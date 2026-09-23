@@ -393,6 +393,64 @@ def asking() -> dict | None:
     return getattr(_ASKING, 'chat', None)
 
 
+# ── the start of the walk: who wants what, the same grouping the desktop draws (walkSummary.js) ──
+# KEEP IN STEP with website/src/walkSummary.js: the four groups, and which lanes land in each. A grouping
+# of lanes the pile already carries - nothing is judged here (2026-09-23).
+GROUPS = (('people', 'People want'), ('you', 'You wanted'), ('agents', 'Agents waiting'), ('read', 'Nothing to decide'))
+_AGENT_LANES = {'blocked', 'stopped', 'queued', 'working', 'broken', 'unjudged'}
+ROWS_PER_GROUP = 5
+
+
+def group_of(i: dict) -> str:
+    if i.get('kind') in ('action', 'agent', 'agentdone') or i.get('lane') in _AGENT_LANES: return 'agents'
+    if i.get('lane') in ('report', 'fyi') or i.get('kind') in ('fyis', 'report', 'idea', 'wrapup'): return 'read'
+    if i.get('channel') in ('own', 'assistant'): return 'you'
+    return 'people'
+
+
+def who_of(i: dict) -> str:
+    who, title = ' '.join(str(i.get('who') or i.get('agent') or '').split()), str(i.get('title') or '')
+    if who and not title.lower().startswith(who.lower()[:16]): return who
+    return 'Report' if i.get('kind') == 'report' or i.get('lane') == 'report' else who or 'someone'
+
+
+def who_wants_what(items: list) -> str:
+    """The desktop's opener, as a chat can print it: the count in a sentence, then each group's rows."""
+    from . import funnel
+    live = [i for i in items or [] if i.get('lane') != 'working']
+    if not live: return 'Nothing is waiting on you.'
+    ready = sum(1 for i in live if i.get('lane') == 'approve')
+    skip = sum(1 for i in live if group_of(i) == 'read')
+    yours = sum(1 for i in live if group_of(i) == 'you')
+    word = len(live) - ready - skip - yours
+    parts = [x for x in (ready and f"{ready} {'is' if ready == 1 else 'are'} ready - you only approve",
+                         word and f"{word} {'needs' if word == 1 else 'need'} a word",
+                         yours and f"{yours} {'is' if yours == 1 else 'are'} on your list",
+                         skip and f"{skip} you can skip") if x]
+    lines = [f"{len(live)} thing{'' if len(live) == 1 else 's'}. " + ', '.join(parts)[:1].upper() + ', '.join(parts)[1:] + '.']
+    for key, word_ in GROUPS:
+        rows = [i for i in live if group_of(i) == key]
+        if not rows: continue
+        lines.append(f'\n{word_.upper()} · {len(rows)}')
+        for i in rows[:ROWS_PER_GROUP]:
+            state = ('draft ready' if i.get('kind') != 'action' else 'wants a yes') if i.get('lane') == 'approve' \
+                else (funnel.LANE_WORDS.get(str(i.get('lane') or '')) or ('',))[0]
+            lines.append(f"· {who_of(i)} - {_cut(i.get('title') or '', 70)}" + (f' ({state})' if state else ''))
+        if len(rows) > ROWS_PER_GROUP: lines.append(f'  and {len(rows) - ROWS_PER_GROUP} more')
+    return '\n'.join(lines)
+
+
+def meetings_line(store) -> str:
+    """Today's meetings, one line each - the day strip the desktop draws over the same opener."""
+    from . import calendar as cal
+    try: t = cal.today(store)
+    except Exception as e:
+        logger.debug(f'the phone could not read today\'s meetings: {e}'); return ''
+    evs = [e for e in t.get('events') or [] if not e.get('all_day')]
+    if not evs: return ''
+    return '\n'.join([f'TODAY\'S MEETINGS · {len(evs)}'] + [f"· {cal.span(e['start'], e.get('end') or '')} {e.get('subject') or ''}" for e in evs])
+
+
 MORNING_KEY, MORNING_AT = 'phone_morning_line', 'phone_morning_line_at'
 SCRIPT_LINES = ['Walk me through my tasks', 'Set up Taskuary', 'Set up a report']
 
@@ -418,8 +476,9 @@ def morning_line(store, now=None, force: bool = False) -> int:
         logger.debug(f'morning line: no pile - {e}'); return 0
     items = p.get('items') or []
     if not items and not force: return 0
-    on_you = sum(1 for i in items if (funnel.LANE_WORDS.get(i.get('lane'), ('', ''))[1] == 'you'))
-    head = (f"Good morning - {len(items)} in the pipe" + (f" · {on_you} on you" if on_you else '') + '.') if items else 'Good morning - the pipe is clear.'
+    # the desktop's opener: the day's meetings, then who wants what (2026-09-23)
+    head = '\n\n'.join(x for x in ('Good morning.', meetings_line(store),
+                                     who_wants_what(items) if items else 'The pipe is clear.') if x)
     text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(SCRIPT_LINES, 1))
     sent = 0
     for d in doors:
@@ -438,8 +497,12 @@ def script_direct(store, question: str) -> str | None:
     if not q: return None
     if q in ('walk me through my tasks', 'walk me through the tasks', 'walk me through tasks', 'my tasks', 'next'):
         with concierge.delivering(concierge.PHONE):
+            from . import funnel
+            try: opener = who_wants_what(funnel.pile(store).get('items') or [])
+            except Exception as e:
+                logger.debug(f'the phone walk opened without its summary: {e}'); opener = ''
             out = concierge.surface(store, actor='owner')
-            return carry_out(store, out, None, actor='owner')
+            return carry_out(store, out, None, actor='owner', lead=opener)
     if q in ('set up taskuary', 'setup taskuary', 'set up', 'setup'): return script_words(store, 'set up Taskuary')
     if q in ('set up a report', 'setup a report', 'set up report', 'new report'): return script_words(store, 'set up a report')
     return None
@@ -470,6 +533,13 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
             if key:
                 nxt = concierge.surface(store, key, actor='owner')
                 send(store, channel, chat, carry_out(store, nxt, nxt.get('item')), connector_id)
+                return
+            # MORE, picked: the rest of what the card folds, then the same choices again without it
+            if picked and question == MORE:
+                again = [w for w in json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') if w != MORE]
+                folded = more_text(store, item) or 'Nothing more on this one.'
+                opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(again, 1)) if again else ''
+                send(store, channel, chat, '\n\n'.join(x for x in (folded, opts) if x), connector_id)
                 return
             # a script by name (the morning line's options, or the words themselves) runs with no model
             scripted = script_direct(store, question)
@@ -666,22 +736,6 @@ def _quote(text) -> str:
     return '\n'.join('> ' + l.rstrip() if l.strip() else '>' for l in str(text or '').strip().splitlines())
 
 
-def checklist_block(store, item: dict | None) -> str:
-    """The desktop's TASK LIST, as boxes a chat can print - the job the card exists for, which the
-    phone never showed at all (the owner, 2026-09-18: "where is the github logo, todo's sections").
-    Read-only here, exactly as on the card: ticking stays on the task."""
-    tid = (item or {}).get('tid')
-    if store is None or not tid: return ''
-    try: items = store.task_checklist(int(tid))
-    except Exception as e:
-        logger.debug(f'the phone could not read the task list: {e}')
-        return ''
-    if not items: return ''
-    done = sum(1 for i in items if i.get('done'))
-    boxes = [f'{TICKED if i.get("done") else BOX} {i["text"]}' for i in items]
-    return '\n'.join([f'TASK LIST · {done} of {len(items)} done'] + boxes)
-
-
 def thread_line(store, msg: dict) -> str:
     """"Email context · 2 messages combined by triage" - the card says how much of the thread is behind
     the one body it shows, and the chat showed one message as if it were the whole of it."""
@@ -708,14 +762,40 @@ def status_line(item: dict | None) -> str:
     return f'{word} - {why}' if word and why else ''
 
 
-def decision_block(store, item: dict | None) -> str:
-    """WHAT THE OWNER IS BEING ASKED TO APPROVE, in the message that asks them.
+def _body(store, item: dict | None) -> tuple[dict, str, bool]:
+    """(the message, its body, whether it is a report) - what arrived, or what Taskuary itself wrote."""
+    if store is None or not (item or {}).get('mid'): return {}, '', False
+    try: msg = store.get_message(int(item['mid'])) or {}
+    except Exception as e:
+        logger.debug(f'the phone could not read the message: {e}')
+        return {}, '', False
+    return msg, str(msg.get('BodyText') or '').strip(), item.get('kind') == 'report' or msg.get('Channel') == 'report'
 
-    The desktop draws the incoming line and the draft under the card, so concierge's own sentence says
-    "approve the draft below" - and on a phone there was nothing below it (the owner, 2026-09-15: "you
-    didn't show the message or the drafed reply? what am i approving?"). A yes is only a yes to
-    something you were shown. The draft rides in FULL: it is the thing being sent in your name, and
-    send() already splits a long message on paragraph boundaries.
+
+def _draft_text(store, item: dict | None) -> str:
+    """The reply waiting on a yes - never an `action` review, whose DraftText is the proposal's JSON."""
+    if store is None or not (item or {}).get('rid'): return ''
+    try: rv = store.get_review(int(item['rid'])) or {}
+    except Exception as e:
+        logger.debug(f'the phone could not read the draft: {e}')
+        return ''
+    return str(rv.get('DraftText') or '').strip() if rv.get('Kind') == 'draft' else ''
+
+
+# the one word the phone adds to what the walk offers: the rest of what is folded, as the card's More
+MORE = 'More'
+EXCERPT = 400                                  # a message longer than this shows its opening; More has the rest
+
+
+def decision_block(store, item: dict | None) -> str:
+    """WHAT IS READY - the card's box, in the message that asks (the owner, 2026-09-15: "what am i
+    approving?"). A yes is only a yes to something you were shown, so the draft rides in FULL.
+
+    Since 2026-09-23 it is the desktop card's box and nothing more: the draft when there is one, the
+    agent's question, a report's first section, or a message's opening lines. What they wrote under a
+    draft, the rest of a report and the rest of a long message are behind More (more_text), and the task
+    list stays on the task - on the phone as on the desktop ("keep the detail task list on the actual
+    task tab").
     """
     if not item: return ''
     parts = []
@@ -723,39 +803,83 @@ def decision_block(store, item: dict | None) -> str:
     if item.get('kind') == 'agent' and item.get('asking'):
         asked = ' '.join(str((item.get('tail') or [''])[0]).split())
         if asked: parts.append('IT ASKED\n' + _cut(asked, 600))
-    todos = checklist_block(store, item)
-    if todos: parts.append(todos)
-    try:
-        if item.get('mid'):
-            msg = store.get_message(int(item['mid'])) or {}
-            is_report = item.get('kind') == 'report' or msg.get('Channel') == 'report'
-            # a report is OURS, not a letter and not a thread: "Report context · 35 messages
-            # combined by triage" counted the mail it was WRITTEN FROM as if it were a
-            # conversation somebody was having with you
-            kin = '' if is_report else thread_line(store, msg)
-            if kin: parts.append(kin)
-            # WHOLE, not a teaser: _cut also flattened every paragraph, and the rest of it existed
-            # only on the desktop. send() splits on paragraph boundaries, so length costs bubbles.
-            body = str(msg.get('BodyText') or '').strip()
-            # a REPORT is ours, not a letter: the card prints its sections, and "THEY WROTE" over a
-            # quoted block credits a person with what Taskuary itself wrote
-            # A REPORT arrives as its sections, each its own bubble, with the `--- raw data ---`
-            # evidence dump cut off exactly where the desktop cuts it. It used to arrive whole:
-            # seven thousand characters in two bubbles, both folded behind "Read more", four
-            # thousand of them the rows the model had been given (the owner, 2026-09-19).
-            if body and is_report:
-                from . import chatformat
-                said = chatformat.blocks(body)
-                if said: parts.append(chatformat.BREAK + chatformat.BREAK.join(said))
-            elif body: parts.append('THEY WROTE\n' + _quote(_plain(body)))
-        if item.get('rid'):
-            rv = store.get_review(int(item['rid'])) or {}
-            # an `action` review's DraftText is the proposal's JSON, never prose to read out
-            draft = str(rv.get('DraftText') or '').strip() if rv.get('Kind') == 'draft' else ''
-            if draft: parts.append('YOUR DRAFT\n' + draft.strip())
-    except Exception as e:
-        logger.debug(f'the phone could not show what is on the table: {e}')
+    draft = _draft_text(store, item)
+    msg, body, is_report = _body(store, item)
+    if draft:
+        parts.append('YOUR DRAFT\n' + draft)
+    elif body and is_report:
+        # a report is OURS, not a letter: its first section here, each further one a bubble of its own
+        # under More, and the `--- raw data ---` dump cut where the desktop cuts it (2026-09-19)
+        from . import chatformat
+        said = chatformat.blocks(body)
+        if said: parts.append(said[0])
+    elif body:
+        # "THEY WROTE" over their own words; a report credits nobody, a draft puts them behind More
+        kin = thread_line(store, msg)
+        opening = _plain(body)
+        if len(opening) > EXCERPT: opening = _cut(opening, EXCERPT)
+        parts.append('\n'.join(x for x in (kin, 'THEY WROTE', _quote(opening)) if x))
     return '\n\n'.join(parts)
+
+
+def more_text(store, item: dict | None) -> str:
+    """What the card folds - the phone's More. Under a draft, what they wrote; under a report, every
+    section after the first; under a long message, the whole of it. '' when nothing is folded."""
+    if not item: return ''
+    msg, body, is_report = _body(store, item)
+    if not body: return ''
+    if is_report:
+        from . import chatformat
+        rest = chatformat.blocks(body)[1:]
+        return chatformat.BREAK + chatformat.BREAK.join(rest) if rest else ''
+    if _draft_text(store, item) or len(_plain(body)) > EXCERPT:
+        kin = thread_line(store, msg)
+        return '\n'.join(x for x in (kin, 'THEY WROTE', _quote(_plain(body))) if x)
+    return ''
+
+
+# what the first word does, said before it is pressed - the desktop card's "then" line. Keyed on the
+# vocabulary's verbs (concierge.CHIPS), so a word the table does not name simply says nothing.
+THEN = {'approve': 'sends the draft above, in your name.',
+        'answer_agent': 'goes straight to the agent; it picks up where it stopped.',
+        'reply': 'writes a draft for you to approve here - nothing is sent.',
+        'followup': 'writes a follow-up for you to approve here - nothing is sent.',
+        'regular_agent': 'starts an agent on it; it comes back here when it stops.',
+        'coder': 'starts a coding agent on it; it comes back here when it stops.',
+        'rerun': 'runs the report again in the background; it comes back here.',
+        'prep': 'opens a chat that gets you ready - who is in it and what came before.',
+        'close': 'ends the task - it stops coming back.'}
+
+
+# words that put a thing DOWN rather than do it: never the card's verb while a real one is offered
+_DOWN = ('close', 'not_ours', 'not_ours_sender', 'block_sender', 'done')
+
+
+def primary(out: dict) -> dict | None:
+    """The card's verb: the first word that DOES the thing - a reply with no draft yet leads with
+    drafting it, not with closing the task (the vocabulary lists close first for a waiting draft)."""
+    chips = [c for c in (out.get('chips') or []) if isinstance(c, dict) and c.get('verb') and c.get('verb') != 'next']
+    return next((c for c in chips if c['verb'] not in _DOWN), chips[0] if chips else None)
+
+
+def then_line(out: dict, store=None) -> str:
+    """"Send the reply: sends the draft above, in your name." - only on a card that shows what it is about."""
+    c = primary(out)
+    if store is None or not c or agent_answers(out.get('item')) or out.get('proposal'): return ''
+    return f"{c.get('label')}: {THEN[c['verb']]}" if c['verb'] in THEN else ''
+
+
+def lead_line(store, item: dict | None, say: str) -> str:
+    """Who wants what: the first sentence of the task's summary, which triage now writes as exactly that
+    (triage.TASK_FIELDS). Nothing when there is no task, or the assistant's own line already said it."""
+    tid = (item or {}).get('tid')
+    if store is None or not tid or item.get('kind') == 'fyis': return ''
+    try: summary = str((store.get_task(int(tid)) or {}).get('Summary') or '').strip()
+    except Exception as e:
+        logger.debug(f'the phone could not read the task summary: {e}')
+        return ''
+    first = re.split(r'(?<=[.!?])\s+', summary)[0].strip() if summary else ''
+    return first if first and first.lower() not in (say or '').lower() else ''
 
 
 def script_words(store, script: str) -> str:
@@ -796,7 +920,7 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
     state = status_line(item)
     # the say line often already carries the cause; a card does not print the same sentence twice
     if state and state.split(' - ', 1)[-1].lower() in say.lower(): state = state.split(' - ', 1)[0]
-    head = '\n'.join(x for x in (source_line(item), say, state) if x)
+    head = '\n'.join(x for x in (source_line(item), say, state, lead_line(store, item, say)) if x)
     if item.get('kind') == 'fyis':
         # THE ITEMS, one per line, and nothing else: the say line restated them as one run-on sentence and
         # the status line added "fyi - people told you things" under it, and on a phone that read as
@@ -805,6 +929,16 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
         members = member_lines(item)
         head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
     words, first = choices(out), len(member_lines(item)) + 1
+    # THE CARD'S ORDER: the verb, then Next, then More, then the rest - the desktop's two buttons and its
+    # Also line, as one numbered list (2026-09-23). A proposal's yes/no and an agent's own answers keep
+    # theirs: those are the answer itself, not a choice of what to do.
+    if not out.get('proposal') and not agent_answers(item):
+        nxt = [w for w in words if str(w).strip().lower() == 'next']
+        rest = [w for w in words if w not in nxt]
+        lead_word = (primary(out) or {}).get('label')
+        first_ = [w for w in rest if w == lead_word][:1] or rest[:1]
+        more = [MORE] if store is not None and more_text(store, item) else []
+        words = first_ + nxt + more + [w for w in rest if w not in first_]
     if item.get('kind') == 'fyis':
         # THE WAY ON, which only this channel has to say. The desktop card carries its own "All read,
         # next" button, so concierge.CHIPS leaves `next` off the batch on purpose - and a chat has no
@@ -824,7 +958,7 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
     opts = (lead_in + '\n'
             + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, first))) if words else ''
     shown = decision_block(store, item) if store is not None else ''
-    return '\n\n'.join(x for x in (lead.strip(), head, shown, opts) if x)
+    return '\n\n'.join(x for x in (lead.strip(), head, shown, then_line(out, store), opts) if x)
 
 
 OFFERED_KEY = 'remote_offered'

@@ -212,7 +212,8 @@ class PhoneDoorTests(unittest.TestCase):
         mid = self.s.add_message({'ExternalId': 'report:1', 'Channel': 'report', 'ConversationId': 'report-1',
                                   'Subject': 'Morning digest', 'BodyText': DIGEST, 'FromName': 'Taskuary',
                                   'FromEmail': None, 'SentAt': '2026-09-19 21:00:00', 'Status': 'open'})
-        block = self.ra.decision_block(self.s, {'mid': mid, 'kind': 'report'})
+        # the card's box is the first section; More sends every section after it, a bubble apiece
+        block = self.ra.decision_block(self.s, {'mid': mid, 'kind': 'report'}) + self.ra.more_text(self.s, {'mid': mid, 'kind': 'report'})
         self.assertNotIn('raw data', block)
         self.assertNotIn('Anthropic asked', block)                  # the evidence dump
         self.assertNotIn('combined by triage', block)               # a report is not a thread

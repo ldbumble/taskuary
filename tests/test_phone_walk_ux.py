@@ -30,16 +30,35 @@ def store_with_a_draft():
 
 
 class ShowWhatYouAreApprovingTests(unittest.TestCase):
-    def test_the_turn_carries_what_they_wrote_and_the_draft_itself(self):
+    def test_the_turn_carries_the_draft_and_what_they_wrote_is_one_number_away(self):
+        """The desktop card's grammar (2026-09-23): the draft in the open, what they wrote behind More,
+        and the options in the card's order - the verb, Next, More, then the rest."""
         s, item = store_with_a_draft()
         out = {'say': 'Tess is owed a reply - the draft is below.', 'item': item,
-               'options': ['Send the reply', 'Redraft it', 'Next']}
+               'chips': [{'verb': 'approve', 'label': 'Send the reply'}, {'verb': 'redraft', 'label': 'Redraft it'},
+                         {'verb': 'next', 'label': 'Next'}]}
         text = remote_assistant.turn_text(out, store=s)
-        self.assertIn('THEY WROTE', text)
-        self.assertIn('did the refund land?', text)
         self.assertIn('YOUR DRAFT', text)
         self.assertIn('the refund cleared this morning', text)          # in full: it is sent in your name
         self.assertLess(text.index('YOUR DRAFT'), text.index('Reply with one of:'))   # read it, then choose
+        self.assertNotIn('THEY WROTE', text)
+        self.assertIn('Send the reply: sends the draft above, in your name.', text)
+        self.assertIn('Reply with one of:\n1 · Send the reply\n2 · Next\n3 · More\n4 · Redraft it', text)
+        folded = remote_assistant.more_text(s, item)
+        self.assertIn('THEY WROTE', folded); self.assertIn('did the refund land?', folded)
+
+    def test_more_sends_what_is_folded_and_offers_the_rest_again(self):
+        s, item = store_with_a_draft()
+        sent = []
+        s.set_setting(f'{remote_assistant.OFFERED_KEY}:whatsapp:{JID}', json.dumps(['Send the reply', 'Next', 'More']), 't')
+        with mock.patch.object(remote_assistant, 'send', side_effect=lambda st, ch, chat, text, cid=None: sent.append(text)), \
+             mock.patch('taskuary.concierge.restore_current', return_value=item), \
+             mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)):
+            remote_assistant.respond(s, 'whatsapp', JID, '3', 1)
+        self.assertEqual(len(sent), 1)
+        self.assertIn('did the refund land?', sent[0])
+        self.assertIn('Reply with one of:\n1 · Send the reply\n2 · Next', sent[0])
+        self.assertNotIn('· More', sent[0])
 
     def test_an_item_with_nothing_to_show_says_nothing_extra(self):
         s, _ = store_with_a_draft()
@@ -279,3 +298,37 @@ class FyiGroupOnAPhoneTests(unittest.TestCase):
                                            'say': 'Process Error Check landed', 'chips': [{'label': 'Run it again'}]})
         self.assertNotIn('read that message in full', text)
         self.assertIn('Reply with one of:', text)
+
+
+class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
+    """The phone opens the day the way the desktop does (2026-09-23): the count, then the four groups."""
+
+    def test_the_groups_and_the_lead(self):
+        items = [{'key': 'a', 'lane': 'approve', 'kind': 'review', 'who': 'Erin Blake', 'title': 'Q3 numbers'},
+                 {'key': 'b', 'lane': 'yours', 'kind': 'todo', 'channel': 'own', 'who': 'you', 'title': 'Renew Trainly'},
+                 {'key': 'c', 'lane': 'blocked', 'kind': 'agent', 'agent': 'coder', 'title': 'Reconcile the GL'},
+                 {'key': 'd', 'lane': 'report', 'kind': 'report', 'who': 'Spend report', 'title': 'Spend report - 3 over'},
+                 {'key': 'e', 'lane': 'working', 'kind': 'agent', 'title': 'busy'}]
+        text = remote_assistant.who_wants_what(items)
+        self.assertTrue(text.startswith('4 things. 1 is ready - you only approve, 1 needs a word, 1 is on your list, 1 you can skip.'))
+        self.assertIn('PEOPLE WANT · 1\n· Erin Blake - Q3 numbers (draft ready)', text)
+        self.assertIn('YOU WANTED · 1', text); self.assertIn('AGENTS WAITING · 1', text)
+        self.assertIn('· Report - Spend report - 3 over', text)          # a report's sender is its title
+        self.assertNotIn('busy', text)                                   # working rows wait on nobody
+        self.assertEqual(remote_assistant.who_wants_what([]), 'Nothing is waiting on you.')
+
+    def test_it_groups_exactly_as_the_desktop_does(self):
+        from pathlib import Path
+        js = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'walkSummary.js').read_text(encoding='utf-8')
+        for lane in remote_assistant._AGENT_LANES: self.assertIn(f'"{lane}"', js.split('AGENT_LANES')[1].split(';')[0])
+        self.assertEqual([w for _, w in remote_assistant.GROUPS], ['People want', 'You wanted', 'Agents waiting', 'Nothing to decide'])
+        for _, word in remote_assistant.GROUPS: self.assertIn(f'word: "{word}"', js)
+
+
+class TheVerbDoesTheThingTests(unittest.TestCase):
+    def test_a_reply_with_no_draft_leads_with_drafting_it_not_closing(self):
+        out = {'say': 'Sam is owed a reply.', 'item': {'kind': 'review', 'lane': 'approve'},
+               'chips': [{'verb': 'close', 'label': 'Close without sending'}, {'verb': 'redraft', 'label': 'Redraft it'},
+                         {'verb': 'not_ours', 'label': 'Not ours'}, {'verb': 'next', 'label': 'Next'}]}
+        text = remote_assistant.turn_text(out, store=MemoryStore())
+        self.assertIn('Reply with one of:\n1 · Redraft it\n2 · Next\n3 · Close without sending\n4 · Not ours', text)

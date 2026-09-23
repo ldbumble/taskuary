@@ -443,15 +443,13 @@ class CardParityTests(unittest.TestCase):
                                  'SentAt': '2026-09-17 23:03:00', 'BodyText': body or self.BODY, 'Status': 'routed'})
         return store, tid, mid
 
-    def test_the_task_list_rides_with_the_item_it_belongs_to(self):
+    def test_the_task_list_stays_on_the_task(self):
+        """On the phone as on the desktop (the owner, 2026-09-23: "let's keep the detail task list on the
+        actual task tab") - the card is who wants what and what is ready, not the task's whole record."""
         store, tid, mid = self.armed()
         block = remote_assistant.decision_block(store, {'tid': tid, 'mid': mid})
-        self.assertIn('TASK LIST \u00b7 0 of 3 done', block)
-        self.assertIn('\u2610 Review the proposed changes', block)
-        store.tick_checklist_item(tid, store.task_checklist(tid)[0]['id'], True, 'owner')
-        ticked = remote_assistant.decision_block(store, {'tid': tid, 'mid': mid})
-        self.assertIn('TASK LIST \u00b7 1 of 3 done', ticked)
-        self.assertIn('\u2611 Review the proposed changes', ticked)
+        self.assertNotIn('TASK LIST', block)
+        self.assertNotIn('\u2610 Review the proposed changes', block)
 
     def test_a_task_with_no_list_says_nothing_about_one(self):
         store, tid, mid = self.armed(checklist=())
@@ -497,8 +495,8 @@ class CardParityTests(unittest.TestCase):
         block = remote_assistant.decision_block(store, {'mid': mid, 'kind': 'report'})
         self.assertNotIn('THEY WROTE', block)
         self.assertFalse([l for l in block.splitlines() if l.startswith('>')], 'a report is not quoted')
-        self.assertIn('Meetings today', block)
-        self.assertIn('People want', block)
+        self.assertIn('Meetings today', block)                       # its first section, in the open
+        self.assertIn('People want', remote_assistant.more_text(store, {'mid': mid, 'kind': 'report'}))   # the rest behind More
 
     def test_a_person_still_gets_the_quote_marks(self):
         store, tid, mid = self.armed()

@@ -29,7 +29,9 @@ class MorningLineTests(unittest.TestCase):
             self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 1)
             self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 12, 0)), 0)      # never twice in a day
         text = self.sent[0][2]
-        self.assertIn('7 in the pipe', text); self.assertIn('1 on you', text)
+        # the desktop's opener, in words: the count, then who wants what (2026-09-23)
+        self.assertIn('7 things. 1 is ready - you only approve, 6 you can skip.', text)
+        self.assertIn('PEOPLE WANT · 1', text); self.assertIn('NOTHING TO DECIDE · 6', text)
         self.assertIn('1 · Walk me through my tasks', text); self.assertIn('2 · Set up Taskuary', text); self.assertIn('3 · Set up a report', text)
         # the numbers are remembered against the chat, so "2" is the words
         self.assertEqual(ra.resolve_index(self.s, 'whatsapp', '1555@s.whatsapp.net', '2'), ('Set up Taskuary', True))

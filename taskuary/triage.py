@@ -264,6 +264,16 @@ def strip_banner(text: str) -> str:
     return kept or (text or '')
 
 
+def read_text(body: str, own: str = None) -> str:
+    """What the owner READS of a message: the sender's own words this time - the mailbox's own cut when
+    it gave one (Graph uniqueBody, message.OwnText), else split_own's - with the legal footer, the signature
+    block and the external-sender banner gone. The same cleaning triage already reads through, now on every
+    screen (the owner, 2026-09-23: "NOTICE etc ... no one needs to see it"). The mail as stored is untouched;
+    a screen that shows this offers the whole email beside it."""
+    t = strip_boilerplate(str(own).strip()) if own and str(own).strip() else own_words(body or '')
+    return strip_banner(t) or strip_banner(body or '')
+
+
 def strip_boilerplate(text: str) -> str:
     """The words the sender actually typed: the legal footer and the signature block go,
     everything before them stays byte-for-byte."""

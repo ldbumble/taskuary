@@ -947,6 +947,7 @@ def task_detail(task_id: int):
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
+            'messages': [_readable(x) for x in d.get('messages') or []],
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
             # load their own rich data. Do not block selecting a task on git status.
@@ -1786,12 +1787,19 @@ def _drop_task(tid: int):
         logger.warning(f'could not close the session on deleted task {tid}: {e}')
     store.delete_task(tid)
 
+def _readable(m: dict) -> dict:
+    """A message with its ReadText beside the body as stored (triage.read_text) - what every screen shows."""
+    from .triage import read_text
+    try: return m | {'ReadText': read_text(m.get('BodyText') or '', m.get('OwnText'))} if m else m
+    except Exception: return m
+
+
 @app.get('/api/messages/{mid}')
 def get_message(mid: int):
     """One message, whole body - the timeline row only carries a 4000-char preview."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    return m
+    return _readable(m)
 
 def _att_row(a: dict) -> dict:
     """One attachment as the panel needs it: enough to decide whether to draw it or list it."""
@@ -1854,7 +1862,7 @@ def message_thread(mid: int, limit: int = 40):
     msgs = store.thread_messages(m.get('ConversationId'), m.get('Subject'), limit)
     # ...and what was DECIDED about it. A row with no task has no task detail to read a
     # history out of, and "not ours" is precisely the verdict that leaves it without one.
-    return {'messages': msgs or [m], 'conversationId': m.get('ConversationId') or '',
+    return {'messages': [_readable(x) for x in (msgs or [m])], 'conversationId': m.get('ConversationId') or '',
             'routes': store.message_routes(mid), 'reviews': store.reviews_for_message(mid)}
 
 @app.get('/api/messages/{mid}/attachments')

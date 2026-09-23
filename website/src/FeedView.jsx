@@ -3316,7 +3316,10 @@ const Bubble = ({ m, fallback, context }) => {
   const [showRaw, setShowRaw] = useState(false);
   const [full, setFull] = useState(false);
   // what just arrived, separated from the thread quoted underneath it
-  const { latest, quoted } = splitQuoted(cleanText(m?.BodyText) || fallback || "…");
+  const { latest: said, quoted } = splitQuoted(cleanText(m?.BodyText) || fallback || "…");
+  // what they WROTE, cleaned of signature, legal footer and banner by the server (ReadText) - the quoted
+  // thread still folds below it, and the original is a click away
+  const latest = m?.ReadText != null && m?.Direction !== "out" ? cleanText(m.ReadText) : said;
   const whole = latest || quoted;
   // a report's raw rows are receipts, not reading: the summary is the message, the rows fold
   // away behind one click - same treatment the quoted thread below a reply gets

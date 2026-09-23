@@ -1217,7 +1217,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
                               overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 4,
                               WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                              {cleanText(m.BodyText)}
+                              {cleanText(m.ReadText ?? m.BodyText)}
                             </Typography>
                           </Box>
                         ))}
@@ -1261,7 +1261,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                                     {m.Subject}</Typography>}
                                   <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
                                     overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
-                                    WebkitBoxOrient: "vertical", overflow: "hidden" }}>{cleanText(m.BodyText)}</Typography>
+                                    WebkitBoxOrient: "vertical", overflow: "hidden" }}>{cleanText(m.ReadText ?? m.BodyText)}</Typography>
                                 </Box>
                               </Box>
                             ))}

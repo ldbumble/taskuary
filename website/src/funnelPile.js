@@ -339,11 +339,16 @@ export const LEVEL_META = {
   task: { word: "your task", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed" },
   reports: { word: "reports", hint: "a report you set up landed, or an agent finished a job" },
   fyi: { word: "fyi", hint: "people told you things, and ideas nobody has turned into work - read them or don't" },
+  passed: { word: "passed", hint: "still yours - you pressed Next on these; they wait down here until you come back to them" },
   agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },
 };
-export const LEVEL_ORDER = ["urgent", "task", "reports", "fyi", "agents"];
+// PASSED: work you walked past with Next. Next settles nothing - the task is still yours - but leaving
+// it at the top of Your task read as if Next had done nothing (the owner, 2026-09-23: "once it's read or
+// next it should move ... maybe add section for deferred tasks that go on the bottom same place as agents
+// working"). A grouping of the rail only: the walk's own order is the server's and is not touched.
+export const LEVEL_ORDER = ["urgent", "task", "reports", "fyi", "passed", "agents"];
 const LEVEL_OF_BAND = { 1: "urgent", 2: "task", 3: "reports", 4: "fyi", 5: "agents" };
-export const levelOf = (item) => LEVEL_OF_BAND[attentionBand(item)] || "fyi";
+export const levelOf = (item) => (item?.surfaced && attentionBand(item) === 2 ? "passed" : LEVEL_OF_BAND[attentionBand(item)] || "fyi");
 export const levelLabel = (level) => LEVEL_META[level]?.word || "";
 // the levels actually present, in the order the rail draws them - the jump menu's entries
 export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).some((i) => levelOf(i) === level));
@@ -352,7 +357,7 @@ export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).s
 // product (the owner, 2026-09-16: "we don't have importance besides for the 4 categories"), so the
 // heading is the only thing on the rail that carries a role colour - the dot beside a row is its
 // SOURCE, and a row's own word is gone. theme.jsx ROLES, named rather than copied.
-export const LEVEL_ROLE = { urgent: "you", task: "you", reports: "info", fyi: "muted", agents: "working" };
+export const LEVEL_ROLE = { urgent: "you", task: "you", reports: "info", fyi: "muted", passed: "muted", agents: "working" };
 
 // ── how the rail divides the height it has ────────────────────────────────────────────────────
 // urgent, your task and agents working are NEVER capped: a task behind a "4 more" button is a task

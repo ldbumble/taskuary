@@ -255,8 +255,20 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     # while it is broken and gone when it is fixed. The owner, 2026-09-18, on a repo that had been
     # answering 404 for days: "we should have notification for the github issue in the notification
     # place". Before this the `broken` lane was produced by exactly one thing, a failing report.
+    # ...but the walk's own marks still hold on it (funnel_state, keyed conn:<id>): it had none, so Next
+    # put the same broken connection back on the table on every press and the walk could not get past it
+    # (the owner, 2026-09-23: "when I hit next it takes me back to linkedin failed"). Shown = walked past,
+    # still on the rail; later/skip = held until then; a changed error (its sig) is new again.
+    states = store.funnel_states()
+    stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     for card in funnel.broken_connections(store):
-        card.update(unread=True, deferred=False, actionable=True, order_band=funnel._band(card))
+        st = states.get(card['key']) or {}
+        held = st.get('Status') in ('later', 'skip', 'done') and (not st.get('Until') or funnel._ts(st['Until']) > stamp)
+        if held and st.get('Status') == 'done' and st.get('Note') and st['Note'] != card.get('sig'): held = False
+        if held and not include_read: continue
+        card.update(unread=not held, deferred=held, actionable=not held, order_band=funnel._band(card))
+        if st.get('Status') == 'surfaced' and not (st.get('Note') and st['Note'] != card.get('sig')):
+            card.update(surfaced=True, surfaced_at=st.get('At'))
         cards.append(card)
     cards = funnel._order(cards)
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,

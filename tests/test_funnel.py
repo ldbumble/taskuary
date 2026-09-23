@@ -1074,3 +1074,19 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
         funnel.invalidate()
         keys = [i['key'] for i in funnel.pile(self.s, force=True)['items']]
         self.assertTrue(any(k.startswith('conn:') for k in keys), keys[:8])
+
+    def test_next_walks_past_a_broken_connection_once_it_was_shown(self):
+        """A broken connection is a condition with no receipt of its own - so Next put the same one back
+        on the table on every press (the owner, 2026-09-23: "when I hit next it takes me back to linkedin
+        failed"). Shown, it is walked past; a NEW error makes it news again."""
+        cid = self._broken('github', 'ldbumble/FckSignups: no such repository')
+        funnel.invalidate()
+        first = funnel.next_item(self.s)
+        self.assertEqual(first['key'], f'conn:{cid}')
+        self.s.set_funnel_state(first['key'], 'surfaced', note=first.get('sig'))
+        funnel.invalidate()
+        again = funnel.next_item(self.s)
+        self.assertNotEqual((again or {}).get('key'), first['key'])
+        self.s.touch_connector(cid, 'a different failure: 401 unauthorised')
+        funnel.invalidate()
+        self.assertEqual((funnel.next_item(self.s) or {}).get('key'), first['key'], 'a new error is news again')

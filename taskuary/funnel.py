@@ -190,7 +190,7 @@ def broken_connections(store) -> list:
         label = CONN_LABELS.get(kind, kind.title() or 'A connection')
         out.append(_item(f'conn:{c["ConnectorId"]}', 'connection', 'broken',
                          f'{label} stopped answering', channel=kind,
-                         who=label, why=_short(err, 220),
+                         who=label, why=_short(err, 220), sig=_short(err, 120),   # a NEW error is news again
                          when=full.get('LastSyncAt') or '', since=full.get('LastSyncAt') or ''))
     return out
 

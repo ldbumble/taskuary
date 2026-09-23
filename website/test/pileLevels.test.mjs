@@ -6,7 +6,7 @@ import { LEVEL_META, LEVEL_ORDER, levelLabel, levelOf, levelsOf } from "../src/f
 // One level per thing triage decided: open work and landed results are not merged into a single name (the owner,
 // 2026-09-07: "why work and reports combined ... just make each one it's own thing").
 test("every level has its own word and its own hint", () => {
-  assert.deepEqual(LEVEL_ORDER, ["urgent", "task", "reports", "fyi", "agents"]);
+  assert.deepEqual(LEVEL_ORDER, ["urgent", "task", "reports", "fyi", "passed", "agents"]);
   for (const level of LEVEL_ORDER) {
     assert.ok(levelLabel(level).length, `${level} needs a word`);
     assert.ok(LEVEL_META[level].hint.length, `${level} needs a hint`);
@@ -39,6 +39,10 @@ test("the ends of the list are one level each", () => {
   assert.equal(levelOf({ lane: "fyi", order_band: 4 }), "fyi");
   assert.equal(levelOf({ lane: "working", order_band: 5 }), "agents");
   assert.equal(levelOf({}), "task", "a row with no band still lands in one, so the dock never reads empty");
+  // work you pressed Next on waits at the bottom, beside the agents - still yours, not at the top
+  assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true }), "passed");
+  assert.equal(levelOf({ lane: "stopped", order_band: 2 }), "task");
+  assert.equal(levelOf({ lane: "time", order_band: 1, surfaced: true }), "urgent", "a meeting about to start never moves down");
 });
 
 test("the menu offers only the runs the pile holds, in the order the rail draws them", () => {

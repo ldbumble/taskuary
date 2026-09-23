@@ -27,6 +27,8 @@ test("the lead counts what is ready to approve first, and working rows are not w
   assert.equal(s.lead, "5 things. 2 are ready - you only approve, 1 needs a word, 1 is on your list, 1 you can skip.");
   assert.deepEqual(s.groups.map((g) => [g.key, g.rows.length]), [["people", 3], ["you", 1], ["read", 1]]);
   assert.equal(summarize([]).lead, "Nothing is waiting on you.");
+  // a meeting is the day's strip above, never a row under People want
+  assert.equal(summarize([it("time", "meeting"), it("asked")]).n, 1);
 });
 
 test("a drafted reply says it is ready, everything else says its lane's word", () => {

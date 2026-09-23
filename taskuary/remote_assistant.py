@@ -417,7 +417,8 @@ def who_of(i: dict) -> str:
 def who_wants_what(items: list) -> str:
     """The desktop's opener, as a chat can print it: the count in a sentence, then each group's rows."""
     from . import funnel
-    live = [i for i in items or [] if i.get('lane') != 'working']
+    # meetings are the day's strip (meetings_line), never a row someone wants - as on the desktop
+    live = [i for i in items or [] if i.get('lane') != 'working' and i.get('kind') != 'meeting']
     if not live: return 'Nothing is waiting on you.'
     ready = sum(1 for i in live if i.get('lane') == 'approve')
     skip = sum(1 for i in live if group_of(i) == 'read')

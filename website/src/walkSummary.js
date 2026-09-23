@@ -33,7 +33,9 @@ export const whoOf = (i) => {
 export const stateOf = (i, laneWord) => i?.lane === "approve" ? (i.kind === "action" ? "wants a yes" : "draft ready") : laneWord;
 
 export function summarize(items) {
-  const live = (items || []).filter((i) => i && i.lane !== "working");
+  // a meeting is on the day's strip right above - listed again under People want it read as someone's ask
+  // (the owner, 2026-09-23: "the calendar invite in people want section is wrong if it's in top section")
+  const live = (items || []).filter((i) => i && i.lane !== "working" && i.kind !== "meeting");
   const groups = GROUPS.map((g) => ({ ...g, rows: live.filter((i) => groupOf(i) === g.key) })).filter((g) => g.rows.length);
   const ready = live.filter((i) => i.lane === "approve").length;
   const skip = live.filter((i) => groupOf(i) === "read").length;

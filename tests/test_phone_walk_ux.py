@@ -308,7 +308,8 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
                  {'key': 'b', 'lane': 'yours', 'kind': 'todo', 'channel': 'own', 'who': 'you', 'title': 'Renew Trainly'},
                  {'key': 'c', 'lane': 'blocked', 'kind': 'agent', 'agent': 'coder', 'title': 'Reconcile the GL'},
                  {'key': 'd', 'lane': 'report', 'kind': 'report', 'who': 'Spend report', 'title': 'Spend report - 3 over'},
-                 {'key': 'e', 'lane': 'working', 'kind': 'agent', 'title': 'busy'}]
+                 {'key': 'e', 'lane': 'working', 'kind': 'agent', 'title': 'busy'},
+                 {'key': 'f', 'lane': 'time', 'kind': 'meeting', 'who': 'Omar Keller', 'title': 'Portal sync'}]
         text = remote_assistant.who_wants_what(items)
         self.assertTrue(text.startswith('4 things. 1 is ready - you only approve, 1 needs a word, 1 is on your list, 1 you can skip.'))
         self.assertIn('PEOPLE WANT · 1\n· Erin Blake - Q3 numbers (draft ready)', text)

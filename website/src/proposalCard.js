@@ -37,6 +37,13 @@ export function describe(p) {
     return { title: p.label || p.kind, target: cut ? x : t, detail: cut ? "" : x,
              params: [...(agent ? [["agent", agent]] : []), ...(repo ? [["repository", repo]] : [])], confirm: p.label || "Confirm", cancel: "Cancel", preview: false };
   }
+  // A REPORT reads the way the report builder does: its name, the prompt as a section of its own, then the settings -
+  // not "source: agent / inputs: ... / summary instructions: ..." (the owner, 2026-09-24: "some technical summary")
+  if (p.kind === "report.create" && p.params?.prompt) {
+    const rows = [["reads", p.params.reads], ["runs", p.params.runs], ["reaches you", p.params.reaches_you], ["goes to", p.params.goes_to]];
+    return { title: p.label || "Create the report", target: p.params.title || p.summary || "", detailHead: "Prompt", detail: p.params.prompt,
+             params: rows.filter(([, v]) => v != null && v !== ""), confirm: p.label || "Confirm", cancel: "Cancel", preview: true };
+  }
   const params = Object.entries(p.params || {}).filter(([k, v]) => v != null && v !== "" && !hidden.has(k))
     .map(([k, v]) => [k.replace(/_/g, " "), show(v)]).filter(([, v]) => v !== "" && v != null);
   // a proposed report can be dry-run before the click (PW-195): read-only, nothing filed, sent, activated or started

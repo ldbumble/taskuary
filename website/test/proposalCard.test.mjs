@@ -122,3 +122,13 @@ test("a coding hand-off nobody named a checkout for asks for one on the card", a
   assert.equal(pickingRepo({ ...base, clear: false, params: { kind: "general", text: "x" } }), false);
   assert.equal(pickingRepo({ ...base, clear: false, repo_choices: [] }), false);
 });
+
+test("a proposed report reads like the report builder: its name, the prompt as a section, then the settings", () => {
+  const d = describe({ kind: "report.create", label: "Create the report", summary: "Stars",
+    params: { config: { type: "agent" }, title: "Stars", prompt: "Count overnight GitHub stars on northwind/ledger", reads: "an AI agent doing the work itself",
+              runs: "daily at 08:00", reaches_you: "informational - filed on the Timeline, not triaged", goes_to: "in the app only - sent to nobody" } });
+  assert.equal(d.target, "Stars"); assert.equal(d.detailHead, "Prompt"); assert.match(d.detail, /GitHub stars/);
+  assert.deepEqual(d.params.map(([k]) => k), ["reads", "runs", "reaches you", "goes to"]);
+  assert.ok(!d.params.some(([k]) => ["config", "source", "inputs", "summary instructions"].includes(k)));
+  assert.equal(d.preview, true);
+});

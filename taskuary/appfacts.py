@@ -22,6 +22,15 @@ def _cfg(src) -> dict:
     except ValueError: return {}
 
 
+def _goes(cfg: dict) -> str:
+    """Where a report's text ends up. Asked to stop "the morning WhatsApp summary", the chat could read every
+    report's clock and reach but not where one is delivered, and handed the question to an agent (2026-09-24 audit)."""
+    d = cfg.get('deliver') or {}
+    to = d.get('to') if isinstance(d.get('to'), list) else [x.strip() for x in str(d.get('to') or '').split(',') if x.strip()]
+    if not to: return 'in the app only - sent to nobody'
+    return f"{d.get('channel') or 'email'} to {len(to)} recipient{'s' if len(to) > 1 else ''}, {'sent unread' if str(d.get('gate')).lower() == 'auto' else 'after you approve'}"
+
+
 def reports(store) -> list:
     """Every report and workflow with its clock, its reach and its last outcome. `last_ok` is None for
     a report that never ran - unknown is not failed."""
@@ -34,7 +43,7 @@ def reports(store) -> list:
         last = runs[0] if runs else None
         out.append({'source_id': src['SourceId'], 'title': cfg.get('title') or src.get('Address') or '',
                     'workflow': bool(workflows.is_workflow(cfg)), 'schedule': rep.schedule_words(cfg), 'reach': rep.reach_of(cfg),
-                    'active': bool(src.get('Active')), 'last_at': str((last or {}).get('at') or ''),
+                    'goes': _goes(cfg), 'active': bool(src.get('Active')), 'last_at': str((last or {}).get('at') or ''),
                     'last_ok': (not last.get('failed')) if last else None,
                     'last_said': str((last or {}).get('error') or (last or {}).get('summary') or (last or {}).get('said') or '')[:200]})
     return out

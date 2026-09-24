@@ -1361,6 +1361,21 @@ class WhichCheckoutTests(unittest.TestCase):
         made = concierge.handoff_task(s, brief, 'coding', 'owner', title='Fan app login crash', repo=prop['params']['repo'])
         self.assertEqual(terminal.guess_repo(s, made['taskId'], self.PROFILE)[0], 'northwind/ledger')
 
+    def test_the_phone_sentence_carries_the_whole_ask_the_card_line_may_cut(self):
+        """"...then tell me what setting or…" was all a phone was told about the job (2026-09-24 audit)."""
+        from taskuary import concierge, general
+        s = store()
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        ask = ('Find where the morning digest is delivered and whether that is the phone summary, then tell me which '
+               'setting or report switch turns it off, and whether anything else would stop with it')
+        prop = concierge.propose_for(s, dock, {'verb': 'regular_agent', 'text': ask}, None, ask)
+        self.assertIn('whether anything else would stop with it', prop['say'])
+        self.assertLessEqual(len(prop['summary']), 121)
+        prop['clear'] = True
+        started = concierge._start_when_clear(prop, 'regular_agent')
+        self.assertTrue(started['auto']); self.assertIn('whether anything else would stop with it.', started['say'])
+        self.assertNotIn('…', started['say'])
+
     def test_a_task_that_matches_nothing_refuses_rather_than_opening_the_default_folder(self):
         s = store()
         s.save_doc('soul', self.SOUL, 'owner')

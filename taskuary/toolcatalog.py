@@ -149,10 +149,17 @@ def block(store=None) -> str:
         '  2. they want detail, history or a summary of a task or a message - LOOK IT UP first and\n'
         '     answer with what you read. Never say you cannot see something you could have read,\n'
         '     and search the period THEY mean: six months ago means days: 200, not the last week.\n'
-        '  3. they want something SET UP - report.create, connection.create, or task.setup when it\n'
-        '     needs digging before it can be configured.\n'
-        '  4. it is not clear which - ASK, one short question, naming the two you are choosing\n'
-        '     between. Guessing at a verb that CHANGES something is the one thing not to do.')
+        '  3. they want something DONE and it says what - propose it now. A reminder or a to-do they\n'
+        '     will do themselves is task.create_from_text kind task, with the day in the text; a\n'
+        '     setting changes with setting.set on the key a look-up found (settings.list, setting.read);\n'
+        '     a report is report.create; a system is connection.create; work for an agent is\n'
+        '     task.create_from_text kind general or coding. task.setup only for a set-up that needs\n'
+        '     digging before anything can be configured - never for a plain reminder.\n'
+        '  4. it is not clear which - LOOK first (the setting, the report, the task it might mean);\n'
+        '     then, if two different things still fit, ASK one short question naming both. A CALL\n'
+        '     is only a card the owner confirms, so a clear ask gets the card, not a question about\n'
+        '     details the card lets them change. A question about this app itself - its settings,\n'
+        '     reports, connections, agents - is answered from these look-ups, never handed to an agent.')
     return '\n'.join(lines)
 
 
@@ -177,7 +184,9 @@ READS = {
     # calendar past today, what happened, and every place a failure is written down.
     'agents.now':       'every agent session running now - its task, which CLI, and whether it is working, idle, stuck or asking the owner something',
     'approvals.list':   'everything waiting for the owner\'s yes: drafted replies and the actions agents proposed, with their tasks',
-    'calendar.read':    ('the owner\'s meetings - `from`: today (the default) | tomorrow | YYYY-MM-DD; `days`: how many (7 by default). '
+    'pipe.list':        ('everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole '
+                         'work rail. Use it for "what\'s waiting", "what\'s left", "what do I have"'),
+    'calendar.read':   ('the owner\'s meetings - `from`: today (the default) | tomorrow | YYYY-MM-DD; `days`: how many (7 by default). '
                          'Reads the calendar live, so it takes a moment'),
     'activity.list':    ('what happened, from the audit trail: counts by kind and the latest entries. `days` (1 by default); '
                          '`who`: you | agents | all'),
@@ -222,7 +231,7 @@ def valid(kind: str, params: dict) -> str:
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'message.read': ('mid', 'id'),
-                'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (),
+                'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (),
                 'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': ()}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"

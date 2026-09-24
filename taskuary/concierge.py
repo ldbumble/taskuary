@@ -742,8 +742,13 @@ def _turns(store, tid: int) -> str:
 
 def _system(store, llm=None) -> str:
     # the document first, the machine contract last; never the tools block - the assistant runs nothing
+    # SOUL.md is who the owner is - their work, people, systems and repositories. The chat read none of it and
+    # asked which repository "taskuary" was (2026-09-24 audit). Read whole, as COUNSEL is: a cut drops a section.
     contract = PHONE_CONTRACT if DELIVERY.get() == PHONE else CONTRACT
-    return f"{_counsel(store)}\n\n{contract.format(owner=_owner(store))}"
+    soul = str(store.doc('soul') or '').strip()
+    who = (f"WHO THE OWNER IS (their own document - context about their work; its reply rules are for text sent to OTHERS):\n{soul}\n\n"
+           if soul else '')
+    return f"{_counsel(store)}\n\n{who}{contract.format(owner=_owner(store))}"
 
 
 def _urgent_line(pile_items: list, item: dict | None) -> str:
@@ -1397,7 +1402,7 @@ def read_op(store, kind: str, params: dict) -> str:
         r = appfacts.find_report(store, str(p.get('title') or ''), p.get('source_id'))
         if not r: return 'No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20])
         out = [f"{'WORKFLOW' if r['workflow'] else 'REPORT'} {r['title']} (source_id {r['source_id']}, {'on' if r['active'] else 'off'}) - "
-               f"runs {r['schedule'] or 'on no clock'}; reaches you: {r['reach']}"]
+               f"runs {r['schedule'] or 'on no clock'}; reaches you: {r['reach']}; goes: {r['goes']}"]
         for run in (store.report_runs(r['source_id'], 6) or []):
             out.append(f"  {str(run.get('at') or '')[:16]} {'FAILED' if run.get('failed') else 'ok'} "
                        f"{run.get('ms') or 0}ms - {_cut(run.get('error') or run.get('summary') or run.get('said') or '', 400)}")
@@ -1408,7 +1413,7 @@ def read_op(store, kind: str, params: dict) -> str:
         if not rows: return 'No reports or workflows are set up.'
         def last(r): return 'never ran' if r['last_ok'] is None else (f"FAILED - {r['last_said']}" if r['last_ok'] is False else f"ok {r['last_at'][:16]}")
         return NEWLINE.join(f"{'WORKFLOW' if r['workflow'] else 'REPORT'} {r['title']} (source_id {r['source_id']}{'' if r['active'] else ', off'}) - "
-                            f"{r['schedule'] or 'no clock'}; reaches you: {r['reach']}; last: {last(r)}" for r in rows)
+                            f"{r['schedule'] or 'no clock'}; reaches you: {r['reach']}; goes: {r['goes']}; last: {last(r)}" for r in rows)
     if kind == 'settings.list':
         from . import appfacts, settings_schema
         rows, group = appfacts.settings(store), str(p.get('group') or '').strip().lower()
@@ -1461,7 +1466,8 @@ def _start_when_clear(prop: dict, verb: str) -> dict:
     role = (prop.get('params') or {}).get('profile')
     who = f'the {role}' if role else ('the coding agent' if verb == 'coder' else 'an agent')
     where = (prop.get('params') or {}).get('repo')
-    prop.update(auto=True, say=f"Starting {who} on it{f' in {where}' if where else ''}: {prop['summary']}.")
+    job = _title_cut((prop.get('params') or {}).get('text') or prop['summary'], 400).rstrip('.')      # the whole ask; the card's title may be cut
+    prop.update(auto=True, say=f"Starting {who} on it{f' in {where}' if where else ''}: {job}.")
     prop['say_card'] = prop['say']
     return prop
 
@@ -2168,7 +2174,10 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     summary = f"{where} → {label[0].lower() + label[1:]}" if it else where
     lead = (f"That is {where}, not the one on the table - so I am proposing it there; {(table or {}).get('ref') or 'the one on the table'} is untouched. "
             if elsewhere else '')
-    head = f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}"
+    # the card's line is a title and may be cut; the sentence is all a phone gets, so it carries the whole ask -
+    # "...then tell me what setting or…" was the phone's only account of what the agent would do (2026-09-24 audit)
+    said = summary if it else _title_cut(params.get('text') or params.get('note') or where, 400).rstrip('.')
+    head = f"Changed to: {label} - {said}" if op['version'] > 1 else f"{label}: {said}"
     say_ = lead + f"{head}.{note} Nothing has been started - confirm below, or tell me what to change."
     # OVER THE CARD, only what the card does not say: its heading IS "<label>" and its line IS the summary, so the
     # sentence above it said them first (the owner, 2026-09-24: "the assistant saying words above the box and then
@@ -2269,7 +2278,7 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
     else:
         if prev: operations.cancel(store, prev['id'], actor)
         op = operations.propose(store, kind, target, params, actor)
-    text = (f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}") + f". {tail}"
+    text = (f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}") + ('.' if tail.startswith('\n') else '. ') + tail
     record_related(store, dock_tid, item, 'assistant', text, {'kind': 'proposal', 'key': None, 'title': label, 'op': op['id'], 'tid': None, 'ref': None})
     return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text}
 
@@ -2289,15 +2298,38 @@ def _schedule_words(cfg: dict) -> str:
     return reports.schedule_words(cfg)
 
 
+# The card reads the way the report builder does - its prompt first, then the settings under it. It used to be
+# "source: agent; inputs: ...; summary instructions: ..." - a config dump the owner called "some technical summary",
+# on the desktop and in WhatsApp alike (2026-09-24).
+FACT_WORDS = {'prompt': 'Prompt', 'reads': 'Reads', 'runs': 'Runs', 'reaches_you': 'Reaches you', 'goes_to': 'Goes to'}
+
+
+def _reads_words(cfg: dict) -> str:
+    srcs = [x for x in (cfg.get('sources') or [cfg]) if isinstance(x, dict)]
+    def one(x):
+        t = str(x.get('type') or '?')
+        if t == 'agent': return f"an AI agent doing the work itself{' (/' + str(x['skill']).lstrip('/') + ')' if x.get('skill') else ''}"
+        what = str(x.get('query') or x.get('object') or x.get('url') or x.get('path') or '').strip()
+        return f"{t}{' - ' + _cut(what, 160) if what else ''}"
+    return '; '.join(one(x) for x in srcs) or str(cfg.get('type') or '')
+
+
 def report_facts(cfg: dict) -> dict:
-    """What the confirmation box says about a report (PW-195): source, inputs, schedule, enabled state, behaviour, delivery."""
-    srcs = cfg.get('sources') or []
-    src = ', '.join(str(x.get('type') or '?') for x in srcs if isinstance(x, dict)) if srcs else str(cfg.get('type') or '')
-    return {'title': str(cfg.get('title') or ''), 'source': src, 'inputs': _cut(str(cfg.get('query') or cfg.get('object') or cfg.get('url') or cfg.get('path') or cfg.get('prompt') or ''), 160),
-            'summary_instructions': _cut(str(cfg.get('ai_prompt') or ''), 160) or 'none - the raw result is filed',
-            'schedule': _schedule_words(cfg) + (f" ({cfg['tz']})" if cfg.get('tz') else ''),
-            'enabled': 'yes - it runs on its schedule once created', 'triage': _routing_words(cfg),
-            'delivery': str((cfg.get('deliver') or {}).get('to') or '') or 'the Timeline only'}
+    """What the confirmation box says about a report (PW-195), in the builder's order: its name, the prompt, then
+    what it reads, when it runs, how it reaches the owner and where else it goes."""
+    from .appfacts import _goes
+    agent = cfg.get('type') == 'agent' or any(isinstance(x, dict) and x.get('type') == 'agent' for x in cfg.get('sources') or [])
+    job = str(cfg.get('prompt') or next((x.get('prompt') for x in cfg.get('sources') or [] if isinstance(x, dict) and x.get('prompt')), '') or '').strip()
+    summ = str(cfg.get('ai_prompt') or '').strip()
+    prompt = '\n\n'.join(x for x in ((job if agent else ''), (f'Then: {summ}' if agent and job and summ else summ)) if x)
+    return {'title': str(cfg.get('title') or ''), 'prompt': prompt or 'none - the raw result is filed as it comes',
+            'reads': _reads_words(cfg), 'runs': _schedule_words(cfg) + (f" ({cfg['tz']})" if cfg.get('tz') else ''),
+            'reaches_you': _routing_words(cfg), 'goes_to': _goes(cfg)}
+
+
+def report_lines(facts: dict) -> str:
+    """The card, as a chat without cards holds it: one labelled line each, the prompt first."""
+    return '\n'.join(f"{w}: {facts[k]}" for k, w in FACT_WORDS.items() if facts.get(k))
 
 
 def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead: str) -> dict:
@@ -2342,8 +2374,12 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     cfg, facts = out['config'], report_facts(out['config'])
     params = {'config': cfg, **facts}
     looked = ', '.join(str(x) for x in (out.get('looked_at') or [])[:4])
-    tail = ((out.get('explain') + ' ') if out.get('explain') else '') + '; '.join(f"{k.replace('_', ' ')}: {v}" for k, v in facts.items() if k != 'title' and v)            + (f'. I read {looked} to build it' if looked else '')            + '. Nothing is saved - confirm below, tell me what to change, or preview a dry run first.'
-    prop = _propose_raw(store, tid, 'report.create', 0, params, 'Create the report', f"{facts['title']} ({cfg.get('type')})", tail, actor, item)
+    # over the card only what the card does not say: why it is built this way, and that nothing is saved yet
+    why = ' '.join(x for x in (str(out.get('explain') or '').strip(), f'I read {looked} to build it.' if looked else '') if x)
+    after = 'Nothing is saved - confirm below, tell me what to change, or preview a dry run first.'
+    prop = _propose_raw(store, tid, 'report.create', 0, params, 'Create the report', facts['title'],
+                        '\n' + report_lines(facts) + '\n\n' + ' '.join(x for x in (why, after) if x), actor, item)
+    prop['say_card'] = ' '.join(x for x in (why, after) if x)
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
 

@@ -102,7 +102,13 @@ JUDGEMENT = (
     '- Never invent a table, column, object or field name. Peek, or ask.\n'
     '- The owner describes what they WANT, not what exists. "Our headcount file" is a path you do '
     'not have - ask for it.\n'
-    '- confidence "low" is a real answer. Say so in explain and the owner will check it.\n')
+    '- confidence "low" is a real answer. Say so in explain and the owner will check it.\n'
+    '- Ask only what you can neither find out nor sensibly default. What the request already says, a repository it '
+    'names, a time these rules default and an obvious search term (the product\'s own name) are not questions - '
+    'use them and say so in explain; the owner sees the report before it runs.\n')
+
+REPOS_RULE = ('- "repositories" are the owner\'s own code repositories: full name and what each is for. When the request names one '
+              'by its short name ("taskuary", "ledger"), it means that one - write its full owner/name, never ask which.\n')
 
 SYSTEM = (
     'You turn a plain-English request into ONE Taskuary scheduled-report configuration.\n\n'
@@ -133,7 +139,8 @@ SYSTEM = (
     'and/or "prompt" to the instruction; the answer is the report, so ai_prompt is usually unnecessary.\n\n' +
     JUDGEMENT +
     '- A config is not finished until it carries what its type needs to RUN: an Intacct report has an object, a SQL '
-    'report has a query, a REST report has a url. A title alone is the owner\'s form handed back to them - peek or ask instead.')
+    'report has a query, a REST report has a url. A title alone is the owner\'s form handed back to them - peek or ask instead.\n'
+    + REPOS_RULE)
 
 
 WORKFLOW_SYSTEM = (
@@ -249,8 +256,7 @@ SOURCE RULES
 - "ai_prompt" is one instruction over ALL these sources together - what the check should SURFACE. Concrete ("Flag any vendor over 10k or new this month; give the number and the site"), never "summarize the data". Write it when the ask says what matters; leave it out when the owner asked only for the data.
 - Never choose "assistant" as a source. That is the check itself; reading its own output is a loop.
 - the_card_you_are_filling_in names the type already chosen on the card. Keep it unless the ask plainly needs another system, and then say so in explain.
-
-""" + JUDGEMENT
+""" + REPOS_RULE + '\n' + JUDGEMENT
 
 
 def _json(text):
@@ -296,6 +302,17 @@ def _rounds(store, llm, system, user, rounds, finish):
     return {'error': 'the model kept asking to look at schemas without answering'}
 
 
+def _repositories(store) -> dict:
+    """The owner's repositories as the coding agent knows them. A report "about taskuary" asked which repository
+    that was, because the composer had never been told there are any (2026-09-24 chat audit)."""
+    try:
+        from . import terminal
+        desc = terminal.repo_map(store)
+        return {r: desc.get(r, '') for r in terminal.known_repos(store)}
+    except Exception as e:
+        logger.debug(f'compose: no repository list - {e}'); return {}
+
+
 def _playbook(cat) -> str:
     """A system's own briefing rides along only where that system is actually connected - there
     is no point teaching the model Intacct's field ids on an install that cannot reach Intacct."""
@@ -312,7 +329,7 @@ def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS,
     if not (ask or '').strip(): return {'error': 'say what you want the report to do'}
     excluded = set(exclude_types or ())
     cat = [row for row in catalog(store) if row.get('type') not in excluded]
-    user = {'request': ask.strip(), 'catalog': cat,
+    user = {'request': ask.strip(), 'catalog': cat, **({'repositories': repos} if (repos := _repositories(store)) else {}),
             **({'answers_to_your_questions': answers} if answers else {})}
 
     def finish(out, looked):
@@ -346,6 +363,7 @@ def compose_sources(store, ask: str, llm, one_type: str = None, answers: dict = 
     user = {'request': ask.strip(), 'catalog': cat, 'max_sources': cap,
             'the_card_you_are_filling_in': one_type or
             'nothing yet - the owner is pointing a check at whatever systems the ask needs',
+            **({'repositories': repos} if (repos := _repositories(store)) else {}),
             **({'answers_to_your_questions': answers} if answers else {})}
 
     def finish(out, looked):

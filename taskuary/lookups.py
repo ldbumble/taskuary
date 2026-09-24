@@ -128,6 +128,21 @@ def approvals_list(store, p: dict) -> str:
     return NL.join(f"{_title(store, r.get('TaskId'))} - {what(r)}, since {_day(r.get('CreatedAt'))}"
                    + (f" | {_cut(r.get('Reason'), 160)}" if r.get('Reason') else '') for r in rows[:30])
 
+def pipe_list(store, p: dict) -> str:
+    """Everything waiting on the owner, lane by lane - the rail itself. "What's waiting on me" was answered out of
+    approvals.list alone: one draft, while replies, asks and stopped agents sat on the rail unnamed (2026-09-24 audit)."""
+    from . import funnel
+    items = [i for i in (funnel.pile(store).get('items') or []) if not i.get('settling')]
+    if not items: return 'The pipe is empty - nothing is waiting on you.'
+    out = []
+    for lane in funnel.LANES:
+        xs = [i for i in items if i['lane'] == lane]
+        if not xs: continue
+        out.append(f"{funnel.LANE_COUNTED[lane].upper()} ({len(xs)}):")
+        out += [f"  {task_ref(i['tid']) + ' ' if i.get('tid') else ''}{i['who'] + ' - ' if i.get('who') else ''}{_cut(i.get('title'), 100)}" for i in xs[:15]]
+        if len(xs) > 15: out.append(f'  ...and {len(xs) - 15} more')
+    return NL.join(out)
+
 def calendar_read(store, p: dict) -> str:
     from . import calendar as cal
     if store.get_settings().get('calendar_enabled', '1') != '1': return 'The calendar is switched off in Settings.'
@@ -226,7 +241,7 @@ def rules_list(store, p: dict) -> str:
     return NL.join(out)
 
 READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
-        'agents.now': agents_now, 'approvals.list': approvals_list, 'calendar.read': calendar_read,
+        'agents.now': agents_now, 'approvals.list': approvals_list, 'pipe.list': pipe_list, 'calendar.read': calendar_read,
         'activity.list': activity_list, 'errors.list': errors_list,
         'memory.list': memory_list, 'rules.list': rules_list}
 

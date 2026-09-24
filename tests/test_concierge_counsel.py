@@ -62,6 +62,15 @@ def test_the_chat_prompt_is_the_document_then_the_machine_contract_and_nothing_e
         assert phrase not in system, f'behaviour reached the prompt from somewhere other than the document: {phrase}'
 
 
+def test_the_chat_knows_who_the_owner_is_from_soul_and_the_contract_still_comes_last():
+    """The chat read COUNSEL and never SOUL.md, so it asked which repository "ledger" was (2026-09-24 audit)."""
+    st = MemoryStore(); st.save_doc('counsel', '# Mine\n\n## Voice\n- Speak plainly.\n', 'owner')
+    st.save_doc('soul', '# SOUL.md\n\n## Repository map\n- **northwind/ledger**: the finance ledger\n', 'owner')
+    system = concierge._system(st)
+    assert system.startswith('# Mine')
+    assert system.index('Speak plainly.') < system.index('**northwind/ledger**: the finance ledger') < system.index('THE CONTRACT')
+
+
 def test_the_shipped_document_carries_the_deciding_rules_the_code_used_to():
     from pathlib import Path
     from taskuary import counsel

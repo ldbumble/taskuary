@@ -969,6 +969,10 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
         if not any('next' in str(w).lower() for w in words): words = words + [concierge.CHIP_WORDS['next']]
     # ...and what a NUMBER does, said plainly. "Open one" describes a door on a screen that is not
     # here; on a phone the number is the only way to see what the line is actually about.
+    # A plain answer with nothing on the table offered "Reply with one of: 1 · Next" under every reply - three
+    # lines of menu for the one word the owner can always type (2026-09-24 audit). The desktop's lone Next is
+    # one small button; on a phone it is noise.
+    if not item and [str(w).strip().lower() for w in words] == ['next']: words = []
     lead_in = ('Reply with a number to read that message in full, or:' if item.get('kind') == 'fyis'
                else 'Reply with a number to open one, or:') if first > 1 else 'Reply with one of:'
     opts = (lead_in + '\n'

@@ -96,6 +96,12 @@ class AppAtWorkTests(unittest.TestCase):
         out = read(s, 'approvals.list')
         self.assertIn('draft reply', out); self.assertIn('open_pr', out); self.assertIn('the fix is ready', out)
 
+    def test_pipe_list_names_everything_on_the_rail_not_only_approvals(self):
+        s = world()
+        out = read(s, 'pipe.list')
+        self.assertIn('Can you fix the export?', out); self.assertIn('Quarterly numbers', out)
+        self.assertIn('Nothing is waiting', read(s, 'approvals.list'))     # the approvals read alone says nothing waits
+
     def test_calendar_read_reads_the_days_asked(self):
         s = world()
         ag = {'events': [{'start': '2026-09-25 10:00', 'end': '2026-09-25 10:30', 'subject': 'Budget review', 'all_day': False,

@@ -29,6 +29,18 @@ def store_with_a_draft():
                'who': 'Tess', 'channel': 'whatsapp', 'title': 'Reply to Tess check-in'}
 
 
+class PlainAnswerTests(unittest.TestCase):
+    def test_a_plain_answer_carries_no_menu_of_just_next(self):
+        """"Reply with one of: 1 · Next" rode under every plain answer (2026-09-24 audit); "next" is always typeable."""
+        text = remote_assistant.turn_text({'say': 'One reply is waiting on you.', 'chips': [{'label': 'Next'}]}, store=MemoryStore())
+        self.assertNotIn('Reply with', text); self.assertIn('One reply is waiting on you.', text)
+
+    def test_a_proposal_still_numbers_its_yes_and_no(self):
+        text = remote_assistant.turn_text({'say': 'Put it on my list: Friday: renew the domain.', 'proposal': {'id': 'op1'},
+                                           'options': ['yes, go ahead', 'no, leave it']}, store=MemoryStore())
+        self.assertIn('1 · yes, go ahead', text)
+
+
 class ShowWhatYouAreApprovingTests(unittest.TestCase):
     def test_the_turn_carries_the_draft_and_what_they_wrote_is_one_number_away(self):
         """The desktop card's grammar (2026-09-23): the draft in the open, what they wrote behind More,

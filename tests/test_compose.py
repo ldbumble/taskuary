@@ -84,6 +84,19 @@ class ComposeTests(unittest.TestCase):
         self.assertTrue(any(c['type'] == 'local_file' for c in cat))
         self.assertTrue(all('takes' in c and 'ready' in c for c in cat))
 
+    def test_the_owners_repositories_are_what_a_short_name_resolves_to(self):
+        """"stars on ledger" asked which repository that was: the composer had never been told there were any."""
+        self.s.save_doc('soul', '# SOUL.md\n\n## Repository map\n- **northwind/ledger**: the finance ledger\n', 'owner')
+        llm = llm_saying(cfg_answer(type='digest', title='Stars', daily_at='08:00'))
+        compose.compose(self.s, 'stars on ledger every morning', llm)
+        self.assertEqual(llm.seen[0]['user']['repositories'], {'northwind/ledger': 'the finance ledger'})
+        self.assertIn('short name', llm.seen[0]['system'])
+
+    def test_no_repositories_means_no_empty_list(self):
+        llm = llm_saying(cfg_answer(type='digest', title='Daily digest', daily_at='08:00'))
+        compose.compose(self.s, 'daily digest', llm)
+        self.assertNotIn('repositories', llm.seen[0]['user'])
+
     def test_questions_come_back_as_questions(self):
         llm = llm_saying(json.dumps({'questions': ['Where does the census file live?',
                                                    'Daily, or weekly?']}))

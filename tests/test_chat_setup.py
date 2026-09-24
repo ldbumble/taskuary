@@ -51,10 +51,16 @@ class ReportSetupTests(unittest.TestCase):
         s = store()
         out = say(s, 'set up a report of open tasks by kind every Monday at 8', composer())
         self.assertIsNone(out['decision']); p = out['proposal']
-        self.assertEqual((p['kind'], p['label'], p['params']['title'], p['params']['schedule'], p['params']['triage']),
+        self.assertEqual((p['kind'], p['label'], p['params']['title'], p['params']['runs'], p['params']['reaches_you']),
                          ('report.create', 'Create the report', 'Open tasks by kind', 'cron 0 8 * * 1', 'informational - filed on the Timeline, not triaged'))
-        self.assertEqual(p['params']['config'], REPORT); self.assertIn('yes', p['params']['enabled'])
+        self.assertEqual(p['params']['config'], REPORT)
         self.assertIn('Nothing is saved', out['say']); self.assertIn('Counts open tasks by kind', out['say'])
+        # the builder's order, not a config dump: the prompt first, then the settings, one labelled line each
+        lines = out['say'].splitlines()
+        self.assertEqual(lines[0], 'Create the report: Open tasks by kind.')
+        self.assertEqual([l.split(':')[0] for l in lines[1:6]], ['Prompt', 'Reads', 'Runs', 'Reaches you', 'Goes to'])
+        self.assertIn('sqlite - SELECT Kind', out['say']); self.assertNotIn('source:', out['say'])
+        self.assertNotIn('Prompt:', p['say_card'])                     # the card says it; the line over it does not
         self.assertEqual([x for x in s.list_sources(active_only=False) if x['Channel'] == 'report' and x['Address'] == 'Open tasks by kind'], [])   # not yet
         self.assertEqual(s.list_tasks(active_only=True), [])                                                # no placeholder task (PW-197)
         r = run(s, p).json()
@@ -65,6 +71,12 @@ class ReportSetupTests(unittest.TestCase):
         self.assertEqual(run(s, p).json()['duplicate'], True)                                               # a second click creates nothing
         dock = general.dock_task(s)[0]['TaskId']
         self.assertTrue(any('is on the Reports tab and runs on its schedule' in (c.get('Body') or '') for c in general.chat_rows(s, dock)))
+
+    def test_an_agent_report_leads_with_the_job_it_was_given(self):
+        facts = concierge.report_facts({'type': 'agent', 'title': 'Stars', 'prompt': 'Count overnight GitHub stars on northwind/ledger',
+                                        'ai_prompt': 'Flag any day under five', 'daily_at': '08:00'})
+        self.assertEqual(facts['prompt'], 'Count overnight GitHub stars on northwind/ledger\n\nThen: Flag any day under five')
+        self.assertEqual(facts['reads'], 'an AI agent doing the work itself'); self.assertEqual(facts['goes_to'], 'in the app only - sent to nobody')
 
     def test_questions_come_back_as_questions_and_the_next_words_answer_them(self):
         s = store(); seen = []
@@ -82,7 +94,7 @@ class ReportSetupTests(unittest.TestCase):
         s = store()
         first = say(s, 'set up a report of open tasks by kind every Monday', composer())['proposal']
         second = say(s, 'make it daily at 7 instead', composer(compose={'config': {**REPORT, 'cron': '0 7 * * *'}, 'explain': 'Daily now.'}))['proposal']
-        self.assertEqual((second['id'], second['version'], second['params']['schedule']), (first['id'], 2, 'cron 0 7 * * *'))
+        self.assertEqual((second['id'], second['version'], second['params']['runs']), (first['id'], 2, 'cron 0 7 * * *'))
         self.assertEqual(run(s, first).status_code, 409)                                                    # the old confirmation is stale
         with mock.patch.object(server, 'store', s): TestClient(server.app).delete(f"/api/operations/{second['id']}")
         self.assertEqual(run(s, second).status_code, 409)

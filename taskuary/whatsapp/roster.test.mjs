@@ -46,12 +46,12 @@ test("a group carries how many people are in it, and an older row stays unknown"
   // the number prefix cannot tell the owner's own Message-yourself thread from a group they made,
   // so the count is what does (2026-09-17)
   const roster = createChatRoster();
-  roster.upsertChat({ id: "18483734737-1612296871@g.us", subject: "Myself", participants: [{ id: "me" }] });
-  roster.upsertChat({ id: "18483734737-1605403928@g.us", subject: "Jogging",
+  roster.upsertChat({ id: "15550100100-1600000001@g.us", subject: "Myself", participants: [{ id: "me" }] });
+  roster.upsertChat({ id: "15550100100-1600000002@g.us", subject: "Jogging",
     participants: [{ id: "me" }, { id: "a" }, { id: "b" }] });
-  roster.upsertChat({ id: "120363407840479752@g.us", subject: "The Acropora Team" });
+  roster.upsertChat({ id: "120363000000000001@g.us", subject: "The Northwind Team" });
   const by = Object.fromEntries(roster.list().map((r) => [r.name, r.people]));
   assert.equal(by.Myself, 1);
   assert.equal(by.Jogging, 3);
-  assert.equal("people" in roster.list().find((r) => r.name === "The Acropora Team"), false);
+  assert.equal("people" in roster.list().find((r) => r.name === "The Northwind Team"), false);
 });

@@ -73,9 +73,9 @@ class DoorwayBoundaryTests(unittest.TestCase):
     def test_the_owners_own_message_yourself_chat_is_not_a_group(self):
         """WhatsApp gives that thread a legacy GROUP jid, and refusing it refused the one chat the
         pairing box points people at (the owner, 2026-09-07: "i said reply and nothing happened")."""
-        mine, theirs = '18483734737-1612296871@g.us', '120363407840479752@g.us'
+        mine, theirs = '15550100100-1600000001@g.us', '120363000000000001@g.us'
         store, connector = armed_store('whatsapp', mine)
-        with mock.patch.object(messengers, 'wa_self_number', return_value='18483734737'):
+        with mock.patch.object(messengers, 'wa_self_number', return_value='15550100100'):
             self.assertTrue(remote_assistant.is_private(store, connector, mine))
             self.assertFalse(remote_assistant.is_private(store, connector, theirs))
             self.assertEqual([d['chat'] for d in remote_assistant.doorways(store)], [mine])
@@ -85,18 +85,18 @@ class DoorwayBoundaryTests(unittest.TestCase):
                 thread.assert_called_once()
         # a REAL group named as the assistant chat is still refused, and offers no doorway at all
         store2, connector2 = armed_store('whatsapp', theirs)
-        with mock.patch.object(messengers, 'wa_self_number', return_value='18483734737'):
+        with mock.patch.object(messengers, 'wa_self_number', return_value='15550100100'):
             self.assertFalse(remote_assistant.enabled(store2, 'whatsapp', theirs, connector2))
             self.assertEqual(remote_assistant.doorways(store2), [])
 
     def test_the_paired_number_is_asked_for_once_and_remembered(self):
-        store, connector = armed_store('whatsapp', '18483734737-1612296871@g.us')
-        with mock.patch.object(messengers, '_wa', return_value={'jid': '18483734737:30@s.whatsapp.net'}) as bridge:
-            self.assertEqual(messengers.wa_self_number(store, connector), '18483734737')
+        store, connector = armed_store('whatsapp', '15550100100-1600000001@g.us')
+        with mock.patch.object(messengers, '_wa', return_value={'jid': '15550100100:30@s.whatsapp.net'}) as bridge:
+            self.assertEqual(messengers.wa_self_number(store, connector), '15550100100')
         fresh = store.get_connector(connector['ConnectorId'], with_secret=True)
-        self.assertEqual(json.loads(fresh['ConfigJson'])['me_number'], '18483734737')
+        self.assertEqual(json.loads(fresh['ConfigJson'])['me_number'], '15550100100')
         with mock.patch.object(messengers, '_wa', side_effect=AssertionError('asked twice')):
-            self.assertEqual(messengers.wa_self_number(store, fresh), '18483734737')
+            self.assertEqual(messengers.wa_self_number(store, fresh), '15550100100')
 
     def test_taskuary_bridge_echo_is_claimed_without_starting_an_answer(self):
         store, connector = armed_store()

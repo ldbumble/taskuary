@@ -16,9 +16,9 @@ import pytest
 from taskuary import remote_assistant
 from taskuary.store import MemoryStore
 
-ME = '18483734737'
-MINE = f'{ME}-1612296871@g.us'        # the real Message-yourself thread
-JOGGING = f'{ME}-1605403928@g.us'     # a group the owner made, same shape, other people in it
+ME = '15550100100'
+MINE = f'{ME}-1600000001@g.us'        # a Message-yourself thread
+JOGGING = f'{ME}-1600000002@g.us'     # a group the owner made, same shape, other people in it
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def test_a_group_of_two_is_still_a_group(conn):
 
 def test_somebody_elses_group_was_never_eligible(conn):
     s, c = conn
-    assert remote_assistant.own_thread(s, c, row('120363407840479752@g.us', people=1)) is False
+    assert remote_assistant.own_thread(s, c, row('120363000000000001@g.us', people=1)) is False
 
 
 def test_a_direct_chat_needs_no_counting(conn):

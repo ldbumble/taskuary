@@ -26,13 +26,13 @@ def store():
     s = MemoryStore()
     s.save_connector({'Type': 'whatsapp', 'Name': 'WhatsApp', 'Active': 1,
                       'ConfigJson': json.dumps({'assistant_chat': '15551234567@s.whatsapp.net'})}, 'test')
-    s.save_source({'Channel': 'whatsapp', 'Address': '120363407840479752@g.us', 'Active': 1,
+    s.save_source({'Channel': 'whatsapp', 'Address': '120363000000000001@g.us', 'Active': 1,
                    'Owner': 'test', 'ConfigJson': '{}'}, 'test')
     return s
 
 
 def test_a_source_chat_is_an_inbox(store):
-    assert outbound.input_chats(store)['whatsapp'] == {'120363407840479752@g.us'}
+    assert outbound.input_chats(store)['whatsapp'] == {'120363000000000001@g.us'}
 
 
 def test_an_email_source_is_not_an_inbox_in_this_sense(store):
@@ -43,7 +43,7 @@ def test_an_email_source_is_not_an_inbox_in_this_sense(store):
 
 
 def test_the_group_it_reads_is_refused_as_a_destination(store):
-    why = outbound.refuse_input_chat(store, 'whatsapp', '120363407840479752@g.us')
+    why = outbound.refuse_input_chat(store, 'whatsapp', '120363000000000001@g.us')
     assert 'inbox, not a destination' in why
 
 
@@ -54,7 +54,7 @@ def test_the_owners_own_chat_is_not_refused(store):
 def test_an_alert_addressed_at_an_inbox_does_not_send_and_says_why(store):
     """At the DOOR, not only in the picker: #140 already holds the old address."""
     cfg = {'title': 'Assistant for Backend Monitoring',
-           'alert': {'channel': 'whatsapp', 'to': '120363407840479752@g.us'}}
+           'alert': {'channel': 'whatsapp', 'to': '120363000000000001@g.us'}}
     src = {'SourceId': 140, 'Address': 'Assistant for Backend Monitoring'}
     with pytest.raises(RuntimeError, match='it is an inbox, not a destination'):
         reports.send_alert(store, src, cfg, '1 came back', 'head', 'body')
@@ -62,7 +62,7 @@ def test_an_alert_addressed_at_an_inbox_does_not_send_and_says_why(store):
 
 def test_nothing_was_filed_for_the_refused_alert(store):
     """A send that never happened must not leave a receipt saying it did."""
-    cfg = {'title': 'x', 'alert': {'channel': 'whatsapp', 'to': '120363407840479752@g.us'}}
+    cfg = {'title': 'x', 'alert': {'channel': 'whatsapp', 'to': '120363000000000001@g.us'}}
     before = len(store.scan_messages())
     with pytest.raises(RuntimeError):
         reports.send_alert(store, {'SourceId': 140, 'Address': 'x'}, cfg, 'why', 'head', 'body')

@@ -956,3 +956,24 @@ class ApiTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FyiHandOffTests(unittest.TestCase):
+    """The owner, 2026-09-24: "Don't see button to send to agent or coding agent?" - a notification can be the
+    start of a job ("make this job stop emailing me every time"), and the fyi card offered only filing it or
+    the owner's own list."""
+    def test_an_fyi_card_offers_both_agents_and_the_coding_one_proposes_from_the_message(self):
+        s = store()
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        mid = s.add_message({'ExternalId': 'n1', 'Channel': 'email', 'Subject': 'Nightly job - 0 created, 1 NOT created',
+                             'FromName': 'Nightly job', 'FromEmail': 'jobs@northwind.example', 'SentAt': '2026-09-24 13:00:00',
+                             'BodyText': 'NOT created (1): already exists', 'Status': 'filed'})
+        item = {'kind': 'fyi', 'lane': 'fyi', 'mid': mid, 'key': f'msg:{mid}', 'title': 'Nightly job - 0 created, 1 NOT created'}
+        with mock.patch.object(concierge, 'no_agent', return_value=''):
+            verbs = [c['verb'] for c in concierge.chips_for(s, item)]
+            self.assertIn('regular_agent', verbs); self.assertIn('coder', verbs)
+            dock = general.dock_task(s, 'owner')[0]['TaskId']
+            prop = concierge.propose_for(s, dock, {'verb': 'coder', 'text': 'stop it emailing on every run'}, item,
+                                         'send this to the coding agent')
+        self.assertEqual((prop['kind'], prop['target']), ('task.create_from_message', mid))
+        self.assertEqual(prop['params']['kind'], 'coding')

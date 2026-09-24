@@ -90,7 +90,10 @@ CHIPS = {'review': ('approve', 'close', 'redraft', 'not_ours', 'skip', 'next'), 
          'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'done', 'next'), 'task': ('close', 'skip', 'next'),
          'asked': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
          'todo': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
-         'fyi': ('not_ours', 'not_ours_sender', 'block_sender', 'mine', 'next'),
+         # ...and an fyi can become WORK for an agent too: "make this job stop emailing me" is a coding job that
+         # arrived as a notification, and the card offered only filing it or putting it on the owner's own list
+         # (the owner, 2026-09-24: "Don't see button to send to agent or coding agent?")
+         'fyi': ('not_ours', 'not_ours_sender', 'block_sender', 'mine', 'regular_agent', 'coder', 'next'),
          # ...except the handful, which is the one card carrying its own "All read, next" button.
          # `done` IS that button (it posts verb done) and `next` ends the same way on rows that were
          # read the moment they were shown - so the owner had three controls for one outcome (2026-09-14:

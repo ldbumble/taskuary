@@ -23,11 +23,15 @@ export function describe(p) {
   // doesn't say which repo it's in")
   if (p.kind === "task.create_from_text") {
     const t = String(p.params?.title || "").trim(), x = String(p.params?.text || "").trim();
-    const repo = p.params?.kind === "coding" ? (p.params?.repo || "not clear from the words - you pick it when it starts") : "";
+    // a checkout nobody NAMED is the words' best match - worth a look before it opens, so it says it is a guess
+    const repo = p.params?.kind === "coding" ? (!p.params?.repo ? "not clear from the words - you pick it when it starts"
+      : p.clear === false ? `${p.params.repo} - a best guess, say which if it is another` : p.params.repo) : "";
+    // ...and a general job names its worker: the card is here because one was not clear, so say so and invite a name
+    const agent = p.params?.kind === "general" ? (p.params?.profile || "none fits clearly - the default agent, or say which one") : "";
     // a title that is only the brief cut short says nothing the brief does not: show the brief, once
     const cut = !t || x.startsWith(t.replace(/[\s.…]+$/, ""));
     return { title: p.label || p.kind, target: cut ? x : t, detail: cut ? "" : x,
-             params: repo ? [["repository", repo]] : [], confirm: p.label || "Confirm", cancel: "Cancel", preview: false };
+             params: [...(agent ? [["agent", agent]] : []), ...(repo ? [["repository", repo]] : [])], confirm: p.label || "Confirm", cancel: "Cancel", preview: false };
   }
   const params = Object.entries(p.params || {}).filter(([k, v]) => v != null && v !== "" && !hidden.has(k))
     .map(([k, v]) => [k.replace(/_/g, " "), show(v)]).filter(([, v]) => v !== "" && v != null);

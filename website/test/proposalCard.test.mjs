@@ -99,10 +99,17 @@ test("a hand-off in words is a job, not a form: the brief once, and a coding job
     params: { kind: "general", text: brief, title: "Fan app screening" } });
   assert.equal(own.target, "Fan app screening");
   assert.equal(own.detail, brief);
-  assert.deepEqual(own.params, []);                                  // no checkout for a non-coding agent
+  assert.equal(own.params.length, 1);                                // no checkout for a non-coding agent...
+  assert.equal(own.params[0][0], "agent");                           // ...but it names who takes it, or that nobody clearly does
+  const named = describe({ kind: "task.create_from_text", label: "Start the researcher on it",
+    params: { kind: "general", text: brief, title: "Fan app screening", profile: "researcher" } });
+  assert.deepEqual(named.params, [["agent", "researcher"]]);
   const marked = describe({ kind: "task.create_from_text", label: "Start a coding agent on it",
     params: { kind: "coding", text: brief, title: "Look into issue 920 on the fan app and make sure the screening…" } });
   assert.equal(marked.detail, "");                                  // "…" marks a cut, it does not make a new title
+  const guessed = describe({ kind: "task.create_from_text", label: "Start a coding agent on it", clear: false,
+    params: { kind: "coding", text: brief, repo: "northwind/ledger" } });
+  assert.match(guessed.params[0][1], /^northwind\/ledger - a best guess/);
   const unsure = describe({ kind: "task.create_from_text", label: "Start a coding agent on it", params: { kind: "coding", text: brief } });
   assert.match(unsure.params[0][1], /you pick it/);
 });

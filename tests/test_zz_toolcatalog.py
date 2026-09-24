@@ -294,6 +294,52 @@ class ReadsTests(unittest.TestCase):
         self.assertIn(concierge.LAST_READ, prompts[-1])
         self.assertIn('regular agent', (out.get('proposal') or {}).get('label', '').lower())
 
+    def _handoff(self, answer, workers=True, soul=''):
+        """One typed turn with nothing on the table, the model answering `answer`; returns (turn, proposal)."""
+        import json
+        s = T.store()
+        if workers: s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
+        if soul: s.save_doc('soul', soul, 'owner')
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger', 'northwind/portal': 'C:/x/portal'}}))
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'can you do this for me', llm=lambda system, user, **kw: answer)
+        return s, out, out.get('proposal') or {}
+
+    def test_an_ask_for_a_worker_that_fits_starts_it_at_once(self):
+        """The owner, 2026-09-24: "if i ask it to do something especially if we have profile for it it should start
+        a general agent" / "start right away if it's clear ... if unclear which profile to choose ... then ask"."""
+        s, out, prop = self._handoff('Research job.' + chr(10) + 'DECIDE: regular_agent[researcher]: find out what the CLI Anything project does')
+        self.assertTrue(prop.get('auto'), prop)
+        self.assertEqual(prop['params']['profile'], 'researcher')
+        self.assertIn('researcher', out['say'])
+        # ...and the task it makes is the researcher's, so the session is seeded with the researcher's rules
+        t = concierge.setup_task(s, 'find out what it does', 'owner', kind='general', agent_job=True, profile='researcher')
+        self.assertEqual(s.get_task(t['taskId'])['Assignee'], 'agent:researcher')
+
+    def test_a_worker_nobody_named_is_asked_about_not_guessed(self):
+        _s, _out, prop = self._handoff('DECIDE: regular_agent: find out what the CLI Anything project does')
+        self.assertFalse(prop.get('auto'))
+        self.assertIsNone((prop.get('params') or {}).get('profile'))
+        _s, _out, prop = self._handoff('DECIDE: regular_agent[astrologer]: find out what it does')    # not on the roster
+        self.assertFalse(prop.get('auto'))
+
+    def test_a_coding_ask_starts_when_the_checkout_is_clear_and_asks_when_it_is_not(self):
+        soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
+                + '- **northwind/portal**: the expense portal' + chr(10))
+        # NAMED - by the model off the map, or in the owner's own words - it starts, in that checkout
+        _s, out, prop = self._handoff('DECIDE: coder[ledger]: fix the login crash in the fan mobile app', soul=soul)
+        self.assertTrue(prop.get('auto'))
+        self.assertIn('northwind/ledger', out['say'])
+        _s, out, prop = self._handoff('DECIDE: coder: fix the login crash in the ledger app', soul=soul)
+        self.assertTrue(prop.get('auto'))
+        # only MATCHED by the description: a guess, shown on the card for a yes - a weak best match once pointed at
+        # a checkout the job was not in
+        _s, _out, prop = self._handoff('DECIDE: coder: fix the login crash in the fan mobile app', soul=soul)
+        self.assertFalse(prop.get('auto'))
+        self.assertEqual(prop['params']['repo'], 'northwind/ledger')
+        _s, _out, prop = self._handoff('DECIDE: coder[nowhere]: tidy up the code', soul=soul)          # not on the map
+        self.assertFalse(prop.get('auto'))
+
     def test_a_brain_that_answers_nothing_never_says_no_ai_is_connected(self):
         s = self._task()
         greedy = lambda system, user, **kw: 'CALL: {"kind":"knowledge.search","params":{"query":"x"}}'

@@ -52,7 +52,8 @@ INTRO_AI = False
 MARK = '<!-- tq:card '
 _MARK = re.compile(r'\s*<!-- tq:card (\{.*?\}) -->\s*$', re.S)
 _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
-_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?::\s*(.*?))?(?:\s+ON:\s*(.+?))?\s*$', re.I | re.S)
+# ...with an optional [worker] after the verb: which profile off the roster takes a hand-off (regular_agent[researcher])
+_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?:\s*\[\s*([A-Za-z0-9_.\- ]+?)\s*\])?(?::\s*(.*?))?(?:\s+ON:\s*(.+?))?\s*$', re.I | re.S)
 # A CALL names an operation out of the registry itself (toolcatalog) instead of a verb out of prose.
 # It exists for the targets a verb cannot say: a SET, described rather than listed.
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
@@ -114,7 +115,9 @@ DECIDE_RULE = (
     "When the owner has DECIDED about an item, end with one final line exactly like DECIDE: <verb> where verb is one of: "
     "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Ravi it is not owned here), approve (send the "
     "drafted reply as it stands), redraft (write the draft again - the change after a colon), coder (hand it to the coding "
-    "agent - everything wanted after a colon, in the owner's words), regular_agent (hand it to a non-coding agent), mine "
+    "agent - everything wanted after a colon, in the owner's words; name the repository in brackets only when you are sure: DECIDE: coder[ledger]: fix the login crash), regular_agent (hand it to a non-coding agent - "
+    "the job after a colon; when one of the WORKERS fits it, name it in brackets: DECIDE: regular_agent[researcher]: find out "
+    "what that project does), mine "
     "(they will do it themselves), not_ours (file this one), not_ours_remember (file this kind from now on), "
     "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), archive, close (close the task), done (handled), later, skip "
     "(tomorrow), next (move on), remember (a fact to keep - after a colon), setup (building a report, a connection to another system or an automation - a walk-through with the "
@@ -465,8 +468,9 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     if not m: return (text or '').strip(), None
     verb = m.group(1).lower()
     if verb not in VERBS or verb == 'none': return text[:m.start()].strip(), None
-    d = {'verb': verb, 'text': (m.group(2) or '').strip()}
-    if m.group(3): d['on'] = m.group(3).strip()          # the decision is about ANOTHER item, named (PW-121)
+    d = {'verb': verb, 'text': (m.group(3) or '').strip()}
+    if m.group(2): d['as'] = m.group(2).strip().lower()   # the worker it goes to - checked against the roster, never trusted
+    if m.group(4): d['on'] = m.group(4).strip()          # the decision is about ANOTHER item, named (PW-121)
     return text[:m.start()].strip(), d
 
 
@@ -1714,7 +1718,7 @@ def walk_is_external(store, text: str, llm=None) -> bool:
 
 
 def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: str = SETUP_KIND,
-               agent_job: bool = False, repo: str = None) -> dict:
+               agent_job: bool = False, repo: str = None, profile: str = None) -> dict:
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can
     walk them through it. `kind` is 'general' for a walk-through and 'coding' for a hand-off the owner
     asked for (concierge's `coder` verb), which is the only path that starts an agent in a checkout."""
@@ -1732,7 +1736,9 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
                              # setting. Its Assistant session owns that browser; a coding handoff
                              # keeps the ordinary task controls instead.
                              # the checkout the owner confirmed on the card is the override (terminal.repo_tag)
-                             'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else (f'repo:{repo}' if repo else '')}, actor)
+                             'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else (f'repo:{repo}' if repo else ''),
+                             # the worker the owner's hand-off named: its rules seed the session (general.assigned_role)
+                             **({'Assignee': f'agent:{profile}'} if profile else {})}, actor)
     # A task the owner creates in the Assistant deserves the same concrete list surface as work
     # triage creates from an incoming ask. With no checklist the card rendered Summary as a banner,
     # then rendered the identical own-message below it; there was no box and the ask appeared three
@@ -1940,14 +1946,16 @@ NO_BRAIN = ('I can read you the facts, but I cannot take an instruction without 
             "Connections, or use the card's own buttons.")
 
 
-def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None) -> dict:
+def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None,
+                 profile: str = None) -> dict:
     """A hand-off with nothing on the table: the owner's words ARE the brief. The confirmed `task.create_from_text`
     lands here - the task is made and the agent started only then (PW-124)."""
     job = str(text or '').strip()
     if not job: raise ValueError('say what the agent should do')
     tid = dock_tid or general.dock_task(store, actor)[0]['TaskId']
     brief = _handoff_brief(store, tid, job)
-    made = setup_task(store, brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general', repo=repo)
+    made = setup_task(store, brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general', repo=repo,
+                      profile=profile)
     if kind == 'general':
         session = general.start_session(store, made['taskId'], actor=actor)
         threading.Thread(target=session.send_prompt, args=(brief,), daemon=True).start()
@@ -2036,7 +2044,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     verb = decision['verb']; kind, label, settles = PROPOSALS[verb]
     d_text = (decision.get('text') or '').strip()
     it = item or {}
-    target, params, note = None, {}, ''
+    target, params, note, clear = None, {}, '', False
     if verb in ('coder', 'regular_agent', 'mine'):
         want = {'coder': 'coding', 'regular_agent': 'general', 'mine': 'task'}[verb]
         if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None}
@@ -2051,8 +2059,23 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             # a coding job names its checkout on the card, and the one confirmed is the one it opens in
             if want == 'coding':
                 from . import terminal as term
-                params['repo'] = term.repo_for_text(store, f'{title} {job}') or None
-            label = 'Start a coding agent on it' if want == 'coding' else 'Start a regular agent on it'
+                # CLEAR is a repository somebody NAMED - the model off the map (coder[ledger]) or the owner's own
+                # words. A best word-match is only a guess: the issue-920 ask scored 0.10 for one checkout against
+                # 0.0 for the rest and was in neither of them, so a guess goes on the card and waits for a yes.
+                named = term.known_repo(store, decision.get('as') or '')
+                guess = named or term.repo_for_text(store, f'{title} {job}')
+                params['repo'] = guess or None
+                clear = bool(named) or bool(guess and guess.split('/')[-1].lower() in f'{title} {job}'.lower())
+                label = 'Start a coding agent on it'
+            else:
+                # ...and a general one names its WORKER - the profile the model picked off the roster, validated
+                # the way triage's pick is (agents.routed_role). Typed in the chat it used to get the plain default
+                # agent even with a researcher on the roster for exactly this (the owner, 2026-09-24)
+                from . import agents as hub_agents
+                role = hub_agents.routed_role(store, 'general', decision.get('as') or '')
+                params['profile'] = role or None
+                clear = bool(role) or not hub_agents.roster(store).strip()
+                label = f'Start the {role} on it' if role else 'Start a regular agent on it'
     elif verb == 'not_ours': target, params = it.get('mid'), {'learn': False}
     elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
     elif verb == 'block_sender': target = it.get('mid')      # the rule is keyed on the sender of THIS message
@@ -2110,7 +2133,9 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     # the box saying the same thing"). `say` keeps the whole sentence for a doorway with no card - a phone chat.
     say_card = (lead + note.strip() + ' Nothing has been started - confirm below, or tell me what to change.').strip()
     return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
-            'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'say_card': say_card, 'note': note.strip()}
+            'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'say_card': say_card, 'note': note.strip(),
+            # a hand-off in words with no doubt left in it - one worker, one checkout - starts without a card
+            'clear': clear}
 
 
 def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False) -> dict:
@@ -2488,7 +2513,15 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         try: state = appfacts.state_block(store)
         except Exception as e:
             logger.warning(f'concierge: the app state block was left out - {e}'); state = ''
+        # the workers a hand-off can go to - the roster triage reads, so the chat and the inbox name the same people
+        from . import agents as hub_agents
+        workers = hub_agents.roster(store).strip()
+        from . import terminal as term
+        repos = '\n'.join(f'- {r}: {d}' for r, d in term.repo_map(store).items())
         system = (_system(store, llm) + '\n\n' + toolcatalog.block(store)
+                  + (f'\n\nWORKERS (a regular_agent hand-off names one in brackets when it fits):\n{workers}' if workers else '')
+                  + (f'\n\nREPOSITORIES (a coder hand-off names one in brackets ONLY when you are sure which; '
+                     f'otherwise none):\n{repos}' if repos else '')
                   + (f'\n\n{state}' if state else '')
                   + (f'\n\n{hub.ASSISTANT_LINE}' if hub.enabled(store) else ''))
         raw = str(llm(system,
@@ -2610,6 +2643,16 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         if verb in AUTO and not elsewhere:
             # ...and a run at once still says what it could not do ("nothing to wrap")
             prop.update(auto=True, say=f"{prop['label']} - {_where(target_item or {})}." + (f" {prop['note']}" if prop.get('note') else ''))
+        # ASKED FOR AN AGENT, AND NOTHING LEFT TO GUESS: it starts. "Research this for me" with a researcher on the
+        # roster, "fix this" in a checkout the words name - the owner asked, so the card that waited for a second
+        # yes was friction (2026-09-24: "it should start right away if it's clear they are asking for that. same
+        # for coding. if it's not sure ... which profile to choose or for coding which repo ... then ask").
+        elif verb in ('coder', 'regular_agent') and prop.get('clear') and not elsewhere:
+            role = (prop.get('params') or {}).get('profile')
+            who = f'the {role}' if role else ('the coding agent' if verb == 'coder' else 'an agent')
+            where = (prop.get('params') or {}).get('repo')
+            prop.update(auto=True, say=f"Starting {who} on it{f' in {where}' if where else ''}: {prop['summary']}.")
+            prop['say_card'] = prop['say']
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}

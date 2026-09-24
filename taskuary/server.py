@@ -780,7 +780,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'task.create_from_text':
         from . import concierge
         return concierge.handoff_task(store, str(p.get('text') or ''), str(p.get('kind') or 'coding'), ACTOR, title=p.get('title'),
-                                      repo=str(p.get('repo') or '') or None)
+                                      repo=str(p.get('repo') or '') or None, profile=str(p.get('profile') or '') or None)
     if kind == 'task.setup':
         from . import concierge
         return concierge.setup_task(store, str(p.get('text') or ''), ACTOR)

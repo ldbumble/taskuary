@@ -113,3 +113,12 @@ test("a hand-off in words is a job, not a form: the brief once, and a coding job
   const unsure = describe({ kind: "task.create_from_text", label: "Start a coding agent on it", params: { kind: "coding", text: brief } });
   assert.match(unsure.params[0][1], /you pick it/);
 });
+
+test("a coding hand-off nobody named a checkout for asks for one on the card", async () => {
+  const { pickingRepo } = await import("../src/proposalCard.js");
+  const base = { kind: "task.create_from_text", params: { kind: "coding", text: "tidy the dashboard" }, repo_choices: ["northwind/ledger", "northwind/portal"] };
+  assert.equal(pickingRepo({ ...base, clear: false }), true);
+  assert.equal(pickingRepo({ ...base, clear: true }), false);                      // named: it starts, nothing to pick
+  assert.equal(pickingRepo({ ...base, clear: false, params: { kind: "general", text: "x" } }), false);
+  assert.equal(pickingRepo({ ...base, clear: false, repo_choices: [] }), false);
+});

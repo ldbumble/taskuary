@@ -5,6 +5,10 @@
 export function proposalOf(data) { return data && data.proposal && data.proposal.id ? data.proposal : null; }
 
 // the box's four facts: what will happen, on what, with which parameters, and the button that does it
+// a coding hand-off whose checkout nobody named: the card asks for it (a dropdown) before Start
+export const pickingRepo = (p) => !!p && p.kind === "task.create_from_text" && p.params?.kind === "coding"
+  && p.clear === false && Array.isArray(p.repo_choices) && p.repo_choices.length > 0;
+
 export function describe(p) {
   const hidden = new Set(["key", "tid", "rid", "hint", "config", "processing_context", "wrap"]);   // wrap: whether a transcript exists - machinery, never a fact to confirm   // a revision map, not a fact for the owner
   // A nested value printed as "[object Object]", which is the one thing a confirmation card must never

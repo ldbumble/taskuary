@@ -327,8 +327,8 @@ class BrainTests(unittest.TestCase):
         patcher = mock.patch('taskuary.agents.default_agent', return_value='coder'); patcher.start(); self.addCleanup(patcher.stop)   # whatever this machine has installed
         self.assertEqual(concierge.pick(s), 'cli:coder'); self.assertTrue(concierge.is_cli(s))
         seen = {}
-        def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None):
-            seen.update(name=name, model=model, cwd=cwd, resume=resume)
+        def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None, keep=None):
+            seen.update(name=name, model=model, cwd=cwd, resume=resume, keep=keep)
             def llm(system, user, max_tokens=0, images=None):
                 seen['system'] = system; llm.session_id = 'sess-1'; return 'Dana wants the file - the draft is below.'
             llm.session_id = resume
@@ -342,6 +342,7 @@ class BrainTests(unittest.TestCase):
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'haiku', None, None))   # on its quick gear, tools off
+            self.assertTrue(str(seen['keep']).startswith(f'{concierge.LIVE_KEY}:'))    # one live CLI process per chat (clipool)
             self.assertIn('I am Taskuary', seen['system'])
             concierge.say(s, 'and when did she send it?', key=f'review:{r}')                            # ...and the same conversation, resumed
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'haiku', 'sess-1', None))   # tools off
@@ -390,7 +391,7 @@ class BrainTests(unittest.TestCase):
             kw.get('trace') and None
             return 'The trending report failed on a rate limit; I reran it - here it is.'
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
-             mock.patch.object(concierge, 'brain', lambda st, trace=None, cancel=None, resume=None, fast=False: (trace and trace('tool_call', 'curl', {'args': {'command': 'curl /reports/1/rerun'}})) or fake):
+             mock.patch.object(concierge, 'brain', lambda st, trace=None, cancel=None, resume=None, fast=False, keep=None: (trace and trace('tool_call', 'curl', {'args': {'command': 'curl /reports/1/rerun'}})) or fake):
             c = TestClient(server.app)
             with c.stream('POST', '/api/concierge/stream', json={'mode': 'next'}) as r:
                 lines = [json.loads(l) for l in r.iter_lines() if l.strip()]
@@ -557,7 +558,7 @@ class FastLaneTests(unittest.TestCase):
         s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
         patcher = mock.patch('taskuary.agents.default_agent', return_value='coder'); patcher.start(); self.addCleanup(patcher.stop)
         calls = []
-        def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None):
+        def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None, keep=None):
             calls.append(cwd); f = lambda *a, **k: 'Dana wrote on email.'; f.session_id = ''; return f
         t, m, r = drafted(s)
         with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make):

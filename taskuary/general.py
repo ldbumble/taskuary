@@ -910,7 +910,9 @@ class GeneralSession:
             # Read/Glob/Grep/WebFetch/WebSearch, granted so a headless run need not click, and no
             # command, edit, write, or MCP tool. Looking is not acting.
             build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
-                              cancel=cancel, resume=self.cli_sid or None, research=True, fallback_user=user)
+                              cancel=cancel, resume=self.cli_sid or None, research=True, fallback_user=user,
+                              # the task's CLI stays open between messages instead of starting again (clipool)
+                              keep=f'general:{self.task_id}')
             # the NAME always rides (so a browser this session opens is one the pane can find); the
             # shell and the browser brief ride only for a task that asked for a browser
             if browser_env: build_args.update(extra_env=browser_env)
@@ -1067,6 +1069,8 @@ class GeneralSession:
         # conservative time to ask once; duplicate close calls are no-ops, and learning can never
         # prevent the session itself from closing.
         was_alive = self.alive
+        # ...and its CLI stops too: a closed task keeps no live process (clipool)
+        from . import clipool; clipool.close(f'general:{self.task_id}')
         # The application-level dock is already offered the Hub publishing road on each turn.
         # Mining it again on New chat launched a hidden Claude process for an ordinary archive;
         # repeated New chats could overlap those minute-long closeout calls and make the next

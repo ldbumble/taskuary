@@ -53,7 +53,7 @@ MARK = '<!-- tq:card '
 _MARK = re.compile(r'\s*<!-- tq:card (\{.*?\}) -->\s*$', re.S)
 _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
 # ...with an optional [worker] after the verb: which profile off the roster takes a hand-off (regular_agent[researcher])
-_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?:\s*\[\s*([A-Za-z0-9_.\- ]+?)\s*\])?(?::\s*(.*?))?(?:\s+ON:\s*(.+?))?\s*$', re.I | re.S)
+_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?:\s*\[\s*([A-Za-z0-9_./\- ]+?)\s*\])?(?::\s*(.*?))?(?:\s+ON:\s*(.+?))?\s*$', re.I | re.S)
 # A CALL names an operation out of the registry itself (toolcatalog) instead of a verb out of prose.
 # It exists for the targets a verb cannot say: a SET, described rather than listed.
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
@@ -183,6 +183,7 @@ ALL_DONE = ("That's everything for now. The pipe is empty - nothing is waiting o
 # the quick gear per CLI when the agent profile names no light_model: the assistant's turns are two
 # sentences, and the coding model is the wrong tool for them (Connections > AI CLI agents sets it)
 LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': 'gemini-2.5-flash'}
+LIVE_KEY = 'concierge'                  # clipool key prefix for the chat's live CLI process
 SID_KEY = 'concierge_cli_sid'          # the CLI's own conversation, resumed turn to turn (per dock task)
 CURRENT_KEY = 'assistant_current'      # what is on the table, per dock task - persisted, validated on restore (PW-162)
 
@@ -205,7 +206,7 @@ def pick(store) -> str:
 def is_cli(store) -> bool: return pick(store).startswith('cli:')
 
 
-def brain(store, trace=None, cancel=None, resume=None, fast=False):
+def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = None):
     """The voice. A CLI runs with its tools, in its own scratch folder (never a checkout), on its light
     gear, and picks its last conversation back up; an API connector answers in-process.
 
@@ -240,9 +241,9 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False):
                 # the default gear rides on a copy of the profile, never written back to the row
                 store_get = store.get_agent
                 store.get_agent = lambda n, _r=row, _p=prof: (_r | {'Config': json.dumps(_p)}) if n == name else store_get(n)
-                try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume)
+                try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep)
                 finally: store.get_agent = store_get
-            return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume)
+            return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep)
         return llm_mod.build_llm(store, pick=p, model=str(store.get_settings().get(MODEL_KEY) or '').strip() or None, trace=trace, cancel=cancel)
     except Exception as e:
         logger.debug(f'concierge: no brain - {e}'); return None
@@ -998,7 +999,8 @@ def _brain_for(store, tid: int, llm, trace=None, cancel=None, fast=True):
     """The caller's brain, or ours - always the fast lane: an API connector when there is one, else the CLI
     with its tools off. The assistant never runs anything, so no turn needs the slow gear."""
     if llm is not None: return llm
-    try: return brain(store, trace=trace, cancel=cancel, resume=_sid(store, tid) or None, fast=True)
+    # one live CLI process per chat, kept open between turns (clipool); New chat closes it
+    try: return brain(store, trace=trace, cancel=cancel, resume=_sid(store, tid) or None, fast=True, keep=f'{LIVE_KEY}:{tid}')
     except Exception as e:
         logger.warning(f'concierge: no brain for this turn - {e}')
         return None
@@ -2049,7 +2051,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     verb = decision['verb']; kind, label, settles = PROPOSALS[verb]
     d_text = (decision.get('text') or '').strip()
     it = item or {}
-    target, params, note, clear = None, {}, '', False
+    target, params, note, clear, choices = None, {}, '', False, []
     if verb in ('coder', 'regular_agent', 'mine'):
         want = {'coder': 'coding', 'regular_agent': 'general', 'mine': 'task'}[verb]
         if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None}
@@ -2067,10 +2069,17 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
                 # CLEAR is a repository somebody NAMED - the model off the map (coder[ledger]) or the owner's own
                 # words. A best word-match is only a guess: the issue-920 ask scored 0.10 for one checkout against
                 # 0.0 for the rest and was in neither of them, so a guess goes on the card and waits for a yes.
-                named = term.known_repo(store, decision.get('as') or '')
+                # ...and the OWNER's own message is read for the name, not only the model's rewording of it, which
+                # can drop "on taskuary" on the way (2026-09-24: "if i ask for coding agent on taskuary (explicitly
+                # write it) will it start right away")
+                named = term.known_repo(store, decision.get('as') or '') or term.repo_named_in(store, f'{text} {job}')
                 guess = named or term.repo_for_text(store, f'{title} {job}')
                 params['repo'] = guess or None
-                clear = bool(named) or bool(guess and guess.split('/')[-1].lower() in f'{title} {job}'.lower())
+                clear = bool(named)
+                # not clear: the card offers every checkout to pick from, and Start waits for one - "you pick it when
+                # it starts" let the start quietly guess instead (the owner, 2026-09-24: "it should be dropdown to
+                # choose repo if it's not clear but it just started it in taskuary")
+                choices = term.known_repos(store)
                 label = 'Start a coding agent on it'
             else:
                 # ...and a general one names its WORKER - the profile the model picked off the roster, validated
@@ -2140,7 +2149,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
             'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'say_card': say_card, 'note': note.strip(),
             # a hand-off in words with no doubt left in it - one worker, one checkout - starts without a card
-            'clear': clear}
+            'clear': clear, 'repo_choices': choices}
 
 
 def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False) -> dict:

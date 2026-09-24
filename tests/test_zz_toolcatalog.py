@@ -340,6 +340,41 @@ class ReadsTests(unittest.TestCase):
         _s, _out, prop = self._handoff('DECIDE: coder[nowhere]: tidy up the code', soul=soul)          # not on the map
         self.assertFalse(prop.get('auto'))
 
+    def test_a_checkout_nobody_named_is_picked_on_the_card_and_the_pick_is_where_it_opens(self):
+        """The owner, 2026-09-24: "it should be dropdown to choose repo if it's not clear but it just started it in
+        taskuary". The card carries every checkout; the one picked is revised onto the proposal and pinned."""
+        from taskuary import operations
+        soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
+                + '- **northwind/portal**: the expense portal' + chr(10))
+        s, _out, prop = self._handoff('DECIDE: coder: tidy up the dashboard code', soul=soul)
+        self.assertFalse(prop.get('auto'))
+        self.assertEqual(set(prop['repo_choices']), {'northwind/ledger', 'northwind/portal'})
+        picked = operations.revise(s, prop['id'], {**prop['params'], 'repo': 'northwind/portal'}, 'owner')
+        made = concierge.handoff_task(s, picked['params']['text'], 'coding', 'owner', title=picked['params']['title'],
+                                      repo=picked['params']['repo'])
+        prof = {'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger', 'northwind/portal': 'C:/x/portal'}}
+        self.assertEqual(terminal.guess_repo(s, made['taskId'], prof)[0], 'northwind/portal')
+
+    def test_a_checkout_the_owner_wrote_starts_even_when_the_model_rewords_it_away(self):
+        """"if i ask for coding agent on taskuary (explicitly write it) will it start right away" - the model's
+        brief can drop the name; the owner's own message still has it."""
+        import json
+        soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
+                + '- **northwind/portal**: the expense portal' + chr(10))
+        s = T.store()
+        s.save_doc('soul', soul, 'owner')
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/l', 'northwind/portal': 'C:/x/p'}}))
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload',
+                                llm=lambda system, user, **kw: 'DECIDE: coder: fix the receipt upload')
+        prop = out.get('proposal') or {}
+        self.assertTrue(prop.get('auto'), prop)
+        self.assertEqual(prop['params']['repo'], 'northwind/portal')
+        self.assertEqual(terminal.repo_named_in(s, 'the portal and the ledger'), '')          # two named: ask
+        # ...and the model names a checkout by its FULL name, slash and all - a bracket that could not hold a '/'
+        # left the whole DECIDE line unread and printed it to the owner as the reply
+        self.assertEqual(concierge.parse_decision('On it.' + chr(10) + 'DECIDE: coder[northwind/portal]: fix it')[1]['as'], 'northwind/portal')
+
     def test_a_brain_that_answers_nothing_never_says_no_ai_is_connected(self):
         s = self._task()
         greedy = lambda system, user, **kw: 'CALL: {"kind":"knowledge.search","params":{"query":"x"}}'

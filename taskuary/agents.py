@@ -925,6 +925,11 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         m, eff = split_pick(profile['model'])
         cmd += [profile.get('model_arg') or '--model', m]
         if eff: cmd += ['-c', f'model_reasoning_effort={eff}']
+    # A CONVERSATION KEPT OPEN: the Assistant and the general agent name theirs (`keep_alive`), and claude's
+    # stream-json input serves every turn from one process instead of starting the CLI per call (clipool).
+    keep = profile.get('keep_alive')
+    if keep and family == 'claude' and 'stream-json' in args and ('-p' in args or '--print' in args):
+        return _run_live(profile, name, cmd, prompt, trace, keep, resume, cancel, extra_env)
     # Keep exec's existing sandbox/config flags, and resume the exact thread.
     if resume: cmd += resume_argv(profile, resume) + (['--json', '-'] if is_codex else [])
     # Kimi's current CLI does not read its prompt from stdin. --prompt is print mode
@@ -1090,6 +1095,50 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         if unc: diff = f'{diff}\n{unc}'.strip()
         if diff: trace('tool', 'code_changes', f'{len(diff.splitlines())} diff lines captured')
     return out, sid, (diff[:150000] or None)
+
+
+def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env):
+    """run_cli's turn on a conversation's LIVE process: the same trace events, the same errors, the same
+    (result, session_id, diff) - with no checkout to diff, since neither the Assistant nor a general agent
+    works in one."""
+    from . import clipool
+    cwd = profile.get('cwd')
+    trace('prompt', 'prompt_sent_to_agent', prompt)
+    trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()} live={keep}' + (f' resume={resume}' if resume else ''))
+    def on(j):
+        if j.get('type') == 'assistant':
+            for c in (j.get('message') or {}).get('content') or []:
+                if c.get('type') == 'tool_use':
+                    trace('tool_call', c.get('name') or 'tool', {'tool_call_id': c.get('id') or 'tool', 'args': c.get('input') or {}})
+                elif c.get('type') == 'text' and str(c.get('text') or '').strip():
+                    trace('progress', 'text', str(c['text']).strip())
+        elif j.get('type') == 'user':
+            for c in (j.get('message') or {}).get('content') or []:
+                if isinstance(c, dict) and c.get('type') == 'tool_result':
+                    trace('tool_result', c.get('tool_use_id') or 'tool', {'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
+        shown = _live_line(j)
+        if shown: trace('live', name, shown)
+    try:
+        final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=child_env({**os.environ, **(extra_env or {})}),
+                                 resume=resume, cancel=cancel, timeout=profile.get('timeout', 1200))
+    except PermissionError as e:
+        raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
+    except RuntimeError as e:
+        said = str(e)
+        if said == 'cancelled': raise
+        limit = rate_limited(said)
+        if limit: raise RuntimeError(rate_limit_msg(name, limit))
+        if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
+        raise RuntimeError(f'{name}: {said[:500]}')
+    if final.get('is_error'):
+        said = str(final.get('result') or final.get('subtype') or 'the CLI reported an error')
+        limit = rate_limited(raw) or rate_limited(said)
+        if limit: raise RuntimeError(rate_limit_msg(name, limit))
+        if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
+        raise RuntimeError(f'{name}: {said[:500]}')
+    out = str(final.get('result') or '').strip()
+    trace('output', name, out[-1000:])
+    return out, final.get('session_id'), None
 
 
 def task_context(store, task_id: int) -> str:

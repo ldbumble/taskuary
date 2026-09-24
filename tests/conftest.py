@@ -341,6 +341,8 @@ def isolated_runtime_boundaries():
                     and all(x in {'exec', '--json', '--skip-git-repo-check'} for x in trailing))
         allowed_files = {Path(__file__).resolve().parent / name
                          for name in ('fake_mcp_server.py', 'fake_tui.py', 'fake_acp_server.py')}
+        # ...and the fake stream-json CLI takes the flags a real one is launched with (tests/test_clipool.py)
+        if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_stream_cli.py': return True
         return len(args) == 1 and Path(args[0]).resolve() in allowed_files
 
     def git_allowed(argv, kwargs) -> bool:

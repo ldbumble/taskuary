@@ -602,6 +602,7 @@ def _assistant_dock_new(background: BackgroundTasks):
     from . import funnel, concierge
     funnel.reset_walk(store)       # the new chat walks the pipe afresh; what was decided stands
     store.set_setting(f"{concierge.SID_KEY}:{old['TaskId']}", '', ACTOR)   # a new chat is a new CLI conversation too
+    from . import clipool; clipool.close(f"{concierge.LIVE_KEY}:{old['TaskId']}")   # ...and its live CLI process goes with it
     if session:
         # Closing is also the conservative point where the Hub may retain hard-earned knowledge.
         # That can call an AI, so it belongs after the response rather than delaying New chat.
@@ -3344,6 +3345,7 @@ def concierge_ai(body: ConciergeAiBody):
     store.set_setting(concierge.MODEL_KEY, str(body.model or ''), ACTOR)
     task, _ = general.dock_task(store, ACTOR)
     store.set_setting(f"{concierge.SID_KEY}:{task['TaskId']}", '', ACTOR)
+    from . import clipool; clipool.close(f"{concierge.LIVE_KEY}:{task['TaskId']}")   # a new brain is a new process
     return {'pick': concierge.pick(store), 'model': body.model or ''}
 
 @app.get('/api/funnel/mutes')

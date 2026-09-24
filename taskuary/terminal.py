@@ -1577,6 +1577,14 @@ def repo_for_text(store, text: str, agent: str = 'coder') -> str:
     return best if sc >= .05 and sc >= max(runner * 1.4, runner + .04) else ''
 
 
+def known_repos(store, agent: str = 'coder') -> list:
+    """Every repository a coding job could open in: the SOUL.md map and the coder's checkouts, once each."""
+    row = store.get_agent(agent) or {}
+    try: paths = json.loads(row.get('Config') or '{}').get('cwd_map') or {}
+    except (TypeError, ValueError, AttributeError): paths = {}
+    return list(dict.fromkeys(list(repo_map(store)) + list(paths)))
+
+
 def known_repo(store, name: str, agent: str = 'coder') -> str:
     """The repository a NAME points at - full ('northwind/ledger') or its last part ('ledger'), any case - out of
     the SOUL.md map and the coder's checkouts; '' when it names none, or more than one."""
@@ -1588,6 +1596,18 @@ def known_repo(store, name: str, agent: str = 'coder') -> str:
     known = list(dict.fromkeys(list(repo_map(store)) + list(paths)))
     hits = [r for r in known if r.lower() == want] or [r for r in known if r.split('/')[-1].lower() == want]
     return hits[0] if len(hits) == 1 else ''
+
+
+def repo_named_in(store, text: str, agent: str = 'coder') -> str:
+    """The ONE known repository these words name outright - 'owner/name' or 'name' as a whole word - or ''."""
+    row = store.get_agent(agent) or {}
+    try: paths = json.loads(row.get('Config') or '{}').get('cwd_map') or {}
+    except (TypeError, ValueError, AttributeError): paths = {}
+    known = list(dict.fromkeys(list(repo_map(store)) + list(paths)))
+    said = str(text or '')
+    hits = {r for r in known for n in (r, r.split('/')[-1])
+            if len(n) >= 3 and re.search(rf'(?<![\w/-]){re.escape(n)}(?![\w-])', said, re.I)}
+    return hits.pop() if len(hits) == 1 else ''
 
 
 def repo_tag(task: dict) -> str | None:

@@ -76,7 +76,7 @@ MAX_TOKENS = 400
 
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
-                 research: bool = False, gear: str = 'light'):
+                 research: bool = False, gear: str = 'light', keep: str = None):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -87,6 +87,8 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     row = store.get_agent(agent_name)
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
+    # a CONVERSATION that stays open between turns (clipool) - the Assistant's chat, a general agent's task
+    if keep: prof['keep_alive'] = keep
     # `read_only` is explicit for scheduled reports: a folder tells the agent where it may READ,
     # not whether it may write. None preserves the older caller contract where a cwd meant hands.
     no_hands = read_only if read_only is not None else not (cwd or cli_tools)
@@ -156,14 +158,14 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
 
 def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
               cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-              gear: str = 'light'):
+              gear: str = 'light', keep: str = None):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
     the machine (demo.py)."""
     from . import demo
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
-    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, gear)
+    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, gear, keep)
     return _Scrubbed(brain) if brain else brain
 
 
@@ -186,7 +188,7 @@ class _Scrubbed:
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
                cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-               gear: str = 'light'):
+               gear: str = 'light', keep: str = None):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -214,11 +216,13 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
             picks.append(candidate); identities.add(identity)
 
     def one(candidate, first=False):
-        chosen_model, chosen_resume = (model, resume) if first else (None, None)
+        # the conversation - its resume id and its live process - belongs to the FIRST brain only; a failover
+        # brain starts its own
+        chosen_model, chosen_resume, chosen_keep = (model, resume, keep) if first else (None, None, None)
         if candidate.startswith('cli:'):
             return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
                                 resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
-                                research=research, gear=gear)
+                                research=research, gear=gear, keep=chosen_keep)
         want = candidate[10:] if candidate.startswith('connector:') else None
         want_id = int(want) if want and want.isdigit() else None
         for c in store.list_connectors():

@@ -50,6 +50,8 @@ import "./assistantView.css";
 // showing anything, so a stale key restores nothing.
 const WALK_KEY = "taskuary_walk_tid";
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
+// markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
+const NOTE_KINDS = new Set(["setup_questions"]);
 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
 // is still mail, and the walk that skipped it said "0 of them are mail" with five in the pipe
@@ -460,7 +462,11 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
   // ``fresh`` is a complete presentation, not a patch. Exact replacement clears source fields
   // that disappeared while retaining the durable conversation line and the card's local UI state.
   const c = follows ? fresh : m.card;                     // the live card follows the pile
-  const kind = c?.kind === "setup" ? "setup" : c?.kind === "walk" ? "walk" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
+  // NOTE_KINDS mark a line for the server's own bookkeeping (the set-up's pending questions) and draw nothing:
+  // read as an item card they hid the sentence and drew an empty "asked you" box where the questions were
+  // (the owner, 2026-09-24: "it should show ... like normal but no response??")
+  const kind = NOTE_KINDS.has(c?.kind) ? null
+    : c?.kind === "setup" ? "setup" : c?.kind === "walk" ? "walk" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
   // the short line only over a LIVE card, which shows the brief and the repository itself; one read back from
   // history carries only its heading, so there the sentence is still the only place the brief is written
   const text = kind === "proposal" && m.proposal?.say_card ? m.proposal.say_card : m.text;

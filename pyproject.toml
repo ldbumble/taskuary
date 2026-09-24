@@ -79,3 +79,10 @@ include = ["taskuary*"]
 # screenshots shipped broken. Every new subdirectory under web/ needs its own line, or its files
 # are simply absent from the wheel while the repo tree looks right.
 taskuary = ["*.json", "web/*", "web/assets/*", "web/walk/*", "templates/*.md", "templates/history/*.md", "skills/*/*.md", "whatsapp/*"]
+
+# ...but not the bridge's own tests: `whatsapp/*` shipped them in every wheel, and they are fixtures, not
+# something an install runs (2026-09-24: one carried real chat ids for weeks before it was scrubbed)
+[tool.setuptools.exclude-package-data]
+taskuary = ["whatsapp/*.test.mjs", "whatsapp/*.log"]
+# the folder is a package of its own to setuptools (a namespace package), so it is named here as well
+"taskuary.whatsapp" = ["*.test.mjs", "*.log"]

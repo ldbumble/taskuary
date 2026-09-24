@@ -50,7 +50,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import {
-  agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
+  agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -638,6 +638,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const pendingReview = pendingReplyReview(detail?.reviews || []);
   const proposals = pendingProposals(detail?.reviews || []);
   const sentReview = sentReplyReview(detail?.reviews || []);
+  const unsentReview = sentReview ? null : unsentReplyReview(detail?.reviews || []);
   // A successful Review send is the reply even before (or when) the external channel ingests an
   // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
   // message; otherwise completed tasks showed one inbound message and claimed that was the whole
@@ -1767,6 +1768,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                                 overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
                                 WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                                 {sentReview.DraftText}</Typography>
+                            </Box>
+                          )}
+                          {/* the draft closed without sending stays readable here, the task done or not */}
+                          {unsentReview && (
+                            <Box sx={{ bgcolor: PANEL2, border: `1px dashed ${BORDER}`, borderRadius: 1.25,
+                              px: 1.1, py: 0.85, mt: 0.9 }}>
+                              <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
+                                fontWeight: 750, letterSpacing: 1.25 }}>Not sent - closed without sending</Typography>
+                              <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                                {unsentReview.DraftText}</Typography>
                             </Box>
                           )}
                         </>

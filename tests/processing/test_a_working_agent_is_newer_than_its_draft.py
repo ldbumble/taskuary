@@ -70,3 +70,15 @@ def test_a_parked_agent_still_speaks_for_the_task(store):
     # unchanged: an agent waiting at its prompt already outranked the draft
     tid = drafted(store, canonical=store.canonical)
     assert lane(store, tid, session(tid, waiting=True)) == 'blocked'
+
+
+def test_the_agent_card_still_knows_a_reply_waits_behind_it(store):
+    # closing from the agent's card dismisses that reply, so the card must carry it to say
+    # "Close without sending" (the owner, 2026-09-24)
+    tid = drafted(store, canonical=store.canonical)
+    for live in (session(tid, waiting=False), session(tid, waiting=True)):
+        funnel.invalidate(); funnel.forget_states()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
+            items = funnel.build(store, live_state=live, keep_surfaced=True)['items']
+        agent = next(i for i in items if i.get('tid') == tid and i['kind'] == 'agent')
+        assert agent.get('reply_pending') or store.canonical is False and live[0]['waiting']

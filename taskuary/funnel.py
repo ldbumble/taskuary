@@ -928,7 +928,7 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
         if not in_hand(i): return i
         live = live_by_tid.get(i.get('tid')) or {}
         who = i.get('working') or live.get('agent') or live.get('label') or 'an agent'
-        if i['kind'] == 'review': i = i | {'kind': 'agent', 'rid': None, 'draft': False}
+        if i['kind'] == 'review': i = i | {'kind': 'agent', 'rid': None, 'draft': False, 'reply_pending': True}
         return i | {'key': f"agent:{i['tid']}" if i.get('tid') else i['key'], 'lane': 'working',
                     'why': f"{who} has it - nothing for you until it stops or asks",
                     'working': who, 'agent': live.get('agent') or who,

@@ -163,17 +163,18 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         if agent_cards:
             card.update(agent_cards[0])
         else:
-            if review: card.update(rid=None, draft=False)
             card.update(kind='agent', lane='working', working=worker.get('agent') or worker.get('label') or 'agent',
                         agent=worker.get('agent') or worker.get('label') or 'agent', sid=worker.get('sid'),
                         mode=worker.get('mode') or 'terminal', tail=worker.get('tail') or [],
                         why='An agent is working on this; nothing needs your input yet')
     elif (row.get('Working') or persisted_working) and active:          # ...a headless run too
         who = row.get('Working') or 'agent'
-        if review: card.update(rid=None, draft=False)
         card.update(kind='agent', lane='working', working=who, agent=who)
     elif active and not review:
         card = funnel.paused_conversation(store, card)
+    # ...but the reply is still there behind the agent: closing from its card dismisses it, so the card
+    # says so ("Close without sending") rather than losing it quietly
+    if review and card.get('kind') == 'agent': card.update(rid=None, draft=False, reply_pending=True)
     # ...and an open task nobody closed comes BACK once it has been quiet, so clearing it is a
     # "not now", never a way to lose it. `queued` used to sit in the force-unread clause below, which
     # made a task handed to an agent the one row Done could not shift - the same question answered two

@@ -184,8 +184,12 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   const [open, setOpen] = useState(false);
   const lifted = !verb && promote ? (nav.also || []).find((a) => a.verb === promote) : null;
   const also = [...(nav.also || []).filter((a) => !covers.includes(a.verb) && a !== lifted), ...extra];
+  // a reply still unsent behind the card is dismissed by closing - the button says so (the owner, 2026-09-24)
+  const unsent = !!(close?.draft || close?.reply_pending);
   const words = [...also, ...(close?.tid && !also.some((a) => a.verb === "close")
-    ? [{ verb: "close", label: shut.busy ? "Closing…" : "Close the task", title: "Close the task - it stops coming back to Work", onClick: shut.run, disabled: shut.busy }] : [])];
+    ? [{ verb: "close", label: shut.busy ? "Closing…" : unsent ? "Close without sending" : "Close the task",
+         title: unsent ? "Close the task - the drafted reply is not sent; it stays on the task" : "Close the task - it stops coming back to Work",
+         onClick: shut.run, disabled: shut.busy }] : [])];
   return (
     <>
       {then && <div className="tq-card-then">{then}</div>}

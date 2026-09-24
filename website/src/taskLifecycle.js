@@ -30,6 +30,12 @@ export const agentPhase = ({ session, run, transcript, report, conversation } = 
 export const pendingReplyReview = (reviews = []) =>
   reviews.find((review) => review.Kind !== "action" && review.Status === "pending");
 
+// ...and the one closed WITHOUT sending: the draft stays on the task whatever became of it, a done task
+// included (the owner, 2026-09-24: "draft should always stay on task even on done task"). Newest wins.
+export const unsentReplyReview = (reviews = []) =>
+  [...reviews].sort((a, b) => (b.ReviewId || 0) - (a.ReviewId || 0)).find((review) => review.Kind !== "action" &&
+    ["no_reply", "closed_unsent", "rejected"].includes(review.Status) && String(review.DraftText || "").trim());
+
 export const sentReplyReview = (reviews = []) =>
   reviews.find((review) => review.Kind !== "action" &&
     ["approved", "edited", "sent"].includes(review.Status));

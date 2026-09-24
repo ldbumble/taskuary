@@ -556,6 +556,33 @@ class BrainOptionsTests(unittest.TestCase):
         # a pick that means nothing is not invented back into the list
         self.assertNotIn('cli:nobody', [o['pick'] for o in general.brain_options(self.store(), keep='cli:nobody')])
 
+    def connected(self):
+        """Six brains connected, every profile on claude: the chat offered claude and nothing else."""
+        from taskuary import agents, config
+        conns = {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}, 'qwen': {'cmd': r'C:\npm\qwen.CMD'}, 'devin': {'cmd': 'devin'}}
+        for p in (mock.patch.object(config, 'load', return_value={'cli_connections': conns}),
+                  mock.patch.object(agents, 'connection_brains', getattr(agents.connection_brains, 'real', agents.connection_brains)),
+                  mock.patch.object(agents, 'runs_here', side_effect=lambda prof: agents.cli_of(prof) in ('claude', 'codex', 'qwen'))):
+            p.start(); self.addCleanup(p.stop)
+
+    def test_a_connected_cli_no_profile_runs_on_is_still_a_brain(self):
+        self.connected()
+        got = [o for o in general.brain_options(self.store()) if o.get('type') == 'cli']
+        # installed ones only (devin is connected but not on this machine), and claude still once
+        self.assertEqual([o['pick'] for o in got], ['cli:coder', 'cli:codex', 'cli:qwen'])
+        self.assertEqual([o['label'] for o in got], ['claude (your CLI)', 'codex (your CLI)', 'qwen (your CLI)'])
+
+    def test_a_connection_pick_resolves_like_a_profile(self):
+        """Picking it must RUN it: every door resolves a `cli:` pick through an agent row, which a
+        connection-only brain has none of - so it fell back to the first option, which is claude."""
+        from taskuary import agents
+        self.connected(); s = self.store()
+        self.assertIsNone(s.get_agent('codex'))
+        self.assertEqual(json.loads(agents.agent_row(s, 'codex')['Config'])['cmd'], 'codex')
+        self.assertIsNone(agents.agent_row(s, 'nobody'))
+        self.assertEqual(general._selected(s, pick='cli:codex')[0], 'cli:codex')
+        self.assertIsNotNone(llm.make_cli_llm(s, 'codex'))
+
 
 class GeneralWaitroomTests(unittest.TestCase):
     def test_a_general_note_reopens_the_assistant_not_a_coding_cli(self):

@@ -31,7 +31,6 @@ SETUP_SKILL_CHARS = 8_000
 # morning, a walk carrying it reads out the AI-brain-and-inbound-source checklist instead
 # (the owner, 2026-09-10). Absent, the skill rides - most set-ups really are about this install.
 SETUP_EXTERNAL = 'setup:external'
-WALK_CLI = 'codex'                     # see walk_pick
 EXTERNAL_WALK = (
     "This walk is not about configuring Taskuary. The owner wants you to operate a system of their "
     "own, with them, step by step. Read what they actually asked for, find the real screen or "
@@ -119,6 +118,12 @@ def provider_options(store) -> list:
         if row['Name'] != cmd: label += f" · {row['Name']}"
         out.append({'id': f"cli:{row['Name']}", 'pick': f"cli:{row['Name']}", 'type': 'cli', 'cmd': cmd,
                     'label': f'{label} (your CLI)', 'model': cfg.get('model') or ''})
+    # ...and every connected CLI no profile runs on: a brain without a worker (agents.agent_row)
+    from . import agents as hub_agents
+    for key, conn in hub_agents.connection_brains(store):
+        cmd = hub_agents.cli_of(conn, key)
+        out.append({'id': f'cli:{key}', 'pick': f'cli:{key}', 'type': 'cli', 'cmd': cmd,
+                    'label': f'{labels.get(cmd) or cmd} (your CLI)', 'model': conn.get('model') or '', 'connection': True})
     for row in store.list_connectors():
         if row.get('Type') not in llm_mod.AI_TYPES or not row.get('Active'): continue
         if not row.get('HasSecret') and row.get('Type') != 'ollama': continue
@@ -150,6 +155,10 @@ def brain_options(store, keep: str = '') -> list:
         if o and row.get('ready'):
             out.append({**o, 'label': f"{row['cli']} (your CLI)", 'agent': row['value'],
                         'models': climodels.catalog(row['cli'])['models']})
+    # connected CLIs no profile runs on - already one per CLI, so only the install check applies
+    brains = dict(hub_agents.connection_brains(store))
+    out += [{**o, 'label': f"{o['cmd']} (your CLI)", 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models']}
+            for o in options if o.get('connection') and hub_agents.runs_here(brains.get(o['pick'][4:]))]
     out += [o for o in options if o.get('type') != 'cli']
     # ...but a pick already in use never vanishes from its own picker. Collapsing five Claude
     # profiles into one entry would otherwise blank the dropdown of a chat running on the fourth.
@@ -165,16 +174,21 @@ def _browser_task(task: dict) -> bool:
     return browserview.wanted(task)
 
 
-def walk_pick(store) -> str:
-    """Which brain drives a set-up walk-through, when the owner has not chosen one.
+def walk_pick(store, task: dict = None) -> str:
+    """Which brain drives a walk when nobody chose one for this task: the Assistant's own
+    (concierge.pick), API or CLI - a walk is an assistant action like every other (the owner,
+    2026-09-24: "of course use default, so if ai api then use that"). This used to prefer codex BY
+    NAME: a choice nobody made and no setting could move.
 
-    It must be a CLI: only a CLI has the browser tool, and a walk that cannot click is a walk that
-    reads a checklist out loud. Among CLIs it is codex, because codex's own config already names
-    the model the owner wants at a real keyboard. No model is named HERE - naming one would freeze
-    it; changing it in codex's config changes this. An explicit choice in the chat still outranks
-    it, and with no CLI at all this names nobody rather than an API brain that cannot act."""
-    clis = [o for o in provider_options(store) if o.get('type') == 'cli']
-    return next((o['pick'] for o in clis if o.get('cmd') == WALK_CLI), '') or (clis[0]['pick'] if clis else '')
+    A BROWSER task is the exception: it needs hands, and only a CLI can run agent-browser (a repeat
+    workflow on the API brain answered "cannot be done from here", 2026-09-15). It keeps the
+    Assistant's brain when that is a CLI, else takes the default CLI."""
+    from . import agents as hub_agents, concierge
+    pick = concierge.pick(store)
+    if pick.startswith('cli:') or not _browser_task(task): return pick
+    clis = [o['pick'] for o in provider_options(store) if o.get('type') == 'cli']
+    want = f'cli:{hub_agents.default_agent(store)}'
+    return want if want in clis else (clis[0] if clis else '')
 
 
 def assigned_role(store, task: dict) -> str:
@@ -209,7 +223,7 @@ def default_pick(store, task: dict = None) -> str:
     # here", because the quick API brain this falls back to has no shell to run agent-browser in
     # (2026-09-15). What needs hands takes the pick that has them.
     if str((task or {}).get('SourceRef') or '') == SETUP_REF or _browser_task(task):
-        walk = walk_pick(store)
+        walk = walk_pick(store, task)
         if walk: return walk
     return _selected(store)[0]
 
@@ -1148,11 +1162,10 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     if not task: raise ValueError(f'no task {tid}')
     if not handles(task): raise ValueError('assistant view is for general, research, marketing, and triage tasks')
     terminal.resume_task(store, tid, actor)
-    # A setup walkthrough needs an operator, not a coder in a checkout. If the dock is normally
-    # backed by an API-only chat model, choose a CLI for this task so it can actually drive the
-    # embedded browser - walk_pick says which. An explicit provider choice still wins.
+    # A setup walkthrough speaks with the Assistant's own brain, not the dock's; a browser task needs
+    # a CLI to drive the embedded browser - walk_pick says which. An explicit provider choice still wins.
     if (task.get('SourceRef') == SETUP_REF or _browser_task(task)) and connector_id is None and not model and not pick and not store.saved_session(tid):
-        pick = walk_pick(store) or None
+        pick = walk_pick(store, task) or None
     existing = session_for(tid)
     if existing:
         if connector_id is not None or model or pick:

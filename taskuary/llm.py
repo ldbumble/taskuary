@@ -84,7 +84,8 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     agents) is what runs here - triage, drafts, summaries, the digest - while the profile's
     main `model` stays reserved for the coding sessions. One brain, two gears: the classifier
     reads one email; it does not need the model that rewrites your codebase."""
-    row = store.get_agent(agent_name)
+    from . import agents as hub_agents
+    row = hub_agents.agent_row(store, agent_name)
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
     # a CONVERSATION that stays open between turns (clipool) - the Assistant's chat, a general agent's task
@@ -208,7 +209,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         identity = candidate
         if candidate.startswith('cli:'):
             from . import agents as hub_agents
-            row = store.get_agent(candidate[4:])
+            row = hub_agents.agent_row(store, candidate[4:])
             try: prof = json.loads((row or {}).get('Config') or '{}')
             except ValueError: prof = {}
             identity = f"cli:{hub_agents.cli_of(prof, candidate[4:])}"

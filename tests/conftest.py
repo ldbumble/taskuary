@@ -461,6 +461,19 @@ def isolated_runtime_boundaries():
     except OSError: pass
 
 
+@pytest.fixture(autouse=True)
+def no_connection_brains():
+    """A test's brains are the agent rows IT wrote. agents.connection_brains reads config.toml, and the
+    test home's carries the `claude` connection cli_connections.migrate split off the default coder
+    profile - so a bare MemoryStore "with no CLI" suddenly had one. A test about connection brains
+    patches config.load and puts the real function back: `agents.connection_brains.real`."""
+    from taskuary import agents
+    real = agents.connection_brains
+    stub = lambda store: []
+    stub.real = real
+    with mock.patch.object(agents, 'connection_brains', stub): yield
+
+
 @pytest.fixture
 def fx():
     """A MemoryStore wrapped in the picture factory. Named pictures (pending_draft,

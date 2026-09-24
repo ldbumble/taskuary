@@ -8,7 +8,8 @@ import re
 def context_key(store, pick, model):
     """A native conversation belongs to one provider configuration and working directory."""
     from .config import home
-    row = store.get_agent(pick[4:]) if pick.startswith('cli:') else None
+    from .agents import agent_row
+    row = agent_row(store, pick[4:]) if pick.startswith('cli:') else None
     config = json.loads((row or {}).get('Config') or '{}')
     # The general assistant's CLI runs in Taskuary scratch, not the coding profile's checkout.
     config = {k: v for k, v in config.items() if k not in ('cwd', 'cwd_map')}
@@ -19,8 +20,8 @@ def context_key(store, pick, model):
 
 def can_resume(store, pick):
     if not pick.startswith('cli:'): return False
-    from .agents import resume_argv
-    prof = json.loads((store.get_agent(pick[4:]) or {}).get('Config') or '{}')
+    from .agents import agent_row, resume_argv
+    prof = json.loads((agent_row(store, pick[4:]) or {}).get('Config') or '{}')
     # over ACP the id is the protocol's own (session/new) and session/load is how it is picked back up:
     # devin has no argv resume flag and still reloads its sessions, yet the id it returned was dropped
     # on the floor and the row saved NativeId '' (measured 2026-09-20)

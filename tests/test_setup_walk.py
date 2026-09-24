@@ -5,8 +5,7 @@ TQ-0496 and said "open it when you want to start" - and nothing started. A task 
 not a walk-through (the owner, 2026-09-10: "it's supposed to walk me through this?").
 
 Three things are pinned here: the card's post opens a live session with an unattributed opening
-turn; a walk prefers the codex CLI, because a walk needs a keyboard on a real browser and codex's
-own config names the model for that; and the shipped taskuary-setup SKILL rides only when the job
+turn; a walk speaks with the Assistant's own brain, like every other assistant action; and the shipped taskuary-setup SKILL rides only when the job
 IS configuring Taskuary - it is the wrong map for somebody else's portal.
 """
 import json, unittest
@@ -129,38 +128,47 @@ class WalkStartsTests(unittest.TestCase):
             self.assertEqual(TestClient(server.app).post('/api/concierge/setup', json={'text': ' '}).status_code, 422)
 
 
+SETUP = {'SourceRef': general.SETUP_REF, 'Kind': 'general'}
+BROWSER = {'Kind': 'general', 'Tags': 'needs:browser'}
+
+
+def api_brain(s):
+    row = s.get_connector_by_type('openai')
+    s.save_connector({'ConnectorId': row['ConnectorId'], 'Active': 1, 'Secret': 'sk-test',
+                      'Name': 'Work model', 'ConfigJson': '{"model":"gpt-test"}'}, 'owner')
+    return f"connector:{row['ConnectorId']}"
+
+
 class WalkBrainTests(unittest.TestCase):
-    def test_a_walk_prefers_codex_because_it_is_the_one_that_drives_the_browser(self):
-        s = store()
-        s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
-        self.assertEqual(general.walk_pick(s), 'cli:codex')
+    """A walk speaks with the Assistant's own brain, like every other assistant action (the owner,
+    2026-09-24: "of course use default, so if ai api then use that"). It used to prefer codex BY NAME,
+    which nobody had chosen and no setting could move."""
 
-    def test_with_no_codex_the_first_cli_still_drives_it(self):
-        self.assertEqual(general.walk_pick(store()), 'cli:coder')
+    def test_a_walk_takes_the_assistants_brain_even_an_api_one(self):
+        s = store(); s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        pick = api_brain(s); s.set_setting(concierge.AI_KEY, pick, 'owner')
+        self.assertEqual(general.walk_pick(s, SETUP), pick)
+        self.assertEqual(general.walk_pick(s, SETUP), concierge.pick(s))
 
-    def test_with_no_cli_at_all_it_names_nobody_rather_than_an_api_brain_that_cannot_click(self):
-        self.assertEqual(general.walk_pick(MemoryStore()), '')
+    def test_with_nothing_chosen_it_is_the_default_cli_not_codex(self):
+        s = store(); s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        self.assertEqual(general.walk_pick(s, SETUP), 'cli:coder')
 
-    def test_no_model_is_named_here_so_codex_own_config_keeps_deciding(self):
-        # the owner wants gpt-6-astra for browser work; that lives in ~/.codex/config.toml. Naming
-        # it in the code would freeze it, so walk_pick returns a PICK and never a model.
-        self.assertNotIn('gpt-', ' '.join(str(c) for c in general.walk_pick.__code__.co_consts))
+    def test_a_browser_task_still_needs_hands_so_an_api_choice_falls_to_the_default_cli(self):
+        # a repeat workflow on the API brain answered "opening the secure area cannot be done from
+        # here" (2026-09-15): only a CLI can run agent-browser
+        s = store(); s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        s.set_setting(concierge.AI_KEY, api_brain(s), 'owner')
+        with mock.patch.object(general, '_browser_task', return_value=True):
+            self.assertEqual(general.walk_pick(s, BROWSER), 'cli:coder')
+        s.set_setting(concierge.AI_KEY, 'cli:codex', 'owner')        # ...and a CLI choice is kept
+        with mock.patch.object(general, '_browser_task', return_value=True):
+            self.assertEqual(general.walk_pick(s, BROWSER), 'cli:codex')
 
     def test_the_picker_names_the_walks_own_brain_before_a_session_exists(self):
-        # default_pick is documented as "the SAME reading start_session makes" - and it was not
-        # making it for a walk: the strip offered the API brain while codex was driving, and the
-        # owner's first typed reply would have handed the walk to a brain with no browser.
-        s = store()
-        s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
-        row = s.get_connector_by_type('openai')
-        s.save_connector({'ConnectorId': row['ConnectorId'], 'Active': 1, 'Secret': 'sk-test',
-                          'Name': 'Work model', 'ConfigJson': '{"model":"gpt-test"}'}, 'owner')
-        s.set_setting('assistant_ai', f"connector:{row['ConnectorId']}", 'owner')
-        walk = {'SourceRef': general.SETUP_REF, 'Kind': 'general'}
-        self.assertEqual(general.default_pick(s, walk), general.walk_pick(s))
-        self.assertTrue(general.default_pick(s, walk).startswith('cli:'))
-        # ...and an ordinary general task still gets the brain it always did
-        self.assertEqual(general.default_pick(s, {'Kind': 'general'}), f"connector:{row['ConnectorId']}")
+        # default_pick is documented as "the SAME reading start_session makes"
+        s = store(); s.set_setting(concierge.AI_KEY, api_brain(s), 'owner')
+        self.assertEqual(general.default_pick(s, SETUP), general.walk_pick(s, SETUP))
 
     def test_provider_options_says_which_cli_each_choice_actually_runs(self):
         s = MemoryStore()

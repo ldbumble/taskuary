@@ -436,6 +436,34 @@ def runs_here(profile: dict) -> bool:
     except (FileNotFoundError, OSError): return False
 
 
+def agent_row(store, name: str) -> dict | None:
+    """The row a `cli:<name>` pick runs: the worker profile of that name, else the CLI CONNECTION of
+    that name. adopt_installed connects every installed CLI and mints no worker for it, so codex,
+    copilot and qwen sat connected while the chat's picker - which only walked profiles - offered
+    claude alone (the owner, 2026-09-24: "why only claude cli? where are the rest"). A connection
+    is a brain in its own right; this is the one place a pick naming one becomes something to run."""
+    row = store.get_agent(name)
+    if row or not name: return row
+    from . import config
+    from .cli_connections import with_defaults
+    conn = (config.load().get('cli_connections') or {}).get(str(name))
+    return {'Name': name, 'Kind': 'general', 'Runner': 'cli', 'Config': json.dumps(with_defaults(conn))} if conn else None
+
+
+def connection_brains(store) -> list[tuple[str, dict]]:
+    """(key, command) for each connected CLI that no worker profile already runs - the brains
+    agent_row resolves. Installed or not: the pickers decide whether that matters."""
+    from . import config
+    from .cli_connections import with_defaults
+    covered = {cli_of(json.loads(r.get('Config') or '{}'), r['Name']) for r in store.list_agents()}
+    out = []
+    for key, conn in (config.load().get('cli_connections') or {}).items():
+        full = with_defaults(conn)
+        if store.get_agent(key) or cli_of(full, key) in covered: continue
+        covered.add(cli_of(full, key)); out.append((key, full))
+    return out
+
+
 def availability_failure(error) -> bool:
     """Can the same untouched work safely be retried on a backup provider?"""
     text = str(error or '')

@@ -226,7 +226,8 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
         if p.startswith('cli:'):
             from . import config
             name = p[4:]
-            row = store.get_agent(name) or {}
+            from . import agents as hub_agents
+            row = hub_agents.agent_row(store, name) or {}
             try: prof = json.loads(row.get('Config') or '{}')
             except ValueError: prof = {}
             cli = re.split(r'[\\/]', str(prof.get('cmd') or name))[-1].lower().rsplit('.', 1)[0]

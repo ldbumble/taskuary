@@ -1563,7 +1563,7 @@ class SQLiteStore:
             p.extend([pat] * 18)
         return where, p
 
-    def list_tasks(self, status=None, active_only=False, q=None):
+    def list_tasks(self, status=None, active_only=False, q=None, also=()):
         """Task rows, each carrying its latest review, run and handover note.
 
         `q` searches HERE rather than in the browser. It used to be six more GROUP_CONCAT(DISTINCT)
@@ -1607,7 +1607,8 @@ class SQLiteStore:
         if active_only:
             # the Board's Done column is today only; older finished work lives on Tasks
             where.append("(t.Status IN ('open','in_progress','waiting') "
-                         "OR (t.Status='done' AND IFNULL(t.ClosedAt, t.UpdatedAt) >= date('now','localtime')))")
+                         "OR (t.Status='done' AND IFNULL(t.ClosedAt, t.UpdatedAt) >= date('now','localtime'))"
+                         + ''.join(f" OR t.TaskId={int(i)}" for i in also) + ")")
         qw, qp = self._search_where(q)
         where += qw; p += qp
         if where:

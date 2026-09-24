@@ -997,6 +997,34 @@ class MemoryTests(unittest.TestCase):
         card = [i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
         self.assertEqual([(i['kind'], i['lane'], i['unread'], i.get('mid')) for i in card], [('agentdone', 'report', True, None)])
         self.assertIn('ten-line checklist', card[0]['summary'])
+        self.assertEqual(card[0]['order_band'], 2)      # Your task - a task is never a report, and done is not 'working' (2026-09-24)
+        # ...and put on the table (which reads it) it is STILL the agent's result, in Reports, until Next moves on
+        # (the owner, 2026-09-24: "when bringing into assistant it disappears instead of staying on sidebar until
+        # next") - the read flipped it to a closed fyi row, and the rail dropped the card the chat was showing
+        from taskuary import concierge, funnel
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            key = concierge.surface(s, llm=lambda *a, **k: 'never')['item']['key']
+        settle()
+        # ...and the table says so: Current is what the page draws on the rail, and "its task is done" wiped it
+        # the moment it went up - a finished agent's task is ALWAYS done (the owner, 2026-09-24, twice)
+        from taskuary import general
+        home = general.dock_task(s, 'owner')[0]['TaskId']
+        self.assertEqual((concierge.restore_current(s, home) or {}).get('key'), key)
+        self.assertEqual(concierge.current_key(s, home), key)
+        here = funnel.next_item(s, key)
+        self.assertEqual((here['kind'], here['lane']), ('agentdone', 'report'))
+        self.assertFalse([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t])  # read: not waiting
+        # what the rail shows the Tasks tab shows, however long ago it closed ("regardless of when it was")
+        s._exec('UPDATE task SET ClosedAt=?, UpdatedAt=? WHERE TaskId=?', (ago(days=2), ago(days=2), t))
+        self.assertNotIn(t, [x['TaskId'] for x in s.list_tasks(active_only=True)])
+        self.assertIn(t, [x['TaskId'] for x in s.list_tasks(active_only=True, also={t})])
+        from taskuary import server
+        with mock.patch.object(server, 'store', s), mock.patch.object(funnel, 'cached_pile', return_value={'items': [{'tid': t}]}):
+            self.assertEqual(server._rail_tids(), {t})
+        # ...and the card on the table counts, although showing it read it and the rail's own list lost it
+        funnel.pile(s, force=True)
+        with mock.patch.object(server, 'store', s), mock.patch.object(funnel, 'cached_pile', return_value={'items': []}):
+            self.assertEqual(server._rail_tids(), {t})
         # ...closed by the OWNER it is simply gone
         u = s.create_task({'Title': 'Old thing', 'Kind': 'general', 'Status': 'open'}, 'o')
         s.update_task(u, {'Status': 'done'}, 'owner'); settle()

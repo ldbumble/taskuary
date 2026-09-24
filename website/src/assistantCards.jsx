@@ -681,7 +681,8 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
       {card.summary && !open && <div className="tq-card-excerpt">{card.summary}</div>}
       {open && <div className="tq-card-full">{report === null ? "…" : looksMd(report) ? <Md text={report} /> : report}</div>}
       <button type="button" className="tq-card-more" onClick={show}>{open ? "Less" : "More - show the final report"}</button>
-      <Foot close={card} onDone={onDone} covers={card.mid ? ["reply"] : []}
+      {/* its agent already closed the task: "Close the task" on it asked for what was done (the owner, 2026-09-24) */}
+      <Foot close={card.closed ? null : card} onDone={onDone} covers={card.mid ? ["reply"] : []}
         verb={card.mid ? (
           <Button size="small" variant="contained" disableElevation disabled={busy} onClick={reply} sx={primary}
             title="Write the sender a reply from what the agent found - it lands on the task for your yes">

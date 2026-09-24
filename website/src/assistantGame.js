@@ -36,10 +36,12 @@ const LANE_ZONE = {
   fyi: "coffee", report: "coffee", broken: "coffee",
   forgotten: "archive",
 };
-// an agent's own news - waving, stopped, finished, wrapped up - stands at its desk, whatever lane it rides in
-const AGENT_KINDS = new Set(["agent", "agentdone", "wrapup"]);
-// your own task (Kind "task", the Tasks tab's "your task") trains in the gym, whatever lane it rides in
-export const zoneOf = (item) => AGENT_KINDS.has(item?.kind) ? "floor" : item?.kind === "task" ? "gym" : LANE_ZONE[item?.lane] || "coffee";
+// an agent's own news - waving, stopped, wrapped up - stands at its desk, whatever lane it rides in
+const AGENT_KINDS = new Set(["agent", "wrapup"]);
+// your own task (Kind "task", the Tasks tab's "your task") trains in the gym, whatever lane it rides in - and so does
+// a task an agent FINISHED: the floor draws desks only for agents at work, so it stood nowhere (the owner, 2026-09-24:
+// "in the game tasks that are done are no where"), and the rail puts it in Your task
+export const zoneOf = (item) => AGENT_KINDS.has(item?.kind) ? "floor" : ["task", "agentdone"].includes(item?.kind) ? "gym" : LANE_ZONE[item?.lane] || "coffee";
 
 export function zoneItems(items = []) {
   const out = { floor: [], gym: [], meeting: [], coffee: [], archive: [], hq: [] };

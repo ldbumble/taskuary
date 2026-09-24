@@ -518,7 +518,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // `in progress` a wider window than `all` - live work of any age against today only - so two
   // live rows from last night counted for one pill and not the other and "all 5" sat over
   // "in progress 4 · done 2" (the owner, 2026-09-22: "that doesn't add up?").
-  const keep = (x) => !!sent || !cutAway(stateOf(x).key, touchedToday(x), older);
+  // ...and a task the work rail is showing is never history, whatever its age (the owner, 2026-09-24)
+  const keep = (x) => !!sent || x.OnRail || !cutAway(stateOf(x).key, touchedToday(x), older);
   const shown = bucket.filter(keep);
   const nOlder = bucket.length - shown.length;
   // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says

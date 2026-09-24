@@ -527,11 +527,30 @@ def tasks(status: str = None, active: bool = False, q: str = None):
     # the FULL session payload (including git status and witness reconciliation) for every task;
     # with hundreds of tasks that made Tasks and Board wait behind repository I/O.
     sessions = {s['taskId']: s for s in hub_term.live_sessions(tail=0, details=False) if s.get('taskId')}
-    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books),
+    # WHAT THE WORK RAIL SHOWS, THE TASKS TAB SHOWS (the owner, 2026-09-24: "if task is on work rail it should be in
+    # tasks tab regardless of when it was"): an agent's result from yesterday was on the rail and cut from Done as old
+    rail = _rail_tids()
+    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books), 'OnRail': t['TaskId'] in rail,
                       'Session': sessions.get(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented}
-                     for t in store.list_tasks(status, active_only=active, q=q)]}
+                     for t in store.list_tasks(status, active_only=active, q=q, also=rail)]}
+
+
+def _rail_tids() -> set:
+    """The task ids on the work rail right now, from the rail as last built - never a build (that reads the live
+    sessions, which the Tasks list must not), and never a reason for the list to fail."""
+    from . import concierge, funnel
+    try:
+        rows = list((funnel.cached_pile(store) or {}).get('items', []))
+        # ...and the card on the TABLE, which the rail draws although showing it read it (the owner, 2026-09-24:
+        # "also not in tasks pane as well") - looked up in the cached build, never a new one
+        dock = str(store.get_settings().get('assistant_dock_task_id') or '')
+        key = concierge.current_key(store, int(dock)) if dock.isdigit() else ''
+        if key: rows += [i for i in funnel.full_items(store) or [] if i.get('key') == key or key in (i.get('aliases') or [])]
+        return {int(i['tid']) for i in rows if i.get('tid')}
+    except Exception as e:
+        logger.warning(f'tasks: the rail could not be read for OnRail: {e}'); return set()
 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):

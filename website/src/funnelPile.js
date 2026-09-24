@@ -336,8 +336,8 @@ export const attentionBand = (item) => {
 // levels - processing_order.attention_band is the same list on the server.
 export const LEVEL_META = {
   urgent: { word: "urgent", hint: "a meeting inside fifteen minutes, or a sender on your escalate list" },
-  task: { word: "your task", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed" },
-  reports: { word: "reports", hint: "a report you set up landed, or an agent finished a job" },
+  task: { word: "your task", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed, a task an agent finished" },
+  reports: { word: "reports", hint: "a report you set up landed - information, never a task" },
   fyi: { word: "fyi", hint: "people told you things, and ideas nobody has turned into work - read them or don't" },
   passed: { word: "passed", hint: "still yours - you pressed Next on these; they come back to Your task and the walk after an hour (Tomorrow holds one until the morning)" },
   agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },

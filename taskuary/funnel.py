@@ -736,7 +736,10 @@ def _band(item):
     return attention_band(urgent=lane == 'time' or (lane in ('asked', 'yours') and bool(item.get('urgent_request'))),
                           owner_wait=lane in ('blocked', 'approve'),
                           working=lane == 'working',
-                          actionable=lane in ('broken', 'asked', 'yours', 'queued', 'stopped'),
+                          # a task an agent FINISHED is still a task - Your task until Next reads it, never a report:
+                          # reports are what a report you set up filed (the owner, 2026-09-24: "reports are never
+                          # tasks just information" / "it's not agent working if task is done")
+                          actionable=lane in ('broken', 'asked', 'yours', 'queued', 'stopped') or item.get('kind') == 'agentdone',
                           result=lane == 'report')
 
 
@@ -1048,6 +1051,11 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
 def full_items(store) -> list | None:
     """The cached build with read items kept, for a same-request lookup of the item on the table."""
     return _CACHE['full'] if _CACHE.get('store') is store and _CACHE['pile'] else None
+
+
+def cached_pile(store) -> dict | None:
+    """The rail as last built, or None - never a build (the Tasks list asks, and must not pay for one)."""
+    return _CACHE['pile'] if _CACHE.get('store') is store else None
 
 
 def invalidate(): _CACHE.update(at=0.0, pile=None, store=None, full=None, mark=None, workers=None); _SOURCES.update(at=0.0, by={})

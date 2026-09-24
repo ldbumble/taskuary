@@ -14,9 +14,9 @@ def attention_band(*, urgent=False, owner_wait=False, working=False, actionable=
     1 urgent - a meeting inside fifteen minutes, or a sender on the owner's escalate list.
     2 your task - what triage called work, whoever is waiting: an open task with no agent, a reply
       drafted and waiting for a yes, an agent parked on a question, a hand-off that never started,
-      a check that failed. Owner-input and actionable were two levels for a split triage never
+      a check that failed, a task an agent finished and closed (until it is read). Owner-input and actionable were two levels for a split triage never
       made, and nothing needed the difference: inside a level the oldest comes first.
-    3 reports - a report landed, or an agent finished. A result is not work.
+    3 reports - a report you set up landed. Information, never a task.
     4 fyi - what triage called fyi, and anything it has not judged yet.
     5 agents working - an agent has it; nothing here is for the owner until it stops or asks."""
     if urgent:

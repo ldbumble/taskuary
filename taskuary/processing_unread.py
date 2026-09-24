@@ -60,15 +60,22 @@ FINISHED_HOURS = 72          # an agent's result nobody opened for three days is
 
 
 def _agent_finished(store, tid, active, review, read_at, now):
-    """{'who', 'summary'} when this task was closed by its agent - not the owner - and has not been read since."""
+    """{'who', 'summary', 'unread'} when this task was closed by its agent - not the owner - in the last three days.
+    What the card IS does not turn on the read: putting it on the table reads it, and a read that turned it into
+    a closed fyi row took it off the rail under the chat that was showing it (the owner, 2026-09-24). The read
+    decides only whether it is still waiting."""
     if not tid or active or review: return None
     t = store.get_task(tid) or {}
     by, closed_at = str(t.get('UpdatedBy') or ''), processing_all._stamp(t.get('ClosedAt'))
     if t.get('Status') != 'done' or by in ('', 'owner') or t.get('SourceRef') == 'assistant:dock' or closed_at is None: return None
-    if closed_at < now - timedelta(hours=FINISHED_HOURS) or (read_at and read_at >= closed_at): return None
+    if closed_at < now - timedelta(hours=FINISHED_HOURS): return None
+    # the agent's own close note is the proof (selfclose.py): 'who last wrote the row' also named the owner's
+    # other spellings ('you', a migration), which the read used to hide once it no longer decided the card
     said = next((c['Body'] for c in reversed(store.list_comments(tid) or [])
-                 if str(c.get('Body') or '').startswith('The agent closed this itself')), '')
-    return {'who': 'The agent' if by in ('assistant', 'agent', 'system', 'router') else by, 'summary': said.split(':', 1)[1].strip() if ':' in said else ''}
+                 if str(c.get('Body') or '').startswith('The agent closed this itself')), None)
+    if said is None: return None
+    return {'who': 'The agent' if by in ('assistant', 'agent', 'system', 'router') else by, 'summary': said.split(':', 1)[1].strip() if ':' in said else '',
+            'unread': not (read_at and read_at >= closed_at)}
 
 
 def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES):
@@ -203,7 +210,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...and stopped work is on the rail however often it was looked at - a look is not handling it;
     # only the owner's own Later holds it (same decision, 2026-09-17).
     stopped = active and card['lane'] == 'stopped' and not read.get('deferred')
-    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or finished or
+    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or (finished and finished['unread']) or
                                                  (active and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] in ('idea', 'todo') or row.get('Channel') == 'assistant'))

@@ -266,8 +266,10 @@ def restore_current(store, tid: int) -> dict | None:
     # fyi row - so Current went on holding a task done twenty minutes ago and the assistant kept
     # offering to hand it to an agent (TQ-0420). The test is OVER, never "read": an item the assistant
     # puts in the chat is read, and clearing on that would empty the table as soon as it was set.
+    # ...except an agent's finished result, whose task is done by definition: the closed task IS what is being
+    # shown, and wiping it emptied the table and the rail the moment it went up (the owner, 2026-09-24)
     over = item and item.get('tid') and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
-    if not item or item.get('settling') or (over and item.get('lane') != 'approve'):
+    if not item or item.get('settling') or (over and item.get('lane') != 'approve' and item.get('kind') != 'agentdone'):
         set_current(store, tid, None)
         return None
     card = card_for(item) | {'presentation_revision': item.get('presentation_revision')}

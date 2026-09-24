@@ -88,7 +88,7 @@ test("walking across a room's line takes you into it", () => {
 });
 
 test("an agent's own news stands at its desk, and every chat word scores as a real move", () => {
-  assert.equal(zoneOf({ kind: "agentdone", lane: "report" }), "floor");
+  assert.equal(zoneOf({ kind: "agentdone", lane: "report" }), "gym");     // finished: your task, not a desk nobody draws
   assert.equal(zoneOf({ kind: "wrapup", lane: "report" }), "floor");
   assert.equal(zoneOf({ kind: "report", lane: "report" }), "coffee");
   for (const move of Object.values(CHIP_MOVE)) assert.ok(move in XP, `${move} has no points`);

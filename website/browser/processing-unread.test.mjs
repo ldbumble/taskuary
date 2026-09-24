@@ -145,8 +145,12 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   // ends the reply obligation rather than holding the row for another pass. Which row leads the pile
   // is nondeterministic since the levels became triage's verdict, so this stays lane-agnostic: it
   // holds whether the row left Unread outright or merely stopped being unread.
-  for (const key of previousMembers) assert.notEqual(afterNext.items.find(item => item.key === key)?.unread, true,
-    'walking past an item reads it: it does not come back as unread');
+  // ...and work still yours that Next walked past waits in PASSED, unread and marked shown (the owner, 2026-09-23:
+  // "i thought if you hit next it goes to passed section?") - what must never happen is that it comes back as new
+  for (const key of previousMembers) {
+    const row = afterNext.items.find(item => item.key === key);
+    assert.ok(!(row?.unread === true && !row.surfaced), 'walking past an item reads it: it does not come back as unread and unwalked');
+  }
   await page.click('button[aria-label^="New chat"]');
   await page.waitForFunction(() => !document.querySelector('.tq-pile-row.current'), { timeout: 20000 });
   await page.waitForNetworkIdle({ idleTime: 200, timeout: 20000 });

@@ -23,8 +23,13 @@ test("P0-BROWSER terminal replay becomes visible and accepts fixture input", { t
   session.on("Network.webSocketFrameSent", ({ response }) => sentFrames.push(response.payloadData));
   session.on("Network.webSocketFrameReceived", ({ response }) => receivedFrames.push(response.payloadData));
 
+  // the demo's agent session, found by its title: the demo world is written out item by item and its numbering
+  // moves with it (2026-09-23 put this task at #6 and left #4 an invoice reply with no terminal at all)
+  const tasks = await (await fetch(`${harness.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": harness.token } })).json();
+  const gl = (tasks.data || []).find((t) => t.Title === "Reconcile the August GL export");
+  assert.ok(gl, "the demo world has no GL export session to replay");
   const replayStarted = performance.now();
-  await page.goto(`${harness.ui}/#task=4`, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.goto(`${harness.ui}/#task=${gl.TaskId}`, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15000 });
   await page.waitForFunction(() => !document.body.innerText.includes("restoring the session"), { timeout: 10000 });
   const rendered = await bodyText(page);

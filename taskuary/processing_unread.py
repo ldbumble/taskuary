@@ -206,8 +206,13 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         # filed on the closed task after the read - a note, the reply going out - made it unread again and
         # Next offered the same finished result a second time. Whether the result was read after the close
         # is finished['unread']'s to say; a new MESSAGE on the task is still news and still brings it back.
+        # ...THEIR message, not ours: the owner's reply to the result going out is a message on the task too,
+        # and it brought the result they had just answered straight back to Next (the same ask, again)
+        from .ingest import is_ours
+        ours = {str(m['MessageId']) for m in view.get('messages') or [] if is_ours(m)}
         units = view.get('processing_read', {}).get('units', ())
-        read = read | {'unread': any(not u.get('read') for u in units if u.get('entity_kind') != 'task')}
+        read = read | {'unread': any(not u.get('read') for u in units if u.get('entity_kind') != 'task'
+                                     and not (u.get('entity_kind') == 'message' and u.get('local_id') in ours))}
     # OUR OWN SEND IS A RECEIPT, NOT AN ARRIVAL. A report's alert files the message it just sent so
     # you can see that it went (reports.send_alert) - Taskuary writing to you, on WhatsApp or
     # Telegram. It arrived on the table wearing a sender's face: "Ignore this sender", "Block them

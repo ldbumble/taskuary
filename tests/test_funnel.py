@@ -1050,6 +1050,10 @@ class MemoryTests(unittest.TestCase):
         self.assertIsNone(walk())
         s.add_comment(t, 'owner', 'human', 'Thanks - noted.'); settle()
         self.assertIsNone(walk())                                   # a note on the closed task is not a new result
+        s.add_message({'TaskId': t, 'ExternalId': 'out:reply', 'Channel': 'email', 'SourceName': 'inbox', 'Subject': 'Re: Research the CLI tool',
+                       'FromName': 'Alex Doyle', 'FromEmail': 'alex@northwind.example', 'SentAt': ago(0), 'BodyText': 'Here is what it does.',
+                       'Direction': 'out', 'Status': 'sent'}); settle()
+        self.assertIsNone(walk())                                   # ...nor is the owner's own reply going out
         mail(s, 'Re: Research the CLI tool', who='Erin', email='erin@northwind.example', hours=0, tid=t); settle()
         self.assertEqual(walk(), ('agentdone', t))                  # ...their new mail is
 

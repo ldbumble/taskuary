@@ -586,6 +586,14 @@ def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: 
     return f'Could not get that to {who} ({out.get("state")}): {out.get("why") or ""}'.strip()
 
 
+def _settled_the_table(prop: dict, item: dict | None) -> bool:
+    """The desktop's rule for walking on (proposalCard.afterConfirm): only a settling action on the item ON THE TABLE.
+    The phone walked on after any settling action, so a hand-off started from plain words arrived with the next
+    item stapled under its receipt - an email nobody asked about (the 2026-09-24 chat audit; the owner: the phone
+    follows the desktop)."""
+    return bool(prop.get('settles') and prop.get('key') and item and prop['key'] == item.get('key'))
+
+
 def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: str = '', picked: bool = False) -> str:
     """Everything the Assistant TAB does after a turn, done here - a chat has no page to do it.
 
@@ -619,11 +627,11 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         said[0] = turn_text({**out, 'proposal': None}, lead, store)
         done = concierge.run_proposal(store, prop, actor)
         said.append(concierge.receipt(store, done, actor))
-        walk_on = done.get('status') == 'done' and prop.get('settles')
+        walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
     elif prop and prop.get('auto') and prop.get('status') == 'proposed':
         done = concierge.run_proposal(store, prop, actor)
         said.append(concierge.receipt(store, done, actor))
-        walk_on = done.get('status') == 'done' and prop.get('settles')
+        walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
         # a SCRIPT started by name from the phone: the tasks walk is Next; set-up opens on the connections
         # (the spec: "or at least see my connectors"); the composer wants a sentence
         script = str((done.get('outcome') or {}).get('script') or '')

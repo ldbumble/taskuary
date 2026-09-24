@@ -278,14 +278,28 @@ class SameWalkTests(unittest.TestCase):
         ran = {}
         turn = {'say': 'Marking it handled.', 'options': [], 'chips': [],
                 'proposal': {'id': 'op1', 'version': 1, 'kind': 'item.settle', 'auto': True,
-                             'status': 'proposed', 'settles': True}}
+                             'status': 'proposed', 'settles': True, 'key': 'msg:1'}}
         with mock.patch.object(concierge, 'run_proposal', side_effect=lambda s, p, a: ran.update(op=p['id']) or {'status': 'done'}), \
              mock.patch.object(concierge, 'receipt', return_value='Done - Mark it handled.'), \
              mock.patch.object(concierge, 'surface', return_value={'say': 'Next up: the payroll thread.', 'chips': []}):
-            text = remote_assistant.carry_out(store, turn, None)
+            text = remote_assistant.carry_out(store, turn, {'key': 'msg:1'})
         self.assertEqual(ran['op'], 'op1')
         self.assertIn('Done - Mark it handled.', text)
         self.assertIn('Next up: the payroll thread.', text)
+
+    def test_a_hand_off_from_plain_words_does_not_staple_the_next_item_on(self):
+        """The desktop walks on only when the item ON THE TABLE was settled; a hand-off started from words settles
+        nothing there, and the phone used to append the next email under its receipt (2026-09-24 chat audit)."""
+        store, connector = armed_store()
+        turn = {'say': 'Starting the researcher on it.', 'options': [], 'chips': [],
+                'proposal': {'id': 'op2', 'version': 1, 'kind': 'task.create_from_text', 'auto': True,
+                             'status': 'proposed', 'settles': True, 'key': None}}
+        with mock.patch.object(concierge, 'run_proposal', return_value={'status': 'done'}), \
+             mock.patch.object(concierge, 'receipt', return_value='Done - it is with the researcher.'), \
+             mock.patch.object(concierge, 'surface', return_value={'say': 'Next up: the budget tab.', 'chips': []}):
+            text = remote_assistant.carry_out(store, turn, {'key': 'msg:9'})
+        self.assertIn('Done - it is with the researcher.', text)
+        self.assertNotIn('Next up', text)
 
     def test_a_reply_the_owner_asked_for_is_actually_drafted(self):
         store, connector = armed_store()

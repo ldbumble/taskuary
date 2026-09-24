@@ -1454,6 +1454,18 @@ def read_op(store, kind: str, params: dict) -> str:
     return lookups.read(store, kind, p)
 
 
+def _start_when_clear(prop: dict, verb: str) -> dict:
+    """A hand-off in words with nothing left to guess - one worker, one checkout - runs at once (the page, or the
+    phone's carry_out, presses the button); anything still open stays a card that asks."""
+    if not prop.get('clear'): return prop
+    role = (prop.get('params') or {}).get('profile')
+    who = f'the {role}' if role else ('the coding agent' if verb == 'coder' else 'an agent')
+    where = (prop.get('params') or {}).get('repo')
+    prop.update(auto=True, say=f"Starting {who} on it{f' in {where}' if where else ''}: {prop['summary']}.")
+    prop['say_card'] = prop['say']
+    return prop
+
+
 def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:
     """The model named an operation out of the registry. Turn it into the same proposal card a verb
     makes - NOTHING runs here (PW-123/124); the owner's confirmation is still what executes it.
@@ -1463,6 +1475,18 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     kind, params = call['kind'], dict(call.get('params') or {})
     if toolcatalog.is_read(kind): raise ValueError(f'{kind} is a look-up, not something to confirm')
     it = item or {}
+    # ONE ROAD TO AN AGENT. The model reaches a hand-off two ways - DECIDE coder/regular_agent, or this tool with
+    # kind coding/general - and only the first chose the worker, the checkout and whether to start at once: the
+    # same "research this" was a started researcher on one run and a bare confirm card on the next (the 2026-09-24
+    # chat audit). This call takes the decision's road.
+    if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
+        verb = 'coder' if params['kind'] == 'coding' else 'regular_agent'
+        dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
+               'as': str(params.get('profile') or params.get('repo') or params.get('agent') or '').strip()}
+        prop = _start_when_clear(propose_for(store, tid, dec, None, text, actor), verb)
+        record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'],
+                                                                    'op': prop['id'], 'tid': prop.get('tid'), 'ref': prop.get('ref')})
+        return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
     if kind == 'pipe.clear':
         sel = params.get('select') or {}
         hits = select_items(store, sel)
@@ -2668,12 +2692,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         # roster, "fix this" in a checkout the words name - the owner asked, so the card that waited for a second
         # yes was friction (2026-09-24: "it should start right away if it's clear they are asking for that. same
         # for coding. if it's not sure ... which profile to choose or for coding which repo ... then ask").
-        elif verb in ('coder', 'regular_agent') and prop.get('clear') and not elsewhere:
-            role = (prop.get('params') or {}).get('profile')
-            who = f'the {role}' if role else ('the coding agent' if verb == 'coder' else 'an agent')
-            where = (prop.get('params') or {}).get('repo')
-            prop.update(auto=True, say=f"Starting {who} on it{f' in {where}' if where else ''}: {prop['summary']}.")
-            prop['say_card'] = prop['say']
+        elif verb in ('coder', 'regular_agent') and not elsewhere: _start_when_clear(prop, verb)
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}

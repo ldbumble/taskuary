@@ -1026,3 +1026,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
         if shown.strip(): msgs.extend(chatformat.split(shown, chatformat.HARD))
     for i, msg in enumerate(msgs):
         out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id)
+    # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one
+    # that never did (2026-09-24)
+    logger.info(f'{channel}: sent {len(msgs)} message(s), {sum(len(m) for m in msgs)} chars, to the assistant chat'
+                if msgs else f'{channel}: nothing to send - the answer was empty')

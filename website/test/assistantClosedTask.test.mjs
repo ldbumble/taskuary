@@ -18,3 +18,11 @@ test("a historical finished-task card is never restored as current funnel work",
   assert.doesNotMatch(events, /setCurrent|setCurrentItem|currentRef\.current\s*=/,
     "live watcher updates do not choose any historical card as Current");
 });
+
+test("a set-up's pending questions are a line, not an item on the table", async () => {
+  const { restorableCurrent } = await import("../src/funnelPile.js");
+  assert.equal(restorableCurrent([{ card: { kind: "setup_questions", questions: ["Which repo?"] } }]), null);
+  const view = (await import("node:fs")).readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+  assert.match(view, /const NOTE_KINDS = new Set\(\["setup_questions"\]\)/);
+  assert.match(view, /NOTE_KINDS\.has\(c\?\.kind\) \? null/);
+});

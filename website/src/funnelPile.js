@@ -150,7 +150,7 @@ export const replaceSelectionToken = (pile, detail) => pile ? (detail.code === "
 // watcher cards stay readable in history but cannot silently become the conversation subject.
 export const restorableCurrent = (messages) => [...(messages || [])].reverse().find((message) =>
   message?.card && !message.card.background_event
-  && !["brief", "setup", "agentdone"].includes(message.card.kind))?.card || null;
+  && !["brief", "setup", "agentdone", "setup_questions"].includes(message.card.kind))?.card || null;   // a set-up's questions are not an item
 // Which line carries the action words. It is the LAST thing Taskuary said, card or no card: an answer
 // to a typed question offers the same verbs as the line that introduced the item, and a receipt is not a
 // place to act. interactiveCardIndex is about the card inside the bubble and stays separate.

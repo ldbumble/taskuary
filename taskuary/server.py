@@ -779,7 +779,8 @@ def _run_operation(op: dict, background: BackgroundTasks):
     # the assistant's proposals (concierge.PROPOSALS): each runs the same code the page's own button runs
     if kind == 'task.create_from_text':
         from . import concierge
-        return concierge.handoff_task(store, str(p.get('text') or ''), str(p.get('kind') or 'coding'), ACTOR, title=p.get('title'))
+        return concierge.handoff_task(store, str(p.get('text') or ''), str(p.get('kind') or 'coding'), ACTOR, title=p.get('title'),
+                                      repo=str(p.get('repo') or '') or None)
     if kind == 'task.setup':
         from . import concierge
         return concierge.setup_task(store, str(p.get('text') or ''), ACTOR)

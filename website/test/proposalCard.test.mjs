@@ -87,3 +87,22 @@ test("the receipt after a sweep carries Next, and the page puts the table down w
   assert.match(view, /const clearTable = \(\) => \{/);                 // putting the table down is not advancing
   assert.doesNotMatch(view, /if \(step === "offer"\) advance\(\)/);
 });
+
+test("a hand-off in words is a job, not a form: the brief once, and a coding job names its repository", () => {
+  const brief = "Look into issue 920 on the fan app and make sure the screening job is scheduled and working.";
+  const cut = describe({ kind: "task.create_from_text", label: "Start a coding agent on it",
+    params: { kind: "coding", text: brief, title: "Look into issue 920 on the fan app and make sure the", repo: "northwind/ledger" } });
+  assert.equal(cut.target, brief);                                   // the title was the brief cut short: said once
+  assert.equal(cut.detail, "");
+  assert.deepEqual(cut.params, [["repository", "northwind/ledger"]]); // no "text:" / "title:" rows
+  const own = describe({ kind: "task.create_from_text", label: "Start a regular agent on it",
+    params: { kind: "general", text: brief, title: "Fan app screening" } });
+  assert.equal(own.target, "Fan app screening");
+  assert.equal(own.detail, brief);
+  assert.deepEqual(own.params, []);                                  // no checkout for a non-coding agent
+  const marked = describe({ kind: "task.create_from_text", label: "Start a coding agent on it",
+    params: { kind: "coding", text: brief, title: "Look into issue 920 on the fan app and make sure the screening…" } });
+  assert.equal(marked.detail, "");                                  // "…" marks a cut, it does not make a new title
+  const unsure = describe({ kind: "task.create_from_text", label: "Start a coding agent on it", params: { kind: "coding", text: brief } });
+  assert.match(unsure.params[0][1], /you pick it/);
+});

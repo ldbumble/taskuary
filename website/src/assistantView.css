@@ -313,8 +313,8 @@
 
 /* the composer */
 .tq-compose { padding: 6px 20px 10px; border-top: 1px solid #e4e0d9; background: #fffdfb; }
-.tq-compose-box { width: min(900px, 100%); margin: 0 auto; display: flex; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
-.tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: 150px; }
+.tq-compose-box { width: min(900px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
+.tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: min(40vh, 280px); overflow-y: auto; }
 .tq-compose-box textarea::placeholder { color: #8f8b84; }
 /* the mic arrives wrapped in a Tooltip <span>; inline descender space under it lifted the
    icon above the emoji next door. Both controls are flex items of the same height now. */

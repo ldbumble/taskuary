@@ -1328,6 +1328,39 @@ class WhichCheckoutTests(unittest.TestCase):
         self.assertEqual(repo, 'ldbumble/taskuary')
         self.assertIn('own', why)
 
+    def test_a_coding_job_handed_off_from_the_chat_is_not_our_own_work(self):
+        """TQ-0713 (the owner, 2026-09-24: "it opened it in wrong one"): a hand-off typed in the Assistant was
+        marked like a Taskuary set-up, so an issue about the fan app opened in Taskuary's own checkout."""
+        from taskuary import concierge
+        s = store()
+        s.save_doc('soul', self.SOUL, 'owner')
+        made = concierge.setup_task(s, 'Fix the login crash in the fan mobile app on older phones', 'owner',
+                                    title='Fan app login crash', kind='coding')
+        self.assertEqual(s.get_task(made['taskId'])['SourceRef'], concierge.HANDOFF_REF)
+        repo, why = terminal.guess_repo(s, made['taskId'], self.PROFILE)
+        self.assertNotEqual(repo, 'ldbumble/taskuary', why)
+        # ...while a walk-through set-up in the chat still is ours
+        walk = concierge.setup_task(s, 'set up a report of failed logins', 'owner')
+        self.assertEqual(s.get_task(walk['taskId'])['SourceRef'], 'assistant:setup')
+
+    def test_the_hand_off_card_names_its_repository_and_the_line_over_it_does_not_repeat_it(self):
+        """The owner, 2026-09-24: "the assistant saying words above the box and then the box saying the same
+        thing ... also it doesn't say which repo it's in". The card carries the repository it will open in, the
+        confirmed one is pinned on the task, and the line over the card says only what the card does not."""
+        from taskuary import concierge, general
+        s = store()
+        s.save_doc('soul', self.SOUL, 'owner')
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps(self.PROFILE))
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        brief = 'Fix the login crash in the fan mobile app on older phones'
+        prop = concierge.propose_for(s, dock, {'verb': 'coder', 'text': brief}, None, brief)
+        self.assertEqual(prop['params']['repo'], 'northwind/ledger')
+        self.assertIn(prop['label'], prop['say'])                       # a phone chat, with no card, gets it all
+        self.assertNotIn(prop['label'], prop['say_card'])
+        self.assertNotIn('login crash', prop['say_card'])
+        made = concierge.handoff_task(s, brief, 'coding', 'owner', title='Fan app login crash', repo=prop['params']['repo'])
+        self.assertEqual(terminal.guess_repo(s, made['taskId'], self.PROFILE)[0], 'northwind/ledger')
+
     def test_a_task_that_matches_nothing_refuses_rather_than_opening_the_default_folder(self):
         s = store()
         s.save_doc('soul', self.SOUL, 'owner')

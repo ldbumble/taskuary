@@ -461,6 +461,9 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
   // that disappeared while retaining the durable conversation line and the card's local UI state.
   const c = follows ? fresh : m.card;                     // the live card follows the pile
   const kind = c?.kind === "setup" ? "setup" : c?.kind === "walk" ? "walk" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
+  // the short line only over a LIVE card, which shows the brief and the repository itself; one read back from
+  // history carries only its heading, so there the sentence is still the only place the brief is written
+  const text = kind === "proposal" && m.proposal?.say_card ? m.proposal.say_card : m.text;
   // From the DURABLE turn, never from `fresh`: the vocabulary was chosen when the line was written and
   // is recorded with it, while a pile refresh rebuilds the live item WITHOUT chips - reading them off
   // `fresh` made the words vanish on the next poll. A verb that has since stopped applying is refused
@@ -513,7 +516,9 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
           {/* ...nor over one the walk has moved past: the line under it (the item's mark, its title and its
               task) is the trail, and the sentence was that line at length (2026-09-23: "we just hit next,
               don't need all this text") */}
-          {m.text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(m.text) ? <Md text={m.text} /> : m.text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
+          {/* ...and over a PROPOSAL only what its card does not say - the heading and its line were the sentence's
+              first half (the owner, 2026-09-24: "if there is box don't show it again") */}
+          {text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(text) ? <Md text={text} /> : text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
           {passed && (
             <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} of {m.card.total}</b>
               <span>·</span>{m.card.title}</div>
@@ -568,6 +573,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const [current, setCurrent] = useState(null);       // the key on the table
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [text, setText] = useState("");
+  // THE BOX GROWS WITH WHAT YOU TYPE, like every chat app: one row empty, a row per line after that, up to the CSS
+  // cap (40% of the window) - then it scrolls inside. rows={1} alone held a paragraph in a one-and-a-half-line slot
+  // (the owner, 2026-09-24: "how do we deal with this when you type in many lines?")
+  const composeRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = composeRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [text]);
   const phone = useMediaQuery("(max-width:600px)");     // the composer's hint is one line there
   const [chatsOpen, setChatsOpen] = useState(false);
   const [chats, setChats] = useState([]);
@@ -1532,7 +1547,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
             </Tooltip>
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
-            <textarea rows={1} value={text} disabled={resetting} placeholder={phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
+            <textarea ref={composeRef} rows={1} value={text} disabled={resetting} placeholder={phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
               : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || !text.trim()} onClick={() => send()}><SendIcon fontSize="small" /></button>

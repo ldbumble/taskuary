@@ -33,6 +33,9 @@ from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
 READ_ROUNDS = 2          # a look-up may lead to one more; never an open-ended crawl
+LAST_READ = ('That was your last look-up for this turn - there is no other. Answer now with what you have. If nothing '
+             'written down here answers it and it needs somebody to go and find out - research, a repository, a website - '
+             'say so in one line and DECIDE the hand-off: regular_agent to research or read, coder for work in a repository.')
 NEWLINE = chr(10)
 # Introducing an item is a FACT - who wrote, what was done, what you need to do - and the pipe knows all
 # three. So 'next' asks no model: it is instant, and it can never describe the wrong item (the owner,
@@ -621,7 +624,7 @@ def _verdict_why(item: dict) -> str:
     return f' - {w}' if w else ''
 
 
-def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
+def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: bool = False) -> str:
     """No model: the facts in the same three beats - where from, what was done, what you need to do."""
     if not item:
         if opening: return ALL_DONE
@@ -632,8 +635,9 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
             # the tab was as far as this went, and the page that fixes it had no door of its
             # own until the checklist needed one. Now it does, so say it.
             return (f"{funnel.summary(left)} Say next and I'll take you through them, or name the one you mean. "
-                    '(No AI is connected, so I speak in facts rather than sentences - '
-                    'Connections → AI CLI agents: #cli-agents.)')
+                    + ('(The AI gave me no answer to that one - say it again, or name what you want done.)' if brain else
+                       '(No AI is connected, so I speak in facts rather than sentences - '
+                       'Connections → AI CLI agents: #cli-agents.)'))
         return ALL_DONE
     if opening and item.get('mid') and item['kind'] in ('review', 'action', 'asked', 'todo', 'fyi'):
         frm = f"{item.get('who') or 'Someone'} wrote on {item.get('channel') or 'email'}" + (f" ({funnel_age(item)})" if funnel_age(item) else '') + f": \"{item['title']}\""
@@ -682,19 +686,27 @@ _HANDOFF = re.compile(r"\b(send|hand|give|pass)\s+(it|this|that|them)?\s*(off|ov
                       r"(agent|coder|codex|claude|gemini)\b|\buntil it works?\b|\band (make sure|see) (it|that it) works?\b|\bplease \b", re.I)
 
 
+def _title_cut(s: str, n: int = 120) -> str:
+    """A title at most n long, cut at a word and marked as cut - "...check the schedule config, a" read as a typo."""
+    s = str(s or '').strip()
+    if len(s) <= n: return s
+    head = s[:n].rsplit(' ', 1)[0].rstrip(' ,;:-')
+    return (head or s[:n]) + '…'
+
+
 def _handoff_title(store, tid: int, text: str) -> str:
     """What to call the task. Their own words when they name the job; otherwise the thing the
     conversation was on - "send it to the coding agent until it works" names nothing by itself."""
     bare = _HANDOFF.sub(' ', _POLITE.sub('', text.strip())).strip(' ,.:-?!')
     bare = re.sub(r'\s{2,}', ' ', bare)
-    if len(bare.split()) >= 3: return bare[:120]
+    if len(bare.split()) >= 3: return _title_cut(bare)
     for c in reversed(general.chat_rows(store, tid)):
         m = _MARK.search(c.get('Body') or '')
         if not m: continue
         try: card = json.loads(m.group(1))
         except ValueError: continue
-        if card.get('title'): return f"{card['title']}"[:120]
-    return (bare or text.strip())[:120]
+        if card.get('title'): return _title_cut(card['title'])
+    return _title_cut(bare or text.strip())
 
 
 def _handoff_brief(store, tid: int, text: str) -> str:
@@ -1669,6 +1681,7 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
 # that will walk me through it"). A set-up is a WALK-THROUGH: the conversational agent (general.py),
 # no repository, no checkout, nothing built. Real building is a hand-off the owner asks for by name.
 SETUP_KIND = 'general'
+HANDOFF_REF = 'assistant:handoff'   # a coding job the owner handed off from the chat (setup_task, kind coding)
 
 WALK_SORT = ('The owner asked for something to be set up. Decide which of two jobs this is. '
              'CONFIGURING TASKUARY ITSELF: its AI brain, a connector card, a source it reads, a '
@@ -1701,7 +1714,7 @@ def walk_is_external(store, text: str, llm=None) -> bool:
 
 
 def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: str = SETUP_KIND,
-               agent_job: bool = False) -> dict:
+               agent_job: bool = False, repo: str = None) -> dict:
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can
     walk them through it. `kind` is 'general' for a walk-through and 'coding' for a hand-off the owner
     asked for (concierge's `coder` verb), which is the only path that starts an agent in a checkout."""
@@ -1711,11 +1724,15 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     title = (title or '').strip()[:120] or re.sub(r'^\s*(please )?(set ?up|create|build|make|add|configure|automate)\s+(a |an |me a |me an )?', '', text, flags=re.I).strip(' .')[:120] or text[:120]
     from . import browserview
     tid = store.create_task({'Title': title[:1].upper() + title[1:], 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal',
-                             'Source': 'assistant', 'SourceRef': 'assistant:agent' if agent_job else 'assistant:setup',
+                             # a CODING hand-off is the owner's own job, not a Taskuary set-up: marked
+                             # assistant:setup it read as "Taskuary's own work" and opened in Taskuary's
+                             # checkout, whatever it was about (the owner, 2026-09-24: an issue in another repository)
+                             'Source': 'assistant', 'SourceRef': 'assistant:agent' if agent_job else HANDOFF_REF if kind == 'coding' else 'assistant:setup',
                              # A walkthrough may have to log into a portal or point at the exact
                              # setting. Its Assistant session owns that browser; a coding handoff
                              # keeps the ordinary task controls instead.
-                             'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else ''}, actor)
+                             # the checkout the owner confirmed on the card is the override (terminal.repo_tag)
+                             'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else (f'repo:{repo}' if repo else '')}, actor)
     # A task the owner creates in the Assistant deserves the same concrete list surface as work
     # triage creates from an incoming ask. With no checklist the card rendered Summary as a banner,
     # then rendered the identical own-message below it; there was no box and the ask appeared three
@@ -1923,14 +1940,14 @@ NO_BRAIN = ('I can read you the facts, but I cannot take an instruction without 
             "Connections, or use the card's own buttons.")
 
 
-def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None) -> dict:
+def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None) -> dict:
     """A hand-off with nothing on the table: the owner's words ARE the brief. The confirmed `task.create_from_text`
     lands here - the task is made and the agent started only then (PW-124)."""
     job = str(text or '').strip()
     if not job: raise ValueError('say what the agent should do')
     tid = dock_tid or general.dock_task(store, actor)[0]['TaskId']
     brief = _handoff_brief(store, tid, job)
-    made = setup_task(store, brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general')
+    made = setup_task(store, brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general', repo=repo)
     if kind == 'general':
         session = general.start_session(store, made['taskId'], actor=actor)
         threading.Thread(target=session.send_prompt, args=(brief,), daemon=True).start()
@@ -2031,6 +2048,10 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             job = (d_text or text or '').strip() or _brief_from_item(store, it)
             title = _handoff_title(store, dock_tid, job) if (d_text or text or '').strip() else (it.get('title') or 'Look into this')
             kind, target, params = 'task.create_from_text', 0, {'kind': want, 'text': job, 'title': title}
+            # a coding job names its checkout on the card, and the one confirmed is the one it opens in
+            if want == 'coding':
+                from . import terminal as term
+                params['repo'] = term.repo_for_text(store, f'{title} {job}') or None
             label = 'Start a coding agent on it' if want == 'coding' else 'Start a regular agent on it'
     elif verb == 'not_ours': target, params = it.get('mid'), {'learn': False}
     elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
@@ -2084,8 +2105,12 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             if elsewhere else '')
     head = f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}"
     say_ = lead + f"{head}.{note} Nothing has been started - confirm below, or tell me what to change."
+    # OVER THE CARD, only what the card does not say: its heading IS "<label>" and its line IS the summary, so the
+    # sentence above it said them first (the owner, 2026-09-24: "the assistant saying words above the box and then
+    # the box saying the same thing"). `say` keeps the whole sentence for a doorway with no card - a phone chat.
+    say_card = (lead + note.strip() + ' Nothing has been started - confirm below, or tell me what to change.').strip()
     return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
-            'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'note': note.strip()}
+            'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'say_card': say_card, 'note': note.strip()}
 
 
 def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False) -> dict:
@@ -2477,13 +2502,19 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
         # nobody. The model then answers with what it read - one round only, so a question can never
         # become an unbounded search (the owner, 2026-09-07: "read should be immediate").
-        for _ in range(READ_ROUNDS):
+        # ...and the LAST round says it is the last. Told only "if it did not answer, CALL another", a question
+        # nothing here has ever written down - a GitHub project to research - searched, searched again and
+        # ended on a bare CALL with no words, which read as "No AI is connected" (the owner, 2026-09-24:
+        # "i asked it to research for me which should open a agent card but it did nothing")
+        for n in range(READ_ROUNDS):
             if not (call and toolcatalog.is_read(call['kind'])): break
             did_read = True
             found = read_op(store, call['kind'], call['params'])
             trace and trace('tool', call['kind'], {'params': call['params']})
+            then = (LAST_READ if n == READ_ROUNDS - 1 else
+                    'Answer them with what you just read, briefly. If it did not answer them and another look-up would, CALL that one now - never offer to look.')
             raw = str(llm(system, f"You looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\n"
-                                  f"The owner asked: {text}\nAnswer them with what you just read, briefly. If it did not answer them and another look-up would, CALL that one now - never offer to look.",
+                                  f"The owner asked: {text}\n{then}",
                           max_tokens=MAX_TOKENS) or '').strip()
             raw, call = parse_call(raw)
         # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
@@ -2582,7 +2613,8 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
-    if not reply: reply = fallback(item, False, p['items'])
+    # a brain that answered with nothing is not "no AI": say what happened, never the missing-connector line
+    if not reply: reply = fallback(item, False, p['items'], brain=True)
     chips = chips_for(store, item) or walk_chips(len(p['items']))
     rec('assistant', reply + (f"\nOPTIONS: {' | '.join(options)}" if options else ''))
     return {'say': reply, 'options': options, 'chips': chips, 'decision': None}

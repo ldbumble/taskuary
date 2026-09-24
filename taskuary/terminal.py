@@ -1457,7 +1457,7 @@ def task_blob(store, tid: int) -> str:
                     + [str(m.get('BodyText') or '')[:2000] for m in store.list_messages(tid)])
 
 
-def rank_repos(store, tid: int, profile: dict) -> list:
+def rank_repos(store, tid: int, profile: dict, text: str = None) -> list:
     """Every repo Taskuary knows about, best match for this task first: [(repo, score, has_path)].
 
     Scored over the WHOLE SOUL.md map, not just the repos this agent has a path for. Scoring only
@@ -1466,7 +1466,7 @@ def rank_repos(store, tid: int, profile: dict) -> list:
     from .routing import cosine, tokens
     paths, desc = (profile.get('cwd_map') or {}), repo_map(store)
     known = list(dict.fromkeys(list(desc) + list(paths)))
-    text = task_blob(store, tid)
+    text = task_blob(store, tid) if text is None else text
     xs, blob = tokens(text), text.lower()
     def score(r):
         dt = set(tokens(f"{r.replace('/', ' ')} {desc.get(r, '')}"))
@@ -1563,6 +1563,20 @@ def remember_path(store, agent: str, repo: str, path: str):
 NO_REPO = 'none'
 
 
+def repo_for_text(store, text: str, agent: str = 'coder') -> str:
+    """The checkout a coding job in these words would open in, or '' when no repository is clearly the one -
+    the same relative test guess_repo applies, run BEFORE the task exists so the confirmation card can name
+    it (the owner, 2026-09-24: "it doesn't say which repo it's in and it opened it in wrong one")."""
+    row = store.get_agent(agent) or {}
+    try: profile = json.loads(row.get('Config') or '{}')
+    except (TypeError, ValueError): profile = {}
+    ranked = rank_repos(store, None, profile, text=str(text or ''))
+    if not ranked: return ''
+    best, sc, _has = ranked[0]
+    runner = ranked[1][1] if len(ranked) > 1 else 0.0
+    return best if sc >= .05 and sc >= max(runner * 1.4, runner + .04) else ''
+
+
 def repo_tag(task: dict) -> str | None:
     """The `repo:` tag on a task, if it has one - the override that always wins over the guess."""
     # a whole token: triage's own `triage-repo:` note must never read as the owner's override (PW-093)
@@ -1579,7 +1593,8 @@ def our_own_repo(store, tid: int, known) -> str:
     t = store.get_task(tid) or {}
     ours = (str(t.get('Source') or '') == 'report'
             or any(str(m.get('Channel') or '') == 'report' for m in store.list_messages(tid))
-            or str(t.get('SourceRef') or '').startswith('assistant:'))
+            # ...but a job the owner handed off from the chat is THEIRS, about whatever it names - not our machinery
+            or (str(t.get('SourceRef') or '').startswith('assistant:') and t.get('SourceRef') != 'assistant:handoff'))
     if not ours: return ''
     return next((r for r in known if APP in r.split('/')[-1].lower()), '')
 

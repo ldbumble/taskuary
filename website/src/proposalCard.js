@@ -17,6 +17,18 @@ export function describe(p) {
   // the brief word for word is the same line twice
   if (String(p.kind || "").startsWith("task.create")) hidden.add("kind");
   if (p.params?.title && p.params.title === p.params.text) hidden.add("title");
+  // A HAND-OFF IN WORDS reads as a job, not a form: its title leads, the brief is a paragraph, and a coding job
+  // names its checkout. "text:" and "title:" printed as fields - a title cut off mid-sentence over the same
+  // sentence in full - is what the owner saw (2026-09-24: "the box itself looks weird. text/title etc.. also it
+  // doesn't say which repo it's in")
+  if (p.kind === "task.create_from_text") {
+    const t = String(p.params?.title || "").trim(), x = String(p.params?.text || "").trim();
+    const repo = p.params?.kind === "coding" ? (p.params?.repo || "not clear from the words - you pick it when it starts") : "";
+    // a title that is only the brief cut short says nothing the brief does not: show the brief, once
+    const cut = !t || x.startsWith(t.replace(/[\s.…]+$/, ""));
+    return { title: p.label || p.kind, target: cut ? x : t, detail: cut ? "" : x,
+             params: repo ? [["repository", repo]] : [], confirm: p.label || "Confirm", cancel: "Cancel", preview: false };
+  }
   const params = Object.entries(p.params || {}).filter(([k, v]) => v != null && v !== "" && !hidden.has(k))
     .map(([k, v]) => [k.replace(/_/g, " "), show(v)]).filter(([, v]) => v !== "" && v != null);
   // a proposed report can be dry-run before the click (PW-195): read-only, nothing filed, sent, activated or started

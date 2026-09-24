@@ -20,6 +20,7 @@ export default function ProposalCard({ p, onConfirm, onCancel, onPreview }) {
     <div className="tq-proposal" style={{ border: "1px solid #d8d1c5", borderRadius: 12, padding: "10px 12px", marginTop: 6, background: "#fffdfb" }}>
       <div style={{ fontWeight: 700, fontSize: 12.5, color: "#41525f" }}>{d.title}</div>
       {d.target && <div style={{ fontSize: 12, color: "#55697a", marginTop: 2 }}>{d.target}</div>}
+      {d.detail && <div style={{ fontSize: 12, color: "#3d4a55", marginTop: 4, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{d.detail}</div>}
       {!!d.params.length && (
         <div style={{ fontSize: 11.5, color: "#6b6459", marginTop: 4 }}>
           {d.params.map(([k, v]) => <div key={k}><span style={{ fontWeight: 600 }}>{k}:</span> {String(v)}</div>)}

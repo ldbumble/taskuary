@@ -19,9 +19,12 @@ test("an emoji sends immediately unless it is being added to a draft", () => {
   assert.match(source, /Added to your draft; press send when ready\./);
 });
 
-test("mic, emoji, prompt and send button share one centered composer line", () => {
+test("mic, emoji, prompt and send button share one composer line, and stay on its bottom edge as it grows", () => {
   assert.match(source, /width: 34, height: 34/);
-  assert.match(css, /\.tq-compose-box \{[^}]*align-items: center/);
+  // one line: every control is 34px, so the bottom edge IS the centre line. Grown to many lines, the buttons
+  // stay by the last line, the way every chat app keeps them (2026-09-24)
+  assert.match(css, /\.tq-compose-box \{[^}]*align-items: flex-end/);
+  assert.match(source, /ref=\{composeRef\}/);
   assert.match(css, /\.tq-compose-box textarea \{[^}]*min-height: 34px/);
   assert.match(css, /\.tq-compose-box > span \{[^}]*flex: 0 0 34px/);
 });

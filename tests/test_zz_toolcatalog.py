@@ -278,6 +278,29 @@ class ReadsTests(unittest.TestCase):
             concierge.say(s, 'tell me everything', llm=greedy)
         self.assertLessEqual(len(calls), concierge.READ_ROUNDS + 1, calls)
 
+    def test_the_last_look_up_says_it_is_the_last_and_a_research_ask_becomes_a_hand_off(self):
+        """The owner, 2026-09-24: "i asked it to research for me which should open a agent card but it did
+        nothing". A project nothing here has written down: the model searched, searched again, ended on a
+        bare CALL - and the empty answer read as "No AI is connected"."""
+        s = self._task()
+        prompts = []
+        def brain(system, user, **kw):
+            prompts.append(user)
+            if 'last look-up' in user:
+                return 'Nothing here covers it - that needs research.' + chr(10) + 'DECIDE: regular_agent: research the CLI Anything project'
+            return 'CALL: {"kind":"knowledge.search","params":{"query":"CLI Anything"}}'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'research this GitHub project for me', llm=brain)
+        self.assertIn(concierge.LAST_READ, prompts[-1])
+        self.assertIn('regular agent', (out.get('proposal') or {}).get('label', '').lower())
+
+    def test_a_brain_that_answers_nothing_never_says_no_ai_is_connected(self):
+        s = self._task()
+        greedy = lambda system, user, **kw: 'CALL: {"kind":"knowledge.search","params":{"query":"x"}}'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'research this GitHub project for me', llm=greedy)
+        self.assertNotIn('No AI is connected', out['say'])
+
 
 class SweepReachesTheTableTests(unittest.TestCase):
     """The item ON THE TABLE has been put in the chat, which marks it surfaced/read - and a surfaced

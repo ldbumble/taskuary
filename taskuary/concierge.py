@@ -110,8 +110,8 @@ CONTRACT_HEAD = (
     "Otherwise no options line.\n"
     "The action words under your line are the owner's buttons and they are already chosen for this item - never "
     "list them, and never end a line with an offer to do something. When you cannot tell which of them the owner's "
-    "words mean, say which two you are choosing between and ask - one short question, no DECIDE line. Guessing is "
-    "worse than asking.\n")
+    "words mean, say which two you are choosing between and ask - one short question, no DECIDE line. When the "
+    "words say what they want, act on them: a proposal is a card they confirm, so acting on a clear ask is not a guess.\n")
 # The verb vocabulary is the machine half and it is the SAME wherever the turn is read: an item settled
 # from the phone is settled on the desk, because both go through parse_decision and the same operations.
 DECIDE_RULE = (
@@ -145,7 +145,8 @@ PHONE_CONTRACT = (
     "The choices are added under your line by code from the item itself. Do not list them, do not invent "
     "one, and never end a line with an offer to do something. When you cannot tell which of them the "
     "owner's words mean, say which two you are choosing between and ask - one short question, no DECIDE "
-    "line. Guessing is worse than asking.\n" + DECIDE_RULE)
+    "line. When the words say what they want, act on them: a proposal is a card they confirm, so acting on a "
+    "clear ask is not a guess.\n" + DECIDE_RULE)
 
 DESK, PHONE = 'desk', 'phone'
 # Where this turn will be READ. Ambient, not an argument: every path into the voice (surface, say, the
@@ -2598,7 +2599,9 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     reply, options, decision, call, did_read = '', [], None, None, False
     try:
         from . import handbook as hub
-        hub_context = hub.block(store, text, actions=False) if hub.enabled(store) else ''
+        # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a
+        # project, the model read internal notes on CLI flags and timeouts, and answered in that register (the
+        # 2026-09-24 debug). knowledge.search reads the Hub when a question is about how things are done here.
         from . import toolcatalog, appfacts
         # THE APP'S OWN STATE rides every turn of the general road (appfacts): what is set up, so
         # "run the AR report" can name a report and "is Teams connected" is a read, not a guess.
@@ -2619,9 +2622,10 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                   + (f'\n\n{hub.ASSISTANT_LINE}' if hub.enabled(store) else ''))
         raw = str(llm(system,
                       f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}{trouble(store, text)}\n\n"
-                      + (hub_context + '\n\n' if hub_context else '')
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
-                      + f"The owner says: {text}\nAnswer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. If this is a decision about the item on the table, name it (DECIDE line).",
+                      + f"The owner says: {text}\nAnswer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
+                      + ('If this is a decision about the item on the table, name it (DECIDE line).' if item else
+                         'If they ask for something to be done, propose it now (CALL or DECIDE) - the card is their confirmation.'),
                       max_tokens=MAX_TOKENS) or '').strip()
         if hub.enabled(store): raw = hub.publish_assistant_entries(store, tid, raw, 'assistant')
         raw, call = parse_call(raw)
@@ -2662,12 +2666,10 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     # The MODEL may answer a correction by moving on - it did: "that's not a fail, it says all clear?" came back
     # as DECIDE: next, so the one thing the owner said was never taken (2026-09-03).
     if decision and decision['verb'] in ('next', 'skip', 'later', 'done') and _CORRECTION.search(text): decision = None
-    # words that point at something else pull it in and talk about THAT (everything is the chat)
-    if not decision and not did_read:
-        found = lookup(store, text)
-        if found and found != key:
-            out = surface(store, found, llm, actor, None, trace, cancel)
-            if out.get('item'): return out
+    # NO WORD MATCH OVERRIDES THE ANSWER. Any subject sharing half the owner's words used to replace the model's
+    # reply with that item: "research CLI Anything on GitHub" became a GitHub PR email, "yes, go ahead" someone
+    # else's message, "what's waiting on me" a certificate notice - 10 of 63 real asks (the 2026-09-24 debug). The
+    # model pulls an item in itself when the owner names one: task.read, timeline.search, or DECIDE ... ON:.
     verb = (decision or {}).get('verb')
     # their yes to the card already waiting on it - the button, said in words (the only road a phone has)
     if verb in ('confirm', 'cancel'): return confirm_open(store, tid, item, verb == 'cancel', actor)

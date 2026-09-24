@@ -24,7 +24,7 @@ class Migration(unittest.TestCase):
         after = st.get_doc('counsel')
         self.assertIn("Alex's rule: never touch Friday.", after); self.assertIn('- Dry.', after)
         self.assertLess(after.index('## When the owner decides'), after.index('## My goal'))
-        self.assertIn('coder and setup are not the same road', after)
+        self.assertIn('Research is never a set-up', after)
         rows = [r for r in st.list_audit('doc', 0) if r['Action'] == 'migrated']
         self.assertEqual(len(rows), 1)
         self.assertEqual(counsel.migrate(st), 'unchanged')
@@ -32,7 +32,7 @@ class Migration(unittest.TestCase):
     def test_a_document_without_the_goal_heading_gets_the_section_at_the_end(self):
         st = MemoryStore(); st.save_doc('counsel', '# Mine\n\n## Voice\n- Dry.\n', 'owner')
         self.assertEqual(counsel.migrate(st), 'appended')
-        self.assertTrue(st.get_doc('counsel').rstrip().endswith('I load, I orchestrate, Taskuary does.'))
+        self.assertTrue(st.get_doc('counsel').rstrip().endswith('never blame myself for not seeing it.'))
 
     def test_a_goal_heading_look_alike_in_a_fence_or_a_deeper_heading_is_never_mistaken_for_the_real_one(self):
         # a bare substring .replace() matches inside a fenced sample AND inside '### My goal' (which

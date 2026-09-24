@@ -209,12 +209,12 @@ class TurnTests(unittest.TestCase):
         self.assertEqual((pulled['item']['kind'], pulled['item']['tid']), ('task', old)); self.assertIn('renamed it', pulled['item']['summary'])
         self.assertIsNone(concierge.lookup(s, 'what about the invoice from Marcus'))
         concierge.surface(s, llm=lambda *a, **k: 'first')               # Dana's is on the table
+        # ...but the owner's WORDS never override the model's answer: a word match replaced it with whatever subject
+        # shared half the words - "yes, go ahead" became someone else's message (the 2026-09-24 debug). The model
+        # reads the thing itself (message.read, task.read) or names it on a decision (ON:).
         out = concierge.say(s, 'what did Lee say?', key=f'review:{r}', llm=lambda *a, **k: 'Lee asked about lunch.')
-        # the row is titled by what Lee SAID: "Teams chat with Lee" only repeats the sender (funnel.says, 2026-09-07)
-        self.assertEqual((out['item']['who'], out['item']['title']), ('Lee Park', 'lunch?'))
         self.assertEqual(out['say'], 'Lee asked about lunch.')
-        roles = [(h['role'], bool(h['card'])) for h in concierge.history(s, general.dock_task(s)[0]['TaskId'])]
-        self.assertEqual(roles[-3:], [('assistant', True), ('user', False), ('assistant', True)])
+        self.assertNotEqual((out.get('item') or {}).get('who'), 'Lee Park')
 
     def test_say_records_the_owners_words_and_answers_about_the_item(self):
         s = store()
@@ -353,7 +353,7 @@ class BrainTests(unittest.TestCase):
             self.assertEqual(seen['resume'], 'sess-1')                                                   # the next turn resumes it
             self.assertIsNone(seen['cwd'])                                                               # a typed ask too: tools off, the assistant runs nothing
             self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system'])
-            self.assertIn('I have no tools and run nothing myself', seen['system'])   # COUNSEL.md's own words now (PW-248/256), not the contract's
+            self.assertIn('I have look-ups', seen['system'])       # COUNSEL.md's own words (PW-248/256); it said "I have no tools" until 2026-09-24
         s.set_setting('assistant_ai', 'connector:3', 't')
         self.assertTrue(concierge.is_cli(s))                                                            # the old dock's pick is not this page's
         s.set_setting(concierge.AI_KEY, 'connector:3', 't')

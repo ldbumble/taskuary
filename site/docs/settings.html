@@ -107,7 +107,7 @@ is what you see if those cards cannot load.</li>
 <p>Which AI reads and classifies inbound messages.</p>
 <p>TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.</p>
 <p>ONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its &#39;light model&#39; (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent&#39;s main model. No second API key, one bill.</p>
-<p>auto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way.</p>
+<p>Left blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way.</p>
 <h3 id="backup-brains">Backup brains<a class="anchor" href="#backup-brains" aria-label="Link to this section">#</a></h3>
 <p><code>triage_backup_ai</code> · type: brains</p>
 <p>Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.</p>

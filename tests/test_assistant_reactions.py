@@ -653,14 +653,14 @@ class ResponseTests(unittest.TestCase):
         self.assertIsNone(out['decision'])
         self.assertEqual(out['say'], 'They want the export fixed.')
 
-    def test_naming_something_else_pulls_it_onto_the_table(self):
+    def test_a_word_match_never_replaces_the_answer(self):
+        """Any subject sharing half the owner's words replaced the model's reply - 10 of 63 real asks (2026-09-24)."""
         s, tid, mid, item = self._asked()
         with mock.patch.object(ingest, '_spawn'):
-            arrive(s, subject='Resident refund for Mrs Garnett', body='Please approve the refund.',
+            arrive(s, subject='Refund for the vendor', body='Please approve the refund.',
                    who='Nina Hart', email='nina@ours.com', conv='c:refund', hours=2, llm=brain('task', 'coding'))
-        out = say(s, 'what did Nina send about the refund?', key=item['key'])
-        self.assertIsNotNone(out.get('item'))
-        self.assertIn('Nina', f"{out['item'].get('who')} {out['say']}")
+        out = say(s, 'yes, go ahead with the refund', key=item['key'])
+        self.assertNotEqual((out.get('item') or {}).get('who'), 'Nina Hart')
 
     def test_every_verb_the_contract_offers_is_one_the_code_can_carry_out(self):
         """The model may answer with any verb in the contract; each has to be a proposal or one of the roads."""

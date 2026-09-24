@@ -99,9 +99,11 @@ class ResearchIsAWalkThroughTests(unittest.TestCase):
         document (PW-248/256): the code keeps only the coder/regular_agent/setup verbs themselves."""
         # a blank store loads the shipped template - prove the rule REACHES the model, not just the file
         system = ' '.join(concierge._system(MemoryStore()).split())
-        self.assertIn('coder and setup are not the same road', system)
-        self.assertIn('the test is whether there is a SYSTEM to type at', system)
-        self.assertIn('because the sentence was polite', system)
+        # 2026-09-24: research is a HAND-OFF to a regular agent - it was sent to the set-up walk, which the contract's
+        # own WORKERS list contradicted (regular_agent[researcher]), and the model split the difference by asking
+        self.assertIn('Research is never a set-up - it is a hand-off to a regular agent', system)
+        self.assertIn('Anything with a system to type at', system)
+        self.assertIn('A polite request is not a question', system)
 
     def test_a_walk_through_opens_a_general_task_and_starts_no_agent(self):
         s = MemoryStore()

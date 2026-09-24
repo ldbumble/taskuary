@@ -2609,8 +2609,13 @@ def people(limit: int = 300):
 def send_targets():
     """Where a report is allowed to be sent: the live channels, and the destinations known on
     each. The builder offers these and nothing else - a WhatsApp JID typed from memory is a
-    report that quietly goes nowhere."""
-    return {'data': outbound.send_targets(store)}
+    report that quietly goes nowhere.
+
+    `inboxes` names the chats Taskuary READS: never offered, and refused at the door - so a report still
+    holding one from before can say so on its own card rather than in a log (the owner, 2026-09-24)."""
+    targets = outbound.send_targets(store)
+    can = {t['channel'] for t in targets}
+    return {'data': targets, 'inboxes': {ch: sorted(v) for ch, v in outbound.input_chats(store).items() if ch in can}}
 
 @app.post('/api/tasks/{task_id}/handoff')
 def handoff(task_id: int, body: HandoffBody):

@@ -1655,8 +1655,7 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         d = out.get('decided') or decide_for(store, cfg, read_result(title, lines, False, said), report_llm(store, cfg, llm))
         speak, why = d['alert'], d['why']
         if speak and str((cfg.get('alert') or {}).get('to') or '').strip():
-            try: send_alert(store, src, cfg, why or f'{said} thing(s) to look at', f'{title} - {said} line(s)', lines)
-            except Exception as e: logger.warning(f'alert for {title} failed: {e}')
+            alert_or_file(store, src, cfg, why or f'{said} thing(s) to look at', f'{title} - {said} line(s)', lines)
         return {'message_id': out.get('message_id'), 'subject': f"{title} - {said} line(s)", 'files': 0, **out}
     try:
         head, summary = render_report(store, cfg, llm)
@@ -1750,11 +1749,10 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         try:
             # the run was judged ONCE, above; a second reading of the same result is how the phone
             # and the Timeline come to disagree. With no rule to name, the run itself is the reason.
-            if d['alert']: send_alert(store, src, cfg, said_why or 'the report ran', subject, strip_directive(body))
+            if d['alert'] and alert_or_file(store, src, cfg, said_why or 'the report ran', subject, strip_directive(body)):
+                store.add_route(mid, None, 'feed', None, 'the report ran; its alert could not be sent', [], 'report')
         except Exception as e:
             logger.warning(f'alert for {title} failed: {e}')
-            store.add_route(mid, None, 'feed', None, f'the report ran; its alert could not be sent: {str(e)[:200]}',
-                            [], 'report')
     # the digest report is ALSO what keeps DIGEST.md alive: one run, two homes - the Timeline
     # row you read in the morning, and the doc Settings → Docs shows
     if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
@@ -2228,6 +2226,37 @@ def _deliver(store, src: dict, cfg: dict, title: str, subject: str, body: str, m
         if mid is not None:
             store.add_route(mid, None, 'feed', None, f'the report ran; sending it out failed: {str(e)[:200]}',
                             [], 'report')
+        return str(e)[:600]
+
+
+def alert_or_file(store, src: dict, cfg: dict, why: str, head: str, body: str) -> str | None:
+    """Send the alert; if it cannot go, say so where the owner looks. Returns the error, or None when it went.
+
+    A refused alert used to be a log line and nothing else: #140's went to a WhatsApp group Taskuary also
+    reads, the door refused every one for a week (the owner's own rule, 2026-09-17: never send into an input
+    chat), and the owner simply "was not getting those messages" (2026-09-24). It files the same broken row a
+    failed delivery does - once a day per report, so an hourly check does not stack a card per run."""
+    title = cfg.get('title') or src['Address']
+    try:
+        send_alert(store, src, cfg, why, head, body)
+        return None
+    except Exception as e:
+        logger.warning(f'alert for {title} failed: {e}')
+        a = cfg.get('alert') or {}
+        to = a.get('to'); who = ', '.join(to) if isinstance(to, list) else str(to or 'nobody')
+        ext = f"alertfail:{src['SourceId']}:{datetime.now().strftime('%Y-%m-%d')}"
+        if not store.message_exists(ext):
+            stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            mid = store.add_message({
+                'TaskId': None, 'ExternalId': ext, 'ConversationId': f'report:{src["SourceId"]}',
+                'Channel': 'report', 'SourceName': title, 'FromName': title, 'SentAt': stamp,
+                'Subject': f'{title} — alert NOT SENT, FAILED',
+                'BodyText': (f'The report found something to tell you ({why}) but the alert to {who} on '
+                             f"{a.get('channel') or 'whatsapp'} was not sent.\n\n{str(e)[:500]}\n\n"
+                             'Pick another chat for "reach me right away" under Reports.'),
+                'SourceLink': cfg.get('link'), 'Status': 'feed'})
+            store.add_route(mid, None, 'feed', None, f'the report found something; its alert to {who} was not sent', [], 'report')
+            store.audit('message', mid, 'report_alert_failed', 'report', 'agent', {'to': to, 'error': str(e)[:200]})
         return str(e)[:600]
 
 

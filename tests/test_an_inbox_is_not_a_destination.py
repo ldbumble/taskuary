@@ -103,3 +103,31 @@ def test_a_note_you_wrote_still_rides_along(store):
     cfg = alerting(store)
     cfg['alert']['note'] = 'check the VPN first'
     assert 'check the VPN first' in sent_text(store, cfg, 'x', 'Assistant for Backend Monitoring - 1 line(s)', 'y')
+
+
+# ── ...and a refused alert is not SILENT ────────────────────────────────────────────────
+# Refused at the door, it was a log line and nothing else: the owner went a week "not getting those
+# messages" (2026-09-24). It files a broken row on the work rail instead - once a day per report.
+def test_a_refused_alert_lands_on_the_work_rail_once_a_day():
+    from taskuary import funnel
+    s = MemoryStore()
+    s.save_source({'Channel': 'whatsapp', 'Address': 'ops-room@g.test', 'Active': 1, 'Owner': 'test', 'ConfigJson': '{}'}, 'test')
+    cfg = {'title': 'Nightly checks', 'alert': {'channel': 'whatsapp', 'to': 'ops-room@g.test'}}
+    src = {'SourceId': 7, 'Address': 'Nightly checks'}
+    err = reports.alert_or_file(s, src, cfg, '1 came back', 'head', 'the ledger job has not run')
+    assert 'inbox, not a destination' in err
+    rows = [m for m in s.scan_messages() if 'alert NOT SENT' in (m['Subject'] or '')]
+    assert len(rows) == 1 and rows[0]['ConversationId'] == 'report:7'
+    assert funnel.report_failed(s, rows[0]['Subject'])                 # the broken lane: work, not an fyi
+    assert 'ops-room@g.test' in rows[0]['BodyText']
+    reports.alert_or_file(s, src, cfg, '1 came back', 'head', 'again, an hour later')
+    assert len([m for m in s.scan_messages() if 'alert NOT SENT' in (m['Subject'] or '')]) == 1
+
+
+def test_an_alert_that_went_files_nothing_extra():
+    from unittest import mock
+    s = MemoryStore()
+    cfg = {'title': 'Nightly checks', 'alert': {'channel': 'whatsapp', 'to': 'me@s.test'}}
+    with mock.patch('taskuary.outbound.send_out', return_value={'ok': True}):
+        assert reports.alert_or_file(s, {'SourceId': 7, 'Address': 'x'}, cfg, 'why', 'head', 'body') is None
+    assert not [m for m in s.scan_messages() if 'alert NOT SENT' in (m['Subject'] or '')]

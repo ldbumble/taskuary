@@ -554,7 +554,7 @@ export default function ReportsView() {
    address - so there, and only there, you may type one as well. */
 const chatFilter = createFilterOptions({ limit: 8, stringify: (o) => `${o.name} ${o.to} ${o.hint || ""}` });
 
-function Destination({ dest, onChange, targets }) {
+function Destination({ dest, onChange, targets, inboxes = {} }) {
   const chans = targets.map((t) => t.channel);
   const ch = dest.channel || chans[0] || "";
   const opts = targets.find((t) => t.channel === ch)?.to || [];
@@ -564,8 +564,16 @@ function Destination({ dest, onChange, targets }) {
   const picked = String(dest.to || "").split(",").map((x) => x.trim()).filter(Boolean);
   const named = (to) => opts.find((o) => o.to === to)?.name || to;
   const empty = ch ? `no ${ch} chat seen yet` : "connect a channel first";
+  // a chat Taskuary READS is refused at send time; a report saved before the picker knew that still holds
+  // one, and said nothing about it for a week (the owner, 2026-09-24: "i am not getting those messages?")
+  const inbox = picked.filter((to) => (inboxes[ch] || []).includes(to));
   return (
     <>
+      {inbox.length > 0 && (
+        <Typography variant="caption" sx={{ flexBasis: "100%", order: 99, color: "#9b2c2c", fontWeight: 600, fontSize: 11.5 }}>
+          Not sent: Taskuary reads {named(inbox[0])} as an inbox, so nothing is ever posted there. Pick your own chat.
+        </Typography>
+      )}
       <Select size="small" value={ch} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 130 }} displayEmpty
         onChange={(e) => onChange({ channel: e.target.value, to: "" })}>
         {(!ch || chans.includes(ch) ? chans : [...chans, ch]).map((c) => (
@@ -807,7 +815,7 @@ function judgeWords(judge, cfg, brains) {
     `That is ${brainLabel(cfg.ai_brain) || "the triage brain"} — the same brain the summary above runs on, picked there. To have one judge for every report, or a model that only decides, pick it under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
 }
 
-function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
+function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceId }) {
   const [replay, setReplay] = useState(null);
   const [busy, setBusy] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -893,7 +901,7 @@ function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
             )}
             {line === "alert" && how !== "never" && (
               <Box sx={{ display: "flex", gap: 1, mt: 0.8, flexWrap: "wrap" }}>
-                <Destination dest={cfg.alert?.to ? cfg.alert : { ...firstDest() }} targets={targets}
+                <Destination dest={cfg.alert?.to ? cfg.alert : { ...firstDest() }} targets={targets} inboxes={inboxes}
                   onChange={(d) => setCfg({ ...cfg, alert: { ...(cfg.alert || {}), ...firstDest(), ...d } })} />
                 <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }} label="what to say (optional)"
                   value={cfg.alert?.note || ""} onChange={(e) => setCfg({ ...cfg, alert: { ...(cfg.alert || {}), note: e.target.value } })} />
@@ -1029,7 +1037,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   };
   // where it may be SENT: only live channels, only destinations Taskuary knows (see Destination)
   const [targets, setTargets] = useState([]);
-  useEffect(() => { api.get("/api/send-targets").then(({ data }) => setTargets(data.data || [])).catch(() => {}); }, []);
+  const [inboxes, setInboxes] = useState({});
+  useEffect(() => { api.get("/api/send-targets").then(({ data }) => { setTargets(data.data || []); setInboxes(data.inboxes || {}); }).catch(() => {}); }, []);
   // switching one of these blocks on should leave a config that works: the first live channel,
   // addressed to your own notify chat - not an empty box beside a channel you never connected
   // YOURS by default, not whatever chat spoke most recently. send_targets marks the chat Taskuary
@@ -1373,7 +1382,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               ) : (
                 <>
                   <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
-                    <Destination dest={cfg.deliver} targets={targets}
+                    <Destination dest={cfg.deliver} targets={targets} inboxes={inboxes}
                       onChange={(d) => setCfg({ ...cfg, deliver: { ...cfg.deliver, ...d } })} />
                     <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }}
                       label="subject (blank = the report's headline)" value={cfg.deliver.subject || ""}
@@ -1397,7 +1406,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </>
               )}
             </Box>
-            <RoutingCard cfg={cfg} setCfg={setCfg} targets={targets} brains={brains}
+            <RoutingCard cfg={cfg} setCfg={setCfg} targets={targets} inboxes={inboxes} brains={brains}
               firstDest={firstDest} sourceId={sourceId} />
 
             {/* A report supersedes itself. Seven "Process Error Check - 0 rows" stacked up in the

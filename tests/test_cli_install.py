@@ -99,6 +99,8 @@ class InstallTests(unittest.TestCase):
         for name in ('persist_windows', 'persist_posix'):
             persist = mock.patch.object(cliinstall, name)
             persist.start(); self.addCleanup(persist.stop)
+        # every fake binary here "starts"; BrokenInstallTests is where one does not
+        ok = mock.patch.object(cliinstall, 'broken', return_value=''); ok.start(); self.addCleanup(ok.stop)
 
     def test_it_runs_the_first_recipe_and_reports_where_the_binary_landed(self):
         import tempfile
@@ -149,6 +151,72 @@ class InstallTests(unittest.TestCase):
             cliinstall.install('claude')
         self.assertEqual(seen, ['installing'])
         self.assertEqual(cliinstall.state()['phase'], 'done')
+
+
+MISSING = ('Error: Missing optional dependency @openai/codex-win32-x64. Reinstall Codex: npm install -g @openai/codex@latest\n'
+           '    at findCodexExecutable (file:///C:/x/node_modules/@openai/codex/bin/codex.js:107:9)')
+
+
+class BrokenInstallTests(unittest.TestCase):
+    """npm installs codex as a JavaScript launcher plus its binary as an OPTIONAL dependency, and
+    drops that dependency without an error. What is left resolves on PATH and throws the moment it
+    runs - and it first ran in the set-up pane, right after we said "installed" (TQ-0726)."""
+
+    def setUp(self):
+        cliinstall.reset(); self.addCleanup(cliinstall.reset)
+        self.env = mock.patch.dict(os.environ, {'PATH': os.environ.get('PATH', '')})
+        self.env.start(); self.addCleanup(self.env.stop)
+        for name in ('persist_windows', 'persist_posix'):
+            persist = mock.patch.object(cliinstall, name)
+            persist.start(); self.addCleanup(persist.stop)
+
+    def test_npm_asks_for_the_optional_dependencies_by_name(self):
+        """A config that omits optionals is one way codex arrives without its binary."""
+        with mock.patch.object(cliinstall, 'npm', return_value='npm'):
+            self.assertEqual(cliinstall.npm_install('@openai/codex'), ['npm', 'install', '-g', '--include=optional', '@openai/codex'])
+
+    def test_the_probe_reads_the_vendors_sentence_not_the_stack(self):
+        done = mock.Mock(returncode=1, stdout='', stderr='file:///C:/x/codex.js:107\n  throw new Error(\n' + MISSING)
+        with mock.patch('taskuary.spawn.run', return_value=done) as run:
+            why = cliinstall.broken('codex', r'C:\x\codex.cmd')
+        self.assertEqual(run.call_args[0][0], [r'C:\x\codex.cmd', '--version'])
+        self.assertIn('Missing optional dependency @openai/codex-win32-x64', why)
+        with mock.patch('taskuary.spawn.run', return_value=mock.Mock(returncode=0, stdout='codex-cli 0.150.0', stderr='')):
+            self.assertEqual(cliinstall.broken('codex', r'C:\x\codex.cmd'), '')
+
+    def test_a_cli_with_no_probe_is_not_asked(self):
+        """devin's --version is unverified: a probe that fails on a healthy CLI would fail every install of it."""
+        with mock.patch('taskuary.spawn.run', side_effect=AssertionError('must not run')):
+            self.assertEqual(cliinstall.broken('devin', '/x/devin'), '')
+
+    def test_an_npm_install_that_does_not_start_falls_through_to_the_release_binary(self):
+        with mock.patch.object(cliinstall, '_run', return_value=(0, 'added 2 packages')), \
+                mock.patch.object(cliinstall, 'find', return_value=r'C:\npm\codex.cmd'), \
+                mock.patch.object(cliinstall, '_binary', return_value=r'C:\home\bin\codex.exe') as binary, \
+                mock.patch.object(cliinstall, 'broken', side_effect=lambda n, p: MISSING if p.endswith('.cmd') else ''):
+            out = cliinstall.install('codex', has_npm=True)
+        binary.assert_called_once()
+        self.assertEqual(out['phase'], 'done')
+        self.assertEqual(out['path'], r'C:\home\bin\codex.exe')   # the archive's own file, not PATH's broken launcher
+
+    def test_nothing_that_starts_is_a_failure_that_says_why(self):
+        with mock.patch.object(cliinstall, '_run', return_value=(0, 'added 2 packages')), \
+                mock.patch.object(cliinstall, 'find', return_value=r'C:\npm\codex.cmd'), \
+                mock.patch.object(cliinstall, '_binary', side_effect=OSError('no network')), \
+                mock.patch.object(cliinstall, 'broken', return_value='Error: Missing optional dependency @openai/codex-win32-x64'):
+            out = cliinstall.install('codex', has_npm=True)
+        self.assertEqual(out['phase'], 'failed')
+        self.assertNotIn('is installed', out['detail'])
+
+    def test_working_prefers_paths_copy_and_falls_back_to_ours(self):
+        with mock.patch.object(cliinstall, 'find', return_value=r'C:\npm\codex.cmd'), \
+                mock.patch.object(cliinstall, 'local', return_value=r'C:\home\bin\codex.exe'), \
+                mock.patch.object(cliinstall, 'broken', side_effect=lambda n, p: MISSING if p.endswith('.cmd') else ''):
+            self.assertEqual(cliinstall.working('codex'), (r'C:\home\bin\codex.exe', ''))
+        with mock.patch.object(cliinstall, 'find', return_value=r'C:\npm\codex.cmd'), \
+                mock.patch.object(cliinstall, 'local', return_value=''), \
+                mock.patch.object(cliinstall, 'broken', return_value='boom'):
+            self.assertEqual(cliinstall.working('codex'), ('', 'boom'))
 
 
 class RecipeForTests(unittest.TestCase):

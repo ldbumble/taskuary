@@ -113,6 +113,52 @@ BINARY = {'claude': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'copilot': '
           'muse': 'muse', 'devin': 'devin', 'qwen': 'qwen', 'opencode': 'opencode', 'kimi': 'kimi'}
 CMD2NAME = {v: k for k, v in BINARY.items()}       # cursor-agent -> cursor: the bin is not the recipe
 
+# A FILE ON DISK IS NOT A CLI THAT STARTS. codex, claude, gemini and copilot ship on npm as a small
+# JavaScript launcher plus the real binary as an OPTIONAL dependency per platform
+# (@openai/codex-win32-x64 and friends), and npm drops an optional dependency without an error when
+# its download fails or the machine's npm config omits optionals. What is left is a `codex` that
+# resolves on PATH, passes find(), and throws "Missing optional dependency" the moment it runs -
+# which it first did inside the set-up pane, in front of someone we had just told it was installed
+# (TQ-0726). So these are asked for their version before anything calls them installed.
+# Only CLIs verified to answer `--version` and exit: a probe that hangs or errors on a healthy CLI
+# would turn every install of it into a failure.
+PROBE = {'codex': ['--version'], 'claude': ['--version'], 'gemini': ['--version'], 'copilot': ['--version']}
+
+
+def broken(name: str, path: str) -> str:
+    """Why the CLI at `path` does not start, or '' when it does (or has no probe to ask)."""
+    if name not in PROBE: return ''
+    try: r = spawn.run([path, *PROBE[name]], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
+    except subprocess.TimeoutExpired: return f'{Path(path).name} did not answer {" ".join(PROBE[name])} within a minute'
+    except OSError as e: return f'{Path(path).name} could not be started: {e}'
+    if r.returncode == 0: return ''
+    lines = [l.strip() for l in f"{r.stderr or ''}\n{r.stdout or ''}".splitlines() if l.strip()]
+    # the vendor's own sentence ("Error: Missing optional dependency ... Reinstall Codex: ..."), not the stack under it
+    return next((l for l in lines if 'error:' in l.lower() and not l.startswith('at ')), lines[-1] if lines else f'exited {r.returncode}')
+
+
+def local(name: str) -> str:
+    """The copy the release-archive road put in ~/.taskuary/bin, or ''."""
+    p = bin_dir() / (BINARY.get(name, name) + ('.exe' if WINDOWS else ''))
+    return str(p) if p.exists() else ''
+
+
+def working(name: str) -> tuple:
+    """(a path to this CLI that starts, '') or ('', why the one here does not). PATH's copy first,
+    then ours: when npm left a launcher without its binary, the install falls through to the release
+    archive, and that archive sits behind the broken launcher on PATH."""
+    why = ''
+    for p in dict.fromkeys(p for p in (find(name), local(name)) if p):
+        why = broken(name, p)
+        if not why: return p, ''
+    return '', why
+
+
+def npm_install(pkg: str) -> list:
+    """`npm install -g`, with the optional dependencies asked for by name: a config that omits them
+    (`omit=optional`, a corporate .npmrc) is exactly how codex arrives without its binary."""
+    return [npm() or 'npm', 'install', '-g', '--include=optional', pkg]
+
 
 def recipe_for(cmd: str) -> str:
     """Which recipe a profile's `cmd` is an install OF, or ''.
@@ -180,7 +226,7 @@ def update(name: str, runner=None) -> dict:
     last = ''
     for r in roads:
         try:
-            cmd = [exe] + list(r['args']) if r['how'] == 'self' else [npm() or 'npm', 'install', '-g', r['pkg']]
+            cmd = [exe] + list(r['args']) if r['how'] == 'self' else npm_install(r['pkg'])
             rc, out = (runner or _run)(cmd, timeout=r.get('timeout', 900))
         except Exception as e:
             last = str(e); logger.warning(f'{name}: {r["how"]} update raised - {e}'); continue
@@ -188,7 +234,12 @@ def update(name: str, runner=None) -> dict:
             last = (f'{r["how"]} exited {rc}. See the installation terminal for full output.' if runner
                     else out or f'{r["how"]} exited {rc}')
             logger.warning(f'{name}: {r["how"]} update failed - {last[-200:]}'); continue
-        _set('done', name, out.strip()[-400:] or f'{name} is up to date', find(name) or exe, verb='update')
+        now = find(name) or exe
+        why = broken(name, now)
+        if why:                                         # "up to date" over a CLI that cannot start is no update
+            last = f'{now} still does not start: {why}'
+            logger.warning(f'{name}: {r["how"]} update left a CLI that does not start - {why}'); continue
+        _set('done', name, out.strip()[-400:] or f'{name} is up to date', now, verb='update')
         logger.info(f'updated {name}')
         return state()
     _set('failed', name, f'could not update {name}: {last}', verb='update')
@@ -387,12 +438,13 @@ def install(name: str, has_npm: bool = None, system: str = None, runner=None) ->
     _set('installing', name, f'installing {name}…')
     last = ''
     for r in roads:
+        got = ''
         try:
             if r['how'] == 'binary':
                 if runner: runner.message(f'Downloading {name} from GitHub releases ({r["repo"]}) into {bin_dir()}')
-                _binary(name, r)
+                got = _binary(name, r)
             else:
-                cmd = list(r['cmd']) if r['how'] == 'script' else [npm() or 'npm', 'install', '-g', r['pkg']]
+                cmd = list(r['cmd']) if r['how'] == 'script' else npm_install(r['pkg'])
                 rc, out = (runner or _run)(cmd, timeout=r.get('timeout', 900))
                 if rc != 0:
                     last = (f'{r["how"]} exited {rc}. See the installation terminal for full output.' if runner
@@ -407,8 +459,17 @@ def install(name: str, has_npm: bool = None, system: str = None, runner=None) ->
             # timeout gets this second look: any other exception left the install where it fell.
             if not (isinstance(e, subprocess.TimeoutExpired) and find(name)): continue
             last = 'the installer finished but its setup wizard needed a terminal'
-        # rc 0 proves the installer ran, not that anything is runnable: only a binary does that
-        found = find(name)
+        # rc 0 proves the installer ran, not that anything is runnable: only a binary that starts does
+        # that. The archive road names its own file - PATH's first copy may be the broken one it replaces.
+        found = got or find(name)
+        why = broken(name, found) if found else ''
+        if why:
+            last = f'{found} is there but does not start: {why}'
+            logger.warning(f'{name}: {r["how"]} left a CLI that does not start - {why}')
+            if runner:
+                try: runner.message(f'{name} was installed but does not start ({why}). Trying the next way in.')
+                except RuntimeError: pass
+            continue
         if found:
             ensure_on_path(Path(found).parent)
             _set('done', name, f'{name} is installed', found)

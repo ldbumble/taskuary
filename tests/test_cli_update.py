@@ -29,6 +29,7 @@ class PlanTests(unittest.TestCase):
 class RunTests(unittest.TestCase):
     def setUp(self):
         cliinstall.reset(); self.addCleanup(cliinstall.reset)
+        ok = mock.patch.object(cliinstall, 'broken', return_value=''); ok.start(); self.addCleanup(ok.stop)
 
     def _update(self, name, rc=0, out='updated', found='/usr/local/bin/codex'):
         ran = []
@@ -57,6 +58,14 @@ class RunTests(unittest.TestCase):
         self.assertEqual([c[0] for c in ran], ['/usr/local/bin/codex', 'npm'])
         self.assertIn('@openai/codex@latest', ran[1])
         self.assertEqual(out['phase'], 'done')
+
+    def test_an_update_that_leaves_a_cli_that_does_not_start_is_not_done(self):
+        """The npm road is the repair for a launcher missing its binary - "up to date" over one still broken is a lie."""
+        with mock.patch.object(cliinstall, 'broken', return_value='Error: Missing optional dependency @openai/codex-win32-x64'):
+            out, ran = self._update('codex')
+        self.assertEqual(len(ran), 2)                         # its own updater, then npm
+        self.assertIn('--include=optional', ran[1])
+        self.assertEqual(out['phase'], 'failed'); self.assertIn('Missing optional dependency', out['detail'])
 
     def test_every_road_failing_says_what_the_updater_said(self):
         out, _ = self._update('codex', rc=1, out='could not reach the release server')

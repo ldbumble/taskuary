@@ -79,8 +79,10 @@ def start(store, name, verb='install', actor='owner'):
             argv = [str(Path(root) / 'System32/WindowsPowerShell/v1.0/powershell.exe'), '-NoLogo', '-NoProfile',
                     '-NoExit', '-Command', 'Remove-Module PSReadLine -ErrorAction SilentlyContinue']
         else: argv = ['/bin/sh', '-i']
-        tid = store.create_task({'Title': f'{verb.title()} {name}', 'Kind': 'setup', 'Status': 'in_progress',
-                                 'Tags': f'cli-install:{name}', 'Summary': 'CLI installer running in an interactive terminal.'}, actor)
+        from .clisetup import open_task               # a second press after a dead pane is the same job, not a new task
+        tid = open_task(store, f'cli-install:{name}', f'{verb.title()} {name}') or store.create_task(
+            {'Title': f'{verb.title()} {name}', 'Kind': 'setup', 'Status': 'in_progress',
+             'Tags': f'cli-install:{name}', 'Summary': 'CLI installer running in an interactive terminal.'}, actor)
         try:
             term = terminal.Term(argv, str(config.home()), f'{verb} {name}', tid, None, 32, 110, store)
         except Exception:

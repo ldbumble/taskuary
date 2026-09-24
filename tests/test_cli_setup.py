@@ -32,7 +32,7 @@ class TableTests(unittest.TestCase):
         """The CLI's own onboarding asks for the settings and the sign-in. Adding to that command
         line - or typing into the box - is us guessing at a conversation it has properly."""
         for name in clisetup.SETUP:
-            with mock.patch('taskuary.cliinstall.find', return_value='/x/thing'):
+            with mock.patch('taskuary.cliinstall.find', return_value='/x/thing'), mock.patch('taskuary.cliinstall.broken', return_value=''):
                 self.assertEqual(clisetup.argv(name), ['/x/thing'], name)
 
     def test_a_set_up_ends_the_way_a_setup_task_ends(self):
@@ -45,8 +45,18 @@ class ArgvTests(unittest.TestCase):
     """The seam: a CLI installed a minute ago has no profile, and this server's PATH predates it."""
 
     def test_the_binary_is_found_never_assumed(self):
-        with mock.patch('taskuary.cliinstall.find', return_value=r'C:\x\codex.exe'):
+        with mock.patch('taskuary.cliinstall.find', return_value=r'C:\x\codex.exe'), mock.patch('taskuary.cliinstall.broken', return_value=''):
             self.assertEqual(clisetup.argv('codex'), [r'C:\x\codex.exe'])
+
+    def test_a_cli_that_does_not_start_is_refused_with_its_reason_and_the_repair(self):
+        """npm left codex's launcher without its platform binary: opening it drew a stack trace in
+        the pane and filed one more set-up task per press (TQ-0726)."""
+        why = 'Error: Missing optional dependency @openai/codex-win32-x64'
+        with mock.patch('taskuary.cliinstall.find', return_value=r'C:\npm\codex.cmd'), \
+                mock.patch('taskuary.cliinstall.local', return_value=''), \
+                mock.patch('taskuary.cliinstall.broken', return_value=why):
+            with self.assertRaises(ValueError) as e: clisetup.argv('codex')
+        self.assertIn(why, str(e.exception)); self.assertIn('Update', str(e.exception))
 
     def test_a_cli_that_is_not_here_yet_says_so_instead_of_starting_nothing(self):
         with mock.patch('taskuary.cliinstall.find', return_value=''):
@@ -70,7 +80,8 @@ class EndpointTests(unittest.TestCase):
         from taskuary import terminal as term
         self.term = mock.patch('taskuary.terminal.Term', FakeTerm); self.term.start()
         self.find = mock.patch('taskuary.cliinstall.find', return_value='/x/claude'); self.find.start()
-        self.addCleanup(self.term.stop); self.addCleanup(self.find.stop)
+        self.ok = mock.patch('taskuary.cliinstall.broken', return_value=''); self.ok.start()
+        self.addCleanup(self.term.stop); self.addCleanup(self.find.stop); self.addCleanup(self.ok.stop)
         self.addCleanup(lambda: term.SESSIONS.pop('fake123', None))
 
     def test_it_opens_a_setup_task_the_board_will_show(self):
@@ -97,6 +108,22 @@ class EndpointTests(unittest.TestCase):
         again = c.post('/api/cli/setup', json={'name': 'claude'}).json()
         self.assertTrue(again['existing'])
         self.assertEqual(again['taskId'], first['taskId'])
+
+    def test_a_press_after_the_pane_died_reuses_the_open_task(self):
+        """A CLI that crashed on launch left an "interrupted" Set up task per press (TQ-0726)."""
+        from taskuary import terminal as term
+        first = c.post('/api/cli/setup', json={'name': 'claude'}).json()
+        term.SESSIONS['fake123'].alive = False
+        again = c.post('/api/cli/setup', json={'name': 'claude'}).json()
+        self.assertFalse(again['existing'])                   # a new pane...
+        self.assertEqual(again['taskId'], first['taskId'])    # ...on the same task
+
+    def test_a_finished_set_up_is_not_reopened(self):
+        from taskuary import terminal as term
+        first = c.post('/api/cli/setup', json={'name': 'claude'}).json()
+        term.SESSIONS['fake123'].alive = False
+        server.store.update_task(first['taskId'], {'Status': 'done'}, 'owner')
+        self.assertNotEqual(c.post('/api/cli/setup', json={'name': 'claude'}).json()['taskId'], first['taskId'])
 
     def test_an_unknown_cli_is_refused(self):
         self.assertEqual(c.post('/api/cli/setup', json={'name': 'rm -rf /'}).status_code, 422)

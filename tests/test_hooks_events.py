@@ -251,6 +251,7 @@ class InstallTests(unittest.TestCase):
              mock.patch.object(cliinstall, '_run', return_value=(0, 'ok')), \
              mock.patch.object(cliinstall, 'find', return_value=r'C:\bin\claude.cmd'), \
              mock.patch.object(cliinstall, 'ensure_on_path'), \
+             mock.patch.object(cliinstall, 'broken', return_value=''), \
              mock.patch.object(hooks, 'install_user') as inst:
             self.assertEqual(cliinstall.install('claude')['phase'], 'done')
         self.assertEqual(inst.call_args.args[0], 'claude')

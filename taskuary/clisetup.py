@@ -54,10 +54,13 @@ def argv(name: str) -> list:
     added on top would be us guessing at a conversation it is about to have properly.
 
     The binary is FOUND, never assumed - this server keeps the PATH it was launched with, and the
-    install may be a minute old."""
+    install may be a minute old. And found is not enough: an npm install missing its platform
+    binary opens as a stack trace in the pane (TQ-0726), so a copy that does not start is refused
+    here, with the vendor's reason and the button that repairs it."""
     if name not in SETUP: raise ValueError(f'{name} is not one of the CLIs Taskuary can set up ({", ".join(sorted(SETUP))})')
-    found = cliinstall.find(name)
-    if not found: raise ValueError(f'{name} is not on this machine yet - install it first')
+    if not cliinstall.find(name) and not cliinstall.local(name): raise ValueError(f'{name} is not on this machine yet - install it first')
+    found, why = cliinstall.working(name)
+    if not found: raise ValueError(f'{name} is on this machine but does not start ({why}) - press Update on its row to reinstall it')
     return [found]
 
 
@@ -72,6 +75,16 @@ def live_for(store, name: str):
     return None
 
 
+def open_task(store, tags: str, title: str):
+    """The still-open setup task this press belongs to, or None. A pane that died took its task with
+    it only in spirit: the row stayed in progress, went "interrupted" and landed on the owner, so a
+    CLI that crashed on launch left one more "Set up codex" per press (TQ-0726). Reuse it instead."""
+    for t in store.list_tasks(active_only=True):
+        if t.get('Kind') == KIND and t.get('Status') != 'done' and str(t.get('Tags') or '') == tags and t.get('Title') == title:
+            return t['TaskId']
+    return None
+
+
 def start(store, name: str, actor: str = 'owner', label: str = '') -> dict:
     """Open the CLI on a setup task and get out of the way. It asks for what it needs; the owner
     answers it in the pane, where they can see what they are typing and to whom."""
@@ -79,8 +92,9 @@ def start(store, name: str, actor: str = 'owner', label: str = '') -> dict:
     live = live_for(store, name)
     if live: return {**live, 'existing': True}
     cmd, what = argv(name), label or name             # resolve first: no task to close if there is no CLI
-    tid = store.create_task({'Title': f'Set up {what}', 'Kind': KIND, 'Status': 'in_progress', 'Tags': tag(name),
-                             'Summary': f'{what} runs its own setup in a live session here - settings, then the sign-in.'}, actor)
+    tid = open_task(store, tag(name), f'Set up {what}') or store.create_task(
+        {'Title': f'Set up {what}', 'Kind': KIND, 'Status': 'in_progress', 'Tags': tag(name),
+         'Summary': f'{what} runs its own setup in a live session here - settings, then the sign-in.'}, actor)
     # no checkout: the pane sits in Taskuary's own folder, and agent=None keeps it off the peer
     # blackboard and out of the worker roster - it is not doing anyone's work
     t = term.Term(cmd, str(config.home()), name, tid, None, 32, 110, store)

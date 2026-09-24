@@ -201,6 +201,13 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         # work the owner started here has nobody behind it to answer (a brief typed in the chat)
         if no_one_behind(row.get('Channel')): card['mid'] = None
         closed = False
+        # ...and READ ONCE IS READ (the owner, 2026-09-24: "make the Next button skip reports that have
+        # already been read"). The task unit's fingerprint carries its comments and artifacts, so anything
+        # filed on the closed task after the read - a note, the reply going out - made it unread again and
+        # Next offered the same finished result a second time. Whether the result was read after the close
+        # is finished['unread']'s to say; a new MESSAGE on the task is still news and still brings it back.
+        units = view.get('processing_read', {}).get('units', ())
+        read = read | {'unread': any(not u.get('read') for u in units if u.get('entity_kind') != 'task')}
     # OUR OWN SEND IS A RECEIPT, NOT AN ARRIVAL. A report's alert files the message it just sent so
     # you can see that it went (reports.send_alert) - Taskuary writing to you, on WhatsApp or
     # Telegram. It arrived on the table wearing a sender's face: "Ignore this sender", "Block them

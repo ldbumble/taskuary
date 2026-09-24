@@ -1031,6 +1031,28 @@ class MemoryTests(unittest.TestCase):
         s.update_task(u, {'Status': 'done'}, 'owner'); settle()
         self.assertFalse([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == u])
 
+    def test_a_finished_result_read_once_is_not_offered_again(self):
+        """"make the Next button skip reports that have already been read" (2026-09-24): the task unit's read
+        fingerprint carries its comments, so a note filed on the closed task after Next read the result put the
+        same result back on Next. A reply from the sender after the close is still news and still returns."""
+        from taskuary import concierge
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'Research the CLI tool', 'Kind': 'general', 'Status': 'open'}, 'o')
+        mail(s, 'Research the CLI tool', who='Erin', email='erin@northwind.example', hours=2, tid=t)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: it wraps any CLI as an agent tool.')
+        s.update_task(t, {'Status': 'done'}, 'assistant'); settle()
+        def walk():
+            with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+                got = concierge.surface(s, llm=lambda *a, **k: 'never')['item']
+            settle(); return got and (got['kind'], got['tid'])
+        self.assertEqual(walk(), ('agentdone', t))
+        self.assertIsNone(walk())
+        s.add_comment(t, 'owner', 'human', 'Thanks - noted.'); settle()
+        self.assertIsNone(walk())                                   # a note on the closed task is not a new result
+        mail(s, 'Re: Research the CLI tool', who='Erin', email='erin@northwind.example', hours=0, tid=t); settle()
+        self.assertEqual(walk(), ('agentdone', t))                  # ...their new mail is
+
     def test_a_pty_worker_that_ran_and_left_leaves_a_transcript_not_a_run(self):
         """A coder started from the terminal writes a TRANSCRIPT on its way out and no run row at
         all - the same row the task card reads to offer "Continue previous work". not_started_why

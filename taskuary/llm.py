@@ -12,7 +12,7 @@ triage.classify_intent expects. Which brain is the owner's choice (setting `tria
 Cloud keys are cheap and instant per message; a CLI run is slower and heavier but keeps
 everything on one model (and one bill). Configure it in Settings -> Triage & routing.
 """
-import base64, json, mimetypes, re, requests
+import base64, hashlib, json, mimetypes, re, requests
 from pathlib import Path
 from time import sleep
 from typing import NamedTuple
@@ -125,7 +125,8 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     light = str(prof.get('light_model') or '') if gear != 'main' else ''
     # a profile that names no light model still gets the CLI's small one: blank used to mean the MAIN model, so triage,
     # drafts and summaries ran on the coding tier (the owner, 2026-09-24: "lower model for triage/assistant")
-    if gear != 'main' and not light and not model: light = LIGHT_DEFAULT.get(hub_agents.cli_of(prof, agent_name), '')
+    cli = hub_agents.cli_of(prof, agent_name)
+    if gear != 'main' and not light and not model: light = LIGHT_DEFAULT.get(cli, '')
     if light.startswith('effort:'):
         # codex on a ChatGPT plan serves ONLY the plan's models - no mini/nano tier exists -
         # so its cheap gear is reasoning effort on the same model (verified: -c
@@ -154,7 +155,24 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         from .agents import run_cli
         kwargs = {'cancel': cancel} if cancel is not None else {}
         if extra_env: kwargs['extra_env'] = extra_env
-        out, sid, _diff = run_cli(prof, f'{system}\n\n{user}', trace or (lambda *a: None),
+        run_prof, prompt = prof, f'{system}\n\n{user}'
+        if system and cli == 'claude':
+            # THE INSTRUCTIONS AS A SYSTEM PROMPT, not pasted above the owner's words: Claude read a persona in the user
+            # turn as a prompt injection once, and said so to the owner (the 2026-09-24 audit). A file, because the
+            # Assistant's is ~27K characters against Windows' 32K command line; named by its content, so a live
+            # conversation (clipool keys on the command) stays warm until the instructions actually change. Without
+            # hands it REPLACES Claude Code's own coding prompt; with tools it is appended to it.
+            from . import config
+            folder = config.home() / 'prompts'; folder.mkdir(parents=True, exist_ok=True)
+            path = folder / f"system-{hashlib.sha1(system.encode('utf-8')).hexdigest()[:16]}.md"
+            if not path.exists(): path.write_text(system, encoding='utf-8')
+            flag = '--system-prompt-file' if no_hands else '--append-system-prompt-file'
+            # ON TOP of the args run_cli would have used - a profile with none gets the preset there, hands and all,
+            # and a bare [flag, path] would have replaced it (no -p, no stream-json)
+            from .clis import preset_args
+            base = list(prof.get('args') or preset_args(prof.get('cmd') or 'claude') or ['-p'])
+            run_prof, prompt = {**prof, 'args': base + [flag, str(path)]}, user
+        out, sid, _diff = run_cli(run_prof, prompt, trace or (lambda *a: None),
                                   resume=resume, **kwargs)
         # what the caller needs to CONTINUE this conversation instead of starting another one
         llm.session_id = sid or resume

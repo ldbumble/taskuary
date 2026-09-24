@@ -135,7 +135,9 @@ class AgentSourceTests(unittest.TestCase):
             f = llm_mod.make_cli_llm(self.s, 'coder', cwd='C:/work/census')
             f('SYS', 'USER')
         self.assertEqual(seen['prof']['cwd'], 'C:/work/census')
-        self.assertTrue(seen['prompt'].startswith('SYS'))
+        # the instructions ride as Claude's system prompt, appended since this run has hands (2026-09-24)
+        args = seen['prof']['args']; flag = args.index('--append-system-prompt-file')
+        self.assertEqual(open(args[flag + 1], encoding='utf-8').read(), 'SYS'); self.assertEqual(seen['prompt'], 'USER')
 
     def test_agent_reports_are_read_only_and_only_workflows_receive_write_access(self):
         calls = []

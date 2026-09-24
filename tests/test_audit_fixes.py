@@ -69,7 +69,10 @@ class BrainTests(unittest.TestCase):
             self.assertNotIn('--dangerously-skip-permissions', seen['prof']['args']); self.assertIn('--tools', seen['prof']['args'])
             self.assertTrue(seen['prof']['cwd'].endswith('scratch'))
             llm_mod.make_cli_llm(s, 'coder', cwd='C:/work/census')('sys', 'weekly report')
-            self.assertNotIn('args', seen['prof'])           # untouched: run_cli applies the preset, hands and all
+            # the preset, hands and all - with the instructions appended as a system prompt, never replacing it (2026-09-24)
+            from taskuary.clis import preset_args
+            self.assertEqual(seen['prof']['args'][:-2], preset_args('claude'))
+            self.assertEqual(seen['prof']['args'][-2], '--append-system-prompt-file')
 
     def test_f08_notice_the_error_is_the_ask_not_a_footer(self):
         body = 'Hi Alex, see the screenshot below from the census app.\nNotice the error at the top - can you fix it before Friday?\nThanks'

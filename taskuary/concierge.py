@@ -1471,6 +1471,10 @@ def _start_when_clear(prop: dict, verb: str) -> dict:
     return prop
 
 
+class CallMiss(Exception):
+    """A CALL whose target could not be found - "no report by that name". Written for the model, which gets it back."""
+
+
 def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:
     """The model named an operation out of the registry. Turn it into the same proposal card a verb
     makes - NOTHING runs here (PW-123/124); the owner's confirmation is still what executes it.
@@ -1532,9 +1536,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     named, tk = '', operations.KINDS[kind][0]
     if tk in ('source', 'connector', 'setting', 'script'):
         from . import appfacts
-        def _miss(say_):
-            record_related(store, tid, item, 'assistant', say_)
-            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+        def _miss(say_): raise CallMiss(say_)         # the model's to fix (say), never passed on as it stands
         if tk == 'source':
             r = appfacts.find_report(store, str(params.pop('title', '') or ''), params.pop('source_id', None) or params.get('target'))
             if not r: return _miss('No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20]) + '.')
@@ -2658,9 +2660,40 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         _remember_sid(store, tid, llm)
     except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
     if call and not _CORRECTION.search(text):
-        try: return call_turn(store, tid, call, item, text, actor)
-        except ValueError as e:
-            say_ = f"I could not put that in front of you - {e}."
+        # A MISS IS THE MODEL'S TO FIX, not the owner's to read. "No setting by that name - settings.list <group> names
+        # them" is written for the model, and it reached the owner word for word (the 2026-09-24 audit). The model gets
+        # it back, may look the name up, and calls again; only a second miss is said - once, in the owner's hearing.
+        miss = None
+        for _ in range(3):
+            if toolcatalog.is_read(call['kind']):
+                found = read_op(store, call['kind'], call['params'])
+                trace and trace('tool', call['kind'], {'params': call['params']})
+                ask = (f"You looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\nThe owner asked: {text}\n"
+                       'Now CALL the action again with the exact name you read, or answer them in plain words.')
+            else:
+                try: return call_turn(store, tid, call, item, text, actor)
+                except CallMiss as e:
+                    if miss: break                                   # the second miss: said, below
+                    miss = str(e)
+                except ValueError as e:
+                    say_ = f"I could not put that in front of you - {e}."
+                    rec('assistant', say_)
+                    return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+                ask = (f"You asked Taskuary for {call['kind']} {json.dumps(call.get('params') or {}, default=str)[:400]} and it "
+                       f"answered: {miss}\n\nThe owner asked: {text}\nFix it yourself: CALL a look-up for the right name, then the "
+                       'action again - or answer them in plain words. Never pass that answer on to them.')
+            try:
+                raw = str(llm(system, ask, max_tokens=MAX_TOKENS) or '').strip()
+            except Exception as e:
+                logger.warning(f'concierge: the retry pass failed - {e}'); raw = ''
+            raw, call = parse_call(raw)
+            raw, decision = parse_decision(raw)
+            reply, options = parse_options(raw)
+            if not call: break
+        if call or (miss and not reply and not decision):
+            # still stuck on a call it cannot make: say what is missing, never the filler it wrote around the call
+            say_ = (f"I could not find what that points at ({miss.rstrip('.')}). Say it another way and I will try again."
+                    if miss else reply or "I could not finish that look-up - say it another way.")
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
     # The MODEL may answer a correction by moving on - it did: "that's not a fail, it says all clear?" came back

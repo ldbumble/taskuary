@@ -52,6 +52,17 @@ class ActsTests(unittest.TestCase):
         # ...while a catalogue card that is OFF is still nameable: resuming it is the whole point
         self.assertEqual(self._turn('connection.resume', name='zoho invoice')['proposal']['kind'], 'connection.resume')
 
+    def test_a_miss_goes_back_to_the_model_which_looks_the_name_up_and_calls_again(self):
+        """"No report by that name - ..." is written for the model; it reached the owner word for word (2026-09-24)."""
+        turns, seen = iter(['CALL: ' + json.dumps({'kind': 'report.pause', 'params': {'title': 'the morning money one'}}),
+                            'CALL: ' + json.dumps({'kind': 'reports.list', 'params': {}}),
+                            'Pausing it.\nCALL: ' + json.dumps({'kind': 'report.pause', 'params': {'title': 'Monthly AR Report'}})]), []
+        def brain(system, user, max_tokens=None): seen.append(user); return next(turns)
+        out = concierge.say(self.s, 'stop the morning money report', llm=brain)
+        self.assertEqual(out['proposal']['kind'], 'report.pause')
+        self.assertIn('No report by that name', seen[1])                   # the model was told...
+        self.assertNotIn('No report by that name', out['say'])             # ...the owner was not
+
     def test_pause_and_resume_flip_the_clock_and_the_receipt_carries_the_undo(self):
         done = concierge.run_proposal(self.s, self._turn('report.pause', title='ar report')['proposal'])
         self.assertFalse(self.s.get_source(self.sid)['Active'])

@@ -64,6 +64,20 @@ class SetupInChatTests(unittest.TestCase):
         self.assertIn('Nothing is set up yet', out['say'])
         print(chr(10) + f"  missing detail -> {out['say'][:80]}")
 
+    def test_the_questions_are_a_numbered_list_one_a_line_and_never_a_menu(self):
+        """The owner, 2026-09-24: "numbered list" - "(1) ... (2) ..." ran the composer's questions into one
+        paragraph. One a line now, numbered "1." - never the menu's "1 ·", so answering "2" picks nothing."""
+        from taskuary import remote_assistant
+        s = T.store()
+        with mock.patch.object(concierge, '_compose_llm', return_value=sorter()), \
+             mock.patch.object(compose, 'compose', return_value={'questions': ['Which repository?', 'What time each morning?']}), \
+             mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = T.say(s, 'set up a morning report', model='Sure.' + chr(10) + 'DECIDE: setup: a morning report')
+        lines = out['say'].split(chr(10))
+        self.assertIn('1. Which repository?', lines)
+        self.assertIn('2. What time each morning?', lines)
+        self.assertEqual(remote_assistant._OFFERED.findall(out['say']), [])
+
     def test_work_that_needs_digging_opens_a_walkthrough_not_a_report(self):
         s = T.store()
         with mock.patch.object(concierge, '_compose_llm', return_value=sorter('investigate')), \

@@ -70,7 +70,7 @@ class ReportSetupTests(unittest.TestCase):
         s = store(); seen = []
         asks = composer(compose={'questions': ['Which database?', 'How often?']}, seen=seen)
         out = say(s, 'set up a check on the export table', asks)
-        self.assertIsNone(out.get('proposal')); self.assertIn('(1) Which database?', out['say']); self.assertIn('Nothing is set up yet', out['say'])
+        self.assertIsNone(out.get('proposal')); self.assertIn('\n1. Which database?\n', out['say']); self.assertIn('Nothing is set up yet', out['say'])
         self.assertEqual(s.list_sources(active_only=False), [x for x in s.list_sources(active_only=False)])   # nothing created, nothing changed
         seen.clear()
         out = say(s, 'the warehouse one, every morning', composer(seen=seen))

@@ -2307,7 +2307,10 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     out = compose.compose(store, ask, cllm, answers=answers)
     if out.get('questions'):
         qs = out['questions']
-        say_ = 'Before I put it together: ' + ' '.join(f"({n}) {q}" for n, q in enumerate(qs, 1)) + ' Nothing is set up yet.'
+        # the composer's OWN list, one question a line - run together as "(1) ... (2) ..." they read as one
+        # paragraph (the owner, 2026-09-24: "numbered list"). "1." and never "1 ·": the dot is how a chat's
+        # MENU is numbered (remote_assistant._OFFERED), and an answer "2" must not pick question two
+        say_ = 'Before I put it together:\n' + '\n'.join(f"{n}. {q}" for n, q in enumerate(qs, 1)) + '\n\nNothing is set up yet.'
         rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': qs})
         return {'say': say_, 'options': [], 'decision': None}
     if out.get('error') or not out.get('config'):                        # a configuration the composer itself could not stand behind

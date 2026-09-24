@@ -38,7 +38,7 @@
       "label": "Triage brain",
       "type": "brain",
       "desc": "Which AI reads and classifies inbound messages.",
-      "help": "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nauto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way."
+      "help": "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nLeft blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way."
     },
     "triage_backup_ai": {
       "group": "Triage & agents",

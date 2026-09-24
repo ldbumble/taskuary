@@ -185,7 +185,7 @@ ALL_DONE = ("That's everything for now. The pipe is empty - nothing is waiting o
 
 # the quick gear per CLI when the agent profile names no light_model: the assistant's turns are two
 # sentences, and the coding model is the wrong tool for them (Connections > AI CLI agents sets it)
-LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': 'gemini-2.5-flash'}
+ASSISTANT_DEFAULT = llm_mod.ASSISTANT_DEFAULT      # the Assistant's model when none is set: one tier over the light gear
 LIVE_KEY = 'concierge'                  # clipool key prefix for the chat's live CLI process
 SID_KEY = 'concierge_cli_sid'          # the CLI's own conversation, resumed turn to turn (per dock task)
 CURRENT_KEY = 'assistant_current'      # what is on the table, per dock task - persisted, validated on restore (PW-162)
@@ -200,6 +200,7 @@ def pick(store) -> str:
     chosen = str(s.get(AI_KEY) or '').strip()
     if chosen: return chosen
     from . import agents as hub_agents
+    if (dflt := hub_agents.default_pick(store)): return dflt          # the default brain, as everywhere else
     if store.list_agents():
         try: return f'cli:{hub_agents.default_agent(store)}'
         except Exception as e: logger.debug(f'concierge: no default agent - {e}')
@@ -213,21 +214,13 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
     """The voice. A CLI runs with its tools, in its own scratch folder (never a checkout), on its light
     gear, and picks its last conversation back up; an API connector answers in-process.
 
-    `fast` is for the turns that need no tools - introducing an item, the opening brief: an API
-    connector when one is configured (a second, not a launch), else the CLI with its tools OFF so it
-    cannot wander off exploring before it answers (a plain 'next' took 20 seconds, 2026-09-03)."""
+    `fast` is for the turns that need no tools: the CLI with its tools OFF so it cannot wander off exploring
+    before it answers (a plain 'next' took 20 seconds, 2026-09-03). It used to swap in an API connector here,
+    which is how an Assistant set to Claude answered on Azure; the chat's CLI stays live instead (clipool)."""
     from . import demo
     if demo.enabled(): return demo.brain()
     p = pick(store)
     if not p: return None
-    # the quick API lane stands in for a CLI only when nobody CHOSE one: it used to override the owner's pick, so an
-    # Assistant set to the Claude CLI was answered by Azure on every turn and the settings page never said so
-    # (2026-09-24). The chosen CLI stays live between turns (clipool), which is what the lane was saving.
-    if fast and p.startswith('cli:') and not str(store.get_settings().get(AI_KEY) or '').strip():
-        native = general._selected(store)[0] if any(o.get('type') != 'cli' for o in general.provider_options(store)) else ''
-        if native and not native.startswith('cli:'):
-            try: return llm_mod.build_llm(store, pick=native)
-            except Exception as e: logger.debug(f'concierge: fast lane connector unavailable - {e}')
     try:
         if p.startswith('cli:'):
             from . import config
@@ -238,14 +231,16 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             except ValueError: prof = {}
             cli = re.split(r'[\\/]', str(prof.get('cmd') or name))[-1].lower().rsplit('.', 1)[0]
             model = str(store.get_settings().get(MODEL_KEY) or '').strip() or None
-            if not model and not prof.get('light_model'):
-                light = LIGHT_DEFAULT.get(cli)
-                if light and not light.startswith('effort:'): model = light
-                elif light: prof['light_model'] = light
+            # the Assistant's OWN model - never the profile's light model, which is triage's: it rode haiku and broke its
+            # contract in the 2026-09-24 audit, where sonnet held (ASSISTANT_DEFAULT)
+            dflt = '' if model else ASSISTANT_DEFAULT.get(cli, '')
+            if (model or '').startswith('effort:'): dflt, model = model, None       # codex: a gear is an effort, not a model
+            if dflt and not dflt.startswith('effort:'): model = dflt
             folder = config.home() / 'assistant'; folder.mkdir(parents=True, exist_ok=True)
             cwd = None if fast else str(folder)                  # no cwd = make_cli_llm's read-only gear: no tools, no permission bypass
-            if prof.get('light_model') and not (row.get('Config') or '').find('light_model') >= 0:
-                # the default gear rides on a copy of the profile, never written back to the row
+            if dflt.startswith('effort:'):
+                # an effort-only gear (codex) rides on a copy of the profile, never written back to the row
+                prof['light_model'] = dflt
                 store_get = store.get_agent
                 store.get_agent = lambda n, _r=row, _p=prof: (_r | {'Config': json.dumps(_p)}) if n == name else store_get(n)
                 try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep)
@@ -609,7 +604,7 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         if v == 'prep' and not item.get('event'): continue
         if v == 'followup' and not (item.get('idea') or (item.get('action') or {}).get('mid')): continue
         if v != 'next' and cannot(item, v, store): continue
-        if v == 'close' and item.get('kind') == 'review':
+        if v == 'close' and (item.get('kind') == 'review' or item.get('reply_pending')):
             out.append({'verb': v, 'label': 'Close without sending',
                         'hint': 'Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.'})
         else:

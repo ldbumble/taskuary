@@ -234,6 +234,9 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
     wanted = str(pick or (f'connector:{connector_id}' if connector_id else '')
                  or store.get_settings().get('assistant_ai') or '')
     if wanted and ':' not in wanted and wanted.isdigit(): wanted = f'connector:{wanted}'
+    if not wanted:                                     # blank = the default brain (agents.default_pick), as everywhere
+        from . import agents as hub_agents
+        wanted = hub_agents.default_pick(store)
     if not wanted:
         # API/local connectors answer in-process and are dramatically quicker than launching a
         # coding CLI. Prefer that native path for chat; the owner can persist a CLI choice when

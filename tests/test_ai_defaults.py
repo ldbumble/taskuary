@@ -32,12 +32,13 @@ class ResolveTests(unittest.TestCase):
         self.assertIn('light model', r['owner'])
         self.assertIn('haiku', r['choices'])
 
-    def test_a_cli_brain_with_no_light_model_says_so(self):
+    def test_a_cli_brain_with_no_light_model_runs_the_small_one_and_says_so(self):
+        """Blank meant the CODING model - triage on the expensive tier (the owner, 2026-09-24: "lower model for triage")."""
         s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'model': 'opus'}}}
         s.set_setting('triage_ai', 'cli:coder', 'o')
         r = aidefaults.resolve(s, cfg, 'triage_ai')
         self.assertEqual(r['model'], '')
-        self.assertIn('coding model', r['note'])           # the cost of leaving it blank, said out loud
+        self.assertEqual(r['default_hint'], 'haiku - the light default'); self.assertEqual(r['note'], '')
 
     def test_codex_effort_only_light_gear_round_trips(self):
         """codex on a ChatGPT plan has no smaller model - its cheap gear IS the effort."""
@@ -233,10 +234,10 @@ if __name__ == '__main__': unittest.main()
 
 
 class AssistantModelTests(unittest.TestCase):
-    def test_the_assistant_card_names_the_light_model_it_really_runs_on(self):
+    def test_the_assistant_card_names_the_model_it_really_runs_on(self):
         """It said "the coding model, the expensive gear" while every turn ran on haiku (2026-09-24)."""
         s = _store(); s.set_setting('concierge_ai', 'cli:coder', 'owner')
         r = aidefaults.resolve(s, {}, 'concierge_ai')
-        self.assertEqual(r['default_hint'], 'haiku - the light default'); self.assertEqual(r['note'], '')
+        self.assertEqual(r['default_hint'], 'sonnet - the Assistant default'); self.assertEqual(r['note'], '')
         s.set_setting('concierge_model', 'sonnet', 'owner')
         self.assertEqual(aidefaults.resolve(s, {}, 'concierge_ai')['model'], 'sonnet')

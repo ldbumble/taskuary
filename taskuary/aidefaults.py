@@ -137,25 +137,29 @@ def resolve(store, cfg, slot_key: str) -> dict:
         out['kind'] = 'brain'
         # anything else is an ordinary brain, so it falls through to the brain branches below
 
-    # a brain: auto, one AI connector, or one of your CLI agents on its light gear
+    # a brain: one AI connector, or one of your CLI agents on its light gear. BLANK is the default brain - shown as the
+    # brain it is, never "auto - first active AI connector" (the owner, 2026-09-24: "first connected should not matter")
+    if not value:
+        from .agents import default_pick
+        value = default_pick(store)
+        if value: out.update(value=value, default=True)
     if value.startswith('cli:'):
+        from .llm import ASSISTANT_DEFAULT, LIGHT_DEFAULT
         name = value[4:]
         prof, cli = _prof(cfg, store, name), _cli_of(cfg, store, name)
         cat = climodels.catalog(cli)
         light = str(_gears(cfg, store, name).get('light_model') or '')
-        model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
-        out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
-                   default_hint=f'same as the coding model ({cli})',
-                   owner=f'the {name} profile (light model)', owner_link='agents', cli=cli)
         if slot_key == 'concierge_ai':
-            # what concierge.brain actually runs: its own override, else the light model, else the CLI's light default -
-            # this card said "the coding model, the expensive gear" while every turn ran on haiku (2026-09-24)
-            from .concierge import LIGHT_DEFAULT
-            own, dflt = str(settings.get(s['model_setting']) or ''), LIGHT_DEFAULT.get(cli, '')
-            if own: out.update(model=own, effort='')
-            out['default_hint'] = (f"{dflt[7:]} effort" if dflt.startswith('effort:') else dflt or f'the {cli} default') + ' - the light default'
-            return out
-        if not light: out['note'] = f'no light model set - triage runs on the {cli} coding model, which is the expensive gear'
+            # what concierge.brain runs: its own model, else the Assistant default - never the profile's light model,
+            # which is triage's (this card said "the coding model, the expensive gear" while every turn ran on haiku)
+            light, dflt, owner = str(settings.get(s['model_setting']) or ''), ASSISTANT_DEFAULT.get(cli, ''), 'this page'
+        else: dflt, owner = LIGHT_DEFAULT.get(cli, ''), f'the {name} profile (light model)'
+        model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
+        said = (f"{dflt[7:]} effort" if dflt.startswith('effort:') else dflt) if dflt else f'the {cli} default'
+        out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
+                   default_hint=f"{said} - the {'Assistant' if slot_key == 'concierge_ai' else 'light'} default",
+                   owner=owner, owner_link='' if slot_key == 'concierge_ai' else 'agents', cli=cli)
+        if not light and not dflt: out['note'] = f'no light model set - this runs on the {cli} coding model, which is the expensive gear'
         return out
 
     c = store.get_connector(int(value[10:])) if value.startswith('connector:') and value[10:].isdigit() else auto_target(store)
@@ -280,12 +284,17 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
     model = cur['model'] if model is None else str(model).strip()
     effort = cur['effort'] if effort is None else str(effort).strip()
     now = str(store.get_settings().get(slot_key) or '')
+    if not now and s['pick'] == 'brain':               # a blank card IS the default brain - its model goes there
+        from .agents import default_pick
+        now = default_pick(store)
 
     if s['pick'] == 'agent':
         if not now: raise ValueError('no coding agent is configured to set a model on')
         prof = _prof(cfg, store, now)
         prof['model'] = f'{model}@{effort}' if (model and effort) else model
         _save_profile(store, cfg, now, prof)
+    elif now.startswith('cli:') and slot_key == 'concierge_ai':
+        store.set_setting(s['model_setting'], f'effort:{effort}' if (effort and not model) else model, actor)
     elif now.startswith('cli:'):
         name = now[4:]
         prof = _prof(cfg, store, name)

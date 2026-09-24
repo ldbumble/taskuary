@@ -334,7 +334,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const [panelOk, setPanelOk] = useState(false);   // the AI defaults panel is standing up; until it is, the plain rows stay
   const [err, setErr] = useState("");
 
-  const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
+  const [brains, setBrains] = useState([]);
   const [agentNames, setAgentNames] = useState([]);
   const [agentOptions, setAgentOptions] = useState([]);
   const [agentModels, setAgentModels] = useState({});

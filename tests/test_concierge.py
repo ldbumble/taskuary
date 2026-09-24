@@ -341,11 +341,11 @@ class BrainTests(unittest.TestCase):
             self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: triage judged it a reply to write. From you: approve the draft below, or redraft it.')
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
-            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'haiku', None, None))   # on its quick gear, tools off
+            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24), tools off
             self.assertTrue(str(seen['keep']).startswith(f'{concierge.LIVE_KEY}:'))    # one live CLI process per chat (clipool)
             self.assertIn('I am Taskuary', seen['system'])
             concierge.say(s, 'and when did she send it?', key=f'review:{r}')                            # ...and the same conversation, resumed
-            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'haiku', 'sess-1', None))   # tools off
+            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet', 'sess-1', None))   # tools off
             self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system'])                                # ...so it is not told it has any
             tid = general.dock_task(s)[0]['TaskId']
             self.assertEqual(concierge._sid(s, tid), 'sess-1')
@@ -361,9 +361,9 @@ class BrainTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             c = TestClient(server.app)
             self.assertEqual(c.post('/api/concierge/ai', json={'pick': ''}).json()['pick'], 'cli:coder')   # back to the default
-            self.assertEqual(c.get('/api/concierge').json()['model'], 'haiku')
+            self.assertEqual(c.get('/api/concierge').json()['model'], 'sonnet')
 
-    def test_codex_gets_low_effort_and_a_profile_light_model_is_respected(self):
+    def test_codex_gets_medium_effort_and_the_assistant_model_is_its_own_not_triages(self):
         s = store()
         s.upsert_agent('codex', 'coding', 'cli', '{"cmd": "codex"}')
         patcher = mock.patch('taskuary.agents.default_agent', return_value='codex'); patcher.start(); self.addCleanup(patcher.stop)
@@ -373,12 +373,17 @@ class BrainTests(unittest.TestCase):
             return lambda *a, **k: 'x'
         with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make):
             concierge.brain(s)
-        self.assertEqual((seen['model'], seen['light']), (None, 'effort:low'))
+        self.assertEqual((seen['model'], seen['light']), (None, 'effort:medium'))
         self.assertIsNone(json.loads(s.get_agent('codex')['Config']).get('light_model'))                # never written back
+        # the profile's light model is TRIAGE's - the Assistant keeps its own default over it
         s.upsert_agent('codex', 'coding', 'cli', '{"cmd": "codex", "light_model": "gpt-5-mini@low"}')
         with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make):
             concierge.brain(s)
-        self.assertEqual((seen['model'], seen['light']), (None, 'gpt-5-mini@low'))
+        self.assertEqual((seen['model'], seen['light']), (None, 'effort:medium'))
+        s.set_setting(concierge.MODEL_KEY, 'gpt-5.4', 'owner')                                              # ...and its own setting wins
+        with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make):
+            concierge.brain(s)
+        self.assertEqual(seen['model'], 'gpt-5.4')
 
     def test_the_stream_carries_the_work_then_the_answer_and_a_report_can_be_rerun(self):
         s = store()
@@ -566,13 +571,14 @@ class FastLaneTests(unittest.TestCase):
             concierge.say(s, 'what did she attach?', key=f'review:{r}')       # a question: the model, tools off
             concierge.say(s, 'I think the export is the old one from June', key=f'review:{r}')   # a remark: the model, tools off
         self.assertEqual(calls, [None, None])                               # both typed turns: no cwd = read-only gear, no tools; the introduction asks nothing
-        # with an API connector configured, the fast lane is that connector - a second, not a launch
+        # an API connector configured is NOT a reason to swap the CLI out: which connector exists never decides the
+        # voice (the owner, 2026-09-24: "first connected should not matter"); the chat's CLI stays live instead
         c = s.get_connector_by_type('openai')
         s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'k', 'Name': 'Fast', 'ConfigJson': '{"model": "gpt-fast"}'}, 'o')
         with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make), mock.patch.object(concierge.llm_mod, 'build_llm', return_value=lambda *a, **k: 'quick') as b:
-            self.assertEqual(concierge.brain(s, fast=True)(None, None), 'quick')
-            self.assertTrue(b.called)
-        self.assertEqual(concierge.pick(s), 'cli:coder')                     # the default voice is still the CLI
+            self.assertEqual(concierge.brain(s, fast=True)(None, None), 'Dana wrote on email.')
+            self.assertFalse(b.called)
+        self.assertEqual(concierge.pick(s), 'cli:coder')
         # ...but a CLI the owner CHOSE is not swapped for the connector: the Assistant set to Claude answered on
         # Azure every turn (2026-09-24). The set-up composer rides the same chosen brain.
         s.set_setting(concierge.AI_KEY, 'cli:coder', 'owner')

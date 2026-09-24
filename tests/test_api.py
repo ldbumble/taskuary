@@ -705,7 +705,7 @@ class ApiTests(unittest.TestCase):
         finally:
             c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'tool'})
         b = c.get('/api/brains').json()
-        self.assertEqual(b['data'][0]['value'], '')                  # auto first
+        self.assertNotIn('', [x['value'] for x in b['data']])          # no "auto - first connector" (2026-09-24)
         anthropic_value = f"connector:{rows['anthropic']['ConnectorId']}"
         self.assertIn('cli:coder', [x['value'] for x in b['data']])  # your coding CLI can be the brain
         # no key saved = not a choice: fifteen greyed rows buried the CLIs under the fold (2026-09-24)

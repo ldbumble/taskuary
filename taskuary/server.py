@@ -3301,7 +3301,7 @@ def concierge_state():
     chosen = next((o for o in options if o['pick'] == pick), None)
     model = str(store.get_settings().get(concierge.MODEL_KEY) or '').strip() or (chosen or {}).get('model') or ''
     if pick.startswith('cli:') and not str(store.get_settings().get(concierge.MODEL_KEY) or '').strip():
-        model = concierge.LIGHT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
+        model = concierge.ASSISTANT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
     from . import remote_assistant
     return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
             # the persisted Current, validated against the pile - never the last card of the history (PW-162)
@@ -4087,9 +4087,9 @@ def brains():
     """Everything that could do intent triage: cloud AI connectors with a key, plus your
     CLI tools (through one representative worker each). Value goes into `triage_ai`."""
     from .llm import AI_TYPES
-    # no steering: auto is one option among equals, and which brain triages is the owner's call
-    out = [{'value': '', 'label': 'auto — first active AI connector', 'kind': 'auto', 'ready': True}]
-    out += [{'value': f"connector:{c['ConnectorId']}", 'label': c['Name'], 'kind': 'api',
+    # no "auto - first active AI connector": a blank setting is the default brain (agents.default_pick), and the
+    # card shows that brain by name - which connector was added first never decides (the owner, 2026-09-24)
+    out = [{'value': f"connector:{c['ConnectorId']}", 'label': c['Name'], 'kind': 'api',
              'ready': bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))}   # local models carry no key
             for c in store.list_connectors() if c['Type'] in AI_TYPES]
     # named by WHAT RUNS, leading with the CLI ('claude · coder'): the profile name is the

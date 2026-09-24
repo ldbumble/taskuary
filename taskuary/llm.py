@@ -74,6 +74,12 @@ def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
 MAX_TOKENS = 400
 
 
+# The model a CLI runs its light jobs on when nobody named one - triage, drafts, summaries - and the Assistant's, one
+# tier up: on haiku it broke its own contract in the 2026-09-24 chat audit ("I don't have the lookup tools"), sonnet held.
+LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': 'gemini-2.5-flash'}
+ASSISTANT_DEFAULT = {'claude': 'sonnet', 'codex': 'effort:medium', 'gemini': 'gemini-2.5-flash'}
+
+
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
                  research: bool = False, gear: str = 'light', keep: str = None):
@@ -117,6 +123,9 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # the analyst answered on the classifier's cheap model (the owner, 2026-09-16: general agents
     # use the same brain on high level like coding by default).
     light = str(prof.get('light_model') or '') if gear != 'main' else ''
+    # a profile that names no light model still gets the CLI's small one: blank used to mean the MAIN model, so triage,
+    # drafts and summaries ran on the coding tier (the owner, 2026-09-24: "lower model for triage/assistant")
+    if gear != 'main' and not light and not model: light = LIGHT_DEFAULT.get(hub_agents.cli_of(prof, agent_name), '')
     if light.startswith('effort:'):
         # codex on a ChatGPT plan serves ONLY the plan's models - no mini/nano tier exists -
         # so its cheap gear is reasoning effort on the same model (verified: -c
@@ -197,6 +206,9 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     fresh conversation - provider-specific model/session identifiers never cross that line."""
     settings = store.get_settings()
     primary = str(pick if pick is not None else settings.get('triage_ai') or '').strip()
+    if not primary:                                    # blank = the default brain, never "the first connector"
+        from .agents import default_pick
+        primary = default_pick(store)
     backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
     # This dedupe SURVIVES the role/brain split, unlike its twin in agent_chain. A session's chain
     # is of brains now, so that one went; but `triage_ai` and `triage_backup_ai` still spell a

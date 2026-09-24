@@ -722,6 +722,18 @@ def default_brain(store) -> str:
     return cli_of(profiles(store).get(legacy) or {}, legacy)
 
 
+def default_pick(store) -> str:
+    """What a BLANK brain setting means - triage, the Assistant, general work: the default brain, as a
+    `cli:<worker>` pick on its light gear. It used to mean "the first active AI connector", so which brain
+    read the mail depended on which connector happened to be added first (the owner, 2026-09-24: "first
+    connected should not matter"). '' only when no default brain is set - a fresh install's own fallback."""
+    key = str(store.get_settings().get('default_brain') or '').strip()
+    if not key: return ''
+    row = next((o for o in cli_agent_options(store, preferred=[default_agent(store)]) if o['cli'] == key), None)
+    if row: return f"cli:{row['value']}"
+    return f'cli:{key}' if key in dict(connection_brains(store)) else ''
+
+
 def brain_for(store, role: str) -> str:
     """The brain that runs one role. A profile never PINS a brain: this is a setting keyed BY a
     profile, and what it names is a brain - never a model, never an effort."""

@@ -116,7 +116,7 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None) -
     if candidates is not None:
         p.update(relationship={'type': ['string', 'null'], 'enum': ['new', 'continues', 'answers', 'uncertain', None]},
                  related_message_ids={'type': ['array', 'null'], 'items': {'type': 'integer'}},
-                 existing_task_id={'type': ['integer', 'null']})
+                 existing_task_id={'type': ['integer', 'null']}, same_problem={'type': ['boolean', 'null']})
     return {'name': 'triage_verdict',
             'schema': {'type': 'object', 'additionalProperties': False, 'required': list(p), 'properties': p}}
 
@@ -499,6 +499,11 @@ def relationship_of(j: dict, candidates: list) -> dict:
     except (TypeError, ValueError): task = None
     if task not in tasks: task = None
     if rel in ('continues', 'answers') and not related and task is None: rel = 'uncertain'
+    # ...and held to its OWN answer: asked outright whether this line is the same problem as the one it continues,
+    # a model that says no has named a second job. Definitions alone did not move it - a sender's "it says AI not set up"
+    # and "it is not re-triaging" joined the DLL-update task six times in six (the owner, 2026-09-24: "different
+    # issues are separate tasks")
+    if rel == 'continues' and j.get('same_problem') is False: rel = 'new'
     return {'relationship': rel, 'related_message_ids': related, 'existing_task_id': task}
 
 
@@ -637,12 +642,22 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 system += ('\n\nTHIS IS A CHAT LINE, and same_day_lines are the lines of this room from the SAME calendar day, '
                            'oldest first, each with its id and the task it belongs to (null = none yet). Add to your answer '
                            '"relationship": "new" | "continues" | "answers" | "uncertain", "related_message_ids": [<ids of the '
-                           'lines it continues or answers>] and "existing_task_id": <that task id, or null>. continues = it '
-                           'carries on, finishes, corrects, narrows or adds detail to an ask in those lines (people type in '
-                           'fragments); answers = it replies to something asked in them; new = it turns to a different subject, '
-                           'however politely ("Also...", "one more thing", "separately") - two problems in one app are two jobs; '
-                           'uncertain = you cannot tell. Only ids from same_day_lines count; anything older is a new subject by '
-                           'rule, whatever it resembles, and a room is not a topic.')
+                           'lines it continues or answers>] and "existing_task_id": <that task id, or null>. continues = it is '
+                           'about the SAME problem or request as those lines: it finishes, corrects, narrows or clarifies it, or '
+                           'shows the very error just described (people type in fragments - "I mean the new one", the screenshot '
+                           'of the message they just quoted); answers = it replies to something asked in them; new = it reports a '
+                           'DIFFERENT problem or asks for a different thing - another error message, another screen, another '
+                           'symptom, another feature - even from the same person, in the same app, minutes apart, however '
+                           'politely ("Also...", "one more thing", "it also says...", "and X does not work either"). Two problems '
+                           'are two jobs even when they MIGHT share a cause: never join them on a guessed common cause - the agent '
+                           'working each one finds that out. When a second problem could be either, answer new. uncertain = you '
+                           'cannot tell what it refers to. Only ids from same_day_lines count; anything older is a new subject by '
+                           'rule, whatever it resembles, and a room is not a topic. And answer "same_problem": true | false - '
+                           'is this line about exactly the SAME problem as the line it continues (the same error, the same screen, '
+                           'the same request)? false when it names a different error, symptom or thing, even in the same app. '
+                           'A line reporting what ELSE is wrong is a different problem even when one change - an update, a '
+                           'migration, a new release - may have caused all of them: "after the update X fails" then "and it '
+                           'says Y" then "Z does not work either" are three problems, three jobs.')
             if project:
                 system += ('\n\nPROJECT RELATIONSHIP CONTEXT - selected from the owner\'s prior explicit repository '
                            'choices for this sender/channel. It helps identify what the message is about; it does '
@@ -659,7 +674,14 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                **(thread or {}),
                                **({'project_context': project} if project else {}),
                                **({'routing_history': routing_history} if routing_history else {}),
-                               **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]} if candidates is not None else {}),
+                               **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates],
+                                   # beside the lines it is compared with, where the answer is made: the rule buried in a
+                                   # 25k-character system prompt moved one verdict in six (2026-09-24)
+                                   'before_you_join': 'Does THIS message report the same problem as the task it would join, '
+                                                      'or something else that is wrong? Something else - another error, '
+                                                      'another screen, another thing that does not work - is relationship '
+                                                      '"new" and same_problem false, even if one update or change may have '
+                                                      'caused both.'} if candidates is not None else {}),
                                # 160 cut every real description mid-clause - taskuary lost "do the work, you approve", ledger
                                # lost the noun its whole sentence was about. This is the one line the model routes on.
                                **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:REPO_ABOUT]} for r in repos]} if repos else {}),

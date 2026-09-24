@@ -191,3 +191,15 @@ class MailAndTrackersAreNotResetAtMidnight(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SameProblemTests(unittest.TestCase):
+    """The owner, 2026-09-24: "different issues are separate tasks". Asked outright, a model that says a line is NOT
+    the same problem as the one it continues has named a second job - it is held to that answer."""
+    def test_a_continuation_the_model_says_is_another_problem_is_new(self):
+        from taskuary import triage
+        cands = [{'id': 1, 'task_id': 7}]
+        base = {'relationship': 'continues', 'related_message_ids': [1], 'existing_task_id': 7}
+        self.assertEqual(triage.relationship_of({**base, 'same_problem': False}, cands)['relationship'], 'new')
+        self.assertEqual(triage.relationship_of({**base, 'same_problem': True}, cands)['relationship'], 'continues')
+        self.assertEqual(triage.relationship_of(base, cands)['relationship'], 'continues')     # not asked: unchanged

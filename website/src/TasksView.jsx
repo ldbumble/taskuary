@@ -459,10 +459,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // from), so take it rather than wait for a re-selection to go looking. A session that has
   // ENDED is deliberately not adopted: findTerm keeps the dead one because its scrollback is
   // exactly what Done and Pause need, and `for_task` only ever returns a live one.
+  // ...and only THIS task's. Switching tasks clears `term` while `detail` still holds the previous
+  // task until its reload lands, so this adopted that task's live session - and nothing cleared it
+  // once the new detail arrived without one: a done task showed another task's coder working.
   useEffect(() => {
     const live = detail?.session;
-    if (live?.alive && live.sid !== term?.sid) setTerm(live);
-  }, [detail?.session, term?.sid]);
+    if (live?.alive && live.taskId === selected && live.sid !== term?.sid) setTerm(live);
+  }, [detail?.session, term?.sid, selected]);
   const openTerm = useCallback(async (body) => {
     try {
       const { data } = await api.post("/api/terminals", body); setTerm(data);

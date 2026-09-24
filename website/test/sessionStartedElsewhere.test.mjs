@@ -34,8 +34,19 @@ test("the open task is reloaded on task-changed, not just the list", () => {
 test("the session the detail already carries is adopted", () => {
   assert.match(src, /const live = detail\?\.session;/,
     "the detail carries the live session - sessionAlive is read off it - so the page must take it");
-  assert.match(src, /live\?\.alive && live\.sid !== term\?\.sid/,
-    "adopt only a LIVE session, and only when it is one we do not already hold");
+  assert.match(src, /live\?\.alive && live\.taskId === selected && live\.sid !== term\?\.sid/,
+    "adopt only a LIVE session of THIS task, and only when it is one we do not already hold");
+});
+
+test("a switch never adopts the task it is leaving's session", () => {
+  // Switching clears `term` while `detail` still holds the previous task until its reload lands.
+  // Unguarded, that task's live session was adopted - and nothing cleared it once the new detail
+  // arrived without one: a done task showed another task's coder working, and its "Save and end
+  // session" and composer acted on THAT task's agent (2026-09-24).
+  const effect = /const live = detail\?\.session;[\s\S]*?\}, \[([^\]]*)\]\);/.exec(src);
+  assert.ok(effect, "the adopting effect is where it was");
+  assert.match(effect[0], /live\.taskId === selected/, "the session must belong to the selected task");
+  assert.match(effect[1], /\bselected\b/, "and the effect must re-run when the selection changes");
 });
 
 test("a session that has ENDED is not adopted over the one findTerm kept", () => {

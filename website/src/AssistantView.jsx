@@ -846,6 +846,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
       first = false;
     }, 30000);
   }, [active, loadPile, readChat]);
+  // A TURN FROM THE PHONE shows here as it happens: the dots while WhatsApp is being answered, and the words the
+  // moment they are sent - it used to wait for the 30 s tick (the owner, 2026-09-24: "it takes 20 seconds from when
+  // message is responded to in whatsapp to show up on the assistant")
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  useEffect(() => onLive(["chat-changed"], (ev) => {
+    setPhoneBusy(!!ev?.thinking);
+    readChat().catch(() => { /* the tick reads again */ });
+  }), [readChat]);
   // a sync lands rows several times a second; one forced rebuild after the burst, not one per row -
   // and a CEILING, because a run that keeps talking pushed the trailing timer out indefinitely and
   // left the pile on its 30-second safety poll (2026-09-10 audit).
@@ -1515,7 +1523,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
           )}
           {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips}
                                      actions={actions} fresh={currentItem} />)}
-          {busy && (
+          {(busy || phoneBusy) && (
             <div className="tq-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
                 {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}

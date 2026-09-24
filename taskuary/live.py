@@ -9,7 +9,10 @@ import asyncio, threading
 from loguru import logger
 
 FEED, INGEST, TASK, RUN = 'feed-changed', 'ingest-status', 'task-changed', 'run-tail'
-KINDS = (FEED, INGEST, TASK, RUN)
+# a phone turn in the Assistant's chat: the desktop read its conversation only on a 30 s tick, so a WhatsApp answer
+# reached the tab up to half a minute after the phone had it (the owner, 2026-09-24: "it takes 20 seconds")
+CHAT = 'chat-changed'
+KINDS = (FEED, INGEST, TASK, RUN, CHAT)
 
 _loop = None
 _clients = set()
@@ -18,7 +21,7 @@ _pending = {}          # kind -> payload (last writer wins for that kind)
 _timers = {}           # kind -> Timer
 # run-tail is a screen you watch, so it can wait a beat to fold pty bursts; the other two
 # are "something landed" and should reach the tab before the next glance.
-_DELAY = {RUN: 0.25, FEED: 0.08, INGEST: 0.08, TASK: 0.08}
+_DELAY = {RUN: 0.25, FEED: 0.08, INGEST: 0.08, TASK: 0.08, CHAT: 0.05}
 
 
 def bind(loop):

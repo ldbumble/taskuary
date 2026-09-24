@@ -560,3 +560,18 @@ class CardParityTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_phone_turn_tells_the_desktop_when_it_starts_and_when_it_is_answered():
+    """The owner, 2026-09-24: "it takes 20 seconds from when message is responded to in whatsapp to show up on the
+    assistant". The tab read its conversation on a 30 s tick; the turn now announces itself both ways - and the
+    end is announced even when answering failed, or the dots would spin for ever."""
+    from unittest import mock
+    from taskuary import live, remote_assistant
+    from taskuary.store import MemoryStore
+    said = []
+    with mock.patch.object(live, 'emit', lambda kind, **kw: said.append((kind, kw.get('thinking')))), \
+         mock.patch.object(remote_assistant, 'respond', side_effect=RuntimeError('model down')):
+        try: remote_assistant._locked_respond(MemoryStore(), 'whatsapp', 'me@s.test', 'hello', None)
+        except RuntimeError: pass
+    assert said == [(live.CHAT, True), (live.CHAT, False)]

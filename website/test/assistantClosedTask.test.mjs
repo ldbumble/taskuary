@@ -26,3 +26,9 @@ test("a set-up's pending questions are a line, not an item on the table", async 
   assert.match(view, /const NOTE_KINDS = new Set\(\["setup_questions"\]\)/);
   assert.match(view, /NOTE_KINDS\.has\(c\?\.kind\) \? null/);
 });
+
+test("a phone turn shows on the desktop as it happens - the dots, then the words", () => {
+  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
+  assert.match(view, /onLive\(\["chat-changed"\], \(ev\) => \{\s*setPhoneBusy\(!!ev\?\.thinking\);\s*readChat\(\)/);
+  assert.match(view, /\{\(busy \|\| phoneBusy\) && \(/);
+});

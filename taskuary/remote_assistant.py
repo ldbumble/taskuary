@@ -381,7 +381,13 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
         except Exception as e: logger.debug(f'no receipt in {channel}: {e}')
     key = (id(store), channel, connector_id, chat)
     with _locks_guard: lock = _locks.setdefault(key, threading.Lock())
-    with lock: respond(store, channel, chat, question, connector_id)
+    # the desktop hears the turn START (it shows the typing dots, as for its own turns) and END (it reads the
+    # conversation at once instead of on its 30 s tick)
+    from . import live
+    live.emit(live.CHAT, thinking=True, channel=channel)
+    try:
+        with lock: respond(store, channel, chat, question, connector_id)
+    finally: live.emit(live.CHAT, thinking=False, channel=channel)
 
 
 _ASKING = threading.local()                  # the chat a turn came from, for the thread that answers it

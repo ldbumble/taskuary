@@ -141,3 +141,51 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
     </Box>
   );
 };
+
+// THE REPOSITORY, CHOSEN BEFORE START. The Start panel said nothing about where a session would open, and the
+// picker above only appeared once a start had already failed or guessed (the owner, 2026-09-24: "when i hit start
+// coding agent then the repo picker showed up, but it should be there always"). This is that choice as a
+// dropdown beside the brain: the repository the instruction NAMES ("check this in ledger") first, else the one
+// pinned on the task, else Taskuary's own pick - and the parent pins the choice before it starts the session.
+export const namedRepo = (rows, text) => {
+  // whole words only: "ledger" names northwind/ledger, "ledgers" and "my-ledger-notes" do not
+  const words = new Set(String(text || "").toLowerCase().split(/[^a-z0-9_./-]+/).map((w) => w.replace(/[./-]+$/, "")));
+  const hits = new Set((rows || []).filter((r) => [r.repo, r.repo.split("/").pop()]
+    .some((n) => n.length >= 4 && words.has(n.toLowerCase()))).map((r) => r.repo));
+  return hits.size === 1 ? [...hits][0] : "";
+};
+
+export const RepoSelect = ({ taskId, agent = "coder", instruction = "", value, onChange }) => {
+  const [data, setData] = useState(null);
+  const [manual, setManual] = useState(false);
+  useEffect(() => {
+    let live = true; setData(null); setManual(false);
+    api.get(`/api/tasks/${taskId}/repos`, { params: { agent } }).then(({ data: d }) => live && setData(d)).catch(() => live && setData({ data: [] }));
+    return () => { live = false; };
+  }, [taskId, agent]);
+  const rows = data?.data || [];
+  const tagged = rows.find((r) => r.tagged)?.repo || "";
+  const suggested = namedRepo(rows, instruction) || tagged || (data?.picked && data.picked !== NO_REPO ? data.picked : "");
+  // follow the words until the owner picks by hand; a hand pick stays
+  useEffect(() => { if (data && !manual && suggested !== value) onChange?.(suggested); }, [data, suggested, manual]);   // eslint-disable-line react-hooks/exhaustive-deps
+  if (!data || !rows.length) return null;
+  const row = rows.find((r) => r.repo === value);
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.75 }}>
+      <AccountTreeIcon sx={{ fontSize: 15, color: DIM }} />
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>repository</Typography>
+      <select className="tq-start-repo" value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
+        style={{ fontSize: 12.5, padding: "4px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fff", color: INK, minWidth: 220 }}>
+        {!value && <option value="">choose a repository…</option>}
+        {rows.map((r) => <option key={r.repo} value={r.repo}>{r.repo}{r.has_path ? "" : " (no local folder)"}</option>)}
+      </select>
+      <Typography variant="caption" sx={{ color: FAINT }}>
+        {!value ? "not clear from the task - choose one to start"
+          : value === namedRepo(rows, instruction) ? "named in your instruction"
+          : value === tagged ? "pinned on this task"
+          : manual ? "your choice" : (data.why || "Taskuary's pick")}
+        {row && !row.has_path ? " - no local folder yet: you will be asked for it" : ""}
+      </Typography>
+    </Box>
+  );
+};

@@ -27,7 +27,7 @@ import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
-import { RepoPicker } from "./RepoPicker.jsx";
+import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
@@ -205,7 +205,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
   }, []);
-  const [run, setRun] = useState({ agent: "", model: "", instruction: "" });   // "" = the roster's default (served first)
+  const [run, setRun] = useState({ agent: "", model: "", instruction: "" });
+  // the repository the Start panel will open the coding session in (RepoSelect); null = not loaded / not offered
+  const [startRepo, setStartRepo] = useState(null);   // "" = the roster's default (served first)
   // Which KIND of worker this row is configuring. "Use non-coding agent" used to dispatch on the
   // spot, so there was no moment at which a profile or a brain could be chosen for it - the block
   // is called "Configure the next run" and could not configure that one (the owner, 2026-09-18).
@@ -797,6 +799,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const id = selected;
     setStartingAgent("coding"); setErr("");
     try {
+      // the repository chosen in the panel is pinned first - the tag is the override the start obeys
+      if (startRepo) await api.put(`/api/tasks/${id}/repo`, { repo: startRepo, agent: run.agent || "coder" });
       // one shared dispatch for coding too (PW-216): the kind switch, the live-worker check (409), the unknown
       // agent (422) and the repository come from the same road the general button and the assistant use -
       // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
@@ -1465,8 +1469,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         onChange={(e) => setRun({ ...run, instruction: e.target.value })}
                         placeholder={detail?.transcript ? "What should this new agent do next?" : "Extra instructions for this session (optional)"}
                         sx={{ mt: 0.85, bgcolor: "#fff" }} />
+                      {!handOff && <RepoSelect taskId={selected} agent={run.agent || "coder"} instruction={run.instruction}
+                        value={startRepo} onChange={setStartRepo} />}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
-                        {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                        {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === ""}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}

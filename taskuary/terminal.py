@@ -1606,7 +1606,7 @@ def repo_named_in(store, text: str, agent: str = 'coder') -> str:
     known = list(dict.fromkeys(list(repo_map(store)) + list(paths)))
     said = str(text or '')
     hits = {r for r in known for n in (r, r.split('/')[-1])
-            if len(n) >= 3 and re.search(rf'(?<![\w/-]){re.escape(n)}(?![\w-])', said, re.I)}
+            if len(n) >= 4 and re.search(rf'(?<![\w/-]){re.escape(n)}(?![\w-])', said, re.I)}
     return hits.pop() if len(hits) == 1 else ''
 
 

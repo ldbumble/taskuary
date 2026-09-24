@@ -73,4 +73,64 @@ class LookupTests(unittest.TestCase):
         self.assertIn('Nothing in the help', read(s, 'docs.search', query='zzzqqq'))
 
 
+class AppAtWorkTests(unittest.TestCase):
+    """What the agents are doing, what waits on a yes, the calendar, what happened, what failed."""
+
+    def test_agents_now_names_the_task_and_what_the_session_is_asking(self):
+        s = world()
+        live = [{'taskId': 1, 'agent': 'coder', 'cli': 'claude', 'started': '2026-09-24 09:00', 'phase': 'parked',
+                 'line': 'coder asked you: which branch?', 'request': {'text': 'which branch?'}}]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
+            out = read(s, 'agents.now')
+            self.assertIn('TQ-0001', out); self.assertIn('which branch?', out); self.assertIn('claude', out)
+        s.start_run(2, 'researcher', 'look into it', 't')
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            self.assertIn('TQ-0002', read(s, 'agents.now'))
+            self.assertIn('running in the background', read(s, 'agents.now'))
+
+    def test_approvals_list_shows_drafts_and_proposals(self):
+        s = world()
+        self.assertIn('Nothing is waiting', read(s, 'approvals.list'))
+        s.add_review({'TaskId': 2, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks, on it.'})
+        s.add_review({'TaskId': 1, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{"action": "open_pr"}', 'Reason': 'the fix is ready'})
+        out = read(s, 'approvals.list')
+        self.assertIn('draft reply', out); self.assertIn('open_pr', out); self.assertIn('the fix is ready', out)
+
+    def test_calendar_read_reads_the_days_asked(self):
+        s = world()
+        ag = {'events': [{'start': '2026-09-25 10:00', 'end': '2026-09-25 10:30', 'subject': 'Budget review', 'all_day': False,
+                          'where': 'Room 2', 'who': ['Erin Blake']}], 'errors': [], 'sources': ['outlook: alex@northwind.example'],
+              'start': '2026-09-25T00:00', 'end': '2026-09-26T00:00', 'tz': 'UTC'}
+        s.set_setting('calendar_enabled', '1', 't')
+        with mock.patch('taskuary.calendar.agenda', return_value=ag) as agenda:
+            out = read(s, 'calendar.read', **{'from': 'tomorrow', 'days': 1})
+        self.assertIn('Budget review', out); self.assertIn('Erin Blake', out)
+        self.assertEqual(agenda.call_args.kwargs['days'], 1)
+        s.set_setting('calendar_enabled', '0', 't')
+        self.assertIn('switched off', read(s, 'calendar.read'))
+
+    def test_activity_list_keeps_the_owner_and_the_agents_apart(self):
+        s = world()
+        s.audit('task', 2, 'close_from_assistant', 'owner')
+        s.audit('lore', 5, 'post', 'coder', actor_type='agent')
+        out = read(s, 'activity.list')
+        self.assertIn('you: 1 x task close from assistant', out); self.assertIn('agents: 1 x lore post', out)
+        self.assertNotIn('lore post', read(s, 'activity.list', who='you'))
+
+    def test_errors_list_gathers_every_failure_written_down(self):
+        import pathlib, tempfile
+        s = world()
+        self.assertIn('Nothing is failing', read(s, 'errors.list'))
+        rid = s.start_run(1, 'coder', 'fix it', 't')
+        s.update_run(rid, {'Status': 'error', 'LastError': 'the checkout is dirty'}, finished=True)
+        s.add_report_run(1, {'at': '2099-01-01 00:00:00', 'title': 'Nightly export check', 'failed': True, 'error': 'HTTP 500'})
+        # a log of its own: the real one may be held open by the app's logger, and Windows will not let go of it
+        with tempfile.TemporaryDirectory() as d:
+            log = pathlib.Path(d) / 'taskuary.log'
+            log.write_text('2026-09-24 09:00:00 ERROR   taskuary.outbox:193 the send was refused\n', encoding='utf-8')
+            with mock.patch.object(lookups, 'log_path', return_value=log): out = read(s, 'errors.list')
+        for want in ('AGENT RUNS THAT FAILED', 'the checkout is dirty', 'Nightly export check', 'HTTP 500', 'the send was refused'):
+            self.assertIn(want, out)
+
+
 if __name__ == '__main__': unittest.main()

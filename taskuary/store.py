@@ -3579,6 +3579,24 @@ class SQLiteStore:
             self.cx.execute('INSERT INTO audit (EntityType,EntityId,Action,Actor,ActorType,RunId,Detail,PrevHash,RowHash,CreatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
                             (et, eid, action, actor, actor_type, run_id, d, prev, rh, _now()))
             self.cx.commit()
+    # ── what went wrong, and what happened (lookups.py: errors.list, activity.list) ──
+    def audit_since(self, since, limit=400) -> list:
+        return self._rows('SELECT EntityType, EntityId, Action, Actor, ActorType, Detail, CreatedAt FROM audit WHERE CreatedAt>=? '
+                          'ORDER BY Id DESC LIMIT ?', (since, limit))
+    def running_runs(self) -> list:
+        return self._rows("SELECT RunId, TaskId, AgentName, StartedAt FROM run WHERE Status='running' ORDER BY RunId DESC")
+    def failures_since(self, since) -> dict:
+        """Every place a failure is written down, from `since`: agent runs, report runs, drafts, triage, operations."""
+        q = lambda sql: self._rows(sql, (since,))
+        return {'agent runs': q("SELECT TaskId, AgentName Who, LastError Error, IFNULL(FinishedAt, UpdatedAt) At FROM run "
+                                "WHERE Status='error' AND IFNULL(FinishedAt, IFNULL(UpdatedAt, StartedAt))>=? ORDER BY RunId DESC LIMIT 20"),
+                'report runs': q("SELECT NULL TaskId, Title Who, Error, At FROM report_run WHERE Failed=1 AND At>=? ORDER BY RunId DESC LIMIT 20"),
+                'drafts': q("SELECT TaskId, Kind Who, DraftError Error, CreatedAt At FROM review WHERE IFNULL(DraftError,'')<>'' AND CreatedAt>=? "
+                            'ORDER BY ReviewId DESC LIMIT 20'),
+                'triage': q("SELECT TaskId, 'm' || MessageId Who, ParseError Error, CreatedAt At FROM route WHERE IFNULL(ParseError,'')<>'' "
+                            'AND CreatedAt>=? ORDER BY RouteId DESC LIMIT 20'),
+                'actions': q("SELECT NULL TaskId, Kind Who, Error, IFNULL(ExecutedAt, UpdatedAt) At FROM operation WHERE IFNULL(Error,'')<>'' "
+                             'AND IFNULL(ExecutedAt, UpdatedAt)>=? ORDER BY UpdatedAt DESC LIMIT 20')}
     def list_audit(self, et=None, eid=None, limit=200):
         if et: return self._rows('SELECT * FROM audit WHERE EntityType=? AND EntityId=? ORDER BY Id DESC LIMIT ?', (et, eid, limit))
         return self._rows('SELECT * FROM audit ORDER BY Id DESC LIMIT ?', (limit,))

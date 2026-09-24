@@ -1,8 +1,9 @@
 """The assistant's look-ups past the first ten (concierge.read_op): open work, one message in full, a
-sender at a glance, and the docs. Each reads what is already stored and changes nothing - the
+sender at a glance, the docs, what the agents are doing, what waits for approval, the calendar,
+what happened and what failed. Each reads what is already stored and changes nothing - the
 assistant stays light because it asks for what it needs instead of carrying a memory in its prompt
 (the owner, 2026-09-24: "it should be able to search ... using lookup tools")."""
-import math, re
+import json, math, re
 from datetime import datetime, timedelta
 from pathlib import Path
 from .routing import tokens
@@ -95,7 +96,95 @@ def docs_search(store, p: dict) -> str:
     if not scored: return f'Nothing in the help pages or your docs mentions "{q}".'
     return (NL * 2).join(f'[{w}]{NL}{_cut(t, CHUNK)}' for sc, w, t in scored[:4] if sc >= scored[0][0] / 2)
 
-READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search}
+def _since(days) -> str: return (datetime.now() - timedelta(days=float(days))).isoformat(' ', 'seconds')
+
+def _title(store, tid) -> str:
+    t = store.get_task(int(tid)) if tid else None
+    return f"{task_ref(tid)} {_cut(t.get('Title'), 80)}" if t else (task_ref(tid) if tid else 'no task')
+
+def agents_now(store, p: dict) -> str:
+    from . import terminal
+    live = terminal.live_sessions(0, details=False)
+    out = []
+    for i in live:
+        req = (i.get('request') or {}).get('text') if isinstance(i.get('request'), dict) else ''
+        state = i.get('line') or {'parked': 'idle, waiting for its next instruction'}.get(i.get('phase'), i.get('phase') or 'working')
+        out.append(f"{_title(store, i.get('taskId'))} - {i.get('agent') or i.get('cli') or 'agent'} ({i.get('cli') or '?'}), "
+                   f"started {_day(i.get('started'))}: {state}" + (f' | asking: {_cut(req, 240)}' if req and req not in state else ''))
+    on = {str(i.get('taskId')) for i in live}
+    out += [f"{_title(store, r['TaskId'])} - {r['AgentName']}: running in the background since {_day(r['StartedAt'])}"
+            for r in store.running_runs() if str(r['TaskId']) not in on]
+    return NL.join(out) if out else 'No agent is working on anything right now.'
+
+def approvals_list(store, p: dict) -> str:
+    rows = store.list_reviews(status='pending')
+    if not rows: return 'Nothing is waiting for your approval.'
+    def what(r):
+        if r.get('Kind') == 'action':
+            try: return 'the agent proposes to ' + str(json.loads(r.get('DraftText') or '{}').get('action') or 'act')
+            except ValueError: return 'an agent proposal'
+        return f"a {str(r.get('Kind') or 'draft').replace('_', ' ')} to {r.get('FromName') or r.get('FromEmail') or 'them'}"
+    return NL.join(f"{_title(store, r.get('TaskId'))} - {what(r)}, since {_day(r.get('CreatedAt'))}"
+                   + (f" | {_cut(r.get('Reason'), 160)}" if r.get('Reason') else '') for r in rows[:30])
+
+def calendar_read(store, p: dict) -> str:
+    from . import calendar as cal
+    if store.get_settings().get('calendar_enabled', '1') != '1': return 'The calendar is switched off in Settings.'
+    when, days = str(p.get('from') or 'today').strip().lower(), max(1, min(int(p.get('days') or 7), 31))
+    start = datetime.now(cal.tz_of(store)).replace(hour=0, minute=0, second=0, microsecond=0)
+    if when == 'tomorrow': start += timedelta(days=1)
+    elif re.fullmatch(r'\d{4}-\d{2}-\d{2}', when): start = start.replace(year=int(when[:4]), month=int(when[5:7]), day=int(when[8:]))
+    ag = cal.agenda(store, days=days, start=start)
+    if not ag['sources']: return 'No calendar is connected - an Outlook or Google mail connection brings its calendar with it.'
+    ev = [f"{e['start']}{'-' + e['end'][11:] if e.get('end') and not e['all_day'] else ''} {'(all day) ' if e['all_day'] else ''}"
+          f"{e['subject']}{' @ ' + e['where'] if e.get('where') else ''}{' with ' + ', '.join(e['who'][:5]) if e.get('who') else ''}"
+          for e in ag['events']]
+    return NL.join([f"{ag['start'][:10]} to {ag['end'][:10]} ({ag['tz']}):"] + (ev or ['nothing booked'])
+                   + [f'could not read one calendar: {x}' for x in ag['errors']])
+
+def activity_list(store, p: dict) -> str:
+    """What happened, from the audit trail - the owner and the agents apart."""
+    days, who = float(p.get('days') or 1), str(p.get('who') or 'all').strip().lower()
+    rows = [r for r in store.audit_since(_since(days)) if who == 'all' or (r['ActorType'] == 'agent') == (who == 'agents')]
+    if not rows: return 'Nothing was recorded in that period.'
+    counts = {}
+    for r in rows: k = (r['ActorType'] == 'agent', r['EntityType'], r['Action']); counts[k] = counts.get(k, 0) + 1
+    summary = [f"{'agents' if a else 'you'}: {n} x {e} {act.replace('_', ' ')}" for (a, e, act), n in sorted(counts.items(), key=lambda kv: -kv[1])[:20]]
+    ref = lambda r: task_ref(r['EntityId']) if r['EntityType'] == 'task' and r['EntityId'] else f"{r['EntityType']} {r['EntityId'] or ''}".strip()
+    last = [f"  {_day(r['CreatedAt'])} {r['Actor']}: {r['Action'].replace('_', ' ')} {ref(r)}{' - ' + _cut(r['Detail'], 100) if r.get('Detail') else ''}"
+            for r in rows[:15]]
+    return NL.join([f'{len(rows)} things in the last {days:g} day(s):'] + summary + ['most recent:'] + last)
+
+LOG_TAIL = 400_000     # bytes read off the end of the log: a few days of a busy install
+
+def log_path():
+    from . import config
+    return config.home() / 'taskuary.log'
+
+def _log_errors(n=12) -> list:
+    f = log_path()
+    if not f.exists(): return []
+    with open(f, 'rb') as fh:
+        fh.seek(max(0, f.stat().st_size - LOG_TAIL)); text = fh.read().decode('utf-8', 'replace')
+    return [l for l in text.splitlines() if ' ERROR ' in l or ' CRITICAL ' in l][-n:]
+
+def errors_list(store, p: dict) -> str:
+    """Everything written down as failing: the bell first, then each table that records a failure, then the log."""
+    from . import problems
+    days, down = float(p.get('days') or 3), problems._dismissed(store)
+    bell = [f"{'(you dismissed this) ' if down.get(x['key']) == problems.signature(x) else ''}{x['title']} - {_cut(x['detail'], 300)}"
+            f"{' since ' + _day(x['since']) if x.get('since') else ''} - fix: {x['fix']} on {x['where']}" for x in problems.collect(store, all_of_them=True)]
+    out = (['FAILING NOW:'] + bell) if bell else ['Nothing is failing right now.']
+    for what, rows in store.failures_since(_since(days)).items():
+        if rows: out += [f'{what.upper()} THAT FAILED ({len(rows)}):'] + [
+            f"  {_day(r['At'])} {_title(store, r['TaskId']) + ' ' if r.get('TaskId') else ''}{r['Who'] or ''}: {_cut(r['Error'], 240)}" for r in rows[:8]]
+    logged = _log_errors()
+    if logged: out += ['LAST ERRORS IN THE LOG:'] + [f'  {_cut(l, 300)}' for l in logged]
+    return NL.join(out)
+
+READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
+        'agents.now': agents_now, 'approvals.list': approvals_list, 'calendar.read': calendar_read,
+        'activity.list': activity_list, 'errors.list': errors_list}
 
 def read(store, kind: str, p: dict) -> str:
     f = READ.get(kind)

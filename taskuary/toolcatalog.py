@@ -173,6 +173,17 @@ READS = {
                          'wrote back and what the owner told you to remember about them. `who`: a name or an address'),
     'docs.search':      ("how Taskuary works and how to set it up (the help pages), and the owner's own docs (SOUL, TRIAGE, "
                          'COUNSEL...). `query`: the words. Use it for any "how do I", "what does X do" or "why did it" about the app'),
+    # THE APP AT WORK (lookups.py, 2026-09-24): which agent is on what, what waits on a yes, the
+    # calendar past today, what happened, and every place a failure is written down.
+    'agents.now':       'every agent session running now - its task, which CLI, and whether it is working, idle, stuck or asking the owner something',
+    'approvals.list':   'everything waiting for the owner\'s yes: drafted replies and the actions agents proposed, with their tasks',
+    'calendar.read':    ('the owner\'s meetings - `from`: today (the default) | tomorrow | YYYY-MM-DD; `days`: how many (7 by default). '
+                         'Reads the calendar live, so it takes a moment'),
+    'activity.list':    ('what happened, from the audit trail: counts by kind and the latest entries. `days` (1 by default); '
+                         '`who`: you | agents | all'),
+    'errors.list':      ('what is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, '
+                         'drafts, triage and actions over `days` (3 by default), and the last errors in the log. Use it for any '
+                         '"what broke", "why did X not happen", "is anything wrong"'),
     'report.read':      'a report or workflow and its last runs - what it said, whether it failed and why, and its source_id. `title`: part of its name (or `source_id`)',
     # THE APP ITSELF, by name (appfacts). Asked from a chat to "run me the AR report" the assistant had
     # no list of reports at all; "is Teams connected" had no answer but a guess (the owner, 2026-09-18).
@@ -205,7 +216,8 @@ def valid(kind: str, params: dict) -> str:
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'message.read': ('mid', 'id'),
-                'sender.read': ('who', 'sender'), 'docs.search': ('query',)}[kind]
+                'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (),
+                'calendar.read': (), 'activity.list': (), 'errors.list': ()}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
         return ''

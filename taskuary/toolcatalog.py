@@ -184,6 +184,12 @@ READS = {
     'errors.list':      ('what is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, '
                          'drafts, triage and actions over `days` (3 by default), and the last errors in the log. Use it for any '
                          '"what broke", "why did X not happen", "is anything wrong"'),
+    'memory.list':      ('everything kept about the owner: the saved notes (from "remember this", their verdicts, Settings) '
+                         'and what LEARNED.md has learned from their verdicts. `about`: words to narrow it (a sender, a topic). '
+                         'Use it for "what do you remember", "what do you know about me"'),
+    'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
+                         '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '
+                         'Use it for "why did I never see X", "what am I filtering"'),
     'report.read':      'a report or workflow and its last runs - what it said, whether it failed and why, and its source_id. `title`: part of its name (or `source_id`)',
     # THE APP ITSELF, by name (appfacts). Asked from a chat to "run me the AR report" the assistant had
     # no list of reports at all; "is Teams connected" had no answer but a guess (the owner, 2026-09-18).
@@ -217,7 +223,7 @@ def valid(kind: str, params: dict) -> str:
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'message.read': ('mid', 'id'),
                 'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (),
-                'calendar.read': (), 'activity.list': (), 'errors.list': ()}[kind]
+                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': ()}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
         return ''

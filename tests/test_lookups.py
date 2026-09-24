@@ -133,4 +133,34 @@ class AppAtWorkTests(unittest.TestCase):
             self.assertIn(want, out)
 
 
+class KeptAndFilteredTests(unittest.TestCase):
+    """What is kept about the owner, and the rules that filter their mail."""
+
+    def test_memory_list_shows_saved_notes_and_what_learned_md_learned(self):
+        from taskuary import learn
+        s = world()
+        s.add_memory({'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'She owns the freight budget.', 'Source': 'manual', 'Active': 1})
+        s.add_memory({'Scope': 'subject', 'ScopeKey': 'weekly spend report', 'Note': 'NOT A TASK', 'Source': 'verdict', 'Active': 1})
+        s.save_doc(learn.DOC, '# Learned\n\n## What becomes a task\n\n- Vendor statements are fyi.\n\n## Hypotheses\n' + learn.HYP_START
+                   + '\n- Maybe spend reports are fyi too.\n' + learn.HYP_END + '\n', 't')
+        out = read(s, 'memory.list')
+        for want in ('SAVED NOTES (2)', 'freight budget', 'weekly spend report', 'Vendor statements are fyi', 'STILL BEING TESTED', 'spend reports are fyi too'):
+            self.assertIn(want, out)
+        narrow = read(s, 'memory.list', about='freight')
+        self.assertIn('freight budget', narrow); self.assertNotIn('weekly spend', narrow)
+
+    def test_rules_list_shows_mutes_and_policies_by_what_they_do(self):
+        from taskuary import funnel
+        s = world()
+        funnel.remember_mute(s, {'sender': 'reports@vendor.example', 'words': ['statement'], 'why': 'finance handles these'})
+        for pat in ('alerts@vendor.example', 'alerts@vendor.example'):
+            s.save_policy({'Name': f'skip:{pat}', 'Kind': 'sender', 'Pattern': pat, 'Action': 'skip', 'Active': 1}, 't')
+        s.save_policy({'Name': 'not-a-task', 'Kind': 'sender_domain', 'Pattern': 'news.example', 'Action': 'ignore', 'Active': 0}, 't')
+        out = read(s, 'rules.list')
+        for want in ('QUEUE MUTES (1)', 'finance handles these', 'skip (never shown at all): 1', 'alerts@vendor.example', '1 off'):
+            self.assertIn(want, out)
+        self.assertEqual(out.count('alerts@vendor.example'), 1, 'the same rule twice reads as one')
+        self.assertNotIn('news.example', out, 'a rule that is off filters nothing')
+
+
 if __name__ == '__main__': unittest.main()

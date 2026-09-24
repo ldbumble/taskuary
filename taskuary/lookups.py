@@ -1,7 +1,8 @@
 """The assistant's look-ups past the first ten (concierge.read_op): open work, one message in full, a
 sender at a glance, the docs, what the agents are doing, what waits for approval, the calendar,
-what happened and what failed. Each reads what is already stored and changes nothing - the
-assistant stays light because it asks for what it needs instead of carrying a memory in its prompt
+what happened, what failed, what is kept about the owner and the rules that filter their mail. Each
+reads what is already recorded and changes nothing - the assistant stays light because it asks for
+what it needs instead of carrying a memory in its prompt
 (the owner, 2026-09-24: "it should be able to search ... using lookup tools")."""
 import json, math, re
 from datetime import datetime, timedelta
@@ -182,9 +183,52 @@ def errors_list(store, p: dict) -> str:
     if logged: out += ['LAST ERRORS IN THE LOG:'] + [f'  {_cut(l, 300)}' for l in logged]
     return NL.join(out)
 
+def _about(p) -> set: return _words(str(p.get('about') or ''))
+
+def memory_list(store, p: dict) -> str:
+    """Everything kept about the owner: the saved notes (chat, verdicts, Settings) and LEARNED.md."""
+    from . import learn
+    want = _about(p)
+    hit = lambda *xs: not want or bool(want & _words(' '.join(str(x or '') for x in xs)))
+    notes = [m for m in store.list_memories() if hit(m.get('ScopeKey'), m.get('Note'))]
+    out = [f'SAVED NOTES ({len(notes)}):' if notes else 'No saved notes' + (' match that.' if want else '.')]
+    out += [f"  mem{m['MemoryId']} {_day(m.get('CreatedAt'))} [{m.get('Source') or 'manual'}, {m.get('Scope')}"
+            f"{': ' + m['ScopeKey'] if m.get('ScopeKey') else ''}] {_cut(m.get('Note'), 300)}" for m in notes[:25]]
+    doc = store.doc(learn.DOC) or ''
+    learned, testing = learn.injectable(doc), learn._block(doc, learn.HYP_START, learn.HYP_END)
+    if want: learned = NL.join(l for l in learned.splitlines() if hit(l))
+    out.append('WHAT I LEARNED FROM YOUR VERDICTS (LEARNED.md):' + NL + _cut(learned, 3000) if learned.strip() else 'LEARNED.md has nothing learned yet.')
+    if testing and not want: out.append('STILL BEING TESTED, not trusted yet:' + NL + _cut(testing, 1200))
+    return NL.join(out)
+
+ACTION_SAYS = {'skip': 'never shown at all', 'ignore': 'shown, marked nothing to do', 'escalate': 'raised to you',
+               'auto_answer': 'answered automatically', 'draft': 'a reply drafted', 'task_only': 'made a task, no reply'}
+
+def rules_list(store, p: dict) -> str:
+    """The standing filters: queue mutes (said with a reason) and the policy rules, which decide before any model reads the mail."""
+    from . import funnel
+    want = _about(p)
+    hit = lambda *xs: not want or bool(want & _words(' '.join(str(x or '') for x in xs)))
+    mutes = [m for m in funnel.mutes(store) if hit(m.get('sender'), ' '.join(m.get('words') or []), m.get('why'))]
+    out = [f'QUEUE MUTES ({len(mutes)}) - set when you cleared items with a reason:'] if mutes else ['No queue mutes.']
+    out += [f"  {m.get('sender') or 'anyone'}{' about ' + ' '.join(m['words']) if m.get('words') else ''}{' - ' + _cut(m['why'], 160) if m.get('why') else ''}"
+            for m in mutes]
+    pols = [x for x in store.list_policies(active_only=False) if hit(x.get('Name'), x.get('Pattern'), x.get('Reason'))]
+    off = sum(1 for x in pols if not x.get('Active', 1))
+    out.append(f'POLICY RULES ({len(pols) - off} on{f", {off} off" if off else ""}) - checked before any model reads the mail:' if pols else 'No policy rules.')
+    for act in ACTION_SAYS:
+        seen = {}
+        for x in pols:
+            if x.get('Active', 1) and x['Action'] == act: seen.setdefault((x['Kind'], (x.get('Pattern') or '').lower()), x)
+        if not seen: continue
+        out.append(f'  {act} ({ACTION_SAYS[act]}): {len(seen)}')
+        out += [f"    {k}{': ' + pat if pat else ''}{' - ' + _cut(x['Reason'], 120) if x.get('Reason') else ''}" for (k, pat), x in list(seen.items())[:40]]
+    return NL.join(out)
+
 READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
         'agents.now': agents_now, 'approvals.list': approvals_list, 'calendar.read': calendar_read,
-        'activity.list': activity_list, 'errors.list': errors_list}
+        'activity.list': activity_list, 'errors.list': errors_list,
+        'memory.list': memory_list, 'rules.list': rules_list}
 
 def read(store, kind: str, p: dict) -> str:
     f = READ.get(kind)

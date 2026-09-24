@@ -897,7 +897,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
                 # a stranger's mail' has an answer
                 store.add_comment(tid, 'router', 'agent', f'Unattended start allowed: {who}.')
-                _spawn(_auto_code if f['kind'] == 'coding' else _auto_general, store, tid)
+                if f['kind'] == 'coding': _spawn(_auto_code, store, tid)
+                else: _spawn(_auto_general, store, tid, advisor_brief(store, msg, mid))
                 if is_chat(msg): _spawn(_ack_chat, store, msg, mid, tid)   # they hear at once that somebody is on it
             else:
                 held = who
@@ -1703,6 +1704,29 @@ def reroute_held_no_repo(store, actor: str = 'owner', start: bool = True) -> lis
             try: _spawn(_auto_general, store, tid)
             except Exception as e: logger.warning(f'reroute: {task_ref(tid)} did not start - {e}')
     return moved
+
+
+def advisor_brief(store, msg: dict, mid: int) -> str | None:
+    """What an agent is told when the Advisor's idea becomes its job: the idea in its own words, and the
+    report it came from. Started on the triage summary alone, it was handed one line about the owner in
+    the third person ("the Advisor wants Dana to add the classifier prompt the report calls out") and no
+    report - and could only ask for it to be pasted (2026-09-23). None for anything else: the ask as before."""
+    msg = store.get_message(mid) or {}               # the stored row: the inbound dict here is lower-case keyed
+    if msg.get('Channel') != 'assistant': return None
+    sources = []
+    for i in store.list_ideas(mid=mid) or []:
+        try: sources.append(json.loads(i.get('ActionJson') or '{}').get('mid'))
+        except (TypeError, ValueError): pass
+    parts = ["Your Advisor (the report that reads the owner's work and suggests things) raised this idea for the owner. "
+             'Look into it and come back with what they should do: adopt it as written, change it, or drop it - '
+             'with the reasons. Write to the owner as "you".',
+             'THE IDEA:\n' + (msg.get('BodyText') or msg.get('Subject') or '').strip()]
+    for sid in dict.fromkeys(x for x in sources if x):
+        src = store.get_message(int(sid)) or {}
+        if src.get('BodyText'):
+            body = src['BodyText'].split('\n--- raw data ---')[0].strip()[:6000]
+            parts.append(f"THE REPORT IT CAME FROM - {src.get('Subject') or 'report'} ({str(src.get('SentAt') or '')[:16]}):\n{body}")
+    return '\n\n'.join(parts)
 
 
 def _auto_general(store, tid, brief: str = None):

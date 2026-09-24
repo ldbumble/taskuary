@@ -36,17 +36,21 @@ export const DEMO_ASSISTANT_TIMELINE = [
   },
 ];
 
+// Every id below is BOUND to the recording by what it is (bindIds): the numbers were written against one
+// recording, and the next one moved them - the cutover card opened the overnight-import draft, and the
+// "onboarding" row pointed at a task that had become an invoice (2026-09-23).
 const reviewCard = {
-  key: "review:1", kind: "review", lane: "approve", title: "AP cutover - Thursday?", who: "Ruth Bennett",
-  when: "2026-09-03 03:25:19", why: "a reply is drafted and waiting for your yes", mid: 7, tid: 3,
-  ref: "TQ-0003", rid: 1, channel: "email", preview: "Are we still moving AP over on Thursday? I need to tell the team.",
+  bind: { review: "AP cutover - Thursday?" }, kind: "review", lane: "approve", title: "AP cutover - Thursday?", who: "Ruth Bennett",
+  when: "2026-09-03 03:25:19", why: "a reply is drafted and waiting for your yes", channel: "email",
+  preview: "Are we still moving AP over on Thursday? I need to tell the team.",
 };
 
 const pileItems = [
   {
-    key: "agent:7", kind: "agent", lane: "blocked", title: "Census sync fails when a site has no manager",
+    bind: { task: "northwind/importers#214 - census sync fails when a site has no manager", key: "agent" },
+    kind: "agent", lane: "blocked", title: "Census sync fails when a site has no manager",
     who: "Marcus Reed", when: "2026-09-03 09:35:19", why: "the coder needs a choice before changing skip behavior",
-    mid: 17, tid: 7, ref: "TQ-0007", agent: "coder", working: "coder", asking: true,
+    agent: "coder", working: "coder", asking: true,
     // the answers it named, and the request they bind to: a raised hand is answered by picking one
     request_id: "q7", request_kind: "input_needed",
     choices: ["Skip only that site and log it", "Fail the whole sync", "Ask me each time"],
@@ -55,9 +59,9 @@ const pileItems = [
   },
   { ...reviewCard, surfaced: true, surfaced_at: "2026-09-03 10:20:00" },
   {
-    key: "msg:15", kind: "asked", lane: "asked", title: "One more onboarding detail for the AP clerk",
-    who: "Marcus Reed", when: "2026-09-03 08:21:19", why: "a follow-up was added to the onboarding thread",
-    mid: 15, tid: 6, ref: "TQ-0006", channel: "email", preview: "Please include the purchasing approval group too.",
+    bind: { task: "Year-end audit - the first document requests", key: "msg" }, kind: "asked", lane: "asked",
+    title: "Year-end audit - they want it by the 15th", who: "Priya Shah", when: "2026-09-03 08:21:19",
+    why: "a date was added to the audit requests", channel: "email", preview: "And they would like all of it by the 15th.",
   },
   {
     key: "idea:renewal", kind: "idea", lane: "forgotten", title: "The copier renewal thread has gone quiet",
@@ -65,19 +69,19 @@ const pileItems = [
     idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 6 }, mid: 6,
   },
   {
-    key: "report:11", kind: "report", lane: "report", title: "Helpdesk tickets by day, last 14",
+    bind: { report: "Helpdesk tickets by day, last 14" }, kind: "report", lane: "report", title: "Helpdesk tickets by day, last 14",
     who: "Helpdesk report", when: "2026-09-03 05:53:19", why: "the scheduled report landed normally",
-    mid: 11, source_id: 7, channel: "report", bad: false,
+    channel: "report", bad: false,
   },
   {
-    key: "msg:16", kind: "fyi", lane: "fyi", title: "Vendor portal maintenance Sunday, 02:00-04:00",
+    bind: { msg: "Vendor portal maintenance window, Sunday 02:00-04:00" }, kind: "fyi", lane: "fyi", title: "Vendor portal maintenance Sunday, 02:00-04:00",
     who: "Platform Updates", when: "2026-09-03 08:58:19", why: "an automated notice; nothing to do",
-    mid: 16, channel: "email", preview: "The vendor portal will be unavailable during the maintenance window.",
+    channel: "email", preview: "The vendor portal will be unavailable during the maintenance window.",
   },
   {
-    key: "agent:2", kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts",
-    who: "Priya Shah", when: "2026-09-03 00:20:19", why: "the coder has it; nothing for you until it stops",
-    mid: 2, tid: 2, ref: "TQ-0002", agent: "coder", working: "coder", asking: false, channel: "email",
+    bind: { task: "New starter on Monday - laptop + accounts", key: "agent" }, kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts",
+    who: "Priya Shah", when: "2026-09-03 00:20:19", why: "a regular agent has it; nothing for you until it stops",
+    agent: "assistant", working: "assistant", asking: false, channel: "email",
   },
 ];
 
@@ -92,7 +96,7 @@ const currentMessages = [
   },
   {
     id: "demo-current-3", role: "assistant", at: "2026-09-03 10:16:10",
-    text: "Ruth needs the Thursday cutover confirmed, and the census-sync coder needs one behavior choice. The onboarding follow-up can wait until those are clear.",
+    text: "Ruth needs the Thursday cutover confirmed, and the census-sync coder needs one behavior choice. The audit requests can wait until those are clear.",
   },
   {
     id: "demo-current-4", role: "user", at: "2026-09-03 10:19:00",
@@ -102,6 +106,8 @@ const currentMessages = [
     id: "demo-current-5", role: "assistant", at: "2026-09-03 10:19:10",
     text: "Yes. It confirms Thursday and says the export will be reconciled Wednesday night. Read the invented draft below; in this demo, Approve never sends anything.",
     card: reviewCard,
+    // the words under it, as a live turn carries them - without them the demo opened on a card with no Next
+    chips: [{ verb: "next", label: "Next", hint: "Read it and move on" }],
   },
 ];
 
@@ -116,7 +122,7 @@ export const DEMO_ASSISTANT_TRANSCRIPTS = {
   8900: currentMessages,
   8899: [
     { id: "demo-8899-1", role: "user", at: "2026-09-03 08:03:00", text: "Walk me through what landed overnight." },
-    { id: "demo-8899-2", role: "assistant", at: "2026-09-03 08:03:10", text: "First: Priya's new-starter request became TQ-0002 and is already with the coder.", card: { key: "agent:2", kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts", tid: 2, ref: "TQ-0002", agent: "coder", channel: "email" } },
+    { id: "demo-8899-2", role: "assistant", at: "2026-09-03 08:03:10", text: "First: Priya's new-starter request is with a regular agent - it is writing up the laptop and access requests.", card: { bind: { task: "New starter on Monday - laptop + accounts", key: "agent" }, kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts", agent: "assistant", channel: "email" } },
     { id: "demo-8899-3", role: "user", at: "2026-09-03 08:05:00", text: "Good. What else?" },
     { id: "demo-8899-4", role: "assistant", at: "2026-09-03 08:05:10", text: "Ruth asked whether Thursday still holds for AP cutover. A short reply is drafted and waiting for review.", card: reviewCard },
     { id: "demo-8899-5", role: "user", at: "2026-09-03 08:07:00", text: "Leave that for the close check. Anything noisy?" },
@@ -128,7 +134,7 @@ export const DEMO_ASSISTANT_TRANSCRIPTS = {
     { id: "demo-8898-1", role: "user", at: "2026-09-02 16:38:00", text: "What changed in month-end since lunch?" },
     { id: "demo-8898-2", role: "assistant", at: "2026-09-02 16:38:10", text: "The reconciliation traced the 4,180 difference to four inter-company rows omitted by the export. The fix is tested; no ledger entries were changed." },
     { id: "demo-8898-3", role: "user", at: "2026-09-02 16:41:00", text: "Keep the task open until finance checks the file." },
-    { id: "demo-8898-4", role: "assistant", at: "2026-09-02 16:42:00", text: "Kept open. Finance's check is the remaining step on TQ-0001.", card: { key: "task:1", kind: "task", lane: "asked", title: "Month-end close is short by 4,180", tid: 1, ref: "TQ-0001", why: "waiting for finance to check the corrected export" } },
+    { id: "demo-8898-4", role: "assistant", at: "2026-09-02 16:42:00", text: "Kept open. Finance's check is the remaining step on the month-end task.", card: { bind: { task: "Month-end close is short by 4,180", key: "task" }, kind: "task", lane: "asked", title: "Month-end close is short by 4,180", why: "waiting for finance to check the corrected export" } },
   ],
   8897: [
     { id: "demo-8897-1", role: "user", at: "2026-09-01 14:19:00", text: "Get me ready for the vendor review." },
@@ -140,18 +146,55 @@ export const DEMO_ASSISTANT_TRANSCRIPTS = {
   ],
 };
 
-export function createDemoAssistantState() {
+// The ids an item needs, found in the recording by what the item IS - a task's title, a review's subject, a
+// message's subject, a report's name. A name the recording does not have leaves the item as written.
+export function bindIds(fx, item) {
+  if (!item?.bind) return item;
+  const { bind, ...rest } = item;
+  const tasks = fx?.["/api/tasks"]?.data || [], reviews = fx?.["/api/reviews"]?.data || [], feed = fx?.["/api/feed"]?.data || [];
+  const src = fx?.["/api/sources"], sources = Array.isArray(src) ? src : src?.data || [];
+  const ref = (tid) => `TQ-${String(tid).padStart(4, "0")}`;
+  const out = { ...rest };
+  if (bind.task) {
+    const t = tasks.find((x) => x.Title === bind.task);
+    if (t) {
+      const latest = feed.filter((r) => r.TaskId === t.TaskId).sort((a, b) => b.MessageId - a.MessageId)[0];
+      Object.assign(out, { tid: t.TaskId, ref: ref(t.TaskId), ...(latest ? { mid: latest.MessageId } : {}),
+        key: bind.key === "msg" && latest ? `msg:${latest.MessageId}` : `${bind.key || "task"}:${t.TaskId}` });
+    }
+  }
+  if (bind.review) {
+    const r = reviews.find((x) => x.Subject === bind.review);
+    if (r) Object.assign(out, { key: `review:${r.ReviewId}`, rid: r.ReviewId, mid: r.MessageId, tid: r.TaskId, ref: ref(r.TaskId) });
+  }
+  if (bind.msg) {
+    const m = feed.find((x) => x.Subject === bind.msg);
+    if (m) Object.assign(out, { key: `msg:${m.MessageId}`, mid: m.MessageId });
+  }
+  if (bind.report) {
+    const m = feed.find((x) => x.Channel === "report" && String(x.Subject || "").startsWith(bind.report));
+    const s = sources.find((x) => (x.Address || x.Title) === bind.report);
+    if (m) Object.assign(out, { key: `report:${m.MessageId}`, mid: m.MessageId, ...(s ? { source_id: s.SourceId } : {}) });
+  }
+  return out;
+}
+
+export function createDemoAssistantState(fx = {}) {
+  const bound = (list) => list.map((m) => (m.card ? { ...m, card: bindIds(fx, m.card) } : m));
+  const transcripts = Object.fromEntries(Object.entries(DEMO_ASSISTANT_TRANSCRIPTS).map(([k, v]) => [k, bound(v)]));
+  const items = pileItems.map((i) => bindIds(fx, i));
+  const census = items.find((i) => i.title === "Census sync fails when a site has no manager");
   return {
     activeTaskId: 8900,
     task: { TaskId: 8900, Title: "What needs me before the ops review?", Kind: "general", Status: "open", Source: "assistant", SourceRef: "assistant:dock", CreatedAt: "2026-09-03 10:14:00" },
-    messages: structuredClone(DEMO_ASSISTANT_TRANSCRIPTS[8900]),
+    messages: structuredClone(transcripts[8900]),
     chats: structuredClone(DEMO_ASSISTANT_CHATS),
-    transcripts: structuredClone(DEMO_ASSISTANT_TRANSCRIPTS),
+    transcripts: structuredClone(transcripts),
     pile: {
-      rev: "demo-assistant-1", items: structuredClone(pileItems), hidden: 0, muted: 2,
+      rev: "demo-assistant-1", items: structuredClone(items), hidden: 0, muted: 2,
       rules: ["vendor newsletters", "automated success notices"], events: [],
       alerts: [
-        { key: "alert:agent:7", item: "agent:7", kind: "agent", lane: "blocked", text: "coder asked you something on TQ-0007" },
+        { key: `alert:${census?.key}`, item: census?.key, kind: "agent", lane: "blocked", text: `coder asked you something on ${census?.ref}` },
       ],
       lanes: [
         { lane: "blocked", word: "agent waving", role: "you", n: 1 },
@@ -166,11 +209,11 @@ export function createDemoAssistantState() {
   };
 }
 
-export function installDemoAssistantTimeline(state) {
+export function installDemoAssistantTimeline(state, posts = DEMO_ASSISTANT_TIMELINE) {
   const feed = state?.["/api/feed"]?.data;
   if (!Array.isArray(feed)) return state;
   const have = new Set(feed.map((row) => row.MessageId));
-  for (const post of DEMO_ASSISTANT_TIMELINE) {
+  for (const post of posts) {
     if (have.has(post.MessageId)) continue;
     const { BodyText, ...row } = post;
     feed.push(row);

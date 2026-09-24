@@ -53,6 +53,24 @@ def _arrived_after_close(task, view) -> bool:
                for m in view.get('messages') or [] if not is_ours(m))
 
 
+# the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the hour
+# ('stopped' is not here: it stays unread however often it is looked at - its own rule, below)
+OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken')
+FINISHED_HOURS = 72          # an agent's result nobody opened for three days is history, not news
+
+
+def _agent_finished(store, tid, active, review, read_at, now):
+    """{'who', 'summary'} when this task was closed by its agent - not the owner - and has not been read since."""
+    if not tid or active or review: return None
+    t = store.get_task(tid) or {}
+    by, closed_at = str(t.get('UpdatedBy') or ''), processing_all._stamp(t.get('ClosedAt'))
+    if t.get('Status') != 'done' or by in ('', 'owner') or t.get('SourceRef') == 'assistant:dock' or closed_at is None: return None
+    if closed_at < now - timedelta(hours=FINISHED_HOURS) or (read_at and read_at >= closed_at): return None
+    said = next((c['Body'] for c in reversed(store.list_comments(tid) or [])
+                 if str(c.get('Body') or '').startswith('The agent closed this itself')), '')
+    return {'who': 'The agent' if by in ('assistant', 'agent', 'system', 'router') else by, 'summary': said.split(':', 1)[1].strip() if ':' in said else ''}
+
+
 def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES):
     from . import funnel
     from .processing_reads import state
@@ -152,6 +170,24 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     back = bool(tid and active and not read.get('deferred') and read_at
                 and read_at <= now - timedelta(minutes=quiet))
     if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
+    # PASSED IS STILL YOURS (the owner, 2026-09-23: "i thought if you hit next it goes to passed section?"):
+    # Next reads the row, and a read row used to leave the rail altogether until the hour brought it back -
+    # an open task, a draft waiting for a yes, simply gone. Work that is still the owner's stays on the rail
+    # for that hour, marked shown, which is what the Passed band draws; the walk does not offer it again.
+    # NEXT only - the shown mark, below. Done is "off work for the hour" (2026-09-15) and stays gone.
+    passed = bool(tid and active and read_at and not read['unread'] and not read.get('deferred') and not back
+                  and card['lane'] in OWNER_LANES)
+    # AN AGENT FINISHED IT (same message: "same for finished agent task?"): a task its agent closed is a
+    # result nobody has looked at yet. It is on the rail once, with Reports, until it is read; a task the
+    # owner closed stays closed and gone.
+    finished = _agent_finished(store, tid, active, review, read_at, now)
+    if finished:
+        from .coder import no_one_behind
+        card.update(kind='agentdone', lane='report', who=finished['who'], summary=finished['summary'], closed=True,
+                    why='the agent finished and closed it - read what it found')
+        # work the owner started here has nobody behind it to answer (a brief typed in the chat)
+        if no_one_behind(row.get('Channel')): card['mid'] = None
+        closed = False
     # OUR OWN SEND IS A RECEIPT, NOT AN ARRIVAL. A report's alert files the message it just sent so
     # you can see that it went (reports.send_alert) - Taskuary writing to you, on WhatsApp or
     # Telegram. It arrived on the table wearing a sender's face: "Ignore this sender", "Block them
@@ -167,7 +203,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...and stopped work is on the rail however often it was looked at - a look is not handling it;
     # only the owner's own Later holds it (same decision, 2026-09-17).
     stopped = active and card['lane'] == 'stopped' and not read.get('deferred')
-    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or
+    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or finished or
                                                  (active and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] in ('idea', 'todo') or row.get('Channel') == 'assistant'))
@@ -203,13 +239,17 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         shown_at = processing_all._stamp(shown.get('At'))
         if shown_at is None or shown_at > now - timedelta(minutes=quiet):
             card.update(surfaced=True, surfaced_at=shown.get('At'))
+    passed = passed and shown is not None
+    if passed:
+        unread = True
+        card.update(unread=True, surfaced=True, surfaced_at=shown.get('At') or read.get('read_at'))
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
                      if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')
                      and r.get('Key') in [card['key'], *card['aliases']]]
         if summaries:
             card['summary'] = next((r for r in summaries if r['Key'] == card['key']), summaries[-1])['Summary']
-    card['actionable'] = bool(unread and not card['deferred'] and not card.get('settling')
+    card['actionable'] = bool(unread and not passed and not card['deferred'] and not card.get('settling')
                               and card['lane'] != 'working' and not funnel._not_yet(card))
     return card
 

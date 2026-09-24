@@ -19,7 +19,8 @@ from . import operations
 # has no business offering (triage corrections, dispatch plumbing) and are left out of the catalogue.
 PURPOSE = {
     'task.create_from_message': 'hand this message to an agent or put it on the list - `kind`: coding | general | task',
-    'task.create_from_text':    'start an agent from a brief when there is no message behind it - `kind`, `text`',
+    'task.create_from_text':    ('a new job with no message behind it - `kind`: task (a to-do or reminder the owner does '
+                                 'themselves, no agent) | general (a regular agent) | coding, and `text`'),
     'message.file':             "file it - not ours, just this one",
     'message.archive':          'archive it: off the pipe and closed, nothing deleted',
     'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
@@ -171,6 +172,11 @@ READS = {
     'connections.list': 'every live connection: name, type, whether it has a key, last sync, last error - and how many catalogue cards are off',
     'connection.read':  'one connection in full. `name`: part of its name (or `connector_id`)',
     'agents.list':      'the agents and profiles, and which brain answers which job',
+    # WHAT WE KNOW. "What is our PO limit", "who handles AP": the answer offered to "look it up in the
+    # Hub" and then searched the mail, because no read reached the Hub, the documents or the kept facts.
+    'knowledge.search': ('what the company knows - the Hub, the indexed documents and the facts the owner asked to keep. '
+                         '`query`: the words to look for. Call it FIRST whenever the owner asks about a person, a site, a '
+                         'policy, a system or how something is done here - never offer to look it up instead of looking'),
 }
 
 # Parameters the CHAT supplies from what is on the table, never the model: it has no way to know a
@@ -187,7 +193,8 @@ def valid(kind: str, params: dict) -> str:
     if kind in READS:
         need = {'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': (),
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
-                'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': ()}[kind]
+                'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
+                'knowledge.search': ('query',)}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
         return ''

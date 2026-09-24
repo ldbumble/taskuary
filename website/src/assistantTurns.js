@@ -3,7 +3,10 @@
 // ids drew both copies after every freshness read even though the server had recorded one turn.
 const optimistic = (m) => typeof m?.id === "string" && /^(?:a|u|r|context)\d+$/.test(m.id);
 const words = (v) => String(v || "").replace(/\s+/g, " ").trim();
-const sameTurn = (a, b) => a?.role === b?.role && words(a?.text) === words(b?.text);
+// a receipt drawn at the click is the server's recorded line, come back as an assistant turn - the
+// same words, so it is the same turn (a card-carrying line, the undo offer, is its own)
+const sameTurn = (a, b) => (a?.role === b?.role || (a?.role === "receipt" && b?.role === "assistant" && !b?.card))
+  && words(a?.text) === words(b?.text);
 
 export function mergeDurableTurns(local = [], durable = []) {
   const messages = [...local];
@@ -25,7 +28,11 @@ export function mergeDurableTurns(local = [], durable = []) {
       const bubble = messages[at];
       // ...and its proposal: the durable turn has none, and without it the card lost its buttons and
       // was redrawn as the item (the owner, 2026-09-07: "shows it then reshows it")
-      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}) };
+      // ...and its words: the durable turn is text only, so an answer lost the item's verbs - Next with them -
+      // the moment the server's copy came back (2026-09-23: ask a question, and there is no way on)
+      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}),
+                       ...(bubble.chips?.length && !turn.chips?.length ? { chips: bubble.chips } : {}),
+                       ...(bubble.role === "receipt" ? { role: "receipt", tid: bubble.tid, ref: bubble.ref, chips: bubble.chips } : {}) };
       claimed.add(at);
     } else {
       messages.push(turn);

@@ -13,14 +13,20 @@
 import FIXTURES from "./demoFixtures.json";
 import { track } from "./demoTrack";
 import { demoTerminalRecording } from "./demoTerminal.js";
-import { createDemoAssistantState, installDemoAssistantTimeline } from "./demoAssistantData.js";
+import { DEMO_ASSISTANT_TIMELINE, createDemoAssistantState, installDemoAssistantTimeline } from "./demoAssistantData.js";
+import { fmtStamp, rebase } from "./demoClock.js";
 import { installNumbersWorkflow, finishNumbersWorkflow, NUMBERS_TASK, NUMBERS_REQUEST, NUMBERS_RESULT } from "./demoNumbers.js";
 
 export const DEMO = import.meta.env?.VITE_DEMO === "1";
 
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
-const state = clone(FIXTURES);          // the recording, as this visitor has changed it
-installDemoAssistantTimeline(state);
+// Two clocks, each moved to the visitor's now (demoClock.js): the recording's (when it was dumped) and the
+// scripted morning's. A literal written below is on the scripted clock; the moment of a click is now().
+const SCRIPTED_NOW = "2026-09-03 10:23:00";
+const now = () => fmtStamp(Date.now());
+const scripted = (x) => rebase(x, SCRIPTED_NOW);
+const state = rebase(clone(FIXTURES), FIXTURES?.["/api/version"]?.started);   // the recording, as this visitor has changed it
+installDemoAssistantTimeline(state, scripted(clone(DEMO_ASSISTANT_TIMELINE)));
 // Two tasks that are the owner's own ("your task": nothing works them) - the recording has none, and
 // the Assistant Game's gym is where they train. Invented, like everything in the demo world.
 for (const [id, title, boxes] of [[31, "Renew the building access badges", [["Collect the expiring list", true], ["Order new badges", false], ["Book the handover", false]]],
@@ -28,9 +34,9 @@ for (const [id, title, boxes] of [[31, "Renew the building access badges", [["Co
   const row = { TaskId: id, Title: title, Summary: null, Kind: "task", Status: "open", Priority: "normal", Source: "owner", CreatedBy: "owner",
     CreatedAt: "2026-09-02 09:00:00", ref: `TQ-00${id}`, Session: null, Waiting: 0, HadAgent: false,
     Checklist: JSON.stringify(boxes.map(([text, done], n) => ({ id: `c${id}-${n}`, text, done }))) };
-  for (const k of ["/api/tasks", "/api/tasks?active=1"]) (state[k] ||= { data: [] }).data.push(clone(row));
+  for (const k of ["/api/tasks", "/api/tasks?active=1"]) (state[k] ||= { data: [] }).data.push(scripted(clone(row)));
 }
-const scriptedAssistant = createDemoAssistantState();
+const scriptedAssistant = scripted(createDemoAssistantState(state));
 const numbersWorkflow = typeof location !== "undefined" && new URLSearchParams(location.search).get("workflow") === "numbers";
 if (numbersWorkflow) installNumbersWorkflow(state, scriptedAssistant);
 let numbersStarted = false;
@@ -47,6 +53,8 @@ scriptedAssistant.transcripts[scriptedAssistant.activeTaskId] = scriptedAssistan
     43: ["slack", "Erin Blake", "@erin", "Heads up: the payroll portal moved to single sign-on", "From Monday the payroll portal signs in through the company login. Nothing to do unless your bookmark breaks."],
     44: ["email", "Paula Vance", "pvance@vendor.example", "Badge printer quote", "Following up on the badge printer quote from last week - it is valid until Friday. Want me to hold it?"],
   };
+  // the coder's task in the recording, by what it is - its number moves whenever the seed does
+  const gl = (state["/api/tasks"]?.data || []).find((t) => t.Title === "Reconcile the August GL export")?.TaskId || 4;
   const one = (state["/api/messages/one"] ||= {});
   for (const [mid, [channel, who, from, subject, body]] of Object.entries(said))
     one[mid] = { MessageId: Number(mid), TaskId: null, Channel: channel, Subject: subject, FromName: who, FromEmail: from, SentAt: at(new Date(Date.now() - 50 * 60000)),
@@ -57,9 +65,9 @@ scriptedAssistant.transcripts[scriptedAssistant.activeTaskId] = scriptedAssistan
     { key: "meeting:ops", kind: "meeting", lane: "time", title: "Operations review", who: "Calendar", when: at(soon), why: "starts in about an hour", channel: "meeting",
       event: { subject: "Operations review", start: at(soon), who: ["Gail Moreno", "Ray Colton", "Marcus Reed"], where: "Room 2", about: "Weekly numbers, the AP cutover, and the census sync." } },
     { key: "msg:43", kind: "fyi", lane: "fyi", title: said[43][3], who: said[43][1], when: at(new Date()), why: "an announcement - nothing to do", mid: 43, channel: "slack", preview: said[43][4] },
-    { key: "idea:badges", kind: "idea", lane: "forgotten", title: "The badge printer quote has gone quiet", who: "Paula Vance", when: "2026-09-01 14:00:00",
+    { key: "idea:badges", kind: "idea", lane: "forgotten", title: "The badge printer quote has gone quiet", who: "Paula Vance", when: scripted(["2026-09-01 14:00:00"])[0],
       why: "no reply since Monday; the quote runs out Friday", idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 44 }, mid: 44 },
-    { key: "agentdone:4", kind: "agentdone", lane: "report", title: "Reconcile the August GL export", who: "coder", when: at(new Date()), tid: 4, ref: "TQ-0004",
+    { key: `agentdone:${gl}`, kind: "agentdone", lane: "report", title: "Reconcile the August GL export", who: "coder", when: at(new Date()), tid: gl, ref: `TQ-${String(gl).padStart(4, "0")}`,
       summary: "Found the two inter-company rows the export dropped; the fix is on a branch with a test.", channel: "github" },
   );
 }
@@ -269,18 +277,20 @@ const scriptedNext = (key = null, only = null) => {
     || candidates.find((i) => !i.surfaced) || candidates[0] || null;
   if (item && scriptedAssistant.pile.items.includes(item)) {
     item.surfaced = true;
-    item.surfaced_at = "2026-09-03 10:23:00";
+    item.surfaced_at = now();
     scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
   }
   const say = scriptedItemLine(item);
-  scriptedAssistant.messages.push({ id: `demo-turn-${++nextId}`, role: "assistant", text: say, card: item ? clone(item) : null, at: "2026-09-03 10:23:00" });
-  return { item: clone(item), say, options: [], left: Math.max(0, candidates.length - (item ? 1 : 0)), exhausted: null, scripted: true };
+  // ...with Next under it, as a live turn has: without the word the walk stopped on its second card
+  const shown = item ? { ...clone(item), chips: [{ verb: "next", label: "Next", hint: "Read it and move on" }] } : null;
+  scriptedAssistant.messages.push({ id: `demo-turn-${++nextId}`, role: "assistant", text: say, card: shown, at: now() });
+  return { item: clone(shown), say, options: [], left: Math.max(0, candidates.length - (item ? 1 : 0)), exhausted: null, scripted: true };
 };
 
 const scriptedSay = (asked, key) => {
   const text = String(asked || "").trim();
   if (/^(next|what(?:'s| is) next|keep going)\b/i.test(text)) return scriptedNext(null, null);
-  if (/\b(coder|agent|census|manager)\b/i.test(text)) return scriptedNext("agent:7", null);
+  if (/\b(coder|agent|census|manager)\b/i.test(text)) return scriptedNext(scriptedAssistant.pile.items.find((i) => i.kind === "agent" && i.asking)?.key || null, null);
   let decision = null;
   if (/\b(approve|send it|looks good)\b/i.test(text)) decision = { verb: "approve" };
   else if (/\b(later|not now)\b/i.test(text)) decision = { verb: "later" };
@@ -292,8 +302,8 @@ const scriptedSay = (asked, key) => {
     : current
       ? `For this scripted example: ${scriptedItemLine(current)}`
       : "This is a scripted demo response. I would use the Timeline and task history to answer that in a real Taskuary; no AI or agent is running here.";
-  scriptedAssistant.messages.push({ id: `demo-user-${++nextId}`, role: "user", text, at: "2026-09-03 10:23:00" });
-  scriptedAssistant.messages.push({ id: `demo-answer-${++nextId}`, role: "assistant", text: say, at: "2026-09-03 10:23:01" });
+  scriptedAssistant.messages.push({ id: `demo-user-${++nextId}`, role: "user", text, at: now() });
+  scriptedAssistant.messages.push({ id: `demo-answer-${++nextId}`, role: "assistant", text: say, at: now() });
   return { say, options: [], decision, item: null, scripted: true };
 };
 
@@ -354,7 +364,7 @@ const write = (method, url, body) => {
     if (!existing) {
       numbersStarted = true;
       const detail = state["/api/tasks/detail"][NUMBERS_TASK];
-      detail.comments.push({ ActorType: "assistant_user", Actor: "Ruth Bennett", Body: NUMBERS_REQUEST, CreatedAt: "2026-09-03 10:24:00" });
+      detail.comments.push({ ActorType: "assistant_user", Actor: "Ruth Bennett", Body: NUMBERS_REQUEST, CreatedAt: now() });
       startDemoAssistant(NUMBERS_TASK, { text: NUMBERS_REQUEST });
     }
     return { dispatch: "assistant", started: !existing, existing, taskId: NUMBERS_TASK, ref: "TQ-0018", agent: "analyst", demo: true };
@@ -365,10 +375,10 @@ const write = (method, url, body) => {
     if (previous) previous.open = false;
     const taskId = ++nextId;
     scriptedAssistant.activeTaskId = taskId;
-    scriptedAssistant.task = { TaskId: taskId, Title: "New demo chat", Kind: "general", Status: "open", Source: "assistant", SourceRef: "assistant:dock", CreatedAt: "2026-09-03 10:23:00" };
+    scriptedAssistant.task = { TaskId: taskId, Title: "New demo chat", Kind: "general", Status: "open", Source: "assistant", SourceRef: "assistant:dock", CreatedAt: now() };
     scriptedAssistant.messages = [];
     scriptedAssistant.transcripts[taskId] = scriptedAssistant.messages;
-    scriptedAssistant.chats.unshift({ taskId, title: "New demo chat", at: "2026-09-03 10:23:00", started: "2026-09-03 10:23:00", turns: 0, seen: 0, mail: 0, minutes: 0, open: true });
+    scriptedAssistant.chats.unshift({ taskId, title: "New demo chat", at: now(), started: now(), turns: 0, seen: 0, mail: 0, minutes: 0, open: true });
     for (const item of scriptedAssistant.pile.items) delete item.surfaced;
     scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
     return { task: clone(scriptedAssistant.task), ref: `TQ-${String(taskId).padStart(4, "0")}`, created: true, scripted: true };
@@ -383,7 +393,7 @@ const write = (method, url, body) => {
     if (item) {
       if (body?.verb === "later" || body?.verb === "skip") {
         item.surfaced = false;
-        item.later = body.verb === "skip" ? "2026-09-04 07:00:00" : "2026-09-03 13:23:00";
+        item.later = body.verb === "skip" ? scripted(["2026-09-04 07:00:00"])[0] : fmtStamp(Date.now() + 3 * 3600000);
       } else if (body?.verb === "done") {
         scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => i.key !== body.key);
       } else if (body?.verb === "surfaced") item.surfaced = true;
@@ -443,7 +453,7 @@ const write = (method, url, body) => {
           ReviewId: ++nextId, TaskId: row?.TaskId || item?.tid || null, MessageId: messageId, RunId: null, Kind: "draft",
           DraftText: "Thanks - I have this. I will confirm the remaining detail and follow up shortly.", FinalText: null,
           Status: "pending", Reason: "Scripted demo draft", DecidedBy: null, DecidedAt: null, DecideNote: null,
-          CreatedAt: "2026-09-03 10:23:00", Deliver: null, Title: row?.Title || item?.title,
+          CreatedAt: now(), Deliver: null, Title: row?.Title || item?.title,
           Subject: row?.Subject || item?.title, FromName: row?.FromName || item?.who, FromEmail: row?.FromEmail || null,
           SentAt: row?.SentAt || item?.when, Channel: row?.Channel || item?.channel || "email", SourceName: row?.SourceName || null,
           ConversationId: row?.ConversationId || null, Preview: row?.Preview || item?.preview || "", CanSend: true,

@@ -138,7 +138,7 @@ SEEDS = [
      'a concrete ask, addressed to you, with a date on it'),
     ('email', 1, 'New starter on Monday - laptop + accounts',
      'Sasha starts Monday in Accounts Payable. Usual kit and the AP group, please.', 'task',
-     'onboarding: an ask that has to happen, and a coding agent can do most of it'),
+     'onboarding: an ask that has to happen, with a day on it'),
     ('teams', 3, '', 'did the overnight import finish? the dashboard still says yesterday', 'reply',
      'a question a sentence settles - answering IS the work'),
     ('email', 2, 'Invoice 88213 - past due', 'This invoice is 46 days past due. Please advise.',
@@ -147,6 +147,13 @@ SEEDS = [
      'cc-for-visibility, nothing asked'),
     ('teams', 1, '', 'thanks!! that fixed it', 'fyi', 'a thank-you closes a thread, it does not open one'),
 ]
+
+# what the responder drafted for each reply-only ask above - the owner's yes is all they wait for
+DRAFTS = {
+    'did the overnight import finish? the dashboard still says yesterday':
+        'It finished at 04:10 - the dashboard catches up on its 7:00 refresh.',
+    'Invoice 88213 - past due': "Thanks Tom - it is approved and goes out in Friday's payment run.",
+}
 
 TRANSCRIPT = [
     ('$ claude', .4), ('', .2),
@@ -190,9 +197,9 @@ ASSIST = [
     ('user', 'what is actually waiting on me this morning?'),
     ('assistant', """Six things came in, four are handled. What is actually yours:
 
-- **TQ-0001 - month-end short by 4,180.** The coder has a fix and is waiting on your approval; it found the four inter-company transfers the export drops.
-- **TQ-0003 - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted on the task.
-- **TQ-0005 - Sam wants the Q3 numbers.** Also drafted.
+- **{gl} - month-end short by 4,180.** The coder is on the export; it found the four inter-company transfers the export drops.
+- **{cutover} - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted on the task.
+- **{q3} - Sam wants the Q3 numbers.** Also drafted.
 
 The newsletter, the thank-you and the maintenance notice are filed. Nothing there needs you."""),
     ('user', 'is Thursday safe for the AP cutover?'),
@@ -273,11 +280,13 @@ HISTORY = [
 def seed(store) -> int:
     """Build the demo's world. Idempotent: a home that already has work in it is left alone."""
     from . import artifacts, general
+    from .store import task_ref
     from .testing import Factory
     if store.list_tasks(): return 0
     f = Factory(store)
     f.actor = 'triage'                     # not the test factory's 't': it is printed on every task
     made = 0
+    refs = {}
     for i, (channel, who, subject, body, verdict, why) in enumerate(SEEDS):
         name, email = PEOPLE[who]
         hours = 2 + i * 3
@@ -286,43 +295,72 @@ def seed(store) -> int:
         # so the row would read as the sender's name and nothing else
         subject = subject or (body[:60] + ('…' if len(body) > 60 else ''))
         source = None if channel == 'email' else ('Ops chat' if channel == 'teams' else channel)
+        said = dict(channel=channel, subject=subject, body=body, from_name=name,
+                    from_email=email if channel == 'email' else None, sent_at=f.ago(hours=hours),
+                    conversation_id=conv, source_name=source)
         if verdict == 'task':
-            tid = f.task(title=subject or body[:60], status='open',
-                         kind='coding' if 'starter' in (subject or '') else 'general')
-            mid = f.message(task_id=tid, channel=channel, subject=subject or None, body=body,
-                            from_name=name, from_email=email if channel == 'email' else None,
-                            sent_at=f.ago(hours=hours), status='routed', conversation_id=conv,
-                            source_name=source)
+            tid = f.task(title=subject, status='open', kind='general', source=channel)
+            mid = f.message(task_id=tid, status='routed', **said)
             f.route(mid, tid, 'create', why)
+        elif verdict == 'reply':
+            # a reply-only ask is a reply waiting for a yes, as triage makes it - filed with no task it
+            # read as an fyi: "Invoice 46 days past due. Please advise." with nothing to do about it
+            tid = f.task(title=subject, status='open', kind='reply', source=channel)
+            mid = f.message(task_id=tid, status='routed', **said)
+            f.route(mid, tid, 'create', why)
+            f.review(tid, mid, draft=DRAFTS.get(body) or DRAFTS[subject])
         else:
-            mid = f.message(channel=channel, subject=subject or None, body=body, from_name=name,
-                            from_email=email if channel == 'email' else None, conversation_id=conv,
-                            sent_at=f.ago(hours=hours), status='filed' if verdict == 'fyi' else 'routed')
-            f.route(mid, None, 'file' if verdict == 'fyi' else 'reply', why)
+            mid = f.message(status='filed', **said)
+            f.route(mid, None, 'file', why)
+        refs[subject] = tid if verdict != 'fyi' else None
         made += 1
 
-    # ...and the rest of a working morning, out of the same named pictures the regression desk
-    # uses (testing.Factory), so the demo shows every surface with something in it: a draft
-    # waiting on the task, an agent mid-run, a scheduled report that filed, a chat, a thread.
-    # every picture is given its own words: the desk's defaults ("please look", "Sam Delgado")
-    # are placeholders for a test to assert on, and a demo is read by people
-    f.pending_draft(title='Can you confirm the AP cutover date?', subject='AP cutover - Thursday?',
-                    from_name='Ruth Bennett', from_email='rbennett@northwind.example',
-                    body='Are we still moving AP over on Thursday? I need to tell the team.',
-                    draft='Thursday still works - the export will be reconciled by Wednesday night.')
-    f.running(title='Reconcile the August GL export', agent='coder')
+    # ...and the rest of a working morning: a draft waiting on the task, an agent mid-run, reports that
+    # filed, a chat, a thread. Every item is written out with its own sender and words - the regression
+    # desk's pictures (testing.Factory) carry placeholder bodies ("x", "and one more thing 1") and an
+    # earlier pass renamed their subjects in scan order, which put a task's title over another's mail.
+    ruth, marcus, priya = PEOPLE[3], PEOPLE[0], PEOPLE[1]
+    refs['cutover'] = f.pending_draft(
+        title='Can you confirm the AP cutover date?', subject='AP cutover - Thursday?',
+        from_name=ruth[0], from_email=ruth[1], sent_at=f.ago(hours=7),
+        body='Are we still moving AP over on Thursday? I need to tell the team.',
+        draft='Thursday still works - the export will be reconciled by Wednesday night.').tid
+    # the agent mid-run: Marcus's month-end difference, handed to the coder
+    gl = f.task(title='Reconcile the August GL export', status='in_progress', kind='coding')
+    gm = f.message(task_id=gl, subject='Reconcile the August GL export', from_name=marcus[0], from_email=marcus[1],
+                   body='Can the export be reconciled against the bank feed? Flag anything that does not match - '
+                        'the close is Thursday.', sent_at=f.ago(hours=6), conversation_id='email:gl-export')
+    f.route(gm, gl, 'create', 'a reconciliation with a clear check: a coding agent can run it')
+    f.run(gl, agent='coder')
+    refs['gl'] = gl
     for title, chart_title, rows in REPORTS:
         pic = f.report_row(title=title)
         body = '\n'.join(json.dumps(r) for r in rows)
         store._exec('UPDATE message SET BodyText=?, Subject=? WHERE MessageId=?',
                     (body, f'{title} - {len(rows)} rows', pic.mid))
         artifacts.attach_report_output(store, pic.mid, chart_title, body)
-    f.messenger(channel='whatsapp', title='the badge printer is offline again')
-    f.thread(title='Onboard the new AP clerk - laptop, AP group, PO approval', n=3)
+    # a chat: Sam on WhatsApp, and the answer drafted
+    q3 = f.task(title='Can you resend the Q3 numbers?', kind='reply', source='whatsapp')
+    qm = f.message(task_id=q3, channel='whatsapp', subject='Can you resend the Q3 numbers?', from_name='Sam Delgado',
+                   from_email='@samdelgado', source_name='Sam (whatsapp)', conversation_id='whatsapp:88214',
+                   body='Hey - can you resend the Q3 numbers? I lost the file.', sent_at=f.ago(hours=3))
+    f.route(qm, q3, 'create', 'a quick ask a reply settles')
+    f.review(q3, qm, draft='Sending the Q3 pack now - it is the same file as the board deck.')
+    refs['q3'] = q3
+    # a thread: three mails on one ask, grouped on one task
+    audit = f.task(title='Year-end audit - the first document requests', kind='general')
+    for n, (subject, body, hours) in enumerate((
+            ('Year-end audit - the first document requests',
+             'The auditors sent their first list: August bank reconciliations and the AP ageing for Q3.', 5),
+            ('RE: Year-end audit - the first document requests', 'They have added the fixed asset register.', 4),
+            ('RE: Year-end audit - the first document requests', 'And they would like all of it by the 15th.', 2))):
+        m = f.message(task_id=audit, subject=subject, body=body, from_name=priya[0], from_email=priya[1],
+                      sent_at=f.ago(hours=hours), conversation_id='email:year-end-audit')
+        f.route(m, audit, 'create' if n == 0 else 'attach', 'a request with a list and a date' if n == 0 else 'same conversation thread')
     f.filed_fyi(subject='Vendor portal maintenance window, Sunday 02:00-04:00')
     # the code lane: GitHub is a source like any other - an issue is an ask, a PR is a notice
     gh = f.task(title='northwind/importers#214 - census sync fails when a site has no manager',
-                status='open', kind='coding')
+                status='open', kind='coding', source='github')
     gid = f.message(task_id=gh, channel='github', subject='#214 census sync fails when a site has no manager',
                     body='Traceback on Lakeview: manager_id is null and the sync aborts the whole run '
                          'rather than skipping the row. Third night in a row.',
@@ -331,17 +369,6 @@ def seed(store) -> int:
     f.route(gid, gh, 'create', 'an issue with a traceback in it: a coding agent can start on this now')
     f.feed_only(title='northwind/importers#215 - keep inter-company rows in the GL export (open)')
     made += 9
-    # the desk's pictures carry placeholder words for a test to assert on ("please look"); a
-    # demo is read by people, so the few that show get real ones
-    for mid, subject in zip([m['MessageId'] for m in store.scan_messages(40)
-                             if (m.get('Subject') or '') == 'please look'],
-                            ('Reconcile the August GL export', 'Can you resend the Q3 numbers?',
-                             'Onboard the new AP clerk - laptop, AP group, PO approval')):
-        store._exec('UPDATE message SET Subject=? WHERE MessageId=?', (subject, mid))
-    for mid, (who, mail) in zip([m['MessageId'] for m in store.scan_messages(40) if not (m.get('FromEmail') or '')
-                                 and not store.get_message(m['MessageId']).get('FromName')],
-                                PEOPLE * 4):
-        store._exec('UPDATE message SET FromName=?, FromEmail=? WHERE MessageId=?', (who, mail, mid))
 
     # ...and spread across the day: the pictures all stamp themselves 'now', so a demo opened
     # at 8pm showed a morning's work arriving in the same minute
@@ -370,10 +397,14 @@ def seed(store) -> int:
     store.add_comment(next(t['TaskId'] for t in store.list_tasks()), 'assistant', 'assistant_agent',
                       'The month-end difference is the four inter-company transfers the export drops. '
                       'I can fix the export, or file it for the close to handle - say which.')
-    chat = f.task(title='This morning, and whether Thursday holds', status='open', kind='general')
+    # the owner's own conversation with the task assistant, finished this morning: on the Tasks tab to read
+    # back, not an empty card in the walk wearing "triage asked you" (it was created as triage, and open)
+    chat = store.create_task({'Title': 'This morning, and whether Thursday holds', 'Status': 'done', 'Kind': 'general',
+                              'Source': 'assistant', 'SourceRef': 'assistant:chat'}, 'owner')
+    names = {'gl': task_ref(refs['gl']), 'cutover': task_ref(refs['cutover']), 'q3': task_ref(refs['q3'])}
     for role, body in ASSIST:
         store.add_comment(chat, 'Dana' if role == 'user' else 'assistant',
-                          general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE, body)
+                          general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE, body.format(**names))
     for kind, agent, body in (
         ('working', 'coder', 'on the month-end export - tools/gl_export.py is mine for the next hour'),
         ('note', 'codex', 'the bank feed keeps inter-company transfers; the export drops them. That is the 4,180'),

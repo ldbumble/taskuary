@@ -126,6 +126,25 @@ class TheWorldTests(unittest.TestCase):
         self.assertIn('Dana Whitfield', s.get_doc('soul') or '')
         self.assertGreaterEqual(len(s.notes()), 3)                      # ...and a wall to read
 
+    def test_every_item_reads_like_a_person_wrote_it(self):
+        """The public demo showed a task titled "the badge printer" over a mail about the Q3 numbers, a body
+        of "x", and "and one more thing 1" - the regression desk's placeholders, and subjects renamed in scan
+        order onto the wrong rows (2026-09-23). Every message has a sender and real words, and an open task's
+        first message is about the task."""
+        s = MemoryStore()
+        demo.seed(s)
+        for m in s.scan_messages(100):
+            m = s.get_message(m['MessageId'])
+            self.assertNotIn(m.get('Subject'), ('please look', None, ''), m)
+            self.assertGreater(len(m.get('BodyText') or ''), 8, m)
+            self.assertNotIn('one more thing', m.get('BodyText') or '')
+            self.assertTrue(m.get('FromName') or m.get('FromEmail'), m)
+        for t in s.list_tasks():
+            first = (s.list_messages(t['TaskId']) or [None])[0]
+            if first and t['Status'] not in ('done', 'dropped'):
+                words = lambda x: set(x.lower().replace('#', ' ').split()) - {'-', 'the', 'a', 'on', 're:'}
+                self.assertTrue(words(t['Title']) & words(first['Subject'] or ''), (t['Title'], first['Subject']))
+
     def test_it_refuses_to_write_over_a_home_that_has_work_in_it(self):
         s = MemoryStore()
         s.create_task({'Title': 'a real task'}, 'o')

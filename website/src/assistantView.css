@@ -234,6 +234,10 @@
 /* the assistant's own chat in the card: the page's ground, not a terminal's */
 .tq-card-chat { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd6c8; background: #faf7f1; display: flex; flex-direction: column; }
 .tq-card-chat > * { flex: 1; min-height: 0; }
+.tq-rows { border-collapse: collapse; white-space: normal; font-size: 12px; }
+.tq-rows th { text-align: left; font-weight: 600; color: #55697a; padding: 0 14px 4px 0; text-transform: capitalize; }
+.tq-rows td { padding: 2px 14px 2px 0; border-top: 1px solid #ddd5c7; }
+.tq-rows td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .tq-card-full { margin-top: 7px; padding: 10px 12px; border-radius: 8px; background: #f6f4f1; border: 1px solid #ebe6de; font-size: 12.5px; line-height: 1.55; color: #262521; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
 .tq-task-focus { margin-top: 9px; padding: 12px 14px 13px; border: 1px solid #b9c8bb; border-radius: 9px; background: #fff;
   box-shadow: 0 2px 8px rgba(63,89,67,.08); color: #252923; }
@@ -341,6 +345,10 @@
 
 @media (max-width: 899.95px) {
   .tq-phone-hide { display: none !important; }   /* the voice and AI knobs: room for the name and the mode toggle */
+  /* ...and at 390 there still was none: "Taskuary" got 27px and printed under Chat | Task | Game */
+  .tq-chat-head { gap: 6px; padding-left: 10px; padding-right: 8px; }
+  .tq-chat-head .who b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tq-stage-mode button { padding: 4px 7px; }
   .tq-msg.you .body { max-width: 92%; }
   .tq-chat-body { padding: 12px 12px 6px; }
   .tq-compose, .tq-btw, .tq-handed { padding-left: 12px; padding-right: 12px; margin-left: 12px; margin-right: 12px; }

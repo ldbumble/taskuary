@@ -13,6 +13,10 @@ export function describe(p) {
   const show = (v) => (v && typeof v === "object" && !Array.isArray(v)
     ? Object.entries(v).filter(([, x]) => x != null && x !== "").map(([k, x]) => `${k.replace(/_/g, " ")}: ${x}`).join(", ")
     : Array.isArray(v) ? v.join(", ") : v);
+  // a new task's `kind` is what its button already says ("Put it on my list"), and a title that repeats
+  // the brief word for word is the same line twice
+  if (String(p.kind || "").startsWith("task.create")) hidden.add("kind");
+  if (p.params?.title && p.params.title === p.params.text) hidden.add("title");
   const params = Object.entries(p.params || {}).filter(([k, v]) => v != null && v !== "" && !hidden.has(k))
     .map(([k, v]) => [k.replace(/_/g, " "), show(v)]).filter(([, v]) => v !== "" && v != null);
   // a proposed report can be dry-run before the click (PW-195): read-only, nothing filed, sent, activated or started
@@ -26,7 +30,9 @@ export const isHandoff = (p) => p.kind === "task.create_from_message" && ["codin
 export function afterExecute(p, res) {
   const label = p.label || p.title || p.kind;
   if (res?.status === "done" && res.duplicate) return { receipt: `Already done - ${label}.`, settle: false, status: "done" };
-  if (res?.status === "done") return { receipt: `Done - ${label}.`, settle: !!p.settles, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat) };
+  // the server's own receipt when it wrote one (it names the task and what became of it); ours was a
+  // shorter second "Done" drawn beside it (2026-09-23)
+  if (res?.status === "done") return { receipt: res.receipt || `Done - ${label}.`, settle: !!p.settles, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat) };
   if (res?.status === "error" && res.outcome?.dispatch === "needs_repo")
     return { receipt: `Not started - ${res.error || "it needs a repository first"}. Pick one on the card and confirm again.`, settle: false, status: "error",
              repo: { taskId: res.outcome.taskId, agent: res.outcome.agent } };

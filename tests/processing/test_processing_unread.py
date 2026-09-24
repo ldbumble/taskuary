@@ -89,10 +89,12 @@ def test_words_said_about_a_task_do_not_make_it_unread_again_but_an_agents_do(st
     with store.processing_own_words(tid, 'Taskuary'):
         store.add_comment(tid, 'Taskuary', 'concierge_assistant', 'Your User changes task is still open.')
     _, after = both(store)
-    assert after['items'] == [], 'the assistant talking about it is not news'
+    # passed with Next it waits in Passed - still yours, not news (2026-09-23: "if you hit next it goes to passed")
+    assert [(i['key'], bool(i.get('surfaced')), i['actionable']) for i in after['items']] == [(key, True, False)], \
+        'the assistant talking about it is not news'
     store.add_comment(tid, 'coder', 'agent', 'Finished: users changed, PR opened.')
     _, news = both(store)
-    assert [i['key'] for i in news['items']] == [key], 'an agent reporting back IS news'
+    assert [(i['key'], bool(i.get('surfaced'))) for i in news['items']] == [(key, False)], 'an agent reporting back IS news'
 
 
 def test_later_keeps_it_unread_until_its_time_then_it_comes_back(store):

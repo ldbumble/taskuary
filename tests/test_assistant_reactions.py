@@ -1720,16 +1720,17 @@ class InlineVerbTests(unittest.TestCase):
             self.assertEqual(concierge.open_day(empty, llm=None)['chips'], [])
             self.assertEqual(concierge.surface(empty, llm=None)['chips'], [])
 
-    def test_next_marks_a_waiting_draft_read_and_ends_the_reply(self):
+    def test_next_marks_a_waiting_draft_read_and_keeps_the_reply(self):
+        """Next passes it - still yours, in Passed - it never throws the draft away (the owner, 2026-09-23:
+        "i thought if you hit next it goes to passed section?"). Not replying is Close, said on purpose."""
         s, tid, rid, item = ResponseTests()._drafted()
         self.assertEqual(item['lane'], 'approve')
         surface(s, item['key'])
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             concierge.surface(s, llm=None, leaving=item['key'])              # …and the owner hits Next
         self.assertEqual(s.funnel_states()[item['key']]['Status'], 'surfaced')
-        self.assertEqual(s.get_review(rid)['Status'], 'no_reply')            # no reply is owed any more
-        self.assertIsNone(s.pending_review(tid))                             # …and it is out of the Review queue
-        self.assertEqual(pile(s), [])                                        # nothing is left waiting on the owner
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')             # the draft still waits for a yes
+        self.assertEqual(s.get_task(tid)['Status'] not in ('done', 'dropped'), True)
 
     def test_next_on_a_parked_agent_reads_it_but_leaves_the_session_running(self):
         s, tid, mid, item = ResponseTests()._asked()

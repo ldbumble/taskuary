@@ -114,8 +114,8 @@ DECIDE_RULE = (
     "agent - everything wanted after a colon, in the owner's words), regular_agent (hand it to a non-coding agent), mine "
     "(they will do it themselves), not_ours (file this one), not_ours_remember (file this kind from now on), "
     "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), archive, close (close the task), done (handled), later, skip "
-    "(tomorrow), next (move on), remember (a fact to keep - after a colon), setup (a walk-through with the assistant - the "
-    "request after a colon), setting (a switch for the owner to approve), split (two jobs in one arrival), stop_agent (end "
+    "(tomorrow), next (move on), remember (a fact to keep - after a colon), setup (building a report, a connection to another system or an automation - a walk-through with the "
+    "assistant, the request after a colon; never a to-do or a reminder, which is a new task for the owner), setting (a switch for the owner to approve), split (two jobs in one arrival), stop_agent (end "
     "the running agent), answer_agent (the answer for the parked agent - after a colon), rerun (run the report again), "
     "forward (send it on - to whom after a colon), clear (clear these from the pipe), confirm (their yes to the card "
     "already waiting on it - only when one is), cancel (their no to it). A decision about a DIFFERENT item than "
@@ -557,6 +557,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         gone = no_agent(store)
         if gone: return (f"There is nothing to hand it to - {gone} is not set up on this machine. "
                          'Connections → AI CLI agents, and then say it again.')
+    if verb == 'close' and item.get('closed'): return f"{what} is already closed - its agent finished it."
     need = NEEDS.get(verb)
     if need and not item.get(need):
         return (f"There is nothing to {SAYS_VERB.get(verb, verb)} on this one - {what} is "
@@ -1328,6 +1329,19 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
     return out
 
 
+def know(store, q: str) -> str:
+    """knowledge.search: the Hub, the knowledge base and the kept facts for these words, in one answer."""
+    from . import handbook as hub, knowledge
+    from .routing import tokens
+    want = {w for w in tokens(q) if len(w) > 2}
+    kept = [m['Note'] for m in store.list_memories() if want & set(tokens(m.get('Note') or ''))][:8]
+    parts = [hub.block(store, q, actions=False) if hub.enabled(store) else '', knowledge.block(store, q),
+             ('KEPT FACTS:' + NEWLINE + NEWLINE.join(f'- {n}' for n in kept)) if kept else '']
+    found = NEWLINE.join(x.strip() for x in parts if x.strip())
+    return found or (f'Nothing the company has written down matches "{q}" - not in the Hub, the documents or the kept facts. '
+                     'Say so plainly; a report or the timeline may still hold it (reports.list, timeline.search).')
+
+
 def read_op(store, kind: str, params: dict) -> str:
     """A LOOK-UP, run at once. Changes nothing, waits for no confirmation, and never moves what is on
     the table - asking about another task must not hijack the walk (the owner, 2026-09-07). The answer
@@ -1400,6 +1414,7 @@ def read_op(store, kind: str, params: dict) -> str:
         from . import appfacts
         return ('agents: ' + ', '.join(f"{a['name']} ({a['kind']}{'' if a['active'] else ', off'})" for a in appfacts.agents(store))
                 + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store)))
+    if kind == 'knowledge.search': return know(store, str(p.get('query') or ''))
     if kind == 'timeline.search':
         sel = {k: v for k, v in p.items() if k != 'limit'}
         if sel.get('select'): sel = sel['select']
@@ -1479,8 +1494,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             if not hit: return _miss('The scripts are: ' + '; '.join(n for n, _ in appfacts.SCRIPTS) + '.')
             params['name'], named = hit, hit; params['target'] = 0
     target = params.pop('target', None) or it.get('mid') or it.get('tid') or it.get('rid') or 0
-    label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
-    label = label[0].upper() + label[1:] if label else kind
+    label = op_label(kind, params)
+    # a brief has no row behind it: what it is about is its own words, never the item on the table
+    if tk == 'text': named = named or str(params.get('title') or params.get('text') or '').strip()[:120]
     # an instant kind (the tiers) runs as soon as it is proposed - the desktop and the phone both carry
     # out an `auto` proposal at once - and its receipt carries the undo; the rest wait for the click
     instant = toolcatalog.is_instant(kind)
@@ -1724,34 +1740,28 @@ def card_for(item: dict) -> dict:
                                        # the agent's own question and the answers it offered: what a chat numbers, and
                                        # the request an answer is bound to (funnel.from_agents, workerstate PW-228)
                                        'choices', 'request_id', 'request_kind',
-                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused',
+                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused', 'closed',
                                        'brief_today')}
 
 
 def move_on(store, key: str, actor: str = 'owner') -> dict:
-    """Put down the thing the owner is walking away from. It is READ - and if it was still waiting on a
-    reply, that reply is no longer owed: the pending draft is decided `no_reply` and leaves the Review
-    queue (the owner, 2026-09-07: "if there is agent awaiting your approval for reply and you hit next
-    then no more reply needed. It's closed").
+    """Put down the thing the owner is walking away from. It is READ, and that is all: Next settles
+    nothing. It waits in Passed, still theirs, and comes back after the quiet hour.
 
-    The TASK is left alone. Nothing is cancelled and no session is stopped - a parked agent goes on
-    working, it just stops interrupting; reopening is the Board's business, not the walk's."""
+    Next used to END a draft waiting for a yes as `no_reply` and close its task (2026-09-07: "if you hit
+    next then no more reply needed"). The Passed band replaced that - "still yours, you pressed Next" -
+    and the two disagreed: a reply walked past was thrown away while the rail promised it back (the
+    owner, 2026-09-23: "i thought if you hit next it goes to passed section?"). Not sending one is
+    Close, said on purpose.
+
+    The TASK is left alone. Nothing is cancelled and no session is stopped."""
     if not key: return {}
     try: item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
     except Exception as e:
         logger.debug(f'concierge: nothing to put down for {key} - {e}'); return {}
     if not item: return {}
     funnel.settle(store, key, 'surfaced', actor, note=item.get('sig'), read=True)
-    ended = []
-    for rid in ([item['rid']] if item.get('rid') else []):
-        rv = store.get_review(int(rid))
-        if not rv or rv.get('Status') not in ('pending', 'held'): continue
-        from . import verdicts
-        try:
-            verdicts.decide(store, rv, 'no_reply', None, 'walked past in the chat - the owner did not want a reply', actor)
-            ended.append(int(rid))
-        except Exception as e: logger.warning(f'concierge: the draft on {key} could not be put down - {e}')
-    return {'key': key, 'read': True, 'reviews_ended': ended}
+    return {'key': key, 'read': True, 'reviews_ended': []}
 
 
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
@@ -2065,7 +2075,9 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         if prev: operations.cancel(store, prev['id'], actor)
         op = operations.propose(store, kind, target, params, actor)
     where = _where(it) if it else (params.get('title') or _cut(params.get('text') or params.get('note') or '', 120))
-    summary = f"{where} → {label[0].lower() + label[1:]}"
+    # an item goes somewhere ("TQ-0007 → coding agent"); words with no item ARE the thing - the arrow only
+    # repeated the label ("Remember it: Gail approves POs → remember it")
+    summary = f"{where} → {label[0].lower() + label[1:]}" if it else where
     lead = (f"That is {where}, not the one on the table - so I am proposing it there; {(table or {}).get('ref') or 'the one on the table'} is untouched. "
             if elsewhere else '')
     head = f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}"
@@ -2238,6 +2250,12 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
 
+# what an authority level lets the connection do, in words. scopes.actions_at is every action in the APP at
+# that level - a hundred report types printed on a Todoist card as its "permissions" (2026-09-23)
+SCOPE_SAYS = {'read': 'it can read, never change or send', 'write': 'it can read and make changes',
+              'admin': 'it can read, make changes and administer the account'}
+
+
 def _propose_connection(store, tid: int, ask: str, provider: str | None, item: dict | None, actor: str) -> dict:
     """A connection (PW-196): provider and non-secret configuration, the authority it will hold and what that unlocks;
     the secret is never asked for here - the card takes it, securely - and it stays off until the owner turns it on."""
@@ -2253,7 +2271,7 @@ def _propose_connection(store, tid: int, ask: str, provider: str | None, item: d
     cid = int(existing['ConnectorId']) if existing and not existing.get('Active') else 0
     name = (existing or {}).get('Name') if cid else f"{provider.title()} (from the chat)"
     scope = scopes.default_scope(provider)
-    params = {'type': provider, 'name': name, 'scope': scope, 'permissions': ', '.join(scopes.actions_at(scope)) or 'read',
+    params = {'type': provider, 'name': name, 'scope': scope, 'permissions': SCOPE_SAYS.get(scope, scope),
               'secret': 'never here - the card asks for it securely', 'starts': 'stays off until you turn it on after authorizing'}
     tail = (f"A {provider} connection with {scope} authority ({params['permissions']}). I never take a token or password in this chat: "
             'once the card exists, sign in or paste the secret there and run its Test. It stays off - nothing polls, nothing starts - '
@@ -2262,20 +2280,27 @@ def _propose_connection(store, tid: int, ask: str, provider: str | None, item: d
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
 
-def describe_op(store, op: dict) -> tuple:
-    """(the button's label, what it was about) for a proposal row - the receipt's two facts."""
-    kind, p, tk, target = op.get('kind'), op.get('params') or {}, op.get('targetKind'), op.get('target')
+def op_label(kind: str, p: dict) -> str:
+    """The button's words for an operation, in the owner's terms. toolcatalog.PURPOSE is written for the
+    MODEL ("start an agent from a brief when there is no message behind it - `kind`, `text`"); read as a
+    label it put that sentence on the button of a plain to-do, and said an agent had started when none had."""
     by_kind = {kind_: [PROPOSALS[v][1] for v in PROPOSALS if PROPOSALS[v][0] == kind_][0] for kind_ in {PROPOSALS[v][0] for v in PROPOSALS}}
-    label = by_kind.get(kind, kind)
+    label = by_kind.get(kind) or toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
     if kind == 'task.create_from_message': label = {'coding': 'Send to the coding agent', 'general': 'Send to a regular agent'}.get(str(p.get('kind')), 'Put it on my list')
-    if kind == 'task.create_from_text': label = 'Start a coding agent on it' if p.get('kind') == 'coding' else 'Start a regular agent on it'
+    if kind == 'task.create_from_text': label = {'coding': 'Start a coding agent on it', 'task': 'Put it on my list'}.get(str(p.get('kind')), 'Start a regular agent on it')
     if kind == 'preference.exclude_sender': label = 'Silence this sender' if p.get('scope') == 'sender' else 'File it and remember this kind'
     if kind == 'item.settle': label = {'later': 'Push it back', 'skip': 'Skip until tomorrow'}.get(str(p.get('verb')), 'Mark it handled')
     if kind == 'task.complete' and p.get('agent'): label = 'Close the task and stop its agent'
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
-    if kind in toolcatalog.INSTANT or kind == 'report.delete':
-        label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip(); label = label[0].upper() + label[1:]
+    if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
+    return label[0].upper() + label[1:] if label else kind
+
+
+def describe_op(store, op: dict) -> tuple:
+    """(the button's label, what it was about) for a proposal row - the receipt's two facts."""
+    kind, p, tk, target = op.get('kind'), op.get('params') or {}, op.get('targetKind'), op.get('target')
+    label = op_label(kind, p)
     ref = ''
     try:
         if tk == 'task' and target: ref = task_ref(int(target))
@@ -2322,8 +2347,10 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'task.split':
         if o.get('newRef'): return f" {o.get('ref') or 'It'} keeps \"{o.get('kept') or ''}\" and {o['newRef']} is \"{o.get('title') or ''}\" - each is its own job now."
         return ' I can only see one ask in that one' + (f" - {o['why']}" if o.get('why') else '') + '. It stays as it was.'
+    if kind == 'task.create_from_text' and o.get('ref') and p.get('kind') == 'task':
+        return f" {o['ref']} - \"{o.get('title') or ''}\" is on your list; no agent was started."
     if kind == 'task.create_from_text' and o.get('ref'):
-        return f" {o['ref']} - \"{o.get('title') or ''}\" is with the {'coding' if p.get('kind') == 'coding' else 'regular'} agent now; it comes back here when it is done."
+        return f" {o['ref']} - \"{o.get('title') or ''}\" is with the {'coding' if p.get('kind') == 'coding' else 'regular'} agent now; what it finds is kept on {o['ref']} - open it from here or from Tasks."
     if kind == 'task.setup' and o.get('ref'):
         return (f" {o['ref']} - \"{o.get('title') or ''}\" is open as a walk-through: a conversation with the assistant, nothing built, no repository touched. "
                 'Open it when you want to start; its browser opens beside the assistant.')
@@ -2332,7 +2359,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         if o.get('started') or o.get('chat'): return f" {o.get('agent') or 'The agent'} is on it - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
     if kind == 'agent.stop': return ' The task stays open - say close it when you want it closed.'
-    if kind == 'memory.remember': return ' A memory settles nothing: the walk is where it was.'
+    if kind == 'memory.remember': return ' I will use it from now on; whatever you were on stays where it was.'
     if kind == 'report.create' and o.get('sourceId'):
         return f" \"{o.get('title')}\" is on the Reports tab{' and runs on its schedule' if o.get('enabled') else ', switched off'}."
     if kind == 'connection.create' and o.get('connectorId'):
@@ -2441,7 +2468,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                       f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}{trouble(store, text)}\n\n"
                       + (hub_context + '\n\n' if hub_context else '')
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
-                      + f"The owner says: {text}\nAnswer them, briefly. If this is a decision about the item on the table, name it (DECIDE line).",
+                      + f"The owner says: {text}\nAnswer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. If this is a decision about the item on the table, name it (DECIDE line).",
                       max_tokens=MAX_TOKENS) or '').strip()
         if hub.enabled(store): raw = hub.publish_assistant_entries(store, tid, raw, 'assistant')
         raw, call = parse_call(raw)
@@ -2454,7 +2481,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             found = read_op(store, call['kind'], call['params'])
             trace and trace('tool', call['kind'], {'params': call['params']})
             raw = str(llm(system, f"You looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\n"
-                                  f"The owner asked: {text}\nAnswer them with what you just read, briefly.",
+                                  f"The owner asked: {text}\nAnswer them with what you just read, briefly. If it did not answer them and another look-up would, CALL that one now - never offer to look.",
                           max_tokens=MAX_TOKENS) or '').strip()
             raw, call = parse_call(raw)
         # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
@@ -2493,6 +2520,11 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         if verb in ('next', 'done', 'skip', 'later'):
             only = 'mail' if re.search(r'\b(mail|inbox|e-?mail|what came in)\b', text, re.I) else None
             return surface(store, None, llm, actor, only, trace, cancel)
+        # "remind me to renew the contract" read as `mine` - theirs to do - with nothing on the table to be
+        # theirs: that is a new to-do in their words, not "nothing is on the table" (2026-09-23)
+        if verb == 'mine':
+            return call_turn(store, tid, {'kind': 'task.create_from_text', 'params': {'kind': 'task', 'text': (decision.get('text') or text).strip()}},
+                             None, text, actor)
         if verb in NEEDS:                              # a hand-off is NOT in NEEDS: the owner's words are its brief
             say_ = ('Nothing is on the table. Say next and I will bring the next thing up, or name the one '
                     'you mean - the sender or its TQ ref - and I will do it there.')

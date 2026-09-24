@@ -376,6 +376,24 @@ class AppReadTests(unittest.TestCase):
         self.assertIn('No connection by that name', concierge.read_op(s, 'connection.read', {'name': 'zzzz'}))
         self.assertIn('coder', concierge.read_op(s, 'agents.list', {}))
 
+    def test_knowledge_search_reads_the_hub_and_the_kept_facts(self):
+        """"Which sites do we run" was offered as "I can look it up in Company Hub" - and then searched
+        the mail, because no look-up reached the Hub or the facts the owner asked to keep."""
+        s = self._store()
+        self.assertTrue(toolcatalog.is_read('knowledge.search')); self.assertIn('knowledge.search', toolcatalog.block())
+        self.assertEqual(toolcatalog.valid('knowledge.search', {}), 'knowledge.search needs query')
+        concierge.remember_fact(s, 'Gail Moreno approves every PO over 5k')
+        self.assertIn('Gail Moreno approves', concierge.read_op(s, 'knowledge.search', {'query': 'who approves a PO'}))
+        self.assertIn('Nothing the company has written down', concierge.read_op(s, 'knowledge.search', {'query': 'warp drive'}))
+
+    def test_a_brief_for_my_list_says_so_on_the_button_and_the_receipt(self):
+        """"Add a to-do: call Ruth" put the MODEL's catalogue sentence on the button ("Start an agent from a
+        brief when there is no message behind it"), and the receipt said a regular agent had it."""
+        self.assertEqual(concierge.op_label('task.create_from_text', {'kind': 'task'}), 'Put it on my list')
+        self.assertEqual(concierge.op_label('task.create_from_text', {'kind': 'coding'}), 'Start a coding agent on it')
+        line = concierge._outcome_line('task.create_from_text', {'kind': 'task'}, {'ref': 'TQ-0009', 'title': 'Call Erin'})
+        self.assertIn('on your list', line); self.assertNotIn('agent now', line)
+
     def test_every_general_turn_carries_the_app_state(self):
         """Asked "run me the AR report" from a chat, the assistant had no list of reports at all. The
         state block rides the system prompt of the general road - and never the scripts, which reach

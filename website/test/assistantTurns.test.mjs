@@ -54,3 +54,19 @@ test("new server-side events are appended and reported as fresh", () => {
   assert.deepEqual(result.messages, incoming);
   assert.deepEqual(result.added, [incoming[1]]);
 });
+
+test("an answer keeps its verbs when the server's text-only copy comes back - Next is never lost", () => {
+  const chips = [{ verb: "reply", label: "Reply" }, { verb: "next", label: "Next" }];
+  const { messages } = mergeDurableTurns([{ id: "a1", role: "assistant", text: "Erin sent it.", chips }],
+    [{ id: 51, role: "assistant", text: "Erin sent it.", options: [], card: null }]);
+  assert.deepEqual(messages[0].chips, chips);
+});
+
+test("the receipt drawn at the click and the server's recorded line are one turn", () => {
+  const { messages, added } = mergeDurableTurns([{ id: "r1", role: "receipt", text: "Done - Put it on my list.", tid: 9, ref: "TQ-0009" }],
+    [{ id: 52, role: "assistant", text: "Done - Put it on my list.", card: null }]);
+  assert.equal(messages.length, 1); assert.deepEqual(added, []);
+  assert.equal(messages[0].role, "receipt"); assert.equal(messages[0].ref, "TQ-0009");
+  // ...but a line that carries a card (the undo offer) is its own turn
+  assert.equal(mergeDurableTurns([{ id: "r2", role: "receipt", text: "Done." }], [{ id: 53, role: "assistant", text: "Done.", card: { kind: "proposal" } }]).messages.length, 2);
+});

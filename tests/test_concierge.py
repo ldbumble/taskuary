@@ -285,6 +285,16 @@ class DecisionTests(unittest.TestCase):
         self.assertIsNone(out.get('decision'))
         self.assertIn('still wait', out['say'])
 
+    def test_mine_with_nothing_on_the_table_is_a_new_to_do_in_their_words(self):
+        """"remind me to renew the contract" came back as DECIDE: mine - theirs to do - and was answered
+        "Nothing is on the table" (2026-09-23). With no item, theirs to do is a new task on their list."""
+        s = store()
+        out = concierge.say(s, 'remind me to renew the Cardinal contract next week', key=None,
+                            llm=lambda *a, **k: 'Noted.\nDECIDE: mine: renew the Cardinal contract next week')
+        p = out['proposal']
+        self.assertEqual((p['kind'], p['label'], p['params']['kind']), ('task.create_from_text', 'Put it on my list', 'task'))
+        self.assertIn('renew the Cardinal contract', p['params']['text']); self.assertNotIn('Nothing is on the table', out['say'])
+
     def test_the_contract_line_is_parsed_and_the_words_alone_decide_nothing(self):
         self.assertEqual(concierge.parse_decision('On it.\nDECIDE: coder: find out why the fix did not stick, and add an admin login')[1],
                          {'verb': 'coder', 'text': 'find out why the fix did not stick, and add an admin login'})

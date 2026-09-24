@@ -134,6 +134,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     held = store.held_review(task_id) or {}
     mid = reply_target(store, task_id) or held.get('MessageId')
     if not mid: return {'ok': False, 'why': 'nobody is waiting on a reply on this task - there is no one to draft it to'}
+    # work the owner started here (a brief typed in the chat) has only their own words behind it: the agent's
+    # answer IS the result, and filing it as a reply "waiting on your approval" addressed it to them (2026-09-23)
+    if not held and no_one_behind((store.get_message(mid) or {}).get('Channel')):
+        return {'ok': False, 'why': 'nobody sent this task - its result stays on the task, there is no one to reply to'}
     live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
     why = f'{agent} wrote this reply in its session - approve to send'
     if held:

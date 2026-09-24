@@ -16,6 +16,7 @@ import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, channelColor, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
+import { jsonRows } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
@@ -236,6 +237,17 @@ function AdvisorWhy({ mid }) {
 }
 
 // the whole text, unfolded under the card on request - a report as markdown, a mail as it was written
+const cell = (v) => (v == null ? "" : typeof v === "number" ? v.toLocaleString() : String(v));
+function RowsTable({ rows }) {
+  const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  return (
+    <table className="tq-rows">
+      <thead><tr>{cols.map((c) => <th key={c}>{c.replace(/_/g, " ")}</th>)}</tr></thead>
+      <tbody>{rows.map((r, i) => <tr key={i}>{cols.map((c) => <td key={c} className={typeof r[c] === "number" ? "n" : ""}>{cell(r[c])}</td>)}</tr>)}</tbody>
+    </table>
+  );
+}
+
 function FullText({ mid, revision }) {
   // a card with no mail behind it asks for nothing. A task whose only message a skip rule hid has no
   // mid, and fetching /api/messages/null painted FastAPI's own validation sentence ("path.mid: Input
@@ -255,7 +267,7 @@ function FullText({ mid, revision }) {
   const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
   return (
     <div className="tq-card-full">
-      {morning ? <DigestText text={text} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
+      {morning ? <DigestText text={text} /> : jsonRows(text) ? <RowsTable rows={jsonRows(text)} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
       {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "#55697a" }}>open the original</a></div>}
     </div>
@@ -358,6 +370,11 @@ export function CardShell({ card, kicker, title, lead, sub, children, err }) {
   );
 }
 
+// how the reply leaves: "emails" said of a WhatsApp answer told the owner it would go somewhere it would not
+const SENDS_ON = { whatsapp: "on WhatsApp", teams: "in Teams", slack: "in Slack", telegram: "on Telegram", sms: "by text",
+  github: "on GitHub", discord: "on Discord", google_chat: "in Google Chat" };
+export const sendsBy = (channel, who) => { const on = SENDS_ON[String(channel || "").toLowerCase()]; return on ? `answers ${who} ${on}` : `emails ${who}`; };
+
 // a reply drafted, or an action proposed - the owner's yes is the only thing that moves it
 export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   const [rv, setRv] = useState(null);
@@ -433,13 +450,13 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   const then = action ? <><b>Run it</b> does what the agent proposed - nothing runs until you press it.</>
     : rv && !value.trim() && !stale ? <><b>Draft with AI</b> writes one for you to approve here - nothing is sent.</>
     : stale ? <><b>Refresh the draft</b> rewrites it from the newest message; you still approve it.</>
-    : rv ? <><b>Send reply</b> emails {who}.</> : null;
+    : rv ? <><b>Send reply</b> {sendsBy(rv.Channel, who)}.</> : null;
   return (
-    <CardShell card={card} kicker={action ? "an agent asks to act" : "reply · draft ready"}
+    <CardShell card={card} kicker={action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
       lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} />} err={err}>
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
-          placeholder={action ? "" : "No draft yet — choose Draft with AI, or write it here"}
+          placeholder={action ? "" : "Write your answer here"}
           sx={{ mt: 1, "& textarea": { fontSize: 12.5, lineHeight: 1.5 } }} />
       )}
       {!action && stale && <div className="tq-card-err">New messages arrived after this draft. Refresh the draft with the latest context before sending.</div>}

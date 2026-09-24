@@ -23,7 +23,7 @@ test("the card says exactly what will happen: action, target and parameters", ()
   const d = describe(p);
   assert.equal(d.title, "Send to the coding agent");
   assert.equal(d.target, "TQ-0007 - Fix the export → coding agent");
-  assert.deepEqual(d.params, [["kind", "coding"], ["instructions", "check the June rows"]]);
+  assert.deepEqual(d.params, [["instructions", "check the June rows"]]);   // kind: the button already says it
   assert.equal(d.confirm, "Send to the coding agent");
   assert.equal(d.cancel, "Cancel");
 });
@@ -39,6 +39,11 @@ test("after the click, the receipt is the server's word and the walk moves only 
     { receipt: "Not done - the context changed since this was proposed. Say it again if you still want it.", settle: false, status: "stale" });
   assert.deepEqual(afterExecute(p, { status: "done", duplicate: true, outcome: {} }),
     { receipt: "Already done - Send to the coding agent.", settle: false, status: "done" });
+});
+
+test("the server's receipt is the one drawn - never a second, shorter Done beside it", () => {
+  const said = "Done - Put it on my list · TQ-0009. TQ-0009 - \"Call Erin\" is on your list; no agent was started.";
+  assert.equal(afterExecute(p, { status: "done", outcome: {}, receipt: said }).receipt, said);
 });
 
 test("cancel is a receipt that nothing changed", () => {
@@ -77,7 +82,7 @@ test("a sweep that took the table with it offers Next; one that did not just rel
 test("the receipt after a sweep carries Next, and the page puts the table down without walking on", () => {
   const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
   assert.match(view, /const chips = step === "offer" \? \[\{ verb: "next", label: "Next" \}\] : \[\];/);
-  assert.match(view, /role: "receipt", text: out\.receipt, tid: p\.tid, ref: p\.ref, chips/);
+  assert.match(view, /role: "receipt", text: out\.receipt, tid: p\.tid \|\| res\?\.outcome\?\.taskId, ref: p\.ref \|\| res\?\.outcome\?\.ref, chips/);
   assert.match(view, /\{last && !!chipsOf\(m\)\.length && \(/);       // the receipt row renders them
   assert.match(view, /const clearTable = \(\) => \{/);                 // putting the table down is not advancing
   assert.doesNotMatch(view, /if \(step === "offer"\) advance\(\)/);

@@ -437,7 +437,7 @@ const StageMode = ({ mode, setMode, onGame }) => (
 );
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
-function Line({ m, live, last, actions, fresh }) {
+function Line({ m, live, last, actions, fresh, tableChips = [] }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}</div></div>;
   if (m.role === "receipt") return (
     <div className="tq-msg receipt"><span /><div className="body">✓ {m.text}
@@ -466,7 +466,8 @@ function Line({ m, live, last, actions, fresh }) {
   // `fresh` made the words vanish on the next poll. A verb that has since stopped applying is refused
   // server-side at propose time, which is the only place that can know.
   // A proposal is waiting on its own Confirm: offering the item's verbs beside it invites two answers.
-  const chips = last && !m.proposal && kind !== "proposal" ? chipsOf(m) : [];
+  const own = chipsOf(m);
+  const chips = last && !m.proposal && kind !== "proposal" ? (own.length || m.card ? own : tableChips) : [];
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
@@ -1055,7 +1056,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
       // a sweep cleared what was on the table too: the receipt carries Next, and the walk waits for it
       const chips = step === "offer" ? [{ verb: "next", label: "Next" }] : [];
       setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
-                       { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref, chips }]);
+                       { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
       onChanged?.();
       // A SCRIPT, started by name (script.start): the deterministic road the words asked for opens here -
       // the walk's Next, the set-up tour, or the composer - and nothing on the table moves for it.
@@ -1384,6 +1385,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
   const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
+  // a reloaded answer is text only: the item still on the table lends it its verbs, so Next is never gone
+  const tableChips = useMemo(() => {
+    const c = shown[lastCardIdx]?.card;
+    return c && current && (c.key === current || (c.aliases || []).includes(current)) ? chipsOf(shown[lastCardIdx]) : [];
+  }, [shown, lastCardIdx, current]);
 
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
@@ -1486,7 +1492,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
               </div>
             </div></div>
           )}
-          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx}
+          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips}
                                      actions={actions} fresh={currentItem} />)}
           {busy && (
             <div className="tq-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
@@ -1526,7 +1532,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
             </Tooltip>
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
-            <textarea rows={1} value={text} disabled={resetting} placeholder={phone ? (current ? "Ask about this one, or name another…" : "Ask Taskuary anything…")
+            <textarea rows={1} value={text} disabled={resetting} placeholder={phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
               : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || !text.trim()} onClick={() => send()}><SendIcon fontSize="small" /></button>
@@ -1547,7 +1553,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
             </Box>
             {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
           </Popover>
-          <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the words under each message do the acting</div>
+          <div className="tq-compose-hint">{phone ? "Enter sends · the words under each message do the acting"   /* no rail on the left on a phone */
+            : "Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the words under each message do the acting"}</div>
         </div>
       )}
     </div>

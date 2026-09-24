@@ -886,7 +886,8 @@ def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTa
     out = operations.execute(store, oid, body.version, lambda: _run_operation(op, background), ACTOR)
     # the receipt is the fact of what happened, in the chat, after it happened (PW-125)
     from . import concierge
-    try: concierge.receipt(store, out, ACTOR)
+    # ...and the page shows THAT line, not a shorter one of its own beside it (two "Done"s per click)
+    try: out = {**out, 'receipt': concierge.receipt(store, out, ACTOR)}
     except Exception as e: logger.debug(f'no receipt recorded for {oid}: {e}')
     if out['status'] in ('stale', 'cancelled'): raise HTTPException(409, out.get('error') or out['status'])
     return out

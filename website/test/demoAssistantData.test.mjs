@@ -40,3 +40,24 @@ test("invented assistant posts are added to the Timeline once and stay date-sort
     assert.match(state["/api/messages/one"][post.MessageId].BodyText, /^## /);
   }
 });
+
+// The scripted cards were written against one recording's numbers and the next recording moved them: the
+// cutover card opened the overnight-import draft (2026-09-23). Bound by what they are, every card's ids
+// point at the row it names in the recording the demo ships.
+test("every scripted card is bound to the row it names in the shipped recording", async () => {
+  const { readFileSync } = await import("node:fs");
+  const fx = JSON.parse(readFileSync(new URL("../src/demoFixtures.json", import.meta.url), "utf8"));
+  const demo = createDemoAssistantState(fx);
+  const tasks = new Map(fx["/api/tasks"].data.map((t) => [t.TaskId, t.Title]));
+  const reviews = new Map(fx["/api/reviews"].data.map((r) => [r.ReviewId, r]));
+  for (const item of demo.pile.items) {
+    assert.equal(item.bind, undefined, item.title);
+    assert.ok(item.key && !/undefined/.test(item.key), item.title);
+    if (item.rid) assert.equal(reviews.get(item.rid).Subject, item.title);
+  }
+  const cutover = demo.pile.items.find((i) => i.kind === "review");
+  assert.equal(tasks.get(cutover.tid), "Can you confirm the AP cutover date?");
+  const census = demo.pile.items.find((i) => i.lane === "blocked");
+  assert.match(tasks.get(census.tid), /census sync fails/);
+  assert.equal(demo.pile.alerts[0].item, census.key);
+});

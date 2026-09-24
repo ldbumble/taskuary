@@ -952,11 +952,55 @@ class MemoryTests(unittest.TestCase):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('queued', t))
             again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
-            self.assertIsNone(again['item']); self.assertEqual(again['say'], concierge.ALL_DONE)   # put down: read, and nothing else waits
+            self.assertIsNone(again['item']); self.assertIn('already seen still waits', again['say'])   # put down: read, waiting in Passed (2026-09-23)
             later = datetime.now() + timedelta(hours=2)
             on_rail = [(i['lane'], bool(i.get('why_open')), bool(i.get('surfaced'))) for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
             self.assertEqual(on_rail, [('queued', True, False)])                                # the hour brought it back, and the mark went with it
             self.assertEqual(funnel_selection.capture_selection(s, now=later).selected['tid'], t)   # ...so the walk offers it again
+
+    def _canonical(self):
+        from taskuary import funnel as f
+        s = store()
+        settle = lambda: (s.reconcile_processing_membership(fixed_now=ago(0)), f.invalidate())
+        return s, settle
+
+    def test_next_on_your_own_task_leaves_it_in_passed_not_gone(self):
+        """The owner, 2026-09-23: "i thought if you hit next it goes to passed section?" - Next read an open
+        task and the rail dropped it for the hour. It is still theirs: on the rail, marked shown (Passed),
+        not offered again by the walk, and not counted as waiting on a decision."""
+        from taskuary import concierge, processing_unread
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'Month-end close is short', 'Kind': 'general', 'Status': 'open'}, 'o')
+        mid = mail(s, 'Month-end close is short', who='Erin', email='erin@northwind.example', hours=3, tid=t)
+        s.add_route(mid, t, 'route', 1.0, 'triage: task', [], 'triage')
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            first = concierge.surface(s, llm=lambda *a, **k: 'never')
+            self.assertEqual(first['item']['tid'], t)
+            again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            self.assertIsNone(again['item'])                                                  # the walk does not bring it straight back
+            rail = [i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
+        self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail], [(True, False)])   # ...but it is on the rail, in Passed
+        self.assertEqual(s.get_task(t)['Status'], 'open')
+
+    def test_a_task_its_agent_finished_shows_once_as_a_result(self):
+        """"same for finished agent task?" - an agent that closed its task left nothing on the rail: the result
+        the owner asked for was only on the Tasks tab. It is a result now, with Reports, until it is read."""
+        from taskuary import processing_unread
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'AP clerk checklist', 'Kind': 'general', 'Status': 'open'}, 'o')
+        s.add_message({'TaskId': t, 'ExternalId': 'own-1', 'Channel': 'own', 'Subject': 'AP clerk checklist',
+                       'FromName': 'You', 'SentAt': ago(1), 'BodyText': 'write a checklist', 'Status': 'routed'})
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: a ten-line checklist, on the task.')
+        s.update_task(t, {'Status': 'done'}, 'assistant'); settle()
+        card = [i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
+        self.assertEqual([(i['kind'], i['lane'], i['unread'], i.get('mid')) for i in card], [('agentdone', 'report', True, None)])
+        self.assertIn('ten-line checklist', card[0]['summary'])
+        # ...closed by the OWNER it is simply gone
+        u = s.create_task({'Title': 'Old thing', 'Kind': 'general', 'Status': 'open'}, 'o')
+        s.update_task(u, {'Status': 'done'}, 'owner'); settle()
+        self.assertFalse([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == u])
 
     def test_a_pty_worker_that_ran_and_left_leaves_a_transcript_not_a_run(self):
         """A coder started from the terminal writes a TRANSCRIPT on its way out and no run row at

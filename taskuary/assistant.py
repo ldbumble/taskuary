@@ -1652,6 +1652,11 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
         brief = str(a.get('title') or i.get('Text') or task.get('Title') or '').strip()
         why = str(a.get('why') or '').strip()
         if why: brief += f'\n\nWhy the assistant raised it: {why}'
+        # ...and the report it points at, or the agent can only ask for it to be pasted (2026-09-23)
+        src = store.get_message(int(a['mid'])) if str(a.get('mid') or '').isdigit() else None
+        if src and src.get('Channel') != 'assistant' and src.get('BodyText'):
+            brief += (f"\n\nThe source - {src.get('Subject') or 'the message'}:\n"
+                      + src['BodyText'].split('\n--- raw data ---')[0].strip()[:6000])
         if kind == 'general':
             ingest._spawn(_auto_general, store, tid, brief)
         elif store.get_settings().get('coder_auto_enabled') == '1':

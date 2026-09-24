@@ -76,6 +76,16 @@ class AgentReplyTests(NoHook):
         out = coder.agent_reply(s, tid, OWN, 'coder')
         self.assertFalse(out['ok']); self.assertEqual(s.list_reviews('pending'), [])
 
+    def test_work_the_owner_started_has_nobody_to_reply_to(self):
+        """A brief typed in the chat is the task's only message ('own', from You): the agent's checklist was
+        filed as a reply "waiting on your approval", addressed to the owner themself (2026-09-23)."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'AP clerk checklist', 'Kind': 'general', 'Status': 'in_progress'}, 't')
+        s.add_message({'TaskId': tid, 'ExternalId': 'own-1', 'Channel': 'own', 'Subject': 'AP clerk checklist',
+                       'FromName': 'You', 'BodyText': 'write a short checklist', 'Status': 'routed'})
+        out = coder.agent_reply(s, tid, OWN, 'assistant')
+        self.assertFalse(out['ok']); self.assertEqual(s.list_reviews('pending'), [])
+
     def test_the_shell_door(self):
         s = MemoryStore(); tid, _ = task_with(s)
         with mock.patch.object(server, 'store', s):

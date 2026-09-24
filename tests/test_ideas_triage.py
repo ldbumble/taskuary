@@ -267,3 +267,24 @@ class MatrixTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AdvisorBriefTests(unittest.TestCase):
+    def test_an_advisor_idea_goes_to_its_agent_with_the_report_it_came_from(self):
+        """The agent was started on the triage summary alone - one line about the owner in the third person,
+        no report - and could only ask for the report to be pasted (2026-09-23)."""
+        from taskuary import ingest
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        rep = s.add_message({'Channel': 'report', 'Subject': 'Automation ideas', 'FromName': 'Automation ideas', 'SentAt': '2026-09-23 08:00:00',
+                             'BodyText': 'Unknown sender bucket: 14 messages in 30 days, 4 became tasks.\n--- raw data ---\n{"x": 1}', 'Status': 'feed'})
+        post = s.add_message({'Channel': 'assistant', 'Subject': 'Advisor idea', 'FromName': 'Advisor', 'SentAt': '2026-09-23 09:00:00',
+                              'BodyText': 'I would add a classifier prompt for the unknown sender bucket.', 'Status': 'feed'})
+        s._exec("INSERT INTO idea (Key, Kind, Text, ActionJson, Status, MessageId) VALUES (?,?,?,?,?,?)",
+                ('k1', 'idea', 'add a classifier prompt', json.dumps({'mid': rep, 'type': 'task'}), 'open', post))
+        brief = ingest.advisor_brief(s, {}, post)
+        self.assertIn('I would add a classifier prompt', brief)
+        self.assertIn('14 messages in 30 days', brief); self.assertNotIn('raw data', brief)
+        self.assertIn('Write to the owner as "you"', brief)
+        mail = s.add_message({'Channel': 'email', 'Subject': 'hi', 'BodyText': 'hello', 'Status': 'routed'})
+        self.assertIsNone(ingest.advisor_brief(s, {}, mail))                  # anything else keeps its own ask

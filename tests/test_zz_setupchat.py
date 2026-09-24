@@ -120,12 +120,14 @@ class SetupInChatTests(unittest.TestCase):
     def test_the_composer_gets_the_stream_so_twelve_seconds_are_not_silent(self):
         """compose reads the real schema and costs seconds (measured 11.8s on the owner's connectors).
         The work is honest; doing it behind three silent dots was not - build_llm always took a trace."""
+        # the composer is the Assistant's own brain now (2026-09-24), so the stream rides concierge.brain
         seen = {}
-        def fake_build(store, *a, **kw): seen.update(kw); return lambda *x, **k: '{}'
-        with mock.patch('taskuary.llm.build_llm', side_effect=fake_build):
+        def fake_brain(store, *a, **kw): seen.update(kw); return lambda *x, **k: '{}'
+        with mock.patch.object(concierge, 'brain', side_effect=fake_brain):
             concierge._compose_llm(T.store(), trace='TRACE', cancel='CANCEL')
         self.assertEqual(seen.get('trace'), 'TRACE')
         self.assertEqual(seen.get('cancel'), 'CANCEL')
+        self.assertIsNone(seen.get('keep'))                  # never the chat's live conversation
 
 
 if __name__ == '__main__':

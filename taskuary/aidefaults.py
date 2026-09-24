@@ -147,6 +147,14 @@ def resolve(store, cfg, slot_key: str) -> dict:
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
                    default_hint=f'same as the coding model ({cli})',
                    owner=f'the {name} profile (light model)', owner_link='agents', cli=cli)
+        if slot_key == 'concierge_ai':
+            # what concierge.brain actually runs: its own override, else the light model, else the CLI's light default -
+            # this card said "the coding model, the expensive gear" while every turn ran on haiku (2026-09-24)
+            from .concierge import LIGHT_DEFAULT
+            own, dflt = str(settings.get(s['model_setting']) or ''), LIGHT_DEFAULT.get(cli, '')
+            if own: out.update(model=own, effort='')
+            out['default_hint'] = (f"{dflt[7:]} effort" if dflt.startswith('effort:') else dflt or f'the {cli} default') + ' - the light default'
+            return out
         if not light: out['note'] = f'no light model set - triage runs on the {cli} coding model, which is the expensive gear'
         return out
 

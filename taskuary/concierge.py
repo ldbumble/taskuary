@@ -220,7 +220,10 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
     if demo.enabled(): return demo.brain()
     p = pick(store)
     if not p: return None
-    if fast and p.startswith('cli:'):
+    # the quick API lane stands in for a CLI only when nobody CHOSE one: it used to override the owner's pick, so an
+    # Assistant set to the Claude CLI was answered by Azure on every turn and the settings page never said so
+    # (2026-09-24). The chosen CLI stays live between turns (clipool), which is what the lane was saving.
+    if fast and p.startswith('cli:') and not str(store.get_settings().get(AI_KEY) or '').strip():
         native = general._selected(store)[0] if any(o.get('type') != 'cli' for o in general.provider_options(store)) else ''
         if native and not native.startswith('cli:'):
             try: return llm_mod.build_llm(store, pick=native)
@@ -1493,6 +1496,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'],
                                                                     'op': prop['id'], 'tid': prop.get('tid'), 'ref': prop.get('ref')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+    # ...and ONE ROAD TO A REPORT. A CALL carried a config the chat model wrote itself - invented keys ("source",
+    # "inputs", "deliver": "always") - and the card read "Create the report - report.create" (the 2026-09-24 audit).
+    # The composer builds it from the owner's words, exactly as a DECIDE setup does; the model already said "report".
+    if kind == 'report.create':
+        return setup_turn(store, tid, text, text, item, actor, sorted_as='report')
     if kind == 'pipe.clear':
         sel = params.get('select') or {}
         hits = select_items(store, sel)
@@ -2229,7 +2237,13 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      'WORK DONE ON A WEBSITE IS ALWAYS INVESTIGATE: signing into a site or portal, reading or filling a page, '
                      'anything whose only road is a browser. Taskuary drives its own browser in a walk-through, beside the '
                      'owner, and keeps the sign-in they type there; there is no browser connector to add and connector_types '
-                     'has none. Never answer "connection" for a website, and never a report that would need one.')
+                     'has none. Never answer "connection" for a website, and never a report that would need one. '
+                     # "a morning report of our GitHub stars and Reddit mentions" became "add a GitHub connection" or a
+                     # walk-through: nothing here said a report can be an AI agent's own job (2026-09-24 audit)
+                     'A REPORT CAN BE AN AI AGENT DOING THE WORK: anything an agent can look up for itself - a public API, a '
+                     'repository\'s stars and traffic, a web or forum search, a summary of news - is a report the agent runs on '
+                     'its schedule, with no connection to add. When the owner asks for a report, answer "report" unless the only '
+                     'road is a site they must sign into; "connection" is for when they ask to connect a system.')
 
 
 def redact(text: str) -> str:
@@ -2242,7 +2256,9 @@ def redact(text: str) -> str:
 
 
 def _compose_llm(store, trace=None, cancel=None):
-    try: return llm_mod.build_llm(store, trace=trace, cancel=cancel)
+    # the Assistant's own brain builds what the Assistant proposes - it was the first API connector whatever the
+    # owner chose (2026-09-24); no `keep`, so a composer's JSON never lands in the chat's live conversation
+    try: return brain(store, trace=trace, cancel=cancel, fast=True)
     except Exception as e:
         logger.warning(f'concierge: no composer brain - {e}'); return None
 
@@ -2341,7 +2357,7 @@ def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead:
 
 
 def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: str = 'owner', llm=None,
-               trace=None, cancel=None) -> dict:
+               trace=None, cancel=None, sorted_as: str = None) -> dict:
     """A set-up asked for in the chat (PW-194): sorted by the model, gathered by the composer - its questions come back as
     questions and the next words answer them - and put in front of the owner as a proposal that the shared Reports /
     Connections road creates on the click. Secrets never pass through here (PW-196); digging is a walk-through (PW-197)."""
@@ -2354,6 +2370,7 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     if pending:
         ask, answers = pending['ask'], {'questions': pending.get('questions') or [], 'reply': text}
         sort = sort_setup(store, f"{ask}. The owner answered: {text}", cllm)
+    elif sorted_as: sort = {'kind': sorted_as, 'provider': None, 'why': ''}      # the chat model already named it
     else: sort = sort_setup(store, ask, cllm)
     if sort['kind'] == 'investigate':
         return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.")

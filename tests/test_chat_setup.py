@@ -72,6 +72,18 @@ class ReportSetupTests(unittest.TestCase):
         dock = general.dock_task(s)[0]['TaskId']
         self.assertTrue(any('is on the Reports tab and runs on its schedule' in (c.get('Body') or '') for c in general.chat_rows(s, dock)))
 
+    def test_a_report_the_chat_model_calls_for_is_built_by_the_composer_not_the_chat(self):
+        """The CALL carried the chat model's own config - invented keys - and the card read "report.create" (2026-09-24)."""
+        s = store(); seen = []
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        with mock.patch.object(concierge, '_compose_llm', return_value=composer(seen=seen)):
+            out = concierge.call_turn(s, dock, {'kind': 'report.create', 'params': {'config': {'source': 'agent', 'deliver': 'always'}}},
+                                      None, 'set up a report of open tasks by kind every Monday at 8')
+        p = out['proposal']
+        self.assertEqual(p['params']['config'], REPORT); self.assertEqual(p['params']['title'], 'Open tasks by kind')
+        self.assertFalse(any('sort one set-up' in sysm for sysm, _ in seen))       # the model already said "report"
+        self.assertNotIn('report.create', out['say'])
+
     def test_an_agent_report_leads_with_the_job_it_was_given(self):
         facts = concierge.report_facts({'type': 'agent', 'title': 'Stars', 'prompt': 'Count overnight GitHub stars on northwind/ledger',
                                         'ai_prompt': 'Flag any day under five', 'daily_at': '08:00'})

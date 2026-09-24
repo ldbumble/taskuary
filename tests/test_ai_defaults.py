@@ -230,3 +230,13 @@ class ApiTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class AssistantModelTests(unittest.TestCase):
+    def test_the_assistant_card_names_the_light_model_it_really_runs_on(self):
+        """It said "the coding model, the expensive gear" while every turn ran on haiku (2026-09-24)."""
+        s = _store(); s.set_setting('concierge_ai', 'cli:coder', 'owner')
+        r = aidefaults.resolve(s, {}, 'concierge_ai')
+        self.assertEqual(r['default_hint'], 'haiku - the light default'); self.assertEqual(r['note'], '')
+        s.set_setting('concierge_model', 'sonnet', 'owner')
+        self.assertEqual(aidefaults.resolve(s, {}, 'concierge_ai')['model'], 'sonnet')

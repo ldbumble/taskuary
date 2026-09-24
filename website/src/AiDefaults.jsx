@@ -60,6 +60,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
           </Typography>
           <Select size="small" displayEmpty value={picked ? slot.value : ""}
             onChange={(e) => onSave({ value: e.target.value })}
+            MenuProps={{ PaperProps: { sx: { maxHeight: 340 } } }}
             sx={{ minWidth: 250, fontSize: 12.5, bgcolor: "#fff" }}>
             {options.map((o) => (
               <MenuItem key={o.value} value={o.value} disabled={o.ready === false} sx={{ fontSize: 12.5 }}>

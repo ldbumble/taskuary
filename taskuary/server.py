@@ -4120,6 +4120,16 @@ def brains():
              'kind': 'cli', 'ready': o['ready'],
              'models': climodels.catalog(o['cli'])['choices']}
             for o in hub_agents.cli_agent_options(store, preferred=preferred)]
+    # ...and every connected CLI no profile runs on. Only the profiles' CLIs were listed, so with every profile on
+    # claude, codex never appeared here while the hand-off picker (general.brain_options) offered it (2026-09-24)
+    from . import general
+    have = {o['label'].split(' (', 1)[0] for o in out if o['kind'] == 'cli'}
+    out += [{'value': o['pick'], 'label': o['label'], 'kind': 'cli', 'ready': True, 'models': climodels.catalog(o['cmd'])['choices']}
+            for o in general.brain_options(store) if o.get('connection') and o.get('cmd') not in have]
+    # An API provider with no key cannot be picked, and fifteen greyed rows made the menu taller than the page with
+    # the CLIs at the bottom (the owner, 2026-09-24: "drop down is too big"). One already in use stays listed.
+    used = {str(settings.get(k) or '') for k in ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')}
+    out = [o for o in out if o['kind'] != 'api' or o['ready'] or o['value'] in used]
     current = store.get_settings().get('triage_ai') or ''
     # Old settings named a type (connector:anthropic). Keep accepting that in llm.py, but
     # point the picker at the concrete instance it currently resolves to.

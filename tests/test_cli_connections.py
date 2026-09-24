@@ -130,3 +130,16 @@ def test_brain_api_lists_cli_tools_once_instead_of_every_profile_using_them():
         ('cli:coder', 'claude (your CLI)'),
         ('cli:codex', 'codex (your CLI)'),
     ]
+
+
+def test_brain_api_lists_a_connected_cli_no_profile_runs_on():
+    """Every profile on claude, codex connected: the Settings brain picker never offered codex (2026-09-24)."""
+    from fastapi.testclient import TestClient
+    from taskuary import agents, server
+    store = MemoryStore()
+    store.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+    with mock.patch.object(server, 'store', store), \
+         mock.patch.object(agents, 'connection_brains', lambda s: [('codex', {'cmd': 'codex'})]), \
+         mock.patch.object(agents, 'runs_here', lambda p: True):
+        choices = [(r['value'], r['label']) for r in TestClient(server.app).get('/api/brains').json()['data'] if r['kind'] == 'cli']
+    assert ('cli:codex', 'codex (your CLI)') in choices and len([c for c in choices if c[1].startswith('codex')]) == 1

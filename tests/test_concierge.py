@@ -573,6 +573,15 @@ class FastLaneTests(unittest.TestCase):
             self.assertEqual(concierge.brain(s, fast=True)(None, None), 'quick')
             self.assertTrue(b.called)
         self.assertEqual(concierge.pick(s), 'cli:coder')                     # the default voice is still the CLI
+        # ...but a CLI the owner CHOSE is not swapped for the connector: the Assistant set to Claude answered on
+        # Azure every turn (2026-09-24). The set-up composer rides the same chosen brain.
+        s.set_setting(concierge.AI_KEY, 'cli:coder', 'owner')
+        calls.clear()
+        with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make), mock.patch.object(concierge.llm_mod, 'build_llm', return_value=lambda *a, **k: 'quick') as b:
+            self.assertEqual(concierge.brain(s, fast=True)(None, None), 'Dana wrote on email.')
+            self.assertEqual(concierge._compose_llm(s)(None, None), 'Dana wrote on email.')
+            self.assertFalse(b.called)
+        self.assertEqual(calls, [None, None])                               # tools off either way
 
 
 class ReplyClosesTests(unittest.TestCase):

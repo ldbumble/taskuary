@@ -707,9 +707,9 @@ class ApiTests(unittest.TestCase):
         b = c.get('/api/brains').json()
         self.assertEqual(b['data'][0]['value'], '')                  # auto first
         anthropic_value = f"connector:{rows['anthropic']['ConnectorId']}"
-        self.assertIn(anthropic_value, [x['value'] for x in b['data']])
         self.assertIn('cli:coder', [x['value'] for x in b['data']])  # your coding CLI can be the brain
-        self.assertFalse(next(x for x in b['data'] if x['value'] == anthropic_value)['ready'])   # no key saved
+        # no key saved = not a choice: fifteen greyed rows buried the CLIs under the fold (2026-09-24)
+        self.assertNotIn(anthropic_value, [x['value'] for x in b['data']])
 
     def test_connector_api_accepts_named_instances_of_one_type(self):
         made = []

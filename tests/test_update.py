@@ -78,6 +78,17 @@ class TheSwapScript(unittest.TestCase):
         self.assertIn('taskuary-update.log', s)                         # the other machine leaves a verdict
         self.assertTrue(s.endswith('\r\n'))                              # batch wants CRLF
 
+    def test_every_relaunch_is_a_fresh_program_not_the_old_ones_child(self):
+        """The helper inherits the old exe's environment, and the new exe sits at the SAME path. Since
+        PyInstaller 6.9 that makes its bootloader think it is the old process's own child: it skips
+        unpacking and loads python312.dll from the old _MEI folder - which went when the old process
+        exited. "Failed to load Python DLL ... _MEIxxxx\\python312.dll" on the first run after Update."""
+        s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'),
+                               PureWindowsPath(r'C:\Apps\Taskuary.new.exe'), 4242, [])
+        reset = s.find('set "PYINSTALLER_RESET_ENVIRONMENT=1"')
+        self.assertGreater(reset, -1)
+        self.assertLess(reset, s.find('start "'))                      # before ALL three relaunches
+
     def test_no_arguments_leaves_no_trailing_space(self):
         s = update.swap_script(Path('T.exe'), Path('T.new.exe'), 1, [])
         self.assertIn('start "" /D "." "T.exe"\r\n', s)

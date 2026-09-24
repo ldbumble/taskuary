@@ -130,6 +130,12 @@ def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
     return '\r\n'.join([
         '@echo off',
         'setlocal',
+        # This batch carries the OLD exe's environment, and the new build lands at the same path.
+        # PyInstaller >= 6.9 reads that pair as "I am my own onefile child", skips unpacking, and
+        # looks for python312.dll in the old _MEI folder - deleted when the old process exited.
+        # The first run after Update died on "Failed to load Python DLL" (an owner's machine,
+        # 2026-09-24). This variable is PyInstaller's own switch for "start as a new program".
+        'set "PYINSTALLER_RESET_ENVIRONMENT=1"',
         f'set "update_log={log}"',
         '> "%update_log%" echo update helper started %date% %time%',
         'set /a waited=0',

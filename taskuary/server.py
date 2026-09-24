@@ -527,10 +527,12 @@ def tasks(status: str = None, active: bool = False, q: str = None):
     # the FULL session payload (including git status and witness reconciliation) for every task;
     # with hundreds of tasks that made Tasks and Board wait behind repository I/O.
     sessions = {s['taskId']: s for s in hub_term.live_sessions(tail=0, details=False) if s.get('taskId')}
-    # WHAT THE WORK RAIL SHOWS, THE TASKS TAB SHOWS (the owner, 2026-09-24: "if task is on work rail it should be in
-    # tasks tab regardless of when it was"): an agent's result from yesterday was on the rail and cut from Done as old
-    rail = _rail_tids()
-    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books), 'OnRail': t['TaskId'] in rail,
+    # WHAT THE WORK RAIL SHOWS - OR SHOWED YOU TODAY - THE TASKS TAB AND THE BOARD SHOW (the owner, 2026-09-24: "if task
+    # is on work rail it should be in tasks tab regardless of when it was" / "if it interacted today with work it should
+    # stay on the done tab, same in board columns"): an agent's result from yesterday was cut from Done as old, and once
+    # read it left the rail and every list with it
+    rail = _rail_tids() | store.worked_today_task_ids()
+    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books), 'OnWorkToday': t['TaskId'] in rail,
                       'Session': sessions.get(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented}
@@ -550,7 +552,7 @@ def _rail_tids() -> set:
         if key: rows += [i for i in funnel.full_items(store) or [] if i.get('key') == key or key in (i.get('aliases') or [])]
         return {int(i['tid']) for i in rows if i.get('tid')}
     except Exception as e:
-        logger.warning(f'tasks: the rail could not be read for OnRail: {e}'); return set()
+        logger.warning(f'tasks: the rail could not be read for OnWorkToday: {e}'); return set()
 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):

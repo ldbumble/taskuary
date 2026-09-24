@@ -1563,6 +1563,14 @@ class SQLiteStore:
             p.extend([pat] * 18)
         return where, p
 
+    def worked_today_task_ids(self) -> set:
+        """Tasks the owner handled on the work rail today - put on the table, passed or settled there. Read from the
+        walk's own marks, not the read receipts: a receipt is kept once per version of an item, so when Taskuary had
+        already read its own words the owner's look wrote nothing and the task seemed untouched."""
+        return {int(r['LocalId']) for r in self._rows(
+            "SELECT DISTINCT m.LocalId FROM funnel_state f JOIN processing_member m ON f.Key='processing:'||m.ItemId "
+            "WHERE m.EntityKind='task' AND m.RetiredAt IS NULL AND f.By IN ('owner','you') "
+            "AND f.At >= date('now','localtime')") if str(r['LocalId']).isdigit()}
     def list_tasks(self, status=None, active_only=False, q=None, also=()):
         """Task rows, each carrying its latest review, run and handover note.
 

@@ -1014,6 +1014,7 @@ class MemoryTests(unittest.TestCase):
         here = funnel.next_item(s, key)
         self.assertEqual((here['kind'], here['lane']), ('agentdone', 'report'))
         self.assertFalse([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t])  # read: not waiting
+        self.assertIn(t, s.worked_today_task_ids())      # ...but handled on the rail today: the Tasks tab and Board keep it
         # what the rail shows the Tasks tab shows, however long ago it closed ("regardless of when it was")
         s._exec('UPDATE task SET ClosedAt=?, UpdatedAt=? WHERE TaskId=?', (ago(days=2), ago(days=2), t))
         self.assertNotIn(t, [x['TaskId'] for x in s.list_tasks(active_only=True)])

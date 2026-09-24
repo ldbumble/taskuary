@@ -435,7 +435,8 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
           // ticked off in Tasks, never came through here - it lives in Tasks, not on this board.
           const agentWork = (t) => t.HadAgent || t.Kind === "coding" || t.Kind === "setup" || !!t.Session;
           const cards = tasks.filter((t) => laneOf(t, live) === col.key
-            && (col.key !== "done" || (String(t.ClosedAt || t.UpdatedAt || "").startsWith(today) && t.Kind !== "reply" && agentWork(t))));
+            // ...or finished earlier and handled on the work rail today (the owner, 2026-09-24: "same in board columns")
+            && (col.key !== "done" || ((String(t.ClosedAt || t.UpdatedAt || "").startsWith(today) || t.OnWorkToday) && t.Kind !== "reply" && agentWork(t))));
           // rank mode: the Queued lane reads top-down in the order the funnel will take them
           if (col.key === "queued") cards.sort((a, b) => (b.Queued?.value ?? 0.5) - (a.Queued?.value ?? 0.5));
           return (
@@ -455,7 +456,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                   border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />
               </Box>
               {col.key === "done" && <Typography variant="caption" sx={{ display: "block", color: FAINT, fontSize: 10, px: 0.4, mb: 0.85, lineHeight: 1.3 }}>
-                Today only — older finished work lives in Tasks, reopenable any time.
+                Finished today, or handled on the work rail today — older finished work lives in Tasks, reopenable any time.
               </Typography>}
               {!cards.length && <Empty>Nothing here.</Empty>}
               {cards.map((t) => {

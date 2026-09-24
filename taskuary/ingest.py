@@ -1273,6 +1273,14 @@ def _secs(a: str, b: str) -> float:
     except (TypeError, ValueError): return float('inf')
 
 
+def is_ack(store, m: dict) -> bool:
+    """Taskuary's own chat acknowledgement (_ack_chat): the `ack:` row it files, or - on a channel that hands
+    our sends back as context (ECHOES) - the echo, which carries the acknowledgement's exact words."""
+    if str(m.get('ExternalId') or '').startswith('ack:'): return True
+    text = (store.get_settings().get('chat_ack_text') or ACK_DEFAULT).strip()
+    return bool(text) and str(m.get('BodyText') or '').strip() == text
+
+
 def is_ours(m: dict) -> bool:
     """A line WE sent: the owner's own reply, wherever they typed it (channels.ingest_own_message
     stores those as `context`), or one Taskuary sent itself."""

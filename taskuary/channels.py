@@ -728,6 +728,10 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
     conv, sent_at = sent.get('ConversationId'), sent.get('SentAt')
     if not conv or not sent_at:
         return []
+    # Taskuary's own "On it - I'll get back to you here." promises the answer; it is not one. Filed as the
+    # owner's line (or echoed back as one on Teams), it retired the very draft it promised (2026-09-24, TQ-0731)
+    from .ingest import is_ack
+    if is_ack(store, sent): return []
     stale = [rv for rv in store.list_reviews('pending')
              if rv.get('TaskId') == tid and rv.get('Kind') != 'action'
              and rv.get('ConversationId') == conv

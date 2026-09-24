@@ -19,7 +19,8 @@ test("each control carries the caption that names its effect on task versus agen
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
     // was named for (2026-09-22), so the caption says what the press does
-    ["{replyPrimary}", "Drafts the reply here, from this task's own context. Nothing is sent until you approve it."],
+    // ...and while the AI writes it the label says "Drafting…" (2026-09-24)
+    ['{openingReply ? "Drafting…" : replyPrimary}', "Drafts the reply here, from this task's own context. Nothing is sent until you approve it."],
     ["Ask sender", "nothing is sent now."],
     ["Review changes", "Nothing is approved or committed here."],
   ]) {

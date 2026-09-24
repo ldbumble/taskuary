@@ -201,11 +201,15 @@ def answered_elsewhere(store, msg: dict, task_id: int):
         other = str(row.get('SourceName') or '').strip()
         return (str(row.get('Channel') or '').strip().lower() == channel
                 and (other.casefold() == source.casefold() if channel == 'email' else other == source))
-    from .ingest import is_ours
+    from .ingest import is_ack, is_ours
     latest = store.last_inbound_on_task(task_id) or msg
     cut = max(str(msg.get('SentAt') or ''), str(latest.get('SentAt') or ''))
+    # ...and Taskuary's own "On it - I'll get back to you here." is a promise that an answer is COMING, never the
+    # answer. Counted as one, every chat task read as already answered: the agent's finished reply was dropped and
+    # the task closed with the sender waiting (TQ-0731, the owner, 2026-09-24: "this task closed and did not
+    # create pending reply?")
     own = [m for m in store.thread_messages(conv)
-           if same_source(m) and is_ours(m) and str(m.get('SentAt') or '') > cut]
+           if same_source(m) and is_ours(m) and not is_ack(store, m) and str(m.get('SentAt') or '') > cut]
     return own[-1] if own else None
 
 

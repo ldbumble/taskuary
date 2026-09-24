@@ -23,3 +23,9 @@ test("the Start panel shows the repository and pins it before the session starts
   assert.match(view, /api\.put\(`\/api\/tasks\/\$\{id\}\/repo`, \{ repo: startRepo/);
   assert.match(view, /disabled=\{!!startingAgent \|\| startRepo === ""\}/);
 });
+
+test("both reply buttons spin and say Drafting while the AI writes the draft", () => {
+  const view = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  assert.equal((view.match(/\{openingReply \? "Drafting…" : replyPrimary\}/g) || []).length, 2);
+  assert.match(view, /startIcon=\{openingReply \? <CircularProgress size=\{11\} \/>/);
+});

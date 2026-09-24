@@ -217,3 +217,28 @@ class SupersedeTests(Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OurAcknowledgementIsNotAnAnswerTests(Base):
+    """TQ-0731 (the owner, 2026-09-24: "this task closed and did not create pending reply?"): Taskuary's own
+    "On it - I'll get back to you here." was filed as the owner's line, so the agent's finished reply was
+    judged already answered and dropped, and the task closed with the sender waiting."""
+    def _ack(self, tid, conv='teams:robin', ext='ack:1', text=ingest.ACK_DEFAULT):
+        return self.s.get_message(self.s.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'teams',
+                                                       'SourceName': 'Robin', 'FromName': 'You', 'SentAt': stamp(), 'BodyText': text,
+                                                       'Status': 'context', 'Direction': 'out'}))
+
+    def test_the_acknowledgement_is_not_the_owner_having_answered(self):
+        from taskuary import coder
+        tid, first, rid = teams_task(self.s)
+        self._ack(tid)
+        self.assertIsNone(coder.answered_elsewhere(self.s, self.s.get_message(first), tid))
+        self._ack(tid, ext='teams:echo')                              # the channel echoing it back, same words
+        self.assertIsNone(coder.answered_elsewhere(self.s, self.s.get_message(first), tid))
+
+    def test_the_acknowledgement_never_retires_a_draft_but_a_real_answer_does(self):
+        tid, first, rid = teams_task(self.s)
+        channels.retire_draft_answered_elsewhere(self.s, tid, self._ack(tid))
+        self.assertEqual(self.s.get_review(rid)['Status'], 'pending')
+        channels.retire_draft_answered_elsewhere(self.s, tid, self._ack(tid, ext='teams:mine', text='done, reset it'))
+        self.assertEqual(self.s.get_review(rid)['Status'], 'superseded')

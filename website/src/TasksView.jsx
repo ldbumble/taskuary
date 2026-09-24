@@ -746,6 +746,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // the envelope on the reply, read from the same Deliver blob Review reads
   const replyOf = pendingReview || sentReview;
   const replyCc = deliveryCc(replyOf), replyFiles = deliveryFiles(replyOf);
+  // the AI writes the draft inside the request (server.open_reply), which can take a while: both buttons spin and say
+  // "Drafting…" until it lands (the owner, 2026-09-24: "it should say spinning as it's waiting on ai to draft reply")
   const replyPrimary = pendingReview ? "Open the draft" : sentReview ? "Write another" : "Write reply";
   const checklist = detail?.checklist || [];
   const checklistPct = checklist.length ? (checklist.filter((i) => i.done).length / checklist.length) * 100 : 0;
@@ -1676,9 +1678,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
-                            startIcon={<ForwardToInboxIcon sx={{ fontSize: 14 }} />}
+                            startIcon={openingReply ? <CircularProgress size={11} /> : <ForwardToInboxIcon sx={{ fontSize: 14 }} />}
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
-                            {replyPrimary}</Button>
+                            {openingReply ? "Drafting…" : replyPrimary}</Button>
                           <Tooltip title="Ask sender — a question waits on the task for your approval">
                             <IconButton size="small" sx={{ color: "#9a7444" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -1702,7 +1704,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                               sx={primaryBtn}
                               startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
                               title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
-                              onClick={() => openReply(true)}>{replyPrimary}</Button>
+                              onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
                           )}
                           <Button size="small" variant="outlined" sx={barBtn}
                             startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#9a7444" }} />}

@@ -114,9 +114,11 @@ def test_capture_is_deterministic_strict_and_does_not_call_mutating_pile_or_anno
         assert (value.cx.total_changes, value._writes) == writes
         value.update_message_body(mid, "x" * 5000 + " changed ending")
         # One source row, its durable dirty-generation trigger, and the rail's dirty-row trigger
-        # (processing_rail). The subsequent selection read must still perform exactly zero writes.
+        # (processing_rail) - plus the message search index re-filing the body, whose shadow-table
+        # writes depend on the text and the sqlite build, so they are a floor, not a count.
+        # The subsequent selection read must still perform exactly zero writes.
         after_update = (value.cx.total_changes, value._writes)
-        assert after_update == (writes[0] + 3, writes[1] + 1)
+        assert after_update[0] >= writes[0] + 3 and after_update[1] == writes[1] + 1
         changed = capture_selection(value, now=NOW)
 
     assert (first.revision, first.member_keys) == (repeated.revision, repeated.member_keys)

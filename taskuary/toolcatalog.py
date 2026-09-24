@@ -162,7 +162,17 @@ def block(store=None) -> str:
 # A read never moves what is on the table: asking about another task must not hijack the walk.
 READS = {
     'task.read':        'everything on one task - its summary, status, the messages on it, what agents said and did. `ref`: TQ-0401 (or `id`)',
-    'timeline.search':  'find rows anywhere in the history, however old - takes the same SELECT fields below, plus `limit`. Returns refs, senders, subjects and dates; read one with task.read',
+    'timeline.search':  ('find messages anywhere in the history, however old - takes the same SELECT fields below, plus `limit`; here '
+                         '`contains` matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, '
+                         'subjects and dates; open one with message.read or its task with task.read'),
+    # OPEN WORK, ONE MESSAGE, ONE PERSON, THE DOCS (lookups.py). "What's open", "what did that mail
+    # actually say", "what do we have with her", "how do I set up X" had no read at all (2026-09-24).
+    'tasks.list':       'the tasks - `status`: open (the default: open, in progress or waiting) | done | all; `contains`: words; `limit`',
+    'message.read':     'one message in full - who, when, its task and the whole text. `mid`: the m-number timeline.search printed',
+    'sender.read':      ('one person at a glance - how often they write, their recent messages, their open tasks, when you last '
+                         'wrote back and what the owner told you to remember about them. `who`: a name or an address'),
+    'docs.search':      ("how Taskuary works and how to set it up (the help pages), and the owner's own docs (SOUL, TRIAGE, "
+                         'COUNSEL...). `query`: the words. Use it for any "how do I", "what does X do" or "why did it" about the app'),
     'report.read':      'a report or workflow and its last runs - what it said, whether it failed and why, and its source_id. `title`: part of its name (or `source_id`)',
     # THE APP ITSELF, by name (appfacts). Asked from a chat to "run me the AR report" the assistant had
     # no list of reports at all; "is Teams connected" had no answer but a guess (the owner, 2026-09-18).
@@ -194,7 +204,8 @@ def valid(kind: str, params: dict) -> str:
         need = {'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': (),
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
-                'knowledge.search': ('query',)}[kind]
+                'knowledge.search': ('query',), 'tasks.list': (), 'message.read': ('mid', 'id'),
+                'sender.read': ('who', 'sender'), 'docs.search': ('query',)}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
         return ''

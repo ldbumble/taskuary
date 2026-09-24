@@ -1329,14 +1329,18 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
     who, cat = want('sender'), want('category')
     words = [w for w in tokens(str(sel.get('contains') or ''))]
     older = sel.get('older_than_hours')
-    out = []
-    for r in store.feed(limit=4000, days=int(sel.get('days') or 3650)):
+    out, days = [], int(sel.get('days') or 3650)
+    # the index reaches every message, body included, best match first; without one, the newest 4000 by subject
+    ids = store.message_search(words, who, days) if (words or who) else None
+    if ids is None: rows = store.feed(limit=4000, days=days)
+    else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids), key=lambda r: rank[r['MessageId']])
+    for r in rows:
         if r.get('Channel') == 'assistant': continue
         hay = f"{r.get('FromName') or ''} {r.get('FromEmail') or ''}".lower()
         if who and who not in hay: continue
         if cat and str(r.get('Category') or '').lower() != cat: continue
         subj = str(r.get('Subject') or '')
-        if words and not all(w in set(tokens(subj + ' ' + hay)) for w in words): continue
+        if ids is None and words and not all(w in set(tokens(subj + ' ' + hay)) for w in words): continue
         if older:
             from datetime import datetime as _dt
             d = funnel._dt(r.get('SentAt'))
@@ -1439,8 +1443,9 @@ def read_op(store, kind: str, params: dict) -> str:
         limit = max(1, min(int(p.get('limit') or 12), 40))
         hits = search_timeline(store, sel, limit)
         if not hits: return 'Nothing in the history matches that.'
-        return NEWLINE.join(f"{h['ref'] or '-'} {h['when'][:16]} {h['who']}: {_cut(h['title'], 120)}" for h in hits)
-    return f'{kind} is not a look-up this app has.'
+        return NEWLINE.join(f"m{h['mid']} {h['ref'] or '-'} {h['when'][:16]} {h['who']}: {_cut(h['title'], 120)}" for h in hits)
+    from . import lookups
+    return lookups.read(store, kind, p)
 
 
 def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:

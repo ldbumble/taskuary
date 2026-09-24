@@ -365,6 +365,23 @@ CREATE TABLE IF NOT EXISTS lore_vote (LoreId INTEGER, Actor TEXT, Delta INTEGER,
 # the knowledge base's search index (knowledge.py). A VIRTUAL table, kept out of SCHEMA: a Python
 # built without FTS5 must still open the store - search then falls back to LIKE over kb_chunk.
 KB_FTS = 'CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(Text, ChunkId UNINDEXED, tokenize="porter unicode61")'
+# Every message ever received, searchable by its words (the assistant's timeline.search). External
+# content: the index holds no second copy of the mail, and the triggers keep it in step for every
+# process that writes, since they live in the database rather than in this file. Only the fields
+# a person searches by - never Status, which changes on every pass and would re-index for nothing.
+MSG_FTS = ('CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(Subject, FromName, FromEmail, BodyText, '
+           "content='message', content_rowid='MessageId', tokenize=\"porter unicode61\")")
+_MSG_COLS = 'Subject, FromName, FromEmail, BodyText'
+_MSG_NEW = 'new.MessageId, new.Subject, new.FromName, new.FromEmail, new.BodyText'
+_MSG_OLD = "'delete', old.MessageId, old.Subject, old.FromName, old.FromEmail, old.BodyText"
+MSG_FTS_TRIGGERS = (
+    f'CREATE TRIGGER IF NOT EXISTS message_fts_ai AFTER INSERT ON message BEGIN '
+    f'INSERT INTO message_fts(rowid, {_MSG_COLS}) VALUES ({_MSG_NEW}); END',
+    f'CREATE TRIGGER IF NOT EXISTS message_fts_ad AFTER DELETE ON message BEGIN '
+    f'INSERT INTO message_fts(message_fts, rowid, {_MSG_COLS}) VALUES ({_MSG_OLD}); END',
+    f'CREATE TRIGGER IF NOT EXISTS message_fts_au AFTER UPDATE OF {_MSG_COLS} ON message BEGIN '
+    f'INSERT INTO message_fts(message_fts, rowid, {_MSG_COLS}) VALUES ({_MSG_OLD}); '
+    f'INSERT INTO message_fts(rowid, {_MSG_COLS}) VALUES ({_MSG_NEW}); END')
 
 # CREATE TABLE IF NOT EXISTS is a no-op on an existing db; these are not. IF NOT EXISTS
 # so a second open (desktop + web, or a restart) does not raise. Named so EXPLAIN QUERY
@@ -881,6 +898,7 @@ class SQLiteStore:
             try: self.cx.execute(KB_FTS); self.kb_fts = True
             except sqlite3.OperationalError as e:
                 self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
+            self.msg_fts = self.kb_fts and self._open_msg_fts()
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
@@ -1785,6 +1803,15 @@ class SQLiteStore:
     def messages_from(self, email, since, limit=8):
         return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','history','skipped') AND SentAt>=? "
                           'ORDER BY SentAt DESC LIMIT ?', (email.lower(), since, limit))
+    def senders_like(self, text, limit=6) -> list:
+        """Everyone who ever wrote in whose name or address holds `text`, the most frequent first."""
+        return self._rows("SELECT lower(FromEmail) Email, MAX(FromName) Name, COUNT(*) N, MIN(SentAt) First, MAX(SentAt) Last FROM message "
+                          "WHERE IFNULL(Direction,'in')<>'out' AND Status<>'context' AND IFNULL(FromEmail,'')<>'' "
+                          "AND lower(IFNULL(FromName,'') || ' ' || FromEmail) LIKE ? GROUP BY lower(FromEmail) ORDER BY N DESC LIMIT ?",
+                          (f'%{str(text).strip().lower()}%', limit))
+    def open_tasks_from(self, email) -> list:
+        return self._rows("SELECT DISTINCT t.TaskId, t.Title, t.Status, t.Kind FROM task t JOIN message m ON m.TaskId=t.TaskId "
+                          "WHERE lower(m.FromEmail)=? AND t.Status IN ('open','in_progress','waiting') ORDER BY t.TaskId DESC", (email.lower(),))
     def own_replies_to(self, email, since, limit=5):
         """The owner's own words on this sender's threads - 'context' rows ride inside the chains."""
         return self._rows("SELECT * FROM message WHERE Status='context' AND SentAt>=? AND ConversationId IN "
@@ -4212,6 +4239,7 @@ class SQLiteStore:
         one of them - a doc that half calls you by name and half calls you John Smith."""
         return render_doc(self.get_doc(name) or '', self.owner())
     def get_doc_row(self, name): return self._one('SELECT Name, Content, UpdatedBy, UpdatedAt FROM doc WHERE Name=?', (name,))
+    def doc_names(self) -> list: return [r['Name'] for r in self._rows('SELECT Name FROM doc ORDER BY Name')]
     def github_permissions(self) -> tuple:
         """(use_github_as_tracker, agents_may_push) - read from the GitHub CONNECTOR, where the
         GitHub decisions belong, falling back to the legacy settings so nothing regresses.
@@ -4294,7 +4322,7 @@ class SQLiteStore:
     NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT).replace('{theirs}', THEIR_TURN)
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None,
-             live_state=_LIVE_UNSET):
+             live_state=_LIVE_UNSET, ids=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt, m.CreatedAt IngestedAt,
                        m.ConversationId,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief, m.TriageTitle,
@@ -4335,6 +4363,7 @@ class SQLiteStore:
             q += f" AND m.Channel IN ({','.join('?' * len(chans))})"
             p += chans
         if source: q += ' AND m.SourceName=?'; p.append(source)   # e.g. one mailbox of several
+        if ids is not None: q += f" AND m.MessageId IN ({','.join(str(int(i)) for i in ids) or 'NULL'})"
         q += f' ORDER BY m.SentAt DESC, m.MessageId DESC LIMIT {int(limit)} OFFSET {int(offset)}'
         rows = self._rows(q, p)
         # the one-word tag every row wears (categories.py) - decided here, once, so the feed,
@@ -4553,6 +4582,30 @@ class SQLiteStore:
     def kb_docs(self, cid=None) -> list:
         w, p = (' WHERE ConnectorId=?', (cid,)) if cid else ('', ())
         return self._rows(f'SELECT * FROM kb_doc{w} ORDER BY Source, Path', p)
+    def _open_msg_fts(self) -> bool:
+        """The message index, and on the first open its backfill (a one-off: ~10k mails is a second or two)."""
+        try:
+            fresh = not self.cx.execute("SELECT 1 FROM sqlite_master WHERE name='message_fts'").fetchone()
+            self.cx.execute(MSG_FTS)
+            for sql in MSG_FTS_TRIGGERS: self.cx.execute(sql)
+            if fresh: self.cx.execute("INSERT INTO message_fts(message_fts) VALUES('rebuild')")
+            return True
+        except sqlite3.OperationalError as e:
+            logger.warning(f'message search index unavailable - the timeline search scans instead: {e}'); return False
+    def message_search(self, words, sender='', days=3650, limit=400) -> list:
+        """MessageIds, best match first: every word somewhere in the subject, the sender or the body,
+        over the whole history. None when there is no index - the caller scans the feed instead."""
+        if not getattr(self, 'msg_fts', False): return None
+        terms = ' '.join('"' + w.replace('"', '') + '"' for w in words if w.replace('"', ''))
+        where, p = ["m.CreatedAt >= datetime('now', 'localtime', ?)"], [f'-{int(days)} days']
+        if sender:
+            where.append("lower(IFNULL(m.FromName,'') || ' ' || IFNULL(m.FromEmail,'')) LIKE ?"); p.append(f'%{sender.lower()}%')
+        if terms:
+            q = (f"SELECT m.MessageId FROM message_fts JOIN message m ON m.MessageId=message_fts.rowid "
+                 f"WHERE message_fts MATCH ? AND {' AND '.join(where)} ORDER BY bm25(message_fts) LIMIT ?")
+            return [r['MessageId'] for r in self._rows(q, (terms, *p, limit))]
+        return [r['MessageId'] for r in self._rows(f"SELECT m.MessageId FROM message m WHERE {' AND '.join(where)} "
+                                                   'ORDER BY m.SentAt DESC LIMIT ?', (*p, limit))]
     def kb_search(self, fts_query: str, limit: int = 8, cid=None) -> list:
         """Passages ranked by bm25 (FTS5) with a snippet around the matches; one hit per document,
         the best passage of each. `fts_query` is FTS5 syntax - knowledge._query builds it safely."""

@@ -457,3 +457,18 @@ class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_connected_cli_with_no_worker_profile_is_an_ai_that_is_set_up():
+    """A tester's install said "Set up an AI" while triage ran on a connected CLI (the owner, 2026-09-24:
+    "It says AI not set up but it is"). The brain is found through agents.agent_row - a CLI CONNECTION is a brain
+    even with no worker profile - and the checklist has to look it up the same way."""
+    from unittest import mock
+    from taskuary import config, setup
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    s.set_setting('triage_ai', 'cli:codex', 'test')
+    assert s.get_agent('codex') is None                                  # no worker profile of that name
+    with mock.patch.object(config, 'load', return_value={'cli_connections': {'codex': {'cmd': 'codex'}}}):
+        ai = setup._ai(s)
+    assert ai and ai.get('Type') == 'cli' and 'codex' in ai.get('Name', '')

@@ -47,7 +47,10 @@ def _ai(store) -> dict:
     test for it too."""
     pick = str(store.get_settings().get('triage_ai') or '')
     if pick.startswith('cli:'):
-        row = store.get_agent(pick[4:])
+        # the SAME lookup the brain is built with (agents.agent_row): a connected CLI with no worker profile is a
+        # brain too, and store.get_agent alone called it "not set up" while triage ran on it (2026-09-24)
+        from .agents import agent_row
+        row = agent_row(store, pick[4:])
         if row: return {'Name': f'{row["Name"]} (CLI)', 'Type': 'cli'}
     for c in store.list_connectors():
         if c['Type'] in AI_TYPES and c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'):

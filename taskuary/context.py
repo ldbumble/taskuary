@@ -140,6 +140,9 @@ def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
             who = 'THE OWNER' if m.get('Status') == 'context' else (m.get('FromName') or m.get('FromEmail') or '?')
             body = _short(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=1500)[0], 1500)
             line = f"--- {who} · {m.get('SentAt')} · {m.get('Channel')}\n{body}"
+            # ...with what came ATTACHED: a screenshot is often the whole message ("this is what I got")
+            atts = [a for a in (store.list_attachments(m['MessageId']) or []) if a.get('Path')]
+            if atts: line += '\n' + '\n'.join(f"  [attachment: {a.get('Name') or 'file'} ({a.get('ContentType') or '?'}) - {a['Path']}]" for a in atts)
             if used + len(line) > THREAD_CHARS: break
             thread.append(line); used += len(line)
         parts.append(f'## The whole thread ({len(allm)} messages, oldest first)\n' + '\n\n'.join(thread))

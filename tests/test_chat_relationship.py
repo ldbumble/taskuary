@@ -145,10 +145,12 @@ class FactsStillDecideTests(unittest.TestCase):
         self.s = MemoryStore()
         self.first = line(self.s, 'the agent isnt working on my dashboard', f'{TODAY} 16:35:00', verdict())
 
-    def test_a_line_typed_seconds_later_is_the_same_thought(self):
+    def test_a_line_typed_seconds_later_is_the_verdicts_to_place(self):
+        """No timing join (2026-09-24): a line seconds after the last is triaged, and `new` means its own task."""
         seen = []
-        out = line(self.s, 'i mean the new one', f'{TODAY} 16:35:40', verdict(relationship='new', seen=seen))
-        self.assertEqual((out['status'], out['task_id']), ('attached', self.first['task_id'])); self.assertEqual(seen, [])
+        out = line(self.s, 'also the setup page is wrong', f'{TODAY} 16:35:40', verdict(relationship='new', seen=seen))
+        self.assertEqual(out['status'], 'created'); self.assertNotEqual(out['task_id'], self.first['task_id'])
+        self.assertEqual(len(seen), 1)
 
     def test_an_answer_to_a_live_agent_is_never_split_off(self):
         seen = []

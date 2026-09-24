@@ -695,11 +695,31 @@ def bind_ext(t, ext_id: str) -> None:
     except Exception as e: logger.debug(f'could not file the session id for {t.sid}: {e}')
 
 
-def resume_seed(instruction: str = '') -> str:
+def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
     """What a reopened conversation is told. Not seed_text's dossier: the CLI still holds the task,
-    the messages and what it already did - repeating them invites it to start the job again."""
+    the messages and what it already did - repeating them invites it to start the job again.
+
+    ...but it does NOT hold what arrived AFTER its last run. Told only "carry on", the agent on TQ-0731 knew of
+    two later messages by their log lines and asked the owner for the details that were in their screenshots
+    (the owner, 2026-09-24: "claude did not get the rest of the messages"). The context file is rewritten now -
+    every message, every attachment path - and the seed says how many are new and where they are. The words
+    stay in the FILE: the seed rides a command line a tty clips at about 1024 bytes."""
     from .continuity import RESUME_PROMPT
-    return f'{RESUME_PROMPT}\n\n{instruction.strip()}' if str(instruction or '').strip() else RESUME_PROMPT
+    parts = [RESUME_PROMPT]
+    if store is not None and tid:
+        try:
+            from . import context as ctx
+            since = str((store.last_transcript(tid) or {}).get('CreatedAt') or '')
+            new = [m for m in store.list_messages(tid) if m.get('Status') != 'context' and m.get('Direction') != 'out'
+                   and str(m.get('SentAt') or '') > since] if since else []
+            cpath = ctx.write(store, tid)
+            if new and cpath:
+                n = len(new)
+                parts.append(f'NEW SINCE YOUR LAST RUN: {n} message{"" if n == 1 else "s"} - read {"it" if n == 1 else "them"} '
+                             f'and any attachments in {cpath} (the thread section) before you answer.')
+        except Exception as e: logger.debug(f'resume seed: the new messages could not be named - {e}')
+    if str(instruction or '').strip(): parts.append(instruction.strip())
+    return '\n\n'.join(parts)
 
 
 def agent_argv(profile: dict, model: str = None) -> list:
@@ -1741,7 +1761,7 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
             term = open_session(store, agent, tid, repo, continued_cwd, 0, 0, actor,
                                 model if i == 0 else None, resume=resume,
                                 brain=candidate or None,
-                                seed_fn=(lambda here: resume_seed(instruction)) if resume else
+                                seed_fn=(lambda here: resume_seed(instruction, store, tid)) if resume else
                                         (lambda here, r=repo: seed_text(store, tid, instruction, r, here)))
             chosen = candidate or cli_named(json.loads(row.get('Config') or '{}'))
             chain = chain[i:]

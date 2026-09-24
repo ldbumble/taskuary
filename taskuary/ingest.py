@@ -1242,7 +1242,6 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
 # them to a classifier before.
 CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage',
                  'mattermost', 'rocketchat', 'matrix', 'google_chat'}
-BURST_SECONDS = 120     # a line typed this soon after the last is the same sentence, finished
 
 
 def is_chat(msg: dict) -> bool:
@@ -1403,17 +1402,17 @@ def _open_task(store, tid):
 def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     """Where a chat line goes: (route dict, (verdict, fail) or None).
 
-    Two FACTS join without a model: a line typed within BURST_SECONDS of the room's last inbound
-    line is the same thought finished, and a line arriving while an agent is live on the room's
-    task is the round trip it asked for. Everything else is the one triage verdict's
+    One FACT joins without a model: a line arriving while an agent is live on the room's task is the
+    round trip it asked for (how soon a line follows the last is evidence for triage, never a join). Everything else is the one triage verdict's
     `relationship`, judged among this room's same-day lines (chat_candidates): continues/answers
     with a valid related line or task joins that task; new and uncertain open work of their own.
     The room id alone never joins (PW-018/PW-032); without a brain, nothing but the facts does."""
     cands = chat_candidates(store, msg)
-    last = next((c for c in reversed(cands) if c['who'] != 'you'), None)
-    if last and _open_task(store, last['task_id']) and _secs(store.get_message(last['id']).get('SentAt'), msg.get('sent_at')) <= BURST_SECONDS:
-        return ({'decision': 'attach', 'task_id': last['task_id'], 'score': 1.0, 'candidates': [],
-                 'reason': 'typed seconds after their last line - one thought, two messages'}, None)
+    # NO TIMING GATE. "Typed within two minutes of their last line" used to join without a model, and a second
+    # bug report sent 37 seconds after the first vanished into the first one's task - never triaged at all (the
+    # owner, 2026-09-24: "someone sent 3 bugs in whatsapp but triage combined them"). Triage reads the room's
+    # same-day lines WITH their times, so a line that finishes the last one still reads as `continues` - the
+    # verdict decides, not the clock.
     live = next((c['task_id'] for c in reversed(cands) if _open_task(store, c['task_id'])
                  and any(x['Status'] == 'running' for x in store.list_runs(c['task_id']))), None)
     if live:

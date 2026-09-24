@@ -54,13 +54,17 @@ class OneRoomManyJobs(unittest.TestCase):
         self.assertEqual(self.first['status'], 'created')
         self.assertEqual(len(self.s.list_tasks()), 1)
 
-    def test_a_line_typed_seconds_later_is_the_same_thought(self):
-        """People type in fragments. No model is asked, because this is not a judgement."""
+    def test_a_line_typed_seconds_later_is_judged_like_any_other(self):
+        """People type in fragments - and they also send a second bug 37 seconds after the first (the owner,
+        2026-09-24: "someone sent 3 bugs in whatsapp but triage combined them"). How soon a line follows is
+        evidence triage reads, never a join: a fragment it calls `continues` stays on the task, and one it calls
+        `new` opens its own."""
         seen = []
-        out = line(self.s, 'i mean the new one', '2026-09-02 16:35:40', brain(same=False, seen=seen))
-        self.assertEqual(out['status'], 'attached')
-        self.assertEqual(out['task_id'], self.first['task_id'])
-        self.assertEqual(seen, [])                        # nothing was asked of the brain
+        out = line(self.s, 'i mean the new one', '2026-09-02 16:35:40', brain(same=True, seen=seen))
+        self.assertEqual((out['status'], out['task_id']), ('attached', self.first['task_id']))
+        self.assertEqual(len(seen), 1)                    # triage was asked
+        out = line(self.s, 'and the setup page says AI is not set up', '2026-09-02 16:35:55', brain(same=False))
+        self.assertEqual(out['status'], 'created'); self.assertNotEqual(out['task_id'], self.first['task_id'])
 
     def test_a_separate_ask_gets_its_own_task(self):
         seen = []

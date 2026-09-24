@@ -1779,3 +1779,21 @@ class InlineVerbTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SecondsApartIsNotOneThoughtTests(unittest.TestCase):
+    def test_a_second_bug_typed_seconds_later_is_triaged_and_becomes_its_own_task(self):
+        """The owner, 2026-09-24: "someone sent 3 bugs in whatsapp but triage combined them". The third arrived
+        37 seconds after the second and joined its task by a two-minute timing rule, never triaged. Triage
+        judges every line now; one it calls `new` opens its own task however soon it came."""
+        s = store()
+        def line(body, secs, rel):
+            llm = lambda system, user, **kw: json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'a bug', 'relationship': rel})
+            return ingest.ingest_message(s, {'external_id': f'wa:{secs}', 'channel': 'whatsapp', 'conversation_id': 'wa:tess',
+                                             'subject': 'WhatsApp with Tess', 'from_name': 'Tess', 'from_email': None,
+                                             'sent_at': ago(minutes=secs / 60), 'body': body, 'source_name': 'Tess'}, llm=llm)
+        with mock.patch.object(ingest, '_spawn'):
+            a = line('the update fails with a DLL error', 60, 'new')
+            b = line('and the setup page says AI is not set up but it is', 23, 'new')
+        self.assertEqual(a['status'], 'created'); self.assertEqual(b['status'], 'created')
+        self.assertNotEqual(a['task_id'], b['task_id'])

@@ -196,3 +196,25 @@ def test_the_task_detail_says_which_session_can_be_continued(tmp_path):
         detail = TestClient(server.app).get(f'/api/tasks/{tid}').json()
     assert detail['resumable']['agent'] == 'claude' and detail['resumable']['sid'] == 'pane-1'
     assert 'claude-thread' not in json.dumps(detail)     # the id is ours to use, not the page's to show
+
+
+def test_a_resumed_session_is_told_what_arrived_since_its_last_run_and_where_the_screenshots_are(tmp_path):
+    """TQ-0731 (the owner, 2026-09-24: "claude did not get the rest of the messages"): two messages with
+    screenshots arrived after the agent's run; continuing the session said only "carry on", and the context file
+    was the one written when the task began. It is rewritten on resume - attachments listed with their paths -
+    and the seed says how many messages are new."""
+    store = MemoryStore(); tid = store.create_task({'Title': 'Update fails', 'Kind': 'coding', 'Status': 'open'}, 'o')
+    first = store.add_message({'TaskId': tid, 'ExternalId': 'w1', 'Channel': 'whatsapp', 'ConversationId': 'wa:gabi',
+                               'FromName': 'Gabi', 'SentAt': '2026-09-24 14:53:24', 'BodyText': 'When updating, this is what I got', 'Status': 'routed'})
+    store._exec("INSERT INTO transcript (TaskId, Sid, Agent, Text, CreatedAt) VALUES (?, 's1', 'coder', 'did the work', '2026-09-24 14:57:40')", (tid,))
+    later = store.add_message({'TaskId': tid, 'ExternalId': 'w2', 'Channel': 'whatsapp', 'ConversationId': 'wa:gabi',
+                               'FromName': 'Gabi', 'SentAt': '2026-09-24 15:00:47', 'BodyText': 'It says AI not set up but it is', 'Status': 'routed'})
+    shot = tmp_path / 'shot.jpg'; shot.write_bytes(b'jpg')
+    store.add_attachment({'MessageId': later, 'Name': 'shot.jpg', 'ContentType': 'image/jpeg', 'Path': str(shot), 'Size': 3})
+    with mock.patch.dict(os.environ, {'TASKUARY_HOME': str(tmp_path)}):
+        seed = terminal.resume_seed('', store, tid)
+    assert continuity.RESUME_PROMPT in seed
+    assert 'NEW SINCE YOUR LAST RUN: 1 message' in seed
+    cpath = seed.split(' in ', 1)[1].split(' (the thread section)')[0]
+    text = open(cpath, encoding='utf-8').read()
+    assert 'It says AI not set up but it is' in text and str(shot) in text

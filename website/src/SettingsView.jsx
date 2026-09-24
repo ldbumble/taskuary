@@ -951,8 +951,14 @@ export default function SettingsView({ onNavigate }) {
   // names BOTH the page and the section. The rail cannot follow the click any more - you scroll
   // out of Configuration and into Routing policies without clicking anything - so it follows the
   // document instead, and the page you are reading is the one it highlights.
+  // NOT WHILE A CLICK IS STILL FLYING. The smooth scroll to Docs passes every heading between here
+  // and there, and the spy named each one as it went by - so the rail folded Docs shut, opened the
+  // pages in between and only opened Docs again on landing: two paints for one click (the owner,
+  // 2026-09-24: "it repaints twice ... it should open the sub menu items right away"). The click
+  // already said where you are going; the spy takes over again, and measures once, when it lands.
   useEffect(() => {
     if (q) { setHere(""); return; }
+    if (jump) return;
     let queued = false;
     const measure = () => {
       queued = false;
@@ -974,7 +980,7 @@ export default function SettingsView({ onNavigate }) {
     measure();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [q, sectionsOf]);
+  }, [q, jump, sectionsOf]);
 
   // #settings=<page> lands on one of the rail's pages, and &group=<section> scrolls to a section
   // inside it. The section names contain a `&` ("Triage & agents"), so a link carries them encoded

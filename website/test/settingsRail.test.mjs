@@ -131,3 +131,13 @@ test("Settings is ONE document - the scroll carries on into the next page", () =
   assert.equal((src.match(/<HelpDialog help=\{help\}/g) || []).length, 1,
     "four pages each rendered their own copy of the help dialog; one document gets one");
 });
+
+test("a rail click opens its sections in one paint - the spy waits for the scroll to land", () => {
+  // The smooth scroll to Docs passed every heading on the way, the spy named each one, and the rail
+  // folded Docs shut and reopened it on landing: two paints for one click (the owner, 2026-09-24).
+  const at = src.indexOf("WHERE YOU ACTUALLY ARE");
+  assert.notEqual(at, -1);
+  const spy = src.slice(at, src.indexOf("#settings=<page>", at));
+  assert.match(spy, /if \(jump\) return;/, "while a click is still scrolling, the click says where you are");
+  assert.match(spy, /\}, \[q, jump, sectionsOf\]\);/, "and the spy measures once, when the jump clears");
+});

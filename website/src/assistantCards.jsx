@@ -401,7 +401,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     try { const p = JSON.parse(rv.DraftText || ""); return p.text || `${p.action}${p.why ? ` — ${p.why}` : ""}`; } catch { return rv?.DraftText || ""; }
   };
   const value = text ?? draft();
-  const stale = rv?.Stale ?? card.stale;
+  const stale = !!(rv?.Stale ?? card.stale);          // a raw review row's Stale is 0, which React would draw
   const who = rv ? (rv.FromName && rv.FromEmail ? `${rv.FromName} <${rv.FromEmail}>` : rv.FromName || rv.FromEmail || "them") : "";
   const decide = async (verb) => {
     setBusy(verb); setErr("");

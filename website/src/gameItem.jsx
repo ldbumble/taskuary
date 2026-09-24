@@ -135,7 +135,7 @@ function Draft({ item, busy, play }) {
       <Label>{action ? "WHAT THE AGENT WANTS TO DO" : `THE DRAFT TO ${who.toUpperCase()} - EDIT, THEN SEND`}</Label>
       <Box component="textarea" rows={5} value={value} readOnly={action} onChange={(e) => setText(e.target.value)}
         placeholder="No draft yet - rewrite it below, or type your own" sx={field} />
-      {(rv.Stale ?? item.stale) && <Typography sx={{ fontSize: 11.5, color: G.gold, mt: 0.4 }}>New messages came in after this draft - rewrite it before sending.</Typography>}
+      {!!(rv.Stale ?? item.stale) && <Typography sx={{ fontSize: 11.5, color: G.gold, mt: 0.4 }}>New messages came in after this draft - rewrite it before sending.</Typography>}
       <Row>
         <Btn kind="gold" disabled={!!busy || (!action && !value.trim())} onClick={send} title={action ? "Runs what the agent proposed" : `Sends it to ${who}`}>
           {action ? "▶ Run it · +40" : "📨 Send it · +40"}</Btn>

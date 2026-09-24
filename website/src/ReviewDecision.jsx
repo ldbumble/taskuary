@@ -145,7 +145,8 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
       )}
       {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
-      {r.Stale && <Alert severity="warning" sx={{ mb: 1 }}>
+      {/* !!: the task detail carries the raw row, where Stale is the NUMBER 0 - and React draws a 0 */}
+      {!!r.Stale && <Alert severity="warning" sx={{ mb: 1 }}>
         New messages arrived after this draft. Refresh the draft before sending it.
         {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>Latest: {r.LatestPreview}</Box>}
       </Alert>}

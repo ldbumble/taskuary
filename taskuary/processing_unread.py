@@ -154,17 +154,23 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         # that stopped, and the owner is the only one who moves it: `stopped`, wearing the cause as its
         # word (the owner, 2026-09-17: "stopped should stay on stopped and shown to user to handle").
         if funnel.agent_left(store, card['tid']): card.update(lane='stopped', why=card['why_idle'])
+    # THE LATEST ACTION IS THE STATUS (the owner, 2026-09-24). An agent parked or asking already spoke
+    # for its task over a draft; one still WORKING did not, so a reply it wrote a minute into the session
+    # read "reply ready" through forty more minutes of edits. Working is newer than any draft it made -
+    # the reply is back the moment the agent parks or its session ends.
     if worker and active:
         agent_cards = funnel.from_agents(store, live_state=[worker], now=now)
         if agent_cards:
             card.update(agent_cards[0])
-        elif not review:
+        else:
+            if review: card.update(rid=None, draft=False)
             card.update(kind='agent', lane='working', working=worker.get('agent') or worker.get('label') or 'agent',
                         agent=worker.get('agent') or worker.get('label') or 'agent', sid=worker.get('sid'),
                         mode=worker.get('mode') or 'terminal', tail=worker.get('tail') or [],
                         why='An agent is working on this; nothing needs your input yet')
-    elif (row.get('Working') or persisted_working) and active and not review:
+    elif (row.get('Working') or persisted_working) and active:          # ...a headless run too
         who = row.get('Working') or 'agent'
+        if review: card.update(rid=None, draft=False)
         card.update(kind='agent', lane='working', working=who, agent=who)
     elif active and not review:
         card = funnel.paused_conversation(store, card)

@@ -916,13 +916,19 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
         if t.get('Status') != 'in_progress': return False
         return tid in live_tids or str(t.get('UpdatedAt') or t.get('CreatedAt') or '') >= stale_before
     def held(tid): return bool(tid) and (tid in busy or mid_job(tid))
-    def in_hand(i): return i['kind'] not in ('agent', 'review', 'action') and (i.get('working') or held(i.get('tid')))
+    # ...and a drafted reply with an agent still WORKING the task: the latest action is the status, and
+    # working is newer than any draft the agent made along the way (the owner, 2026-09-24). Only a live
+    # worker, never the in_progress clock - a reply waits on nothing once the agent has stopped.
+    def in_hand(i):
+        if i['kind'] == 'review': return i.get('tid') in busy
+        return i['kind'] not in ('agent', 'action') and (i.get('working') or held(i.get('tid')))
     # ...under the SAME key the parked agent will have (agent:<tid>), so shown-once and the page's live
     # row follow the task through stopping and starting instead of losing it at each change
     def held_item(i):
         if not in_hand(i): return i
         live = live_by_tid.get(i.get('tid')) or {}
         who = i.get('working') or live.get('agent') or live.get('label') or 'an agent'
+        if i['kind'] == 'review': i = i | {'kind': 'agent', 'rid': None, 'draft': False}
         return i | {'key': f"agent:{i['tid']}" if i.get('tid') else i['key'], 'lane': 'working',
                     'why': f"{who} has it - nothing for you until it stops or asks",
                     'working': who, 'agent': live.get('agent') or who,

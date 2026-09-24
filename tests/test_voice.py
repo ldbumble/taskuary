@@ -201,3 +201,47 @@ class FunnelTests(unittest.TestCase):
             self.assertEqual(c_api.get('/api/voice/status').json()['vocabulary'], ['Taskuary', 'Careview'])
             self.assertEqual(s._rows("SELECT Action FROM audit WHERE Action='voice_vocabulary'")[0]['Action'], 'voice_vocabulary')
             self.assertEqual(c_api.put('/api/voice/vocabulary', json={'terms': ['x' * 51]}).status_code, 422)
+
+
+class VoiceToTheAssistantTests(unittest.TestCase):
+    """The owner, 2026-09-24: "i sent whatsapp voice note to taskuary ... nothing came through to the assistant".
+    A note in the Assistant's own chat had no text for the interceptors and was not an inbound source, so it was
+    dropped without a trace. It is heard first now, and the words reach the Assistant as if typed."""
+    ME = '15550100100@s.whatsapp.net'
+
+    def _setup(self, s):
+        cid = s.get_connector_by_type('whatsapp')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': json.dumps({'assistant_chat': self.ME})}, 'o')
+        return s.get_connector_by_type('whatsapp', with_secret=True)
+
+    def _feed(self, path):
+        return {'seq': 1, 'messages': [{'seq': 1, 'id': 'v9', 'jid': self.ME, 'fromMe': True, 'text': '', 'audio': path,
+                                        'mime': 'audio/ogg', 'seconds': 17, 'ptt': True, 'ts': 1755700000}]}
+
+    def test_a_voice_note_in_the_assistant_chat_reaches_the_assistant_as_words(self):
+        from taskuary import remote_assistant
+        s = _voice_store('groq_stt'); c = self._setup(s)
+        with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as f: f.write(b'OggS'); path = f.name
+        heard = []
+        try:
+            with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: self._feed(path)), \
+                 mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'walk me through my tasks'})), \
+                 mock.patch.object(remote_assistant, 'intercept', lambda store, ch, jid, text, **kw: heard.append((jid, text)) or True):
+                messengers.poll_whatsapp(s, c, s.list_sources())
+        finally: os.unlink(path)
+        self.assertEqual(heard, [(self.ME, 'walk me through my tasks')])
+
+    def test_one_it_cannot_hear_says_so_in_the_chat(self):
+        from taskuary import remote_assistant
+        s = MemoryStore(); c = self._setup(s)                       # no voice connector at all
+        with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as f: f.write(b'OggS'); path = f.name
+        said, heard = [], []
+        try:
+            with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: self._feed(path)), \
+                 mock.patch.object(remote_assistant, 'send', lambda store, ch, jid, text, cid=None: said.append(text)), \
+                 mock.patch.object(remote_assistant, 'intercept', lambda *a, **kw: heard.append(a) or True):
+                messengers.poll_whatsapp(s, c, s.list_sources())
+        finally: os.unlink(path)
+        self.assertEqual(heard, [])
+        self.assertEqual(len(said), 1)
+        self.assertIn('could not hear that voice note', said[0])

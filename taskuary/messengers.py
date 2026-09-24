@@ -307,6 +307,23 @@ def _read_media(path: str):
         logger.warning(f'could not read the media the bridge saved ({path}): {e}'); return None
 
 
+def _hear(store, c, jid: str, m: dict) -> str:
+    """The words of a voice note the owner sent to a control chat, or '' - and when it cannot be heard, the
+    owner is told so in that same chat, instead of the note simply never arriving."""
+    import os
+    from . import voice, remote_assistant
+    data = _read_media(m.get('audio'))
+    if data is None: return ''
+    mime = (m.get('mime') or 'audio/ogg').split(';')[0]
+    try: return str(voice.transcribe(store, data, mime, os.path.basename(m['audio']))['text'] or '').strip()
+    except Exception as e:
+        logger.warning(f'whatsapp: a voice note to Taskuary was not transcribed - {e}')
+        try: remote_assistant.send(store, 'whatsapp', jid, f"I could not hear that voice note - {str(e)[:200]}. "
+                                   "Type it, or add a voice connector under Connections > AI - voice.", c.get('ConnectorId'))
+        except Exception as e2: logger.warning(f'whatsapp: could not say so either - {e2}')
+        return ''
+
+
 def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     """The bridge keeps a sequence number per message; ours is on the connector, so nothing is
     read twice and a bridge restart just resets both to live traffic."""
@@ -347,16 +364,26 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # This id was sent through the bridge's localhost /send endpoint. It is Taskuary's
         # output, never an owner verdict or question; discard it before either interceptor.
         if m.get('taskuary'): continue
+        text = (m.get('text') or '').strip()
+        # A VOICE NOTE IN A CONTROL CHAT is the owner talking to Taskuary, so it is heard BEFORE the interceptors,
+        # which only ever read text. It used to fall past both - no text - and then past the source filter, since
+        # the Assistant's own chat is not an inbound source: dropped without a trace, while the same note in a
+        # group was transcribed and filed (the owner, 2026-09-24: "i sent whatsapp voice note to taskuary ...
+        # nothing came through to the assistant").
+        if not text and m.get('audio') and jid in {x for x in (assistant_chat, notify_chat) if x}:
+            text = _hear(store, c, jid, m)
+            if not text:
+                took.append(m.get('id')); continue
         # the WhatsApp bridge is the owner's OWN account, so a verdict they type in the
         # notify chat arrives as fromMe - intercept runs before that filter (phone.py also
         # recognizes and swallows our own pings echoing back through the bridge)
-        if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text'], m.get('quoted')):
+        if text and phone.intercept(store, 'whatsapp', jid, text, m.get('quoted')):
             continue
         # A natural message the owner types in their designated private chat goes to the SAME
         # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed
         # here too, so a notification or answer can never loop back as a fresh question.
-        if (m.get('text') or '').strip() and remote_assistant.intercept(
-                store, 'whatsapp', jid, m['text'], from_me=bool(m.get('fromMe')),
+        if text and remote_assistant.intercept(
+                store, 'whatsapp', jid, text, from_me=bool(m.get('fromMe')),
                 connector=c, message_id=m.get('id')):
             continue
         if m.get('group') or jid.endswith('@g.us'):

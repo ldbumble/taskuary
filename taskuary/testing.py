@@ -309,7 +309,7 @@ class Factory:
         out = {}
         for name in names:
             out[name] = getattr(self, name)()
-        # SQLiteStore also seeds Morning digest, Automation ideas and the Assistant
+        # SQLiteStore also seeds the End of day checkup and the Advisor
         # with a NULL watermark. Stamp every report so the next server start does not
         # file a failed mssql row (or a real digest) on top of the fixtures. The
         # Assistant is the exception it cannot cover: on_startup with no once_per_day

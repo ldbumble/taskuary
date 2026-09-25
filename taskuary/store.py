@@ -28,8 +28,7 @@ SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJs
 # KEEP IN STEP with the seeding blocks below - tests/test_assistant_blocks.py builds a fresh store and
 # asserts this table describes the rows that actually appeared. The ownership heal reads it, and
 # RETIRED_SEEDS beside it; nothing else may write `Owner='template'`.
-SEEDED_REPORTS = (('automate_report_seeded', 'Automation ideas', 'automate'),
-                  ('assistant_report_seeded', 'Advisor', 'assistant'),
+SEEDED_REPORTS = (('assistant_report_seeded', 'Advisor', 'assistant'),
                   ('evening_inbox_report_seeded', 'End of day checkup', 'evening_inbox'))
 # ...and the ones a fresh install no longer gets, which older installs still carry and the heal still
 # owes. The Morning digest: the walk now opens with who wants what (the owner, 2026-09-23: "remove the
@@ -39,7 +38,10 @@ RETIRED_SEEDS = (('digest_report_seeded', 'Morning digest', 'digest'),
                  # the Advisor was seeded as 'Assistant' until 2026-09-23 - the name the Assistant TAB
                  # also answers to (the owner: "rename assistant that reviews everything in the reports
                  # tab and gives you ideas ... since assistant is the one that walks you through")
-                 ('assistant_report_seeded', 'Assistant', 'assistant'))
+                 ('assistant_report_seeded', 'Assistant', 'assistant'),
+                 # Automation ideas: the Advisor reads the same month of counts once a week ([taskuary.automation]) and
+                 # raises what is worth automating as an idea of its own (the owner, 2026-09-25: one voice, not two)
+                 ('automate_report_seeded', 'Automation ideas', 'automate'))
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 PROJECT_COLS = ('Name', 'Description', 'Active', 'CreatedBy', 'UpdatedBy')
 ROUTING_FACT_COLS = ('Field', 'Signal', 'SignalKey', 'Value', 'Confidence', 'EvidenceCount',
@@ -1148,20 +1150,9 @@ class SQLiteStore:
                     c['title'] = 'Advisor'
                     self.cx.execute("UPDATE source SET Address='Advisor', ConfigJson=? WHERE SourceId=?", (json.dumps(c), r['SourceId']))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_renamed_advisor', '1', 'migration')")
-            # The Morning digest is no longer seeded (RETIRED_SEEDS): the walk opens the day with who
-            # wants what. The weekly 'what should you automate next' brief (toil.py) -
-            # same deal: a real report, prompt on the Reports tab, deleting it turns it off.
-            # It also runs on startup, once a WEEK: seeded on cron alone, a fresh install saw
-            # nothing from it until the following Monday, so the third shipped report was
-            # invisible on the day someone was actually looking at the tab.
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='automate_report_seeded'").fetchone():
-                from .toil import PROMPT as AUTOMATE_PROMPT
-                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
-                                ('report', 'Automation ideas', 'template', 1,
-                                 json.dumps({'type': 'automate', 'title': 'Automation ideas', 'days': 30,
-                                             'cron': '0 8 * * 1', 'on_startup': True, 'once_per_week': True,
-                                             'ai_prompt': AUTOMATE_PROMPT})))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('automate_report_seeded', '1', 'template')")
+            # The Morning digest and Automation ideas are no longer seeded (RETIRED_SEEDS): the walk opens the day
+            # with who wants what, and the Advisor reads the month of counts once a week. An install that has
+            # either keeps it until its owner deletes it; both report types still exist to make one by hand.
             # ...and the Assistant (assistant.py): its post on the Timeline is scheduled and worded HERE
             # too - every 30 minutes and on startup by default (a quiet check posts nothing), the
             # instruction editable, deleting the row is the off switch. These two are the working demo of
@@ -1187,14 +1178,15 @@ class SQLiteStore:
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT
-            from .assistant import OLD_PROMPT_HEADS, PROMPT as ASSISTANT_PROMPT
+            from .assistant import OLD_PROMPT_HEADS, OLD_PROMPT_SHA, PROMPT as ASSISTANT_PROMPT
             from .toil import PROMPT as AUTOMATE_PROMPT
             for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
                 try: c = json.loads(cj or '{}')
                 except ValueError: continue
                 # the stock Assistant was seeded hourly (then 20-minutely) with a stock prompt; unedited, it
                 # becomes the 30-minute check with the current prompt (an owner-edited prompt or cadence is kept)
-                if c.get('type') == 'assistant' and str(c.get('ai_prompt') or '').startswith(OLD_PROMPT_HEADS):
+                if c.get('type') == 'assistant' and (str(c.get('ai_prompt') or '').startswith(OLD_PROMPT_HEADS)
+                                                     or hashlib.sha256(str(c.get('ai_prompt') or '').encode()).hexdigest() in OLD_PROMPT_SHA):
                     c['ai_prompt'] = ASSISTANT_PROMPT
                     if c.get('every_minutes') in (60, 20): c['every_minutes'] = 30
                     c.setdefault('on_startup', True)

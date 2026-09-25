@@ -53,8 +53,9 @@ class AutomateReportTests(unittest.TestCase):
                            'Subject': f'Thread {i}', 'SentAt': recent, 'Status': st})
         self.assertIn('client@real.com: 5 msgs', gather(s, days=30))     # all but the one 'context' row
 
-    def test_seeded_weekly(self):
-        s = MemoryStore()
+    def test_an_older_installs_row_is_weekly(self):
+        from tests.automate_fixture import add_automate
+        s = MemoryStore(); add_automate(s)                                # a fresh install no longer gets one (2026-09-25)
         src = next(x for x in s.list_sources() if x['Address'] == 'Automation ideas')
         cfg = json.loads(src['ConfigJson'])
         self.assertEqual((cfg['type'], cfg['cron']), ('automate', '0 8 * * 1'))

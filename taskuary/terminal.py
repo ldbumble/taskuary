@@ -279,7 +279,10 @@ class Term:
             # A CLI can exit itself (quit, crash, rate-limit) without traveling through the HTTP
             # close button. It no longer owns the task at that point: release stale running rows
             # and put unfinished work back in the owner's pipe immediately.
-            release_task(self.store, self.task_id)
+            # ...only when it went away BY ITSELF. A close is someone's decision - Save and end session, Mark done,
+            # Stop, the X - and whoever closed it says what the task is now; this used to reopen it under them and
+            # write "nobody is working it" over a session the owner had just ended (A1/A2, 2026-09-25)
+            if not getattr(self, 'on_purpose', False): release_task(self.store, self.task_id)
             blackboard.drain_later(self.store)
             waitroom.later(self.store)                    # ...and notes left for THIS agent reopen it
 
@@ -987,6 +990,10 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
     # it stops waiting on the task and comes back rewritten from the report - see coder.raise_reply.
+    if task_id:
+        # ONE START, whatever the door (A22, 2026-09-25): the interruption is over, a saved session is live again, and the
+        # task is no longer queued - the task page's own terminal door skipped all three and left them stale
+        resume_task(store, task_id, actor); store.tag_task(task_id, SAVED, False, actor); store.clear_dispatch(task_id)
     if task_id and store.hold_reviews(task_id, 'held while an agent works the task - the reply is written from what it finds'):
         logger.debug(f'held the pending reply on task {task_id} while {agent or "a session"} works it')
     store.audit('terminal', 0, 'open', actor, detail={'sid': t.sid, 'agent': agent, 'cwd': cwd, 'task': task_id})
@@ -2106,8 +2113,27 @@ def live_sessions(tail=3, details=True):
 
 def close(sid):
     t = SESSIONS.pop(sid, None)
-    if t: t.close()
+    if t:
+        t.on_purpose = True                   # the pump's end must not release the task under whoever closed it
+        t.close()
     return bool(t)
+
+
+SAVED = 'session:saved'          # the owner ended the session and its result is written (Save and end session) - not "left"
+
+
+def release_held(store, task_id, actor='terminal') -> int:
+    """A reply held while the agent worked (open_session) comes back when the session is over, whatever ended it -
+    it stayed held and invisible for good after a stop, a crash or a restart (A6, 2026-09-25). Unless the agent wrote a
+    newer reply meanwhile: that one is the answer, and the old draft is closed as superseded."""
+    rows = store._rows('SELECT ReviewId, Status FROM review WHERE TaskId=?', (task_id,))
+    held = [r for r in rows if r.get('Status') == 'held']
+    if not held: return 0
+    newer = [r for r in rows if r.get('Status') == 'pending' and r['ReviewId'] > max(h['ReviewId'] for h in held)]
+    for h in held:
+        if newer: store.decide_review(h['ReviewId'], 'closed_unsent', None, actor, note="superseded by the agent's newer reply")
+        else: store.unhold_review(h['ReviewId'], 'the agent session ended - the reply is back for your yes')
+    return len(held)
 
 
 INTERRUPTED = 'interrupted'      # Taskuary closed (or restarted) while a worker had this; the owner decides what continues (PW-262)
@@ -2140,6 +2166,8 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
             ws.record(store, task_id, sid, 'disconnected', text='the session ended', source=actor)
     except Exception as e: logger.debug(f'release_task: no worker ending written for {task_id}: {e}')
     store.update_task(task_id, {'Status': 'open'}, actor)
+    try: release_held(store, task_id, actor)
+    except Exception as e: logger.debug(f'release_task: the held reply on {task_id} stayed held: {e}')
     # not Working, not Done: interrupted, visibly - and nothing restarts by itself (PW-262)
     if actor in INTERRUPTING: store.tag_task(task_id, INTERRUPTED, True, actor)
     store.add_comment(task_id, actor, 'agent', note or

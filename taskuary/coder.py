@@ -305,6 +305,16 @@ def deliver_findings(store, task_id: int, mid: int, run_id: int, rep: dict, tgt:
         logger.warning(f'findings draft failed for task {task_id}: {e}')
 
 
+def _ended(store, tid: int, close: bool, actor: str):
+    """The session is over by the owner's (or the agent's) decision. With the task kept open that is `session saved`: its
+    result is written, nobody is working it, and it is not "left without finishing" (A1/A2, 2026-09-25). The pty's own
+    end no longer reopens the task (terminal.close is on purpose), so the status is set here."""
+    from . import terminal as term
+    if close: return
+    store.tag_task(tid, term.SAVED, True, actor)
+    if (store.get_task(tid) or {}).get('Status') == 'in_progress': store.update_task(tid, {'Status': 'open'}, actor)
+
+
 def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = None,
          final_message: str = '') -> dict:
     """"We're done" - the whole ending, in one callable. The transcript becomes the report, the
@@ -365,6 +375,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
                           + (' The reply to whoever asked is drafted for you to approve.' if fin.get('drafting')
                              else ' Marked the task done.' if close else ''))
+        _ended(store, tid, close, actor)
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [],
                 'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),
                 'send_block': fin.get('send_block') or '', 'freshness': fin.get('freshness') or 'unchecked'}
@@ -428,6 +439,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     pbd = playbooks.draft(store, tid, text, agent)
     if pbd: proposed.append(pbd)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or found, 'close': close})
+    _ended(store, tid, close, actor)
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
             'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')), 'send_block': fin.get('send_block') or '',
             'freshness': fin.get('freshness') or 'unchecked', 'artifacts': [artifact] if artifact else []}

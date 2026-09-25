@@ -15,6 +15,7 @@ const DIAGRAMS = {
   "docs/how-a-task-ends.md": ["docs/site/img/how-a-task-ends.svg"],
   "docs/assistant-words.md": ["docs/site/img/assistant-buttons.svg", "docs/site/img/assistant-questions.svg", "docs/site/img/assistant-task-tools.svg"],
   "docs/phone-choices.md": ["docs/site/img/phone-choices.svg"],
+  "docs/work-rail.md": ["docs/site/img/rail-on.svg", "docs/site/img/rail-off.svg"],
 };
 
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: "new" });

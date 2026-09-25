@@ -52,7 +52,7 @@
 <div class="entry on">
       <a class="page" href="./tasks-and-agents" aria-current="page">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Tasks and agents's sections"></button>
-      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-a-coding-agent" data-sec="sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="#the-general-agent" data-sec="the-general-agent">The general agent</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-a-coding-agent" data-sec="sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="#the-general-agent" data-sec="the-general-agent">The general agent</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
@@ -321,6 +321,108 @@ playbook onto the task. Approve it, and the next message like it is matched to t
 triage, and the agent is seeded from it instead of from <code>CODER.md</code>&#39;s repository rules.</p>
 <p>Each connector card lists the playbooks that name it, and the words themselves are edited on the
 <strong>Docs</strong> tab.</p>
+<h2 id="the-work-rail">The work rail<a class="anchor" href="#the-work-rail" aria-label="Link to this section">#</a></h2>
+<p>The rail beside the Assistant holds what still wants something from you - nothing finished, and never a history.</p>
+<p><figure><img src="img/rail-on.svg" alt="What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours - then Urgent, Your task, Passed, Reports, FYI or Agents working" loading="lazy"><figcaption>What is on the rail, and under which heading.</figcaption></figure></p>
+<table>
+<thead>
+<tr>
+<th>Heading</th>
+<th>What lands there</th>
+<th>Comes back to it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Urgent</strong></td>
+<td>A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Your task</strong></td>
+<td>A person&#39;s ask, a reply ready for your yes, an agent waiting on you, a hand-off that has not started, a stopped agent, a check that failed, a task an agent finished</td>
+<td>Passed work after 3 hours</td>
+</tr>
+<tr>
+<td><strong>Passed</strong></td>
+<td>Your work you pressed <strong>Next</strong> on - still yours, not offered again by the walk</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Reports</strong></td>
+<td>A report run that landed</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>FYI</strong></td>
+<td>People told you things; rows whose triage failed</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Agents working</strong></td>
+<td>An agent busy on a task - nothing for you until it stops or asks</td>
+<td>-</td>
+</tr>
+</tbody></table>
+<p><figure><img src="img/rail-off.svg" alt="Every way off the rail and what brings it back" loading="lazy"><figcaption>Nothing leaves for good while it is still yours.</figcaption></figure></p>
+<table>
+<thead>
+<tr>
+<th>You or it does</th>
+<th>It goes</th>
+<th>Back when</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Next</strong> on your open work</td>
+<td>Passed</td>
+<td>after 3 hours (Settings → Passed work comes back after), or a new message</td>
+</tr>
+<tr>
+<td><strong>Next</strong> on anything else</td>
+<td>off</td>
+<td>a new message, note or edit on it</td>
+</tr>
+<tr>
+<td><strong>Mark done</strong></td>
+<td>off</td>
+<td>THEY write after the close - your own reply does not count</td>
+</tr>
+<tr>
+<td><strong>Remind me</strong></td>
+<td>Upcoming in Tasks</td>
+<td>07:00 on that day, saying &quot;you asked to be reminded about this today&quot;</td>
+</tr>
+<tr>
+<td>Its agent closes the task</td>
+<td>&quot;Agent finished&quot; until you read it</td>
+<td>a new message on it</td>
+</tr>
+<tr>
+<td>A draft decided anywhere, an idea dismissed</td>
+<td>off</td>
+<td>they write again</td>
+</tr>
+<tr>
+<td>An auto-reply, a withdrawn message, a thread where yours is the last word</td>
+<td>never shown (Settings → Hide auto-replies and answered threads)</td>
+<td>-</td>
+</tr>
+<tr>
+<td>A meeting starts</td>
+<td>off 5 minutes in (Settings)</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Next</strong> on a failed connection</td>
+<td>off</td>
+<td>a different error</td>
+</tr>
+<tr>
+<td>Older than 14 days</td>
+<td>off - search Tasks for it</td>
+<td>a new message; a Remind me date</td>
+</tr>
+</tbody></table>
 <h2 id="how-work-is-ordered">How work is ordered<a class="anchor" href="#how-work-is-ordered" aria-label="Link to this section">#</a></h2>
 <p>Each inbound connector chooses how the tasks it creates reach agents:</p>
 <ul>

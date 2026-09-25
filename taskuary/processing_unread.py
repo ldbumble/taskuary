@@ -56,7 +56,9 @@ def _arrived_after_close(task, view) -> bool:
 
 
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
-OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped')
+# ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
+# at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
+OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'time')
 
 
 def _decided(view, allowed) -> bool:

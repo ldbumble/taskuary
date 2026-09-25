@@ -439,6 +439,18 @@
       "desc": "How long something you passed with Next - an agent waiting, a reply ready, a task nobody is on - waits in Passed before it is back in Your task and the walk. 180 (three hours) by default. To put a task away until a date, use Remind me on the task.",
       "help": "Next does not close anything - the task stays open in Tasks. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until you Mark it done. A task with a Remind me date stays away until that date."
     },
+    "meeting_grace_minutes": {
+      "group": "Assistant",
+      "label": "A meeting stays on the rail after it starts (minutes)",
+      "type": "number",
+      "desc": "How long a meeting that has started stays on the work rail. 5 by default."
+    },
+    "rail_hide_noise": {
+      "group": "Assistant",
+      "label": "Hide auto-replies and answered threads",
+      "type": "switch",
+      "desc": "Keeps withdrawn messages, out-of-office auto-replies and threads where yours is the last word off the work rail. On by default."
+    },
     "fyi_batch": {
       "group": "Assistant",
       "label": "FYI read together",

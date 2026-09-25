@@ -183,7 +183,7 @@ def test_the_task_an_ideas_vehicle_carries_is_still_a_row_while_an_agent_works_i
     all_rows, unread = both(store)
     assert [r['open_target'] for r in all_rows] == [{'kind': 'task', 'id': tid}], 'the task it became, not the vehicle'
     assert vehicle not in {r['row'].get('MessageId') for r in all_rows}
-    assert [(i['kind'], i['lane'], i['tid']) for i in unread['items']] == [('todo', 'asked', tid)]
+    assert [(i['kind'], i['lane'], i['tid']) for i in unread['items']] == [('todo', 'yours', tid)]
     working = processing_unread.build(store, live_state=[{'taskId': tid, 'agent': 'claude', 'sid': 'browser-job', 'waiting': False}])
     assert [(i['lane'], i['order_band'], i['tid']) for i in working['items']] == [('working', 5, tid)]
 

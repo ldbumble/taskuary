@@ -55,9 +55,41 @@ def _arrived_after_close(task, view) -> bool:
                for m in view.get('messages') or [] if not is_ours(m))
 
 
-# the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the hour
-# ('stopped' is not here: it stays unread however often it is looked at - its own rule, below)
-OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken')
+# the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
+OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped')
+
+
+def _decided(view, allowed) -> bool:
+    """A draft on these messages was decided (sent, rejected, no reply) and nobody has written since."""
+    from .ingest import is_ours
+    at = [processing_all._stamp(r.get('DecidedAt')) for r in view.get('reviews') or []
+          if r.get('Status') != 'pending' and r.get('MessageId') in allowed]
+    at = [a for a in at if a]
+    if not at: return False
+    return not any((processing_all._stamp(m.get('SentAt')) or max(at)) > max(at) for m in view.get('messages') or [] if not is_ours(m))
+
+
+def _dismissed_idea(view, compact) -> bool:
+    target = compact.get('open_target') or {}
+    if target.get('kind') != 'idea': return False
+    idea = next((i for i in view.get('ideas') or [] if i['IdeaId'] == target.get('id')), {})
+    return str(idea.get('Status') or 'open') not in ('open', 'snoozed')
+
+
+def _noise_hidden(store) -> bool:
+    return str(store.get_settings().get('rail_hide_noise', '1')).strip() not in ('0', 'false', 'off')
+
+
+def _noise(row, view) -> bool:
+    """Nobody asking anything: withdrawn, an auto-reply, or a thread whose last word is yours. Not a policy-IGNORED
+    line: that one stays, saying so (the rail shows what a rule filed; unjudged is not fyi)."""
+    from .assistant import _OOO
+    from .ingest import is_ours
+    if row.get('MsgStatus') == 'withdrawn' or _OOO.match(str(row.get('Subject') or '')): return True
+    at = processing_all._stamp(row.get('SentAt'))
+    msgs = view.get('messages') or []
+    last = max(msgs, key=lambda m: processing_all._stamp(m.get('SentAt')) or datetime.min, default=None)
+    return bool(at and last and is_ours(last) and (processing_all._stamp(last.get('SentAt')) or at) >= at)
 
 
 def _agent_finished(store, tid, active, review, read_at, now):
@@ -114,6 +146,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # AFTER the close is new: closing a task ends the work on it, it does not deafen the thread.
     closed = not active and not review and (not row.get('MessageId') or row.get('Channel') == 'assistant'
                                             or not _arrived_after_close(task, view))
+    # DECIDED IS OFF, WHEREVER IT WAS DECIDED (R4, 2026-09-25): a draft sent, rejected or answered "no reply" on the
+    # Review page, or an idea dismissed in the chat, stayed on the rail as an unread fyi. Off until THEY write again.
+    if not tid and not review and not closed: closed = _decided(view, allowed) or _dismissed_idea(view, compact)
+    # ...and the noise the old rail filtered (R5): withdrawn lines, auto-replies, a thread you already answered
+    if not tid and not review and not closed and row.get('MessageId') and _noise_hidden(store): closed = _noise(row, view)
     if row.get('MessageId'):
         if review:
             exact = next(m for m in view['messages'] if m['MessageId'] == review['MessageId'])
@@ -141,7 +178,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             card = funnel._item('', 'idea', lane, compact['title'], **base)
         else:
             card = funnel._item('', 'todo' if kind == 'task' else 'action',
-                                'queued' if kind == 'task' and queued else 'asked' if kind == 'task' and active else 'fyi',
+                                # a task with no message is YOUR task, like one with mail (R14, 2026-09-25) - not "asked"
+                                'queued' if kind == 'task' and queued else 'yours' if kind == 'task' and active else 'fyi',
                                 compact['title'], **base)
         if review:
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
@@ -234,13 +272,14 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # draft still waiting for a yes is the owner's move whichever way the last line pointed.
     receipt = bool(not tid and not review and row.get('Direction') == 'out')
     # Worker attention is not a read operation. An active worker remains visible.
-    # ...and stopped work is on the rail however often it was looked at - a look is not handling it;
-    # only the owner's own Later holds it (same decision, 2026-09-17).
-    stopped = active and card['lane'] == 'stopped' and not read.get('deferred')
+    # ...and stopped work is on the rail until it is looked at. It used to stay however often it was looked at, with
+    # Later the only way to put it down - and Later is gone (R6, the owner, 2026-09-25: "next should move it to passed
+    # and done should close it"). Next puts it in Passed like the rest of your work; the quiet hours bring it back.
+    stopped = active and card['lane'] == 'stopped' and not read.get('deferred') and read_at is None
     unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or (finished and finished['unread']) or
                                                  (active and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
-    card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] in ('idea', 'todo') or row.get('Channel') == 'assistant'))
+    card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] == 'idea' or row.get('Channel') == 'assistant'))
     card.update(key='processing:' + item['item_id'], processing_id=item['item_id'],
                 member_ids=list(item['member_ids']), context_revision=item['context_revision'],
                 view_revision=item['view_revision'], aliases=[a['Value'] for a in item.get('aliases', [])

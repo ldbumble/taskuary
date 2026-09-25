@@ -1917,13 +1917,24 @@ class SQLiteStore:
         return self._rows(q + ' ORDER BY IdeaId DESC', p)
     def get_idea(self, idea_id): return self._one('SELECT * FROM idea WHERE IdeaId=?', (idea_id,))
     def upsert_idea(self, s: dict, stamp: str) -> dict:
-        """Said: a new key is born. Said AGAIN (a snooze waking) reopens it AS IT WAS - an idea is never edited
-        once raised (the owner, 2026-09-25: "advisor can only send new ideas not edit an existing idea")."""
-        if self._one('SELECT 1 FROM idea WHERE Key=?', (s['key'],)):
-            self._exec("UPDATE idea SET Status='open', SnoozeUntil=NULL, LastSaid=?, SaidCount=SaidCount+1 WHERE Key=?", (stamp, s['key']))
+        """Said (again): a known key reopens with the new facts and text; a new one is born."""
+        old = self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
+        action = dict(s.get('action') or {})
+        if old:
+            try: prior = json.loads(old.get('ActionJson') or '{}')
+            except ValueError: prior = {}
+            # Talking back is part of this suggestion's history. New facts may reopen and
+            # rewrite the action, but must not erase the owner's correction or our answer.
+            if prior.get('chat'): action['chat'] = prior['chat']
+            # the shared verdict is history too: it stays until the facts (Sig) change, when triage_ideas re-judges
+            if prior.get('triage') and 'triage' not in action: action['triage'] = prior['triage']
+        act = json.dumps(action)
+        if old:
+            self._exec("UPDATE idea SET Kind=?, Text=?, ActionJson=?, Sig=?, Status='open', SnoozeUntil=NULL, LastSaid=?, SaidCount=SaidCount+1 WHERE Key=?",
+                       (s.get('kind'), s['text'], act, s.get('sig'), stamp, s['key']))
         else:
             self._exec('INSERT INTO idea (Key, Kind, Text, ActionJson, Sig, Status, FirstSeen, LastSaid, SaidCount) VALUES (?,?,?,?,?,?,?,?,1)',
-                       (s['key'], s.get('kind'), s['text'], json.dumps(dict(s.get('action') or {})), s.get('sig'), 'open', stamp, stamp))
+                       (s['key'], s.get('kind'), s['text'], act, s.get('sig'), 'open', stamp, stamp))
         return self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
     def set_idea_status(self, idea_id, status, by, until=None):
         self._exec('UPDATE idea SET Status=?, SnoozeUntil=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (status, until, by, _now(), idea_id))

@@ -66,7 +66,8 @@ _UNREAD_COLUMNS = {'message': ('BodyText',)}
 # THREE readers must agree on exactly which rows are ungrouped - this census, `uncatalogued` in
 # store.processing_inventory_snapshot (compact_inventory refuses while it is non-zero), and the
 # backfill - so all three call ungrouped_message_sql and none spells the predicate out itself.
-UNGROUPED_MESSAGE_STATUS = ('skipped',)
+# ...and an auto-reply (autoreply.STATUS, 2026-09-25): stored so the Advisor knows who is away, never an arrival of its own
+UNGROUPED_MESSAGE_STATUS = ('skipped', 'autoreply')
 
 
 def ungrouped_message_sql(col: str = ''):

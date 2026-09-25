@@ -566,6 +566,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         store.add_route(mid, None, 'feed', None,
                         msg.get('file_reason') or 'shown for information - this connection is a feed, not a task trigger', [], 'feed')
         return {'status': 'feed', 'task_id': None, 'message_id': mid}
+    # AN AUTO-REPLY IS NEVER TRIAGED (autoreply.py): kept so the Advisor knows who is away, and nothing else - no task,
+    # no thread it joins, no rail row. Ahead of every rule and of triage, whatever the channel says.
+    from . import autoreply
+    if not is_chat(msg) and autoreply.is_auto(msg):
+        mid = _land(store, msg, None, autoreply.STATUS)
+        store.add_route(mid, None, 'file', None, 'an automatic reply - never triaged, never on a task', [], 'ingest')
+        return {'status': autoreply.STATUS, 'task_id': None, 'message_id': mid}
     # the policy answer is needed on both passes (escalate marks the task urgent below); it is
     # an in-memory match, cheap enough to make twice
     pol = evaluate(msg, store.list_policies(), store.known_sender(msg.get('from_email')))

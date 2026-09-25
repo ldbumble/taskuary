@@ -20,7 +20,6 @@ class ChatHandRaiseTests(unittest.TestCase):
 
     def test_first_observation_waiting_pings_once_and_rearms_after_work(self):
         s = MemoryStore()
-        s.set_setting('phone_approvals', '1', 't')
         tid = s.create_task({'Title': 'Fix notifications', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
         term = FakeTerm(tid, True, ['Which repository should I use?'])
         pings = []
@@ -34,7 +33,7 @@ class ChatHandRaiseTests(unittest.TestCase):
             self.assertEqual(handraise.tick(s), 1)
         self.assertEqual(len(pings), 2)
         self.assertIn('codex asked you something', pings[0])
-        self.assertIn('[tq0001]', pings[0])
+        self.assertNotIn('[tq', pings[0])                 # a ping is read-only - phone approvals are gone (2026-09-25)
 
     def test_notifications_off_consumes_the_transition_without_sending(self):
         s = MemoryStore(); s.set_setting('notify_level', 'off', 't')

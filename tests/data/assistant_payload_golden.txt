@@ -34,7 +34,7 @@ INBOUND BY SENDER (last 30 days; senders with 3+ messages):
   (nothing repeated 3+ times)
 EXISTING POLICIES (already automated - never propose these again):
   (none)
-CURRENT SWITCHES: auto-dispatch=on, phone approvals=off
+CURRENT SWITCHES: auto-dispatch=on
 
 ALREADY SAID (never repeat):
 - (open) The ledger reconciliation repeats monthly - worth automating.  [key idea:weekly-ledger · said <day> <mon> <time>]
@@ -77,7 +77,7 @@ INBOUND BY SENDER (last 30 days; senders with 3+ messages):
   (nothing repeated 3+ times)
 EXISTING POLICIES (already automated - never propose these again):
   (none)
-CURRENT SWITCHES: auto-dispatch=on, phone approvals=off
+CURRENT SWITCHES: auto-dispatch=on
 
 ALREADY SAID (never repeat):
 - (open) The ledger reconciliation repeats monthly - worth automating.  [key idea:weekly-ledger · said <day> <mon> <time>]

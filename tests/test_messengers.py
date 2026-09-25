@@ -4,7 +4,7 @@ replies that go back into the SAME chat, and the owner-name flow the docs hang o
 import base64, json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import messengers, outbound, phone, server
+from taskuary import messengers, outbound, server
 from taskuary.store import MemoryStore, retoken_doc
 
 c_api = TestClient(server.app)
@@ -116,17 +116,6 @@ class WhatsAppTests(unittest.TestCase):
         self.assertIsNotNone(s.feed()[0]['AnsweredAt'])
         c2 = s.get_connector_by_type('whatsapp')
         self.assertEqual(json.loads(c2['ConfigJson'])['wa_seq'], 7)
-
-    def test_poll_passes_the_quoted_ping_to_phone_routing(self):
-        s, c = self._store()
-        feed = {'seq': 8, 'messages': [
-            {'seq': 8, 'id': 'answer', 'jid': '155@s.whatsapp.net', 'text': 'yes',
-             'quoted': '[tq0251] reply to this message', 'fromMe': True}]}
-        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed), \
-             mock.patch.object(phone, 'intercept', return_value=True) as intercept:
-            self.assertEqual(messengers.poll_whatsapp(s, c, s.list_sources(), llm=None), 0)
-        intercept.assert_called_once_with(s, 'whatsapp', '155@s.whatsapp.net', 'yes',
-                                          '[tq0251] reply to this message')
 
     def test_only_the_chats_you_named_come_in_and_there_is_no_catch_all(self):
         """A paired account is the owner's OWN WhatsApp: it sees every group they are in and every

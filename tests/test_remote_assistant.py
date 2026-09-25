@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import channels, concierge, funnel, general, llm as llm_mod, messengers, phone, \
+from taskuary import channels, concierge, funnel, general, llm as llm_mod, messengers, \
     remote_assistant, server, terminal
 from taskuary.store import MemoryStore
 
@@ -423,16 +423,6 @@ class InterruptionsReachThePhoneTests(unittest.TestCase):
                 remote_assistant.start_handoff(store, 'whatsapp')                    # a fresh walk...
             with mock.patch.object(funnel, 'pile', return_value=self.pile()):
                 self.assertEqual(remote_assistant.push_alerts(store, force=True), 1)  # ...hears it again
-
-
-class PhoneApprovalsStillWorkTests(unittest.TestCase):
-    def test_natural_question_does_not_edit_the_last_review_when_the_doorway_is_on(self):
-        store, _ = armed_store()
-        store.set_setting('phone_approvals', '1', 'test')
-        t, m, rid = waiting(store)
-        phone.ping_tail(store, rid)
-        self.assertFalse(phone.intercept(store, 'whatsapp', JID, 'What should I handle first?'))
-        self.assertEqual(store.get_review(rid)['Status'], 'pending')
 
 
 class CardParityTests(unittest.TestCase):

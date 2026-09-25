@@ -15,11 +15,10 @@ export const hasNotifyRole = (c) => String(c.Roles || "").split(",").includes("n
 // missing. Pure, because the awkward cases are exactly the ones worth testing - a role with
 // no chat, a named chat on a connector that is switched OFF, and a stale role left behind on
 // a channel that cannot send (the card no longer offers the switch, so it cannot be cleared).
-export function notifyState(connectors, level = "needs_me", phoneApprovals = false, phoneAssistant = false) {
+export function notifyState(connectors, level = "needs_me", phoneAssistant = false) {
   const all = (connectors || []).filter(hasNotifyRole);
   const able = all.filter((c) => CAN_NOTIFY.has(c.Type));
   const named = able.filter((c) => c.Active && notifyChat(c));
-  const phoneNamed = named.filter((c) => c.Type === "telegram" || c.Type === "whatsapp");
   // the assistant answers in WhatsApp and in Telegram - both carry the same walk (remote_assistant.CHANNELS)
   const guideAble = (connectors || []).filter((c) => c.Type === "whatsapp" || c.Type === "telegram");
   const guideNamed = guideAble.filter((c) => c.Active && assistantChat(c));
@@ -37,8 +36,6 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
       + (phoneAssistant ? " The assistant still needs an active, private WhatsApp or Telegram chat." : "") + note };
   if (named.length) return { kind: "pinging", targets: named, stale,
     text: `Pinging ${named.map((c) => `${c.Name} · ${notifyChat(c)}`).join(" · ")}`
-      + (phoneApprovals && phoneNamed.length ? " — reply there to answer agents or approve drafts" : "")
-      + (phoneApprovals && !phoneNamed.length ? " — phone replies need a Telegram or WhatsApp notify chat" : "")
       + (phoneAssistant && guideNamed.length ? " — the assistant walks you through your work in that chat too" : "")
       + (phoneAssistant && !guideNamed.length ? " — the assistant needs a private WhatsApp or Telegram chat of its own" : "") + note };
   if (phoneAssistant && guideNamed.length) return { kind: "pinging", targets: guideNamed, stale,

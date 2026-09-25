@@ -341,12 +341,6 @@ is what you see if those cards cannot load.</li>
 <h3 id="desktop-notification-when-an-agent-raises-its-hand">Desktop notification when an agent raises its hand<a class="anchor" href="#desktop-notification-when-an-agent-raises-its-hand" aria-label="Link to this section">#</a></h3>
 <p><code>hand_desktop</code> · type: switch</p>
 <p>The browser&#39;s notification, so it reaches you when Taskuary is behind other windows. Click it to jump to the task.</p>
-<h3 id="answer-agents-approve-from-phone">Answer agents &amp; approve from phone<a class="anchor" href="#answer-agents-approve-from-phone" aria-label="Link to this section">#</a></h3>
-<p><code>phone_approvals</code> · type: switch</p>
-<p>Reply to a tagged ping to answer that live agent, approve a draft, reject it, or write the reply yourself.</p>
-<p>On: when a live coding agent stops or asks, its chat ping carries a [tqN] tag. Reply to that ping and your words go straight into that exact agent session. Pending-reply pings carry the DRAFT and an [rvN] tag: &#39;approve&#39; sends the draft, &#39;reject&#39; / &#39;no reply&#39; land those verdicts, and ANY OTHER TEXT is sent instead of the draft. Confirmations come back into the chat.</p>
-<p>Needs a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Answers and verdicts are intercepted before triage, so they never become new work. Quoting the [tqN] ping is required for agent answers because several agents may be waiting at once.</p>
-<p>Off (default): pings stay read-only.</p>
 <h2 id="attachments-images">Attachments &amp; images<a class="anchor" href="#attachments-images" aria-label="Link to this section">#</a></h2>
 <h3 id="ai-reads-attached-images">AI reads attached images<a class="anchor" href="#ai-reads-attached-images" aria-label="Link to this section">#</a></h3>
 <p><code>vision_enabled</code> · type: switch</p>

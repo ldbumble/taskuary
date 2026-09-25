@@ -25,7 +25,7 @@ def _line(term, waitroom) -> str:
 def tick(store) -> int:
     """Push newly waiting sessions to notify chats. Returns the number of events attempted;
     outbound.notify owns per-connector delivery errors and never lets this clock fail."""
-    from . import outbound, phone, terminal, waitroom, workerstate as ws
+    from . import outbound, terminal, waitroom, workerstate as ws
     global _state
     current, events = {}, []
     for sid, term in list(terminal.SESSIONS.items()):
@@ -60,7 +60,7 @@ def tick(store) -> int:
         detail = '' if from_word else (f'\n\n{tail}' if tail else '')
         try:
             outbound.notify(store, f'{task_ref(tid)} · {what}: {task.get("Title") or "untitled"}'
-                             f'{detail}{phone.task_ping_tail(store, tid)}')
+                             f'{detail}')
         except Exception as e:
             logger.warning(f'hand raise: {task_ref(tid)}: {e}')
     return len(events)

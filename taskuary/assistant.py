@@ -39,7 +39,7 @@ import json, math, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
 
-from .store import task_ref
+from .store import is_model_idea, task_ref
 from .assistantblocks import said_number   # the payload's own English for a window: 'the last two days'
 
 CHANNEL = 'assistant'
@@ -467,12 +467,14 @@ def connect_ideas(store, now: datetime = None, days: int = 30, floor: int = 3) -
 
 
 def fresh(state: dict, cand: dict, now: datetime) -> bool:
-    """Worth saying now? Never said: yes. Said with these facts: no. Dismissed or done: only when
-    the facts changed (a new last word on the thread, a moved meeting). Snoozed: when it wakes."""
+    """Worth saying now? Never said: yes. Snoozed: when it wakes. The model's OWN idea (idea:<slug>), said once:
+    never again - the Advisor raises new ideas, it never edits one (the owner, 2026-09-25). Its Sig is the start of
+    its wording, so "the facts changed" was a rewording, and a read idea came back rewritten every run. A candidate
+    the hub found (a follow-up, a quiet thread) has a real Sig - its last word - and comes back when that moves."""
     i = state.get(cand['key'])
     if not i: return True
     if i.get('Status') == 'snoozed': return bool(i.get('SnoozeUntil')) and _ts(i['SnoozeUntil']) <= now.strftime('%Y-%m-%d %H:%M:%S')
-    return (i.get('Sig') or '') != (cand.get('sig') or '')
+    return not is_model_idea(cand['key']) and (i.get('Sig') or '') != (cand.get('sig') or '')
 
 
 def source_of(line: dict, mids: dict, chosen: dict) -> dict | None:
@@ -526,7 +528,8 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'whatever prompt the owner writes.\n'
             'Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
             'one-day silence from someone who always takes a week is not news) - skipping is free, repeating is not: never say '
-            'again, reworded or not, anything under ALREADY SAID. Your own ideas are the point: a thread going in circles, a '
+            'again, reworded or not, anything under ALREADY SAID - and if a line of yours IS about the same subject as one there, give it '
+            'THAT line\'s key, never a new slug for it. Your own ideas are the point: a thread going in circles, a '
             'promise buried in a mail, two people asking the same thing, the thing to do now so the next ask never comes. '
             'Facts only from what you are given; never invent a name, a date or a number. Nothing new to say -> {"say": []}.')
 
@@ -715,11 +718,19 @@ def _open(store, cap: int = 20) -> str:
     return '\n'.join(line(t) for t in ts[:cap]) or '(nothing open)'
 
 
-def _said(store, cap: int = 40) -> str:
-    rows = [i for i in store.list_ideas() if i.get('Status') in ('open', 'dismissed', 'snoozed')][:cap]
+def _said(store, cap: int = 40, done_days: float = 7) -> str:
+    """Every line the owner has from me, WITH ITS KEY (the owner, 2026-09-25: "advisor should know what it sent in the
+    past and not recreate them"). Without the key the model saw a line it half-recognised, minted a new slug for the
+    same subject, and the code took it as news - the same budget question four posts running. Seeing the key, it
+    reuses it, and fresh() refuses a known key. What was acted on this week is here too, or it comes straight back."""
+    cut = _since(done_days)
+    rows = [i for i in store.list_ideas() if i.get('Status') in ('open', 'dismissed', 'snoozed')
+            or (i.get('Status') == 'done' and _ts(i.get('DecidedAt') or i.get('LastSaid') or '') >= cut)][:cap]
     out = []
     for i in rows:
-        out.append(f"- ({i['Status']}) {i['Text']}")
+        n = int(i.get('SaidCount') or 1)
+        out.append(f"- ({i['Status']}) {i['Text']}  [key {i['Key']} · said {_when(i.get('LastSaid') or i.get('FirstSeen'))}"
+                   f"{f', {n} times' if n > 1 else ''}]")
         try: chat = json.loads(i.get('ActionJson') or '{}').get('chat') or []
         except ValueError: chat = []
         for turn in chat[-4:]:

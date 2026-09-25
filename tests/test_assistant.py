@@ -420,10 +420,31 @@ class ButtonTests(unittest.TestCase):
         self.assertIn('sent-review.png', seen['user'])
         self.assertEqual(len(seen['images']), 1)
         self.assertIn('That is wrong', assistant._said(s))
-        # A later check may rewrite the suggestion, but it cannot erase the correction.
+        # A later check cannot rewrite the suggestion at all, so the correction stays with it.
         s.upsert_idea({'key': 'idea:priya', 'kind': 'idea', 'text': 'Updated thought.',
                        'action': {'type': 'note', 'why': 'new facts'}}, _ago())
         self.assertEqual(len(assistant._public(s.get_idea(idea['IdeaId']))['action']['chat']), 2)
+
+    def test_the_advisor_raises_new_ideas_and_never_edits_one(self):
+        """"advisor can only send new ideas not edit an existing idea" (the owner, 2026-09-25): the model reworded the
+        same key overnight, the new Sig read as new facts, and a read idea was rewritten and back on Next."""
+        s = _store(); now = datetime.now()
+        row = s.upsert_idea({'key': 'idea:alert', 'kind': 'idea', 'text': 'The alert group is refused, not a bug.', 'sig': 'a'}, _ago())
+        state = {i['Key']: i for i in s.list_ideas()}
+        self.assertFalse(assistant.fresh(state, {'key': 'idea:alert', 'sig': 'reworded'}, now))     # said, whatever the wording
+        s.set_idea_status(row['IdeaId'], 'dismissed', 'owner')
+        self.assertFalse(assistant.fresh({i['Key']: i for i in s.list_ideas()}, {'key': 'idea:alert', 'sig': 'b'}, now))
+        self.assertTrue(assistant.fresh(state, {'key': 'idea:other', 'sig': 'a'}, now))           # a new key is news
+        s.upsert_idea({'key': 'idea:alert', 'kind': 'idea', 'text': 'Reworded.', 'sig': 'b', 'action': {'type': 'note'}}, _ago())
+        again = s.get_idea(row['IdeaId'])
+        self.assertEqual((again['Text'], again['Sig']), ('The alert group is refused, not a bug.', 'a'))
+        # ...and the model is shown the KEY of what it said, with when, so the same subject reuses it
+        said = assistant._said(s)
+        self.assertIn('[key idea:alert · said ', said); self.assertIn('2 times', said)
+        s.set_idea_status(row['IdeaId'], 'done', 'owner')
+        self.assertIn('idea:alert', assistant._said(s))                                          # acted on this week: still there
+        s._exec('UPDATE idea SET DecidedAt=? WHERE IdeaId=?', (_ago(days=8), row['IdeaId']))
+        self.assertNotIn('idea:alert', assistant._said(s))
 
 
 class ApiTests(unittest.TestCase):

@@ -30,8 +30,8 @@ OPEN WORK:
 - TQ-0001 [open, coding] Reconcile the Q3 ledger - <h> since anything happened
 
 ALREADY SAID (never repeat):
-- (open) The ledger reconciliation repeats monthly - worth automating.
-- (open) No answer from Priya on the signed copy.
+- (open) The ledger reconciliation repeats monthly - worth automating.  [key idea:weekly-ledger · said <day> <mon> <time>]
+- (open) No answer from Priya on the signed copy.  [key followup:c-invoice · said <day> <mon> <time>]
 
 YOUR NOTES FROM YOUR LAST CHECK (<date> <time>; your own facts and timings - use them, then rewrite them; they are not rules):
 Dana still owes the ledger; Sam is away.
@@ -66,8 +66,8 @@ OPEN WORK:
 - TQ-0001 [open, coding] Reconcile the Q3 ledger - <h> since anything happened
 
 ALREADY SAID (never repeat):
-- (open) The ledger reconciliation repeats monthly - worth automating.
-- (open) No answer from Priya on the signed copy.
+- (open) The ledger reconciliation repeats monthly - worth automating.  [key idea:weekly-ledger · said <day> <mon> <time>]
+- (open) No answer from Priya on the signed copy.  [key followup:c-invoice · said <day> <mon> <time>]
 
 YOUR NOTES FROM YOUR LAST CHECK (<date> <time>; your own facts and timings - use them, then rewrite them; they are not rules):
 Dana still owes the ledger; Sam is away.

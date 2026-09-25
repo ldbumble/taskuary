@@ -105,6 +105,8 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
+# the model's own thought (idea:<slug>, or report:<id>:idea:<slug> from a report) - not a candidate the hub found
+def is_model_idea(key) -> bool: return ':idea:' in f':{key}'
 
 # The one sentence of TRIAGE.md that was wrong, and what replaces it on a doc that has stopped
 # tracking the shipped template (the migration in _ensure_schema). The canonical wording lives in
@@ -1917,8 +1919,13 @@ class SQLiteStore:
         return self._rows(q + ' ORDER BY IdeaId DESC', p)
     def get_idea(self, idea_id): return self._one('SELECT * FROM idea WHERE IdeaId=?', (idea_id,))
     def upsert_idea(self, s: dict, stamp: str) -> dict:
-        """Said (again): a known key reopens with the new facts and text; a new one is born."""
+        """Said: a new key is born. Said AGAIN: the model's own idea (idea:<slug>) reopens AS IT WAS - the Advisor
+        raises new ideas, it never edits one (the owner, 2026-09-25); its Sig is only its wording. A candidate the
+        hub found (a follow-up, a quiet thread) reopens with the new facts and text, which is what its Sig tracks."""
         old = self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
+        if old and is_model_idea(s['key']):
+            self._exec("UPDATE idea SET Status='open', SnoozeUntil=NULL, LastSaid=?, SaidCount=SaidCount+1 WHERE Key=?", (stamp, s['key']))
+            return self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
         action = dict(s.get('action') or {})
         if old:
             try: prior = json.loads(old.get('ActionJson') or '{}')

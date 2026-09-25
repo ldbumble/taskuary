@@ -130,6 +130,47 @@ class AnswerBindingTests(Base):
         self.assertTrue(any('could not be delivered' in c['Body'] for c in self.s.list_comments(self.tid)))
 
 
+class CodexQueueTests(Base):
+    """A codex question asked in words is answered with `codex queue` (the owner, 2026-09-25) - a new turn on its
+    own thread, not keystrokes into its TUI. A chooser, an approval or a codex that refuses stays a keystroke."""
+    def codex(self):
+        sess = live(self.tid, argv=('codex',)); sess.cli, sess.ext_id = 'codex', '01a0d8dd-16d7-7490-a649-e1712f9f1829'
+        term.SESSIONS['run1'] = sess; return sess
+
+    def test_a_question_in_words_goes_through_the_queue_on_its_own_thread(self):
+        self.codex()
+        ws.record(self.s, self.tid, 'run1', 'input_needed', request_id='q1', text='Which environment?', event_id='e1')
+        ran = SimpleNamespace(returncode=0, stdout='Queued message x for thread y.', stderr='')
+        with mock.patch('taskuary.spawn.run', return_value=ran) as run, mock.patch.object(term, 'type_into') as typed, \
+             mock.patch('taskuary.agents._resolve_cmd', return_value=['codex']):
+            out = ws.answer(self.s, self.tid, 'q1', 'staging, not prod', actor='owner')
+        self.assertEqual((out['delivered'], out['state']), (True, 'delivered')); typed.assert_not_called()
+        self.assertEqual(run.call_args[0][0], ['codex', 'queue', '--thread', '01a0d8dd-16d7-7490-a649-e1712f9f1829', '--message', 'staging, not prod'])
+        self.assertEqual(ws.status(self.s, self.tid)['requests'], [])
+
+    def test_a_chooser_an_approval_and_a_refusal_are_still_typed(self):
+        sess = self.codex()
+        ws.record(self.s, self.tid, 'run1', 'input_needed', request_id='q1', text='Which one?', choices=['staging', 'prod'], event_id='e1')
+        ws.record(self.s, self.tid, 'run1', 'approval_needed', request_id='p1', text='Run the migration?', event_id='e2')
+        ws.record(self.s, self.tid, 'run1', 'input_needed', request_id='q2', text='Anything else?', event_id='e3')
+        refused = SimpleNamespace(returncode=1, stdout='', stderr='no such thread')
+        with mock.patch('taskuary.spawn.run', return_value=refused) as run, \
+             mock.patch.object(term, 'type_into', side_effect=lambda t, text: sess.typed.append(text)), \
+             mock.patch('taskuary.agents._resolve_cmd', return_value=['codex']):
+            for rid, text in (('q1', 'prod'), ('p1', 'yes'), ('q2', 'no')): self.assertTrue(ws.answer(self.s, self.tid, rid, text)['delivered'])
+        self.assertEqual(sess.typed, ['prod', 'yes', 'no'])                  # every one reached the pane
+
+    def test_a_mailed_answer_is_queued_for_codex_and_the_note_says_so(self):
+        self.codex()
+        ran = SimpleNamespace(returncode=0, stdout='Queued.', stderr='')
+        with mock.patch('taskuary.spawn.run', return_value=ran) as run, mock.patch.object(term, 'type_into') as typed, \
+             mock.patch('taskuary.agents._resolve_cmd', return_value=['codex']):
+            self.assertTrue(term.say_to_task(self.s, self.tid, {'FromName': 'Erin Blake', 'BodyText': 'Use staging.', 'Channel': 'email'}))
+        typed.assert_not_called(); self.assertIn('Erin Blake answered (by email): Use staging.', run.call_args[0][0])
+        self.assertTrue(any('queued for the live session' in c['Body'] for c in self.s.list_comments(self.tid)))
+        self.assertEqual(run.call_count, 1)                                   # only the question in words tried the queue - and fell back
+
+
 class ProducersTests(Base):
     def test_claude_code_hooks_become_events_without_guessing(self):
         sess = live(self.tid); sess.store = self.s; term.SESSIONS['run1'] = sess

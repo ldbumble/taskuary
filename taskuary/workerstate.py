@@ -208,6 +208,8 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
         if pick: send = str(pick)
     try:
         if hasattr(sess, 'send_prompt'): sess.send_prompt(send)
+        # a codex question asked in WORDS is answered through its own queue - a chooser or an approval is still a keystroke
+        elif req['kind'] == 'input_needed' and req.get('source') != 'screen' and not req.get('choices') and term.queue_codex(sess, send): pass
         else: term.type_into(sess, send)
     except Exception as e:
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered to {who}: {str(e)[:200]}')

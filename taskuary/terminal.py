@@ -2021,8 +2021,8 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
     who = msg.get('FromName') or msg.get('from_name') or msg.get('FromEmail') or msg.get('from_email') or 'the sender'
     body = str(msg.get('BodyText') or msg.get('body') or '').strip()
     if not body: return False
-    type_into(t, f'{who} answered (by {msg.get("Channel") or msg.get("channel") or "mail"}): {body}'[:4000])
-    store.add_comment(task_id, actor, 'agent', f"{who}'s answer was typed into the live session.")
+    how = tell(t, f'{who} answered (by {msg.get("Channel") or msg.get("channel") or "mail"}): {body}'[:4000])
+    store.add_comment(task_id, actor, 'agent', f"{who}'s answer was {how} the live session.")
     store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who})
     return True
 
@@ -2050,6 +2050,31 @@ def type_into(t, text: str):
             time.sleep(SEED_ENTER)
             if t.n > was: return
     threading.Thread(target=go, daemon=True).start()
+
+
+def queue_codex(t, text: str) -> bool:
+    """Hand `text` to a live codex session as its next user turn with `codex queue` (0.149+) - True when codex
+    took it. Keystrokes into a TUI can land garbled or into whatever box is focused; the queue wakes an idle
+    thread at once and holds a busy one's message for its next turn (measured 2026-09-25: a pty-launched
+    codex answered a queued line in 8 s). It is a new TURN, never a pick: a chooser or an approval on the
+    screen still needs its keystroke, so callers only send an answer to a question asked in words."""
+    if getattr(t, 'cli', '') != 'codex' or not getattr(t, 'ext_id', ''): return False
+    from .agents import _resolve_cmd, child_env
+    from . import spawn
+    try:
+        r = spawn.run(_resolve_cmd('codex') + ['queue', '--thread', t.ext_id, '--message', clean_typed(text)],
+                      env=child_env(), cwd=t.cwd or None, capture_output=True, text=True, timeout=60)
+    except Exception as e:
+        logger.warning(f'codex queue failed for {t.ext_id} - typing instead: {e}'); return False
+    if r.returncode: logger.warning(f'codex queue refused for {t.ext_id} - typing instead: {(r.stderr or r.stdout).strip()[:300]}')
+    return r.returncode == 0
+
+
+def tell(t, text: str) -> str:
+    """Put words in front of a live agent as its next turn: codex through its own queue, everything else typed.
+    Returns how, for the note the caller files ('queued for' / 'typed into')."""
+    if queue_codex(t, text): return 'queued for'
+    type_into(t, text); return 'typed into'
 
 
 def session_for(task_id):

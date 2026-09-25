@@ -55,6 +55,11 @@
       <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-a-coding-agent" data-sec="sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="#the-general-agent" data-sec="the-general-agent">The general agent</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
+      <a class="page" href="./assistant">The Assistant's buttons</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show The Assistant's buttons's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./assistant#the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="./assistant#the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="./assistant#remind-me">Remind me</a><a class="sec" href="./assistant#words-that-work-typed">Words that work typed</a></div>
+    </div>
+<div class="entry">
       <a class="page" href="./reports">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
       <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
@@ -119,19 +124,89 @@ the workspace takes most of the page. Full controls, saved results and restart c
 when the agent stops.</p>
 <h3 id="who-is-allowed-to-close-it">Who is allowed to close it<a class="anchor" href="#who-is-allowed-to-close-it" aria-label="Link to this section">#</a></h3>
 <p><figure><img src="img/how-a-task-ends.svg" alt="Every way a task ends: you press Mark done, send the reply, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges" loading="lazy"><figcaption>Every road ends in Mark done, or says why the task stays open.</figcaption></figure></p>
-<ul>
-<li><strong>You</strong> end a task with <strong>Mark done</strong>. Every way of saying it — the button, the Assistant&#39;s card,
-&quot;done&quot; or &quot;close&quot; in the chat, the phone — does the same thing: the task is done, any unsent
-draft is kept but retired, a live agent is stopped, and it leaves your work rail.</li>
-<li><strong>Sending the reply</strong> marks the task done, unless an agent is still working on it or a new
-message came in while you were answering — then it stays open and says why.</li>
-<li><strong>Ticking the last checklist box</strong> marks it done, unless an agent is working on it.</li>
-<li><strong>An agent</strong> may say it is finished (<code>taskuary --done</code>). Taskuary saves the result, and either
-waits for you with a drafted reply or marks the task done. A task an agent closed stays on your
-work rail until you have read it. A session you started yourself tells the agent to leave the
-ending to you.</li>
-<li>A stopped or quiet session never ends a task on its own.</li>
-</ul>
+<p>There is one close, <strong>Mark done</strong>, and every road below leads to it. Mark done always does the
+same five things: the task is done, any unsent draft is kept but retired, a live agent is stopped,
+it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
+<table>
+<thead>
+<tr>
+<th>You or an agent does</th>
+<th>What happens</th>
+<th>Stays open when</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Mark done</strong> — the task page, the Assistant&#39;s button or card, &quot;done&quot; or &quot;close&quot; in the chat, the phone</td>
+<td>Mark done</td>
+<td>never</td>
+</tr>
+<tr>
+<td><strong>Send the reply</strong></td>
+<td>Sends it, then Mark done</td>
+<td>an agent is still working on it, or a new message came in while you were answering — it says why</td>
+</tr>
+<tr>
+<td><strong>Tick the last checklist box</strong></td>
+<td>Mark done</td>
+<td>an agent is still working on it</td>
+</tr>
+<tr>
+<td><strong>Hand it to a person</strong></td>
+<td>Forwards it, then Mark done</td>
+<td>never</td>
+</tr>
+<tr>
+<td><strong>Not ours</strong> / <strong>Not a task</strong></td>
+<td>Deleted if nothing was done on it, otherwise Mark done</td>
+<td>never</td>
+</tr>
+<tr>
+<td><strong>Mark done</strong> on a channel that cannot send (the draft stays unsent)</td>
+<td>Mark done</td>
+<td>never</td>
+</tr>
+<tr>
+<td><strong>An agent says it is finished</strong> (<code>taskuary --done</code>)</td>
+<td>The session is written up; the task waits for you with the draft if a reply is owed, otherwise it is done</td>
+<td>a reply is owed</td>
+</tr>
+<tr>
+<td><strong>Its pull request is merged or closed</strong></td>
+<td>Same as an agent saying it is finished</td>
+<td>a reply is owed</td>
+</tr>
+</tbody></table>
+<p>A task an agent or a merged pull request closed stays on your work rail until you have read it.
+A session you started yourself tells the agent to leave the ending to you.</p>
+<p>These never end a task:</p>
+<table>
+<thead>
+<tr>
+<th>You do</th>
+<th>What happens instead</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Save and end session</strong></td>
+<td>The agent stops and its report is written; the task stays open</td>
+</tr>
+<tr>
+<td><strong>Reject</strong> a draft</td>
+<td>The draft is rejected; the task is untouched</td>
+</tr>
+<tr>
+<td><strong>Next</strong></td>
+<td>Read and moved on; open work comes back after a few hours</td>
+</tr>
+<tr>
+<td><strong>Remind me</strong></td>
+<td>Put away until the day you pick, then back on your rail that morning</td>
+</tr>
+<tr>
+<td>A stopped or quiet session</td>
+<td>Nothing — only you, or the agent saying so, ends a task</td>
+</tr>
+</tbody></table>
 <p>Reopening a completed task starts a fresh task lifecycle rather than pretending an old terminal
 is still alive.</p>
 <h2 id="sending-work-to-a-coding-agent">Sending work to a coding agent<a class="anchor" href="#sending-work-to-a-coding-agent" aria-label="Link to this section">#</a></h2>
@@ -257,7 +332,7 @@ the bottom of the queue cannot starve.</p>
 moves it down without deleting it.</p>
 
     </article>
-    <nav class="pager"><a class="pn prev" href="./connections"><span>Previous</span>Connections</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
+    <nav class="pager"><a class="pn prev" href="./connections"><span>Previous</span>Connections</a><a class="pn next" href="./assistant"><span>Next</span>The Assistant's buttons</a></nav>
     <p class="stamp">Documentation for Taskuary 0.3.5.6 · updated 2026-09-18</p>
   </main>
 </div>

@@ -21,17 +21,33 @@ when the agent stops.
 
 ![Every way a task ends: you press Mark done, send the reply, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges](img/how-a-task-ends.svg "Every road ends in Mark done, or says why the task stays open.")
 
-- **You** end a task with **Mark done**. Every way of saying it — the button, the Assistant's card,
-  "done" or "close" in the chat, the phone — does the same thing: the task is done, any unsent
-  draft is kept but retired, a live agent is stopped, and it leaves your work rail.
-- **Sending the reply** marks the task done, unless an agent is still working on it or a new
-  message came in while you were answering — then it stays open and says why.
-- **Ticking the last checklist box** marks it done, unless an agent is working on it.
-- **An agent** may say it is finished (`taskuary --done`). Taskuary saves the result, and either
-  waits for you with a drafted reply or marks the task done. A task an agent closed stays on your
-  work rail until you have read it. A session you started yourself tells the agent to leave the
-  ending to you.
-- A stopped or quiet session never ends a task on its own.
+There is one close, **Mark done**, and every road below leads to it. Mark done always does the
+same five things: the task is done, any unsent draft is kept but retired, a live agent is stopped,
+it leaves your work rail, and the "yours to end" mark comes off.
+
+| You or an agent does | What happens | Stays open when |
+|---|---|---|
+| **Mark done** — the task page, the Assistant's button or card, "done" or "close" in the chat, the phone | Mark done | never |
+| **Send the reply** | Sends it, then Mark done | an agent is still working on it, or a new message came in while you were answering — it says why |
+| **Tick the last checklist box** | Mark done | an agent is still working on it |
+| **Hand it to a person** | Forwards it, then Mark done | never |
+| **Not ours** / **Not a task** | Deleted if nothing was done on it, otherwise Mark done | never |
+| **Mark done** on a channel that cannot send (the draft stays unsent) | Mark done | never |
+| **An agent says it is finished** (`taskuary --done`) | The session is written up; the task waits for you with the draft if a reply is owed, otherwise it is done | a reply is owed |
+| **Its pull request is merged or closed** | Same as an agent saying it is finished | a reply is owed |
+
+A task an agent or a merged pull request closed stays on your work rail until you have read it.
+A session you started yourself tells the agent to leave the ending to you.
+
+These never end a task:
+
+| You do | What happens instead |
+|---|---|
+| **Save and end session** | The agent stops and its report is written; the task stays open |
+| **Reject** a draft | The draft is rejected; the task is untouched |
+| **Next** | Read and moved on; open work comes back after a few hours |
+| **Remind me** | Put away until the day you pick, then back on your rail that morning |
+| A stopped or quiet session | Nothing — only you, or the agent saying so, ends a task |
 
 Reopening a completed task starts a fresh task lifecycle rather than pretending an old terminal
 is still alive.

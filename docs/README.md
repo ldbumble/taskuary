@@ -39,3 +39,7 @@ guide. [Status and roadmap](roadmap.md) is the one that is still for readers.
 
 **[How a task ends](how-a-task-ends.md)** is required reading before touching anything that finishes a
 task: the one close (Mark done), every door into it, and the decision tree.
+
+**[The Assistant's words](assistant-words.md)** is the same for the Assistant's buttons: which card offers
+which, the one question two of them ask, and what was retired. Its trees are drawn onto the docs site
+(`website/tools/render-diagrams.mjs`), where each word also gets a row in a table.

@@ -74,7 +74,8 @@ These never close a task:
 
 - **Save and end session**: stops the agent and writes its report; the task stays open.
 - **Reject** a draft: the draft is rejected; the task is untouched.
-- **Next** and **Tomorrow**: they move the walk.
+- **Next**: it moves the walk; open work comes back after `task_return_minutes`.
+- **Remind me**: the task is put away until a day (`remind.py`), then back on the rail that morning.
 
 ## Removed
 

@@ -28,6 +28,12 @@
       "desc": "A task, the agent work on it and the reply to the sender are three separate lives."
     },
     {
+      "slug": "assistant",
+      "file": "assistant.md",
+      "title": "The Assistant's buttons",
+      "desc": "Every button under an Assistant card, the one question two of them ask, Remind me, and the words that work typed."
+    },
+    {
       "slug": "reports",
       "file": "reports.md",
       "title": "Reports and the Advisor",

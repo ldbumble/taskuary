@@ -413,13 +413,15 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
                 with _PENDING_LOCK: held = _PENDING.pop(mid, None)
                 msg = {**(held or _from_row(r, store)), '_mid': mid}
                 if on_start: on_start(r)
+                before = (store.get_message(mid) or {}).get('TaskId')
                 try:
                     ingest_message(store, msg, llm=llm)
                 except Exception as e:
                     logger.warning(f'deferred triage failed for message {mid}: {e}')
+                    tid = (store.get_message(mid) or {}).get('TaskId')
+                    if _judged_then_failed(store, mid, before, tid, e): continue
                     # a row whose judgement blew up keeps whatever task the router gave it and says
                     # triage failed - an error with a retry, never a filed "nothing to do" (PW-036)
-                    tid = (store.get_message(mid) or {}).get('TaskId')
                     store.place_message(mid, tid, 'error')
                     store.add_route(mid, tid, 'file', None, f'triage failed ({str(e)[:160]}) - unclassified; retry available', [], 'triage',
                                     parse_error=str(e)[:1000])
@@ -490,6 +492,9 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
         from . import context as taskcontext
         closed = taskcontext.recent_closures(store, msg)
         if closed: thread = {**thread, 'recently_closed': closed}
+        # ...and the OPEN work it touches, so a repeat can be named as the task it repeats (same_as, 2026-09-25)
+        still = taskcontext.recent_open(store, msg)
+        if still: thread = {**thread, 'open_work': still}
     except Exception as e: logger.debug(f'recent closures skipped: {e}')
     # an assistant idea carries where it came from and what it is about (PW-199): the report, the task
     # it names and whether a worker has that task - facts the model needs to judge a generated line
@@ -653,6 +658,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # a chat line was judged once already, before routing (chat_route): that verdict is the follow-up's
         if verdict is not None: follow, _fail = verdict
         # a chat line joined on a FACT (burst, live agent) was not read and is not re-judged here
+        # a line that would REOPEN a closed task is one the no-AI noise rule may still file: a keyword fyi on it
+        # stays filed on the closed task rather than bringing it back
+        elif r.get('reopen') and decided_intent(msg, mine): follow = decided_intent(msg, mine)
         elif not busy and cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg) and not decided_intent(msg, mine):
             try: follow, _fail = judge(store, msg, llm, mine, me)
             except Exception as e:
@@ -682,6 +690,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             logger.info(f"ingest: filed onto {task_ref(tid)} as fyi - {msg.get('subject') or ''}")
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
+        if r.get('reopen'): _reopen(store, tid, msg, actor)
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
         # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
         # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
@@ -780,6 +789,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # on the task; an fyi or a triaged report has no task, so it is kept on the message and the
         # rail reads it instead of the mail header (funnel.says).
         if intent.get('title'): msg['_title'] = str(intent['title']).strip()[:140] or None
+        # SAME AS A TASK THAT EXISTS (T4, 2026-09-25): triage named the open or recently closed task this IS, or
+        # the exact repeat check found one (the same triaged title from the same sender - Taskuary's own reports
+        # and ideas count as one sender, T3). It joins that task: filed on it when it adds nothing for the owner,
+        # otherwise on it - and a closed one reopens. Never a second task for one job.
+        same = intent.get('same_as') or store.open_task_with_same_ask(intent.get('title'), msg.get('from_email'), msg.get('channel'))
+        if same and store.get_task(same):
+            return _join_same(store, msg, same, intent, actor, _notes_note())
         if intent['intent'] == 'fyi':
             mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
@@ -823,18 +839,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # TRIAGE's title, never the router's subject cut: a subject line is the very resemblance that
         # joined two unrelated refunds in 2026-09-03, and two people can send one subject about two
         # different things. A verdict that named no title has said nothing to match on.
-        twin = store.open_task_with_same_ask(intent.get('title'), msg.get('from_email'))
-        if twin:
-            mid = _land(store, msg, twin, 'routed')
-            store.add_route(mid, twin, 'attach', 1.0,
-                            f"attached: {msg.get('from_email')} has already asked this and {task_ref(twin)} is still "
-                            f"open - the same ask on a new thread is not a second task" + _notes_note(), [], 'triage',
-                            verdict=_stored_verdict(intent))
-            store.add_comment(twin, actor, 'agent',
-                              f"Again from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - the same ask, kept here")
-            if intent.get('checklist'): store.merge_task_checklist(twin, intent['checklist'], 'triage')
-            logger.info(f"ingest: a repeat of {task_ref(twin)} - {msg.get('subject') or ''}")
-            return {'status': 'routed', 'task_id': twin, 'message_id': mid}
         # WHICH ROLE works this - a different question from which brain runs it. Coding has one
         # role and triage does not choose it; a specialist is named only on general work. The
         # session is seeded from THIS role's document (terminal.profile_of), so a researcher is
@@ -1106,6 +1110,47 @@ def thread_ruling(store, msg: dict) -> str:
     return f'On this very conversation you ruled earlier: "{on_thread}" - weigh whether this message changes that' if on_thread else ''
 
 
+def _judged_then_failed(store, mid, before, after, e) -> bool:
+    """T5 (2026-09-25): the verdict was made and the message placed on a task, THEN a later step broke (the agent
+    start, the checklist). Marking it "triage failed" put it back in the retry sweep, which judged it again as new
+    and opened a second task. It stays on its task, saying what broke - never re-triaged as new work."""
+    if not after or after == before: return False
+    store.place_message(mid, after, 'routed')
+    store.add_comment(after, 'triage', 'agent', f'Triaged onto this task; a later step failed ({str(e)[:160]}) - nothing was re-triaged.')
+    logger.warning(f'ingest: message {mid} reached {task_ref(after)}, then a later step failed - {e}')
+    return True
+
+
+def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note: str = '') -> dict:
+    """The arrival IS a task that exists (same_as, or the exact repeat): it joins that one. Filed on it when it
+    adds nothing that needs the owner; otherwise on it, a closed one reopened, a question drafted, new asks added."""
+    t = store.get_task(tid) or {}
+    closed = t.get('Status') == 'done'
+    ref = task_ref(tid)
+    if intent.get('intent') == 'fyi':
+        mid = _land(store, msg, tid, 'filed')
+        store.add_route(mid, tid, 'attach', 1.0, f"triage: fyi, the same as {ref} - {intent.get('why') or 'nothing new'} · kept on it" + notes_note,
+                        [], 'triage', verdict=_stored_verdict(intent))
+        store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same, nothing new")
+        logger.info(f"ingest: the same as {ref}, fyi - filed on it")
+        return {'status': 'filed', 'task_id': tid, 'message_id': mid}
+    mid = _land(store, msg, tid, 'routed')
+    if closed: _reopen(store, tid, msg, actor)
+    store.add_route(mid, tid, 'attach', 1.0, f"triage: {intent['intent']} - the same as {ref}, joined to it"
+                    + (' and reopened' if closed else '') + f" - {intent.get('why') or ''}" + notes_note, [], 'triage',
+                    verdict=_stored_verdict(intent))
+    store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same ask, kept here")
+    if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage')
+    if intent.get('intent') == 'reply_only' and not store.pending_review(tid):
+        from .outbound import send_block
+        unsendable = send_block(store, msg.get('channel'))
+        rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                'Reason': f"needs a reply: {intent.get('why') or 'question for you'}" + (f' · {unsendable}' if unsendable else '')})
+        _spawn(_auto_draft, store, tid, rid)
+    logger.info(f"ingest: the same as {ref} - joined" + (' and reopened' if closed else ''))
+    return {'status': 'routed', 'task_id': tid, 'message_id': mid}
+
+
 def identity_route(store, msg: dict) -> dict:
     """Where a mail or tracker item goes: the OPEN task its own conversation already belongs to, else
     new work. The router used to score subject words, sender and body cosine against every open
@@ -1122,10 +1167,23 @@ def identity_route(store, msg: dict) -> dict:
     if not home:
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': 'new task - no open task on this conversation'}
     t = store.get_task(home) or {}
-    if t.get('Status') in ('done', 'dropped'):
-        logger.info(f"ingest: this thread's task {task_ref(home)} is closed - new work, not a reopening")
+    # THE THREAD'S CLOSED TASK IS STILL ITS TASK (the owner, 2026-09-25, reversing PW-017). Judged as new, every
+    # line after a close opened another task - one mail thread carried nine. It joins the task it belongs to, and
+    # the task reopens only when this line needs the owner; a "thanks" is filed on it and it stays closed.
+    # A DROPPED task (not a task, folded into another) is not work to come back to: that thread starts fresh.
+    if t.get('Status') == 'dropped':
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
-                'reason': f"this thread's task {task_ref(home)} is closed - judged as new; the reply stays on the thread"}
+                'reason': f"this thread's task {task_ref(home)} was dropped - judged as new"}
+    # ...except Taskuary's OWN channels: every run of one report, every idea of one source, shares a conversation
+    # id, so "the same thread" there is only the same report - a new failure would reopen last week's task. For
+    # those the closed task is shown to triage (recently_closed) and same_as decides whether this IS it.
+    from .store import OWN_CHANNELS
+    if t.get('Status') == 'done' and msg.get('channel') in OWN_CHANNELS:
+        return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
+                'reason': f"a new run of the report behind {task_ref(home)}, which was closed - judged on its own, same_as decides"}
+    if t.get('Status') == 'done':
+        return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reopen': True,
+                'reason': f"same conversation thread as {task_ref(home)}, which was closed - it reopens if this needs you"}
     return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reason': 'attached: same conversation thread'}
 
 
@@ -1399,6 +1457,27 @@ def _open_task(store, tid):
     return tid if t and t.get('Status') not in ('done', 'dropped') else None
 
 
+def _joinable_task(store, tid):
+    """An open task, or a DONE one a line can reopen - never a dropped one (not a task, or folded away)."""
+    t = store.get_task(tid) if tid else None
+    return tid if t and t.get('Status') != 'dropped' else None
+
+
+def _reopen(store, tid, msg: dict, actor: str) -> bool:
+    """A line on a closed task's thread that needs the owner puts the task back in front of them (the owner,
+    2026-09-25). Said on the task, so the history reads why it came back."""
+    t = store.get_task(tid) or {}
+    if t.get('Status') != 'done': return False
+    store.update_task(tid, {'Status': 'open'}, actor)
+    from . import selfclose
+    selfclose.forget(tid)
+    who = msg.get('from_name') or msg.get('from_email') or 'someone'
+    store.add_comment(tid, actor, 'agent', f"Reopened - {who} wrote again and it needs you: {msg.get('subject') or (msg.get('body') or '')[:80]}")
+    store.audit('task', tid, 'reopen', actor, 'agent', {'why': 'a new line on its thread needs the owner'})
+    logger.info(f"ingest: {task_ref(tid)} reopened - a new line on its thread needs the owner")
+    return True
+
+
 def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     """Where a chat line goes: (route dict, (verdict, fail) or None).
 
@@ -1426,13 +1505,17 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
                  'reason': f'a chat line on its own - {why}, and a room is not a topic{apart}'}, None)
     intent, fail = judge(store, msg, llm, mine, me)
     rel = intent.get('relationship') or 'uncertain'
-    target = _open_task(store, intent.get('existing_task_id'))
+    # ...a CLOSED task too (the owner, 2026-09-25): a line the model says answers or continues an ask that was
+    # closed used to open a new reply task, reasoned "uncertain" - "yes", "ok so now" each got a drafted reply
+    target = _joinable_task(store, intent.get('existing_task_id'))
     for rel_mid in (intent.get('related_message_ids') or []):
         if target: break
-        target = _open_task(store, (store.get_message(rel_mid) or {}).get('TaskId'))
+        target = _joinable_task(store, (store.get_message(rel_mid) or {}).get('TaskId'))
     if rel in ('continues', 'answers') and target:
-        return ({'decision': 'attach', 'task_id': target, 'score': 1.0, 'candidates': [],
-                 'reason': f'{rel} the ask on {task_ref(target)} (same chat, same day)'}, (intent, fail))
+        closed = (store.get_task(target) or {}).get('Status') == 'done'
+        return ({'decision': 'attach', 'task_id': target, 'score': 1.0, 'candidates': [], 'reopen': closed,
+                 'reason': f'{rel} the ask on {task_ref(target)} (same chat, same day)'
+                           + (' - it was closed, and reopens if this needs you' if closed else '')}, (intent, fail))
     why = ('a separate ask in the same chat' if rel == 'new' else
            'uncertain whether it continues an ask in this chat - not joined on a guess')
     return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': why + apart}, (intent, fail))
@@ -1848,9 +1931,10 @@ def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = 
         try:
             out = ingest_message(store, {**_from_row(m, store), '_mid': mid}, actor='retry-sweep', llm=llm)
         except Exception as e:
+            now = store.get_message(mid) or {}
+            if _judged_then_failed(store, mid, m.get('TaskId'), now.get('TaskId'), e): continue
             # the pipeline itself broke rather than the AI: put the row back where it was, with the
             # reason on it, exactly as the button's endpoint does
-            now = store.get_message(mid) or {}
             store.place_message(mid, now.get('TaskId'), 'error')
             store.add_route(mid, now.get('TaskId'), 'file', None,
                             f'triage retry failed ({str(e)[:200]}) - unclassified; retry available', [],

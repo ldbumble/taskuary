@@ -9,6 +9,8 @@ from loguru import logger
 _LIVE_UNSET = object()
 _POLL_UNSET = object()
 GENESIS = '0' * 64
+# the channels Taskuary writes itself - its reports and the Advisor's ideas - which carry no sender address
+OWN_CHANNELS = ('report', 'assistant')
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
@@ -1871,7 +1873,7 @@ class SQLiteStore:
             if r: return r['TaskId']
         # channels without a conversation id (and mail whose References header was rewritten)
         return next((m['TaskId'] for m in reversed(self.thread_messages(None, subject)) if m['TaskId']), None) if subject else None
-    def open_task_with_same_ask(self, title, from_email):
+    def open_task_with_same_ask(self, title, from_email, channel=None):
         """The OPEN task this exact ask is already sitting on, when the thread cannot say so.
 
         A machine that mails the same alert daily gets a new conversation id every time, so the
@@ -1880,7 +1882,17 @@ class SQLiteStore:
         title plus the sender's address, both matched EXACTLY - resemblance still decides nothing
         (ingest.identity_route), and a closed task is never reopened by a repeat.
         """
-        if not (title or '').strip() or not (from_email or '').strip(): return None
+        if not (title or '').strip(): return None
+        # ...and Taskuary's OWN arrivals, which have no sender address at all: an Advisor idea and the report run
+        # about the same event opened two tasks seconds apart (the owner, 2026-09-25: "no duplicate ideas"). For
+        # those the "sender" is Taskuary itself - the same triaged title from its own channels, still open.
+        if not (from_email or '').strip():
+            if channel not in OWN_CHANNELS: return None
+            r = self._one("SELECT t.TaskId FROM task t WHERE t.Status NOT IN ('done','dropped') "
+                          "AND LOWER(TRIM(t.Title))=? AND EXISTS (SELECT 1 FROM message m WHERE m.TaskId=t.TaskId "
+                          f"AND m.Channel IN ({','.join('?' * len(OWN_CHANNELS))})) ORDER BY t.TaskId DESC LIMIT 1",
+                          (title.strip().lower(), *OWN_CHANNELS))
+            return r['TaskId'] if r else None
         # Driven from the TASKS, of which a handful are ever open, not from the messages, of which
         # there are tens of thousands: joining message-first scanned the whole table on every triaged
         # mail (14ms on a 6.7k-row store, growing with it). LOWER(TRIM()) rules out idx_message_from
@@ -1901,6 +1913,15 @@ class SQLiteStore:
         if not s: return []
         return self._rows(f"SELECT DISTINCT t.TaskId FROM task t JOIN message m ON m.TaskId=t.TaskId WHERE t.Status='done' "
                           f"AND lower(m.FromEmail) IN ({','.join('?' * len(s))}) ORDER BY t.TaskId DESC LIMIT ?", [*s, limit])
+    def tasks_open_linked(self, limit=80):
+        """The OPEN tasks, newest activity first, each with the senders and conversations it carried - the
+        open half of what triage is shown (context.recent_open) beside what closed lately."""
+        return self._rows(
+            "SELECT t.TaskId, t.Title, t.Status, t.Kind, "
+            "       GROUP_CONCAT(DISTINCT lower(m.FromEmail)) Senders, GROUP_CONCAT(DISTINCT m.ConversationId) Convs "
+            "  FROM task t LEFT JOIN message m ON m.TaskId=t.TaskId "
+            " WHERE t.Status NOT IN ('done','dropped') "
+            " GROUP BY t.TaskId ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC LIMIT ?", (limit,))
     def tasks_closed_since(self, since: str, limit=60):
         """Tasks closed (done or dropped) on or after `since`, newest first, each with the senders and
         conversations it carried - enough for a caller to decide whether it touches the message in hand

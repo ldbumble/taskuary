@@ -58,7 +58,7 @@ class IdentityTests(unittest.TestCase):
                  at='2026-09-07 09:00:00')
         self.assertEqual((a['status'], b['status']), ('created', 'routed'))
         self.assertEqual(b['task_id'], a['task_id'])
-        self.assertIn('has already asked this', s.message_routes(b['message_id'])[-1]['Reason'])
+        self.assertIn('the same as', s.message_routes(b['message_id'])[-1]['Reason'])
 
     def test_a_repeat_is_matched_on_the_triaged_ask_not_the_subject_line(self):
         """The subject is the resemblance that joined two unrelated refunds; a verdict with no title
@@ -76,16 +76,20 @@ class IdentityTests(unittest.TestCase):
         b = mail(s, 'b', 'The July file please.', 'AAQk-thread-B', llm=named, at='2026-09-07 09:00:00')
         self.assertEqual(b['status'], 'created'); self.assertNotEqual(b['task_id'], a['task_id'])
 
-    def test_a_reply_on_a_closed_tasks_thread_does_not_reopen_it(self):
+    def test_a_reply_on_a_closed_tasks_thread_joins_it_and_reopens_it_only_when_it_needs_you(self):
+        """The thread's closed task is still its task (the owner, 2026-09-25): a thanks is filed on it and it stays
+        closed; a line that needs the owner reopens THAT task - never a second one for the same thread."""
         s = MemoryStore()
         a = mail(s, 'a', 'Please approve the refund for Jane Doe.', 'AAQk-thread-A')
         s.update_task(a['task_id'], {'Status': 'done'}, 'owner')
         thanks = mail(s, 'b', 'Thanks, all done.', 'AAQk-thread-A', llm=FYI, at='2026-09-06 10:00:00')
         self.assertEqual(thanks['status'], 'filed'); self.assertEqual(s.get_task(a['task_id'])['Status'], 'done')
         self.assertEqual(s.get_message(thanks['message_id'])['ConversationId'], 'AAQk-thread-A')   # the chain keeps it
+        self.assertEqual(thanks['task_id'], a['task_id'])                                          # ...on its own task
         again = mail(s, 'c', 'Actually the refund bounced, can you re-issue it?', 'AAQk-thread-A', at='2026-09-06 11:00:00')
-        self.assertEqual(again['status'], 'created'); self.assertNotEqual(again['task_id'], a['task_id'])
-        self.assertEqual(s.get_task(a['task_id'])['Status'], 'done')
+        self.assertEqual((again['status'], again['task_id']), ('attached', a['task_id']))
+        self.assertEqual(s.get_task(a['task_id'])['Status'], 'open')                                 # reopened
+        self.assertTrue(any(c['Body'].startswith('Reopened') for c in s.list_comments(a['task_id'])))
 
     def test_a_tracker_item_keeps_its_own_identity(self):
         s = MemoryStore()

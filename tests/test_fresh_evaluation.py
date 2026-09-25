@@ -133,7 +133,7 @@ class HistoryIsPreservedTests(unittest.TestCase):
         self.assertEqual(before, after)
         self.assertEqual(before[0], 'ignored')
 
-    def test_a_reply_on_a_closed_tasks_thread_does_not_reopen_it(self):
+    def test_a_reply_on_a_closed_tasks_thread_reopens_it_only_when_it_needs_you(self):
         s = MemoryStore()
         first = arrive(s, 'd1', brain('reply_only'), conv='done-1', subject='Budget upload failing', body='The upload fails, can you look?')
         tid = first['task_id']
@@ -143,8 +143,8 @@ class HistoryIsPreservedTests(unittest.TestCase):
         self.assertEqual(out['status'], 'filed')
         out2 = arrive(s, 'd3', brain('task', 'a new problem on the same thread'), conv='done-1', subject='Re: Budget upload failing',
                       body='It broke again after the update, please fix.')
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
-        self.assertEqual(out2['status'], 'created'); self.assertNotEqual(out2['task_id'], tid)
+        self.assertEqual((out2['status'], out2['task_id']), ('attached', tid))       # the same thread's task, reopened
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
 
 
 class NoForcedVerdictTests(unittest.TestCase):

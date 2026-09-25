@@ -56,6 +56,49 @@ RECENT = 3               # ...and how many of them the judge is shown
 RECENT_CHARS = 700
 
 
+def _arrival_keys(msg: dict) -> tuple:
+    """(conversation, sender, words) an arrival is matched on. Taskuary's OWN reports and ideas are the exception
+    (2026-09-25): every run of one report shares a conversation id, so "the same thread" only says "the same
+    report" and crowded the one task that mattered out of the three shown; and their subject is the report's name
+    ("Process Error Check - Failure summary"), so the words that identify them are the body's."""
+    from .routing import tokens
+    from .store import OWN_CHANNELS
+    own = msg.get('channel') in OWN_CHANNELS
+    words = f"{msg.get('subject') or ''} {msg.get('_title') or ''}" + (f" {str(msg.get('body') or '')[:600]}" if own else '')
+    return str(msg.get('conversation_id') or ''), str(msg.get('from_email') or '').lower(), set(tokens(words)), own
+
+
+def _match(conv, sender, toks, own, convs, senders, title_toks):
+    """(why, rank) this task touches the arrival, or None. For a report or an idea the shared conversation is only
+    "the same report" and ranks BELOW a task its words name, so last week's other failures of one report cannot
+    crowd out the one this run is about - but it still counts when nothing names it better."""
+    shared = toks & title_toks
+    if conv and conv in convs and not own: return 'the same thread', 3.0
+    if len(shared) >= 2: return 'the same subject', 1.0 + len(shared) / max(1, len(title_toks))
+    if conv and conv in convs: return 'the same report', 0.8
+    if sender and sender in senders: return 'the same sender', 0.5
+    return None
+
+
+def recent_open(store, msg: dict, limit: int = RECENT) -> list:
+    """The OPEN work this arrival touches - the same thread, the same sender, or two words of the same
+    subject - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job
+    (the owner, 2026-09-25). Ranked like recent_closures; the model decides whether it is the same."""
+    from .routing import tokens
+    conv, sender, toks, own = _arrival_keys(msg)
+    out = []
+    for t in store.tasks_open_linked():
+        convs = {c for c in str(t.get('Convs') or '').split(',') if c}
+        senders = {s for s in str(t.get('Senders') or '').split(',') if s}
+        title_toks = set(tokens(t.get('Title') or ''))
+        hit = _match(conv, sender, toks, own, convs, senders, title_toks)
+        if not hit: continue
+        why, rank = hit
+        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'why': why, '_rank': rank})
+    out.sort(key=lambda r: -r['_rank'])
+    return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
+
+
 def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECENT) -> list:
     """What was answered and closed RECENTLY that touches this arriving message - the same thread,
     the same sender, or two words of the same subject - newest first, each with how it ended.
@@ -72,8 +115,7 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
     file, where the whole of past_work already is, not in every triage prompt."""
     from .routing import tokens
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
-    conv, sender = str(msg.get('conversation_id') or ''), str(msg.get('from_email') or '').lower()
-    toks = set(tokens(msg.get('subject') or ''))
+    conv, sender, toks, own = _arrival_keys(msg)
     # RANKED, then capped - not filtered by a cleverer rule. Weighting the shared words by how rare
     # they are in the window was tried and measured nothing: across 60 closed titles every shared word
     # appeared once or twice, so "spendly" and "failures" scored alike. What actually separates them is
@@ -84,11 +126,9 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
         title_toks = set(tokens(t.get('Title') or ''))
-        shared = toks & title_toks
-        if conv and conv in convs: why, rank = 'the same thread', 3.0
-        elif len(shared) >= 2: why, rank = 'the same subject', 1.0 + len(shared) / max(1, len(title_toks))
-        elif sender and sender in senders: why, rank = 'the same sender', 0.5
-        else: continue
+        hit = _match(conv, sender, toks, own, convs, senders, title_toks)
+        if not hit: continue
+        why, rank = hit
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
                     'closed': str(t.get('Closed') or '')[:16], 'summary': t.get('Summary') or '',
                     'how': 'done' if t.get('Status') == 'done' else 'dropped', 'why': why, '_rank': rank})

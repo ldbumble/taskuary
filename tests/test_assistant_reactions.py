@@ -342,14 +342,14 @@ class WrongThreadTests(unittest.TestCase):
                                          'body': 'The July financials bounced for Paul Rivera - his mailbox is full.',
                                          'to': ['owner@ours.com']}, llm=brain('task', 'coding'))
 
-    def test_a_reply_after_its_task_closed_is_new_work_not_another_tasks_mail(self):
+    def test_a_reply_after_its_task_closed_goes_back_to_that_task_never_another_ones(self):
         s = store()
         fin, pcc = self._two_tasks(s)
         s.update_task(fin, {'Status': 'done'}, 'owner')                    # the owner closed it, as they had
         with mock.patch.object(ingest, '_spawn'):
             out = self._reply_on_the_financials_thread(s)
-        self.assertEqual(out['status'], 'created')                          # new work, per the written rule
-        self.assertNotIn(out['task_id'], (fin, pcc))
+        self.assertEqual(out['task_id'], fin)                               # its own thread's task (2026-09-25)
+        self.assertNotEqual(out['task_id'], pcc)
         self.assertNotIn('Paul Rivera', ' '.join(str(m.get('BodyText') or '') for m in s.list_messages(pcc)))
 
     def test_the_guard_itself_refuses_a_third_task_and_says_why(self):

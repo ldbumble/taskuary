@@ -95,7 +95,7 @@ TASK_FIELDS = (
     'For a task, also answer "checklist": ["<one distinct requested outcome each>"] - drawn only from what the '
     'message and exchange actually ask for; never invent a requirement, never list anything as already done.')
 
-def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None) -> dict:
+def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -117,6 +117,7 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None) -
         p.update(relationship={'type': ['string', 'null'], 'enum': ['new', 'continues', 'answers', 'uncertain', None]},
                  related_message_ids={'type': ['array', 'null'], 'items': {'type': 'integer'}},
                  existing_task_id={'type': ['integer', 'null']}, same_problem={'type': ['boolean', 'null']})
+    if same: p['same_as'] = {'type': ['integer', 'null']}
     return {'name': 'triage_verdict',
             'schema': {'type': 'object', 'additionalProperties': False, 'required': list(p), 'properties': p}}
 
@@ -658,6 +659,23 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'A line reporting what ELSE is wrong is a different problem even when one change - an update, a '
                            'migration, a new release - may have caused all of them: "after the update X fails" then "and it '
                            'says Y" then "Z does not work either" are three problems, three jobs.')
+            # SAME AS A PAST TASK (the owner, 2026-09-25): shown the open and the recently closed work this
+            # touches, the model can say the arrival IS one of them - the same ask again, the same notice, the
+            # same failure reported twice - and it joins that task instead of opening a second (a closed one
+            # reopens only when this needs the owner). Here, not in TRIAGE.md: the owner's document replaces
+            # the shipped instructions, and a field the code reads must be asked for by the code.
+            same_ids = {int(w['tid']) for key in ('open_work', 'recently_closed') for w in ((thread or {}).get(key) or []) if w.get('tid')}
+            if same_ids:
+                system += ('\n\nSAME AS A TASK THAT EXISTS? open_work lists OPEN tasks this message touches and recently_closed '
+                           'the ones closed lately, each with its tid. If this message IS one of them - the same ask again, the '
+                           'same notice or report, the same failure, a reply to what that task asked - answer "same_as": <that tid>, '
+                           'and still answer intent for THIS message (fyi when it adds nothing that needs the owner). It then joins '
+                           'that task instead of opening a second one. Closed is no reason it cannot be the same: the same notice '
+                           'or alert arriving again, or another occurrence of a condition a closed task already explained (the '
+                           'failure it found transient or expected - a new run id or timestamp does not make it new), IS that task '
+                           '- same_as, and fyi when its determination already answers it. A different ask, problem, system, or a '
+                           'failure the closed task did not explain is new work: "same_as": null. Sharing a sender or a word is '
+                           'not being the same.')
             if project:
                 system += ('\n\nPROJECT RELATIONSHIP CONTEXT - selected from the owner\'s prior explicit repository '
                            'choices for this sender/channel. It helps identify what the message is about; it does '
@@ -707,7 +725,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # behind it, for a CLI brain that has no wire to put a schema on - one more ask, naming
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
-            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles),
+            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids)),
                               need=('title', 'summary'), **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
             if j is None: raise ValueError(answer.error or 'the response was not JSON')
@@ -734,6 +752,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if profiles and pr and out['intent'] == 'task' and re.search(rf'^- {re.escape(pr)}: ', profiles, re.M):
                     out['profile'] = pr
                 if candidates is not None: out.update(relationship_of(j, candidates))
+                # same_as: only a tid it was actually shown - a task it made up joins nothing
+                try: same = int(j.get('same_as')) if j.get('same_as') is not None else None
+                except (TypeError, ValueError): same = None
+                if same in same_ids: out['same_as'] = same
                 if repos and out['intent'] == 'task': out.update(repo_choice_of(j, repos))
                 # the work, named (PW-074): a title and summary of what was asked - validated, never
                 # trusted; the router falls back when absent. Kept on EVERY verdict now, not only on

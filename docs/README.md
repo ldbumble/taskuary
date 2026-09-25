@@ -36,3 +36,6 @@ The rest of this folder is working material rather than product documentation â€
 acceptance ledgers, investigation write-ups, and the specs and plans under `superpowers/`. It is
 kept because it explains why things are the way they are, not because it is meant to be read as a
 guide. [Status and roadmap](roadmap.md) is the one that is still for readers.
+
+**[How a task ends](how-a-task-ends.md)** is required reading before touching anything that finishes a
+task: the one close (Mark done), every door into it, and the decision tree.

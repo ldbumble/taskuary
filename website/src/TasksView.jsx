@@ -122,7 +122,7 @@ const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
 // three facts you can only read - "buttons are still not clear what they are. and they are
 // floating" (the owner, 2026-09-16). Same pill geometry as the facts beside them, in the slate
 // the app uses for every control: the colour says pressable, the border says where it ends.
-// Not filled - filled is Mark task done's, one strip up, and a live session has no primary.
+// Not filled - filled is Mark done's, one strip up, and a live session has no primary.
 // ...and SMALL, because every row this bar spends is a row the terminal does not get.
 const liveCtl = { fontSize: 10.5, fontWeight: 650, height: 23, minHeight: 23, py: 0, px: 0.9,
   borderRadius: 11.5, color: ACCENT, bgcolor: "#f1f4f7", borderColor: "#c7d2dc", whiteSpace: "nowrap",
@@ -554,12 +554,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   }, [active, selected, tasks, search, filter]);
 
   // ...except when the owner ENDS it. The effect above exists so a task that moves state under
-  // you stays on screen, and for done it did exactly the wrong thing: click Mark task done and
+  // you stays on screen, and for done it did exactly the wrong thing: click Mark done and
   // the view followed the task into the Done list and sat there on the row you had just
   // finished with. Closing a task is a statement that you are finished looking at it, so let go
   // of it and stay where the work is.
   const finish = async (status) => {
-    // Mark task done always means "continue with the work still in progress", even when this task
+    // Mark done always means "continue with the work still in progress", even when this task
     // was opened from All/search. Choose from the complete live bucket rather than `shown`, which
     // may be filtered or cut to today. Pre-record the state we are about to write: the server emits
     // task-changed during the PATCH, and without this guard that event can make the effect above
@@ -892,7 +892,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       {canSave && <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
         disabled={!!wrapping} sx={canContinue ? barBtn : primaryBtn}
         startIcon={<DoneAllIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
-        title="Writes up what this session did and files it as the task's result. The task stays open: Mark task done completes it and drafts the reply."
+        title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
         onClick={wrapUp}>{isGeneral ? "Save this conversation's result" : "Save stopped run result"}</Button>}
       {!isGeneral && <>
         {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
@@ -1078,7 +1078,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
                         title="Closes the task and ends the live agent session with it."
-                        onClick={() => finish("done")}>Mark task done</Button>
+                        onClick={() => finish("done")}>Mark done</Button>
                       <Tooltip title="Not a task — delete it and teach triage why">
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -1132,7 +1132,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               title="Closes the task and ends the live agent session with it."
-                              onClick={() => finish("done")}>Mark task done</Button>
+                              onClick={() => finish("done")}>Mark done</Button>
                             <Tooltip title="Not a task — delete it and teach triage why">
                               <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                                 <BlockIcon sx={{ fontSize: 16 }} /></IconButton>
@@ -1160,7 +1160,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 16 }} />}
                           sx={primaryBtn}
                           title="Closes the task and ends the live agent session with it."
-                          onClick={() => finish("done")}>Mark task done</Button>
+                          onClick={() => finish("done")}>Mark done</Button>
                         <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
                           sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
                           title="Delete it and teach triage why — the sender keeps writing to you."

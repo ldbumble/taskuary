@@ -79,7 +79,7 @@ harness and keeps the checkout and the history.
 it comes back to you rather than disappearing. Only **Later** holds it.
 
 **Stop session** ends the process and deliberately changes nothing else — not the task state, not
-the reply. If you want the task closed, **Mark task done** does both.
+the reply. If you want the task closed, **Mark done** does both.
 
 ## A report returned nothing
 

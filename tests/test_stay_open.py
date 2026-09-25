@@ -58,27 +58,14 @@ class TheJudgeIsRefusedButNotTheAgent(unittest.TestCase):
         return mock.Mock(task_id=tid, agent='coder', started_ts=0, n=99999,
                          tail=lambda n=0: 'all done, the export is fixed')
 
-    def test_the_judge_does_not_end_a_stay_open_session(self):
+    def test_a_quiet_screen_never_ends_a_task(self):
+        """The judge is gone (the owner, 2026-09-24): only the agent SAYING done, or the owner, ends a task - never a
+        guess read off a quiet screen, whoever opened the session."""
         s = MemoryStore()
-        tid = _task(s, selfclose.STAY_TAG)
-        with mock.patch.object(selfclose, 'judge', return_value={'state': 'finished', 'why': 'it said so'}) as j, \
-             mock.patch.object(selfclose, '_wrap') as w:
-            out = selfclose.on_stop(s, self._term(tid))
-        self.assertFalse(out['closed'])
-        self.assertIn('work in', out['why'])
-        w.assert_not_called()
-        j.assert_not_called()                       # and it does not even pay for the judge
-
-    def test_the_judge_still_ends_a_routed_one(self):
-        """The funnel must keep working: this is the behaviour the tag is carving an exception out of."""
-        s = MemoryStore()
-        tid = _task(s)
-        with mock.patch('taskuary.terminal.harvest', return_value='all done'), \
-             mock.patch.object(selfclose, 'judge', return_value={'state': 'finished', 'why': 'it said so'}), \
-             mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as w:
-            out = selfclose.on_stop(s, self._term(tid))
-        self.assertTrue(out['closed'])
-        w.assert_called_once()
+        for tid in (_task(s, selfclose.STAY_TAG), _task(s)):
+            with mock.patch.object(selfclose, '_wrap') as w:
+                out = selfclose.on_stop(s, self._term(tid))
+            self.assertFalse(out['closed']); self.assertTrue(out['why']); w.assert_not_called()
 
     def test_taskuary_done_closes_the_task_even_on_a_stay_open_session(self):
         """The stay-open tag is the JUDGE's veto and says so: "only an explicit ending counts".
@@ -98,12 +85,6 @@ class TheJudgeIsRefusedButNotTheAgent(unittest.TestCase):
         self.assertTrue(out['closed'])
         w.assert_called_once()
         self.assertIn('The agent closed this itself: fixed the export', [c['Body'] for c in s.list_comments(tid)])
-
-    def test_the_reason_is_reported_rather_than_silently_swallowed(self):
-        s = MemoryStore()
-        tid = _task(s, selfclose.STAY_TAG)
-        with mock.patch.object(selfclose, 'judge', return_value={'state': 'finished', 'why': 'x'}):
-            self.assertTrue(selfclose.on_stop(s, self._term(tid))['why'])
 
 
 if __name__ == '__main__':

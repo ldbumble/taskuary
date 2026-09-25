@@ -11,7 +11,7 @@ const tasks = src("TasksView.jsx");
 
 test("each control carries the caption that names its effect on task versus agent", () => {
   for (const [label, title] of [
-    ["Mark task done", "Closes the task and ends the live agent session with it."],
+    ["Mark done", "Closes the task and ends the live agent session with it."],
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
     ["Save and end session", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],

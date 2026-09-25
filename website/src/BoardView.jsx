@@ -1,6 +1,7 @@
 // Board: the agent kanban - every task as a card in a status column. Some cards arrive
-// from triage, some you start yourself; drag between columns to change status, click a
-// card to open the task (where you can message the agent working it). House design.
+// from triage, some you start yourself; click a card to open the task (where you can message the agent
+// working it). No drag-and-drop: dragging between columns changed status behind every other rule, so a
+// card "moved to Done" skipped Mark done (the owner, 2026-09-24: "remove that feature"). House design.
 import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -266,7 +267,6 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
   const [err, setErr] = useState("");
   const [view, setView] = useState("columns");   // columns | studio | wall - three looks at one board
   const [boardTick, setBoardTick] = useState(0); // bumped when a session starts here: the active board view reloads at once
-  const [dragId, setDragId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [noteFor, setNoteFor] = useState(null);   // the task whose handover note is open
   const [feedOpen, setFeedOpen] = useState(false); // Feed the agent: the funnel's front door
@@ -317,12 +317,6 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
       setNt((cur) => ({ ...cur, repo: def || NO_REPO }));
     }).catch(() => {});
   }, []);
-
-  const drop = async (col) => {
-    if (!dragId || col.key === "waiting") { setDragId(null); return; }   // waiting is review-driven
-    await api.patch(`/api/tasks/${dragId}`, { Status: col.status });
-    setDragId(null); load();
-  };
 
   // one reading of the repository box (newTask.js): who works it, and what the two fields
   // under it should say about that
@@ -441,14 +435,12 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
           if (col.key === "queued") cards.sort((a, b) => (b.Queued?.value ?? 0.5) - (a.Queued?.value ?? 0.5));
           return (
             // the lanes run to the bottom of the window: four columns of different heights
-            // read as four unrelated boxes floating on the page, and a short lane gave a
-            // drop target the size of its one card
-            <Box key={col.key} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(col)}
+            // read as four unrelated boxes floating on the page
+            <Box key={col.key}
               sx={{ bgcolor: "#e9e3d8", border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 0.85,
                 // stacked on a phone, an EMPTY column that keeps a desktop's height is 200px of
                 // "Nothing here." between you and the column that has the work in it
-                minHeight: { xs: cards.length ? 200 : 0, md: "calc(100vh - 190px)" }, alignSelf: "stretch",
-                outline: dragId && col.key !== "waiting" ? "2px dashed #d8cfbe" : "none", outlineOffset: -4 }}>
+                minHeight: { xs: cards.length ? 200 : 0, md: "calc(100vh - 190px)" }, alignSelf: "stretch" }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.4, pb: 0.85 }}>
                 <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: col.dot }} />
                 <Typography variant="body2" sx={{ color: INK, fontWeight: 700, flex: 1, fontSize: 11.5 }}>{col.title}</Typography>
@@ -470,9 +462,8 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 const badge = agentBadge(chat ? agentName(t) : (brain || live[t.TaskId]?.AgentName || t.RunAgent),
                   t.RunStatus, !!live[t.TaskId], cmds);
                 return (
-                <Box key={t.TaskId} draggable onDragStart={() => setDragId(t.TaskId)} onDragEnd={() => setDragId(null)}
-                  onClick={() => onOpenTask(t.TaskId)}
-                  sx={{ ...card, ...hoverable, p: 1.1, mb: 0.9, cursor: "grab", "&:active": { cursor: "grabbing" },
+                <Box key={t.TaskId} onClick={() => onOpenTask(t.TaskId)}
+                  sx={{ ...card, ...hoverable, p: 1.1, mb: 0.9, cursor: "pointer",
                     position: "relative",
                     ...(badge ? { mt: 1.1, borderColor: `${badge.color}55` } : {}) }}>
                   {badge && (

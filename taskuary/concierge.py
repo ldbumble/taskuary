@@ -69,7 +69,7 @@ VERBS = ('reply', 'approve', 'setting', 'not_ours', 'not_ours_remember', 'not_ou
 CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Hand it to a coding agent',
               'regular_agent': 'Hand it to an agent', 'mine': 'Put it on my list', 'not_ours': 'Not ours',
               'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
-              'archive': 'Archive it', 'close': 'Close the task',
+              'archive': 'Archive it', 'close': 'Mark done',
               'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
               'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
               'prep': 'Prep me', 'followup': 'Draft a follow-up'}
@@ -122,7 +122,7 @@ DECIDE_RULE = (
     "the job after a colon; when one of the WORKERS fits it, name it in brackets: DECIDE: regular_agent[researcher]: find out "
     "what that project does), mine "
     "(they will do it themselves), not_ours (file this one), not_ours_remember (file this kind from now on), "
-    "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), archive, close (close the task), done (handled), later, skip "
+    "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), archive, close (Mark done - say it that way, never 'close the task'), done (Mark done), later, skip "
     "(tomorrow), next (move on), remember (a fact to keep - after a colon), setup (building a report, a connection to another system or an automation - a walk-through with the "
     "assistant, the request after a colon; never a to-do or a reminder, which is a new task for the owner), setting (a switch for the owner to approve), split (two jobs in one arrival), stop_agent (end "
     "the running agent), answer_agent (the answer for the parked agent - after a colon), rerun (run the report again), "
@@ -605,9 +605,11 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         if v == 'prep' and not item.get('event'): continue
         if v == 'followup' and not (item.get('idea') or (item.get('action') or {}).get('mid')): continue
         if v != 'next' and cannot(item, v, store): continue
+        # ONE WORD for the one close (the owner, 2026-09-24: "mark done everywhere as the word") - it was "Close the
+        # task", "Close without sending" and "Mark task done" for the same act; only the hint says a draft stays unsent
         if v == 'close' and (item.get('kind') == 'review' or item.get('reply_pending')):
-            out.append({'verb': v, 'label': 'Close without sending',
-                        'hint': 'Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.'})
+            out.append({'verb': v, 'label': 'Mark done',
+                        'hint': 'Marks the task done without sending the draft, and ends any live agent session.'})
         else:
             out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
     return out
@@ -1714,6 +1716,8 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
             store.add_comment(tid, actor, 'human', 'Stopped the agent - the task was closed from the chat.')
     except Exception as e: logger.warning(f'concierge: the agent on {task_ref(tid)} was not stopped - {e}')
     if not closed: store.update_task(tid, {'Status': 'done'}, actor)
+    from . import selfclose
+    selfclose.unclaim(store, tid, actor)            # a finished task is nobody's to end any more
     store.audit('task', tid, 'close_from_assistant', actor)
     # ...and the row goes off Unread with it (the owner, 2026-09-07: "it should just go off the unread
     # timeline"). Closing is the decision, wherever it was made; only the CHAT's close used to post the
@@ -1975,7 +1979,7 @@ PROPOSALS = {
     'not_ours_sender': ('preference.exclude_sender', 'Ignore this sender from now on', True),
     'block_sender': ('preference.sender_rule', 'Add an exclusion rule in Settings', True),
     'archive': ('message.archive', 'Archive it', True),
-    'close': ('task.complete', 'Close the task', True), 'done': ('item.settle', 'Mark it handled', True),
+    'close': ('task.complete', 'Mark done', True), 'done': ('item.settle', 'Mark it handled', True),
     'later': ('item.settle', 'Push it back', True), 'skip': ('item.settle', 'Skip until tomorrow', True),
     'approve': ('review.approve', 'Send the reply', True), 'answer_agent': ('agent.answer', 'Send the answer to the agent', True),
     'stop_agent': ('agent.stop', 'Save and end session', False), 'rerun': ('report.rerun', 'Run the report again', True),
@@ -2139,7 +2143,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         if not it.get('key'): raise ValueError('nothing is on the table')
         # "done" said about an agent parked on a question is not a row to tick: the job is over, so the task
         # closes and the session ends with it - the shared task.complete road does both
-        if verb == 'done' and it.get('kind') == 'agent' and it.get('tid'): kind, label, target, params = 'task.complete', 'Close the task and stop its agent', it['tid'], {'agent': True}
+        if verb == 'done' and it.get('kind') == 'agent' and it.get('tid'): kind, label, target, params = 'task.complete', 'Mark done', it['tid'], {'agent': True}
         else: target, params = it.get('tid') or 0, {'key': it['key'], 'verb': verb, 'tid': it.get('tid'), 'rid': it.get('rid'), 'kind': it.get('kind')}
     elif verb == 'approve': target = it.get('rid')
     elif verb == 'answer_agent': target, params = it.get('tid'), {'text': d_text or 'yes'}
@@ -2437,8 +2441,7 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'task.create_from_message': label = {'coding': 'Send to the coding agent', 'general': 'Send to a regular agent'}.get(str(p.get('kind')), 'Put it on my list')
     if kind == 'task.create_from_text': label = {'coding': 'Start a coding agent on it', 'task': 'Put it on my list'}.get(str(p.get('kind')), 'Start a regular agent on it')
     if kind == 'preference.exclude_sender': label = 'Silence this sender' if p.get('scope') == 'sender' else 'File it and remember this kind'
-    if kind == 'item.settle': label = {'later': 'Push it back', 'skip': 'Skip until tomorrow'}.get(str(p.get('verb')), 'Mark it handled')
-    if kind == 'task.complete' and p.get('agent'): label = 'Close the task and stop its agent'
+    if kind == 'item.settle': label = {'later': 'Push it back', 'skip': 'Skip until tomorrow'}.get(str(p.get('verb')), 'Mark done' if p.get('tid') else 'Mark it handled')
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
     if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()

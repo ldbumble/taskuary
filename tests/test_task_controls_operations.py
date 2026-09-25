@@ -50,7 +50,7 @@ class TaskControls(unittest.TestCase):
                 rid = self.s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
                                          'Status': 'pending', 'DraftText': 'Checked.'})
                 chips = concierge.chips_for(self.s, {'kind': 'review', 'tid': tid, 'mid': mid, 'rid': rid})
-                self.assertTrue(any(x['verb'] == 'close' and x['label'] == 'Close without sending' for x in chips))
+                self.assertTrue(any(x['verb'] == 'close' and x['label'] == 'Mark done' for x in chips))
                 with mock.patch.object(terminal, 'session_for', return_value=None), \
                      mock.patch.object(server, 'decide') as send:
                     _, response = self.run_op('task.complete', tid)

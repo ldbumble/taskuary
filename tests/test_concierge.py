@@ -761,7 +761,7 @@ class ClosingTests(unittest.TestCase):
         self.assertEqual(s.get_task(t)['Status'], 'waiting')                        # not closed on the words
         self.assertEqual(run(s, out['proposal']).json()['status'], 'done')
         self.assertEqual(s.get_task(t)['Status'], 'done')
-        self.assertIn(f'Done - Close the task · TQ-{t:04d}', last_receipt(s))
+        self.assertIn(f'Done - Mark done · TQ-{t:04d}', last_receipt(s))
         self.assertEqual([i for i in funnel.build(s)['items'] if i.get('tid') == t], [])
 
     def test_a_close_made_outside_this_chat_says_nothing_in_it(self):

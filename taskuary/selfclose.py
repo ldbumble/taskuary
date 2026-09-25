@@ -7,16 +7,15 @@ click is what TRIGGERS the ending - the report, the proposals, the drafted reply
 nobody got round to closing produced no record and no answer to the person who asked. The
 sender waited on a button.
 
-So the ending moves to where the knowledge is. Two roads in, deliberately different:
+So the ending moves to where the knowledge is: the agent runs `taskuary --done "<one line>"` in its
+own shell. Deterministic, free, and the agent says it in words - the seed prompt tells every session
+to do this when it is finished (terminal.seed_text).
 
-- EXPLICIT: the agent runs `taskuary --done "<one line>"` in its own shell. Deterministic, free,
-  and the agent says it in words - the seed prompt tells every session to do this when it is
-  finished (terminal.seed_text). This is the road we want taken.
-- AUTOMATIC: the CLI's own stop hook fires (hooks.receive on Claude Code's `Stop`), and the last
-  thing the agent said is JUDGED - did this run end finished, or end waiting? Codex has no stop
-  hook, so its sessions fall back to a settle check on the same judge.
+There used to be a second road: when the CLI's stop hook fired, a model JUDGED the quiet screen and
+closed on "finished". It is gone (the owner, 2026-09-24): a guess read off a quiet screen is not an
+ending. Only the agent saying so, or the owner's Mark done, ends a task.
 
-Both land in coder.wrap, which is exactly what the Done button calls. Nothing about the ending
+It lands in coder.wrap, which is exactly what the Done button calls. Nothing about the ending
 is different because a machine started it: the same report, the same proposals, the same drafted
 reply sitting on the task with the task tagged "reply pending". The owner still approves what goes
 out - that is the part a person is genuinely needed for, and it is the only part left.
@@ -24,8 +23,8 @@ out - that is the part a person is genuinely needed for, and it is the only part
 What keeps this honest is that closing is the WRONG move most of the time it is tempting. An
 agent that stopped to ask a question has also "stopped talking". A pty parked at a prompt for
 three seconds after printing a plan has stopped talking. Closing either one throws away a live
-session and mails somebody a half-answer, so the gates below are deliberately mean: the judge
-must say finished AND the screen must not read as a question AND the session must have actually
+session and mails somebody a half-answer, so the gates below are deliberately mean even for an
+agent that says done: the screen must not read as a question AND the session must have actually
 done something AND no self-close may have run already. When they disagree, nothing happens and
 the Done button is still there.
 """
@@ -49,7 +48,6 @@ SETTING = 'agent_self_close'      # '1' (default) auto, 'ask' explicit-only, '0'
 STAY_TAG = 'stay:open'
 MIN_AGE = 45.0                    # seconds a session must have lived before it may close itself
 MIN_CHARS = 400                   # ...and printed. A session that produced nothing did nothing.
-JUDGE_TAIL = 6000                 # how much of the end of the transcript the judge reads
 _DONE = set()                     # task ids a self-close has already run for, this process
 _LOCK = threading.Lock()
 
@@ -60,50 +58,6 @@ def mode(store) -> str:
     merely stops talking does not."""
     v = str(store.get_settings().get(SETTING, '1') or '1').strip().lower()
     return 'off' if v in ('0', 'off', 'false') else 'ask' if v == 'ask' else 'auto'
-
-
-# ── the judge ───────────────────────────────────────────────────────────────────────────
-# It reads the END of a transcript, which is where "I'm done" and "which of these do you want?"
-# both live, and they are the two answers that matter. Everything else is 'working' - the safe
-# verdict, because being wrong about 'working' costs a Done click and being wrong about
-# 'finished' mails a stranger half an answer.
-JUDGE_SYSTEM = (
-    'You are reading the last part of a coding agent\'s terminal session. The agent has stopped '
-    'printing. Decide ONE thing: is this run OVER, or is it waiting on the owner?\n'
-    'Answer JSON only: {"state": "finished|asking|working", "why": "<one short sentence quoting '
-    'what told you>"}.\n'
-    'finished = the agent has said, in its own words, that the work is complete - it fixed it, or '
-    'it looked and there was nothing to fix, or it produced what was asked for - and it is not '
-    'waiting for anything from the owner. A summary of what it did with no open question is '
-    'finished.\n'
-    'asking = the last thing on screen wants something from the owner: a question, a choice '
-    'between options, a permission request, a "let me know", a blocked step. Anything the owner '
-    'must answer before the agent can go on. When in the slightest doubt between finished and '
-    'asking, say asking.\n'
-    'working = the run is mid-flight, or it crashed, or the screen simply does not say - it '
-    'printed a plan, a partial edit, an error it has not addressed. Say working whenever the '
-    'screen does not clearly say one of the other two.\n'
-    'You are deciding whether to END a live session and MAIL somebody the result. Guessing '
-    'finished when it is not is the expensive mistake; guessing working costs one click.')
-
-
-def judge(store, text: str, said: str = '') -> dict:
-    """{'state', 'why'} for the tail of a transcript. No AI configured means no automatic
-    closing at all - a keyword scan is not allowed to end sessions and mail people."""
-    from .llm import build_llm
-    tail = (text or '')[-JUDGE_TAIL:]
-    if not tail.strip(): return {'state': 'working', 'why': 'nothing on screen'}
-    try:
-        llm = build_llm(store)
-        if not llm: return {'state': 'working', 'why': 'no AI is configured to judge the ending'}
-        body = (f'The last thing the agent said:\n{said.strip()[:2000]}\n\n' if said.strip() else '') + f'Screen:\n{tail}'
-        j = json.loads(re.sub(r'^```(json)?|```$', '', str(llm(JUDGE_SYSTEM, body, max_tokens=200) or '').strip(), flags=re.M))
-        state = str(j.get('state') or '').lower()
-        return {'state': state if state in ('finished', 'asking', 'working') else 'working',
-                'why': str(j.get('why') or '')[:300]}
-    except Exception as e:
-        logger.debug(f'self-close judge failed: {e}')
-        return {'state': 'working', 'why': f'the judge could not answer ({str(e)[:80]})'}
 
 
 # ── the gates ───────────────────────────────────────────────────────────────────────────
@@ -223,24 +177,10 @@ def _finished(store, tid: int, s, line: str) -> str:
 
 
 def on_stop(store, term, said: str = '') -> dict:
-    """The AUTOMATIC road: the CLI's stop hook fired. Judge the ending, and close only on a clear
-    'finished'. Runs on its own thread from the caller - a hook must never hold the agent."""
-    tid = getattr(term, 'task_id', None)
-    if not tid or mode(store) != 'auto': return {'closed': False, 'why': 'not automatic'}
-    why = blocked(store, tid, term)
-    if why: return {'closed': False, 'why': why}
-    if stays_open(store, tid):
-        logger.debug(f'self-close: task {tid} was opened to work in - only `taskuary --done` ends it')
-        return {'closed': False, 'why': 'you opened this one to work in'}
-    from . import terminal as _t
-    v = judge(store, _t.harvest(term), said)
-    if v['state'] != 'finished':
-        logger.debug(f'self-close: task {tid} stays open - {v["state"]}: {v["why"]}')
-        return {'closed': False, 'why': f"{v['state']}: {v['why']}"}
-    if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
-    store.add_comment(tid, getattr(term, 'agent', None) or 'agent', 'agent',
-                      f'The session stopped and read as finished, so it closed itself: {v["why"]}')
-    return _wrap(store, tid, getattr(term, 'agent', None) or 'coder', v['why'], said)
+    """The CLI's stop hook fired. It used to judge the quiet screen and close on "finished"; that guess is OFF
+    (the owner, 2026-09-24): a task ends when the owner marks it done or its agent SAYS so (`declare`,
+    `taskuary --done`)."""
+    return {'closed': False, 'why': 'a quiet screen is not an ending - only the agent saying done, or you, ends a task'}
 
 
 def _wrap(store, tid: int, agent: str, why: str, final_message: str = '') -> dict:

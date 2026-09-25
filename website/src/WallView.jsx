@@ -7,7 +7,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Box, Button, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
-import DoneAllIcon from "@mui/icons-material/DoneAll";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
@@ -125,31 +124,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
     window.addEventListener("pointercancel", finish);
   };
   useEffect(() => () => drag.current?.cleanup?.(), []);
-  const wrap = async (s) => {
-    if (!s?.sid || wrappingRef.current[s.sid]) return;
-    wrappingRef.current = { ...wrappingRef.current, [s.sid]: true };
-    setWrapping({ ...wrappingRef.current });
-    setWrapNotice("");
-    setWrapErrors((errs) => { const next = { ...errs }; delete next[s.sid]; return next; });
-    try {
-      const { data } = await api.post(`/api/tasks/${s.taskId}/wrap`, { close: true });
-      // the pane goes, but not silently: the result and where the task went stay on the wall until dismissed
-      setWrapDone({ tid: s.taskId, ref: tasks[s.taskId]?.ref || `TQ-${s.taskId}`, line: String(data?.report || "").split("\n")[0].slice(0, 240), drafting: !!data?.drafting });
-      // Do not wait for the eight-second Wall poll to prove a successful response meant success.
-      // Remove this exact pane now; other agents on the Wall keep their place and keep working.
-      setSessions((rows) => withoutWallSession(rows, s.sid));
-      setOrder((rows) => rows.filter((sid) => sid !== s.sid));
-      setLive((rows) => { const next = { ...rows }; delete next[s.taskId]; return next; });
-    } catch (e) {
-      const msg = e?.response?.data?.detail || e?.message || "the session could not be wrapped up";
-      setWrapErrors((errs) => ({ ...errs, [s.sid]: msg }));
-      setWrapNotice(`Could not finish ${tasks[s.taskId]?.ref || `TQ-${s.taskId}`}: ${msg}`);
-    } finally {
-      const next = { ...wrappingRef.current }; delete next[s.sid]; wrappingRef.current = next;
-      setWrapping(next);
-      await load();
-    }
-  };
+  // no "Wrap up task" on the Wall: the task page's Mark done ends a task (the owner, 2026-09-24: "remove it")
   const closeSession = async () => {
     if (!closing?.sid) return;
     await api.delete(`/api/terminals/${closing.sid}`);
@@ -243,11 +218,6 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                     <Typography noWrap title={t.Title || s.cwd}
                       sx={{ fontSize: 12, fontWeight: 650, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
                     <Tooltip title="Open the full task page"><IconButton aria-label="Open full task" size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
-                    <Tooltip title={wrapBusy ? "Closing the session and writing its report…" : "Done — close the session and wrap up the task"}>
-                      <IconButton aria-label={wrapBusy ? "Wrapping up task" : "Wrap up task"} size="small" disabled={wrapBusy} onClick={() => wrap(s)}>
-                        {wrapBusy ? <CircularProgress size={14} /> : <DoneAllIcon sx={{ fontSize: 15, color: "#47654a" }} />}
-                      </IconButton>
-                    </Tooltip>
                     <Tooltip title="Close session — stop the agent; keep the task and transcript"><span><IconButton aria-label="Close session" size="small" disabled={wrapBusy} onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></span></Tooltip>
                   </Box>
                   {/* Always reserve the status row. A tool starting/stopping used to add/remove

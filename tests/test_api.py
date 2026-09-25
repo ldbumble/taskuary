@@ -359,13 +359,18 @@ class ApiTests(unittest.TestCase):
         c.patch(f'/api/tasks/{other}', json={'Status': 'dropped'})
         self.assertEqual(boxes(other), [False, False])
 
-    def test_an_agents_task_is_not_closed_by_a_tick(self):
-        """A task an agent holds may have boxes the owner ticks while it works; closing it would stop
-        the agent mid-run. The agent's task ends the agent's way (--done, or the owner's Completed)."""
+    def test_the_last_tick_is_mark_done_unless_an_agent_is_working_it(self):
+        """The last box is Mark done - unless an agent is working it right now (the owner, 2026-09-24). It used to
+        need nobody assigned, so a task once handed to an agent never closed this way."""
+        from taskuary import funnel
         tid = c.post('/api/tasks', json={'Title': 'agent work', 'Assignee': 'agent:coder'}).json()['taskId']
         (a,) = c.put(f'/api/tasks/{tid}/checklist', json={'items': ['one thing']}).json()['checklist']
-        self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True}).json().get('closed'))
+        with mock.patch.object(funnel, 'working_tids', return_value={tid}):
+            self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True}).json().get('closed'))
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'open')
+        c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': False})
+        self.assertTrue(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True}).json().get('closed'))
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
     def test_active_tasks_omit_old_done(self):
         """Board/Studio ask ?active=1 so they do not ship every finished task ever."""

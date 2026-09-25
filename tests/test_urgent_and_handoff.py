@@ -88,7 +88,7 @@ class HandoffClosesTheTaskTests(unittest.TestCase):
         t = s.get_task(tid)
         self.assertEqual(t['Status'], 'done')                 # not 'waiting', not 'needs you'
         self.assertTrue(t['ClosedAt'])
-        self.assertEqual(s.get_review(rid)['Status'], 'superseded')
+        self.assertEqual(s.get_review(rid)['Status'], 'no_reply')         # forward, then Mark done: the draft retires
         self.assertNotIn(rid, [r['ReviewId'] for r in s.list_reviews('pending')])
         # the forward itself is still on the record - closing is not forgetting
         self.assertTrue(any('Handed off to hwhitfield@example.com' in (c['Body'] or '')

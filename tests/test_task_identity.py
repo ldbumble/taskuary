@@ -70,6 +70,7 @@ class SessionOutlivesTaskTests(unittest.TestCase):
         mid = server.store.add_message({'Channel': 'email', 'Subject': 'Re: Resident Refund',
                                         'FromEmail': 'a@b.c', 'TaskId': tid, 'ExternalId': 'nm1'})
         with mock.patch.object(server.hub_term, 'for_task', return_value={'sid': 'S2'}), \
+             mock.patch.object(server.hub_term, 'session_for', return_value=mock.Mock(sid='S2', alive=True)), \
              mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'sender'})
         close.assert_called_once_with('S2')
@@ -80,6 +81,7 @@ class SessionOutlivesTaskTests(unittest.TestCase):
         mid = server.store.add_message({'Channel': 'teams', 'Subject': 'chat', 'TaskId': tid,
                                         'ExternalId': 'file1'})
         with mock.patch.object(server.hub_term, 'for_task', return_value={'sid': 'S3'}), \
+             mock.patch.object(server.hub_term, 'session_for', return_value=mock.Mock(sid='S3', alive=True)), \
              mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             c.post(f'/api/messages/{mid}/file')
         close.assert_called_once_with('S3')

@@ -630,8 +630,11 @@ def tick_checklist(task_id: int, item_id: str, body: ChecklistTick):
     if not t: raise HTTPException(404, 'task not found')
     if not store.tick_checklist_item(task_id, item_id, body.done, ACTOR): raise HTTPException(404, 'no such checklist item')
     items, closed = store.task_checklist(task_id), False
-    if (body.done and items and all(i.get('done') for i in items) and t.get('Status') == 'open'
-            and not str(t.get('Assignee') or '').startswith('agent:')):
+    # the last box is Mark done - unless an agent is working it right now (the owner, 2026-09-24). It used to need
+    # Status open and nobody assigned, so a task once handed to an agent never closed this way.
+    from .funnel import working_tids
+    if (body.done and items and all(i.get('done') for i in items) and t.get('Status') not in ('done', 'dropped')
+            and task_id not in working_tids(store)):
         from . import concierge
         closed = concierge.close_task(store, task_id, ACTOR)          # the same road as Completed and "close it"
         if closed: store.add_comment(task_id, ACTOR, 'human', 'Closed - the last item on the checklist was ticked.')
@@ -796,12 +799,11 @@ def _run_operation(op: dict, background: BackgroundTasks):
         verb = str(p.get('verb') or 'done')
         out = funnel.settle(store, str(p.get('key')), verb, ACTOR, p.get('hours'),
                             expected_context=p.get('processing_context'))
-        # done on a task-backed item means the TASK is done: its pending draft is dismissed and it closes
-        if verb == 'done' and p.get('kind') != 'agent':
-            rv = store.get_review(int(p['rid'])) if p.get('rid') else None
-            if rv and rv.get('Status') in ('pending', 'held'): verdicts.decide(store, rv, 'no_reply', None, 'handled - the owner said so', ACTOR)
-            t = store.get_task(int(p['tid'])) if p.get('tid') else None
-            if t and t.get('Status') not in ('done', 'dropped'): store.update_task(int(p['tid']), {'Status': 'done'}, ACTOR); out['closed'] = int(p['tid'])
+        # "done" on a task-backed item IS Mark done - the one close (concierge.close_task): drafts retired, the agent
+        # stopped, off the rail. It used to close the task and leave its agent running (the owner, 2026-09-24).
+        if verb == 'done' and p.get('tid'):
+            from . import concierge
+            if concierge.close_task(store, int(p['tid']), ACTOR): out['closed'] = int(p['tid'])
         return out
     if kind == 'review.approve':
         if not store.get_review(tid): raise HTTPException(404, 'review not found')
@@ -1260,7 +1262,13 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
             is_chat = getattr(live, 'mode', '') == 'assistant'
             wants_chat = general.handles({'Kind': next_kind})
             if is_chat != wants_chat or next_kind == 'task': hub_term.close(live.sid)
+    # Status done through here is Mark done too - the one close (concierge.close_task), whichever page sent it
+    closing = fields.get('Status') == 'done' and t.get('Status') not in ('done', 'dropped')
+    if closing: fields.pop('Status')
     store.update_task(task_id, fields, ACTOR)
+    if closing:
+        from . import concierge
+        concierge.close_task(store, task_id, ACTOR)
     if t.get('Status') in ('done', 'dropped') and fields.get('Status') in ('open', 'in_progress', 'waiting'):
         # A self-close is remembered in-process to prevent duplicate hooks. Reopening is a new
         # lifecycle, so a later automated run must be allowed to settle again.
@@ -1787,11 +1795,8 @@ def _file_task(tid: int, why: str) -> str:
     lost = work_on_task(tid)
     if not lost:
         _drop_task(tid); return 'deleted'
-    try:                                       # the work is kept; the agent doing it is not
-        live = hub_term.for_task(tid)
-        if live: hub_term.close(live['sid'])
-    except Exception as e: logger.warning(f'could not stop the agent on archived task {tid}: {e}')
-    store.update_task(tid, {'Status': 'done'}, ACTOR)
+    from . import concierge
+    concierge.close_task(store, tid, ACTOR)                     # the work is kept; Mark done stops the agent
     store.add_comment(tid, ACTOR, 'human', f'Archived, not deleted - {why}. Kept because {lost}.')
     store.audit('task', tid, 'archived_not_deleted', ACTOR, detail={'why': why, 'kept': lost})
     return 'archived'
@@ -2656,7 +2661,8 @@ def handoff(task_id: int, body: HandoffBody):
     # thing now, so leaving the card open on 'needs you' is the funnel asking for a second
     # decision about work the owner just gave away. Closing it also retires the task's pending
     # reviews, so the review queue stops asking about a draft that has already been forwarded.
-    store.update_task(task_id, {'Status': 'done'}, ACTOR)
+    from . import concierge
+    concierge.close_task(store, task_id, ACTOR)                  # forward, then Mark done: the agent stops, off the rail
     store.audit('task', task_id, 'handoff', ACTOR,
                 detail={'to': body.to, 'channel': body.channel, 'closed': True})
     return {'sent': sent, 'text': text, 'status': 'done'}

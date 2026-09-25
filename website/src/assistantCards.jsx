@@ -187,8 +187,8 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   // a reply still unsent behind the card is dismissed by closing - the button says so (the owner, 2026-09-24)
   const unsent = !!(close?.draft || close?.reply_pending);
   const words = [...also, ...(close?.tid && !also.some((a) => a.verb === "close")
-    ? [{ verb: "close", label: shut.busy ? "Closing…" : unsent ? "Close without sending" : "Close the task",
-         title: unsent ? "Close the task - the drafted reply is not sent; it stays on the task" : "Close the task - it stops coming back to Work",
+    ? [{ verb: "close", label: shut.busy ? "Closing…" : "Mark done",
+         title: unsent ? "Mark done - the drafted reply is not sent; it stays on the task" : "Mark done - it stops coming back to Work",
          onClick: shut.run, disabled: shut.busy }] : [])];
   return (
     <>
@@ -470,10 +470,10 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
           you are responding to") - one press away, under the draft */}
       {card.mid && <button type="button" className="tq-card-more" onClick={() => setFull((v) => !v)}>{full ? "Less" : "More - what they wrote"}</button>}
       {full && card.mid && <CombinedTaskText card={card} list={false} />}
-      {/* "Close without sending" arrives as a conversation word; off the walk (no words), the same
-          road is still offered under More actions */}
+      {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
+          under More actions */}
       <Foot verb={verb} then={then} covers={["approve", "redraft"]}
-        extra={card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done without sending",
+        extra={card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
           title: "Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.",
           disabled: !!busy || !rv, onClick: finish }] : []}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
@@ -999,8 +999,8 @@ export function WrapupCard({ card, onDone, onOpenTask }) {
       {card.sent && <div className="tq-card-excerpt">You sent: {card.sent}</div>}
       {card.summary && <div className="tq-card-excerpt">The agent: {card.summary}</div>}
       <Foot covers={["close"]}
-        verb={<Button size="small" variant="contained" disableElevation disabled={busy} onClick={close} sx={primary}>{busy ? "Closing…" : "Close the task"}</Button>}
-        then={<><b>Close the task</b> ends {card.ref} - it stops coming back to Work.</>}
+        verb={<Button size="small" variant="contained" disableElevation disabled={busy} onClick={close} sx={primary}>{busy ? "Closing…" : "Mark done"}</Button>}
+        then={<><b>Mark done</b> ends {card.ref} - it stops coming back to Work.</>}
         where={<Button size="small" onClick={() => onOpenTask?.(card.tid)} sx={faint}>Open {card.ref} ↗</Button>} />
     </CardShell>
   );

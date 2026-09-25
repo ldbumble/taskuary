@@ -204,9 +204,9 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
         ) : r.CanSend === false ? (
           <Button size="small" variant="contained" disableElevation disabled={busy}
             sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
-            title={`No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task closes as your decision (PW-145).`}
+            title={`No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).`}
             onClick={() => decide("close_unsent")}>
-            {busy ? "closing…" : "Close without sending"}
+            {busy ? "closing…" : "Mark done"}
           </Button>
         ) : r.Stale ? (
           /* THE ROAD OUT OF THE WARNING. A stale draft disabled the only button on the card
@@ -228,10 +228,7 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
               : "Approve & send"}
           </Button>
         )}
-        {!proposal && r.CanSend !== false && (
-          <Button size="small" sx={{ color: "#867f74" }} disabled={busy}
-            onClick={() => decide("no_reply")}>No reply needed</Button>
-        )}
+        {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
         <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")}>{proposal?.rejectLabel || "Reject"}</Button>
         <Box sx={{ flex: 1 }} />
         {!proposal && meta.kind !== "zoho_invoice" && <Button size="small" disabled={busy} onClick={redraft}>

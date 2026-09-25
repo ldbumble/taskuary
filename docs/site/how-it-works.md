@@ -82,11 +82,11 @@ The same gate covers more than mail: a GitHub comment, an invoice, a bill posted
 system and a file written to a share are all proposals until you approve them. A connector card
 ships at a read-only authority, and raising it is a deliberate act.
 
-:::rule Finishing is not closing
-Finishing an agent run and completing a task are separate actions, and a reply going out is a
-third. A task you created, promoted with **This one is mine**, or started yourself stays open
-until you press **Mark task done** — agents can finish and replies can be sent many times in
-between. See [Tasks and agents](tasks-and-agents#a-tasks-three-lives).
+:::rule One way to finish
+A task ends with **Mark done** — on the task page, on the Assistant's card, or by saying "done" in
+the chat. Sending the reply marks it done too, unless an agent is still working on it or a new
+message arrived meanwhile. An agent that says it is finished closes its own task, and that result
+stays on your work rail until you have read it. See [Tasks and agents](tasks-and-agents#who-is-allowed-to-close-it).
 :::
 
 ## Correcting it teaches it

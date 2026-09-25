@@ -23,5 +23,5 @@ export function progressLine(items) {
   const n = (items || []).length;
   if (!n) return "";
   const done = items.filter((i) => i.done).length;
-  return `${done} of ${n} done${done === n ? " — close the task when it is really finished" : ""}`;
+  return `${done} of ${n} done${done === n ? " — Mark done when it is really finished" : ""}`;
 }

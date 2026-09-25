@@ -534,11 +534,11 @@ class ResponseTests(unittest.TestCase):
     def test_close_the_task_is_confirmed_then_closes_it_and_says_which(self):
         s, tid, mid, item = self._asked()
         p = decide(s, 'close it', 'close', key=item['key'])['proposal']
-        self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, 'Close the task'))
+        self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, 'Mark done'))
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         run(s, p)
         self.assertEqual(s.get_task(tid)['Status'], 'done')
-        self.assertTrue(any('Done - Close the task' in b and f'TQ-{tid:04d}' in b for b in receipts(s)), receipts(s)[-2:])
+        self.assertTrue(any('Done - Mark done' in b and f'TQ-{tid:04d}' in b for b in receipts(s)), receipts(s)[-2:])
 
     def test_stopping_the_agent_is_not_closing_the_task(self):
         s, tid, mid, item = self._asked()
@@ -898,7 +898,7 @@ class AgentEndingsTests(unittest.TestCase):
     def test_done_on_a_parked_agent_closes_the_task_and_the_session(self):
         s, tid, live, item = self._parked()
         p = decide(s, 'done', 'done', key=item['key'], live=live)['proposal']
-        self.assertEqual((p['kind'], p['target'], p['params'], p['label']), ('task.complete', tid, {'agent': True}, 'Close the task and stop its agent'))
+        self.assertEqual((p['kind'], p['target'], p['params'], p['label']), ('task.complete', tid, {'agent': True}, 'Mark done'))
         with mock.patch.object(terminal, 'session_for') as found, mock.patch.object(terminal, 'close') as closed:
             found.return_value = mock.Mock(sid='s1', alive=True)
             run(s, p, live=live)

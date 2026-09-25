@@ -3851,8 +3851,8 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
       {canSend === false ? (
         <Button size="small" variant="contained" disableElevation
           sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
-          title="GitHub replies are off (GitHub card → Reply to issue/PR authors) — close this without sending"
-          onClick={() => decide(reviewId, "close_unsent")}>Close without sending</Button>
+          title="GitHub replies are off (GitHub card → Reply to issue/PR authors) — mark it done without sending"
+          onClick={() => decide(reviewId, "close_unsent")}>Mark done</Button>
       ) : (
         <>
           <Button size="small" variant="contained" disabled={!text.trim() || (channel === "email" && !review) || (envelope && !envelope.to.length)}
@@ -3861,7 +3861,9 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
             {deliveryUnknown ? "Check delivery and retry"
               : [`Approve & send`, files.length ? `${files.length} file${files.length === 1 ? "" : "s"}` : "",
                  cc.length ? `copying ${cc.length}` : ""].filter(Boolean).join(" · ")}</Button>
-          <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
+          {/* Mark done, not "No reply needed": one word for the one close (the owner, 2026-09-24) */}
+          <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}
+            title="Marks the task done without sending this draft">Mark done</Button>
         </>
       )}
       <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>Reject</Button>

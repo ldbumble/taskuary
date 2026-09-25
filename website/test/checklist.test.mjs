@@ -24,7 +24,7 @@ test("toggling flips one item by id and leaves the rest", () => {
 
 test("the progress line counts boxes and never calls the task done", () => {
   assert.equal(progressLine(ITEMS), "1 of 2 done");
-  assert.equal(progressLine([{ id: "x", text: "t", done: true }]), "1 of 1 done — close the task when it is really finished");
+  assert.equal(progressLine([{ id: "x", text: "t", done: true }]), "1 of 1 done — Mark done when it is really finished");
   assert.equal(progressLine([]), "");
 });
 

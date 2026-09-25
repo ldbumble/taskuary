@@ -56,11 +56,12 @@ def _arrived_after_close(task, view) -> bool:
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the hour
 # ('stopped' is not here: it stays unread however often it is looked at - its own rule, below)
 OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken')
-FINISHED_HOURS = 72          # an agent's result nobody opened for three days is history, not news
 
 
 def _agent_finished(store, tid, active, review, read_at, now):
-    """{'who', 'summary', 'unread'} when this task was closed by its agent - not the owner - in the last three days.
+    """{'who', 'summary', 'unread'} when this task was closed by its agent or its PR ending - not the owner.
+    NEVER SEEN BY A PERSON STAYS ON THE RAIL (the owner, 2026-09-24): there is no age limit any more - it was
+    three days, and a result nobody read simply vanished.
     What the card IS does not turn on the read: putting it on the table reads it, and a read that turned it into
     a closed fyi row took it off the rail under the chat that was showing it (the owner, 2026-09-24). The read
     decides only whether it is still waiting."""
@@ -68,11 +69,12 @@ def _agent_finished(store, tid, active, review, read_at, now):
     t = store.get_task(tid) or {}
     by, closed_at = str(t.get('UpdatedBy') or ''), processing_all._stamp(t.get('ClosedAt'))
     if t.get('Status') != 'done' or by in ('', 'owner') or t.get('SourceRef') == 'assistant:dock' or closed_at is None: return None
-    if closed_at < now - timedelta(hours=FINISHED_HOURS): return None
     # the agent's own close note is the proof (selfclose.py): 'who last wrote the row' also named the owner's
     # other spellings ('you', a migration), which the read used to hide once it no longer decided the card
+    # ...or the upstream ending (a PR merged or closed: channels.close_upstream_ended, filed by 'router')
     said = next((c['Body'] for c in reversed(store.list_comments(tid) or [])
-                 if str(c.get('Body') or '').startswith('The agent closed this itself')), None)
+                 if str(c.get('Body') or '').startswith('The agent closed this itself')
+                 or (by == 'router' and c.get('Actor') == 'router')), None)
     if said is None: return None
     return {'who': 'The agent' if by in ('assistant', 'agent', 'system', 'router') else by, 'summary': said.split(':', 1)[1].strip() if ':' in said else '',
             'unread': not (read_at and read_at >= closed_at)}

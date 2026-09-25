@@ -98,7 +98,7 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   // the completion control rides on the folded strip too, so it is there whether the card is open
   // or folded - the strip is the Task card's whole presence when the agent or reply has the focus
   const folded = source.slice(source.indexOf('stage !== "task" && ('), source.indexOf('{stage === "task" && <>'));
-  assert.ok(folded.includes(">Mark task done</Button>"), "the folded Task strip must carry the done control");
+  assert.ok(folded.includes(">Mark done</Button>"), "the folded Task strip must carry the done control");
   assert.ok(folded.includes('finish("done")'), "and it must run the same completion road");
   assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action \}\)/);
   // ...and a general conversation is wrappable once its provider session is gone (server.py/coder.py, 2026-09-07)

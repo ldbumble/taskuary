@@ -26,7 +26,7 @@ PURPOSE = {
     'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
     'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline',
     'item.settle':              'put the item down - `verb`: done | later | skip (the item on the table is the target)',
-    'task.complete':            'close the task',
+    'task.complete':            'Mark done - the task is finished',
     'review.approve':           'send the drafted reply as it stands',
     'agent.answer':             'answer the agent that is waiting - `text`',
     'agent.stop':               'stop the running agent',

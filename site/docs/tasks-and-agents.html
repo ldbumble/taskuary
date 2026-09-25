@@ -98,8 +98,8 @@ each stage owns exactly one state badge.</p>
 <tbody><tr>
 <td><strong>Task</strong></td>
 <td>The durable job and who owns it</td>
-<td>owner, kind, priority, status, Reopen, Mark task done</td>
-<td>Starting or ending an agent does not complete an owner-controlled task</td>
+<td>owner, kind, priority, status, Reopen, Mark done</td>
+<td>Starting or ending an agent session does not complete it</td>
 </tr>
 <tr>
 <td><strong>Agent work</strong></td>
@@ -111,22 +111,25 @@ each stage owns exactly one state badge.</p>
 <td><strong>Reply</strong></td>
 <td>Communication with the person who asked</td>
 <td>write, generate, edit, approve and send</td>
-<td>Sending an update does not complete an owner-controlled task</td>
+<td>Sending it marks the task done — unless an agent is still working or a new message came in</td>
 </tr>
 </tbody></table>
 <p>While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
 the workspace takes most of the page. Full controls, saved results and restart choices come back
 when the agent stops.</p>
 <h3 id="who-is-allowed-to-close-it">Who is allowed to close it<a class="anchor" href="#who-is-allowed-to-close-it" aria-label="Link to this section">#</a></h3>
-<p>How the work arrived decides who may finish it.</p>
 <ul>
-<li><strong>Triaged work closes itself.</strong> When triage creates and dispatches a coding task, the agent may
-declare the work finished: Taskuary closes the task, saves the result and prepares a reply. If
-the agent needs something from you it raises its hand instead.</li>
-<li><strong>Owner-controlled work stays open.</strong> A task you created by hand, promoted with <strong>This one is
-mine</strong>, split manually, opened as a discussion, or started yourself carries a durable
-<code>stay:open</code> policy. Agent runs may finish and replies may go out repeatedly; only <strong>Mark task
-done</strong> closes it.</li>
+<li><strong>You</strong> end a task with <strong>Mark done</strong>. Every way of saying it — the button, the Assistant&#39;s card,
+&quot;done&quot; or &quot;close&quot; in the chat, the phone — does the same thing: the task is done, any unsent
+draft is kept but retired, a live agent is stopped, and it leaves your work rail.</li>
+<li><strong>Sending the reply</strong> marks the task done, unless an agent is still working on it or a new
+message came in while you were answering — then it stays open and says why.</li>
+<li><strong>Ticking the last checklist box</strong> marks it done, unless an agent is working on it.</li>
+<li><strong>An agent</strong> may say it is finished (<code>taskuary --done</code>). Taskuary saves the result, and either
+waits for you with a drafted reply or marks the task done. A task an agent closed stays on your
+work rail until you have read it. A session you started yourself tells the agent to leave the
+ending to you.</li>
+<li>A stopped or quiet session never ends a task on its own.</li>
 </ul>
 <p>Reopening a completed task starts a fresh task lifecycle rather than pretending an old terminal
 is still alive.</p>
@@ -159,15 +162,15 @@ and topic history, the learned profile, and reports from related closed tasks.</
 <td>Ends the session after writing a handoff note for the next one</td>
 </tr>
 <tr>
-<td><strong>Finish agent run</strong></td>
-<td>Ends the session and writes its result — without closing an owner-controlled task</td>
+<td><strong>Save and end session</strong></td>
+<td>Ends the session and writes its result; the task stays open until you mark it done</td>
 </tr>
 <tr>
 <td><strong>Stop session</strong></td>
 <td>Ends only the process. Deliberately changes neither task nor reply state</td>
 </tr>
 </tbody></table>
-<p><strong>Mark task done</strong> is stronger than all of them: it closes the task <em>and</em> ends any live session,
+<p><strong>Mark done</strong> is stronger than all of them: it closes the task <em>and</em> ends any live session,
 because a finished task should not leave an orphan process running.</p>
 <p>The saved result is deliberately short. Every finished coding session also writes a full Markdown
 artifact with that result and the complete transcript — <strong>Work details → Full artifact</strong> on the

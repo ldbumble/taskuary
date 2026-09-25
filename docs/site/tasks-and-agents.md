@@ -9,9 +9,9 @@ each stage owns exactly one state badge.
 
 | Part | What it records | Main controls | What it never does by itself |
 |---|---|---|---|
-| **Task** | The durable job and who owns it | owner, kind, priority, status, Reopen, Mark task done | Starting or ending an agent does not complete an owner-controlled task |
+| **Task** | The durable job and who owns it | owner, kind, priority, status, Reopen, Mark done | Starting or ending an agent session does not complete it |
 | **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, new prompt, start, prompt, pause, finish, stop | Stopping does not mark the task done or send a reply |
-| **Reply** | Communication with the person who asked | write, generate, edit, approve and send | Sending an update does not complete an owner-controlled task |
+| **Reply** | Communication with the person who asked | write, generate, edit, approve and send | Sending it marks the task done — unless an agent is still working or a new message came in |
 
 While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
 the workspace takes most of the page. Full controls, saved results and restart choices come back
@@ -19,15 +19,17 @@ when the agent stops.
 
 ### Who is allowed to close it
 
-How the work arrived decides who may finish it.
-
-- **Triaged work closes itself.** When triage creates and dispatches a coding task, the agent may
-  declare the work finished: Taskuary closes the task, saves the result and prepares a reply. If
-  the agent needs something from you it raises its hand instead.
-- **Owner-controlled work stays open.** A task you created by hand, promoted with **This one is
-  mine**, split manually, opened as a discussion, or started yourself carries a durable
-  `stay:open` policy. Agent runs may finish and replies may go out repeatedly; only **Mark task
-  done** closes it.
+- **You** end a task with **Mark done**. Every way of saying it — the button, the Assistant's card,
+  "done" or "close" in the chat, the phone — does the same thing: the task is done, any unsent
+  draft is kept but retired, a live agent is stopped, and it leaves your work rail.
+- **Sending the reply** marks the task done, unless an agent is still working on it or a new
+  message came in while you were answering — then it stays open and says why.
+- **Ticking the last checklist box** marks it done, unless an agent is working on it.
+- **An agent** may say it is finished (`taskuary --done`). Taskuary saves the result, and either
+  waits for you with a drafted reply or marks the task done. A task an agent closed stays on your
+  work rail until you have read it. A session you started yourself tells the agent to leave the
+  ending to you.
+- A stopped or quiet session never ends a task on its own.
 
 Reopening a completed task starts a fresh task lifecycle rather than pretending an old terminal
 is still alive.
@@ -45,10 +47,10 @@ and topic history, the learned profile, and reports from related closed tasks.
 | **Start new coding session** | Picks a different harness after an earlier run stopped or hit a limit; the checkout and history are kept |
 | **Give new prompt** | Queues another instruction for the live session |
 | **Pause & save** | Ends the session after writing a handoff note for the next one |
-| **Finish agent run** | Ends the session and writes its result — without closing an owner-controlled task |
+| **Save and end session** | Ends the session and writes its result; the task stays open until you mark it done |
 | **Stop session** | Ends only the process. Deliberately changes neither task nor reply state |
 
-**Mark task done** is stronger than all of them: it closes the task *and* ends any live session,
+**Mark done** is stronger than all of them: it closes the task *and* ends any live session,
 because a finished task should not leave an orphan process running.
 
 The saved result is deliberately short. Every finished coding session also writes a full Markdown

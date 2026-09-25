@@ -103,14 +103,6 @@ class NeitherRoadEndsIt(unittest.TestCase):
         self.assertTrue(out['closed']); wrap.assert_called_once()
         self.assertIn('The agent closed this itself: PR 33', ' '.join(c['Body'] for c in s.list_comments(tid)))
 
-    def test_the_judge_is_not_consulted(self):
-        s = MemoryStore(); tid = _task(s, status='in_progress'); selfclose.claim(s, tid, 'owner')
-        term = mock.Mock(task_id=tid, agent='coder')
-        with mock.patch.object(selfclose, 'blocked', return_value=''), \
-             mock.patch.object(selfclose, 'judge') as judge, mock.patch.object(selfclose, '_wrap') as wrap:
-            out = selfclose.on_stop(s, term, 'all done')
-        self.assertFalse(out['closed']); judge.assert_not_called(); wrap.assert_not_called()
-
 
 if __name__ == '__main__':
     unittest.main()

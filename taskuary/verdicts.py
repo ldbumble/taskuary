@@ -125,34 +125,31 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
                               'Stopped the agent after sending the clarification; waiting for the sender.')
         return
 
-    # A task the owner opened a session on (stay:open) is guarded from the JUDGE - an agent gone quiet for a minute
-    # is not an ending. The owner's own sent reply IS one: it used to leave such a task "remaining open", waiting
-    # on a Mark done nobody pressed (the owner, 2026-09-24: "task should close when sending reply").
-    from . import selfclose
-    selfclose.unclaim(store, task_id, actor)
-
-    # The reply that went out IS the task's ending (the owner, 2026-09-03: "replying should close it") -
-    # whatever kind of review carried it: the coder's own draft after a job, one you opened by hand, one
-    # triage queued. The one exception is an agent still WORKING the task: its result and its own
-    # close-out come first, and the task closes when that lands.
+    # SEND, THEN MARK DONE - the one close every door takes (concierge.close_task: done, drafts retired, the agent
+    # stopped, off the rail). It used to keep the task open while an agent still worked it, and before that while the
+    # owner had opened a session on it (the owner, 2026-09-24: "send the reply should send then close").
+    # ...unless the work is still going (the owner, 2026-09-24: "if session still going, i don't think we should force
+    # close it... if new message comes in while sending reply, it should stay on"). Mark done is the owner's own word
+    # and always closes; a send only closes what nothing is still happening on.
     from .funnel import working_tids
     if task_id in working_tids(store):
-        store.add_comment(task_id, actor, 'human', 'Reply sent; the agent still has this task, so it stays open until the agent is done.')
+        store.add_comment(task_id, actor, 'human', 'Reply sent. The agent is still working on it, so the task stays open.')
         return
-    from . import terminal
-    session = terminal.session_for(task_id)
-    stopped = bool(session and getattr(session, 'alive', False) and terminal.close(session.sid))
-    if task.get('Status') not in ('done', 'dropped'):
-        store.update_task(task_id, {'Status': 'done'}, actor)
+    if _newer_inbound(store, task_id, rv):
+        store.add_comment(task_id, actor, 'human', 'Reply sent. A new message came in meanwhile, so the task stays open.')
+        return
+    from . import concierge
+    if concierge.close_task(store, task_id, actor):
         store.add_comment(task_id, actor, 'human', 'Closed - the reply went out.')
-        # ...and the item leaves Unread with it (PW-149). Canonical Unread empties on read receipts, and
-        # nobody writes one for a reply approved from the Review page - so the answered thread sat in the
-        # pile as 'a person asked you for something' with its task already closed. All keeps the whole thread.
-        from . import funnel
-        try: funnel.settle(store, f'task:{task_id}', 'done', actor, note='the reply went out')
-        except Exception as e: logger.debug(f'the sent reply did not settle its item: {e}')
-    if stopped:
-        store.add_comment(task_id, actor, 'human', 'Stopped the parked agent because the task reply was sent.')
+
+
+def _newer_inbound(store, task_id: int, rv: dict) -> bool:
+    """A message from someone else on this task, newer than the one this reply answered."""
+    from .ingest import is_ours
+    answered = store.get_message(rv['MessageId']) if rv.get('MessageId') else None
+    since = str((answered or {}).get('SentAt') or rv.get('CreatedAt') or '')
+    return any(str(m.get('SentAt') or '') > since and not is_ours(m) and m.get('MessageId') != rv.get('MessageId')
+               for m in store.list_messages(task_id) or [])
 
 
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
@@ -191,9 +188,9 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         store.decide_review(rid, 'closed_unsent', rv.get('DraftText'), actor, why)
         if rv.get('TaskId'):
             store.add_comment(rv['TaskId'], actor, 'human', f'Closed without sending - no reply went out: {why}. The unsent draft is kept on the review.')
-            from . import selfclose
-            if not selfclose.stays_open(store, rv['TaskId']) and (store.get_task(rv['TaskId']) or {}).get('Status') not in ('done', 'dropped'):
-                store.update_task(rv['TaskId'], {'Status': 'done'}, actor)
+            # Close without sending IS Mark done (the owner, 2026-09-24): the one close, whoever opened a session on it
+            from . import concierge
+            concierge.close_task(store, rv['TaskId'], actor)
         store.audit('review', rid, 'close_unsent', actor, detail={'why': why[:200]})
         return {'ok': True, 'status': 'closed_unsent', 'sent': None, 'send_error': None}
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
@@ -328,9 +325,9 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             _mark_delivery(store, rid, env, 'failed')
             store.unhold_review(rid, f'approved, but sending FAILED: {send_err} - fix the channel and approve again')
     if verb == 'no_reply' and rv.get('TaskId'):
-        from . import selfclose
-        if not selfclose.stays_open(store, rv['TaskId']):
-            store.update_task(rv['TaskId'], {'Status': 'done'}, actor)
+        # the owner's word that nothing goes back IS Mark done - the one close, whoever opened a session on it
+        from . import concierge
+        concierge.close_task(store, rv['TaskId'], actor)
     # Sending is the lifecycle boundary. A final/manual answer closes the task and its live
     # terminal; a clarification stops the blocked terminal but deliberately leaves it waiting.
     if verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:

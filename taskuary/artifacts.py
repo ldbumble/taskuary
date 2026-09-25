@@ -255,7 +255,7 @@ def attach_report_output(store, mid: int, title: str, body: str) -> list:
     rows = rows_from_body(body)
     if not rows: return []
     want_val, want_lab, want_title = chart_directive(body)
-    charts_on = str(store.get_settings().get('report_images_enabled') or '1') == '1'
+    charts_on = str(store.get_setting('report_images_enabled') or '1') == '1'
     stem = _SAFE.sub('', title or 'report').strip()[:60] or 'report'
     day = datetime.now().strftime('%Y-%m-%d')
     made = []

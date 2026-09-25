@@ -1414,7 +1414,7 @@ class SQLiteStore:
         together survive a deleted tail that the table alone forgets."""
         live = self._one('SELECT MAX(TaskId) m FROM task')['m'] or 0
         ever = self._one("SELECT MAX(EntityId) m FROM audit WHERE EntityType='task'")['m'] or 0
-        mark = int(self.get_settings().get('task_id_mark') or 0)
+        mark = int(self.get_setting('task_id_mark') or 0)
         nxt = max(live, ever, mark) + 1
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) '
                    'ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value', ('task_id_mark', str(nxt), 'store'))
@@ -4069,6 +4069,12 @@ class SQLiteStore:
         else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL WHERE ConnectorId=?', (_now(), cid))
         self._processing_ignored_writes += 1
     def get_settings(self): return {r['Name']: r['Value'] for r in self._rows('SELECT * FROM setting')}
+    def get_setting(self, name, default=None):
+        """ONE setting, as `get_setting(name, default)` answers it (a stored NULL or '' is returned as stored).
+        Reading the whole table to pick one key was ~35% of the app's busy time (2026-09-25 profile): the table
+        carries 400 rows, one of them a 35k-character run record, and it was read per rail card."""
+        r = self._one('SELECT Value FROM setting WHERE Name=?', (name,))
+        return default if r is None else r['Value']
     def list_settings(self): return self._rows('SELECT * FROM setting ORDER BY Name')
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
@@ -4454,7 +4460,7 @@ class SQLiteStore:
                 ideas_by_mid.setdefault(idea['MessageId'], []).append(idea)
         now_dt = datetime.now()
         now = now_dt.strftime('%Y-%m-%d %H:%M:%S')
-        try: unread_hours = max(1, int(self.get_settings().get('funnel_hours') or 12))
+        try: unread_hours = max(1, int(self.get_setting('funnel_hours') or 12))
         except (TypeError, ValueError): unread_hours = 12
         unread_cutoff = (now_dt - timedelta(hours=unread_hours)).strftime('%Y-%m-%d %H:%M:%S')
         for r in rows:

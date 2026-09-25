@@ -83,7 +83,7 @@ def cli_for(profile: dict) -> str | None:
 
 def wanted(store, profile: dict) -> bool:
     """A hooked CLI, and the owner has not switched the hooks off."""
-    return bool(cli_for(profile)) and store.get_settings().get('agent_hooks', '1') == '1'
+    return bool(cli_for(profile)) and store.get_setting('agent_hooks', '1') == '1'
 
 
 def command(base: str, token: str = '') -> str:

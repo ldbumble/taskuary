@@ -1048,7 +1048,7 @@ def own_addresses(store) -> set:
     owner_email when it is set; otherwise every polled mailbox, which is all we know. Distinct
     from owner_addresses: a shared log mailbox the funnel polls is a place the owner READS, not a
     name the owner IS, and mail sent there is not mail sent to them."""
-    own = (store.get_settings().get('owner_email') or '').strip().lower()
+    own = (store.get_setting('owner_email') or '').strip().lower()
     return {own} if own else owner_addresses(store)
 
 
@@ -1274,7 +1274,7 @@ def is_ack(store, m: dict) -> bool:
     """Taskuary's own chat acknowledgement (_ack_chat): the `ack:` row it files, or - on a channel that hands
     our sends back as context (ECHOES) - the echo, which carries the acknowledgement's exact words."""
     if str(m.get('ExternalId') or '').startswith('ack:'): return True
-    text = (store.get_settings().get('chat_ack_text') or ACK_DEFAULT).strip()
+    text = (store.get_setting('chat_ack_text') or ACK_DEFAULT).strip()
     return bool(text) and str(m.get('BodyText') or '').strip() == text
 
 
@@ -1596,7 +1596,7 @@ def auto_sessions(store) -> int:
     """How many unattended agent sessions may run at once. Was a module constant, which meant
     the one number that decides how much work the machine takes on could only be changed by
     editing the source - so it is a setting now, and AUTO_SESSIONS is just its default."""
-    try: n = int(store.get_settings().get('auto_sessions') or AUTO_SESSIONS)
+    try: n = int(store.get_setting('auto_sessions') or AUTO_SESSIONS)
     except (ValueError, TypeError): return AUTO_SESSIONS
     return max(1, min(16, n))
 

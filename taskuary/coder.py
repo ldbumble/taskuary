@@ -213,6 +213,13 @@ def answered_elsewhere(store, msg: dict, task_id: int):
     return own[-1] if own else None
 
 
+def _owners_own(store, m: dict) -> bool:
+    """The message is the owner writing, on a channel that names its author by login (GitHub today)."""
+    if str(m.get('Channel') or '').lower() != 'github': return False
+    from .whoami import github_logins
+    return str(m.get('FromName') or '').strip().lower() in github_logins(store)
+
+
 def freshen(store, task_id: int, mid: int) -> dict:
     """Refresh the source conversation and say where the ask stands before the result becomes a reply:
     fresh | changed (a newer inbound message - the draft answers that one) | answered (the owner already
@@ -266,6 +273,11 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     if owner_done and mid and not can_send: mid = None
     # ...and when its pull request ended it (merged or closed), nobody is owed an answer (A21, 2026-09-25)
     if no_reply: mid = None
+    # ...nor when the ask is the OWNER's own: an issue they opened on their own repository came back from the agent with
+    # a reply drafted to themselves (the owner, 2026-09-25: "why is there reply on issue?")
+    if mid and _owners_own(store, store.get_message(mid) or {}):
+        store.add_comment(task_id, actor, 'agent', 'You opened this yourself - the result is filed with the report, no reply drafted.')
+        mid = None
     # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
     if mid and not held and not own_draft(store, task_id) and nobody_waiting(store, mid, rep):
         store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '
@@ -409,7 +421,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # anything the agent PROPOSED becomes a pending review here, at the one moment its whole
     # transcript is in hand - and refusals are recorded rather than dropped (proposals.py)
     proposed = []
-    if store.get_settings().get('proposals_enabled', '1') == '1':
+    if store.get_setting('proposals_enabled', '1') == '1':
         try: proposed = proposals.collect(store, tid, text, agent)
         except Exception as e: logger.warning(f'proposal collection failed for task {tid}: {e}')
     # ...and the one question worth asking the transcript that is NOT about this task: did the
@@ -531,7 +543,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
 
 def _notify_done(store, task_id: int, rid: int) -> None:
     # the ping that matters most: work FINISHED and its reply is sitting on the task on you
-    if (store.get_settings().get('notify_level') or 'needs_me') != 'off':
+    if (store.get_setting('notify_level') or 'needs_me') != 'off':
         from .outbound import notify
         from .store import task_ref
         t = store.get_task(task_id) or {}

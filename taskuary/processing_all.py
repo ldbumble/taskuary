@@ -554,7 +554,7 @@ class MembershipWorker:
             # the grouping rule changed (an idea joins its task): every existing install reconciles once.
             # The setting is in PROCESSING_DIRTY_SETTINGS, so writing it is what makes the loop below work.
             try:
-                if self.store.get_settings().get('processing_membership_rules') != MEMBERSHIP_RULES:
+                if self.store.get_setting('processing_membership_rules') != MEMBERSHIP_RULES:
                     self.store.set_setting('processing_membership_rules', MEMBERSHIP_RULES, 'system')
             except Exception as exc: logger.warning(f'processing membership rule stamp failed: {exc}')
             while not self.stop.is_set():

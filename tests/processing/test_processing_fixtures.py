@@ -58,7 +58,9 @@ def test_terminal_replay_fixture_renders_visible_lines_without_control_queries()
 
     assert all(line in rendered for line in picture.replay_lines)
     assert '[6n' not in rendered
-    assert chr(27) not in rendered[len(terminal.REPLAY_RESET):]
+    # the one move it may end with puts the cursor back where the CLI left it - relative, never a query (2026-09-25)
+    import re
+    assert chr(27) not in re.sub(r'(\x1b\[\d+A)?\x1b\[\d+G$', '', rendered[len(terminal.REPLAY_RESET):])
 
 
 def test_fixture_payload_is_redacted_and_contains_no_credentials():

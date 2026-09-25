@@ -296,7 +296,7 @@ def block(store, text: str, budget: int = BLOCK_BUDGET, limit: int = 4, connecto
 
 def status(store, c: dict) -> dict:
     n = store.kb_count(c['ConnectorId'])
-    try: last = json.loads(store.get_settings().get(f"kb_last:{c['ConnectorId']}") or 'null')
+    try: last = json.loads(store.get_setting(f"kb_last:{c['ConnectorId']}") or 'null')
     except ValueError: last = None
     return {**n, 'sources': len(sources_of(cfg_of(c))), 'last': last}
 

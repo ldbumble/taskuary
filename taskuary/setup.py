@@ -45,7 +45,7 @@ def _ai(store) -> dict:
 
     Ollama is the other exception: a local model carries no key, so 'has a secret' is the wrong
     test for it too."""
-    pick = str(store.get_settings().get('triage_ai') or '')
+    pick = str(store.get_setting('triage_ai') or '')
     if pick.startswith('cli:'):
         # the SAME lookup the brain is built with (agents.agent_row): a connected CLI with no worker profile is a
         # brain too, and store.get_agent alone called it "not set up" while triage ran on it (2026-09-24)
@@ -81,7 +81,7 @@ def state(store) -> dict:
     checklist's row name the same destination with the same words."""
     who = (store.owner() or {}).get('owner') or ''
     ai, inbound = _ai(store), _inbound(store, MESSAGING)
-    seen_models = str(store.get_settings().get(SEEN_MODELS) or '') == '1'
+    seen_models = str(store.get_setting(SEEN_MODELS) or '') == '1'
     # the four seeded reports (Morning digest, End of day checkup, Automation ideas, the Assistant)
     # file their own rows on first start, so "something is in the timeline" was true before a single
     # message had ever been read
@@ -141,4 +141,4 @@ def state(store) -> dict:
     ]
     done = sum(1 for s in steps if s['done'])
     return {'steps': steps, 'done': done, 'total': len(steps), 'complete': done == len(steps),
-            'dismissed': str(store.get_settings().get(DISMISSED) or '') == '1'}
+            'dismissed': str(store.get_setting(DISMISSED) or '') == '1'}

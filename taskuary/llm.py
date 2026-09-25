@@ -50,7 +50,7 @@ VISION_MAX, VISION_BYTES = 4, 5 * 1024 * 1024      # per call: how many images, 
 def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
     """[(media_type, base64)] for the images on these messages, or [] when the owner has vision
     switched off. SVG and PDF are skipped: no provider takes them as image input."""
-    if str(store.get_settings().get('vision_enabled') or '1') != '1': return []
+    if str(store.get_setting('vision_enabled') or '1') != '1': return []
     out = []
     for mid in message_ids or []:
         for a in store.list_attachments(mid):

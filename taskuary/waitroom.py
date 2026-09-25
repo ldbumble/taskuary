@@ -50,7 +50,7 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0) -> str:
 def drip(store) -> bool:
     """One note per stop (the default) or everything queued at once. Twenty prompts pasted as a
     funnel want a drip: each lands as its own turn, with the agent's full attention, in order."""
-    return store.get_settings().get('waitroom_drip', '1') == '1'
+    return store.get_setting('waitroom_drip', '1') == '1'
 
 
 _ITEM = re.compile(r'^\s*(?:[-*•]|\d+[.)])\s*')

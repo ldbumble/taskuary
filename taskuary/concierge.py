@@ -207,7 +207,7 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             try: prof = json.loads(row.get('Config') or '{}')
             except ValueError: prof = {}
             cli = re.split(r'[\\/]', str(prof.get('cmd') or name))[-1].lower().rsplit('.', 1)[0]
-            model = str(store.get_settings().get(MODEL_KEY) or '').strip() or None
+            model = str(store.get_setting(MODEL_KEY) or '').strip() or None
             # the Assistant's OWN model - never the profile's light model, which is triage's: it rode haiku and broke its
             # contract in the 2026-09-24 audit, where sonnet held (ASSISTANT_DEFAULT)
             dflt = '' if model else ASSISTANT_DEFAULT.get(cli, '')
@@ -223,15 +223,15 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
                 try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep)
                 finally: store.get_agent = store_get
             return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep)
-        return llm_mod.build_llm(store, pick=p, model=str(store.get_settings().get(MODEL_KEY) or '').strip() or None, trace=trace, cancel=cancel)
+        return llm_mod.build_llm(store, pick=p, model=str(store.get_setting(MODEL_KEY) or '').strip() or None, trace=trace, cancel=cancel)
     except Exception as e:
         logger.debug(f'concierge: no brain - {e}'); return None
 
 
-def _sid(store, tid: int) -> str: return str(store.get_settings().get(f'{SID_KEY}:{tid}') or '')
+def _sid(store, tid: int) -> str: return str(store.get_setting(f'{SID_KEY}:{tid}') or '')
 
 
-def current_key(store, tid: int) -> str: return str(store.get_settings().get(f'{CURRENT_KEY}:{tid}') or '')
+def current_key(store, tid: int) -> str: return str(store.get_setting(f'{CURRENT_KEY}:{tid}') or '')
 
 
 def set_current(store, tid: int, key: str | None, actor: str = 'assistant'):
@@ -2493,7 +2493,7 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
     else: line = f"Not done - {op.get('error') or st}. {ref or 'It'} is where it was."
     # only what THIS chat proposed is its news. A close from the Tasks page or the wall used to be narrated
     # here too - and opened a fresh chat to say it in (the owner, 2026-09-07: "no one asked you to do that")
-    raw = store.get_settings().get('assistant_dock_task_id')
+    raw = store.get_setting('assistant_dock_task_id')
     dock_tid = int(raw) if str(raw or '').isdigit() else None
     if not dock_tid or not _chat_proposed(store, dock_tid, op.get('id')): return line
     # THE UNDO RIDES THE RECEIPT (the tiers): an instant write says what it did AND how to put it back -
@@ -2519,7 +2519,7 @@ LAST_UNDO = 'assistant_last_undo'           # the newest undo proposal's id: wha
 
 def undo_last(store, actor: str = 'owner') -> str:
     """"undo", alone, from a chat: run the newest undo the receipts offered, once."""
-    oid = str(store.get_settings().get(LAST_UNDO) or '').strip()
+    oid = str(store.get_setting(LAST_UNDO) or '').strip()
     op = operations.get(store, oid) if oid else None
     if not op or op.get('status') != 'proposed': return 'Nothing to undo - the last change has no undo left, or it was already put back.'
     store.set_setting(LAST_UNDO, '', actor)

@@ -48,12 +48,12 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
 def _blocks_reply(store, tid: int) -> list:
     from .ingest import notes_for
     from .learn import injectable
-    from .responder import BREVITY, CHAT, CHAT_CHANNELS, EMAIL, NOT_YET, SYSTEM, history_block, style_doc
+    from .responder import BREVITY, CHAT, EMAIL, NOT_YET, SYSTEM, history_block, style_doc, written_as_chat
     msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     last = msgs[-1] if msgs else {}
     soul = store.doc('soul') or ''
     owner = soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner'
-    chat = str(last.get('Channel') or '').lower() in CHAT_CHANNELS
+    chat = written_as_chat(last.get('Channel'))
     sty, lrn = style_doc(store), injectable(store.doc('learned') or '')
     notes = notes_for(store, {'from_email': last.get('FromEmail'), 'subject': last.get('Subject'),
                               'body': last.get('BodyText')}, budget=1500)

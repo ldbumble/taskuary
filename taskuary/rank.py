@@ -57,7 +57,7 @@ def head_size(store, channel: str = None) -> int:
                 raw = _cfg(c).get('bulk_head')
                 break
     if raw in (None, ''):
-        try: raw = store.get_settings().get('bulk_head')
+        try: raw = store.get_setting('bulk_head')
         except AttributeError: raw = None
     try: n = int(str(raw if raw not in (None, '') else HEAD_JUDGED).strip())
     except (TypeError, ValueError): return HEAD_JUDGED

@@ -36,7 +36,7 @@ def about_time(text: str) -> bool: return bool(SCHEDULING.search(text or ''))
 
 
 def tz_of(store):
-    name = (store.get_settings().get('timezone') or '').strip()
+    name = (store.get_setting('timezone') or '').strip()
     try: return ZoneInfo(name) if name else datetime.now().astimezone().tzinfo
     except Exception: return datetime.now().astimezone().tzinfo
 
@@ -221,7 +221,7 @@ def context_for(store, text: str) -> str:
     """The paragraph the responder gets when the thread is about time - or '' when it is not,
     the switch is off, or no card can reach a calendar. A fetch that fails still returns a
     paragraph: it says the calendar could not be read, so the draft does not claim a free slot."""
-    if store.get_settings().get('calendar_enabled', '1') != '1' or not about_time(text): return ''
+    if store.get_setting('calendar_enabled', '1') != '1' or not about_time(text): return ''
     try: ag = agenda(store)
     except Exception as e:
         logger.warning(f'calendar: {e}'); return ''
@@ -239,7 +239,7 @@ UPCOMING_TTL = 300          # seconds - the Timeline polls for the countdown far
 def upcoming(store, hours: int = 36, force: bool = False) -> dict:
     """The next events for the Timeline's 'coming up' band: {events, tz, errors, fetched}. Events
     already running (started within the last 15 min) stay so a meeting you are late for still shows."""
-    if store.get_settings().get('calendar_enabled', '1') != '1': return {'events': [], 'tz': tz_name(tz_of(store)), 'errors': [], 'fetched': None}
+    if store.get_setting('calendar_enabled', '1') != '1': return {'events': [], 'tz': tz_name(tz_of(store)), 'errors': [], 'fetched': None}
     if not force and _UPCOMING['data'] and time.time() - _UPCOMING['at'] < UPCOMING_TTL: return _UPCOMING['data']
     ag = agenda(store, days=max(1, (hours + 23) // 24))
     tz = tz_of(store); now = datetime.now(tz).replace(tzinfo=None)
@@ -264,7 +264,7 @@ def today(store) -> dict:
     tz = tz_of(store); now = datetime.now(tz)
     d = now.strftime('%Y-%m-%d')
     if _TODAY['data'] and _TODAY['day'] == d and time.time() - _TODAY['at'] < UPCOMING_TTL: return _TODAY['data']
-    if store.get_settings().get('calendar_enabled', '1') != '1':
+    if store.get_setting('calendar_enabled', '1') != '1':
         return {'date': d, 'now': now.strftime('%H:%M'), 'events': [], 'tz': tz_name(tz), 'errors': []}
     ag = agenda(store, days=1, start=now.replace(hour=0, minute=0, second=0, microsecond=0))
     evs = [e for e in ag['events'] if e['start'][:10] == d]

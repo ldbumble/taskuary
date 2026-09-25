@@ -18,7 +18,7 @@ KEY, DEFAULT_DAYS, RAN_KEY = 'chat_keep_days', 15, 'chat_cleanup_at'
 
 
 def keep_days(store) -> int:
-    try: return max(1, int(store.get_settings().get(KEY) or DEFAULT_DAYS))
+    try: return max(1, int(store.get_setting(KEY) or DEFAULT_DAYS))
     except (TypeError, ValueError): return DEFAULT_DAYS
 
 
@@ -55,7 +55,7 @@ def cleanup(store, now: datetime = None, actor: str = 'retention') -> dict:
 def tick(store, now: datetime = None) -> dict | None:
     """Once a day, on the app's own clock - at start-up and on the sync timer, never from a history read."""
     now = now or datetime.now()
-    if str(store.get_settings().get(RAN_KEY) or '')[:10] == now.strftime('%Y-%m-%d'): return None
+    if str(store.get_setting(RAN_KEY) or '')[:10] == now.strftime('%Y-%m-%d'): return None
     out = cleanup(store, now)
     store.set_setting(RAN_KEY, now.strftime('%Y-%m-%d %H:%M:%S'), 'retention')
     return out

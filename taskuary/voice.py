@@ -62,7 +62,7 @@ def normalize_vocabulary(value) -> list:
 
 
 def vocabulary(store) -> list:
-    return normalize_vocabulary(store.get_settings().get(VOCAB_SETTING) or '[]')
+    return normalize_vocabulary(store.get_setting(VOCAB_SETTING) or '[]')
 
 
 def save_vocabulary(store, terms, actor: str = 'owner') -> list:

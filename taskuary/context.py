@@ -192,7 +192,7 @@ def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
 def write(store, tid: int, msgs: list = None, repo: str = None):
     """Write ~/.taskuary/context/TQ-xxxx.md and return its path - or None when there is nothing
     worth a file, the setting is off, or the disk refused (the seed then simply carries no pointer)."""
-    if store.get_settings().get('coder_context_file', '1') != '1': return None
+    if store.get_setting('coder_context_file', '1') != '1': return None
     try:
         text = build(store, tid, msgs, repo)
         if not text: return None

@@ -64,7 +64,7 @@ def test_jira(store, c) -> str:
 def _jira_me(store, c) -> str:
     """The accountId this token acts as, cached - so the hub can tell its OWN comments from a
     person's and never answers itself. '' when Jira would not say; then nothing is treated as ours."""
-    me = str(store.get_settings().get('jira_account_id') or '')
+    me = str(store.get_setting('jira_account_id') or '')
     if me: return me
     try: me = str((_jira_get(c, '/rest/api/2/myself') or {}).get('accountId') or '')
     except Exception as e:

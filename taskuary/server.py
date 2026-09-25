@@ -59,7 +59,7 @@ try:
     # brain layer, and onto exactly what it ran yesterday
     if hub_agents.adopt_brain_setting(store):
         from loguru import logger as _log
-        _log.info(f"the brain layer is on: default_brain = {store.get_settings().get('default_brain')}")
+        _log.info(f"the brain layer is on: default_brain = {store.get_setting('default_brain')}")
     _repaired = hub_agents.repair_role_assignees(store)
     if _repaired:
         from loguru import logger as _log
@@ -433,7 +433,7 @@ def _send_state(memo: dict, channel, has_message=True) -> tuple:
 @app.get('/api/feed')
 def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None, source: str = None,
          request: Request = None):
-    try: days = int(store.get_settings().get('feed_days') or 14)
+    try: days = int(store.get_setting('feed_days') or 14)
     except (TypeError, ValueError): days = 14        # a blanked number field saves '' - the Timeline must not die of it
     tag = '"' + store.feed_tag(days, pending_only, channel, source) + '"'
     if request is not None and request.headers.get('if-none-match') == tag:
@@ -460,7 +460,7 @@ async def _all_error(_request, error: processing_all.AllError):
 @app.get('/api/processing/all')
 def processing_all_page(limit: int = 100, cursor: str = None, channel: str = None, source: str = None):
     try:
-        days = int(store.get_settings().get('feed_days') or 14)
+        days = int(store.get_setting('feed_days') or 14)
     except (TypeError, ValueError):
         days = 14
     try:
@@ -550,7 +550,7 @@ def _rail_tids() -> set:
         rows = list((funnel.cached_pile(store) or {}).get('items', []))
         # ...and the card on the TABLE, which the rail draws although showing it read it (the owner, 2026-09-24:
         # "also not in tasks pane as well") - looked up in the cached build, never a new one
-        dock = str(store.get_settings().get('assistant_dock_task_id') or '')
+        dock = str(store.get_setting('assistant_dock_task_id') or '')
         key = concierge.current_key(store, int(dock)) if dock.isdigit() else ''
         if key: rows += [i for i in funnel.full_items(store) or [] if i.get('key') == key or key in (i.get('aliases') or [])]
         return {int(i['tid']) for i in rows if i.get('tid')}
@@ -752,7 +752,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
         elif t == 'number': v = str(int(float(v))) if v.replace('.', '', 1).lstrip('-').isdigit() else None
         elif t == 'select': v = v if v in [str(o) for o in (meta.get('options') or [])] else None
         if v is None: raise HTTPException(422, f"{meta['label']} takes {'on or off' if t == 'switch' else 'a number' if t == 'number' else 'one of ' + ', '.join(str(o) for o in meta.get('options') or [])} - not {raw!r}")
-        prev = store.get_settings().get(key)
+        prev = store.get_setting(key)
         store.set_setting(key, v, ACTOR)
         store.audit('setting', 0, 'set', 'assistant', detail={'key': key, 'from': prev, 'to': v})
         said = settings_schema.describe(key, v)
@@ -3396,8 +3396,8 @@ def concierge_state():
     options = general.provider_options(store)
     pick = concierge.pick(store)
     chosen = next((o for o in options if o['pick'] == pick), None)
-    model = str(store.get_settings().get(concierge.MODEL_KEY) or '').strip() or (chosen or {}).get('model') or ''
-    if pick.startswith('cli:') and not str(store.get_settings().get(concierge.MODEL_KEY) or '').strip():
+    model = str(store.get_setting(concierge.MODEL_KEY) or '').strip() or (chosen or {}).get('model') or ''
+    if pick.startswith('cli:') and not str(store.get_setting(concierge.MODEL_KEY) or '').strip():
         model = concierge.ASSISTANT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
     from . import remote_assistant
     return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
@@ -4227,7 +4227,7 @@ def brains():
     # the CLIs at the bottom (the owner, 2026-09-24: "drop down is too big"). One already in use stays listed.
     used = {str(settings.get(k) or '') for k in ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')}
     out = [o for o in out if o['kind'] != 'api' or o['ready'] or o['value'] in used]
-    current = store.get_settings().get('triage_ai') or ''
+    current = store.get_setting('triage_ai') or ''
     # Old settings named a type (connector:anthropic). Keep accepting that in llm.py, but
     # point the picker at the concrete instance it currently resolves to.
     if current.startswith('connector:') and not current[10:].isdigit():
@@ -4910,7 +4910,7 @@ def report_preview(body: dict):
         # rendered in memory here, since a preview files no message to hang an attachment on
         from .artifacts import chart_directive, rows_from_body, strip_directive, to_svg_chart
         svg, rows = '', rows_from_body(summary)
-        if rows and str(store.get_settings().get('report_images_enabled') or '1') == '1':
+        if rows and str(store.get_setting('report_images_enabled') or '1') == '1':
             val, lab, ctitle = chart_directive(summary)
             svg = to_svg_chart(rows, None, ctitle or body.get('title') or head, val, lab) or ''
         return {'ok': True, 'headline': head, 'summary': strip_directive(summary)[:4000],
@@ -5043,7 +5043,7 @@ def setup_seen(body: SetupSeenBody):
     if not key: raise HTTPException(422, f'{body.step!r} is not a step that records being seen')
     # AiDefaults posts this on every mount of the models page, so the write and its audit row must
     # be idempotent - otherwise every visit logs a duplicate event that means nothing new.
-    if str(store.get_settings().get(key) or '') != '1':
+    if str(store.get_setting(key) or '') != '1':
         store.set_setting(key, '1', ACTOR)
         store.audit('setting', 0, 'setup_seen', ACTOR, detail={'step': body.step})
     return setup_mod.state(store)
@@ -5070,7 +5070,7 @@ def setup_adopt_brain(body: SetupAdoptBrainBody):
     tests landing together can race - and the loser's only cost is that the other valid CLI won."""
     from . import setup as setup_mod
     worker = next((o['value'] for o in hub_agents.cli_agent_options(store) if o['cli'] == body.cli), '')
-    current = str(store.get_settings().get('triage_ai') or '')
+    current = str(store.get_setting('triage_ai') or '')
     adopted = bool(worker) and not current
     if adopted:
         store.set_setting('triage_ai', f'cli:{worker}', ACTOR)
@@ -6099,7 +6099,7 @@ def poll_forever():
             # rather than the scheduler has to be able to tell those two apart (TQ-0451)
             if time.time() - _HEARTBEAT[0] >= HEARTBEAT_TICK:
                 _HEARTBEAT[0] = time.time(); note_app_up(store)
-            try: mins = int(store.get_settings().get('poll_minutes') or 0)
+            try: mins = int(store.get_setting('poll_minutes') or 0)
             except (TypeError, ValueError): mins = 10
             if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:
                 _poll_reports(0, what='syncing')
@@ -6148,7 +6148,7 @@ def quick_forever():
             from . import remote_assistant
             try: remote_assistant.push_alerts(store)
             except Exception as e: logger.warning(f'could not send an interruption to the chat: {e}')
-            try: mins = int(store.get_settings().get('poll_minutes') or 0)
+            try: mins = int(store.get_setting('poll_minutes') or 0)
             except (TypeError, ValueError): mins = 10
             if mins > 0:
                 quick = _quick_due()
@@ -6433,7 +6433,7 @@ def catch_up_on_startup():
     service - it is a window you open. So opening it reaches back past the watermark - but only
     as far as the app was actually closed, with `startup_sync_days` (default 3) as the ceiling.
     0 turns the startup poll off entirely."""
-    try: days = int(store.get_settings().get('startup_sync_days') or 0)
+    try: days = int(store.get_setting('startup_sync_days') or 0)
     except ValueError: days = 0
     if days <= 0: return
     hours = _catchup_hours(days)
@@ -6472,7 +6472,7 @@ def _heal_owner_docs():
     the one setting from then on. "Johnson Controls" is not a name match; owner prose survives."""
     try:
         soul = store.get_doc('soul') or ''
-        if not (store.get_settings().get('owner_name') or '').strip():
+        if not (store.get_setting('owner_name') or '').strip():
             name = store_mod.owner_from_soul(soul)
             if name and name not in ('the owner', 'John Smith'):   # John Smith IS the placeholder
                 store.set_setting('owner_name', name, 'startup')
@@ -6516,7 +6516,7 @@ def ingest_poll(background: BackgroundTasks):
 
 @app.get('/api/ingest/status')
 def ingest_status():
-    try: st = json.loads(store.get_settings().get('ingest_status') or '{"state": "idle"}')
+    try: st = json.loads(store.get_setting('ingest_status') or '{"state": "idle"}')
     except ValueError: st = {'state': 'idle'}
     # a poll that died with the app leaves 'running' behind with nobody holding the lock - a
     # ghost the timeline banner would show forever (the poll sets the flag only AFTER taking
@@ -6526,10 +6526,10 @@ def ingest_status():
         store.set_setting('ingest_status', json.dumps(st), 'system')
     # the cadence rides along so the timeline's caption can state the truth instead of a
     # hardcoded "every 10 min" that stayed on screen after somebody set the interval to 0
-    try: every = int(store.get_settings().get('poll_minutes') or 0)
+    try: every = int(store.get_setting('poll_minutes') or 0)
     except (TypeError, ValueError): every = 10
     try:
-        fetched_at = float(store.get_settings().get('ingest_last_fetch_completed_at'))
+        fetched_at = float(store.get_setting('ingest_last_fetch_completed_at'))
         if not 0 < fetched_at < float('inf'): fetched_at = None
     except (TypeError, ValueError): fetched_at = None
     # and the clock itself: when the last full poll ran and when the next is due, so the caption
@@ -6540,8 +6540,8 @@ def ingest_status():
             'failed': sorted({c['Type'] for c in store.list_connectors() if c.get('Active') and c.get('LastError')}),
             'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),
             # the brain's last failure, until it answers again - shown in the caption, not buried in rows
-            'triageError': store.get_settings().get('triage_last_error') or '',
-            'timelineFade': store.get_settings().get('timeline_fade') or 'normal'}  # how old rows dim (FeedView)
+            'triageError': store.get_setting('triage_last_error') or '',
+            'timelineFade': store.get_setting('timeline_fade') or 'normal'}  # how old rows dim (FeedView)
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
 # And one socket for the rest of the UI: Timeline/Board/Studio subscribe instead of polling.
@@ -7143,7 +7143,7 @@ def audit_assistant(limit: int = 60):
         try: d = json.loads(r.get('Detail') or '{}') if str(r.get('Detail') or '').startswith('{') else {'detail': r.get('Detail')}
         except ValueError: d = {'detail': r.get('Detail')}
         out.append({'when': r.get('CreatedAt'), 'entity': r.get('EntityType'), 'id': r.get('EntityId'), 'action': r.get('Action'), 'detail': d})
-    undo = str(store.get_settings().get('assistant_last_undo') or '')
+    undo = str(store.get_setting('assistant_last_undo') or '')
     op = operations.get(store, undo) if undo else None
     return {'data': out, 'undo': ({'id': op['id'], 'version': op['version'], 'label': 'Undo the last change'} if op and op.get('status') == 'proposed' else None)}
 
@@ -7173,7 +7173,7 @@ def assistant_doorways():
     """Where the assistant can be reached, per channel - for Settings -> Assistant on your phone."""
     from . import remote_assistant
     return {'data': remote_assistant.doorway_state(store),
-            'standing': store.get_settings().get('phone_assistant') == '1'}
+            'standing': store.get_setting('phone_assistant') == '1'}
 
 class DoorwayBody(BaseModel):
     channel: str

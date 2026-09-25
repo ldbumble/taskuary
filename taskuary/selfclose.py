@@ -57,13 +57,13 @@ _LOCK = threading.Lock()
 def mode(store) -> str:
     """'on' | 'off'. There used to be three: 'auto' also let a judge close a quiet screen, 'ask' did not.
     The judge is gone (2026-09-24), so the two behaved the same and one is left; a stored 'ask' reads as on."""
-    v = str(store.get_settings().get(SETTING, '1') or '1').strip().lower()
+    v = str(store.get_setting(SETTING, '1') or '1').strip().lower()
     return 'off' if v in ('0', 'off', 'false') else 'on'
 
 
 def settle_legacy(store) -> bool:
     """A stored 'ask' becomes '1' once, so Settings' switch shows what the setting does. True when it moved."""
-    if str(store.get_settings().get(SETTING) or '').strip().lower() != 'ask': return False
+    if str(store.get_setting(SETTING) or '').strip().lower() != 'ask': return False
     store.set_setting(SETTING, '1', 'upgrade'); return True
 
 

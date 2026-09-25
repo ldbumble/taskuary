@@ -11,7 +11,8 @@ const tasks = src("TasksView.jsx");
 
 test("each control carries the caption that names its effect on task versus agent", () => {
   for (const [label, title] of [
-    ["Mark done", "Closes the task and ends the live agent session with it."],
+    // ...and while the close runs it greys out and says "Marking done…" (2026-09-25)
+    ['{finishing ? "Marking done…" : "Mark done"}', "Closes the task and ends the live agent session with it."],
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
     ["Save and end session", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
@@ -94,7 +95,9 @@ test("a live session still lets you act on the TASK", () => {
   const at = tasks.indexOf('{sessionView && !["done", "dropped"].includes(t.Status) && (');
   assert.notEqual(at, -1, "the header must carry the task controls while a session fills the page");
   const bar = tasks.slice(at, at + 2200);
-  for (const [what, hook] of [["Mark task done", 'finish("done")'], ["Not a task", "setConfirmNAT(true)"],
+  // Mark done goes through askFinish, which asks first while an agent session is live (2026-09-25)
+  assert.match(tasks, /const askFinish = \(\) => \(liveSession \? setConfirmDone\(true\) : finish\("done"\)\)/);
+  for (const [what, hook] of [["Mark task done", "onClick={askFinish}"], ["Not a task", "setConfirmNAT(true)"],
                               ["Hand it to a person", "setHandoff(true)"], ["Split or merge", "setReshape(true)"]]) {
     assert.ok(bar.includes(hook), `${what} must be reachable during a live session`);
   }

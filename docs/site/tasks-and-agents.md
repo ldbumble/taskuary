@@ -85,6 +85,23 @@ Timeline, the task page, the Board, the assistant's cards and the phone all use 
 | ⏹ | **agent stopped** | It ended without finishing: a crash, a closed pane, Taskuary closing | **Continue session**, or hand it on |
 | ✅ | **agent finished** | The agent, or its merged pull request, closed the task | Read the result |
 
+![How an agent starts: handed off, auto-start allowed or not, a free slot or next in line](img/agent-start.svg "Waiting to start always says why.")
+
+![While it runs: working, or waiting on you - a question, an approval, stuck on a limit, quiet at its prompt](img/agent-run.svg "Your answer puts it back to work.")
+
+![How it ends: agent finished, session saved, the task closed, or agent stopped - and Continue session](img/agent-end.svg "Only a session that ended by itself reads as stopped.")
+
+| It ended because | What you see | What brings it back |
+|---|---|---|
+| The agent said it was done, or its pull request merged | ✅ **agent finished** - its reply ready for your yes if one is owed | a new message on it |
+| You pressed **Save and end session** | 💾 **session saved** - the report is written, the task stays open | **Continue session** |
+| You pressed **Mark done** | the task is closed and the agent stopped | they write again |
+| The session crashed or was closed, or Taskuary closed | ⏹ **agent stopped** - a reply it had held is back for your yes | **Continue session**, or **Run another agent** |
+
+**Continue session** works for a coding agent (it reopens its own CLI session, or a fresh one seeded with the
+handover) and a regular agent (its saved conversation). It asks what to tell it as it picks up - optional; on the
+phone the next thing you type is the note, or tap **Continue as is**.
+
 The saved result is deliberately short. Every finished coding session also writes a full Markdown
 artifact with that result and the complete transcript — **Work details → Full artifact** on the
 task page.

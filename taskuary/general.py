@@ -1116,12 +1116,18 @@ class GeneralSession:
         # without it the Timeline row of a chat waiting on the owner had AgentWaiting and no AgentLine
         from . import waitroom, workerstate as ws
         waiting = self.waiting()
-        sub = ws.sub_state(waiting, bool(waiting) and waitroom.looks_like_question(self.tail(waitroom.TAIL_LINES)))
+        # ...and WHAT IT ASKED: a [[TASKUARY-ASK]] is recorded as an open request with its choices, and `request` was
+        # hardcoded None here - so a regular agent's question and its answer pills never reached the rail or the chat
+        # card (A9, 2026-09-25). The request's own kind leads, as a pty session's does (terminal.worker_fields).
+        try: req = ws.asking_of(self.store, self) if waiting and self.store is not None else None
+        except Exception as e:
+            logger.debug(f'general: no request read for {self.sid}: {e}'); req = None
+        sub = ws.sub_state(waiting, bool(waiting) and not req and waitroom.looks_like_question(self.tail(waitroom.TAIL_LINES)), req)
         base = {'sid': self.sid, 'label': self.label, 'cwd': '', 'taskId': self.task_id,
                 'agent': self.agent, 'cli': 'taskuary', 'mode': self.mode, 'alive': self.alive,
                 'busy': self.busy,
                 'started': self.started, 'idle': self.idle(), 'phase': self.phase(),
-                'waiting': waiting, 'request': None, 'state': sub, 'line': ws.says(sub, self.agent) if sub else None,
+                'waiting': waiting, 'request': req, 'state': sub, 'line': ws.says(sub, self.agent, (req or {}).get('text')) if sub else None,
                 'cmd': f'{self.provider or "AI connector"} {self.model}'.strip(),
                 'provider': self.provider, 'pick': self.pick,
                 'connector_id': int(self.pick.split(':', 1)[1]) if self.pick.startswith('connector:') else None,

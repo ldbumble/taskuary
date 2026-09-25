@@ -501,6 +501,26 @@ def not_started_why(store, tid) -> str:
     return f'It was handed to {who} and nothing has started it.' + old
 
 
+def left_by_facts(tags, runs) -> str:
+    """'saved' | 'stopped' | '' from the task's tags and its runs - the rule the rail (agent_left) and All
+    (processing_all.row_lane) now share, so one task cannot read "waiting to start" in one and "agent stopped" in the
+    other (A16, 2026-09-25)."""
+    from . import terminal
+    tg = [x.strip() for x in str(tags or '').split(',')]
+    if terminal.SAVED in tg: return 'saved'
+    if terminal.INTERRUPTED in tg or any(r.get('Status') in ('stopped', 'failed', 'error') for r in runs or []): return 'stopped'
+    return ''
+
+
+def general_not_started(task: dict, has_conversation: bool, routes=()) -> bool:
+    """A regular-agent task triage handed on and nothing started: its route says so (`not auto-worked`) and there is no
+    conversation yet. Left unassigned when triage named no specialist, it read as the owner's own work; it is waiting to
+    start (A10, 2026-09-25). `general` is also the default kind of any task, so the route is what says it was meant for an
+    agent."""
+    return (str((task or {}).get('Kind') or '') == 'general' and not has_conversation
+            and any(AUTO_OFF in str(r.get('Reason') or '') for r in routes or ()))
+
+
 def session_saved(store, tid) -> bool:
     """The owner ended the agent's session and its result is written (Save and end session): `session saved`, never
     "left without finishing" (A1, 2026-09-25). A new session clears it (terminal.open_session)."""
@@ -614,10 +634,14 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
                              mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
                              why=request_line(agent, req)))
             continue
-        asking = waitroom.looks_like_question(tail)
+        # ONE READING of "is it asking" (A15, 2026-09-25): the session's own state and sentence (terminal.worker_fields,
+        # general.info) - the rail read the screen with a question regex of its own, and could say "asked you" where the
+        # Timeline, reading the session, said "is waiting on you". The screen is the fallback only where there is none.
+        state = t.get('state')
+        asking = state == 'asking' if state else waitroom.looks_like_question(tail)
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
-                         why=agent_says('asking' if asking else 'parked', agent)))
+                         why=t.get('line') or agent_says('asking' if asking else 'parked', agent)))
     return out
 
 

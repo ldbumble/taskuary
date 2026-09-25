@@ -460,6 +460,11 @@ def connect_ideas(store, now: datetime = None, days: int = 30, floor: int = 3) -
     # the threads on their own, because that is what the sentence claims to have counted: a card
     # raised by SOUL.md and two report titles must not say "3 threads this month"
     threads = connectorcatalog.mentions(texts, exclude_types=connected)
+    # ...and WHICH threads, because a name match is not a judgement: "Federal Holiday - Monday October 12th" matched
+    # Monday.com (the owner, 2026-09-25: "it should understand that using AI"). The model reads these and decides.
+    seen = {}
+    for x in texts:
+        for typ in connectorcatalog.mentions([x], exclude_types=connected): seen.setdefault(typ, []).append(x.strip())
     raised = {i['Key'] for i in store.list_ideas() if str(i['Key']).startswith('connect:')}
     best = sorted(((n, t) for t, n in hits.items() if n >= floor and f'connect:{t}' not in raised), reverse=True)
     if not best: return []
@@ -468,7 +473,11 @@ def connect_ideas(store, now: datetime = None, days: int = 30, floor: int = 3) -
     said = threads.get(t, 0)
     lead = (f"{said} threads this month were about {card['title']}" if said
             else f"Your own reports and documents name {card['title']}")
+    subjects = '; '.join(f'"{_short(x, 90)}"' for x in seen.get(t, [])[:6]) or '(no thread - named only in your own documents and reports)'
     return [{'key': f'connect:{t}', 'kind': 'connect', 'sig': t,
+             'facts': (f"{card['title']} is not connected, and its NAME matched {said} thread(s) this month: {subjects}. A word match is "
+                       f"not a subject - say it only if these threads are really about {card['title']} (a holiday on a Monday is "
+                       f"not Monday.com); otherwise skip it."),
              'text': (f"{lead} and nothing here reads it. "
                       + ('It is on the roadmap - say so and it moves up.' if card.get('planned') else f"Connect {card['title']}?")),
              'action': {'type': 'connect', 'connector_type': t, 'title': card['title'], 'planned': bool(card.get('planned')), 'count': n,
@@ -1576,6 +1585,12 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # working even if the owner turns off the free-form "idea" producer in Settings.
     configured = bool(_ids(watch_source_ids) or _inline(watch_sources))
     used, note, read, mids = bool(llm and (configured if systems_only else ('idea' in c['producers'] or configured))), '', '', {}
+    # A SYSTEM WORTH CONNECTING is a candidate the MODEL judges, with the threads that matched its name - never a
+    # line the code posts off a word count. No model, no line: there is nothing to judge it with.
+    if used and not systems_only and (blocks is None or bool((blocks.get('connectors') or {}).get('on'))):
+        co = (blocks or {}).get('connectors') or {}
+        try: cands += [x for x in connect_ideas(store, now, days=co.get('days', 30), floor=co.get('floor', 3)) if fresh(state, x, now)]
+        except Exception as e: logger.warning(f'assistant: the connect check was skipped - {e}')
     if used:
         try:
             say, note, read, mids = think(store, cands, llm, instruction, c['max'],
@@ -1613,16 +1628,15 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     else:
         rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {
             'notes': note, 'blocks': read_blocks(blocks)}
-    # ...and what the REPORT proposes on its own: the app's health and a system worth connecting. Read,
-    # not thought; fresh() keeps a declined one from coming back, and a raised one from repeating.
+    # ...and what the REPORT proposes on its own: the app's health. Read, not thought; fresh() keeps a declined one
+    # from coming back, and a raised one from repeating. A system worth connecting is NOT here any more: it is a
+    # candidate the model judges (above), because a name match raised Monday.com off three holiday notices.
     if not systems_only:
         have = {s['key'] for s in say}
-        # the two the report raises are blocks like any other: off in this report's choice, off here
+        # the report raises it as a block like any other: off in this report's choice, off here
         on = lambda bid: blocks is None or bool((blocks.get(bid) or {}).get('on'))
-        co = (blocks or {}).get('connectors') or {}
         try:
-            props = ((health_ideas(store, now) if on('health') else [])
-                     + (connect_ideas(store, now, days=co.get('days', 30), floor=co.get('floor', 3)) if on('connectors') else []))
+            props = health_ideas(store, now) if on('health') else []
             say = list(say) + [x | {'why': x['action'].get('why', '')} for x in props
                                if x['key'] not in have and fresh(state, x, now)]
         except Exception as e: logger.warning(f'assistant: the health and connect checks were skipped - {e}')

@@ -204,7 +204,11 @@ def run_metric_check(cfg):
 AGENT_SYSTEM = ('You are running a SCHEDULED REPORT for a busy operator. Do exactly what the instruction '
                 'says - use your tools, read what you need to read - and then answer with the report itself: '
                 'plain text or markdown, concrete (numbers, names, dates, deltas), no preamble and no '
-                'questions back. If something the instruction asks about cannot be found, say so in the report.')
+                'questions back. If something the instruction asks about cannot be found, say so in the report. '
+                # THE RESULT LEADS (the owner, 2026-09-25: "don't care what happened ... main report should be the result"):
+                # a trending report opened with a table of the fetches and searches it made, and the list itself came second
+                'The result comes FIRST - what the instruction asked for, whole. How you got it (the fetches, searches and '
+                'cross-checks) goes LAST, under one short "How I got this" heading, or not at all.')
 
 
 BLOCKED = ('web search is not available', 'not available on this claude account', 'web search is not enabled',
@@ -318,7 +322,8 @@ def run_agent(cfg):
     prev = store.last_report(cfg.get('title') or '') if cfg.get('title') else None
     shape = _outline((prev or {}).get('BodyText'))
     if shape: ask += ('\n\nSTRUCTURE: keep the sections, their order and the table columns of the previous run of this '
-                      f'report so runs stay comparable - change only the content. Previous outline: {shape}')
+                      'report so runs stay comparable - change only the content - except that the result always comes first '
+                      f'and how you got it last. Previous outline: {shape}')
     out = str(llm(AGENT_SYSTEM, ask) or '').strip()
     if not out: raise RuntimeError(f'{name} answered nothing')
     excuse = _blocked(out)

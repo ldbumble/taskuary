@@ -32,8 +32,12 @@ class CatalogueTests(unittest.TestCase):
                     'card declined at the bank', 'search the web for it',
                     # TQ-0650: an app about messages cannot read the bare word as a Mac-only channel
                     '12 messages waiting', 'no messages from the vendor since Tuesday',
-                    'Your Apple ID was used to sign in', 'Apple sent a receipt for the subscription']
+                    'Your Apple ID was used to sign in', 'Apple sent a receipt for the subscription',
+                    # 2026-09-25: three holiday notices ("Federal Holiday - Monday October 12th") became
+                    # "3 threads this month were about Monday.com" - a weekday is not the product
+                    'Labor Day Holiday - Monday September 7th', 'Federal Holiday - Monday October 12th']
         self.assertEqual(connectorcatalog.mentions(ordinary), {})
+        self.assertEqual(connectorcatalog.mentions(['moved the sprint board to monday.com']).get('monday'), 1)
         self.assertEqual(connectorcatalog.mentions(['the network file share is full']).get('smb_file'), 1)
         self.assertEqual(connectorcatalog.mentions(['SMB share on fileserv']).get('smb_file'), 1)
         self.assertEqual(connectorcatalog.mentions(['can you read Apple Messages?']).get('imessage'), 1)
@@ -111,6 +115,21 @@ class ConnectTests(unittest.TestCase):
         self.assertEqual(assistant.connect_ideas(s)[0]['key'], 'connect:salesforce')       # the next one, never adp again
         state = {i['Key']: i for i in s.list_ideas()}
         self.assertFalse(assistant.fresh(state, {'key': 'connect:adp', 'sig': 'adp'}, datetime.now()))
+
+    def test_a_system_worth_connecting_is_the_models_call_with_the_matching_threads_in_front_of_it(self):
+        """A name match is not a judgement (2026-09-25): three holiday notices "on Monday" became "3 threads this month
+        were about Monday.com", posted by the code with no model in the loop. It is a candidate now - the model sees
+        which threads matched and says it, or skips it."""
+        s = A.store()
+        self._mail(s, 4, 'ADP payroll register ready')
+        seen = {}
+        def skips(system, user, **k): seen['user'] = user; return json.dumps({'say': []})
+        assistant.run(s, llm=skips, force=True)
+        self.assertIn('ADP payroll register ready', seen['user'])                           # the threads, not a count
+        self.assertNotIn('connect:adp', {i['Key'] for i in s.list_ideas()})                 # skipped: nothing posted
+        says = json.dumps({'say': [{'key': 'connect:adp', 'text': 'ADP payroll mail arrives weekly and nothing reads it.'}]})
+        assistant.run(s, llm=lambda *a, **k: says, force=True)
+        self.assertIn('connect:adp', {i['Key'] for i in s.list_ideas()})                   # kept: posted, with its buttons
 
     def test_a_connected_system_is_never_suggested(self):
         s = A.store()

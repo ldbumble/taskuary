@@ -34,7 +34,11 @@ const sx = {
   // a wide table scrolls inside its own box; the panel never grows sideways
   "& .tbl": { overflowX: "auto", mb: 0.75 },
   "& table": { borderCollapse: "collapse", fontSize: 12.5, minWidth: "100%" },
-  "& th, & td": { border: `1px solid ${BORDER}`, px: 0.9, py: 0.45, textAlign: "left", verticalAlign: "top" },
+  // a cell never splits a word: an `anywhere` inherited from the card let the table shrink a column below its
+  // longest word, so "11" stood on two lines and "JavaScript" broke after "JavaScri" (the owner, 2026-09-25).
+  // break-word still breaks a word too long for any line; the table scrolls sideways in .tbl before that.
+  "& th, & td": { border: `1px solid ${BORDER}`, px: 0.9, py: 0.45, textAlign: "left", verticalAlign: "top",
+    overflowWrap: "break-word", wordBreak: "normal" },
   "& th": { bgcolor: PANEL, fontWeight: 700, whiteSpace: "nowrap" },
   "& > :first-of-type": { mt: 0 }, "& > :last-child": { mb: 0 },
 };

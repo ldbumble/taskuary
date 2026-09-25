@@ -361,8 +361,7 @@
       "planned": false,
       "desc": "Monday.com items ASSIGNED TO YOU (any People column naming you) land on the Timeline through triage.",
       "match": [
-        "monday.com",
-        "monday"
+        "monday.com"
       ]
     },
     {

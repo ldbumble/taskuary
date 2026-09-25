@@ -618,12 +618,15 @@ def from_proposals(store, used_rids: set) -> list:
 
 def from_calendar(store, now: datetime) -> list:
     out = []
+    # how long a started meeting stays on the rail - a setting (the owner, 2026-09-25), STARTED_MIN when unset
+    try: grace = max(0, int(store.get_settings().get('meeting_grace_minutes') or STARTED_MIN))
+    except (TypeError, ValueError): grace = STARTED_MIN
     # block=False: the pile is a read the owner is waiting on, and the calendar is a network call
     for e in _agenda(store, block=False):
         st, en = _activity_time(e.get('start')), _activity_time(e.get('end')) or _activity_time(e.get('start'))
         # a meeting is unread work until it starts; a few minutes into it there is nothing to walk the owner
         # into (2026-09-07: an hour-old meeting sat at the top of Unread as "next - coming up")
-        if not st or (en and en <= now) or st <= now - timedelta(minutes=STARTED_MIN): continue
+        if not st or (en and en <= now) or st <= now - timedelta(minutes=grace): continue
         mins = int((st - now).total_seconds() // 60)
         if mins > SOON_MIN and st.date() != now.date(): continue   # the rest of today is visible; the walk still waits for ALERT_MIN
         who = [w for w in (e.get('who') or []) if w]
@@ -1412,6 +1415,16 @@ def reset_walk(store):
     store.clear_funnel_states(('ack',))
     for k, st in store.funnel_states().items():
         if k.startswith('agent:') and st.get('Status') == 'surfaced': store.clear_funnel_state(k)
+    # ...and on the rail an agent's row is keyed processing:<item>, not agent:, so the mark above never reached it and
+    # a new walk never raised a waving agent again (R11, 2026-09-25)
+    try:
+        states = store.funnel_states()
+        from . import processing_unread          # the rail itself, not pile(): the pile runs the notice watcher
+        for i in processing_unread.build(store).get('items') or []:
+            if i.get('lane') != 'blocked': continue
+            for k in [i.get('key'), *(i.get('aliases') or [])]:
+                if k and (states.get(k) or {}).get('Status') == 'surfaced': store.clear_funnel_state(k)
+    except Exception as e: logger.debug(f'a new walk could not raise the waiting agents again: {e}')
     invalidate()
 
 

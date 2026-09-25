@@ -208,6 +208,12 @@ is what you see if those cards cannot load.</li>
 <p><code>task_return_minutes</code> · type: number</p>
 <p>How long something you passed with Next - an agent waiting, a reply ready, a task nobody is on - waits in Passed before it is back in Your task and the walk. 180 (three hours) by default. To put a task away until a date, use Remind me on the task.</p>
 <p>Next does not close anything - the task stays open in Tasks. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until you Mark it done. A task with a Remind me date stays away until that date.</p>
+<h3 id="a-meeting-stays-on-the-rail-after-it-starts-minutes">A meeting stays on the rail after it starts (minutes)<a class="anchor" href="#a-meeting-stays-on-the-rail-after-it-starts-minutes" aria-label="Link to this section">#</a></h3>
+<p><code>meeting_grace_minutes</code> · type: number</p>
+<p>How long a meeting that has started stays on the work rail. 5 by default.</p>
+<h3 id="hide-auto-replies-and-answered-threads">Hide auto-replies and answered threads<a class="anchor" href="#hide-auto-replies-and-answered-threads" aria-label="Link to this section">#</a></h3>
+<p><code>rail_hide_noise</code> · type: switch</p>
+<p>Keeps withdrawn messages, out-of-office auto-replies and threads where yours is the last word off the work rail. On by default.</p>
 <h3 id="fyi-read-together">FYI read together<a class="anchor" href="#fyi-read-together" aria-label="Link to this section">#</a></h3>
 <p><code>fyi_batch</code> · type: number</p>
 <p>How many fyi the assistant puts in front of you at once. 1 to 10; four by default.</p>

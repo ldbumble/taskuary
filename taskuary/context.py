@@ -68,6 +68,16 @@ def _arrival_keys(msg: dict) -> tuple:
     return str(msg.get('conversation_id') or ''), str(msg.get('from_email') or '').lower(), set(tokens(words)), own
 
 
+def _who(sender, senders) -> str:
+    """Who asked for this task, beside the arrival's own sender: a stranger's pull request that "Closes #53" shares
+    every word of the owner's issue #53, and triage joined it to that task - reopening the owner's finished session and
+    showing its old draft addressed to the stranger (2026-09-25). The judge can only see that the asker changed if
+    it is told who asked."""
+    if not senders: return 'no sender (a report or an idea)'
+    if sender and sender in senders: return 'this sender'
+    return 'someone else: ' + ', '.join(sorted(senders)[:3]) + ' - not this sender'
+
+
 def _match(conv, sender, toks, own, convs, senders, title_toks):
     """(why, rank) this task touches the arrival, or None. For a report or an idea the shared conversation is only
     "the same report" and ranks BELOW a task its words name, so last week's other failures of one report cannot
@@ -94,7 +104,8 @@ def recent_open(store, msg: dict, limit: int = RECENT) -> list:
         hit = _match(conv, sender, toks, own, convs, senders, title_toks)
         if not hit: continue
         why, rank = hit
-        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'why': why, '_rank': rank})
+        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),
+                    'why': why, '_rank': rank})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 
@@ -129,7 +140,7 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
         hit = _match(conv, sender, toks, own, convs, senders, title_toks)
         if not hit: continue
         why, rank = hit
-        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
+        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),
                     'closed': str(t.get('Closed') or '')[:16], 'summary': t.get('Summary') or '',
                     'how': 'done' if t.get('Status') == 'done' else 'dropped', 'why': why, '_rank': rank})
     out.sort(key=lambda r: -r['_rank'])          # the query is newest-first and sort is stable: recency breaks ties

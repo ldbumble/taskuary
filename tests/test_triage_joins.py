@@ -67,6 +67,38 @@ class SameAsTests(unittest.TestCase):
         self.assertEqual(other['status'], 'created'); self.assertNotEqual(other['task_id'], first['task_id'])
 
 
+class SomeoneElsesAskTests(unittest.TestCase):
+    """A stranger's pull request that closes the owner's issue shares every word of it, and triage joined the two -
+    reopening the owner's finished task, its agent session and its old draft, now addressed to the stranger
+    (2026-09-25). The judge is told who each task is from, and that another person's new thread is a new ask."""
+
+    def test_triage_sees_the_task_is_someone_elses(self):
+        s = MemoryStore()
+        issue = mail(s, 'i', brain('task', title='Split long Discord replies'), conv='gh:northwind/ledger#53',
+                     frm='alex@northwind.example', subject='Discord replies are cut off at 2,000 characters')
+        s.update_task(issue['task_id'], {'Status': 'done'}, 'owner')
+        seen = []
+        mail(s, 'p', brain('task', seen=seen), conv='gh:northwind/ledger#65', frm='ray@vendor.example',
+             subject='Send long Discord replies without truncation', body='Discord replies are cut off at 2,000 characters. Closes #53.')
+        self.assertIn('"from": "someone else: alex@northwind.example - not this sender"', seen[-1]['usr'])
+        self.assertIn('is from someone else and this message is a new thread', seen[-1]['sys'])
+
+    def test_the_same_sender_again_is_told_so(self):
+        s = MemoryStore()
+        mail(s, 'a', brain('task'), conv='c1')
+        seen = []
+        mail(s, 'b', brain('task', seen=seen), conv='c2')
+        self.assertIn('"from": "this sender"', seen[-1]['usr'])
+
+    def test_their_pull_request_left_unjoined_is_a_task_of_its_own(self):
+        s = MemoryStore()
+        issue = mail(s, 'i', brain('task'), conv='gh:northwind/ledger#53', frm='alex@northwind.example')
+        s.update_task(issue['task_id'], {'Status': 'done'}, 'owner')
+        pr = mail(s, 'p', brain('task', title='Review the Discord chunking PR'), conv='gh:northwind/ledger#65', frm='ray@vendor.example')
+        self.assertEqual(pr['status'], 'created'); self.assertNotEqual(pr['task_id'], issue['task_id'])
+        self.assertEqual(s.get_task(issue['task_id'])['Status'], 'done')
+
+
 class ChatReopensTests(unittest.TestCase):
     def test_a_chat_line_that_answers_a_closed_ask_goes_back_to_it(self):
         s = MemoryStore()

@@ -144,9 +144,9 @@ def deliver(store, tid: int) -> dict:
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'answered', 'left': left})
         return {'delivered': len(notes), 'state': 'answered', 'left': left}
     if st == 'parked':
-        term.type_into(t, batch(notes, remaining=left))
+        how = term.tell(t, batch(notes, remaining=left))
         store.deliver_waiting([x['WId'] for x in notes], 'typed')
-        store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) typed into the live session once the agent stopped.'
+        store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session once the agent stopped.'
                           + (f' {left} still waiting for its next stop.' if left else ''))
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'typed', 'left': left})
         return {'delivered': len(notes), 'state': 'parked', 'left': left}

@@ -94,9 +94,6 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
         # here, or the walk would take a waving agent back while the rail still showed it as passed
         and (scope["include_surfaced"] or not item.get("surfaced"))
     ]
-    if scope["only"] == "mail" and not any(item.get("processing_id") for item in items):
-        ready = [item for item in ready
-                 if funnel.came_in(item) or item.get("kind") in funnel.INTERRUPTS]
     return ready
 
 

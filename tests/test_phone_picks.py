@@ -25,14 +25,14 @@ def armed():
     return s, cid
 
 
-def sent_to(s, text, fn='send'):
+def sent_to(s, text, poll=False):
     """Everything the phone said back to one line from the owner."""
     got = []
     with mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append((body, poll))), \
          mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
          mock.patch.object(concierge, 'restore_current', return_value=None), \
          mock.patch.object(concierge, 'say', side_effect=AssertionError('a pick never reaches the model')):
-        ra.respond(s, 'whatsapp', JID, text, None)
+        ra.respond(s, 'whatsapp', JID, text, None, poll=poll)
     return got
 
 
@@ -89,7 +89,7 @@ class PickIsTheButtonTests(unittest.TestCase):
              mock.patch.object(concierge, 'receipt', return_value='Done - Ignore this sender from now on.'), \
              mock.patch.object(concierge, 'surface', return_value={'say': 'All clear.', 'item': None}), \
              mock.patch.object(funnel, 'next_item', return_value=ITEM):
-            got = sent_to(s, 'From now on - triage learns this sender')
+            got = sent_to(s, 'From now on - triage learns this sender', poll=True)   # the poll tap
         self.assertEqual(pd.call_args.args[1:3], ('not_ours_sender', 'msg:7'))
         self.assertTrue(pd.call_args.kwargs['exact'])
         run.assert_called_once()
@@ -125,13 +125,19 @@ class StaleListTests(unittest.TestCase):
             sent_to(s, '2')                                          # Next: runs, and the list is spent
         self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, '3'), ('3', False))
 
-    def test_typed_next_does_not_reprint_the_days_summary(self):
+    def test_the_walk_opens_on_its_pill_and_typed_next_goes_to_the_model(self):
         s, _ = armed()
         with mock.patch.object(funnel, 'pile', return_value={'items': [{'key': 'a'}]}), \
              mock.patch.object(ra, 'who_wants_what', return_value='TODAY: three people want you.'), \
              mock.patch.object(concierge, 'surface', return_value={'say': 'All clear.', 'item': None}):
-            self.assertNotIn('TODAY', ra.script_direct(s, 'next'))
-            self.assertIn('TODAY', ra.script_direct(s, 'walk me through my tasks'))
+            self.assertIn('TODAY', ra.run_act(s, {'t': 'walk'}, None))
+        said = []
+        with mock.patch.object(messengers, 'wa_send', side_effect=lambda *a, **k: said.append(a[2])), \
+             mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
+             mock.patch.object(concierge, 'restore_current', return_value=None), \
+             mock.patch.object(concierge, 'say', return_value={'say': 'Next up.', 'item': None}) as model:
+            ra.respond(s, 'whatsapp', JID, 'next', None)
+        model.assert_called_once()                                    # typed words are the model's, "next" too
 
 
 class PollTests(unittest.TestCase):
@@ -140,8 +146,8 @@ class PollTests(unittest.TestCase):
         got = offer(s, {'say': 'The export job failed again.', 'item': ITEM, 'chips': CHIPS})
         self.assertEqual(got[-1][1], ['Make a task', 'Next', 'Send to agent', 'Not ours'])
         self.assertTrue(all(p is None for _, p in got[:-1]))
-        self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, 'Send to agent'), ('Send to agent', True))
-        self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, 'send to agent'), ('send to agent', False), 'typed words stay words')
+        self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, 'Send to agent', poll=True), ('Send to agent', True))
+        self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, 'Send to agent'), ('Send to agent', False), 'typed, the same words are words')
 
     def test_a_single_choice_is_no_poll(self):
         s, _ = armed()

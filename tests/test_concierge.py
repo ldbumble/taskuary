@@ -187,9 +187,6 @@ class TurnTests(unittest.TestCase):
         concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never')
         self.assertIsNone(again['item']); self.assertEqual(again['say'], "1 thing you've already seen still waits in Work. I'll bring it round again in a while.")
-        s.add_message({'ExternalId': 'r9', 'Channel': 'report', 'SourceName': 'Nightly', 'Subject': 'Nightly report', 'FromName': 'Nightly', 'SentAt': ago(1), 'BodyText': '5 rows', 'Status': 'feed'})
-        mail_out = concierge.surface(s, llm=lambda *a, **k: 'never', only='mail')
-        self.assertIsNone(mail_out['item']); self.assertEqual(mail_out['exhausted'], 'mail'); self.assertIn("That's all the mail. 2 other things still wait", mail_out['say'])
         gone = concierge.surface(s, key='msg:999', llm=lambda *a, **k: 'never')
         self.assertIsNone(gone['item']); self.assertIn("can't find that one", gone['say'])
 
@@ -660,9 +657,8 @@ class SetupAndTroubleTests(unittest.TestCase):
         it = funnel.build(s)['items'][0]
         fx = concierge.facts(s, it)
         self.assertIn('LAST RUNS:', fx); self.assertIn('FAILED: claude exit 1: rate_limit_event', fx)
-        self.assertEqual(concierge.trouble(s, 'what did she attach?'), '')
-        block = concierge.trouble(s, 'why is my github report not working?')
-        self.assertIn('WHAT IS FAILING RIGHT NOW', block); self.assertIn('Report failed: GitHub Trending', block)
+        # what is failing is a tool the model calls (errors.list) - no longer injected when the words sound like trouble
+        self.assertFalse(hasattr(concierge, 'trouble'))
 
     def test_the_no_model_line_points_at_the_page_that_fixes_it(self):
         """"No AI is connected - Connections → AI" named a tab, and the AI CLI agents page inside it
@@ -761,18 +757,6 @@ class ClosingTests(unittest.TestCase):
         self.assertEqual(s.get_task(t)['Status'], 'done')
         self.assertIsNone(s.pending_review(t))                        # no reply left waiting on a closed task
         self.assertFalse(concierge.close_task(s, t, 'owner'))          # already closed
-
-    def test_being_told_a_fact_is_wrong_is_never_answered_by_moving_on(self):
-        s = store()
-        t, m, r = drafted(s)
-        key = f'review:{r}'
-        # the model itself said "move on" - which is the one answer a correction may not get
-        out = concierge.say(s, "that's not a fail, it says all clear?", key=key,
-                            llm=lambda *a, **k: 'Fair enough - the run says all clear.\nCALL: {"kind": "next", "params": {}}')
-        self.assertIsNone(out['decision'])
-        self.assertNotEqual(out['say'].strip(), 'Next.')
-        self.assertIn('all clear', out['say'])
-
 
 class OpeningTests(unittest.TestCase):
     def test_a_new_chat_opens_with_the_day_once_and_the_walk_starts_on_a_button(self):

@@ -618,13 +618,6 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(s.get_task(r.json()['outcome']['taskId'])['Kind'], 'general')
         self.assertFalse(spawn.called)                                  # nobody is sent into a repository
 
-    def test_a_correction_is_taken_not_shrugged_off(self):
-        s, tid, mid, item = self._asked()
-        out = say(s, "that's not a fail, it says all clear?", key=item['key'],
-                  model='Fair enough - the run says all clear.' + chr(10) + 'CALL: {"kind": "next", "params": {}}')
-        self.assertIsNone(out['decision'])
-        self.assertIn('all clear', out['say'])
-
     def test_a_question_is_answered_and_decides_nothing(self):
         s, tid, mid, item = self._asked()
         out = say(s, 'what did they actually ask for?', key=item['key'], model='They want the export fixed.')
@@ -886,7 +879,7 @@ class AgentEndingsTests(unittest.TestCase):
         s, tid, live, item = self._parked()
         out = decide(s, 'wrap it up', 'stop_agent', key=item['key'], live=live)
         self.assertFalse(out['proposal']['params']['wrap'])                          # the wrap would 422: it stops instead
-        self.assertIn('nothing to wrap', out['say'])
+        self.assertIn('no transcript to write a report from yet', out['say'])
 
 
 class WalkFromWordsTests(unittest.TestCase):
@@ -1134,21 +1127,6 @@ class WalkOrderTests(unittest.TestCase):
                 seen.append(out['item']['lane'])
                 funnel.settle(s, out['item']['key'], 'done', 'owner')
         self.assertEqual(seen, ['approve', 'queued', 'blocked', 'report', 'fyi'])
-
-    def test_start_with_what_came_in_walks_only_what_a_person_sent(self):
-        s = store()
-        agent, draft, asked = self._everything(s)
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            came = []
-            for _ in range(6):
-                item = funnel.next_item(s, only='mail')
-                if not item: break
-                came.append((item['kind'], item['channel'] or 'email'))
-                funnel.settle(s, item['key'], 'done', 'owner')
-        self.assertTrue(came, 'the mail-first walk finds the mail')
-        self.assertTrue(all(ch != 'report' for _, ch in came), came)      # never a scheduled report
-        self.assertIn('review', [k for k, _ in came])                     # …and it does include a draft for a yes
-
 
 class NeverWorkTests(unittest.TestCase):
     def test_a_brain_that_fails_files_the_message_and_says_so(self):

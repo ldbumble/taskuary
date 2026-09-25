@@ -21,7 +21,8 @@ from . import operations
 PURPOSE = {
     'task.create_from_message': 'hand this message to an agent or put it on the list - `kind`: coding | general | task',
     'task.create_from_text':    ('a new job with no message behind it - `kind`: task (a to-do or reminder the owner does '
-                                 'themselves, no agent) | general (a regular agent) | coding, and `text`. Never for a task that '
+                                 'themselves, no agent) | general (a regular agent) | coding, `text`, and a short `title` in '
+                                 'your own words for the job (never "send it to the agent"). Never for a task that '
                                  'already exists (a TQ ref): starting an agent on one is dispatch.prepare, and its own last '
                                  'session is agent.continue'),
     'message.file':             "file it - not ours, just this one",

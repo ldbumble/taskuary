@@ -864,9 +864,7 @@ export function BriefCard({ card, onStart }) {
       {!!n && <CardNav.Provider value={{ ...nav, onNext: null }}>
         <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onStart?.(null)} sx={primary}
             title="Everything in the pipe, one card at a time">Start at the top</Button>}
-          then={<><b>Start at the top</b> brings up the first card; each one has its verb and Next.</>}
-          more={<Button size="small" onClick={() => onStart?.("mail")} sx={faint}
-            title="Only what people sent you - mail and chat">Just what came in</Button>} />
+          then={<><b>Start at the top</b> brings up the first card; each one has its verb and Next.</>} />
       </CardNav.Provider>}
     </CardShell>
   );

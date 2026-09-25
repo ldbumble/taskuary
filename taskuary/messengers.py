@@ -384,7 +384,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # here too, so a notification or answer can never loop back as a fresh question.
         if text and remote_assistant.intercept(
                 store, 'whatsapp', jid, text, from_me=bool(m.get('fromMe')),
-                connector=c, message_id=m.get('id')):
+                connector=c, message_id=m.get('id'), poll=bool(m.get('poll'))):
             continue
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always

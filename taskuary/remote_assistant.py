@@ -349,7 +349,7 @@ def _claim(channel: str, message_id) -> bool:
 
 
 def intercept(store, channel: str, chat: str, text: str, *, from_me=False, taskuary=False, connector=None,
-              message_id=None) -> bool:
+              message_id=None, poll=False) -> bool:
     """Claim an owner-authored question before it can be discarded or triaged.
 
     ``taskuary`` is stamped by the local bridge on every message Taskuary itself sends. Those echoes are
@@ -367,12 +367,12 @@ def intercept(store, channel: str, chat: str, text: str, *, from_me=False, tasku
     # on a queue nobody reads again. The turn talks to the store underneath instead, like any request.
     threading.Thread(target=_locked_respond,
                      args=(getattr(store, '_store', store), channel, str(chat), question, c.get('ConnectorId'),
-                           message_id),
+                           message_id, bool(poll)),
                      name=f'taskuary-{channel}-assistant', daemon=True).start()
     return True
 
 
-def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None):
+def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None, poll=False):
     # the thumb goes up BEFORE the lock: it says "heard you", and it must not wait behind the turn
     # already answering (which is exactly when the owner most needs to know they were heard)
     if message_id:
@@ -386,7 +386,7 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
     from . import live
     live.emit(live.CHAT, thinking=True, channel=channel)
     try:
-        with lock: respond(store, channel, chat, question, connector_id)
+        with lock: respond(store, channel, chat, question, connector_id, poll=poll)
     finally: live.emit(live.CHAT, thinking=False, channel=channel)
 
 
@@ -463,7 +463,8 @@ def meetings_line(store) -> str:
 
 
 MORNING_KEY, MORNING_AT = 'phone_morning_line', 'phone_morning_line_at'
-SCRIPT_LINES = ['Walk me through my tasks', 'Set up Taskuary', 'Set up a report']
+SCRIPT_LINES = [('Walk me through my tasks', {'t': 'walk'}), ('Set up Taskuary', {'t': 'script', 'script': 'set up Taskuary'}),
+                ('Set up a report', {'t': 'script', 'script': 'set up a report'})]
 
 
 def morning_line(store, now=None, force: bool = False) -> int:
@@ -490,37 +491,31 @@ def morning_line(store, now=None, force: bool = False) -> int:
     # the desktop's opener: the day's meetings, then who wants what (2026-09-23)
     head = '\n\n'.join(x for x in ('Good morning.', meetings_line(store),
                                      who_wants_what(items) if items else 'The pipe is clear.') if x)
-    text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(SCRIPT_LINES, 1))
+    text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, (w, _) in enumerate(SCRIPT_LINES, 1))
     sent = 0
     for d in doors:
+        _offer(SCRIPT_LINES)                    # per send: remember_offered spends what was offered
         try: send(store, d['channel'], d['chat'], text, d['connectorId']); sent += 1
         except Exception as e: logger.warning(f'the morning line did not reach {d["channel"]}: {e}')
     if sent: store.set_setting(MORNING_AT, today, 'assistant')
     return sent
 
 
-def script_direct(store, question: str) -> str | None:
-    """A script named in so many words needs no model: "walk me through my tasks" is Next, "set up
-    Taskuary" opens on the connections, "set up a report" asks for the sentence. Returns the words to
-    send, or None when the line is not a script (then the general road reads it)."""
-    from . import concierge
-    q = ' '.join(str(question or '').lower().replace('-', ' ').split())
-    if not q: return None
-    if q in ('walk me through my tasks', 'walk me through the tasks', 'walk me through tasks', 'my tasks', 'next'):
-        with concierge.delivering(concierge.PHONE):
-            from . import funnel
-            # the day's summary opens the WALK; "next" inside it is the desktop's Next, which reprints nothing
-            try: opener = who_wants_what(funnel.pile(store).get('items') or []) if q != 'next' else ''
-            except Exception as e:
-                logger.debug(f'the phone walk opened without its summary: {e}'); opener = ''
-            out = concierge.surface(store, actor='owner')
-            return carry_out(store, out, None, actor='owner', lead=opener)
-    if q in ('set up taskuary', 'setup taskuary', 'set up', 'setup'): return script_words(store, 'set up Taskuary')
-    if q in ('set up a report', 'setup a report', 'set up report', 'new report'): return script_words(store, 'set up a report')
-    return None
+def walk(store, actor: str = 'owner') -> str:
+    """"Walk me through my tasks", picked: the day's summary, then the first card - the desktop's Start at the top.
+    A table of typed words used to run this and set-up with no model ("next", "set up", "my tasks"); the owner,
+    2026-09-25: "No hard coded anything... Only if you type 1 or hit poll that's clicking a pill". Typed, the words
+    go to the model like any other."""
+    from . import concierge, funnel
+    with concierge.delivering(concierge.PHONE):
+        try: opener = who_wants_what(funnel.pile(store).get('items') or [])
+        except Exception as e:
+            logger.debug(f'the phone walk opened without its summary: {e}'); opener = ''
+        out = concierge.surface(store, actor=actor)
+        return carry_out(store, out, None, actor=actor, lead=opener)
 
 
-def respond(store, channel: str, chat: str, question: str, connector_id: int):
+def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False):
     """Answer synchronously; the poller runs this on a serialized background worker."""
     from . import concierge, general
     _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id}
@@ -533,12 +528,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
             # the item on the table is the walk's own, persisted and validated here - a phone has no
             # client state to send, and the key is all say() needs to build the item afresh
             item = concierge.restore_current(store, tid)
-            # "undo", alone: the newest undo a receipt offered, run once (the tiers - an instant write
-            # says how to put it back, and on a phone the word is the button)
-            if question.strip().lower() in ('undo', 'undo it', 'put it back'):
-                send(store, channel, chat, concierge.undo_last(store, 'owner'), connector_id)
-                return
-            question, picked = resolve_index(store, channel, chat, question)   # "2" is the words we numbered
+            question, picked = resolve_index(store, channel, chat, question, poll=poll)   # "2" is the words we numbered
             # A PICK IS THE BUTTON: what the desktop's click would run, run here in code - the model reads only
             # words (the owner, 2026-09-25: the phone matches the desktop exactly). A list answers ONE reply:
             # whatever comes next, the old numbers are gone, so a stale "2" can never fire.
@@ -564,11 +554,6 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
                 folded = more_text(store, item) or 'Nothing more on this one.'
                 opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(again, 1)) if again else ''
                 send(store, channel, chat, '\n\n'.join(x for x in (folded, opts) if x), connector_id)
-                return
-            # a script by name (the morning line's options, or the words themselves) runs with no model
-            scripted = script_direct(store, question)
-            if scripted:
-                send(store, channel, chat, scripted, connector_id)
                 return
             straight = answer_the_agent(store, item, question, picked)
             if straight:
@@ -737,6 +722,8 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     try:
         if t == 'next': return carry_out(store, concierge.surface(store, actor=actor), None, actor)
         if t == 'stay': return 'Left it - nothing moved.'
+        if t == 'walk': return walk(store, actor)
+        if t == 'script': return script_words(store, act.get('script') or '')
         if t == 'undo': return concierge.undo_last(store, actor)
         if t == 'remind': return _remind(store, act, actor)
         if t in ('confirm', 'cancel', 'repo'):
@@ -1170,7 +1157,7 @@ def acts_for(store, channel: str, chat: str) -> dict:
     except ValueError: return {}
 
 
-def resolve_index(store, channel: str, chat: str, text: str) -> tuple[str, bool]:
+def resolve_index(store, channel: str, chat: str, text: str, poll: bool = False) -> tuple[str, bool]:
     """"2" as an answer - because WE numbered the options a moment ago. Returns (words, picked).
 
     The code indexes the list it offered; it reads no words and knows no verbs (the intent model still
@@ -1185,9 +1172,11 @@ def resolve_index(store, channel: str, chat: str, text: str) -> tuple[str, bool]
     """
     try: words = json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
     except ValueError: words = []
-    # a WhatsApp poll's vote arrives as the option's own words (cut to the poll's 100 characters): the tap is a pick
+    # a WhatsApp poll's vote arrives as the option's own words (cut to the poll's 100 characters): the TAP is a pick.
+    # Only a vote the bridge marked as one - the same words TYPED are words, and go to the model (the owner,
+    # 2026-09-25: "Only if you type 1 or hit poll that's clicking a pill")
     said = str(text or '').strip()
-    hit = next((w for w in words if said and (said == w or (len(said) >= 100 and w.startswith(said)))), None)
+    hit = next((w for w in words if said and (said == w or (len(said) >= 100 and w.startswith(said)))), None) if poll else None
     if hit: return hit, True
     t = said.lstrip('#').rstrip('.').strip()
     if not t.isdigit(): return text, False

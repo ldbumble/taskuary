@@ -43,10 +43,13 @@ class MorningLineTests(unittest.TestCase):
         with self._pile(3): self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
         self.assertEqual(self.sent, [])
 
-    def test_a_script_named_in_words_runs_with_no_model(self):
-        self.assertIn('what is connected', ra.script_direct(self.s, 'Set up Taskuary'))
-        self.assertIn('sentence', ra.script_direct(self.s, 'set up a report'))
-        self.assertIsNone(ra.script_direct(self.s, 'what reports do we have'))
+    def test_its_options_are_pills_and_the_words_are_the_models(self):
+        """A number (or a poll tap) runs the script with no model; typed, "set up" is words like any other (2026-09-25:
+        "No hard coded anything... Only if you type 1 or hit poll that's clicking a pill")."""
+        self.assertFalse(hasattr(ra, 'script_direct'))
+        self.assertIn('what is connected', ra.run_act(self.s, {'t': 'script', 'script': 'set up Taskuary'}, None))
+        self.assertIn('sentence', ra.run_act(self.s, {'t': 'script', 'script': 'set up a report'}, None))
+        self.assertEqual([t for t, _ in ra.SCRIPT_LINES], ['Walk me through my tasks', 'Set up Taskuary', 'Set up a report'])
 
 
 if __name__ == '__main__':

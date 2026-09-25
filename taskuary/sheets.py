@@ -60,6 +60,18 @@ def _get(tok, url, **params):
     return r.json()
 
 
+def _heads(first, n):
+    "Column names for `n` columns: blank or missing headers get `col<i>`, a repeat gets `_2`, `_3`, so no column shares a key and vanishes."
+    out, seen = [], set()
+    for i in range(n):
+        h = str(first[i]) if i < len(first) else ''
+        base = h if h.strip() else f'col{i}'
+        k, j = base, 1
+        while k in seen: j += 1; k = f'{base}_{j}'
+        seen.add(k); out.append(k)
+    return out
+
+
 def run_google_sheets(cfg):
     """{"spreadsheet": "<id or URL>", "range": "Sheet1!A:Z"} - a Google Sheet's cells as rows, the
     first row as the column names. Blank range = the first sheet. The OAuth client comes from the
@@ -75,7 +87,7 @@ def run_google_sheets(cfg):
     j = _get(tok, f'{SHEETS}/{sid}/values/{requests.utils.quote(rng, safe="!:")}', valueRenderOption='UNFORMATTED_VALUE', dateTimeRenderOption='FORMATTED_STRING')
     vals = j.get('values') or []
     if not vals: return f'{rng}: empty', ''
-    head = [str(h) if str(h).strip() else f'col{i}' for i, h in enumerate(vals[0])]
+    head = _heads(vals[0], max(len(r) for r in vals))
     rows = [dict(zip(head, r + [''] * (len(head) - len(r)))) for r in vals[1:]]
     lim, mine = row_limit(cfg)
     return rows_out(rows, lim, unit=f'rows from {rng}', mine=mine)

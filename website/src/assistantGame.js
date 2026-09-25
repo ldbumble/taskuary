@@ -95,7 +95,7 @@ export const MOVE_WORDS = {
 // later still runs, it just scores as a plain "done"
 export const CHIP_MOVE = { approve: "approve", redraft: "draft", reply: "draft", coder: "dispatch", regular_agent: "dispatch",
   mine: "done", not_ours: "sort", not_ours_sender: "sort", block_sender: "sort", archive: "sort", close: "done", done: "done",
-  later: "later", skip: "later", defer: "later", answer_agent: "answer", stop_agent: "wrap", rerun: "rerun", split: "done", prep: "prep", followup: "followup" };
+  later: "later", skip: "later", defer: "later", continue: "dispatch", answer_agent: "answer", stop_agent: "wrap", rerun: "rerun", split: "done", prep: "prep", followup: "followup" };
 
 export const TITLES = ["Intern", "Inbox Rookie", "Reply Ranger", "Agent Wrangler", "Combo Clerk",
   "Thread Slayer", "Ghostbuster", "Chief of Vibes", "Office Legend", "Inbox Zero Deity"];

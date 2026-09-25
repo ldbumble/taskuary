@@ -311,9 +311,10 @@ Start an agent on an EXISTING task; a coding task asks which repository when it 
 
 ### `agent.continue`
 
-Pick up the agent's own last session on a task where it left off.
+Pick up the agent's own last session on a task where it left off, coding or not.
 
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
+- `note` - when the owner said what to tell it as it picks up
 
 <p class="runs">Waits for your yes on a card.</p>
 

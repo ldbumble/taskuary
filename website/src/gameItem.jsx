@@ -182,6 +182,7 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
     // the words that are the page's own actions rather than proposals - exactly as the chat runs them
     if (c.ask) return null;
     if (c.verb === "defer") { if (item.tid) setRemindAt(anchor || document.body); return null; }
+    if (c.verb === "continue" && item.tid) return play("dispatch", item.key, () => api.post(`/api/tasks/${item.tid}/continue-work`, { note: null }));
     if (c.verb === "followup") return play("followup", item.key, () => api.post("/api/concierge/act", { key: item.key, verb: "followup" }));
     if ((c.verb === "reply" || c.verb === "redraft") && item.mid)
       return play("draft", null, () => api.post(`/api/messages/${item.mid}/reply`, { draft: true, redraft: c.verb === "redraft", instruction: null }));

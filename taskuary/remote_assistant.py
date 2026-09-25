@@ -538,6 +538,12 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             except ValueError: offered = []
             act = acts.get(question) if picked else None
             forget_offered(store, channel, chat); _ACTS.rows = None
+            pending = str(store.get_settings().get(f'{NOTE_KEY}:{channel}:{chat}') or '')
+            if pending: store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
+            if pending and not picked:
+                # the line typed after "Continue session" is what to tell the agent - a text field, not a word to read
+                send(store, channel, chat, _continue(store, pending, question), connector_id)
+                return
             if act:
                 send(store, channel, chat, run_act(store, act, item), connector_id)
                 return
@@ -727,6 +733,7 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         if t == 'script': return script_words(store, act.get('script') or '')
         if t == 'undo': return concierge.undo_last(store, actor)
         if t == 'remind': return _remind(store, act, actor)
+        if t == 'continue': return _continue(store, act.get('tid'), act.get('note') or '')
         if t in ('confirm', 'cancel', 'repo'):
             op = operations.get(store, act.get('id') or '')
             if not op or op.get('status') != 'proposed': return 'That one is not waiting on you any more - nothing moved.'
@@ -743,6 +750,12 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(act.get('table')), exact=True)
             # the pick answered the card's question; only a checkout still to choose is left to ask
             return _settle(store, {**prop, 'alts': []}, item, actor)
+        if verb == 'continue':
+            here = asking() or {}
+            if here.get('chat'): store.set_setting(f"{NOTE_KEY}:{here['channel']}:{here['chat']}", str(on.get('tid') or ''), 'assistant')
+            rows = [('Continue as is', {'t': 'continue', 'tid': on.get('tid')}), ('Cancel', {'t': 'stay'})]
+            return turn_text({'say': f"Continue {on.get('ref') or 'it'}? Type what to tell it as it picks up, or tap Continue as is.",
+                              'item': None}, store=store, extra=rows)
         if verb == 'defer':
             # Remind me asks for the day, as the desktop's picker does; a day typed instead goes to the model's task.defer
             rows = [(label, {'t': 'remind', 'tid': on.get('tid'), 'until': until}) for label, until in REMIND_DAYS]
@@ -757,6 +770,19 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(item and item.get('key') == key))
         return _settle(store, prop, item, actor)
     except ValueError as e: return f'Not done - {e}. Nothing moved.'
+
+
+NOTE_KEY = 'remote_continue_note'         # a Continue pick waiting for its note: the next typed line is it
+
+
+def _continue(store, tid, note: str) -> str:
+    """Continue session, from the phone: the same road as the desktop's pill (server.continue_work)."""
+    from .server import ContinueBody, continue_work
+    from fastapi import HTTPException
+    try: continue_work(int(tid), ContinueBody(note=note or None))
+    except HTTPException as e: return f'Could not continue it: {e.detail}'
+    ref = f'TQ-{int(tid):04d}'
+    return f'Continuing {ref}' + (' with your note' if note else '') + ' - it picks up where it left off, and comes back here when it stops or asks.'
 
 
 REMIND_DAYS = (('Tomorrow', 'tomorrow'), ('Next week', '1 week'), ('In 2 weeks', '2 weeks'), ('In a month', '1 month'))   # RemindMe.jsx's QUICK

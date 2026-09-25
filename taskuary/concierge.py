@@ -70,12 +70,13 @@ CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Re
               'archive': 'Archive it', 'close': 'Mark done',
               'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
               'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
-              'prep': 'Prep me', 'followup': 'Draft a follow-up', 'defer': 'Remind me'}
+              'prep': 'Prep me', 'followup': 'Draft a follow-up', 'defer': 'Remind me', 'continue': 'Continue session'}
 # What the word will actually DO, on hover - written where the difference matters.
 CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
               'regular_agent': 'An agent takes it - triage picks a coding or a non-coding one, and you can change it on the card',
               'mine': "A task on your own list - no agent starts", 'next': 'Read it and move on',
-         'defer': 'Put the task away until a day - it is Upcoming in Tasks and back on your rail that morning'}
+         'defer': 'Put the task away until a day - it is Upcoming in Tasks and back on your rail that morning',
+         'continue': 'Pick the agent up where it left off - say what to tell it, or continue as is'}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
 # THE SHORT LIST (the owner, 2026-09-25, word by word): eight buttons. Tomorrow and Later are gone - Next on
@@ -513,11 +514,11 @@ def _pile_hit(store, extra: list, item: dict) -> str | None:
 # through task.create_from_text from the item's facts and the owner's words.
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
-         'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid'}
+         'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coder': 'hand to a coding agent', 'regular_agent': 'hand to a regular agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
-             'split': 'split', 'defer': 'put away'}
+             'split': 'split', 'defer': 'put away', 'continue': 'continue'}
 
 def no_agent(store) -> str:
     """The coding agent the dispatch would use, when there is not one - so "Sent off to the coding
@@ -574,6 +575,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     "It says x, does something else")."""
     if not item: return []
     verbs = list(CHIPS[item['kind']] if item.get('kind') in CHIPS else ('next',))    # the handful's () is deliberate
+    # CONTINUE SESSION leads on work an agent left - stopped, saved by you, or paused when Taskuary stopped (A19)
+    if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused')): verbs = ['continue'] + [v for v in verbs if v != 'continue']
     if first and first in CHIP_WORDS and first != 'next':
         verbs = [first] + [v for v in verbs if v != first]
     out = []
@@ -1930,13 +1933,14 @@ PROPOSALS = {
     'later': ('item.settle', 'Push it back', True), 'skip': ('item.settle', 'Skip until tomorrow', True),
     'approve': ('review.approve', 'Send the reply', True), 'answer_agent': ('agent.answer', 'Send the answer to the agent', True),
     'stop_agent': ('agent.stop', 'Save and end session', False), 'rerun': ('report.rerun', 'Run the report again', True),
+    'continue': ('agent.continue', 'Continue session', False),
     'remember': ('memory.remember', 'Remember it', False), 'split': ('task.split', 'Split it in two', False),
     'clear': ('pipe.clear', 'Clear them from the pipe', False), 'setup': ('task.setup', 'Open the walk-through', False),
 }
 # ...and ending the agent's session, which the task page's own button does on the click: it writes the
 # session up and drafts the reply for your yes - nothing leaves (the owner, 2026-09-23: "it should be save
 # end session as well same as in task", having been asked to confirm a card that read "wrap: false")
-AUTO = ('done', 'skip', 'later', 'close', 'stop_agent')     # settles what is on the table; nothing leaves, nothing is handed off
+AUTO = ('done', 'skip', 'later', 'close', 'stop_agent', 'continue')     # settles what is on the table; nothing leaves, nothing is handed off
 # the operations that take the item off the table, so the walk moves on after them (the page reads
 # `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
 SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles)
@@ -2106,6 +2110,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         except Exception: wrap = False
         target, params = end, {'wrap': wrap}
         if not wrap: note = ' There is no transcript to write a report from yet - this stops the agent and the task stays open.'
+    elif verb == 'continue': target, params = it.get('tid'), {'note': d_text or ''}
     elif verb == 'rerun': target = it.get('source_id')
     elif verb == 'remember':
         if not d_text: raise ValueError('remember what? Say the fact and I will keep it')

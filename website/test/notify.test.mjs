@@ -19,15 +19,10 @@ test("a fully wired connector reads as pinging, with the chat named", () => {
   assert.match(st.text, /Pinging Telegram · -100123/);
 });
 
-test("phone answers and approvals are mentioned only when they are on", () => {
-  assert.doesNotMatch(notifyState([withChat({})], "needs_me", false).text, /approve/);
-  assert.match(notifyState([withChat({})], "needs_me", true).text, /answer agents or approve drafts/);
-});
-
-test("Teams can carry alerts but says phone replies need Telegram or WhatsApp", () => {
-  const st = notifyState([withChat({ Type: "teams", Name: "Teams" })], "needs_me", true);
+test("alerts never promise replies that approve - phone approvals are gone (2026-09-25)", () => {
+  assert.doesNotMatch(notifyState([withChat({})], "needs_me").text, /approve/);
+  const st = notifyState([withChat({ Type: "teams", Name: "Teams" })], "needs_me");
   assert.equal(st.kind, "pinging");
-  assert.match(st.text, /phone replies need a Telegram or WhatsApp/);
 });
 
 test("the role without a chat is amber, not green", () => {
@@ -66,7 +61,7 @@ test("level off overrides a working setup", () => {
 });
 
 test("the assistant can listen in its chat while push alerts are off", () => {
-  const st = notifyState([withAssistant({ Name: "WhatsApp" })], "off", false, true);
+  const st = notifyState([withAssistant({ Name: "WhatsApp" })], "off", true);
   assert.equal(st.kind, "pinging");
   assert.match(st.text, /the assistant is listening/);
 });
@@ -74,20 +69,20 @@ test("the assistant can listen in its chat while push alerts are off", () => {
 test("a Telegram Assistant chat counts as much as a WhatsApp one", () => {
   const tg = conn({ Type: "telegram", Name: "Telegram", Roles: "trigger,tool",
     ConfigJson: JSON.stringify({ assistant_chat: "900100" }) });
-  const st = notifyState([tg], "off", false, true);
+  const st = notifyState([tg], "off", true);
   assert.equal(st.kind, "pinging");
   assert.match(st.text, /Telegram . 900100/);
 });
 
 test("connecting the WhatsApp Assistant does not turn on ordinary notifications", () => {
-  const st = notifyState([withAssistant({ Name: "WhatsApp" })], "needs_me", false, true);
+  const st = notifyState([withAssistant({ Name: "WhatsApp" })], "needs_me", true);
   assert.equal(st.kind, "pinging");
   assert.match(st.text, /Ordinary push alerts are not configured/);
   assert.doesNotMatch(st.text, /^Pinging/);
 });
 
 test("assistant chat asks specifically for WhatsApp when only Teams is named", () => {
-  const st = notifyState([withChat({ Type: "teams", Name: "Teams" })], "needs_me", false, true);
+  const st = notifyState([withChat({ Type: "teams", Name: "Teams" })], "needs_me", true);
   assert.match(st.text, /the assistant needs a private WhatsApp or Telegram chat/);
 });
 

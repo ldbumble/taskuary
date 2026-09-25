@@ -5,7 +5,7 @@ hook) - plus the automation-ideas report. All faked; no network, no pty.
 import json, time, unittest
 from unittest import mock
 
-from taskuary import ingest, outbound, phone, terminal, verdicts
+from taskuary import ingest, outbound, terminal, verdicts
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -104,95 +104,6 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(out['status'], 'approved')
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
         close.assert_called_once_with('blocked-coder')
-
-
-def arm_phone(s):
-    s.set_setting('phone_approvals', '1', 't')
-    cid = s.get_connector_by_type('telegram')['ConnectorId']
-    s.save_connector({'ConnectorId': cid, 'Secret': 'tok', 'Active': 1,
-                      'ConfigJson': json.dumps({'notify_chat': '777'})}, 't')
-
-
-class PhoneTests(unittest.TestCase):
-    def test_approve_by_reply(self):
-        s = MemoryStore(); arm_phone(s)
-        _, _, rid = seed_review(s)
-        self.assertIn(f'[rv{rid}]', phone.ping_tail(s, rid, 'the draft'))    # ping carries the tag + draft
-        acks = []
-        with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': ['sarah@x.com']}), \
-             mock.patch('taskuary.messengers.tg_send', side_effect=lambda st, chat, text: acks.append(text)):
-            self.assertTrue(phone.intercept(s, 'telegram', '777', 'approve'))
-        self.assertEqual(s.get_review(rid)['Status'], 'approved')
-        self.assertIn('sent by email', acks[0])
-
-    def test_own_text_becomes_the_reply(self):
-        s = MemoryStore(); arm_phone(s)
-        _, _, rid = seed_review(s)
-        phone.ping_tail(s, rid)
-        sent = {}
-        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, t, to=None, cc=None, attachments=None: sent.update(t=t) or {'channel': 'email', 'to': []}), \
-             mock.patch('taskuary.messengers.tg_send'):
-            self.assertTrue(phone.intercept(s, 'telegram', '777', 'Tell her Thursday works.'))
-        self.assertEqual(sent['t'], 'Tell her Thursday works.')
-        self.assertEqual(s.get_review(rid)['Status'], 'edited')
-
-    def test_wrong_chat_and_off_flow_to_triage(self):
-        s = MemoryStore(); arm_phone(s)
-        _, _, rid = seed_review(s); phone.ping_tail(s, rid)
-        self.assertFalse(phone.intercept(s, 'telegram', '999', 'approve'))   # not the notify chat
-        s.set_setting('phone_approvals', '0', 't')
-        self.assertFalse(phone.intercept(s, 'telegram', '777', 'approve'))   # feature off
-
-    def test_own_ping_echo_is_swallowed(self):
-        s = MemoryStore(); arm_phone(s)
-        _, _, rid = seed_review(s)
-        ping = 'TQ-0001 is done.' + phone.ping_tail(s, rid, 'the draft')
-        with mock.patch('taskuary.messengers.tg_send'):
-            self.assertTrue(phone.intercept(s, 'telegram', '777', ping))     # swallowed, no verdict
-        self.assertEqual(s.get_review(rid)['Status'], 'pending')
-
-    def test_no_draft_yet(self):
-        s = MemoryStore(); arm_phone(s)
-        _, _, rid = seed_review(s, draft='')
-        phone.ping_tail(s, rid)
-        acks = []
-        with mock.patch('taskuary.messengers.tg_send', side_effect=lambda st, chat, text: acks.append(text)):
-            self.assertTrue(phone.intercept(s, 'telegram', '777', 'approve'))
-        self.assertEqual(s.get_review(rid)['Status'], 'pending')
-        self.assertIn('no draft yet', acks[0])
-
-    def test_quoted_task_ping_routes_answer_to_that_live_agent(self):
-        s = MemoryStore(); arm_phone(s)
-        tid = s.create_task({'Title': 'choose a repo', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
-        fake = FakeSession(tid); acks = []
-        quoted = f'{tid} is waiting.' + phone.task_ping_tail(s, tid)
-        with mock.patch.dict(terminal.SESSIONS, {'sid1': fake}, clear=True), \
-             mock.patch('taskuary.messengers.tg_send', side_effect=lambda st, chat, text: acks.append(text)):
-            self.assertTrue(phone.intercept(s, 'telegram', '777', 'Yes, use taskhub.', quoted))
-            time.sleep(0.4)
-        self.assertIn('Yes, use taskhub.', ''.join(fake.writes))
-        self.assertIn('sent to the live agent', acks[0])
-
-    def test_task_tag_wins_over_a_bare_review_approve(self):
-        s = MemoryStore(); arm_phone(s)
-        _, _, rid = seed_review(s); phone.ping_tail(s, rid)
-        tid = s.create_task({'Title': 'permission', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
-        fake = FakeSession(tid)
-        with mock.patch.dict(terminal.SESSIONS, {'sid1': fake}, clear=True), \
-             mock.patch('taskuary.messengers.tg_send'):
-            self.assertTrue(phone.intercept(s, 'telegram', '777', 'approve', phone.task_ping_tail(s, tid)))
-            time.sleep(0.4)
-        self.assertEqual(s.get_review(rid)['Status'], 'pending')
-        self.assertIn('approve', ''.join(fake.writes))
-
-    def test_stale_task_ping_is_acknowledged_without_becoming_work(self):
-        s = MemoryStore(); arm_phone(s)
-        tid = s.create_task({'Title': 'old question', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
-        acks = []
-        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
-             mock.patch('taskuary.messengers.tg_send', side_effect=lambda st, chat, text: acks.append(text)):
-            self.assertTrue(phone.intercept(s, 'telegram', '777', f'[tq{tid:04d}] yes'))
-        self.assertIn('no live agent', acks[0])
 
 
 class FakeSession:

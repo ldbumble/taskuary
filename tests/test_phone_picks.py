@@ -8,7 +8,7 @@ turns old still answered "2"; a bare "yes" in the Assistant chat approved whiche
 import json, unittest
 from unittest import mock
 
-from taskuary import concierge, funnel, messengers, phone, remote_assistant as ra
+from taskuary import concierge, funnel, messengers, remote_assistant as ra
 from taskuary.store import MemoryStore
 
 JID = '15550001234@s.whatsapp.net'
@@ -171,15 +171,6 @@ class UndoTests(unittest.TestCase):
         with mock.patch.object(concierge, 'undo_last', return_value='Done - put back.') as undo:
             self.assertEqual(ra.run_act(s, {'t': 'undo'}, None), 'Done - put back.')
         undo.assert_called_once()
-
-
-class ApprovalsYieldTests(unittest.TestCase):
-    def test_a_bare_yes_in_the_assistant_chat_is_the_assistants(self):
-        s, _ = armed()
-        s.set_setting('phone_approvals', '1', 'test')
-        with mock.patch.object(phone, 'notify_chats_of', return_value=[JID]), \
-             mock.patch.object(phone, '_find_review', side_effect=AssertionError('no review is looked up')):
-            self.assertFalse(phone.intercept(s, 'whatsapp', JID, 'yes'))
 
 
 if __name__ == '__main__': unittest.main()

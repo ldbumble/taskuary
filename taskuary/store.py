@@ -539,7 +539,6 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # ask = a one-click offer in the panel; auto = typed straight in; off = neither
                     'answer_to_agent': 'ask',
                     # replies in the notify chat decide pinged reviews (approve/reject/your text)
-                    'phone_approvals': '0',
                     # the owner's messages in one private WhatsApp notify chat open the same
                     # durable guide conversation as the floating desktop assistant
                     'phone_assistant': '0',

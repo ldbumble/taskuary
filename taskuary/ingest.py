@@ -939,9 +939,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
 
 
 def _notify_new(store, msg: dict, tid, mid, why: str, rid=None):
-    """One short line to the notify channels. With phone approvals on, a question's ping
-    also carries the [rvN] tag so replying in the chat decides it (phone.py). Failure is a
-    log line, never a broken ingest."""
+    """One short line to the notify channels - read-only; a draft is decided on the task or in the Assistant.
+    Failure is a log line, never a broken ingest."""
     from .outbound import notify
     from .store import task_ref
     try:
@@ -949,9 +948,6 @@ def _notify_new(store, msg: dict, tid, mid, why: str, rid=None):
         body_head = str(msg.get('body') or '').strip().splitlines()
         head = msg.get('subject') or (body_head[0][:80] if body_head else '(no subject)')
         line = f"{task_ref(tid)} - {why}\n{head}\nfrom {who} on {msg.get('channel') or 'api'}"
-        if rid:
-            from .phone import ping_tail
-            line += ping_tail(store, rid, (store.get_review(rid) or {}).get('DraftText'))
         notify(store, line, about={'Channel': msg.get('channel'), 'ConversationId': msg.get('conversation_id')})
     except Exception as e:
         logger.warning(f'notify failed for message {mid}: {e}')

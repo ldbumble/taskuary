@@ -342,13 +342,6 @@
       "type": "switch",
       "desc": "The browser's notification, so it reaches you when Taskuary is behind other windows. Click it to jump to the task."
     },
-    "phone_approvals": {
-      "group": "Notifications",
-      "label": "Answer agents & approve from phone",
-      "type": "switch",
-      "desc": "Reply to a tagged ping to answer that live agent, approve a draft, reject it, or write the reply yourself.",
-      "help": "On: when a live coding agent stops or asks, its chat ping carries a [tqN] tag. Reply to that ping and your words go straight into that exact agent session. Pending-reply pings carry the DRAFT and an [rvN] tag: 'approve' sends the draft, 'reject' / 'no reply' land those verdicts, and ANY OTHER TEXT is sent instead of the draft. Confirmations come back into the chat.\n\nNeeds a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Answers and verdicts are intercepted before triage, so they never become new work. Quoting the [tqN] ping is required for agent answers because several agents may be waiting at once.\n\nOff (default): pings stay read-only."
-    },
     "phone_assistant": {
       "group": "Assistant on your phone",
       "label": "Chat with the assistant in WhatsApp or Telegram",

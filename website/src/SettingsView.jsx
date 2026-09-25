@@ -597,8 +597,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
         const m = meta(s.Name);
         return (
           <Box key={s.Name} sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
-            gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`,
-            opacity: s.Name === "phone_approvals" && (settings.find((x) => x.Name === "notify_level") || {}).Value === "off" ? 0.5 : 1 }}>
+            gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
               onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
               <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
@@ -1179,8 +1178,7 @@ const HelpDialog = ({ help, onClose }) => (
 // than leaving the page looking like a finished setup that silently goes nowhere.
 const NotifyStatus = ({ connectors, settings }) => {
   const val = (n, d) => (settings.find((s) => s.Name === n) || {}).Value ?? d;
-  const st = notifyState(connectors, val("notify_level", "needs_me"), val("phone_approvals") === "1",
-    val("phone_assistant") === "1");
+  const st = notifyState(connectors, val("notify_level", "needs_me"), val("phone_assistant") === "1");
   const good = st.kind === "pinging", warn = st.kind === "none" || st.kind === "unnamed" || st.kind === "inactive";
   return (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5, mt: -0.5, px: 1.25, py: 0.85,

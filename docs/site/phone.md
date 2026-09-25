@@ -64,14 +64,9 @@ words you type go to the model.
 
 ### Approving things
 
-A reply drafted for you can be approved from the phone. Tagged answers use `[tq…]` for a task and
-`[rv…]` for a Review item, and the plain words `approve`, `reject` and `no reply` work as
-shortcuts on the item currently in front of you. In the chat the Assistant listens in, a bare
-"yes" or "approve" answers the Assistant's own question; to approve a review there, reply to its
-ping or name its `[rv…]`.
-
-The approval gate itself does not move: approving on your phone is the same deliberate human
-action as approving on the page, and nothing goes out without one.
+A drafted reply comes to the chat with its **Send the reply** choice - the same button as on the desktop, as a
+number or a poll tap. Nothing goes out without that pick: approving on your phone is the same deliberate act as
+approving on the page. Alerts sent to a notify chat are read-only.
 
 ## The morning line
 

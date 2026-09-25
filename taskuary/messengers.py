@@ -103,13 +103,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         chat, frm = m.get('chat') or {}, m.get('from') or {}
         cid = str(chat.get('id') or '')
         if not cid or frm.get('is_bot'): continue
-        # a reply in the NOTIFY chat may be a verdict on a pinged review ("approve") - it is
-        # handled before the approve-first filter, so the notify chat never needs a source
-        # row and the owner's verdicts never become work (see phone.py)
-        from . import phone, remote_assistant
-        if phone.intercept(store, 'telegram', cid, m.get('text') or m.get('caption') or '',
-                           (m.get('reply_to_message') or {}).get('text')):
-            continue
+        from . import remote_assistant
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
         # named private chat is what says the words are the owner's - there is no fromMe to read.
@@ -357,7 +351,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         if '(404)' not in str(e): raise                     # an older detached bridge: keep polling until its next restart
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
     n, took = 0, []
-    from . import phone, remote_assistant
+    from . import remote_assistant
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
         if not jid: continue
@@ -374,11 +368,6 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             text = _hear(store, c, jid, m)
             if not text:
                 took.append(m.get('id')); continue
-        # the WhatsApp bridge is the owner's OWN account, so a verdict they type in the
-        # notify chat arrives as fromMe - intercept runs before that filter (phone.py also
-        # recognizes and swallows our own pings echoing back through the bridge)
-        if text and phone.intercept(store, 'whatsapp', jid, text, m.get('quoted')):
-            continue
         # A natural message the owner types in their designated private chat goes to the SAME
         # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed
         # here too, so a notification or answer can never loop back as a fresh question.

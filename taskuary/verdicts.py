@@ -125,14 +125,11 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
                               'Stopped the agent after sending the clarification; waiting for the sender.')
         return
 
-    # Sending a message is not the same as completing an owner-controlled task. It may be an
-    # update halfway through a long task, and its agent session may still be useful. Routed work
-    # keeps the automatic "answer sent = complete" behavior.
+    # A task the owner opened a session on (stay:open) is guarded from the JUDGE - an agent gone quiet for a minute
+    # is not an ending. The owner's own sent reply IS one: it used to leave such a task "remaining open", waiting
+    # on a Mark done nobody pressed (the owner, 2026-09-24: "task should close when sending reply").
     from . import selfclose
-    if selfclose.stays_open(store, task_id):
-        store.add_comment(task_id, actor, 'human',
-                          'Reply sent. This owner-controlled task remains open.')
-        return
+    selfclose.unclaim(store, task_id, actor)
 
     # The reply that went out IS the task's ending (the owner, 2026-09-03: "replying should close it") -
     # whatever kind of review carried it: the coder's own draft after a job, one you opened by hand, one

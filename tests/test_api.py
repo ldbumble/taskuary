@@ -1122,9 +1122,9 @@ class ApiTests(unittest.TestCase):
         self.assertIn('mailbox not found', out['send_error'])
         self.assertTrue(any('NOT SENT' in cm['Body'] for cm in server.store.list_comments(tid)))
 
-    def test_sending_a_reply_does_not_close_an_owner_created_task(self):
-        """A message can be an update halfway through a manual task. Reply and completion are
-        independent; the task only closes automatically when triage created the work."""
+    def test_sending_a_reply_closes_an_owner_created_task_too(self):
+        """Owner-created tasks stayed open after their reply went out (0.3.2.9); the owner, 2026-09-24: "task should
+        close when sending reply". Only an agent still working a task holds it open."""
         tid = c.post('/api/tasks', json={'Title': 'importer down', 'Kind': 'coding'}).json()['taskId']
         server.store.update_task(tid, {'Status': 'waiting'}, 'coder')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:BBB', 'Channel': 'email',
@@ -1134,8 +1134,8 @@ class ApiTests(unittest.TestCase):
                                        'DraftText': 'Running again - a bad date had stopped it.'})
         with mock.patch.object(server.outbound, 'send_email', return_value={'channel': 'email', 'to': ['ap@client.com']}):
             c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'})
-        self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
-        self.assertIn('stay:open', server.store.get_task(tid)['Tags'])
+        self.assertEqual(server.store.get_task(tid)['Status'], 'done')
+        self.assertNotIn('stay:open', server.store.get_task(tid)['Tags'] or '')
 
     def test_mine_makes_a_task_for_the_owner_with_nobody_dispatched(self):
         """An ADP "approve this workflow" mail is real work and not an agent's. Filing it as

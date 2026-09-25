@@ -17,7 +17,17 @@ test("people, your own list, agents and the rest each land in their own group", 
   assert.equal(groupOf(it("queued", "task")), "agents");
   assert.equal(groupOf(it("fyi", "fyi")), "read");
   assert.equal(groupOf(it("report", "report")), "read");
-  assert.deepEqual(GROUPS.map((g) => g.key), ["people", "you", "agents", "read"]);
+  assert.deepEqual(GROUPS.map((g) => g.key), ["people", "you", "agents", "read", "passed"]);
+});
+
+test("what you walked past with Next is its own group, as in the rail - never back under Agents waiting", () => {
+  // the owner, 2026-09-24: "now it's gone from work but in the good evening list of tasks??"
+  const passed = it("stopped", "agent", { surfaced: true });
+  assert.equal(groupOf(passed), "passed");
+  assert.equal(groupOf(it("stopped", "agent")), "agents");
+  const s = summarize([passed, it("asked")]);
+  assert.equal(s.lead, "2 things. 1 needs a word, 1 you passed.");
+  assert.deepEqual(s.groups.map((g) => g.key), ["people", "passed"]);
 });
 
 test("the lead counts what is ready to approve first, and working rows are not waiting on anyone", () => {

@@ -1352,7 +1352,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Box sx={{ flex: 1, minWidth: 12 }} />
                       <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 340 }}>
                         {completionIsManual
-                          ? "You control completion. Ending an agent run or sending a reply leaves this task open."
+                          ? "You control completion. Ending an agent run leaves this task open; sending the reply closes it."
                           : "Automatic task. When its triaged work finishes, Taskuary may close it and prepare the reply."}
                       </Typography>
                     </Box>
@@ -1674,7 +1674,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     description={term?.alive
                       ? (replyMessage ? "Reply controls return when the agent stops." : "No inbound sender is attached to this task.")
                       : replyMessage
-                        ? "What goes back to the sender. Sending and task completion are separate decisions."
+                        ? "What goes back to the sender. Sending it closes the task."
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
                     chip={<LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
                     tone="#9a7444" {...stageProps("reply")}
@@ -1720,7 +1720,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             {pendingReview
                               ? "Nothing is sent until you approve it."
                               : sentReview
-                              ? `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${completionIsManual ? "The task remains under your control." : "The automatic task can now be complete."}`
+                              ? `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${String(t?.Status || "") === "done" ? "The task closed with it." : "The task stays open while its agent is still working."}`
                               : "A reply is optional. Starting or stopping an agent does not send one."}
                           </Typography>
                         </Box>

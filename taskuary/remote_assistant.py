@@ -402,12 +402,15 @@ def asking() -> dict | None:
 # ── the start of the walk: who wants what, the same grouping the desktop draws (walkSummary.js) ──
 # KEEP IN STEP with website/src/walkSummary.js: the four groups, and which lanes land in each. A grouping
 # of lanes the pile already carries - nothing is judged here (2026-09-23).
-GROUPS = (('people', 'People want'), ('you', 'You wanted'), ('agents', 'Agents waiting'), ('read', 'Nothing to decide'))
+GROUPS = (('people', 'People want'), ('you', 'You wanted'), ('agents', 'Agents waiting'), ('read', 'Nothing to decide'),
+          ('passed', 'You passed'))
 _AGENT_LANES = {'blocked', 'stopped', 'queued', 'working', 'broken', 'unjudged'}
 ROWS_PER_GROUP = 5
 
 
 def group_of(i: dict) -> str:
+    # walked past with Next: the rail's Passed band (funnelPile.levelOf) - never back under "Agents waiting" (2026-09-24)
+    if i.get('surfaced') and i.get('order_band') == 2: return 'passed'
     if i.get('kind') in ('action', 'agent', 'agentdone') or i.get('lane') in _AGENT_LANES: return 'agents'
     if i.get('lane') in ('report', 'fyi') or i.get('kind') in ('fyis', 'report', 'idea', 'wrapup'): return 'read'
     if i.get('channel') in ('own', 'assistant'): return 'you'
@@ -429,11 +432,12 @@ def who_wants_what(items: list) -> str:
     ready = sum(1 for i in live if i.get('lane') == 'approve')
     skip = sum(1 for i in live if group_of(i) == 'read')
     yours = sum(1 for i in live if group_of(i) == 'you')
-    word = len(live) - ready - skip - yours
+    passed = sum(1 for i in live if group_of(i) == 'passed')
+    word = len(live) - ready - skip - yours - passed
     parts = [x for x in (ready and f"{ready} {'is' if ready == 1 else 'are'} ready - you only approve",
                          word and f"{word} {'needs' if word == 1 else 'need'} a word",
                          yours and f"{yours} {'is' if yours == 1 else 'are'} on your list",
-                         skip and f"{skip} you can skip") if x]
+                         skip and f"{skip} you can skip", passed and f"{passed} you passed") if x]
     lines = [f"{len(live)} thing{'' if len(live) == 1 else 's'}. " + ', '.join(parts)[:1].upper() + ', '.join(parts)[1:] + '.']
     for key, word_ in GROUPS:
         rows = [i for i in live if group_of(i) == key]

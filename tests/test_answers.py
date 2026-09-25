@@ -58,7 +58,9 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         close.assert_called_once_with('live-coder')
 
-    def test_sent_reply_leaves_owner_controlled_task_and_agent_open(self):
+    def test_a_sent_reply_closes_even_a_task_the_owner_opened_a_session_on(self):
+        """Since 0.3.2.9 a task the owner opened a session on (stay:open) stayed open after its reply went out; the
+        owner, 2026-09-24: "task should close when sending reply". The tag guards against the judge, not the send."""
         from taskuary import selfclose
         s = MemoryStore()
         tid = s.create_task({'Title': 'long migration', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
@@ -73,8 +75,18 @@ class VerdictTests(unittest.TestCase):
              mock.patch.object(terminal, 'session_for', return_value=live), \
              mock.patch.object(terminal, 'close', return_value=True) as close:
             verdicts.decide(s, s.get_review(rid), 'approve')
-        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
-        close.assert_not_called()
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertFalse(selfclose.stays_open(s, tid))                       # the mark came off with it
+        close.assert_called_once()                                          # the parked session ends with the task
+        # ...the one thing that still holds it open is an agent actually WORKING it
+        tid2 = s.create_task({'Title': 'second batch', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+        selfclose.claim(s, tid2)
+        mid2 = s.add_message({'TaskId': tid2, 'ExternalId': 'progress-2', 'Channel': 'email', 'Subject': 'Migration',
+                              'BodyText': 'And now?', 'FromEmail': 'sender@work.example', 'Status': 'routed'})
+        rid2 = s.add_review({'TaskId': tid2, 'MessageId': mid2, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Still going.'})
+        with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': []}),              mock.patch('taskuary.funnel.working_tids', return_value={tid2}):
+            verdicts.decide(s, s.get_review(rid2), 'approve')
+        self.assertEqual(s.get_task(tid2)['Status'], 'in_progress')
 
     def test_sent_clarification_stops_agent_but_leaves_task_waiting(self):
         s = MemoryStore()

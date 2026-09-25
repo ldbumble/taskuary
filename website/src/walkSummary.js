@@ -2,11 +2,14 @@
 // wants what task (or list of tasks that we created for ourselves), agent actions, and pending reply so
 // we just approve"). It replaces the Morning digest as the day's opener. A pure GROUPING of lanes the
 // pile already carries - nothing is judged here, and the rail's own split is untouched.
+import { levelOf } from "./funnelPile.js";
+
 export const GROUPS = [
   { key: "people", word: "People want" },
   { key: "you", word: "You wanted" },
   { key: "agents", word: "Agents waiting" },
   { key: "read", word: "Nothing to decide" },
+  { key: "passed", word: "You passed" },
 ];
 
 const AGENT_LANES = new Set(["blocked", "stopped", "queued", "working", "broken", "unjudged"]);
@@ -14,6 +17,9 @@ const READ_LANES = new Set(["report", "fyi"]);
 
 export const groupOf = (i) => {
   if (!i) return "read";
+  // what you walked past with Next sits in the rail's Passed band - here too, never back under "Agents waiting"
+  // as if it were new (the owner, 2026-09-24: "now it's gone from work but in the good evening list")
+  if (levelOf(i) === "passed") return "passed";
   if (i.kind === "action" || i.kind === "agent" || i.kind === "agentdone" || AGENT_LANES.has(i.lane)) return "agents";
   if (READ_LANES.has(i.lane) || ["fyis", "report", "idea", "wrapup"].includes(i.kind)) return "read";
   // what YOU made - a task born by hand or from the assistant. A person's ask triage filed as a to-do
@@ -39,11 +45,12 @@ export function summarize(items) {
   const groups = GROUPS.map((g) => ({ ...g, rows: live.filter((i) => groupOf(i) === g.key) })).filter((g) => g.rows.length);
   const ready = live.filter((i) => i.lane === "approve").length;
   const skip = live.filter((i) => groupOf(i) === "read").length;
+  const passed = live.filter((i) => groupOf(i) === "passed").length;
   const yours = live.filter((i) => groupOf(i) === "you").length;
-  const word = live.length - ready - skip - yours;
+  const word = live.length - ready - skip - yours - passed;
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   const parts = [ready && `${n(ready, "is", "are")} ready - you only approve`, word && `${n(word, "needs", "need")} a word`,
-                 yours && `${yours} ${yours === 1 ? "is" : "are"} on your list`, skip && `${skip} you can skip`].filter(Boolean);
+                 yours && `${yours} ${yours === 1 ? "is" : "are"} on your list`, skip && `${skip} you can skip`, passed && `${passed} you passed`].filter(Boolean);
   const lead = live.length
     ? `${live.length} thing${live.length === 1 ? "" : "s"}. ${parts.join(", ").replace(/^./, (c) => c.toUpperCase())}.`
     : "Nothing is waiting on you.";

@@ -330,11 +330,20 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
         self.assertNotIn('busy', text)                                   # working rows wait on nobody
         self.assertEqual(remote_assistant.who_wants_what([]), 'Nothing is waiting on you.')
 
+    def test_what_you_passed_is_its_own_group_as_on_the_rail(self):
+        """"now it's gone from work but in the good evening list" (the owner, 2026-09-24): an agent row passed
+        with Next is in the rail's Passed band, and the opener says so instead of listing it as waiting."""
+        items = [{'key': 'a', 'lane': 'stopped', 'kind': 'agent', 'who': 'Erin Blake', 'title': 'Budget tab', 'surfaced': True, 'order_band': 2},
+                 {'key': 'b', 'lane': 'asked', 'kind': 'asked', 'who': 'Gail Moreno', 'title': 'Q3 numbers', 'order_band': 2}]
+        text = remote_assistant.who_wants_what(items)
+        self.assertTrue(text.startswith('2 things. 1 needs a word, 1 you passed.'), text)
+        self.assertIn('YOU PASSED · 1', text); self.assertNotIn('AGENTS WAITING', text)
+
     def test_it_groups_exactly_as_the_desktop_does(self):
         from pathlib import Path
         js = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'walkSummary.js').read_text(encoding='utf-8')
         for lane in remote_assistant._AGENT_LANES: self.assertIn(f'"{lane}"', js.split('AGENT_LANES')[1].split(';')[0])
-        self.assertEqual([w for _, w in remote_assistant.GROUPS], ['People want', 'You wanted', 'Agents waiting', 'Nothing to decide'])
+        self.assertEqual([w for _, w in remote_assistant.GROUPS], ['People want', 'You wanted', 'Agents waiting', 'Nothing to decide', 'You passed'])
         for _, word in remote_assistant.GROUPS: self.assertIn(f'word: "{word}"', js)
 
 

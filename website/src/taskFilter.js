@@ -1,13 +1,13 @@
 // Keep the master list and detail pane telling the same story. A task can finish while its
 // detail is open; leaving the selected pill on "in progress" makes the accurate Done header
-// look like a second, conflicting status. Explicit "all" and search views remain untouched.
-// `stateKey` is the task's BUCKET: "upcoming" while a Remind me date holds it, its state otherwise. There is no
-// Done pill any more (the owner, 2026-09-25: in progress / upcoming / all) - a finished task lives under all.
+// look like a second, conflicting status. Search views remain untouched.
+// `stateKey` is the task's BUCKET: "upcoming" while a Remind me date holds it, its state otherwise. The pills
+// are in progress / upcoming / done (the owner, 2026-09-25) - one each. A dropped task has no pill, so the
+// rail stays where it is rather than guess.
 export const filterForSelectedState = (filter, stateKey) => {
-  const over = ["done", "dropped"].includes(stateKey);
-  if (filter === "live" && (over || stateKey === "upcoming")) return over ? "" : "upcoming";
-  if (filter === "upcoming" && stateKey !== "upcoming") return over ? "" : "live";
-  return filter;
+  if (stateKey === "dropped") return filter;
+  const to = stateKey === "done" ? "done" : stateKey === "upcoming" ? "upcoming" : "live";
+  return filter === to ? filter : to;
 };
 
 // REMIND ME (2026-09-25): an open task put away until a day is Upcoming until that morning. The server writes

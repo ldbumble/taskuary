@@ -568,6 +568,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   // the day's meetings are asked for NOW, not when the welcome first draws - the strip is ready with it
   useEffect(() => { refreshToday(); }, []);
   const [busy, setBusy] = useState(false);
+  // a card was let go and the next one is on its way: the settle and the deferred pick run BEFORE
+  // surface() raises busy, and that second drew nothing at all (the owner, 2026-09-25: "for a second
+  // there is no ... loading the next"). Its own flag, because busy would make surface() refuse to run.
+  const [nextComing, setNextComing] = useState(false);
   // the walk validates Current against the pile before it can say anything, and that read was
   // 5-47s (2026-09-09). busy is the TURN's interlock and surface() refuses to run while it is
   // set, so opening needs its own flag - without one the button stayed enabled, said nothing,
@@ -687,13 +691,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     deferredChat.current.clear();
     const epoch = chatEpoch.current;
     const timer = setTimeout(() => {
-      deferredChat.current.delete(timer);
+      deferredChat.current.delete(timer); setNextComing(false);
       if (epoch === chatEpoch.current && !resettingRef.current) fn();
     }, delay);
     deferredChat.current.add(timer);
     return timer;
   }, []);
   const cancelDeferredChat = useCallback(() => {
+    setNextComing(false);
     for (const timer of deferredChat.current) clearTimeout(timer);
     deferredChat.current.clear();
   }, []);
@@ -1169,12 +1174,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     // no half-second of grace - the server has settled already, and the timer only has to outlive this
     // render (a proposal's busy flag is released the moment its caller returns)
     if (pile) holdPile(pile, nextSelectionScope(only.current, null));
+    setNextComing(true);
     deferInChat(() => surfaceRef.current?.(), pile ? 120 : 500);
   };
   const done = async (receipt) => {
     // the card folds to its line the moment its verb is pressed - see interactiveCardIndex
     setMsgs((m) => { const i = interactiveCardIndex(m), out = i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true } : x));
       return receipt ? [...out, { id: `r${Date.now()}`, role: "receipt", text: receipt }] : out; });
+    setNextComing(true);
     let pile = null;
     // `only` rides along so the rail comes back captured under the scope this page walks with
     if (current) { try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current })).data?.pile || null; } catch { /* it may already be gone */ } }
@@ -1525,7 +1532,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
           )}
           {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips}
                                      actions={actions} fresh={currentItem} />)}
-          {(busy || phoneBusy) && (
+          {(busy || phoneBusy || nextComing) && (
             <div className="tq-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
                 {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}

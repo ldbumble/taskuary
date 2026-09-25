@@ -1057,6 +1057,32 @@ class MemoryTests(unittest.TestCase):
         mail(s, 'Re: Research the CLI tool', who='Erin', email='erin@northwind.example', hours=0, tid=t); settle()
         self.assertEqual(walk(), ('agentdone', t))                  # ...their new mail is
 
+    def test_a_finished_result_stays_read_when_the_advisor_says_its_idea_again(self):
+        """"i clicked next on this text which should dismiss it but it's coming back" (2026-09-25): an Advisor idea
+        about the finished task was said again overnight - same key, reworded by the model - and the rewording is
+        new fingerprint, so the whole finished result was back on Next. A re-said idea read before is not news; an
+        idea the owner never saw still is."""
+        from taskuary import concierge
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'Look into the failed alert', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        mail(s, 'Look into the failed alert', who='Erin', email='erin@northwind.example', hours=2, tid=t)
+        say = lambda text, key='idea:alert': s.upsert_idea({'key': key, 'kind': 'idea', 'text': text, 'sig': text[:40],
+                                                           'action': {'type': 'task', 'tid': t, 'title': 'Check the allowlist'}}, ago(0))
+        say('The alert failed because the group is refused, not a bug.')
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: the group is refused on purpose.')
+        s.update_task(t, {'Status': 'done'}, 'assistant'); settle()
+        def walk():
+            with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+                got = concierge.surface(s, llm=lambda *a, **k: 'never')['item']
+            settle(); return got and (got['kind'], got['tid'])
+        self.assertEqual(walk(), ('agentdone', t))
+        self.assertIsNone(walk())
+        say('TQ-0001 found the alert was refused by configuration - check the allowlist.'); settle()
+        self.assertIsNone(walk())                                   # the same idea, reworded, is not a new result
+        say('A second group is refused the same way.', key='idea:alert-2'); settle()
+        self.assertEqual(walk(), ('agentdone', t))                  # ...an idea never seen is
+
     def test_a_finished_result_stays_read_when_its_mail_was_read_long_before_the_close(self):
         """The same ask, TQ-0740: the read that counts is the task's own, after the close. A note filed on the closed
         task changes the task's fingerprint, and the newest read left was the mail's, from BEFORE the agent closed it

@@ -70,18 +70,19 @@ const statusLabel = (s) => String(s || "").replace(/_/g, " ");
 // the pills wear the same colours as the chips on the rows they hold: "in progress" in the
 // slate-blue brand chrome next to a sage "agent working" chip read as two different states
 const ST_C = Object.fromEntries(TASK_STATES.map((s) => [s.key, s.c]));
-// three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and everything.
-// Done went to make room - a finished task is under all.
+// three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and what is done.
+// "all" held the other two over again, so a live task sat in two pills at once ("we don't want one for
+// all if it's another group"); every task now has one pill. Dropped has none - search finds it.
 const STATE_FILTERS = [
   { key: "live", label: "in progress", c: ST_C.working },
   { key: "upcoming", label: "upcoming", c: ST_C.queued },
-  { key: "", label: "all" },
+  { key: "done", label: "done", c: ST_C.done },
 ];
 // "today" as the person reading the list means it - the server's clock, in local terms
 const isToday = (s) => !!s && asUtc(String(s)).toDateString() === new Date().toDateString();
 const touchedToday = (t) => isToday(t.ClosedAt) || isToday(t.UpdatedAt) || isToday(t.CreatedAt);
-// everything still on somebody's plate - yours or an agent's. Dropped is neither, and only
-// ever shows under "all".
+// everything still on somebody's plate - yours or an agent's. Dropped is neither, and
+// has no pill - search finds it.
 const bucketOf = (t) => (remindWaiting(t) ? "upcoming" : stateOf(t).key);
 const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key) && !remindWaiting(t)
                                              : bucketOf(t) === key);
@@ -160,13 +161,13 @@ const askedAgo = (t) => {
 
 export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true }) {
   const [tasks, setTasks] = useState(null);
-  // "live" on arrival: what is still on somebody's plate is what you came here for. "all"
-  // opens on a list whose top is whatever finished most recently. ("" = all; the rest derive.)
+  // "live" on arrival: what is still on somebody's plate is what you came here for. "done"
+  // opens on a list whose top is whatever finished most recently.
   const [filter, setFilter] = useState("live");
   const [query, setQuery] = useState("");
   // what the loaded rows are FOR. The box is debounced because every change is now a round trip.
   const [sent, setSent] = useState("");
-  // "all" and "done" pile up for months; today's are the ones you came to look at, the rest
+  // "done" piles up for months; today's are the ones you came to look at, the rest
   // wait behind one button. In progress is never cut: what is still on a plate must show.
   const [older, setOlder] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -253,7 +254,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // fetch everything once and filter on the derived state - the server only knows raw
   // Status, and the state a person cares about is a combination of three columns
   // ?active=1 is open/in_progress/waiting PLUS today's done - exactly what "in progress" and an
-  // un-expanded "done" show. The archive waits until something asks: "show older", or "all".
+  // un-expanded "done" show. The archive waits until something asks: "show older".
   //
   // A SEARCH IS ITS OWN QUERY. It used to mean "load every task ever filed, with six GROUP_CONCAT
   // aggregates over the whole message table, and grep them here" - which is how you search only if
@@ -512,13 +513,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const id = setTimeout(() => setSent(search), 250);
     return () => clearTimeout(id);
   }, [search]);
-  // The two gestures that need more than the live set. "done" on its own does NOT: ?active=1
-  // already carries today's, which is what it shows until "show older". "all" does, because
-  // today's DROPPED tasks only ever appear there and active does not include them. A search no
-  // longer belongs here at all - it asks the server for its own answer.
+  // The one gesture that needs more than the live set. "done" on its own does NOT: ?active=1
+  // already carries today's, which is what it shows until "show older". A search no longer
+  // belongs here at all - it asks the server for its own answer.
   useEffect(() => {
-    if ((older || filter === "") && !fullLoaded.current) loadTasks(true);
-  }, [older, filter, loadTasks]);
+    if (older && !fullLoaded.current) loadTasks(true);
+  }, [older, loadTasks]);
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
   // is what makes a completed PR/task discoverable instead of merely searching the visible rows -
   // and the rows ARE the matches now, so there is nothing left here to filter them by.
@@ -536,8 +536,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // the list is broken, not cut. Each pill counts what clicking it would SHOW, by the same rule.
   const countIn = (key) => (tasks || []).filter((x) => (!key || inBucket(x, key)) && keep(x)).length;
   // A task may finish while its detail stays open (especially an assistant conversation). Move
-  // the selected bucket with it so Done never sits under an In progress filter. Search and All
-  // are deliberate cross-status views, so neither is changed.
+  // the selected bucket with it so Done never sits under an In progress filter. Search is a
+  // deliberate cross-status view, so it is not changed.
   // ...but ONLY when the task changed under you. This also fired on the filter itself, which
   // made the pills unusable: with a done task selected, clicking "in progress" set the filter,
   // this read the still-done selection and put it straight back - the pill lit for an instant
@@ -565,7 +565,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // of it and stay where the work is.
   const finish = async (status) => {
     // Mark done always means "continue with the work still in progress", even when this task
-    // was opened from All/search. Choose from the complete live bucket rather than `shown`, which
+    // was opened from Done/search. Choose from the complete live bucket rather than `shown`, which
     // may be filtered or cut to today. Pre-record the state we are about to write: the server emits
     // task-changed during the PATCH, and without this guard that event can make the effect above
     // chase the closing task into Done before this continuation selects the next row.

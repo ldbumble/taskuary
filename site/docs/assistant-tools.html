@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What the Assistant sees — Taskuary documentation</title>
+<meta name="description" content="Every tool the Assistant has: the summary it gets on every turn, and each tool in detail. Written from the code.">
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./docs.css">
+</head>
+<body>
+<a class="skip" href="#doc">Skip to the documentation</a>
+<header class="nav">
+  <div class="navwrap">
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="26" height="26">Taskuary</a>
+    <span class="tag">a work AI assistant</span>
+    <nav class="links">
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/demo/">Demo</a>
+      <a href="https://github.com/ldbumble/taskuary">GitHub</a>
+      <a class="btn" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">Download</a>
+    </nav>
+  </div>
+</header>
+<div class="shell">
+  <aside class="rail" id="rail">
+    <form class="search" role="search" onsubmit="return false">
+      <label class="sr" for="q">Search the documentation</label>
+      <input id="q" type="search" placeholder="Search the docs…" autocomplete="off">
+    </form>
+    <div class="results" id="results" hidden></div>
+    <nav class="entries" id="entries" aria-label="Documentation">
+<div class="entry">
+      <a class="page" href="./">Start here</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Start here's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#next">Next</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./how-it-works">How it works</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./connections">Connections</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Connections's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./connections#what-a-connection-is">What a connection is</a><a class="sec" href="./connections#the-five-roles">The five roles</a><a class="sec" href="./connections#mail">Mail</a><a class="sec" href="./connections#chat">Chat</a><a class="sec" href="./connections#repositories-and-trackers">Repositories and trackers</a><a class="sec" href="./connections#data-and-report-sources">Data and report sources</a><a class="sec" href="./connections#coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="./connections#adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="./connections#pushing-something-in-yourself">Pushing something in yourself</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./tasks-and-agents">Tasks and agents</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./assistant">Assistant buttons</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Assistant buttons's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./assistant#the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="./assistant#the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="./assistant#remind-me">Remind me</a><a class="sec" href="./assistant#everything-the-task-page-can-do">Everything the task page can do</a><a class="sec" href="./assistant#words-that-work-typed">Words that work typed</a></div>
+    </div>
+<div class="entry on">
+      <a class="page" href="./assistant-tools" aria-current="page">What the Assistant sees</a>
+      <button class="chev" type="button" aria-expanded="true" aria-label="Hide What the Assistant sees's sections"></button>
+      <div class="secs"><a class="sec" href="#the-summary-sent-every-turn" data-sec="the-summary-sent-every-turn">The summary, sent every turn</a><a class="sec" href="#every-tool-in-detail" data-sec="every-tool-in-detail">Every tool, in detail</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./reports">Reports and the Advisor</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./phone">On your phone</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show On your phone's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./phone#the-doorways">The doorways</a><a class="sec" href="./phone#what-it-can-do">What it can do</a><a class="sec" href="./phone#the-morning-line">The morning line</a><a class="sec" href="./phone#handing-over">Handing over</a><a class="sec" href="./phone#what-it-will-not-do">What it will not do</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./settings">Settings reference</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coder-agent">Coder agent</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./troubleshooting">When something is wrong</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show When something is wrong's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./troubleshooting#it-will-not-start">It will not start</a><a class="sec" href="./troubleshooting#a-connection-stopped">A connection stopped</a><a class="sec" href="./troubleshooting#triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="./troubleshooting#an-agent-is-stuck">An agent is stuck</a><a class="sec" href="./troubleshooting#a-report-returned-nothing">A report returned nothing</a><a class="sec" href="./troubleshooting#reading-the-audit-log">Reading the audit log</a><a class="sec" href="./troubleshooting#where-the-logs-are">Where the logs are</a><a class="sec" href="./troubleshooting#still-wrong">Still wrong</a></div>
+    </div>
+    </nav>
+    <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
+  </aside>
+  <main id="doc">
+    <p class="eyebrow">What the Assistant sees</p>
+    <article>
+<!-- Written by `python -m taskuary.toolcatalog` from taskuary/toolcatalog.py - edit the catalogue, not this page. --><p>What the Assistant is told about its tools. It gets the <strong>summary</strong> on every turn: the buckets, and
+each tool&#39;s name and what it needs. It asks for the <strong>detail</strong> of a bucket (<code>tools.list</code>) or a tool
+(<code>tools.describe</code>) only when a turn needs it. Everything it can change becomes a card you confirm,
+except the few that can be undone, which run at once with an undo on the receipt.</p>
+<h2 id="the-summary-sent-every-turn">The summary, sent every turn<a class="anchor" href="#the-summary-sent-every-turn" aria-label="Link to this section">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Bucket</th>
+<th>What it is for</th>
+<th>Tools, and what each needs</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>table</strong></td>
+<td>decide about the item on the table</td>
+<td>reply(text), approve, redraft(text), mine, regular_agent(text, as?), coder(text, as?), not_ours, not_ours_sender, block_sender, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), clear(text), confirm, cancel</td>
+</tr>
+<tr>
+<td><strong>task</strong></td>
+<td>change any task - the one on the table or one named with ref</td>
+<td>task.update(priority/title/assignee), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject</td>
+</tr>
+<tr>
+<td><strong>agents</strong></td>
+<td>start, continue, answer or stop the agent on a task, and teach where work belongs</td>
+<td>dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value)</td>
+</tr>
+<tr>
+<td><strong>new</strong></td>
+<td>new work with no task yet</td>
+<td>task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text)</td>
+</tr>
+<tr>
+<td><strong>pipe</strong></td>
+<td>the walk and sets of items, and filing mail</td>
+<td>pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule</td>
+</tr>
+<tr>
+<td><strong>reports</strong></td>
+<td>reports and workflows</td>
+<td>report.create(config), report.run, report.rerun, report.pause, report.resume, report.reach(reach), report.edit(config), report.delete</td>
+</tr>
+<tr>
+<td><strong>app</strong></td>
+<td>settings, connections, scripts and kept facts</td>
+<td>setting.set(setting, value), connection.create(type, name), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?)</td>
+</tr>
+<tr>
+<td><strong>look</strong></td>
+<td>look-ups - they run at once and change nothing</td>
+<td>task.read, timeline.search, tasks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
+</tr>
+</tbody></table>
+<p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
+<h2 id="every-tool-in-detail">Every tool, in detail<a class="anchor" href="#every-tool-in-detail" aria-label="Link to this section">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Bucket</th>
+<th>Needs</th>
+<th>What it does</th>
+<th>Runs</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>reply</code></td>
+<td>table</td>
+<td>text</td>
+<td>write a reply to the sender - text: the gist, in the owner&#39;s words. Nothing is sent</td>
+<td>at once - a draft, nothing sent</td>
+</tr>
+<tr>
+<td><code>approve</code></td>
+<td>table</td>
+<td>-</td>
+<td>send the drafted reply as it stands</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>redraft</code></td>
+<td>table</td>
+<td>text</td>
+<td>write the draft again - text: the change</td>
+<td>at once - a draft, nothing sent</td>
+</tr>
+<tr>
+<td><code>mine</code></td>
+<td>table</td>
+<td>-</td>
+<td>make it a task on the owner&#39;s own list - no agent</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>regular_agent</code></td>
+<td>table</td>
+<td>text, as?</td>
+<td>send it to a non-coding agent - text: the job; as: a profile from agents.list, only when one fits</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>coder</code></td>
+<td>table</td>
+<td>text, as?</td>
+<td>send it to a coding agent - text: what is wanted; as: the repository (repos.list), only when sure. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>not_ours</code></td>
+<td>table</td>
+<td>-</td>
+<td>file it, just this once - its card asks whether from now on, or as a rule</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>not_ours_sender</code></td>
+<td>table</td>
+<td>-</td>
+<td>file everything from this sender from now on - their mail still arrives and stays readable</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>block_sender</code></td>
+<td>table</td>
+<td>-</td>
+<td>an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>close</code></td>
+<td>table</td>
+<td>-</td>
+<td>Mark done - the task behind the item is finished</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>done</code></td>
+<td>table</td>
+<td>-</td>
+<td>the owner handled it - Mark done on a task; on an idea, a report or an fyi it is read and settled</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>next</code></td>
+<td>table</td>
+<td>-</td>
+<td>move on to the next thing</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>answer_agent</code></td>
+<td>table</td>
+<td>text</td>
+<td>answer the agent waiting on the owner - text</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>stop_agent</code></td>
+<td>table</td>
+<td>-</td>
+<td>save and end the agent&#39;s session on the item</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>rerun</code></td>
+<td>table</td>
+<td>-</td>
+<td>run the report on the table again</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>remember</code></td>
+<td>table</td>
+<td>text</td>
+<td>keep a fact - text</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>setup</code></td>
+<td>table</td>
+<td>text</td>
+<td>build a report, a connection to another system or an automation - text: the request. Never a to-do</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>clear</code></td>
+<td>table</td>
+<td>text</td>
+<td>clear these from the pipe - text: which</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>confirm</code></td>
+<td>table</td>
+<td>-</td>
+<td>the owner&#39;s yes to the card already waiting - only when one is</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>cancel</code></td>
+<td>table</td>
+<td>-</td>
+<td>the owner&#39;s no to it</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>task.update</code></td>
+<td>task</td>
+<td>priority/title/assignee</td>
+<td>change a task&#39;s priority, title or owner - any of priority: low / normal / high / urgent, title, assignee (&#39;me&#39;, or an agent&#39;s role); ref when it is not the one on the table</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.set_kind</code></td>
+<td>task</td>
+<td>kind</td>
+<td>say what kind of work a task is - kind: task (the owner does it) / general (a non-coding agent) / coding; ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.set_repo</code></td>
+<td>task</td>
+<td>repo</td>
+<td>put a coding task in the repository it belongs in - repo (its name, as the repositories list says it); ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.check</code></td>
+<td>task</td>
+<td>item, done?</td>
+<td>tick a checklist item on a task - item: its number (1 is the first) or words from it; done: false un-ticks; ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.comment</code></td>
+<td>task</td>
+<td>text</td>
+<td>file a note on a task - text; ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.split</code></td>
+<td>task</td>
+<td>text</td>
+<td>split one arrival into two jobs - text</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.merge</code></td>
+<td>task</td>
+<td>into</td>
+<td>fold a task into the one it duplicates - into: the survivor&#39;s ref (TQ-0123); ref is the one folded away</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.reopen</code></td>
+<td>task</td>
+<td>-</td>
+<td>reopen a task that was marked done - ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.not_a_task</code></td>
+<td>task</td>
+<td>-</td>
+<td>delete a task and teach triage it was never work - ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.complete</code></td>
+<td>task</td>
+<td>-</td>
+<td>Mark done - the task is finished</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.defer</code></td>
+<td>task</td>
+<td>until</td>
+<td>Remind me: put an open task away until a day and bring it back that morning - until: a date (2026-10-09), &quot;2 weeks&quot;, &quot;3 days&quot;, &quot;monday&quot;, or &quot;none&quot; to bring it back now; ref names the task (TQ-0123) when it is not the one on the table</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>task.handoff</code></td>
+<td>task</td>
+<td>who, note?</td>
+<td>hand a task to a PERSON - who (a name or address that has written here), note optional: writes the forward for the owner&#39;s yes, nothing is sent from this card; ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.clarify</code></td>
+<td>task</td>
+<td>text</td>
+<td>prepare a question for the task&#39;s sender - text: the question; it waits for the owner&#39;s yes, never sent from here; ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>review.approve</code></td>
+<td>task</td>
+<td>-</td>
+<td>send the drafted reply as it stands</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>review.reject</code></td>
+<td>task</td>
+<td>-</td>
+<td>reject the draft reply waiting on a task - nothing is sent, the task stays open; ref names the task</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>dispatch.prepare</code></td>
+<td>agents</td>
+<td>kind, instructions?</td>
+<td>start an agent on an EXISTING task - kind: coding / general, instructions optional; a coding task asks which repository when it is not clear; ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>agent.continue</code></td>
+<td>agents</td>
+<td>-</td>
+<td>pick up the agent&#39;s own last session on a task where it left off - ref</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>agent.answer</code></td>
+<td>agents</td>
+<td>text</td>
+<td>answer the agent that is waiting - text; ref names its task when it is not the one on the table</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>agent.stop</code></td>
+<td>agents</td>
+<td>-</td>
+<td>save and end an agent&#39;s session - the one on the table, or the task ref names; never a guess at which</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>routing.remember</code></td>
+<td>agents</td>
+<td>field, value</td>
+<td>remember how work like this should be ROUTED next time - field: kind / profile / system, and value. kind: coding (an agent in a checkout) / general (the assistant) / task (the owner, no agent). system: where the work actually lives when no repository here can touch it, named plainly (&quot;ADP&quot;). It teaches triage and moves nothing - say it when the owner tells you a verdict was wrong, or where a kind of job really belongs.</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.create_from_text</code></td>
+<td>new</td>
+<td>kind, text</td>
+<td>a new job with no message behind it - kind: task (a to-do or reminder the owner does themselves, no agent) / general (a regular agent) / coding, and text. Never for a task that already exists (a TQ ref): starting an agent on one is dispatch.prepare, and its own last session is agent.continue</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.create_from_message</code></td>
+<td>new</td>
+<td>kind</td>
+<td>hand this message to an agent or put it on the list - kind: coding / general / task</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.setup</code></td>
+<td>new</td>
+<td>text</td>
+<td>open a walk-through with the assistant, for a set-up that needs digging first - text</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>pipe.clear</code></td>
+<td>pipe</td>
+<td>-</td>
+<td>clear a SET of items from the pipe at once - takes select (below); read, never deleted</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>item.settle</code></td>
+<td>pipe</td>
+<td>verb</td>
+<td>put the item down - verb: done / later / skip (the item on the table is the target)</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>message.file</code></td>
+<td>pipe</td>
+<td>-</td>
+<td>file it - not ours, just this one</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>message.archive</code></td>
+<td>pipe</td>
+<td>-</td>
+<td>archive it: off the pipe and closed, nothing deleted</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>preference.exclude_sender</code></td>
+<td>pipe</td>
+<td>scope</td>
+<td>teach triage to file this sender or subject from now on - their mail still arrives (scope: sender / subject)</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>preference.sender_rule</code></td>
+<td>pipe</td>
+<td>-</td>
+<td>an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>report.create</code></td>
+<td>reports</td>
+<td>config</td>
+<td>create a scheduled report or workflow - config; the composer builds it from what the owner asked for</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>report.run</code></td>
+<td>reports</td>
+<td>-</td>
+<td>run a report or workflow now - title (or source_id); it lands in the pipe when done</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>report.rerun</code></td>
+<td>reports</td>
+<td>-</td>
+<td>run that report again</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>report.pause</code></td>
+<td>reports</td>
+<td>-</td>
+<td>stop a report or workflow running on its clock - title</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>report.resume</code></td>
+<td>reports</td>
+<td>-</td>
+<td>put a paused report or workflow back on its clock - title</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>report.reach</code></td>
+<td>reports</td>
+<td>reach</td>
+<td>change when a report reaches the owner - title, reach: always / wrong / rule</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>report.edit</code></td>
+<td>reports</td>
+<td>config</td>
+<td>change a report&#39;s configuration - title, config: only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>report.delete</code></td>
+<td>reports</td>
+<td>-</td>
+<td>delete a report or workflow for good - title; asks first</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>setting.set</code></td>
+<td>app</td>
+<td>setting, value</td>
+<td>change one setting - setting (its key, or label: part of its name) and value; the schema says what it takes</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>connection.create</code></td>
+<td>app</td>
+<td>type, name</td>
+<td>add a system Taskuary talks to - type, name; created OFF and never carrying a secret, which the owner gives on the card</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>connection.test</code></td>
+<td>app</td>
+<td>-</td>
+<td>test a connection now and say what it answered - name</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>connection.pause</code></td>
+<td>app</td>
+<td>-</td>
+<td>switch a connection off - name; nothing is deleted</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>connection.resume</code></td>
+<td>app</td>
+<td>-</td>
+<td>switch a connection back on - name</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>script.start</code></td>
+<td>app</td>
+<td>name</td>
+<td>start a script by its name: walk me through my tasks / set up Taskuary / set up a report</td>
+<td>at once, with an undo</td>
+</tr>
+<tr>
+<td><code>memory.remember</code></td>
+<td>app</td>
+<td>note</td>
+<td>keep a fact - note</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>hub.publish</code></td>
+<td>app</td>
+<td>title, body, topic?, kind?, why_earned?</td>
+<td>save to the company Hub - title: one durable claim, body: why it matters and what to do, topic, kind: new_idea / technical_solve / howto / gotcha / decision / system / people, why_earned. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it</td>
+<td>you confirm</td>
+</tr>
+<tr>
+<td><code>task.read</code></td>
+<td>look</td>
+<td>-</td>
+<td>everything on one task - its summary, status, the messages on it, what agents said and did. ref: TQ-0401 (or id)</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>timeline.search</code></td>
+<td>look</td>
+<td>-</td>
+<td>find messages anywhere in the history, however old - takes the same SELECT fields below, plus limit; here contains matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, subjects and dates; open one with message.read or its task with task.read</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>tasks.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>the tasks - status: open (the default: open, in progress or waiting) / done / all; contains: words; limit</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>message.read</code></td>
+<td>look</td>
+<td>-</td>
+<td>one message in full - who, when, its task and the whole text. mid: the m-number timeline.search printed</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>sender.read</code></td>
+<td>look</td>
+<td>-</td>
+<td>one person at a glance - how often they write, their recent messages, their open tasks, when you last wrote back and what the owner told you to remember about them. who: a name or an address</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>docs.search</code></td>
+<td>look</td>
+<td>-</td>
+<td>how Taskuary works and how to set it up (the help pages), and the owner&#39;s own docs (SOUL, TRIAGE, COUNSEL...). query: the words. Use it for any &quot;how do I&quot;, &quot;what does X do&quot; or &quot;why did it&quot; about the app</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>agents.now</code></td>
+<td>look</td>
+<td>-</td>
+<td>every agent session running now - its task, which CLI, and whether it is working, idle, stuck or asking the owner something</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>approvals.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>everything waiting for the owner&#39;s yes: drafted replies and the actions agents proposed, with their tasks</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>pipe.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole work rail. Use it for &quot;what&#39;s waiting&quot;, &quot;what&#39;s left&quot;, &quot;what do I have&quot;</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>calendar.read</code></td>
+<td>look</td>
+<td>-</td>
+<td>the owner&#39;s meetings - from: today (the default) / tomorrow / YYYY-MM-DD; days: how many (7 by default). Reads the calendar live, so it takes a moment</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>activity.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>what happened, from the audit trail: counts by kind and the latest entries. days (1 by default); who: you / agents / all</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>errors.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>what is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, drafts, triage and actions over days (3 by default), and the last errors in the log. Use it for any &quot;what broke&quot;, &quot;why did X not happen&quot;, &quot;is anything wrong&quot;</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>memory.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>everything kept about the owner: the saved notes (from &quot;remember this&quot;, their verdicts, Settings) and what LEARNED.md has learned from their verdicts. about: words to narrow it (a sender, a topic). Use it for &quot;what do you remember&quot;, &quot;what do you know about me&quot;</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>rules.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>the standing filters on the owner&#39;s mail - queue mutes set with a reason, and the policy rules (skip, ignore, escalate...) that decide before any model reads it. about: words to narrow it. Use it for &quot;why did I never see X&quot;, &quot;what am I filtering&quot;</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>report.read</code></td>
+<td>look</td>
+<td>-</td>
+<td>a report or workflow and its last runs - what it said, whether it failed and why, and its source_id. title: part of its name (or source_id)</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>reports.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>every report and workflow: name, source_id, clock, how it reaches the owner, last outcome</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>settings.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>the settings in one group (or, with no group, the groups themselves and how many knobs each has)</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>setting.read</code></td>
+<td>look</td>
+<td>-</td>
+<td>one setting, its value in words and what it does. key (or label: part of its name)</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>connections.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>every live connection: name, type, whether it has a key, last sync, last error - and how many catalogue cards are off</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>connection.read</code></td>
+<td>look</td>
+<td>-</td>
+<td>one connection in full. name: part of its name (or connector_id)</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>agents.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>the agents and profiles, and which brain answers which job</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>repos.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>the repositories a coding agent can work in, and what each one is for</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>tools.list</code></td>
+<td>look</td>
+<td>-</td>
+<td>every tool in one bucket (table, task, agents, new, pipe, reports, app, look) - what each does and needs</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>tools.describe</code></td>
+<td>look</td>
+<td>-</td>
+<td>one tool in full - kind: its name</td>
+<td>at once</td>
+</tr>
+<tr>
+<td><code>knowledge.search</code></td>
+<td>look</td>
+<td>-</td>
+<td>what the company knows - the Hub, the indexed documents and the facts the owner asked to keep. query: the words to look for. Call it FIRST whenever the owner asks about a person, a site, a policy, a system or how something is done here - never offer to look it up instead of looking</td>
+<td>at once</td>
+</tr>
+</tbody></table>
+
+    </article>
+    <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
+    <p class="stamp">Documentation for Taskuary 0.3.5.6 · updated 2026-09-18</p>
+  </main>
+</div>
+<script src="./docs.js"></script>
+</body>
+</html>

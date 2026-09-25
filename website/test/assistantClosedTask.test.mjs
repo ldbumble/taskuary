@@ -30,5 +30,8 @@ test("a set-up's pending questions are a line, not an item on the table", async 
 test("a phone turn shows on the desktop as it happens - the dots, then the words", () => {
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   assert.match(view, /onLive\(\["chat-changed"\], \(ev\) => \{\s*setPhoneBusy\(!!ev\?\.thinking\);\s*readChat\(\)/);
-  assert.match(view, /\{\(busy \|\| phoneBusy\) && \(/);
+  assert.match(view, /\{\(busy \|\| phoneBusy \|\| nextComing\) && \(/);
+  // ...and between letting a card go and the next pick: the settle and the deferred surface() run before busy
+  assert.match(view, /setNextComing\(true\);\s*let pile = null;/);
+  assert.match(view, /deferredChat\.current\.delete\(timer\); setNextComing\(false\);/);
 });

@@ -467,12 +467,13 @@ def connect_ideas(store, now: datetime = None, days: int = 30, floor: int = 3) -
 
 
 def fresh(state: dict, cand: dict, now: datetime) -> bool:
-    """Worth saying now? Never said: yes. Said with these facts: no. Dismissed or done: only when
-    the facts changed (a new last word on the thread, a moved meeting). Snoozed: when it wakes."""
+    """Worth saying now? Never said: yes. Said already: no - the Advisor raises NEW ideas, it never edits one
+    (the owner, 2026-09-25). A changed Sig used to re-say it, and for the model's own idea:<slug> keys the Sig
+    is the start of its wording, so a rewording overnight rewrote a read idea and brought the finished task it
+    was about back to Next. Facts that really changed are a new idea with a new key. Snoozed: when it wakes."""
     i = state.get(cand['key'])
     if not i: return True
-    if i.get('Status') == 'snoozed': return bool(i.get('SnoozeUntil')) and _ts(i['SnoozeUntil']) <= now.strftime('%Y-%m-%d %H:%M:%S')
-    return (i.get('Sig') or '') != (cand.get('sig') or '')
+    return i.get('Status') == 'snoozed' and bool(i.get('SnoozeUntil')) and _ts(i['SnoozeUntil']) <= now.strftime('%Y-%m-%d %H:%M:%S')
 
 
 def source_of(line: dict, mids: dict, chosen: dict) -> dict | None:

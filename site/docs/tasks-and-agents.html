@@ -302,6 +302,41 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 <td>Read the result</td>
 </tr>
 </tbody></table>
+<p><figure><img src="img/agent-start.svg" alt="How an agent starts: handed off, auto-start allowed or not, a free slot or next in line" loading="lazy"><figcaption>Waiting to start always says why.</figcaption></figure></p>
+<p><figure><img src="img/agent-run.svg" alt="While it runs: working, or waiting on you - a question, an approval, stuck on a limit, quiet at its prompt" loading="lazy"><figcaption>Your answer puts it back to work.</figcaption></figure></p>
+<p><figure><img src="img/agent-end.svg" alt="How it ends: agent finished, session saved, the task closed, or agent stopped - and Continue session" loading="lazy"><figcaption>Only a session that ended by itself reads as stopped.</figcaption></figure></p>
+<table>
+<thead>
+<tr>
+<th>It ended because</th>
+<th>What you see</th>
+<th>What brings it back</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>The agent said it was done, or its pull request merged</td>
+<td>✅ <strong>agent finished</strong> - its reply ready for your yes if one is owed</td>
+<td>a new message on it</td>
+</tr>
+<tr>
+<td>You pressed <strong>Save and end session</strong></td>
+<td>💾 <strong>session saved</strong> - the report is written, the task stays open</td>
+<td><strong>Continue session</strong></td>
+</tr>
+<tr>
+<td>You pressed <strong>Mark done</strong></td>
+<td>the task is closed and the agent stopped</td>
+<td>they write again</td>
+</tr>
+<tr>
+<td>The session crashed or was closed, or Taskuary closed</td>
+<td>⏹ <strong>agent stopped</strong> - a reply it had held is back for your yes</td>
+<td><strong>Continue session</strong>, or <strong>Run another agent</strong></td>
+</tr>
+</tbody></table>
+<p><strong>Continue session</strong> works for a coding agent (it reopens its own CLI session, or a fresh one seeded with the
+handover) and a regular agent (its saved conversation). It asks what to tell it as it picks up - optional; on the
+phone the next thing you type is the note, or tap <strong>Continue as is</strong>.</p>
 <p>The saved result is deliberately short. Every finished coding session also writes a full Markdown
 artifact with that result and the complete transcript — <strong>Work details → Full artifact</strong> on the
 task page.</p>

@@ -170,6 +170,21 @@ class BlockTests(unittest.TestCase):
         self.assertIn('## Top', got[0])
 
 
+class SplitLimitTests(unittest.TestCase):
+    """split() is pure and its callers pass sensible limits, so a limit <= 0 was latent - but the
+    arithmetic made it hang: every cut was 0 (or -1), text[:0] was appended and text never got
+    shorter, so the loop grew a list for ever. Reject it at the door."""
+
+    def test_a_non_positive_limit_raises_instead_of_hanging(self):
+        with self.assertRaises(ValueError):
+            cf.split('abc', 0)
+        with self.assertRaises(ValueError):
+            cf.split('abc', -5)
+
+    def test_limit_one_still_splits_one_character_at_a_time(self):
+        self.assertEqual(cf.split('ab', 1), ['a', 'b'])
+
+
 if __name__ == '__main__':
     unittest.main()
 

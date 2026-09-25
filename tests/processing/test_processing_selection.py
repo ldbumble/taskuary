@@ -178,9 +178,7 @@ def test_unrelated_scheduled_clock_churn_only_invalidates_at_eligibility_boundar
 def test_fyi_capture_uses_one_scoped_order_and_names_the_exact_four_member_card():
     values = [item(f"msg:{n}", lane="fyi", kind="fyi", mid=n, channel="email")
               for n in range(1, 6)]
-    # An assistant-local FYI is deliberately in the same lane but not incoming mail.
-    values.insert(1, item("idea:9", lane="fyi", kind="idea", idea=9, channel="assistant"))
-    cap = captured(values, only="mail")
+    cap = captured(values)
 
     assert cap.member_keys == ("msg:1", "msg:2", "msg:3", "msg:4")
     assert cap.selected["key"] == "fyis:msg:1,msg:2,msg:3,msg:4"
@@ -189,9 +187,9 @@ def test_fyi_capture_uses_one_scoped_order_and_names_the_exact_four_member_card(
     displayed = {row["key"]: row for row in cap.pile["items"]}
     assert all(child == displayed[child["key"]] for child in cap.selected["items"])
 
-    after_first = captured(values, only="mail", exclude="msg:1")
+    after_first = captured(values, exclude="msg:1")
     assert after_first.member_keys == ("msg:2", "msg:3", "msg:4", "msg:5")
-    after_batch = captured(values, only="mail", exclude=cap.selected["key"])
+    after_batch = captured(values, exclude=cap.selected["key"])
     assert after_batch.member_keys == ("msg:5",)
     assert after_batch.selected["key"] == "fyis:msg:5"
 

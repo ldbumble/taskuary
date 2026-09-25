@@ -1206,16 +1206,6 @@ def notices(store, states: dict = None) -> list:
 
 
 MAIL_KINDS = ('review', 'action', 'asked', 'todo', 'fyi')
-INTERRUPTS = ('agent', 'meeting')          # what a mail-only walk still stops for: they block work, or the clock
-NOT_INCOMING = ('report', 'own', 'assistant')      # a scheduled report, a note to yourself, our own post
-
-
-def came_in(i: dict) -> bool:
-    """Something a PERSON sent, whatever lane it ended up in - mail, a chat line, the thread behind a
-    slipped follow-up. "Start with the mail" used to key on the item's KIND, so the assistant's own
-    line about a mail ('slipped') was not mail: the walk skipped the very row it had just marked NEXT,
-    and the brief said "0 of them are mail" with five in the pipe (the owner, 2026-09-03)."""
-    return bool(i.get('mid')) and (i.get('channel') or 'email') not in NOT_INCOMING
 FYI_BATCH = 4                              # FYI has no action: the normal chat walk reads four together
 FYI_BATCH_RANGE = (1, 10)                  # ...and how many is the owner's (Settings -> Assistant)
 
@@ -1286,7 +1276,6 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
              and not _not_yet(i) and i.get('key') != exclude
              and (include_surfaced or not i.get('surfaced')
                   or (i['lane'] in ('blocked', 'approve') and _ts(i.get('surfaced_at')) <= again))]
-    if only == 'mail': ready = [i for i in ready if came_in(i) or i['kind'] in INTERRUPTS]
     # What is ON THE OWNER leads; after that, new arrivals; after those, a merely-shown row is walked
     # normally. Being put in the conversation never counted as the owner's decision, so it cannot make
     # an unread row unreachable - nor bury the one item that is actually waiting on them under fifty fyi.

@@ -352,7 +352,7 @@ New work with no task yet.
 A new job with no message behind it. Never for a task that already exists (a TQ ref): starting an agent on one is dispatch.prepare, and its own last session is agent.continue.
 
 - `kind` - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding
-- `text`
+- `text` - , and a short `title` in your own words for the job (never "send it to the agent")
 
 <p class="runs">Waits for your yes on a card.</p>
 

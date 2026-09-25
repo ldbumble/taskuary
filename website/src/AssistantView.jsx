@@ -56,7 +56,6 @@ const NOTE_KINDS = new Set(["setup_questions"]);
 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
 // is still mail, and the walk that skipped it said "0 of them are mail" with five in the pipe
-const incoming = (items) => (items || []).filter((i) => i.mid && !["report", "own", "assistant"].includes(i.channel || "email"));
 
 // WHAT THE HEADING ALREADY SAID. A row speaks only when its own word ADDS something: "slipped"
 // under fyi does, "fyi" under fyi does not, and "agent finished" under agents working does -
@@ -976,7 +975,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     if (busy || resetting || handoff || turnFlight.current || startFlight.current || starting) return;
     startFlight.current = true;
     const epoch = chatEpoch.current;
-    const said = what === "mail" ? "Just what came in." : "Walk me through my tasks.";
+    const said = "Walk me through my tasks.";
     setStarting(true); setErr("");
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: said }]);
     try {
@@ -1519,8 +1518,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
               <div className="tq-modes">
                 <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
                   title="Everything in the pipe, most important first - mail, reports, agents, meetings">{starting ? "Reading your pipe..." : "Walk me through my tasks"}</button>
-                {!pile?.canonical && <button type="button" className="tq-chip" disabled={busy || resetting || starting || !incoming(ready).length} onClick={() => start("mail")}
-                  title="Only what people sent you - mail and chat">Just what came in</button>}
                 {/* the same walk the header chip opens. It lives here as well because the header
                     hides its chip on a phone, and this block is what a phone shows - without it the
                     one door to the set-up guidance was absent on the device it is most needed on. */}

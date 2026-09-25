@@ -467,21 +467,6 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     return text[:m.start()].strip(), d
 
 
-# "can you ask the assistant to look into that server?" is an ORDER wearing a question mark. The
-# polite opener plus the trailing '?' used to veto every verb, so the request fell through to
-# lookup() and came back as a description of the mail it was about (the owner, 2026-09-03).
-_POLITE = re.compile(r"^\s*(?:(?:please|pls|plz)\s+)?(?:(?:can|could|would|will)\s+(?:you|u)|do you mind|would you mind|i'?d like you to|i want you to|i need you to|let'?s)\s+(?:please\s+)?(?:to\s+)?|^\s*(?:please|pls|plz)\s+", re.I)
-
-# Being told we have a fact wrong is not an instruction to carry out. "it says the report failed,
-# which is wrong" ended as a bare "Next." - the one answer that says the correction was not heard
-# (the owner, 2026-09-03: "that's not what a assistant should do").
-_CORRECTION = re.compile(r"\b(that'?s (wrong|not right|incorrect|not true)|(that|this|it) is (wrong|not right|incorrect)|"
-                         r"no,? it (did|does|is|was)n'?t|not true|you'?re wrong|wrong again|it did ?n'?t fail|"
-                         # ...and the shapes it arrives in: "that's not a fail, it says all clear?"
-                         r"(that|this|it)'?s not (a |an )?(fail|failure|error|problem|issue)|not a fail|"
-                         r"it (says|said) (it ?'?s )?(all clear|clear|ok|okay|fine|success|passed)|did ?n'?t (fail|error|break)|"
-                         r"(i|we) (already|just) (told|said)|(i|you) (got|have) (that|it) wrong|which is wrong|is not wrong)\b", re.I)
-
 
 # what the card's primary button does, said as a word. Anything not here has no yes-able action.
 ASSENT_VERB = {'review': 'approve', 'action': 'approve', 'agent': 'answer_agent', 'idea': 'followup'}
@@ -687,9 +672,6 @@ def funnel_age(item: dict) -> str:
     return f'{m} min ago' if m < 60 else f'{m // 60}h ago' if m < 1440 else f'{m // 1440}d ago'
 
 
-_HANDOFF = re.compile(r"\b(send|hand|give|pass)\s+(it|this|that|them)?\s*(off|over|along)?\s*(to)?\s*(the\s+)?(coding\s+)?"
-                      r"(agent|coder|codex|claude|gemini)\b|\buntil it works?\b|\band (make sure|see) (it|that it) works?\b|\bplease \b", re.I)
-
 
 def _title_cut(s: str, n: int = 120) -> str:
     """A title at most n long, cut at a word and marked as cut - "...check the schedule config, a" read as a typo."""
@@ -700,11 +682,11 @@ def _title_cut(s: str, n: int = 120) -> str:
 
 
 def _handoff_title(store, tid: int, text: str) -> str:
-    """What to call the task. Their own words when they name the job; otherwise the thing the
-    conversation was on - "send it to the coding agent until it works" names nothing by itself."""
-    bare = _HANDOFF.sub(' ', _POLITE.sub('', text.strip())).strip(' ,.:-?!')
-    bare = re.sub(r'\s{2,}', ' ', bare)
-    if len(bare.split()) >= 3: return _title_cut(bare)
+    """What to call the task: the title the model named (task.create_from_text's `title`), or the words as said;
+    with no words, the thing the conversation was on. A phrase list used to strip "can you send it to the coding agent"
+    off the words - the model names the job now (2026-09-25: no hard-coded words)."""
+    bare = ' '.join(str(text or '').split())
+    if bare: return _title_cut(bare)
     for c in reversed(general.chat_rows(store, tid)):
         m = _MARK.search(c.get('Body') or '')
         if not m: continue
@@ -1049,21 +1031,6 @@ def _live(store) -> list:
     try: return term.live_sessions(tail=0)
     except Exception: return []
 
-
-_TROUBLE = re.compile(r"\b(report|connection|connector|failing|fails|failed|not working|broken|error|why (is|did|does))\b", re.I)
-
-def trouble(store, text: str) -> str:
-    """When the owner asks why something is failing: what IS failing, from the hub's own view - every
-    connector whose last poll errored, the triage brain, every report that failed today (problems.py) - so
-    the assistant explains from the error, not from a guess. Reading, never running."""
-    if not _TROUBLE.search(text or ''): return ''
-    from . import problems
-    try: rows = problems.collect(store)
-    except Exception as e:
-        logger.debug(f'concierge: problems skipped - {e}'); return ''
-    if not rows: return '\n\nWHAT IS FAILING RIGHT NOW: nothing - every connection polled clean and no report failed today.'
-    return '\n\nWHAT IS FAILING RIGHT NOW (explain from the error; offer rerun, or the coding agent for a fix):\n' + '\n'.join(
-        f"- {r.get('title')}: {_cut(r.get('detail'), 300)}" + (f" (since {str(r.get('since'))[:16]})" if r.get('since') else '') for r in rows[:8])
 
 
 _SWEEP_CUES = _CUES | {'remove', 'clear', 'dismiss', 'get', 'rid', 'hide', 'drop', 'kill', 'archive', 'mark', 'read', 'all', 'every', 'these', 'those',
@@ -1819,8 +1786,8 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             say = (f"{n} thing{'s' if n != 1 else ''} you've already seen still wait{'s' if n == 1 else ''} in Work. "
                    f"I'll bring {'it' if n == 1 else 'them'} round again in a while.")
         elif only and left:
-            # the mail is done; what remains is the rest of the pipe - offer it rather than call the day over
-            say = f"That's all the mail. {len(left)} other thing{'s' if len(left) != 1 else ''} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."
+            # the filtered set is done; what remains is the rest of the pipe - offer it rather than call the day over
+            say = f"That's all of those. {len(left)} other thing{'s' if len(left) != 1 else ''} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."
         elif selection is not None and any(selection.pending.values()):
             pending = selection.pending
             parts = ([f"{pending['working']} in progress"] if pending['working'] else [])
@@ -2128,12 +2095,11 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         # there is a transcript to write it from (a wrap writes the report FROM it), and simply ended when
         # there is none. It used to write up only on the word "wrap" - so the button stopped an agent and
         # threw its work away, where the page's button of the same meaning kept it.
-        asked_wrap = bool(re.search(r"\b(wrap|finished|it'?s done)\b", text, re.I))
         from . import terminal as term
         try: wrap = bool((term.transcript_for(store, end) or ('',))[0].strip())
         except Exception: wrap = False
         target, params = end, {'wrap': wrap}
-        if asked_wrap and not wrap: note = ' There is no transcript to write a report from yet, so there is nothing to wrap - this stops the agent and the task stays open.'
+        if not wrap: note = ' There is no transcript to write a report from yet - this stops the agent and the task stays open.'
     elif verb == 'rerun': target = it.get('source_id')
     elif verb == 'remember':
         if not d_text: raise ValueError('remember what? Say the fact and I will keep it')
@@ -2519,7 +2485,7 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
     dock_tid = int(raw) if str(raw or '').isdigit() else None
     if not dock_tid or not _chat_proposed(store, dock_tid, op.get('id')): return line
     # THE UNDO RIDES THE RECEIPT (the tiers): an instant write says what it did AND how to put it back -
-    # a one-click card on the desktop, the word "undo" on the phone (remote_assistant). The undo is a
+    # a one-click card on the desktop, an Undo pill on the phone (remote_assistant). The undo is a
     # proposal of its own, never auto, so the click is the only thing that reverts.
     undo = (op.get('outcome') or {}).get('undo') if st == 'done' and not op.get('duplicate') else None
     # ...and an undo that ran offers no undo of its own: put back is put back, not a see-saw
@@ -2536,7 +2502,7 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
     return line
 
 
-LAST_UNDO = 'assistant_last_undo'           # the newest undo proposal's id: what "undo" on the phone runs
+LAST_UNDO = 'assistant_last_undo'           # the newest undo proposal's id: what the phone's Undo pill runs
 
 
 def undo_last(store, actor: str = 'owner') -> str:
@@ -2597,7 +2563,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = _system(store, llm) + '\n\n' + toolcatalog.block(store)
         raw = str(llm(system,
-                      f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}{trouble(store, text)}\n\n"
+                      f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}\n\n"
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
                       + f"The owner says: {text}\nAnswer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
                       + ('If this is a decision about the item on the table, CALL it (bucket table).' if item else
@@ -2632,7 +2598,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             reply, options = '', []
         _remember_sid(store, tid, llm)
     except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
-    if call and not _CORRECTION.search(text):
+    if call:
         # A MISS IS THE MODEL'S TO FIX, not the owner's to read. "No setting by that name - settings.list <group> names
         # them" is written for the model, and it reached the owner word for word (the 2026-09-24 audit). The model gets
         # it back, may look the name up, and calls again; only a second miss is said - once, in the owner's hearing.
@@ -2669,9 +2635,6 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                     if miss else reply or "I could not finish that look-up - say it another way.")
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
-    # The MODEL may answer a correction by moving on - it did: "that's not a fail, it says all clear?" came back
-    # as DECIDE: next, so the one thing the owner said was never taken (2026-09-03).
-    if decision and decision['verb'] in ('next', 'skip', 'later', 'done') and _CORRECTION.search(text): decision = None
     # NO WORD MATCH OVERRIDES THE ANSWER. Any subject sharing half the owner's words used to replace the model's
     # reply with that item: "research CLI Anything on GitHub" became a GitHub PR email, "yes, go ahead" someone
     # else's message, "what's waiting on me" a certificate notice - 10 of 63 real asks (the 2026-09-24 debug). The
@@ -2685,8 +2648,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     # NOTHING ON THE TABLE: next / done / later move the WALK; a verb that needs something to act on says so
     if decision and not item:
         if verb in ('next', 'done', 'skip', 'later'):
-            only = 'mail' if re.search(r'\b(mail|inbox|e-?mail|what came in)\b', text, re.I) else None
-            return surface(store, None, llm, actor, only, trace, cancel)
+            return surface(store, None, llm, actor, None, trace, cancel)
         # "remind me to renew the contract" read as `mine` - theirs to do - with nothing on the table to be
         # theirs: that is a new to-do in their words, not "nothing is on the table" (2026-09-23)
         if verb == 'mine':

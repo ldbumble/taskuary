@@ -38,7 +38,7 @@ flowchart LR
 | 3 | The choice that was already the answer is the confirm; another answer runs at once | one tap, not a second "yes, go ahead" |
 | 4 | A list answers one reply; after any reply its numbers are gone | a "2" typed three turns later fired a list nobody was looking at |
 | 5 | A receipt that can be undone offers **Undo** as a choice | the undo existed only as the typed word |
-| 6 | Typing **next** moves on without reprinting the day's summary; "walk me through my tasks" opens with it | the summary came back on every Next |
+| 6 | No typed word is a shortcut: "next", "undo", "set up" go to the model like any other words; the morning message's options are pills | a table of typed words ran the walk, set-up and undo with no model, and had to be kept in step with the vocabulary by hand |
 | 7 | In the chat the Assistant listens in, a bare "yes" or "approve" is the Assistant's; quoting a review ping or naming `[rvN]` is still a phone approval | a bare "yes" approved whichever review had pinged last |
 | 8 | On WhatsApp the choices also come as a poll on the last bubble (2 to 12 of them, each cut to 100 characters); only the newest poll in a chat counts | a poll is the one tappable thing WhatsApp lets an account send |
-| 9 | Typed words that match a choice exactly, with the same capitals, count as a pick; anything else is words | a poll vote arrives as the choice's own words |
+| 9 | A poll vote (the bridge marks it) is the choice it names; the same words typed are words | a poll vote arrives as the choice's own words, but only a tap is a pill |

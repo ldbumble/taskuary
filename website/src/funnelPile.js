@@ -116,9 +116,8 @@ export const canAdvanceSelection = (pile, ready, only = null) => {
   if (!hasNextSelection(pile)) return (ready || []).length > 0;
   if (pile.selection_unavailable || pile.selection_invalidated) return false;
   if (pile.expected_next_key) return true;
-  // An empty mail capture is still a guarded operation: the server returns exhausted:"mail", the
-  // client drops that scope, and the following Next continues with non-mail work already in view.
-  return only === "mail" && (ready || []).length > 0;
+  // (a mail-only walk used to continue here; the mode is gone - 2026-09-25, no typed word picks a walk)
+  return false;
 };
 
 // Both an initial HTTP conflict and a late streamed conflict carry this shape.  Keeping parsing

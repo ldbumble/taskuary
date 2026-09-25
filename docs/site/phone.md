@@ -59,9 +59,8 @@ words you type go to the model.
 | a coding job with no clear checkout | "Which repository?" — the best guess first; the one you pick starts |
 | **Undo** (offered under a receipt that can be undone) | puts the last change back, once |
 | **More** | the rest of a long message, then the same choices |
-| **next**, typed | the next item, with no summary reprinted |
 | an old number, after you have already replied | nothing — a list answers one reply, then its numbers are gone |
-| anything else | the model reads it, with the same tools as the desktop |
+| anything typed - "next", "undo" and "set up" too | the model reads it, with the same tools as the desktop. No typed word is a shortcut; only a number or a poll tap is a pill |
 
 ### Approving things
 

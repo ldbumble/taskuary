@@ -115,7 +115,7 @@ class DoorwayBoundaryTests(unittest.TestCase):
              mock.patch.object(remote_assistant, 'intercept', return_value=True) as intercept:
             self.assertEqual(messengers.poll_whatsapp(store, connector, [], llm=None), 0)
         intercept.assert_called_once_with(store, 'whatsapp', JID, 'Walk me through important email',
-                                          from_me=True, connector=connector, message_id='q')
+                                          from_me=True, connector=connector, message_id='q', poll=False)
         self.assertEqual(json.loads(store.get_connector(connector['ConnectorId'])['ConfigJson'])['wa_seq'], 9)
 
     def test_telegram_routes_only_the_named_private_chat(self):

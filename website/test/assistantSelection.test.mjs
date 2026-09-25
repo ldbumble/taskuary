@@ -67,10 +67,9 @@ test("the server capture owns the visible Next marker, including FYI batches and
     expected_next_members: [] };
   const nonMailReady = [{ key: "task:7", kind: "task", lane: "asked" }];
   assert.equal(nextMarkerKey(emptyMail, nonMailReady, null), null);
-  assert.equal(canAdvanceSelection(emptyMail, nonMailReady, "mail"), true,
-    "a guarded empty mail request must reach the server so it can release mail scope");
+  // an empty capture with nothing next cannot advance - there is no mail-only scope to release any more
   assert.equal(canAdvanceSelection(emptyMail, nonMailReady, null), false);
-  assert.equal(canAdvanceSelection({ ...emptyMail, selection_unavailable: true }, nonMailReady, "mail"), false);
+  assert.equal(canAdvanceSelection({ ...emptyMail, selection_unavailable: true }, nonMailReady, null), false);
 });
 
 test("HTTP and streamed stale conflicts share one authoritative no-retry detail", () => {

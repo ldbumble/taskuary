@@ -245,7 +245,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
   assert.match(view, /new ResizeObserver\(\(\) => \{ if \(el\.scrollHeight/);   // the chat keeps its bottom in view as it grows
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has
-  assert.match(cardsSrc(), /Just what came in/);           // ...which is what "mail" actually means: a person sent it
+  assert.doesNotMatch(cardsSrc(), /Just what came in/);    // no mail-only walk: a set is the model's to name (2026-09-25)
   assert.match(view, /Walk me through my tasks/);
   assert.match(cardsSrc(), /All read, next/);             // a handful of fyi's goes in one click
   assert.match(cardsSrc(), /<TerminalPane sid=\{card\.sid\}/);   // a stopped agent's own screen, in the chat

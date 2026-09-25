@@ -405,6 +405,7 @@ def asking() -> dict | None:
 GROUPS = (('people', 'People want'), ('you', 'You wanted'), ('agents', 'Agents waiting'), ('read', 'Nothing to decide'),
           ('passed', 'You passed'))
 _AGENT_LANES = {'blocked', 'stopped', 'queued', 'working', 'broken', 'unjudged'}
+AGENT_CARD_LANES = {'blocked', 'stopped', 'queued', 'working', 'saved'}     # the lanes whose card is an agent's
 ROWS_PER_GROUP = 5
 
 
@@ -964,6 +965,11 @@ def more_text(store, item: dict | None) -> str:
     """What the card folds - the phone's More. Under a draft, what they wrote; under a report, every
     section after the first; under a long message, the whole of it. '' when nothing is folded."""
     if not item: return ''
+    if item.get('kind') == 'agentdone' and item.get('tid'):
+        # what the agent FOUND, in full - the card's line is its summary, and it asks "want to see the final report?"
+        rep = next((c['Body'] for c in reversed(store.list_comments(int(item['tid'])) or [])
+                    if str(c.get('Body') or '').startswith(('CODER REPORT', 'The agent closed this itself'))), '')
+        return rep.split('\n', 1)[-1].strip() if rep.startswith('CODER REPORT') else rep
     msg, body, is_report = _body(store, item)
     if not body: return ''
     if is_report:
@@ -1061,6 +1067,15 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
     # the say line often already carries the cause; a card does not print the same sentence twice
     if state and state.split(' - ', 1)[-1].lower() in say.lower(): state = state.split(' - ', 1)[0]
     head = '\n'.join(x for x in (source_line(item), say, state, lead_line(store, item, say)) if x)
+    if item.get('kind') in ('agent', 'agentdone') or item.get('lane') in AGENT_CARD_LANES:
+        # AN AGENT'S CARD is the task, then the agent's mark and what it did or needs (the owner, 2026-09-25: "show the
+        # task and then emoji for agent and what it did"). It stacked a source line, the say line, the lane's
+        # sentence and the task summary - four lines for one fact, two of them the same sentence.
+        task = ' · '.join(x for x in (str(item.get('ref') or ''), _cut(item.get('title') or '', 90)) if x)
+        # ...and WHY, where the why is the news: not started, stopped, or the session you saved (a waiting agent's
+        # sentence already says what it needs)
+        why = state if item.get('lane') in ('queued', 'stopped', 'saved') else ''
+        head = '\n'.join(x for x in (task, say, why) if x)
     if item.get('kind') == 'fyis':
         # THE ITEMS, one per line, and nothing else: the say line restated them as one run-on sentence and
         # the status line added "fyi - people told you things" under it, and on a phone that read as
@@ -1121,6 +1136,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
 
 
 OFFERED_KEY = 'remote_offered'
+_CHOICES_BLOCK = re.compile(r'\n*Reply with (?:one of|a number[^\n]*?):\n(?:\d+ · [^\n]*(?:\n|$))+')
 _OFFERED = re.compile(r'^\s*(\d+) · (.+?)\s*$', re.M)
 
 
@@ -1210,6 +1226,11 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
     try: offered = remember_offered(store, channel, chat, text)
     except Exception as e:
         logger.debug(f'could not keep the offered options for {channel}: {e}'); offered = []
+    if channel == 'whatsapp' and len(offered) > 1:
+        # the POLL is the choices (the owner, 2026-09-25: "don't need this choices if you have pick"). A number typed
+        # still answers - the list is remembered above - it is only not printed twice. Numbered lines that are the
+        # CONTENT (an fyi batch's members, above the lead-in) stay.
+        text = _CHOICES_BLOCK.sub('', str(text or '')).rstrip()
     msgs = []
     for part in str(text or '').split(chatformat.BREAK):
         shown = chatformat.render(part, channel)

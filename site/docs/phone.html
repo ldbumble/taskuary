@@ -128,8 +128,8 @@ conversation with two doors.</p>
 <h3 id="choosing">Choosing<a class="anchor" href="#choosing" aria-label="Link to this section">#</a></h3>
 <p>The phone is the desktop Assistant in a chat, word for word. Every button the desktop card draws is a
 numbered line here, and on WhatsApp the same choices come again as a <strong>poll</strong> under the message, so one
-tap picks. A number or a tap runs exactly what the desktop&#39;s button runs, and no model reads it. Only
-words you type go to the model.</p>
+tap picks - even when the only choice is <strong>Next</strong>. A number or a tap runs exactly what the desktop&#39;s button runs,
+and no model reads it. Only words you type go to the model.</p>
 <p><figure><img src="img/phone-choices.svg" alt="A number or a poll tap runs the desktop's action; Not ours asks how far, Send to agent asks which agent, an unclear checkout asks which repository; typed words go to the model" loading="lazy"><figcaption>A pick is the button; words are words.</figcaption></figure></p>
 <table>
 <thead>
@@ -140,7 +140,7 @@ words you type go to the model.</p>
 </thead>
 <tbody><tr>
 <td>a number, or a tap in the poll</td>
-<td>the desktop button with that name, run at once</td>
+<td>the desktop button with that name, run at once - and if the model is still answering something you typed, that answer is dropped and the pick goes first</td>
 </tr>
 <tr>
 <td><strong>Not ours</strong></td>
@@ -160,7 +160,7 @@ words you type go to the model.</p>
 </tr>
 <tr>
 <td><strong>More</strong></td>
-<td>the rest of a long message, then the same choices</td>
+<td>the rest of a long message - or, on a finished agent, its report - then the same choices</td>
 </tr>
 <tr>
 <td>an old number, after you have already replied</td>
@@ -171,6 +171,9 @@ words you type go to the model.</p>
 <td>the model reads it, with the same tools as the desktop. No typed word is a shortcut; only a number or a poll tap is a pill</td>
 </tr>
 </tbody></table>
+<p>Typed words are answered by the <strong>Assistant&#39;s</strong> brain - the same one, and the same model, as the Assistant tab
+(Settings → Triage &amp; agents → Assistant). A Claude Assistant runs at <strong>low effort</strong> unless its model names one
+(<code>claude-sonnet-5@medium</code>): a turn is a short answer, and Sonnet&#39;s own default is high.</p>
 <h3 id="approving-things">Approving things<a class="anchor" href="#approving-things" aria-label="Link to this section">#</a></h3>
 <p>A drafted reply comes to the chat with its <strong>Send the reply</strong> choice - the same button as on the desktop, as a
 number or a poll tap. Nothing goes out without that pick: approving on your phone is the same deliberate act as

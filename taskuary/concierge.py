@@ -213,6 +213,8 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             dflt = '' if model else ASSISTANT_DEFAULT.get(cli, '')
             if (model or '').startswith('effort:'): dflt, model = model, None       # codex: a gear is an effort, not a model
             if dflt and not dflt.startswith('effort:'): model = dflt
+            # the Assistant's effort, unless the pick names one (ASSISTANT_EFFORT)
+            if model and '@' not in model and llm_mod.ASSISTANT_EFFORT.get(cli): model = f'{model}@{llm_mod.ASSISTANT_EFFORT[cli]}'
             folder = config.home() / 'assistant'; folder.mkdir(parents=True, exist_ok=True)
             cwd = None if fast else str(folder)                  # no cwd = make_cli_llm's read-only gear: no tools, no permission bypass
             if dflt.startswith('effort:'):

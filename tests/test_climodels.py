@@ -52,8 +52,8 @@ class CatalogTests(unittest.TestCase):
         # the account's granted extras ride along with the catalog, and the friendly name is the label
         self.assertEqual(cat['choices'], ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-5[1m]'])
         self.assertEqual(cat['models'][0]['label'], 'Opus 5'); self.assertEqual(cat['source'], 'claude model catalog')
-        # NEVER an @effort pick for claude: that flag is codex's, and claude reads effort from settings.json
-        self.assertTrue(all(m['efforts'] == [] for m in cat['models']))
+        # claude's own levels, as its catalog lists them - Claude Code takes `--effort <level>` (effort_args)
+        self.assertEqual(cat['models'][0]['efforts'], ['low', 'max']); self.assertEqual(cat['models'][1]['efforts'], [])
 
     def test_an_unreadable_claude_catalog_does_not_take_the_picker_down(self):
         with tempfile.TemporaryDirectory() as d:
@@ -149,7 +149,7 @@ GPT-5.6 Sol (gpt-5.6-sol)
         seen = {}
         with mock.patch('taskuary.agents.run_cli', side_effect=lambda prof, p, t, **kw: (seen.update(prof), ('{}', None, None))[1]):
             llm.make_cli_llm(s, 'codex')('sys', 'user')
-        self.assertEqual(seen['model'], 'gpt-5.4-mini'); self.assertEqual(seen['args'][-2:], ['-c', 'model_reasoning_effort=low'])
+        self.assertEqual(seen['model'], 'gpt-5.4-mini@low')      # run_cli spells the effort in this CLI's own flag
         # and the main model pick on a run does the same
         from taskuary.agents import run_cli
         with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), \
@@ -157,3 +157,33 @@ GPT-5.6 Sol (gpt-5.6-sol)
             with self.assertRaises(RuntimeError): run_cli({'cmd': 'codex', 'args': ['exec'], 'model': 'gpt-5.6-sol@xhigh'}, 'hi', lambda *a: None)
         argv = pop.call_args[0][0]
         self.assertEqual(argv[argv.index('--model') + 1], 'gpt-5.6-sol'); self.assertIn('model_reasoning_effort=xhigh', argv)
+
+
+class EffortFlagTests(unittest.TestCase):
+    """2026-09-25: "change assistant to effort level of low so it goes faster" - every Assistant turn ran on sonnet's
+    default HIGH, because claude got no effort at all and codex's flag was the only one ever written."""
+
+    def _argv(self, prof):
+        from taskuary.agents import run_cli
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']),              mock.patch('taskuary.spawn.popen', side_effect=RuntimeError('stop')) as pop:
+            with self.assertRaises(RuntimeError): run_cli(prof, 'hi', lambda *a: None)
+        return pop.call_args[0][0]
+
+    def test_each_cli_gets_its_own_spelling(self):
+        self.assertEqual(climodels.effort_args('claude', 'low'), ['--effort', 'low'])
+        self.assertEqual(climodels.effort_args('codex', 'low'), ['-c', 'model_reasoning_effort=low'])
+        self.assertEqual(climodels.effort_args('gemini', 'low'), [])
+        argv = self._argv({'cmd': 'claude', 'args': ['-p'], 'model': 'claude-sonnet-5@low'})
+        self.assertEqual(argv[argv.index('--model') + 1], 'claude-sonnet-5'); self.assertEqual(argv[argv.index('--effort') + 1], 'low')
+        self.assertNotIn('model_reasoning_effort=low', argv)
+
+    def test_the_assistant_runs_low_unless_its_pick_names_an_effort(self):
+        from taskuary import concierge
+        s = MemoryStore()
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+        s.set_setting('concierge_ai', 'cli:coder', 't')
+        seen = []
+        with mock.patch('taskuary.llm.make_cli_llm', side_effect=lambda st, name, model, **kw: seen.append(model)):
+            s.set_setting('concierge_model', 'claude-sonnet-5', 't'); concierge.brain(s, fast=True)
+            s.set_setting('concierge_model', 'claude-sonnet-5@high', 't'); concierge.brain(s, fast=True)
+        self.assertEqual(seen, ['claude-sonnet-5@low', 'claude-sonnet-5@high'])

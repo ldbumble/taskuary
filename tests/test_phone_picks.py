@@ -149,16 +149,62 @@ class PollTests(unittest.TestCase):
         self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, 'Send to agent', poll=True), ('Send to agent', True))
         self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, 'Send to agent'), ('Send to agent', False), 'typed, the same words are words')
 
-    def test_a_single_choice_is_no_poll(self):
+    def test_a_single_choice_is_still_a_poll(self):
+        # the owner, 2026-09-25: "even if only next we should have poll to go next no?"
         s, _ = armed()
-        got = offer(s, {'say': 'x', 'item': ITEM, 'chips': [{'verb': 'mine', 'label': 'Make a task'}]})
-        self.assertIsNone(got[-1][1])
+        got = offer(s, {'say': 'x', 'item': ITEM, 'chips': [{'verb': 'next', 'label': 'Next'}]})
+        self.assertEqual(got[-1][1], ['Next'])
+        self.assertNotIn('Reply with one of', got[-1][0])
+
+    def test_a_finished_agents_card_offers_its_report(self):
+        # an agent finished the task behind a report that came again - the card asked "want to see the final report?"
+        # and offered only Next
+        s, _ = armed()
+        t = s.create_task({'Title': 'Why the nightly export times out', 'Kind': 'coding', 'Status': 'done'}, 'coder')
+        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nThe mass update made the export 6x larger.')
+        item = {'key': f'task:{t}', 'kind': 'agentdone', 'tid': t, 'ref': f'TQ-{t:04d}', 'title': 'Why the nightly export times out',
+                'lane': 'report', 'channel': 'report'}
+        got = offer(s, {'say': 'coder finished it.', 'item': item, 'chips': concierge.chips_for(s, item)})
+        self.assertEqual(got[-1][1], ['Mark done', 'Next', 'More'])
 
     def test_the_bridge_is_sent_the_poll(self):
         s, cid = armed()
         with mock.patch.object(messengers, '_wa') as wa:
             messengers.wa_send(s, JID, 'hello', connector_id=cid, poll=['A', 'B'])
         self.assertEqual(wa.call_args.args[2], {'jid': JID, 'text': 'hello', 'poll': {'name': 'Pick one', 'values': ['A', 'B']}})
+
+
+class PickJumpsTheQueueTests(unittest.TestCase):
+    """2026-09-25: a poll tap got its thumb, then waited a minute behind a typed turn still waiting on the model."""
+
+    def test_a_tap_stops_the_model_turn_in_flight_and_answers_at_once(self):
+        import threading, time
+        s, cid = armed()
+        offer(s, {'say': 'The export job failed again.', 'item': ITEM, 'chips': CHIPS})
+        started, sent = threading.Event(), []
+
+        def slow_say(store, text, key=None, actor='owner', cancel=None, **kw):
+            started.set()
+            for _ in range(200):                                # the model, thinking - until the tap cancels it
+                if cancel is not None and cancel.is_set(): raise RuntimeError('cancelled')
+                time.sleep(0.01)
+            return {'say': 'the late answer', 'item': None}
+
+        with mock.patch.object(messengers, 'react'), \
+             mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: sent.append(body)), \
+             mock.patch.object(concierge, 'say', side_effect=slow_say), \
+             mock.patch.object(concierge, 'restore_current', return_value=ITEM), \
+             mock.patch.object(ra, 'run_act', return_value='Next up: the invoice.') as ran:
+            typed = threading.Thread(target=ra._locked_respond, args=(s, 'whatsapp', JID, 'what is this about', cid))
+            typed.start(); self.assertTrue(started.wait(2))
+            t0 = time.time()
+            ra._locked_respond(s, 'whatsapp', JID, 'Next', cid, poll=True)
+            took = time.time() - t0
+            typed.join(3); self.assertFalse(typed.is_alive())
+        self.assertLess(took, 1.5, 'the tap must not wait out the model turn')
+        ran.assert_called_once()
+        self.assertTrue(any('Next up: the invoice.' in b for b in sent))
+        self.assertFalse(any('the late answer' in b or "couldn't answer" in b for b in sent), 'the cancelled turn says nothing')
 
 
 class UndoTests(unittest.TestCase):

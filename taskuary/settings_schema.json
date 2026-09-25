@@ -103,14 +103,14 @@
       "group": "Triage & agents",
       "label": "Assistant tab model",
       "type": "text",
-      "desc": "Override the quick gear for the brain above (e.g. sonnet, gpt-5.4-mini@low). Blank = the default.",
-      "help": "For a CLI this is its --model (Codex takes model@effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation."
+      "desc": "Override the quick gear for the brain above (e.g. sonnet, claude-sonnet-5@medium, gpt-5.4-mini@low). Blank = the default; a Claude pick with no @effort runs at low effort.",
+      "help": "For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation."
     },
     "assistant_ai": {
       "group": "Triage & agents",
       "label": "General agent brain",
       "type": "brain",
-      "desc": "Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble and the WhatsApp doorway.",
+      "desc": "Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble. Your phone talks to the Assistant, not this.",
       "help": "Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent."
     },
     "judge_ai": {

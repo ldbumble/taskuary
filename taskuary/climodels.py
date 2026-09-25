@@ -5,7 +5,8 @@ name, the reasoning levels each supports, hidden ones flagged), and the model it
 to lives in config.toml. A hand-typed list here said gpt-5 while the picker on the same machine
 said GPT-5.6-Sol; the owner rightly asked what it was. Claude Code keeps no such file, so its
 aliases stay static. A pick is spelled `model` or `model@effort` (gpt-5.4-mini@low); llm and
-agents turn the effort into codex's -c model_reasoning_effort=<effort>.
+agents turn the effort into the CLI's own flag (effort_args): codex's -c model_reasoning_effort=<effort>,
+claude's --effort <effort>.
 """
 import json, os, re, shutil, subprocess
 from functools import lru_cache
@@ -152,9 +153,10 @@ def claude_models() -> list:
     """The /model list, as Claude Code cached it.
 
     It writes a catalog per surface under cache/model-catalog/ and leaves the older file behind when a
-    signed-in account refetches, so the newest `fetchedAt` wins. `efforts` is deliberately EMPTY even
-    though every model lists reasoning levels: an @effort pick is translated into codex's
-    `-c model_reasoning_effort=`, and Claude Code takes its effort from settings.json, not from a flag.
+    signed-in account refetches, so the newest `fetchedAt` wins. `efforts` are the
+    catalog's own levels (thinking.effort_options), the default the one it badges: Claude Code grew
+    `--effort <level>` (effort_args), so an @effort pick reaches it. They were empty while it took its effort
+    only from settings.json - and every Assistant turn ran on sonnet's default HIGH (2026-09-25).
     """
     best, models = -1.0, []
     for p in sorted(claude_home().glob('cache/model-catalog/*.json')):
@@ -164,7 +166,7 @@ def claude_models() -> list:
         if when < best: continue
         rows = ((d.get('catalog') or {}).get('config') or {}).get('models') or []
         found = [{'id': m['id'], 'label': m.get('name') or m['id'], 'desc': (m.get('description') or '')[:120],
-                  'efforts': [], 'default_effort': ''} for m in rows if isinstance(m, dict) and m.get('id')]
+                  **_claude_efforts(m)} for m in rows if isinstance(m, dict) and m.get('id')]
         if found: best, models = when, found
     seen = {m['id'] for m in models}
     return models + [m for m in _claude_granted() if m['id'] not in seen] if models else []
@@ -250,6 +252,20 @@ def catalog(cli: str) -> dict:
                 'choices': [m['id'] for m in (models or STATIC['claude'])]}
     models = STATIC.get(cli, [])
     return {'models': models, 'current': {}, 'source': 'built-in', 'choices': [m['id'] for m in models]}
+
+
+def _claude_efforts(m: dict) -> dict:
+    opts = [o for o in ((m.get('thinking') or {}).get('effort_options') or []) if isinstance(o, dict) and o.get('id')]
+    return {'efforts': [o['id'] for o in opts], 'default_effort': next((o['id'] for o in opts if o.get('badge')), '')}
+
+
+def effort_args(cli: str, effort: str) -> list:
+    """The flag that sets reasoning effort, spelled the way THIS CLI spells it - [] for one we cannot spell.
+    Every CLI got codex's `-c model_reasoning_effort=`, which claude would have taken as an unknown option."""
+    if not effort: return []
+    if cli == 'codex': return ['-c', f'model_reasoning_effort={effort}']
+    if cli == 'claude': return ['--effort', effort]
+    return []
 
 
 def split_pick(pick: str) -> tuple:

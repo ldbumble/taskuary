@@ -130,11 +130,11 @@ is what you see if those cards cannot load.</li>
 <p>A CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent&#39;s own &#39;light model&#39; from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks.</p>
 <h3 id="assistant-tab-model">Assistant tab model<a class="anchor" href="#assistant-tab-model" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_model</code> · type: text · set on a card at the top of the page</p>
-<p>Override the quick gear for the brain above (e.g. sonnet, gpt-5.4-mini@low). Blank = the default.</p>
-<p>For a CLI this is its --model (Codex takes model@effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation.</p>
+<p>Override the quick gear for the brain above (e.g. sonnet, claude-sonnet-5@medium, gpt-5.4-mini@low). Blank = the default; a Claude pick with no @effort runs at low effort.</p>
+<p>For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation.</p>
 <h3 id="general-agent-brain">General agent brain<a class="anchor" href="#general-agent-brain" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_ai</code> · type: brain · set on a card at the top of the page</p>
-<p>Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble and the WhatsApp doorway.</p>
+<p>Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble. Your phone talks to the Assistant, not this.</p>
 <p>Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent.</p>
 <h3 id="where-runs-go">Where runs go<a class="anchor" href="#where-runs-go" aria-label="Link to this section">#</a></h3>
 <p><code>judge_ai</code> · type: brain · set on a card at the top of the page</p>

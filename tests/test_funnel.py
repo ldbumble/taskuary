@@ -1064,7 +1064,7 @@ class MemoryTests(unittest.TestCase):
         """"i clicked next on this text which should dismiss it but it's coming back" (2026-09-25): an Advisor idea
         about the finished task was said again overnight - same key, reworded by the model - and the rewording is
         new fingerprint, so the whole finished result was back on Next. A re-said idea read before is not news; an
-        idea the owner never saw still is."""
+        the Advisor's ideas have their own cards, so no idea brings a finished result back."""
         from taskuary import concierge
         s, settle = self._canonical()
         t = s.create_task({'Title': 'Look into the failed alert', 'Kind': 'coding', 'Status': 'open'}, 'o')
@@ -1084,7 +1084,34 @@ class MemoryTests(unittest.TestCase):
         say('TQ-0001 found the alert was refused by configuration - check the allowlist.'); settle()
         self.assertIsNone(walk())                                   # the same idea, reworded, is not a new result
         say('A second group is refused the same way.', key='idea:alert-2'); settle()
-        self.assertEqual(walk(), ('agentdone', t))                  # ...an idea never seen is
+        self.assertIsNone(walk())                                   # ...nor a new one: an idea is its own card (2026-09-25)
+
+    def test_a_task_the_owner_closed_by_sending_the_reply_is_not_agent_finished(self):
+        """The agent finished, a reply was drafted, the task waited - and the owner's send closed it minutes later.
+        Inside the evidence window that close was credited to the agent, and two answered tasks came back as "agent
+        finished"; an unread Advisor idea on a finished task held it there too (2026-09-25)."""
+        from taskuary import processing_unread
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'Grant budget access', 'Kind': 'general', 'Status': 'open'}, 'o')
+        mail(s, 'Grant budget access', who='Erin', email='erin@northwind.example', hours=2, tid=t)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        s.add_comment(t, 'coder', 'agent', 'The agent closed this itself: access granted.')
+        s.update_task(t, {'Status': 'done'}, 'coder'); settle()
+        s.add_comment(t, 'owner', 'human', 'Closed - the reply went out.')
+        s.update_task(t, {'Status': 'done'}, 'owner'); settle()                    # the send is the owner's edit (verdicts)
+        self.assertFalse([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t])
+        u = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        mail(s, 'Fix the export', who='Erin', email='erin@northwind.example', hours=2, tid=u)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        s.add_comment(u, 'coder', 'agent', 'The agent closed this itself: fixed.')
+        s.update_task(u, {'Status': 'done'}, 'coder'); settle()
+        from taskuary import concierge
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            concierge.surface(s, llm=lambda *a, **k: 'never')                 # the result is read
+        settle()
+        s.upsert_idea({'key': 'idea:export-again', 'kind': 'idea', 'text': 'The export fix may not hold.', 'sig': 'x',
+                       'action': {'type': 'note', 'tid': u}}, ago(0)); settle()
+        self.assertFalse([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == u and i.get('unread')])
 
     def test_a_finished_result_stays_read_when_its_mail_was_read_long_before_the_close(self):
         """The same ask, TQ-0740: the read that counts is the task's own, after the close. A note filed on the closed

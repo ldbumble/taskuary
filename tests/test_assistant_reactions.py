@@ -944,6 +944,17 @@ class WalkFromWordsTests(unittest.TestCase):
             self.assertIsNone(out.get('decision'), words); self.assertIsNone(out.get('proposal'), words)
             self.assertIn('Nothing is on the table', out['say'], words)
 
+    def test_an_answer_it_looked_up_survives_a_stray_decision_on_the_end(self):
+        """"What happened with TQ-0731" was read and answered, then "DECIDE: reply" - and the owner got
+        "Nothing is on the table" instead of the answer (the 2026-09-24 audit)."""
+        s = self._three()
+        tid = s.create_task({'Title': 'Update fails on a DLL', 'Kind': 'coding', 'Status': 'done'}, 'o')
+        turns = iter([f'CALL: {{"kind": "task.read", "params": {{"ref": "TQ-{tid:04d}"}}}}',
+                      'The update failed on a DLL; the agent drafted a reply.\nDECIDE: reply: tell them where it stands'])
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, f'what happened with TQ-{tid:04d}?', llm=lambda *a, **k: next(turns))
+        self.assertEqual(out['say'], 'The update failed on a DLL; the agent drafted a reply.')
+
     def test_words_land_on_the_fyi_batch_the_way_buttons_do(self):
         s = self._three()
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):

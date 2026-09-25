@@ -1580,7 +1580,7 @@ def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, acto
         # a setting is changed by NAME now (setting.set - validated against the schema, undo in the
         # receipt); a bare "change a setting" with no name gets the road, not a guess at a switch
         say_ = ('Name the setting and the value - "auto-drafts off", "poll every 5 minutes" - and I change it; '
-                'the receipt carries the undo. settings.list <group> names the knobs.')
+                'the receipt carries the undo.')              # never the look-up's own syntax: that is the model's
         rec(say_)
         return {'say': say_, 'options': [], 'decision': None}
     if words['verb'] == 'forward':
@@ -2720,8 +2720,12 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             return call_turn(store, tid, {'kind': 'task.create_from_text', 'params': {'kind': 'task', 'text': (decision.get('text') or text).strip()}},
                              None, text, actor)
         if verb in NEEDS:                              # a hand-off is NOT in NEEDS: the owner's words are its brief
-            say_ = ('Nothing is on the table. Say next and I will bring the next thing up, or name the one '
-                    'you mean - the sender or its TQ ref - and I will do it there.')
+            # an ANSWER from a look-up, with a stray decision on the end, keeps the answer: "what happened with TQ-0731"
+            # was read and answered well, then suggested "DECIDE: reply", and the whole answer became "Nothing is on the
+            # table" (2026-09-24). Without a read the words are a verb - "close it" answered "Ok." - and "Ok." would claim.
+            say_ = reply if (did_read and reply) else (
+                'Nothing is on the table. Say next and I will bring the next thing up, or name the one '
+                'you mean - the sender or its TQ ref - and I will do it there.')
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     # a switch is already a proposal on the task (proposals.py); a hand-off to a person is a DRAFT for approval

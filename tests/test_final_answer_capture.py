@@ -9,7 +9,7 @@ from tests.test_worker_events import Base, live
 def quiet_gates():
     return [mock.patch.object(selfclose, 'blocked', return_value=''), mock.patch.object(selfclose, '_mark', return_value=True),
             mock.patch.object(selfclose, 'stays_open', return_value=False), mock.patch.object(selfclose, '_wrap', return_value={'closed': True}),
-            mock.patch.object(selfclose, 'mode', return_value='auto')]
+            mock.patch.object(selfclose, 'mode', return_value='on')]
 
 
 class FinalAnswer(Base):

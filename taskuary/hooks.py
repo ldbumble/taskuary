@@ -335,16 +335,10 @@ def receive(payload: dict, cli: str = 'claude') -> dict:
     if cli == 'claude':
         for n in witness.claude_notes(payload): t.witness.note(n)
     _events(t, payload)
-    # ...and the one hook that is not just an observation: Stop means the agent has finished
-    # TALKING, which is the closest thing a pty ever gives us to "the run is over". Whether it
-    # actually is over is selfclose's judgement, on its own thread - a hook has three seconds
-    # and must never hold the agent (see selfclose.on_stop for the gates).
-    closing, st = False, getattr(t, 'store', None)
-    if str(payload.get('hook_event_name') or '') == 'Stop' and st:
-        from . import selfclose
-        closing = selfclose.mode(st) == 'auto'
-        if closing: selfclose.spawn_on_stop(st, t, str(payload.get('last_assistant_message') or ''))
-    return {'bound': True, 'sid': t.sid, 'closing': closing}
+    # Stop is an observation like the rest: the agent finished a RESPONSE, not the task. Nothing closes
+    # on it - only `taskuary --done` (selfclose.declare) or the owner ends a task (2026-09-24). The answer
+    # used to carry a `closing` flag for a judge that no longer exists; nothing read it.
+    return {'bound': True, 'sid': t.sid}
 
 
 # ── Codex's spool: the hook appends, we tail ─────────────────────────────────────────────────────

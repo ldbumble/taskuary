@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
 
-from .store import task_ref
+from .store import task_ref, auto_code_enabled
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda, _OOO
 from .funnel_presentation import present as _present
 from .processing_order import attention_band, priority_rank
@@ -496,7 +496,7 @@ def not_started_why(store, tid) -> str:
         reason = str(r.get('Reason') or '')
         if AUTO_OFF in reason:
             return 'Triage did not start it: ' + reason.split(AUTO_OFF, 1)[1].strip().rstrip('.') + '.' + old
-    if store.get_settings().get('coder_auto_enabled', '1') != '1' and (t.get('Kind') or '') == 'coding':
+    if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
         return f'Auto-start is off, so {who} waits for you to press Start.' + old
     return f'It was handed to {who} and nothing has started it.' + old
 

@@ -11,7 +11,7 @@ from loguru import logger
 from .routing import ask_line, route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
-from .store import task_ref
+from .store import task_ref, auto_code_enabled
 from . import senders
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -156,7 +156,7 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
         from . import general
         if not general.provider_options(store): return False, 'no assistant provider is configured (Settings -> AI) - open it from the task once one is'
     elif kind == 'coding':
-        if cfg.get('coder_auto_enabled') != '1': return False, 'auto-dispatch is off (Settings) - start the session from the task'
+        if not auto_code_enabled(cfg): return False, 'auto-dispatch is off (Settings) - start the session from the task'
     else: return False, 'a person has to do this one - on your list for you'
     ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
     if ok or not why.startswith('first message from'): return ok, why
@@ -938,7 +938,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             'reply' if (follow or {}).get('intent') == 'reply_only' else (store.get_task(tid) or {}).get('Kind'))
     # both worker kinds are auto-dispatched (PW-069); a personal task or a held one still waits on the owner
     dispatched = kind in ('coding', 'general') and not held and not msg.get('no_auto') and (
-        cfg.get('coder_auto_enabled') == '1' if kind == 'coding' else cfg.get('general_auto_enabled', '1') == '1')
+        auto_code_enabled(cfg) if kind == 'coding' else cfg.get('general_auto_enabled', '1') == '1')
     if lvl == 'all' or (lvl == 'needs_me' and not dispatched):
         _notify_new(store, msg, tid, mid,
                     'a question for you' if kind == 'reply' else 'new task on your list', rid=new_rid)

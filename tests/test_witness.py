@@ -95,7 +95,7 @@ class HookWiringTests(unittest.TestCase):
         self._fake('x', 3, argv=['codex'])                                               # codex never takes a claude hook
         r = hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'PostToolUse', 'tool_name': 'Edit', 'tool_input': {'file_path': r'C:\repo\a.py'}})
         # `closing` says whether this event handed the session to selfclose (Stop only)
-        self.assertEqual(r, {'bound': True, 'sid': 'b', 'closing': False}); self.assertEqual(b.ext_id, 'S1'); self.assertEqual(b.witness.tool['name'], 'Edit')
+        self.assertEqual(r, {'bound': True, 'sid': 'b'}); self.assertEqual(b.ext_id, 'S1'); self.assertEqual(b.witness.tool['name'], 'Edit')
         a.last = time.time()                                                             # a wakes up - but S1 stays bound to b
         hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'Stop', 'last_assistant_message': 'done'})
         self.assertTrue(b.witness.done_at); self.assertIsNone(a.witness.done_at)

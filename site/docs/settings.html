@@ -312,13 +312,12 @@ is what you see if those cards cannot load.</li>
 <p>The file is the project-LOCAL settings Claude itself gitignores, so nothing is committed. Existing hooks are kept and only Taskuary&#39;s own entries (marked by the /api/hooks/claude endpoint) are replaced. Removing them by hand is safe; they are rewritten the next time a session opens.</p>
 <p>CLAUDE CODE ONLY. The hook format is Claude&#39;s, so on codex, copilot, qwen, devin or any other CLI this switch does nothing at all — those sessions are read from the terminal whatever it says.</p>
 <h3 id="let-a-finished-agent-close-its-own-task">Let a finished agent close its own task<a class="anchor" href="#let-a-finished-agent-close-its-own-task" aria-label="Link to this section">#</a></h3>
-<p><code>agent_self_close</code> · type: select</p>
-<p>An agent that has finished wraps itself up: the report is written from its transcript and the reply to whoever asked is drafted for your approval.</p>
-<p>Options: <code>1</code>, <code>ask</code>, <code>0</code></p>
+<p><code>agent_self_close</code> · type: switch</p>
+<p>An agent that says it has finished wraps itself up: the report is written from its transcript and the reply to whoever asked is drafted for your approval. A session you opened yourself is yours to complete.</p>
 <p>Done was a button, which meant a task finished at 2am produced no report and the person who asked heard nothing until somebody opened the tab. The agent knows it has finished long before you look, so it says so.</p>
-<p>The explicit road is a command every session is told about in its prompt: taskuary --done with one sentence. That closes the task, files the report from what is on screen, and drafts the reply - which still waits for YOUR approval before it leaves.</p>
-<p>yes = that, plus a safety net: when a Claude Code session stops talking, the end of its transcript is read and the task closes only if it plainly reads as finished. A session parked on a question never closes - the screen is checked for one first, and an unsure judge does nothing.</p>
-<p>only when it says so = the command works, the silent ending does not. never = the Done button, exactly as before.</p>
+<p>Every session is told about one command in its prompt: taskuary --done with one sentence. That closes the task, files the report from what is on screen, and drafts the reply - which still waits for YOUR approval before it leaves. A session that merely stops talking never closes anything.</p>
+<p>One exception, and the task decides it: when you start or continue a session on a task yourself, the task is marked stay:open. There the command is refused - the agent&#39;s sentence is filed on the task and you mark it done.</p>
+<p>Off: the Done button, exactly as before.</p>
 <h3 id="agents-at-once">Agents at once<a class="anchor" href="#agents-at-once" aria-label="Link to this section">#</a></h3>
 <p><code>auto_sessions</code> · type: number</p>
 <p>How many unattended agent sessions may run together. The rest queue.</p>

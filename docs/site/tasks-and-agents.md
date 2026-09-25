@@ -33,11 +33,12 @@ it leaves your work rail, and the "yours to end" mark comes off.
 | **Hand it to a person** | Forwards it, then Mark done | never |
 | **Not ours** / **Not a task** | Deleted if nothing was done on it, otherwise Mark done | never |
 | **Mark done** on a channel that cannot send (the draft stays unsent) | Mark done | never |
-| **An agent says it is finished** (`taskuary --done`) | The session is written up; the task waits for you with the draft if a reply is owed, otherwise it is done | a reply is owed |
+| **An agent says it is finished** (`taskuary --done`) | The session is written up; the task waits for you with the draft if a reply is owed, otherwise it is done | a reply is owed, or you opened the session yourself |
 | **Its pull request is merged or closed** | Same as an agent saying it is finished | a reply is owed |
 
 A task an agent or a merged pull request closed stays on your work rail until you have read it.
-A session you started yourself tells the agent to leave the ending to you.
+A session you started yourself is yours to complete: the agent is told so, and if it says it is
+finished anyway its sentence is filed on the task and the task stays open until you mark it done.
 
 These never end a task:
 

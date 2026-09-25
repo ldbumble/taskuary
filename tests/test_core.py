@@ -200,6 +200,15 @@ class CoreTests(unittest.TestCase):
         self.assertNotIn('auto_draft_enabled', d)                          # every question is drafted - no setting (2026-09-25)
         self.assertEqual(MemoryStore().get_settings()['coder_auto_enabled'], '1')
 
+    def test_one_read_of_auto_start_with_the_seeded_default(self):
+        """Missing read as off in ingest and the assistant but on in the funnel's line: one accessor, missing = seeded '1'."""
+        self.assertTrue(store_mod.auto_code_enabled({}))
+        self.assertTrue(store_mod.auto_code_enabled({'coder_auto_enabled': '1'}))
+        self.assertFalse(store_mod.auto_code_enabled({'coder_auto_enabled': '0'}))
+        s = MemoryStore(); s.set_setting('coder_auto_enabled', '0', 'owner')
+        self.assertFalse(store_mod.auto_code_enabled(s))
+        self.assertEqual(store_mod.DEFAULT_SETTINGS['coder_auto_enabled'], '1')
+
     def test_out_of_the_box_timeline_fade_is_normal(self):
         self.assertEqual(store_mod.DEFAULT_SETTINGS['timeline_fade'], 'normal')
         self.assertEqual(MemoryStore().get_settings()['timeline_fade'], 'normal')

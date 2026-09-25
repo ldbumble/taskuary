@@ -291,19 +291,9 @@
     "agent_self_close": {
       "group": "Coder agent",
       "label": "Let a finished agent close its own task",
-      "type": "select",
-      "options": [
-        "1",
-        "ask",
-        "0"
-      ],
-      "optionLabels": {
-        "0": "never - I press Done",
-        "1": "yes - and judge a silent ending too",
-        "ask": "only when it says so"
-      },
-      "desc": "An agent that has finished wraps itself up: the report is written from its transcript and the reply to whoever asked is drafted for your approval.",
-      "help": "Done was a button, which meant a task finished at 2am produced no report and the person who asked heard nothing until somebody opened the tab. The agent knows it has finished long before you look, so it says so.\n\nThe explicit road is a command every session is told about in its prompt: taskuary --done with one sentence. That closes the task, files the report from what is on screen, and drafts the reply - which still waits for YOUR approval before it leaves.\n\nyes = that, plus a safety net: when a Claude Code session stops talking, the end of its transcript is read and the task closes only if it plainly reads as finished. A session parked on a question never closes - the screen is checked for one first, and an unsure judge does nothing.\n\nonly when it says so = the command works, the silent ending does not. never = the Done button, exactly as before."
+      "type": "switch",
+      "desc": "An agent that says it has finished wraps itself up: the report is written from its transcript and the reply to whoever asked is drafted for your approval. A session you opened yourself is yours to complete.",
+      "help": "Done was a button, which meant a task finished at 2am produced no report and the person who asked heard nothing until somebody opened the tab. The agent knows it has finished long before you look, so it says so.\n\nEvery session is told about one command in its prompt: taskuary --done with one sentence. That closes the task, files the report from what is on screen, and drafts the reply - which still waits for YOUR approval before it leaves. A session that merely stops talking never closes anything.\n\nOne exception, and the task decides it: when you start or continue a session on a task yourself, the task is marked stay:open. There the command is refused - the agent's sentence is filed on the task and you mark it done.\n\nOff: the Done button, exactly as before."
     },
     "auto_sessions": {
       "group": "Coder agent",

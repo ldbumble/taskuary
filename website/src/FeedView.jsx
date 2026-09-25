@@ -49,7 +49,7 @@ import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./se
 import { rowLane } from "./rowLane.js";
 import { extraTriageFields, intentLabel, kindLabel, latestTriageVerdict, legacyTriageVerdict, relationshipLabel } from "./triageVerdict.js";
 import ReplyFiles from "./ReplyFiles.jsx";
-import { timelinePhases } from "./taskLifecycle.js";
+import { AGENT, timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
 import { laneMeta } from "./funnelPile.js";
 
@@ -2464,7 +2464,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                     state={failedTriage ? "current" : triageStatus !== "not routed" ? "done" : "idle"}
                     onOpen={() => setTab("why")} />
                   <StoryTimelineStep title="Agent"
-                    status={onIt ? (onIt.waiting ? "waiting" : "working") : chatTask ? "assistant chat" : rep ? "finished" : "not started"}
+                    status={onIt ? (onIt.waiting ? AGENT.waiting : AGENT.working) : chatTask ? "assistant chat" : rep ? AGENT.saved : AGENT.idle}
                     summary={onIt ? (onIt.waiting ? `${onIt.agent} needs your answer.` : `${onIt.agent} is working in the live terminal.`)
                       : chatTask ? "The assistant conversation is available here."
                       : rep ? (reportResult || "The agent finished; open for the result.")

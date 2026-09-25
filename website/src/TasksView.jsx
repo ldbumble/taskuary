@@ -51,7 +51,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import {
-  agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -902,12 +902,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
         onClick={isGeneral ? resumeGeneralAgent : continueSession}>
-        {startingAgent === "resume" ? "Continuing…" : "Continue this session"}</Button>}
+        {startingAgent === "resume" ? "Continuing…" : "Continue session"}</Button>}
       {canSave && <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
         disabled={!!wrapping} sx={canContinue ? barBtn : primaryBtn}
         startIcon={<DoneAllIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
         title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
-        onClick={wrapUp}>{isGeneral ? "Save this conversation's result" : "Save stopped run result"}</Button>}
+        onClick={wrapUp}>Save and end session</Button>}
       {!isGeneral && <>
         {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
         <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
@@ -1011,7 +1011,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Typography>
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg,
                     color: PILL_COLORS.red.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
-                  {String(task.Tags || "").split(/[\s,]+/).includes("interrupted") && <Chip size="small" label="interrupted"
+                  {String(task.Tags || "").split(/[\s,]+/).includes("interrupted") && <Chip size="small" label="agent stopped"
                     title="Taskuary closed while an agent was working this. Nothing restarts until you choose an agent."
                     sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e", flexShrink: 0 }} />}
                   <StateChip task={task} />
@@ -1079,7 +1079,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     {t.Title}
                   </Typography>
                   {/* the list row said this and the task page did not, so a held task looked merely open */}
-                  {interruptedTask && <Chip size="small" label="interrupted"
+                  {interruptedTask && <Chip size="small" label="agent stopped"
                     title="Taskuary closed while an agent was working this. Nothing restarts until you choose one."
                     sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e", flexShrink: 0 }} />}
                   {/* A LIVE SESSION HIDES THE TASK CARD ENTIRELY (the gate is !term?.alive below), so
@@ -1396,7 +1396,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         hour (the owner, 2026-09-11, TQ-0499). agentState is the session's own word
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
                     <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
-                      : agentState === "needs you" ? `${agentName(t)} needs you`
+                      : agentState === AGENT.waiting ? says("parked", agentName(t))
                         : `${agentName(t)} is working`}
                     chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" {...stageProps("agent")}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
@@ -1410,7 +1410,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={startingAgent === "resume" ? <CircularProgress size={11} /> : <HistoryIcon sx={{ fontSize: 14 }} />}
                               title={`Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}.`}
-                              onClick={continueSession}>Continue this session</Button>
+                              onClick={continueSession}>Continue session</Button>
                           ) : (
                             <Button size="small" variant="contained" disableElevation
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
@@ -1502,7 +1502,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         </Button>}
                         {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
-                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
+                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save and end session</Button>}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
                             become the profile, brain and model, and the next press starts it */}
                         {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
@@ -1639,7 +1639,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     border: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
                     <Box sx={{ width: 8, height: 8, borderRadius: 99, bgcolor: "#6f8a6e", flexShrink: 0 }} />
                     <Typography variant="body2" sx={{ flex: 1, minWidth: 0, color: INK, fontSize: 12.5 }} noWrap>
-                      {agentState === "needs you" ? says(subState(term), agentName(t)) : `${agentName(t)} is working`} in its session — it keeps running while you read the task.
+                      {agentState === AGENT.waiting ? says(subState(term), agentName(t)) : `${agentName(t)} is working`} in its session — it keeps running while you read the task.
                     </Typography>
                     <Button size="small" variant="contained" disableElevation sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                       onClick={() => setPeek(false)}>Back to the session</Button>
@@ -2111,8 +2111,8 @@ const Fold = ({ title, children }) => (
 );
 
 // ONE ROW ON A DESKTOP, TWO ON A PHONE. The bar is flexShrink: 0 so it never loses a button, which
-// at 390px meant it kept its width by sitting ON the title ("A… w…" under Continue this session,
-// Save this c… cut off at the card's edge, 2026-09-18). Below sm the bar takes the whole next line.
+// at 390px meant it kept its width by sitting ON the title ("A… w…" under the continue button,
+// the save button cut off at the card's edge, 2026-09-18). Below sm the bar takes the whole next line.
 const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action }) => (
   <Box onClick={onToggle} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
     cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,

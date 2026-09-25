@@ -1096,7 +1096,7 @@
   "lanes": [
    {
     "lane": "blocked",
-    "word": "agent waving",
+    "word": "agent waiting on you",
     "role": "you",
     "n": 0
    },
@@ -1137,6 +1137,12 @@
     "n": 0
    },
    {
+    "lane": "saved",
+    "word": "session saved",
+    "role": "working",
+    "n": 0
+   },
+   {
     "lane": "broken",
     "word": "a check failed",
     "role": "bad",
@@ -1168,7 +1174,7 @@
    },
    {
     "lane": "working",
-    "word": "working",
+    "word": "agent working",
     "role": "working",
     "n": 2
    }

@@ -404,7 +404,7 @@ def asking() -> dict | None:
 # of lanes the pile already carries - nothing is judged here (2026-09-23).
 GROUPS = (('people', 'People want'), ('you', 'You wanted'), ('agents', 'Agents waiting'), ('read', 'Nothing to decide'),
           ('passed', 'You passed'))
-_AGENT_LANES = {'blocked', 'stopped', 'queued', 'working', 'broken', 'unjudged'}
+_AGENT_LANES = {'blocked', 'stopped', 'saved', 'queued', 'working', 'broken', 'unjudged'}
 AGENT_CARD_LANES = {'blocked', 'stopped', 'queued', 'working', 'saved'}     # the lanes whose card is an agent's
 ROWS_PER_GROUP = 5
 

@@ -70,14 +70,14 @@ test("a box means an item you can tick, and the job is not said twice", () => {
 test("a paused assistant task exposes resume instead of pretending nobody has worked it", () => {
   const cards = read("assistantCards.jsx");
   const agent = cards.slice(cards.indexOf("export function AgentCard"), cards.indexOf("export function MeetingCard"));
-  assert.match(agent, /card\.paused \? "conversation paused"/);
+  assert.match(agent, /card\.paused \? "agent stopped"/);
   assert.match(agent, /\/api\/tasks\/\$\{card\.tid\}\/resume/);
-  assert.match(agent, /"Continue this session"/);
+  assert.match(agent, /"Continue session"/);
   assert.match(agent, /card\.paused && card\.tid && <CombinedTaskText/);
   const tasks = read("TasksView.jsx");
   assert.match(tasks, /const resumeGeneralAgent = async/);
   // one set of words for the one act, whichever agent held the conversation (2026-09-15)
-  assert.match(tasks, /"Continue this session"/);
+  assert.match(tasks, /"Continue session"/);
   assert.match(tasks, /const continueSession = async/);
   assert.match(tasks, /\/api\/tasks\/\$\{id\}\/continue-session/);
 });

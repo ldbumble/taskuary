@@ -75,4 +75,4 @@ def test_the_walk_line_reads_its_counting_words_from_the_vocabulary():
     assert 'summarize(items).lead' in view
     assert 'stateOf(i, laneMeta(i.lane).word)' in cards
     assert '["landed", "report"]' not in view + walk, 'the third copy of the counting words is gone'
-    assert 'agent waving' not in walk and 'asked you' not in walk
+    assert 'agent waiting on you' not in walk and 'asked you' not in walk

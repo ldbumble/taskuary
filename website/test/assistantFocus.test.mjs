@@ -23,7 +23,7 @@ test("a proposed action is a reply card with its own words", () => {
 test("an agent that stopped is the agent card and names who is waiting", () => {
   const f = assistantFocus(item({ kind: "agent", lane: "blocked", agent: "codex" }));
   assert.equal(f.card, "agent");
-  assert.equal(f.lead, "codex stopped and is waiting on you.");
+  assert.equal(f.lead, "codex is waiting on you.");
 });
 
 test("work nobody is on is the task, and it is on you", () => {

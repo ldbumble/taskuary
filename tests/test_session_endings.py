@@ -102,3 +102,19 @@ class MergedPullRequestOwesNoReplyTests(unittest.TestCase):
         draft.assert_not_called()
         self.assertFalse(out.get('drafting'))
         self.assertEqual(s.list_reviews('pending'), [])
+
+
+class SavedIsItsOwnLaneTests(unittest.TestCase):
+    def test_a_session_you_ended_is_session_saved_on_the_rail(self):
+        """A1 + the one vocabulary: `saved` (💾 session saved), never `stopped` (⏹ agent stopped)."""
+        from test_funnel import ago
+        from taskuary import processing_unread
+        s = MemoryStore(); tid = handed(s, Status='open')
+        s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'Channel': 'email', 'Subject': 'Export', 'FromName': 'Erin Blake',
+                       'FromEmail': 'erin@northwind.example', 'SentAt': ago(1), 'BodyText': 'Is it fixed?', 'Status': 'routed'})
+        s.tag_task(tid, terminal.SAVED, True, 'owner')
+        s.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            lanes = [i['lane'] for i in processing_unread.build(s, live_state=[], include_read=True)['items'] if i.get('tid') == tid]
+        self.assertEqual(lanes, ['saved'])
+        self.assertEqual(funnel.LANE_WORDS['saved'][0], 'session saved')

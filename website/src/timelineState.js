@@ -1,6 +1,6 @@
 // What a Timeline row IS, in one word — and the one place that DECIDES it. The words themselves
 // are not here any more: they live in taskuary/lanes.json with the work rail's and the chat's, so
-// one situation cannot be "agent waving" on one tab and something else on another (the owner,
+// one situation cannot be "agent waiting on you" on one tab and something else on another (the owner,
 // 2026-09-16: "we need this unified and the timeline should have this as well"). This file still
 // owns stateOf - which state a row is in - because that is a judgement about a row, not a word.
 //
@@ -18,12 +18,12 @@ import vocab from "../../taskuary/lanes.json" with { type: "json" };
 const WORDS = Object.fromEntries([...vocab.lanes, ...vocab.kinds, ...vocab.states]
   .map(({ key, counted, ...meta }) => [key, meta]));
 
-// Which shared word each Timeline state wears. The six on the right of this map exist only here -
+// Which shared word each Timeline state wears. The seven on the right of this map exist only here -
 // a row that is no longer live work - and live in lanes.json's `states`; the rest are the very
 // same situations the work rail names, pointed at the one entry that owns the word.
 const OF = {
   triaging: "triaging", error: "unjudged", waving: "blocked", working: "working",
-  reply: "approve", held: "held", mine: "mine", done: "agentdone", withdrawn: "withdrawn",
+  reply: "approve", held: "held", mine: "mine", done: "closed", withdrawn: "withdrawn",
   answered: "answered", theirs: "theirs", todo: "yours", fyi: "fyi",
 };
 export const STATES = Object.fromEntries(Object.entries(OF).map(([key, word]) => [key, WORDS[word]]));

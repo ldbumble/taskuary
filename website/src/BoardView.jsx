@@ -24,6 +24,7 @@ import { isAgentKind, isGeneralKind } from "./autostart.js";
 import { onLive } from "./live.js";
 import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark, assignedAgent } from "./ui.jsx";
+import { AGENT } from "./taskLifecycle.js";
 
 // Not every ask is about a codebase - "what does this policy mean", "draft me a note", "prepare
 // me for this meeting". The task carries `repo:none`, which is the one answer the picker could
@@ -255,6 +256,8 @@ const localToday = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
+// a run's status in the agent vocabulary the rest of the app speaks (taskLifecycle.AGENT)
+const RUN_WORD = { running: AGENT.working, stopped: AGENT.stopped, failed: AGENT.stopped, error: AGENT.stopped };
 const COLS = [
   { key: "queued", title: "Queued", dot: "#867f74", status: "open" },
   { key: "working", title: "Agent working", dot: "#6f8a6e", status: "in_progress" },
@@ -485,7 +488,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                       sx={{ height: 15, fontSize: 8.5, bgcolor: "#e3e6e1", color: "#47654a",
                         "& .MuiChip-label": { px: 0.55 }, "& .MuiChip-icon": { ml: 0.35 } }} />}
                     {t.RunStatus && (
-                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.RunStatus}`
+                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${RUN_WORD[t.RunStatus] || t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
                         sx={{ height: 15, fontSize: 8.5, fontWeight: 700, "& .MuiChip-label": { px: 0.7 },
                           bgcolor: t.RunStatus === "running" ? "#eae4d8" : t.RunStatus === "error" ? "#f0e2e4" : "#dfeade",

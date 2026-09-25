@@ -253,6 +253,55 @@ and topic history, the learned profile, and reports from related closed tasks.</
 </tbody></table>
 <p><strong>Mark done</strong> is stronger than all of them: it closes the task <em>and</em> ends any live session,
 because a finished task should not leave an orphan process running.</p>
+<h3 id="what-an-agent-is-doing">What an agent is doing<a class="anchor" href="#what-an-agent-is-doing" aria-label="Link to this section">#</a></h3>
+<p>An agent is always in one of six states. Each has one word and one mark, and the work rail, the
+Timeline, the task page, the Board, the assistant&#39;s cards and the phone all use the same ones.</p>
+<table>
+<thead>
+<tr>
+<th>Mark</th>
+<th>State</th>
+<th>What it means</th>
+<th>Your move</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>⏳</td>
+<td><strong>waiting to start</strong></td>
+<td>Handed to an agent, not running yet</td>
+<td><strong>Start now</strong></td>
+</tr>
+<tr>
+<td>⚙️</td>
+<td><strong>agent working</strong></td>
+<td>Running, and needs nothing from you</td>
+<td><strong>Leave a note</strong> for when it stops</td>
+</tr>
+<tr>
+<td>👋</td>
+<td><strong>agent waiting on you</strong></td>
+<td>Running, and it asked you something, needs your approval, or is stuck</td>
+<td>Answer it</td>
+</tr>
+<tr>
+<td>💾</td>
+<td><strong>session saved</strong></td>
+<td>You ended it with <strong>Save and end session</strong>; its report is written</td>
+<td><strong>Continue session</strong>, or <strong>Mark done</strong></td>
+</tr>
+<tr>
+<td>⏹</td>
+<td><strong>agent stopped</strong></td>
+<td>It ended without finishing: a crash, a closed pane, Taskuary closing</td>
+<td><strong>Continue session</strong>, or hand it on</td>
+</tr>
+<tr>
+<td>✅</td>
+<td><strong>agent finished</strong></td>
+<td>The agent, or its merged pull request, closed the task</td>
+<td>Read the result</td>
+</tr>
+</tbody></table>
 <p>The saved result is deliberately short. Every finished coding session also writes a full Markdown
 artifact with that result and the complete transcript — <strong>Work details → Full artifact</strong> on the
 task page.</p>
@@ -339,7 +388,7 @@ triage, and the agent is seeded from it instead of from <code>CODER.md</code>&#3
 </tr>
 <tr>
 <td><strong>Your task</strong></td>
-<td>A person&#39;s ask, a reply ready for your yes, an agent waiting on you, a hand-off that has not started, a stopped agent, a check that failed, a task an agent finished</td>
+<td>A person&#39;s ask, a reply ready for your yes, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a check that failed, a task an agent finished</td>
 <td>Passed work after 3 hours</td>
 </tr>
 <tr>

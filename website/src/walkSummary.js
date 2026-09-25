@@ -12,7 +12,7 @@ export const GROUPS = [
   { key: "passed", word: "You passed" },
 ];
 
-const AGENT_LANES = new Set(["blocked", "stopped", "queued", "working", "broken", "unjudged"]);
+const AGENT_LANES = new Set(["blocked", "stopped", "saved", "queued", "working", "broken", "unjudged"]);
 const READ_LANES = new Set(["report", "fyi"]);
 
 export const groupOf = (i) => {

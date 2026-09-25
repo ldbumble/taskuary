@@ -21,7 +21,7 @@ test("every sub-state has one sentence and the request's words ride on it", () =
   for (const sub of Object.keys(lanes.lanes.find((l) => l.key === "blocked").says)) assert.ok(says(sub, "coder").startsWith("coder "), sub);
   assert.equal(says("stalled", "coder", "rate limit: resets at 3pm"), "coder is stuck - rate limit: resets at 3pm");
   assert.equal(says("asking", "codex", "Which  branch?"), "codex asked you: Which branch?");
-  assert.equal(says("parked", "coder", "the screen said this"), "coder stopped and is waiting on you");
+  assert.equal(says("parked", "coder", "the screen said this"), "coder is waiting on you");
 });
 
 test("the walk's lead, the hand-raise and the Timeline read the same sentence", () => {

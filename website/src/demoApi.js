@@ -248,7 +248,7 @@ const demoReply = (taskId, asked) => {
 const scriptedItemLine = (item) => {
   if (!item) return "The scripted demo pipe is clear. Nothing here connects to a mailbox, an agent, or an AI.";
   if (item.kind === "agent") return item.asking
-    ? `${item.agent || "The coder"} stopped on ${item.ref} and needs one choice: ${item.preview || item.why}`
+    ? `${item.agent || "The coder"} is waiting on you on ${item.ref} - one choice: ${item.preview || item.why}`
     : `${item.ref} is still with ${item.agent || "the coder"}. Nothing needs you there until it stops.`;
   if (item.kind === "review") return `${item.who || "The sender"} is waiting on \u201c${item.title}\u201d. The invented draft is ready below; approving it in this demo sends nothing.`;
   if (item.kind === "report") return `${item.title} landed normally. Open the recorded report below if you want the detail.`;

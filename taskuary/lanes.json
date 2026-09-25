@@ -3,17 +3,17 @@
   "lanes": [
     {
       "key": "blocked",
-      "word": "agent waving",
+      "word": "agent waiting on you",
       "role": "you",
       "mark": "👋",
-      "hint": "an agent stopped and is waiting on you — it is blocking work",
+      "hint": "an agent is waiting on you — it asked, needs your approval or is stuck, and it is blocking work",
       "loud": true,
       "_says": "the ONE sentence each sub-state of this lane gets, on every surface (workerstate.says / funnelPile.says). `line` when the request has words, `bare` when it does not. asking = a question, approval = a permission, stalled = a turn that died on a wall (rate limit, token ceiling) with the CLI alive at its prompt, parked = quiet at its prompt with nothing recorded",
       "says": {
         "asking": { "bare": "{agent} asked you something", "line": "{agent} asked you: {text}" },
         "approval": { "bare": "{agent} needs your approval", "line": "{agent} needs your approval: {text}" },
         "stalled": { "bare": "{agent} is stuck", "line": "{agent} is stuck - {text}" },
-        "parked": { "bare": "{agent} stopped and is waiting on you" }
+        "parked": { "bare": "{agent} is waiting on you" }
       }
     },
     {
@@ -60,6 +60,13 @@
       "hint": "an agent worked this and left without finishing - continue the session, or hand it on"
     },
     {
+      "key": "saved",
+      "word": "session saved",
+      "role": "working",
+      "mark": "💾",
+      "hint": "you ended the agent's session - its report is written; continue it, or mark the task done"
+    },
+    {
       "key": "broken",
       "word": "a check failed",
       "role": "bad",
@@ -97,7 +104,7 @@
     },
     {
       "key": "working",
-      "word": "working",
+      "word": "agent working",
       "role": "working",
       "mark": "⚙️",
       "hint": "an agent has it — nothing for you until it stops or asks; it moves up when it needs your input"
@@ -106,7 +113,7 @@
   "kinds": [
     {
       "key": "agentdone",
-      "word": "done",
+      "word": "agent finished",
       "role": "done",
       "mark": "✅",
       "hint": "the agent finished and its result is ready to read"
@@ -120,6 +127,13 @@
     }
   ],
   "states": [
+    {
+      "key": "closed",
+      "word": "done",
+      "role": "done",
+      "mark": "✅",
+      "hint": "the task is closed - by you, or by the agent that finished it"
+    },
     {
       "key": "triaging",
       "word": "triaging",

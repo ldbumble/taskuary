@@ -347,7 +347,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or getattr(session, 'sid', None), 'close': close, 'mode': 'assistant'})
         last = next((m['content'][0]['text'] for m in reversed(general.history(store, tid)) if m['role'] == 'assistant'), '')
         # THE RESULT IS FILED, NOT JUST HANDED BACK. This branch returned `report: last` to whoever
-        # called it and wrote nothing but a human note, so pressing "Save this conversation's result"
+        # called it and wrote nothing but a human note, so pressing save on a conversation (now "Save and end session")
         # left no result anywhere: the card still read `in conversation`, the button was still on
         # offer, and every reader of a task's outcome - the pipe's line, the responder's draft, the
         # next session's context - looks for a CODER REPORT comment and found none (the owner,

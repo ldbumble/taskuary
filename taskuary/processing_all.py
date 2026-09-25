@@ -70,6 +70,11 @@ def idea_reason(idea: dict) -> str:
     return f'triage: {intent}' + (f' - {why}' if why else '')
 
 
+def _has_conversation(view, tid) -> bool:
+    from .general import ASSISTANT_TYPE, USER_TYPE
+    return any(c.get('TaskId') in (tid, None) and c.get('ActorType') in (USER_TYPE, ASSISTANT_TYPE) for c in view.get('comments', []))
+
+
 def row_lane(row: dict) -> str:
     """The pile's word for a feed row, so All and unread say the same thing about one item."""
     if row.get('ReportFailed'): return 'broken'
@@ -77,8 +82,10 @@ def row_lane(row: dict) -> str:
     # it is not work until somebody decides it is - but it must not wear 'fyi', the word for a
     # verdict that was actually reached (the owner, 2026-09-15: "that's a bad bug").
     if row.get('MsgStatus') == 'error': return 'unjudged'
-    if (row.get('TaskStatus') in ('open', 'in_progress') and str(row.get('Assignee') or '').startswith('agent:')
-            and not row.get('Working') and not row.get('AgentWaiting')): return 'queued'
+    idle = row.get('TaskStatus') in ('open', 'in_progress') and not row.get('Working') and not row.get('AgentWaiting')
+    # an agent HAD it and is gone (saved by you, or stopped) - the rail's own rule, from the same facts (A16)
+    if idle and row.get('AgentLeft'): return row['AgentLeft']
+    if idle and (str(row.get('Assignee') or '').startswith('agent:') or row.get('GeneralNotStarted')): return 'queued'
     band = feed_band(row)
     # one level for everything that is the owner's task: the lane still says WHICH kind it is
     if band == 2:
@@ -252,6 +259,11 @@ def message_row(message, item, threads, now, *, full=False):
         row.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '')
         if review.get('Status') != 'pending':
             row['NeedsYou'] = int(waiting)
+    if active_task and not working:
+        from .funnel import general_not_started, left_by_facts
+        task_runs = [r for r in view.get('runs', []) if r.get('TaskId') == tid]
+        row['AgentLeft'] = left_by_facts(task.get('Tags'), task_runs)
+        row['GeneralNotStarted'] = general_not_started(task, _has_conversation(view, tid), view.get('routes', []))
     # Classification needs the existing 4k window even when the HTTP preview is compact.
     row['Category'] = category_of({**row, 'Preview': (message.get('BodyText') or '')[:4000]},
                                   team_domains_of(view.get('settings', {})))

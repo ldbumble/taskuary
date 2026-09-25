@@ -95,8 +95,26 @@ def _noise(row, view) -> bool:
     return bool(at and last and is_ours(last) and (processing_all._stamp(last.get('SentAt')) or at) >= at)
 
 
+def finish_evidence(store, tid, closed_at=None):
+    """{'who', 'summary'} when this task was closed by its agent or its upstream item ending - by WHY it closed, never by
+    who touched the row last (A17, 2026-09-25): keyed on UpdatedBy, any later edit by the owner made an unread finish
+    vanish, and a merged pull request was credited to "The agent". The note must sit at the close (within ten minutes),
+    so a finish the owner later reopened and closed themselves is theirs."""
+    at = closed_at or processing_all._stamp((store.get_task(tid) or {}).get('ClosedAt'))
+    for c in reversed(store.list_comments(tid) or []):
+        body, made = str(c.get('Body') or ''), processing_all._stamp(c.get('CreatedAt'))
+        if at and made and abs((at - made).total_seconds()) > 600: continue
+        if body.startswith('The agent closed this itself'):
+            return {'who': c.get('Actor') if c.get('Actor') not in (None, '', 'assistant', 'agent', 'system') else 'The agent',
+                    'summary': body.split(':', 1)[1].strip() if ':' in body else ''}
+        if c.get('Actor') == 'router' and 'this task came from was' in body:
+            kind = 'pull request' if 'pull request' in body else 'issue' if 'issue' in body else 'item'
+            return {'who': f'Its {kind}', 'summary': body}
+    return None
+
+
 def _agent_finished(store, tid, active, review, read_at, now):
-    """{'who', 'summary', 'unread'} when this task was closed by its agent or its PR ending - not the owner.
+    """{'who', 'summary', 'unread'} when this task was closed by its agent or its upstream item ending - not the owner.
     NEVER SEEN BY A PERSON STAYS ON THE RAIL (the owner, 2026-09-24): there is no age limit any more - it was
     three days, and a result nobody read simply vanished.
     What the card IS does not turn on the read: putting it on the table reads it, and a read that turned it into
@@ -104,17 +122,11 @@ def _agent_finished(store, tid, active, review, read_at, now):
     decides only whether it is still waiting."""
     if not tid or active or review: return None
     t = store.get_task(tid) or {}
-    by, closed_at = str(t.get('UpdatedBy') or ''), processing_all._stamp(t.get('ClosedAt'))
-    if t.get('Status') != 'done' or by in ('', 'owner') or t.get('SourceRef') == 'assistant:dock' or closed_at is None: return None
-    # the agent's own close note is the proof (selfclose.py): 'who last wrote the row' also named the owner's
-    # other spellings ('you', a migration), which the read used to hide once it no longer decided the card
-    # ...or the upstream ending (a PR merged or closed: channels.close_upstream_ended, filed by 'router')
-    said = next((c['Body'] for c in reversed(store.list_comments(tid) or [])
-                 if str(c.get('Body') or '').startswith('The agent closed this itself')
-                 or (by == 'router' and c.get('Actor') == 'router')), None)
-    if said is None: return None
-    return {'who': 'The agent' if by in ('assistant', 'agent', 'system', 'router') else by, 'summary': said.split(':', 1)[1].strip() if ':' in said else '',
-            'unread': not (read_at and read_at >= closed_at)}
+    closed_at = processing_all._stamp(t.get('ClosedAt'))
+    if t.get('Status') != 'done' or t.get('SourceRef') == 'assistant:dock' or closed_at is None: return None
+    ev = finish_evidence(store, tid, closed_at)
+    if not ev: return None
+    return {**ev, 'unread': not (read_at and read_at >= closed_at)}
 
 
 def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES):
@@ -141,7 +153,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     persisted_working = active and any(r.get('TaskId') == tid and r.get('Status') == 'running'
                                       for r in view.get('runs', []))
     # handed to an agent and not started: on the rail until it starts, however often it was looked at
-    queued = active and not workers and str(task.get('Assignee') or '').startswith('agent:') and not persisted_working
+    # ...or a regular-agent task nobody has started yet: unassigned when triage named no specialist, it read as the
+    # owner's own work (A10, 2026-09-25)
+    from .processing_all import _has_conversation
+    queued = active and not workers and not persisted_working and (
+        str(task.get('Assignee') or '').startswith('agent:') or funnel.general_not_started(task, _has_conversation(view, tid), view.get('routes', [])))
     # a done task is not work any more - its own row, the assistant's note that became it, AND the mail
     # it was opened from. That last one used to stay in the pipe wearing an fyi face with its task
     # already closed (the owner, 2026-09-07: "it should just go off the unread timeline"), and reading
@@ -188,11 +204,17 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
                         why='A proposed action is waiting for your approval' if review.get('Kind') == 'action' else 'A reply is waiting for your approval')
+    # ONE "AGENT FINISHED" (A17, 2026-09-25): a finish that drafted a reply left the task waiting on it, and the owner saw
+    # only "reply ready" - never that the agent had finished. The reply is the move, so the card stays the reply to
+    # send, and says who finished it.
+    if review and task.get('Status') == 'waiting' and review.get('Kind') != 'action':
+        ev = finish_evidence(store, tid)
+        if ev: card['why'] = f"{ev['who']} finished it - its reply is ready for your yes" + (f": {ev['summary']}" if ev.get('summary') else '')
     # ...and the row behind it says so too: a mail-backed row read 'asked you' - as if a person were
     # waiting on the owner - while the task under it was already an agent's (the owner, 2026-09-07:
     # "What about all the other tasks?")
-    if queued and card['lane'] == 'asked':
-        card.update(lane='queued', why=f"handed to {task['Assignee'].split(':', 1)[-1] or 'an agent'}, not started yet")
+    if queued and card['lane'] in ('asked', 'yours'):
+        card.update(lane='queued', why=f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'the regular agent'}, not started yet")
     # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a
     # queue that clears itself; every cause underneath it needs the owner instead (2026-09-14).
     if card['lane'] == 'queued' and card.get('tid'):

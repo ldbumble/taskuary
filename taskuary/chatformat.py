@@ -171,6 +171,11 @@ def split(text: str, limit: int = HARD) -> list:
     """One section that will not fit, broken where a reader would break it: a blank line, then a
     line end, and only as a last resort a space. The old splitter took max() of those three
     positions, so the space always won and every break landed mid-sentence."""
+    if limit < 1:
+        # A non-positive limit makes every cut 0 (or -1): text[:0] is appended, text never gets
+        # shorter, and the loop grows a list for ever (issue #60). Callers pass sensible limits,
+        # so this is a bug in the caller - say so instead of hanging the process.
+        raise ValueError(f'limit must be at least 1, got {limit}')
     out = []
     while len(text) > limit:
         window = text[:limit]

@@ -906,13 +906,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
         if p.get('select'):
             out = concierge.clear_selected(store, p['select'], ACTOR)
             return out
-        out = concierge.clear_matching(store, str(p.get('text') or ''), ACTOR, hint=str(p.get('hint') or ''))
-        # a standing RULE already keeps these out of the pipe; a sender-wide verdict on top of it would reach
-        # everything that person ever sends, which is not what "don't need these" means
-        if out.get('remember') and out.get('mid') and not out.get('rules'):
-            try: not_mine(int(out['mid']), NotMineBody(scope='sender'), background)
-            except Exception as e: logger.warning(f'the sweep happened but the sender was not silenced: {e}')
-        return out
+        return concierge.clear_matching(store, str(p.get('text') or ''), ACTOR, hint=str(p.get('hint') or ''))
     raise HTTPException(501, f'{kind} has no shared handler yet')
 
 @app.post('/api/operations/{oid}/preview')

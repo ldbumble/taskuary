@@ -143,7 +143,7 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     nobody named falls to `reply` or `general` below - never to coding, because no coding session
     starts on a guess made here.
 
-    `urgent` is DECIDED BY A RULE, never guessed here. Priority used to come from a keyword
+    `urgent` is DECIDED BY TRIAGE (its `urgent` verdict, 2026-09-25) or an escalate rule, never guessed here. Priority used to come from a keyword
     scan for urgent/asap/immediately/outage/down, which flagged mail nobody had called
     urgent: bare substrings, so every message carrying the "do not DOWNload attachments"
     external-mail banner came in urgent. A word in a footer is not a priority, and a

@@ -14,13 +14,13 @@ question a card asks), `PROPOSALS` (what each runs), `toolcatalog.PURPOSE` (the 
 ```mermaid
 flowchart LR
   C{"What is on the table?"}
-  C -->|a draft reply| B1["Send · Mark done · Not ours · Next"]
+  C -->|a draft reply| B1["Send · Mark done · Remind me · Not ours · Next"]
   C -->|an agent's proposal| B2["Run it · Not ours · Next"]
-  C -->|a person's ask| B3["Reply · Make a task · Send to agent · Not ours · Next"]
+  C -->|a person's ask| B3["Reply · Make a task · Send to agent · Remind me · Not ours · Next"]
   C -->|an fyi| B4["Make a task · Send to agent · Not ours · Next"]
-  C -->|an agent waiting on you| B5["Save and end session · Next"]
+  C -->|an agent waiting on you| B5["Save and end session · Remind me · Next"]
   C -->|an agent that finished| B6["Mark done · Reply · Next"]
-  C -->|a task| B7["Mark done · Next"]
+  C -->|a task| B7["Mark done · Remind me · Next"]
   C -->|an idea| B8["Make a task · Send to agent · Next"]
   C -->|a meeting or a report| B9["Send to agent · Next"]
 ```

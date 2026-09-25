@@ -327,6 +327,8 @@ export const attentionBand = (item) => {
   // a meeting that is not imminent, and any row whose lane this build does not know, are the
   // owner's to deal with - never a landed result, which is what band 3 now means
   if (item?.kind === "meeting" && (item.calendar_ready === false || item.mins > 15)) return 2;
+  // a task its agent finished rides the report lane but is Your task, as the server says (R15)
+  if (item?.kind === "agentdone") return 2;
   return BAND[item?.lane] ?? 2;
 };
 // Unread is ranked by attention, not by the clock, so a DATE over the rail said nothing about what
@@ -338,7 +340,7 @@ export const attentionBand = (item) => {
 // on it, a landed result is not work, and an idea nobody has judged is an fyi. The words are the
 // levels - processing_order.attention_band is the same list on the server.
 export const LEVEL_META = {
-  urgent: { word: "urgent", hint: "a meeting inside fifteen minutes, or a sender on your escalate list" },
+  urgent: { word: "urgent", hint: "a meeting inside fifteen minutes, an ask triage called urgent, or a sender on your escalate list" },
   task: { word: "your task", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed, a task an agent finished" },
   reports: { word: "reports", hint: "a report you set up landed - information, never a task" },
   fyi: { word: "fyi", hint: "people told you things, and ideas nobody has turned into work - read them or don't" },

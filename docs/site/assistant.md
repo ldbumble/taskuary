@@ -17,6 +17,7 @@ words, in the app or on your phone.
 | **Send to agent** | an ask, an fyi, an idea, a meeting, a report | A task and an agent on it. The card asks which agent | you confirm |
 | **Not ours** | a draft reply, a proposal, an ask, an fyi | Files it. The card asks how far | you confirm |
 | **Save and end session** | an agent waiting on you | Writes up what the session did and stops the agent. The task stays open | at once |
+| **Remind me** | any card with an open task behind it | Asks for a day, then puts the task away until that morning: Upcoming in Tasks, off your rail. On the phone the days come as choices | you pick the day |
 
 A handful of fyi comes as one card with its own **All read, next** button.
 
@@ -80,7 +81,7 @@ These have no button. Say them, in the app or on your phone.
 | "remember that…" | A fact kept in Settings → Memory, used by triage and the Assistant | you confirm |
 | "clear all the fyi" | Clears that set from the walk, with the count on the card | you confirm |
 | "set up a report that…" | A walk-through for a report, connection or workflow | you confirm |
-| "turn auto-drafts off" | The setting is changed, with an undo | at once |
+| "stop hiding auto-replies" | The setting is changed, with an undo | at once |
 | "what's waiting on me?" | Looked up and answered — tasks, reports, mail, calendar, settings | at once |
 
-Later and Tomorrow are gone: **Next** is the "not now", and a date is the task's **Remind me**.
+Later and Tomorrow are gone: **Next** is the "not now", and **Remind me** puts a task away until a day.

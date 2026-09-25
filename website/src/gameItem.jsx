@@ -12,6 +12,7 @@ import { mono } from "./theme.jsx";
 import { cleanText } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
+import { RemindPicker } from "./RemindMe.jsx";
 import { cardFor, laneMeta } from "./funnelPile.js";
 import { afterExecute, proposalOf } from "./proposalCard.js";
 import { needsYou, matchFor, CHIP_MOVE } from "./assistantGame.js";
@@ -157,6 +158,7 @@ function Draft({ item, busy, play }) {
 export function Moves({ item, covers = [], busy, play, onRepo, given = null, initial = null }) {
   const [chips, setChips] = useState(given);
   const [prop, setProp] = useState(initial);
+  const [remindAt, setRemindAt] = useState(null);     // Remind me asks for the day first
   useEffect(() => {
     if (given) return undefined;
     let live = true;
@@ -176,9 +178,10 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
     setProp(null);
     return out;
   };
-  const pick = async (c) => {
+  const pick = async (c, anchor) => {
     // the words that are the page's own actions rather than proposals - exactly as the chat runs them
     if (c.ask) return null;
+    if (c.verb === "defer") { if (item.tid) setRemindAt(anchor || document.body); return null; }
     if (c.verb === "followup") return play("followup", item.key, () => api.post("/api/concierge/act", { key: item.key, verb: "followup" }));
     if ((c.verb === "reply" || c.verb === "redraft") && item.mid)
       return play("draft", null, () => api.post(`/api/messages/${item.mid}/reply`, { draft: true, redraft: c.verb === "redraft", instruction: null }));
@@ -197,8 +200,10 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
     <Box onClick={(e) => e.stopPropagation()}>
       <Label>MORE MOVES</Label>
       <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
-        {shown.map((c) => <Btn key={c.verb} disabled={!!busy || !!prop} onClick={() => pick(c)} title={c.hint}>{c.label}</Btn>)}
+        {shown.map((c) => <Btn key={c.verb} disabled={!!busy || !!prop} onClick={(e) => pick(c, e?.currentTarget)} title={c.hint}>{c.label}</Btn>)}
       </Box>
+      {remindAt && <RemindPicker task={{ TaskId: item.tid, RemindAt: "" }} anchor={remindAt} onClose={() => setRemindAt(null)}
+        onDone={(out) => out?.remindAt && play("later", item.key, async () => out)} />}
       {prop && (
         <Box sx={{ mt: 0.8, p: 1, borderRadius: "9px", border: `1px dashed ${G.gold}`, bgcolor: "rgba(240,192,90,.07)" }}>
           <Typography sx={{ fontSize: 12, color: G.ink }}>{prop.say || prop.label}</Typography>

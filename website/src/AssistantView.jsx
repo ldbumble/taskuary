@@ -29,6 +29,7 @@ import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
+import { RemindPicker } from "./RemindMe.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
@@ -510,7 +511,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
   const nextChip = verbs.find((c) => c.verb === "next");
   const nav = { busy: actions.busy, items: actions.items, surface: actions.surface,
     onNext: nextChip ? () => actions.chip(nextChip) : null,
-    also: verbs.filter((c) => c.verb !== "next").map((c) => ({ verb: c.verb, label: c.label, title: c.hint, disabled: actions.busy, onClick: () => actions.chip(c) })) };
+    also: verbs.filter((c) => c.verb !== "next").map((c) => ({ verb: c.verb, label: c.label, title: c.hint, disabled: actions.busy, onClick: (e) => actions.chip(c, e?.currentTarget) })) };
   return (
     <>
       <div className={passed ? "tq-msg tq-step" : "tq-msg"}>
@@ -599,6 +600,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const [chatsLoading, setChatsLoading] = useState(false);
   const [old, setOld] = useState(null);               // an earlier chat, read-only
   const [aiEl, setAiEl] = useState(null);
+  const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
   const [emojiEl, setEmojiEl] = useState(null);
   const [speakOnState, setSpeak] = useState(speakOn);
   const [stageMode, setStageMode] = useState("chat");   // what a click on a row does: chat (default) or task view
@@ -1132,12 +1134,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   // verb goes to the same proposal endpoint a card button uses, with the target explicit. The two that
   // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
-  const runChip = async (c) => {
+  const runChip = async (c, anchor) => {
     if (busy || resetting || handoff || !c) return;
     if (c.ask) { send(c.ask); return; }
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
     if (c.verb === "next") { surface(null, null, key); return; }
+    // REMIND ME asks for the day - the task page's own picker - and the walk moves on once it is put away
+    if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     setBusy(true); setErr("");
     try {
@@ -1447,6 +1451,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>
+      {remindOn && <RemindPicker task={remindOn.task} anchor={remindOn.anchor || document.body} onClose={() => setRemindOn(null)}
+        onDone={(out) => {
+          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: remindOn.task.TaskId, ref: remindOn.ref,
+            text: out?.remindAt ? `Away until ${out.when} - it is under Upcoming in Tasks, and back on your rail that morning.` : "It is back on your rail now." }]);
+          if (out?.remindAt) advance();
+        }} />}
       <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { p: 1.5, width: 320 } } }}>
         <Typography sx={{ fontSize: 12, fontWeight: 700, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>

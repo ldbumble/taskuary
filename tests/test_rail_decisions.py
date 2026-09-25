@@ -101,6 +101,46 @@ class StoppedGoesToPassedTests(unittest.TestCase):
             self.assertEqual(back, [True])
 
 
+class RemindMeTests(unittest.TestCase):
+    def test_remind_me_puts_away_a_live_agent_until_its_day(self):
+        """R7: a working agent forced its row unread, whatever the date said."""
+        from taskuary import remind
+        s, settle = settled()
+        t = s.create_task({'Title': 'Draft the vendor letter', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        mail(s, 'vendor letter', who='Gail Moreno', email='gail@northwind.example', hours=2, tid=t)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'sid': 's1', 'mode': 'terminal', 'tail': []}]
+        on = lambda: [i['unread'] for i in processing_unread.build(s, live_state=live, include_read=True)['items'] if i.get('tid') == t]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
+            self.assertEqual(on(), [True])
+            remind.set_reminder(s, t, 'monday'); settle()
+            self.assertEqual(on(), [False], 'away until Monday, agent or not')
+
+    def test_on_its_day_it_says_why_it_is_back(self):
+        """R13: remind.due cleared the date as it filed the note, so the reason was never shown."""
+        from taskuary import remind
+        s, settle = settled()
+        t = s.create_task({'Title': 'Renew the domain', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        s.update_task(t, {'RemindAt': ago(hours=1)}, 'owner')
+        self.assertEqual(remind.due(s), 1); settle()
+        self.assertEqual([i['why'] for i in rail(s) if i.get('tid') == t], ['you asked to be reminded about this today'])
+
+
+class ErrorDismissTests(unittest.TestCase):
+    def test_next_on_an_error_dismisses_it_and_a_different_error_comes_back(self):
+        """R10: Next from the page wrote no sig, so the error after the dismissed one stayed hidden too."""
+        s = store()
+        c = s.get_connector_by_type('github')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 'test')
+        s.touch_connector(c['ConnectorId'], 'northwind/ledger: 404 Not Found')
+        key = f"conn:{c['ConnectorId']}"
+        self.assertTrue([i for i in rail(s) if i['key'] == key])
+        funnel.settle(s, key, 'surfaced', 'owner', read=True); funnel.invalidate()
+        self.assertFalse([i for i in rail(s) if i['key'] == key], 'Next dismisses it')
+        s.touch_connector(c['ConnectorId'], 'northwind/ledger: 401 Bad credentials'); funnel.invalidate()
+        self.assertTrue([i for i in rail(s) if i['key'] == key], 'a different error is news again')
+
+
 class NewWalkRaisesWavingAgentsTests(unittest.TestCase):
     def test_a_new_walk_clears_the_shown_mark_on_an_agent_waiting_on_you(self):
         """R11: the rail keys an agent's row processing:<item>, and reset_walk only ever cleared agent: keys."""

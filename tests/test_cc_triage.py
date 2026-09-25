@@ -110,6 +110,10 @@ class AddressingTests(unittest.TestCase):
         # (2026-09-25), which defines a kind and weighs no signal
         self.assertTrue(seen['system'].startswith('My own rules. Answer JSON only.'))
         added = seen['system'][len('My own rules. Answer JSON only.'):]
+        # ...and the "urgent" field's definition (2026-09-25: urgent is triage's call), asked of a document that never
+        # names it - a field every verdict answers, like the shape; the one exception, and only that exact line
+        self.assertIn('\n\n' + triage.URGENT, added)
+        added = added.replace('\n\n' + triage.URGENT, '')
         kind_block, _, rest = added.strip().partition('\n\nWHATEVER ELSE')
         self.assertTrue(kind_block.startswith('KIND, DECIDED FIRST') and '\n\n' not in kind_block, kind_block[:120])
         self.assertEqual(('WHATEVER ELSE' + rest).strip(), ('WHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + triage.TASK_FIELDS).strip())

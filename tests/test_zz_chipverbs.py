@@ -45,6 +45,10 @@ class ChipVerbsTests(unittest.TestCase):
                     note = 'walked on'
                 elif verb == 'reply':
                     note = 'drafts (page road, no proposal)'
+                elif verb == 'defer':
+                    from taskuary import remind
+                    ok = bool(remind.set_reminder(s, item['tid'], 'tomorrow').get('remindAt'))
+                    note = 'asks the day, then the task page road (no proposal)'
                 else:
                     p = concierge.propose_direct(s, verb, item['key'], table=True)
                     note = f"proposed {p['kind']}"

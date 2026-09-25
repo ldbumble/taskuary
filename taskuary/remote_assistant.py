@@ -736,7 +736,9 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     t = act.get('t')
     try:
         if t == 'next': return carry_out(store, concierge.surface(store, actor=actor), None, actor)
+        if t == 'stay': return 'Left it - nothing moved.'
         if t == 'undo': return concierge.undo_last(store, actor)
+        if t == 'remind': return _remind(store, act, actor)
         if t in ('confirm', 'cancel', 'repo'):
             op = operations.get(store, act.get('id') or '')
             if not op or op.get('status') != 'proposed': return 'That one is not waiting on you any more - nothing moved.'
@@ -753,6 +755,11 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(act.get('table')), exact=True)
             # the pick answered the card's question; only a checkout still to choose is left to ask
             return _settle(store, {**prop, 'alts': []}, item, actor)
+        if verb == 'defer':
+            # Remind me asks for the day, as the desktop's picker does; a day typed instead goes to the model's task.defer
+            rows = [(label, {'t': 'remind', 'tid': on.get('tid'), 'until': until}) for label, until in REMIND_DAYS]
+            return turn_text({'say': f"Remind you about {on.get('ref') or on.get('title') or 'this'} when? Or say a day.", 'item': None},
+                             store=store, extra=rows + [('Cancel', {'t': 'stay'})])
         if verb == 'answer_agent':
             return f"What should I tell {on.get('agent') or 'it'}? Say it here and I will pass it straight to the run that is waiting."
         if verb in ('reply', 'redraft') and on.get('mid'):
@@ -762,6 +769,20 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(item and item.get('key') == key))
         return _settle(store, prop, item, actor)
     except ValueError as e: return f'Not done - {e}. Nothing moved.'
+
+
+REMIND_DAYS = (('Tomorrow', 'tomorrow'), ('Next week', '1 week'), ('In 2 weeks', '2 weeks'), ('In a month', '1 month'))   # RemindMe.jsx's QUICK
+
+
+def _remind(store, act: dict, actor: str) -> str:
+    """The day picked: the task page's own road (remind.set_reminder), then the walk moves on - it is off the rail."""
+    from . import concierge, operations, remind
+    out = remind.set_reminder(store, int(act['tid']), act['until'], actor)
+    operations.record_direct(store, 'task.defer', int(act['tid']), {'until': act['until']}, actor, out)
+    if not out.get('remindAt'): return 'It is back on your rail now.'
+    said = f"Away until {out['when']} - it is under Upcoming in Tasks, and back on your rail that morning."
+    back = [('Bring it back now', {'t': 'remind', 'tid': act['tid'], 'until': 'none'})]
+    return '\n\n'.join([said, turn_text(concierge.surface(store, actor=actor), store=store, extra=back)])
 
 
 def _draft(store, item: dict, verb: str, instruction: str):

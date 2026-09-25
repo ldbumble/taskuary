@@ -669,6 +669,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         mid = _land(store, msg, tid, 'routed')
         if r.get('reopen'): _reopen(store, tid, msg, actor)
         if pol['action'] == 'escalate': _escalate(store, tid, pol, actor)
+        elif (follow or {}).get('urgent'): _mark_urgent(store, tid, follow, actor)
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
         # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
         # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
@@ -773,6 +774,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         same = intent.get('same_as') or store.open_task_with_same_ask(intent.get('title'), msg.get('from_email'), msg.get('channel'))
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
+            elif intent.get('urgent'): _mark_urgent(store, same, intent, actor)
             return _join_same(store, msg, same, intent, actor, _notes_note())
         if intent['intent'] == 'fyi':
             mid = _land(store, msg, None, 'filed')
@@ -791,7 +793,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # conversation, task = the owner's own list, reply = the responder and Review. It is
         # triage's judgement, made against TRIAGE.md; a kind it did not name is task, the owner's list
         # (draft_task_fields). Nothing downstream second-guesses it - auto_start_ok only asks who may start.
-        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate', kind=intent.get('kind'))
+        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate' or bool(intent.get('urgent')), kind=intent.get('kind'))
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
         # CODING STAYS CODING (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it
         # into a general agent?"). A coding job whose repository triage could not tell used to become the
@@ -1084,6 +1086,13 @@ def _escalate(store, tid, pol: dict, actor: str):
     if (store.get_task(tid) or {}).get('Priority') == 'urgent': return
     store.update_task(tid, {'Priority': 'urgent'}, actor)
     store.add_comment(tid, actor, 'agent', f"Marked urgent - the rule \"{pol.get('rule')}\" escalates this sender.")
+
+
+def _mark_urgent(store, tid, verdict: dict, actor: str):
+    """Triage called this line urgent: the task it lands on is urgent now - once, with triage's reason on it."""
+    if (store.get_task(tid) or {}).get('Priority') == 'urgent': return
+    store.update_task(tid, {'Priority': 'urgent'}, actor)
+    store.add_comment(tid, actor, 'agent', f"Marked urgent - triage: {verdict.get('why') or 'this cannot wait'}")
 
 
 def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note: str = '') -> dict:

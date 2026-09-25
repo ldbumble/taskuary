@@ -9,7 +9,7 @@ each stage owns exactly one state badge.
 
 | Part | What it records | Main controls | What it never does by itself |
 |---|---|---|---|
-| **Task** | The durable job and who owns it | owner, kind, priority, status, Reopen, Mark done | Starting or ending an agent session does not complete it |
+| **Task** | The durable job and who owns it | owner, kind, priority, Reopen, Mark done | Starting or ending an agent session does not complete it |
 | **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, new prompt, start, prompt, pause, finish, stop | Stopping does not mark the task done or send a reply |
 | **Reply** | Communication with the person who asked | write, generate, edit, approve and send | Sending it marks the task done — unless an agent is still working or a new message came in |
 
@@ -159,9 +159,9 @@ outlives the job that produced it.
 
 ## Checklists and closing
 
-A task can carry a checklist. Ticking the last box marks the task done, because there is nothing
-left it was waiting for, unless an agent is still working on it. Closing a task ticks every remaining box, for the same
-reason in reverse — a closed task with open items is a lie about its own state.
+A task can carry a checklist. Tick the boxes as you go, then press **Mark done** — ticking the last box does not close
+the task on its own. Closing a task ticks every remaining box: a closed task with open items is a lie about its own
+state.
 
 ## Replies
 
@@ -190,6 +190,29 @@ triage, and the agent is seeded from it instead of from `CODER.md`'s repository 
 
 Each connector card lists the playbooks that name it, and the words themselves are edited on the
 **Docs** tab.
+
+## The Tasks list and the Board
+
+Both pages show the same state for a task, in the work rail's words — the server decides it once and both draw it.
+
+![Which state a task is in: a live session first, then who closed it, a drafted reply, an agent's session, or you](img/task-state.svg "The Board's columns are the agent's states.")
+
+| The task | Tasks list | Board column |
+|---|---|---|
+| handed to an agent, nothing started | ⏳ waiting to start | waiting to start — with what it waits for, or why it could not start, and **Start now** / **Cancel** |
+| its agent is running | ⚙️ agent working | agent working |
+| its agent asked, needs approval, or is stuck | 👋 agent waiting on you | agent waiting on you |
+| you ended its session / it ended by itself | 💾 session saved / ⏹ agent stopped | saved or stopped — with **Continue session** |
+| a reply is drafted for your yes | ✉️ reply ready | agent finished, when an agent drafted it |
+| its agent closed it | ✅ agent finished | agent finished (today) |
+| you closed it | ✅ done | — |
+| waiting on somebody else | 📤 waiting on them | — |
+| nobody was handed it | 📋 on you | — |
+
+A task put away with **Remind me** is under **upcoming** and off the Board until its day — unless its agent asks you
+something. Status has no box of its own: **Start**, **Mark done**, **Remind me** and **Reopen** set it, and Reopen clears
+an old reminder. **Mark done** keeps a draft that was waiting; **Bring it back to send** sends it after all. Done is
+listed by task number, highest first.
 
 ## The work rail
 

@@ -19,6 +19,7 @@ from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg
 from . import agents as hub_agents
 from . import cli_connections
 from . import blackboard
+from . import taskstate
 from . import guard
 from . import policy as policy_engine
 from . import reshape
@@ -538,7 +539,9 @@ def tasks(status: str = None, active: bool = False, q: str = None):
     return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books), 'OnWorkToday': t['TaskId'] in rail,
                       'Session': sessions.get(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
-                      'HadAgent': t['TaskId'] in agented}
+                      'HadAgent': t['TaskId'] in agented,
+                      # what the task IS right now - the one state the list's chip and the Board's column both draw (T1-T9)
+                      'State': taskstate.state(store, t, sessions.get(t['TaskId']), qs.get(t['TaskId']))}
                      for t in store.list_tasks(status, active_only=active, q=q, also=rail)]}
 
 
@@ -624,24 +627,13 @@ class ChecklistEdit(BaseModel):
 
 @app.patch('/api/tasks/{task_id}/checklist/{item_id}')
 def tick_checklist(task_id: int, item_id: str, body: ChecklistTick):
-    """One box - and the LAST box is the close. PW-077 kept a tick from ever completing a task so
-    that an agent's progress could not end the owner's work; this is the owner's own hand on the
-    owner's own list, and with every item ticked there is nothing left of the task but its row -
-    which sat on the rail for a day (TQ-0626; the owner, 2026-09-18: "it did not close even though
-    i ticked the items"). A task an agent holds is left alone: closing it would stop the agent."""
+    """One box, and only the box. TICK THEM ALL, THEN MARK DONE (T16, the owner, 2026-09-25: "they should click all the
+    do's and then hit mark done"): the last tick used to close the task (2026-09-18, TQ-0626), so it followed the task
+    into Done while Mark done moved on to the next one - two closes that behaved differently. Mark done is the close."""
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
     if not store.tick_checklist_item(task_id, item_id, body.done, ACTOR): raise HTTPException(404, 'no such checklist item')
-    items, closed = store.task_checklist(task_id), False
-    # the last box is Mark done - unless an agent is working it right now (the owner, 2026-09-24). It used to need
-    # Status open and nobody assigned, so a task once handed to an agent never closed this way.
-    from .funnel import working_tids
-    if (body.done and items and all(i.get('done') for i in items) and t.get('Status') not in ('done', 'dropped')
-            and task_id not in working_tids(store)):
-        from . import concierge
-        closed = concierge.close_task(store, task_id, ACTOR)          # the same road as Completed and "close it"
-        if closed: store.add_comment(task_id, ACTOR, 'human', 'Closed - the last item on the checklist was ticked.')
-    return {'ok': True, 'checklist': items, 'closed': closed}
+    return {'ok': True, 'checklist': store.task_checklist(task_id), 'closed': False}
 
 
 @app.put('/api/tasks/{task_id}/checklist')
@@ -782,7 +774,8 @@ def _run_operation(op: dict, background: BackgroundTasks):
         return {'status': 'done', 'already': not concierge.close_task(store, tid, ACTOR)}
     if kind == 'task.reopen':
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
-        store.update_task(tid, {'Status': 'open'}, ACTOR); return {'status': 'open'}
+        # ONE REOPEN (T13): back in progress, and an old Remind me date cleared - it reopened straight into Upcoming
+        store.update_task(tid, {'Status': 'open', 'RemindAt': ''}, ACTOR); return {'status': 'open'}
     # THE TASK PAGE AS TOOLS (2026-09-25): each is the page's own handler, so the card and the click agree
     if kind == 'task.update':
         want = {'Priority': str(p.get('priority') or '').lower() or None, 'Title': str(p.get('title') or '').strip()[:200] or None}
@@ -3843,6 +3836,19 @@ async def terminal_image(sid: str, request: Request):
 @app.delete('/api/tasks/{tid}/waitroom/{wid}')
 def waitroom_drop(tid: int, wid: int):
     store.drop_waiting(wid, tid)
+    return {'ok': True}
+
+@app.post('/api/reviews/{rid}/reopen')
+def reopen_review(rid: int):
+    """A draft closed without sending, back in front of you to send after all (T11, the owner, 2026-09-25: "keep draft
+    reply even if closed so you can send later if you want"). Mark done kept it on the task; nothing could send it."""
+    rv = store.get_review(rid)
+    if not rv: raise HTTPException(404, 'review not found')
+    if rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is proposed again, not reopened')
+    if rv['Status'] not in ('closed_unsent', 'no_reply', 'rejected'): raise HTTPException(422, f"this one is {rv['Status']}, not closed")
+    if not str(rv.get('DraftText') or '').strip(): raise HTTPException(422, 'there is no draft to send')
+    store.unhold_review(rid, 'brought back by you to send after all')
+    store.audit('review', rid, 'reopen', ACTOR)
     return {'ok': True}
 
 @app.post('/api/reviews/{rid}/release')

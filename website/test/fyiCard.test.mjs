@@ -75,9 +75,9 @@ test("a paused assistant task exposes resume instead of pretending nobody has wo
   assert.match(agent, /"Continue session"/);
   assert.match(agent, /card\.paused && card\.tid && <CombinedTaskText/);
   const tasks = read("TasksView.jsx");
-  assert.match(tasks, /const resumeGeneralAgent = async/);
-  // one set of words for the one act, whichever agent held the conversation (2026-09-15)
-  assert.match(tasks, /"Continue session"/);
-  assert.match(tasks, /const continueSession = async/);
-  assert.match(tasks, /\/api\/tasks\/\$\{id\}\/continue-session/);
+  // one set of words for the one act, whichever agent held the conversation (2026-09-15) - and one box, the rail's,
+  // with a note for the agent (T14, 2026-09-25)
+  assert.match(tasks, /Continue session/);
+  assert.match(tasks, /<ContinueBox task=\{t\} anchor=\{continueAt\}/);
+  assert.match(tasks, /onClick=\{\(e\) => setContinueAt\(e\.currentTarget\)\}/);
 });

@@ -1,5 +1,7 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import { says, subState } from "./laneSays.js";
+import ContinueBox from "./ContinueBox.jsx";
+import QueuedStart from "./QueuedStart.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
@@ -25,7 +27,7 @@ import { completionTransition, cutAway, filterForSelectedState, remindWaiting, r
 import ReviewDecision from "./ReviewDecision.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
@@ -58,8 +60,6 @@ const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the g
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
-const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
-const statusLabel = (s) => String(s || "").replace(/_/g, " ");
 // `assistant` is a legacy alias from Timeline discussions. New discussions use `general`, but
 // old ones must still open here instead of falling through to the coding terminal.
 // CATEGORY is where a task is; the chip on the row says what it needs. Filtering by "needs
@@ -241,9 +241,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [askSenderOpen, setAskSenderOpen] = useState(false);
   const [senderQuestion, setSenderQuestion] = useState("");
   // "this one is mine" - the verdict that used to be a silent dropdown (TQ-0501)
-  const [mineOpen, setMineOpen] = useState(false);
-  const [belongsTo, setBelongsTo] = useState("");
-  const [savingMine, setSavingMine] = useState(false);
   const [askingSender, setAskingSender] = useState(false);
   const [openingReply, setOpeningReply] = useState(false);
   const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
@@ -319,6 +316,19 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     // page offered to start one, which would have made a second).
     return onLive("task-changed", () => { loadTasks(); if (selRef.current) loadDetail(selRef.current); });
   }, [active, loadTasks, loadDetail]);
+  // A SESSION THAT GOES QUIET is an agent waiting on you, and no event says so: the rows are read again when one
+  // flips, the same check the Board makes, so the two pages move together (T9)
+  useEffect(() => {
+    if (!active) return undefined;
+    let sig = null;
+    const tick = () => api.get("/api/runs/live").then(({ data }) => {
+      const now = (data.data || []).map((r) => `${r.TaskId}:${isWaiting(r) ? 1 : 0}`).sort().join(",");
+      if (sig !== null && now !== sig) loadTasks();
+      sig = now;
+    }).catch(() => {});
+    tick(); const id = setInterval(tick, 3000);
+    return () => clearInterval(id);
+  }, [active, loadTasks]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {
     if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0], model: "" }));
@@ -414,11 +424,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); setPeek(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
+  // ...in the scope ON SCREEN: with no dependencies this kept the first render's scope, so Refresh always went back to
+  // the task view (T19) - and the diff stays up while the new one loads rather than blanking
   const loadDiff = useCallback(async (id) => {
-    setDiff(null);
     try { setDiff((await api.get(`/api/tasks/${id}/diff`, { params: { scope: diffScope } })).data); }
     catch (e) { setDiff({ files: [], why: e?.response?.data?.detail || "Could not read the checkout" }); }
-  }, []);
+  }, [diffScope]);
   useEffect(() => { if (diffOpen && selected) loadDiff(selected); }, [diffOpen, selected, loadDiff]);
   // A fold DROPS the task you were looking at, so follow the work to the survivor - staying
   // put would leave the detail pane on a task that no longer holds anything.
@@ -533,8 +544,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // "in progress 4 · done 2" (the owner, 2026-09-22: "that doesn't add up?").
   // ...and a task the work rail shows, or showed you today, is never history, whatever day it closed (the owner, 2026-09-24)
   const keep = (x) => !!sent || x.OnWorkToday || !cutAway(stateOf(x).key, touchedToday(x), older);
-  // upcoming reads as a calendar: soonest first
-  const shown = bucket.filter(keep).sort((a, b) => (filter === "upcoming" && !sent ? String(a.RemindAt).localeCompare(String(b.RemindAt)) : 0));
+  // upcoming reads as a calendar: soonest first. Done is by task number, highest first (T17, the owner, 2026-09-25) -
+  // it came in the server's order, which a comment called "by when it finished" and was not.
+  const shown = bucket.filter(keep).sort((a, b) => (sent ? 0 : filter === "upcoming" ? String(a.RemindAt).localeCompare(String(b.RemindAt))
+    : filter === "done" ? b.TaskId - a.TaskId : 0));
   const nOlder = bucket.length - shown.length;
   // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says
   // the list is broken, not cut. Each pill counts what clicking it would SHOW, by the same rule.
@@ -641,6 +654,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // are taking away precious agent space"). Live is live, whoever is working.
   const liveSession = !!term?.alive;
   const askFinish = () => (liveSession ? setConfirmDone(true) : finish("done"));
+  // what Mark done does HERE - it said "ends the live agent session" with no session in sight (T11), and a waiting
+  // draft is kept on the task, never thrown away: it can be brought back and sent later
+  const markDoneHint = ["Closes the task", liveSession ? "and ends the live agent session" : "",
+    pendingReplyReview(detail?.reviews || []) ? "- your draft stays on it, to send later if you want" : ""].filter(Boolean).join(" ") + ".";
   // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
   const sessionView = liveSession && !peek;
   // ...and a stage you opened by hand does not outlive the session you opened it on. The agent
@@ -701,23 +718,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     } catch (e) {
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not prepare the question for the sender");
     } finally { if (!stale(id)) setAskingSender(false); }
-  };
-  // The owner overturning the routing verdict: the task becomes theirs, any agent on it stops, and
-  // - the half that never existed - they can say where the work actually lives. "Not for the agent"
-  // only ever said where it does NOT go, so the next message like it was judged no better.
-  const takeItMyself = async () => {
-    if (!selected || savingMine) return;
-    const id = selected;
-    setSavingMine(true); setErr("");
-    try {
-      await api.post(`/api/tasks/${id}/not-coding`, { learn: true, belongs_to: belongsTo.trim() || null });
-      if (stale(id)) return;
-      setMineOpen(false); setBelongsTo("");
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-    } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not put the task on your list");
-    } finally { if (!stale(id)) setSavingMine(false); }
   };
   const openReply = async (generate = false) => {
     if (!replyMessage?.MessageId || openingReply) return;
@@ -797,10 +797,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const canContinue = !term?.alive && (isGeneral ? generalStarted : !!detail?.resumable);
   const canSave = !report && !wrapped;            // nothing filed yet, so this session is still worth writing up
   const agentBar = !term?.alive && !restartOpen && (isGeneral ? generalStarted : !!(report || detail?.transcript));
+  // the list's row for this task carries the server's state (taskstate.py): the page reads the same verdict
+  const listRow = (tasks || []).find((x) => x.TaskId === selected);
+  const rowState = listRow?.State;
   const agentState = agentPhase({
     session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
-    conversation: generalStarted,
+    conversation: generalStarted, finished: rowState === "agentdone",
+    handed: !!assignedAgent(t?.Assignee) || rowState === "queued" || !!detail?.transcript || !!report || generalStarted,
   });
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping, wrapped });
   const replyState = replyPhase(detail?.reviews || []);
@@ -866,34 +870,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the non-coding agent");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
-  // Reopening the agent's OWN conversation - the assistant through /resume, a coding pane through
-  // its saved session id. Two roads because the two agents are held differently; one button, one
-  // set of words, because to the owner it is the same act (2026-09-15).
-  const continueSession = async () => {
-    if (!selected || startingAgent) return;
+  // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and
+  // what you type is the first thing it hears. The page had two older roads with no note (continue-session, resume).
+  const [continueAt, setContinueAt] = useState(null);
+  const continued = () => {
     const id = selected;
-    setStartingAgent("resume"); setErr("");
-    try {
-      await api.post(`/api/tasks/${id}/continue-session`);
-      if (!stale(id)) setGeneralRevision((n) => n + 1);
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-    } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not continue this session");
-    } finally { if (!stale(id)) setStartingAgent(""); }
-  };
-  const resumeGeneralAgent = async () => {
-    if (!selected || startingAgent) return;
-    const id = selected;
-    setStartingAgent("resume"); setErr("");
-    try {
-      await api.post(`/api/tasks/${id}/resume`);
-      if (!stale(id)) setGeneralRevision((n) => n + 1);
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-    } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not resume this conversation");
-    } finally { if (!stale(id)) setStartingAgent(""); }
+    if (!stale(id)) setGeneralRevision((n) => n + 1);
+    Promise.all([loadDetail(id), loadTasks()]).then(() => onChanged?.());
   };
   // THE BAR THE AGENT CARD ACTS THROUGH, built here so it can ride inside the heading beside the
   // chip - where the Task and Reply strips keep theirs. Group one is THIS session, group two is
@@ -906,13 +889,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         title={isGeneral
           ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
-        onClick={isGeneral ? resumeGeneralAgent : continueSession}>
+        onClick={(e) => setContinueAt(e.currentTarget)}>
         {startingAgent === "resume" ? "Continuing…" : "Continue session"}</Button>}
       {canSave && <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
         disabled={!!wrapping} sx={canContinue ? barBtn : primaryBtn}
         startIcon={<DoneAllIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
         title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
-        onClick={wrapUp}>Save and end session</Button>}
+        onClick={wrapUp}>Save result</Button>}{/* the session has ended: nothing is left to END (T15) */}
       {!isGeneral && <>
         {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
         <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
@@ -1016,13 +999,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Typography>
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg,
                     color: PILL_COLORS.red.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
-                  {String(task.Tags || "").split(/[\s,]+/).includes("interrupted") && <Chip size="small" label="agent stopped"
-                    title="Taskuary closed while an agent was working this. Nothing restarts until you choose an agent."
-                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e", flexShrink: 0 }} />}
+                  {/* the state says it once - "agent stopped" had its own chip beside it (T1) */}
                   <StateChip task={task} />
                 </Box>
                 {/* the third line, and ONLY when it has something to say - a queued task with no list
                     stays two lines, so the rail does not pay for this everywhere */}
+                {/* A START THAT FAILED says so on the row, with the error (T10) - it said "starts by itself when it can" */}
+                {task.Queued?.state === "failed" && (
+                  <Typography noWrap title={task.Queued.lastError || ""} sx={{ fontSize: 10.5, mt: 0.45, color: ALERT, fontWeight: 600 }}>
+                    could not start{task.Queued.lastError ? ` - ${task.Queued.lastError}` : ""}
+                  </Typography>
+                )}
                 {(list.length > 0 || asked) && (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.9, mt: 0.55, minWidth: 0 }}>
                     {list.length > 0 && <LinearProgress variant="determinate" value={(nDone / list.length) * 100}
@@ -1096,7 +1083,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
                       <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={11} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 13 }} />}
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
-                        title="Closes the task and ends the live agent session with it."
+                        title={markDoneHint}
                         disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
                       <Tooltip title="Not a task — delete it and teach triage why">
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
@@ -1151,7 +1138,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
                             <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={12} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 14 }} />}
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
-                              title="Closes the task and ends the live agent session with it."
+                              title={markDoneHint}
                               disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
                             <Tooltip title="Not a task — delete it and teach triage why">
                               <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
@@ -1180,7 +1167,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
                         <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
                           sx={primaryBtn}
-                          title="Closes the task and ends the live agent session with it."
+                          title={markDoneHint}
                           disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
                         <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
                           sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
@@ -1338,11 +1325,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                                 primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
                             </MenuItem>)}
                         </Select>
-                        <Select value={t.Status || "open"} onChange={(e) => patch({ Status: e.target.value })} sx={chipSel}
-                          renderValue={statusLabel} title="Task status — independent of its agent and reply">
-                          {STATUSES.filter((s) => !["done", "dropped"].includes(s) || s === t.Status)
-                            .map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{statusLabel(s)}</MenuItem>)}
-                        </Select>
+                        {/* no Status box: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12). A hand-set
+                            "in progress" was read as an agent's at the next restart, and the list ignored it */}
                         <Select value={t.Priority || "normal"} onChange={(e) => patch({ Priority: e.target.value })}
                           sx={chipSel} title="Priority">
                           {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
@@ -1387,6 +1371,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     question (the owner, 2026-09-17: "can we also keep the agent header simple and
                     short like it is when coder is active"). The bar rides IN the heading now, so
                     the sentence and the row that held it both go. */}
+                {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
+                {!liveSession && listRow?.Queued && <Box sx={{ mb: 1 }}>
+                  <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
+                </Box>}
                 <Box sx={{ ...card, mb: liveSession ? 0.55 : 1.25,
                   px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #6f8a6e",
@@ -1401,21 +1389,22 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         hour (the owner, 2026-09-11, TQ-0499). agentState is the session's own word
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
                     <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
-                      : agentState === AGENT.waiting ? says("parked", agentName(t))
+                      : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
-                    chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" {...stageProps("agent")}
+                    chip={agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null} tone="#6f8a6e" {...stageProps("agent")}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
                     action={stage === "agent" && agentBar ? agentBarRow :
                       stage !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
-                          {detail?.resumable ? (
+                          {/* a regular agent's conversation is continued too - "Start an agent" read as starting over (T15) */}
+                          {detail?.resumable || (isGeneral && generalStarted) ? (
                             <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={startingAgent === "resume" ? <CircularProgress size={11} /> : <HistoryIcon sx={{ fontSize: 14 }} />}
-                              title={`Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}.`}
-                              onClick={continueSession}>Continue session</Button>
+                              title={detail?.resumable ? `Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}.` : "Picks its conversation back up."}
+                              onClick={(e) => setContinueAt(e.currentTarget)}>Continue session</Button>
                           ) : (
                             <Button size="small" variant="contained" disableElevation
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
@@ -1507,7 +1496,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         </Button>}
                         {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
-                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save and end session</Button>}
+                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save result</Button>}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
                             become the profile, brain and model, and the next press starts it */}
                         {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
@@ -1751,7 +1740,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
                         <ReviewDecision review={pendingReview}
-                          onChanged={() => { loadDetail(selected); onChanged?.(); }} />
+                          onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>
                           {/* THE ENVELOPE over what was sent, read from the same Deliver blob
@@ -1800,6 +1789,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                                 fontWeight: 750, letterSpacing: 1.25 }}>Not sent - closed without sending</Typography>
                               <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                                 {unsentReview.DraftText}</Typography>
+                              {/* ...and it can still go: the draft comes back to send, the task done or not (T11) */}
+                              {hasCorrespondent(replyMessage) && (
+                                <Button size="small" sx={{ mt: 0.75, fontSize: 11 }} onClick={() => {
+                                  const id = selected;
+                                  api.post(`/api/reviews/${unsentReview.ReviewId}/reopen`)
+                                    .then(() => { if (!stale(id)) { loadDetail(id); setOpenStage("reply"); } })
+                                    .catch((e) => { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not bring the draft back"); });
+                                }}>Bring it back to send</Button>
+                              )}
                             </Box>
                           )}
                         </>
@@ -1815,7 +1813,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           </Typography>
                           {proposals.map((p) => (
                             <ReviewDecision key={p.ReviewId} review={p}
-                              onChanged={() => { loadDetail(selected); onChanged?.(); }} />
+                              onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                           ))}
                         </Box>
                       )}
@@ -2000,25 +1998,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           </Button>
         </DialogActions>
       </Dialog>
-      <Dialog open={mineOpen} onClose={() => !savingMine && setMineOpen(false)} fullWidth maxWidth="sm"
-        PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle>Yours, not the agent's · {detail?.ref}</DialogTitle>
-        <DialogContent sx={{ pt: "8px !important" }}>
-          <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-            The task stays and goes on your list; any agent working it stops. Triage learns from this,
-            so the next message like it is judged better.
-          </Typography>
-          <TextField autoFocus fullWidth label="Where does this work actually live? (optional)"
-            value={belongsTo} onChange={(e) => setBelongsTo(e.target.value)}
-            placeholder="ADP" helperText="Name the system that really holds it. This is the part triage cannot work out on its own — it only knows the repositories it has the code for." />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setMineOpen(false)} disabled={savingMine}>Cancel</Button>
-          <Button variant="contained" disableElevation onClick={takeItMyself} disabled={savingMine}>
-            {savingMine ? <CircularProgress size={15} /> : "Put it on my list"}
-          </Button>
-        </DialogActions>
-      </Dialog>
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>New task</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "8px !important" }}>
@@ -2058,6 +2037,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <Button variant="contained" disabled={!nt.Title.trim()} onClick={create}>Create</Button>
         </DialogActions>
       </Dialog>
+      {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
       <Confirm open={confirmDone} title="Stop the agent and mark done?"
         text="An agent session is still open on this task. Mark done ends it - what it did so far is saved with the task."
         confirmLabel="Stop it and mark done" onClose={() => setConfirmDone(false)}

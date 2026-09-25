@@ -25,6 +25,9 @@ import { onLive } from "./live.js";
 import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark, assignedAgent } from "./ui.jsx";
 import { AGENT } from "./taskLifecycle.js";
+import QueuedStart from "./QueuedStart.jsx";
+import { LANE_META, KIND_META } from "./funnelPile.js";
+import { remindWaiting } from "./taskFilter.js";
 
 // Not every ask is about a codebase - "what does this policy mean", "draft me a note", "prepare
 // me for this meeting". The task carries `repo:none`, which is the one answer the picker could
@@ -91,7 +94,7 @@ const ChatTail = ({ run, name }) => {
   return (
     <Box sx={{ mt: 0.7 }}>
       <Typography sx={{ ...mono, fontSize: 9, letterSpacing: ".11em", textTransform: "uppercase", color: FAINT }}>
-        {waiting ? "asked you" : `${name} is working`}
+        {waiting ? says(subState(run), name) : `${name} is working`}
       </Typography>
       {said && <Typography sx={{ color: INK, fontSize: 11.5, lineHeight: 1.45, mt: 0.2,
         display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{said}</Typography>}
@@ -228,27 +231,14 @@ const NoteDialog = ({ open, task, onClose }) => {
   );
 };
 
-// Column model: where a card sits is derived from task status + its latest review.
-// Which lane a card sits in is decided by what is TRUE right now - a live CLI session is an
-// agent working, and that same session gone quiet is a question waiting on you. Reading it
-// off the Status column alone left a card in "Queued" while its agent asked what to do.
-const laneOf = (t, live) => {
-  const l = live[t.TaskId];
-  // Work started again on a finished task is work in progress, whatever the Status column
-  // still says. The tell is WHEN the session began: one that started after the task was
-  // closed means somebody picked it back up, while one that predates the close is just a
-  // terminal nobody shut - and bouncing every card out of Done because its window is still
-  // open would be its own bug. No ClosedAt to compare against (a row closed before the
-  // column existed) trusts the live session: it is the fact happening right now.
-  const resumed = l && (!t.ClosedAt || String(l.StartedAt || "") > String(t.ClosedAt));
-  if (t.Status === "done" && !resumed) return "done";
-  if (l) return l.kind === "session" && isWaiting(l) ? "waiting" : "working";
-  if (t.RunStatus === "error") return "waiting";       // it failed: your move, never back to "queued"
-  if (t.ReviewStatus === "pending" || t.Status === "waiting") return "waiting";
-  if (t.RunStatus === "running") return "working";
-  if (t.Status === "in_progress") return "waiting";    // its session ended without a wrap-up: your move
-  return "queued";
-};
+// WHERE A CARD SITS IS THE TASK'S STATE (T2, T8, T9, the owner, 2026-09-25: "everything should be the task list and
+// the board just follows whatever is going on there"). The server decides it once (taskstate.py) and the Tasks list
+// draws the same field; this board used to decide again in the browser, from its own facts, and the two disagreed.
+// Its columns are the agent's states, in lanes.json's words: "Queued" held waiting-to-start, stopped, saved and
+// Taskuary-closed alike, and "Waiting on you" held an asking agent, a drafted reply and a task waiting on somebody else.
+const COLUMN_OF = { queued: "queued", working: "working", blocked: "blocked", saved: "left", stopped: "left",
+  agentdone: "agentdone", approve: "agentdone" };
+const laneOf = (t) => COLUMN_OF[t.State] || null;
 
 // Done is a TODAY column: yesterday's finished work is history, not board furniture - it
 // lives on in Tasks, reopenable any time.
@@ -259,10 +249,11 @@ const localToday = () => {
 // a run's status in the agent vocabulary the rest of the app speaks (taskLifecycle.AGENT)
 const RUN_WORD = { running: AGENT.working, stopped: AGENT.stopped, failed: AGENT.stopped, error: AGENT.stopped };
 const COLS = [
-  { key: "queued", title: "Queued", dot: "#867f74", status: "open" },
-  { key: "working", title: "Agent working", dot: "#6f8a6e", status: "in_progress" },
-  { key: "waiting", title: "Waiting on you", dot: ALERT, status: "waiting" },
-  { key: "done", title: "Done", dot: "#47654a", status: "done" },
+  { key: "queued", title: `${LANE_META.queued.mark} ${LANE_META.queued.word}`, dot: "#867f74" },
+  { key: "working", title: `${LANE_META.working.mark} ${LANE_META.working.word}`, dot: "#6f8a6e" },
+  { key: "blocked", title: `${LANE_META.blocked.mark} ${LANE_META.blocked.word}`, dot: ALERT },
+  { key: "left", title: `${LANE_META.saved.mark} ${LANE_META.saved.word} · ${LANE_META.stopped.mark} ${LANE_META.stopped.word}`, dot: "#a09787" },
+  { key: "agentdone", title: `${KIND_META.agentdone.mark} ${KIND_META.agentdone.word}`, dot: "#47654a" },
 ];
 
 export default function BoardView({ onOpenTask, onOpenReports, active = true }) {
@@ -300,12 +291,20 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
   useEffect(() => { load(); return active ? onLive("task-changed", load) : undefined; }, [load, active]);
   // live tails arrive as run-tail (the cards are a status wall you watch); the task page has the full trace
   useEffect(() => {
-    const tick = () => api.get("/api/runs/live").then(({ data }) =>
-      setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
+    let sig = null;
+    const tick = () => api.get("/api/runs/live").then(({ data }) => {
+      const rows = data.data || [];
+      setLive(Object.fromEntries(rows.map((r) => [r.TaskId, r])));
+      // A SESSION THAT GOES QUIET is an agent waiting on you, and nothing else announces it: the rows are read again,
+      // so the column is still the task's own state, never a second verdict made here (T9)
+      const now = rows.map((r) => `${r.TaskId}:${isWaiting(r) ? 1 : 0}`).sort().join(",");
+      if (sig !== null && now !== sig) load();
+      sig = now;
+    }).catch(() => {});
     if (!active) return undefined;
     tick(); const id = setInterval(tick, 3000);
     return () => clearInterval(id);
-  }, [active]);
+  }, [active, load]);
   useEffect(() => {
     if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0], model: "" }));
   }, [agents, nt.agent]);
@@ -425,15 +424,18 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
       {view === "studio" && <StudioView onOpenTask={onOpenTask} refresh={boardTick} active={active} />}
       {view === "wall" && <WallView onOpenTask={onOpenTask} onOpenReports={onOpenReports} refresh={boardTick} active={active} />}
 
-      <Box sx={{ display: view === "columns" ? "grid" : "none", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
+      <Box sx={{ display: view === "columns" ? "grid" : "none", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(5, minmax(0, 1fr))" }, gap: 1.5, alignItems: "start" }}>
         {COLS.map((col) => {
           const today = localToday();
           // Done is agent work finished today. A reply the owner answered by hand, or a to-do
           // ticked off in Tasks, never came through here - it lives in Tasks, not on this board.
-          const agentWork = (t) => t.HadAgent || t.Kind === "coding" || t.Kind === "setup" || !!t.Session;
-          const cards = tasks.filter((t) => laneOf(t, live) === col.key
-            // ...or finished earlier and handled on the work rail today (the owner, 2026-09-24: "same in board columns")
-            && (col.key !== "done" || ((String(t.ClosedAt || t.UpdatedAt || "").startsWith(today) || t.OnWorkToday) && t.Kind !== "reply" && agentWork(t))));
+          const agentWork = (t) => t.HadAgent || t.Kind === "coding" || t.Kind === "setup" || !!t.Session
+            || String(t.Assignee || "").startsWith("agent:");
+          const cards = tasks.filter((t) => laneOf(t) === col.key && agentWork(t)
+            // REMIND ME holds a card off the board until its day - unless its agent is asking you (T7, A11)
+            && (!remindWaiting(t) || t.State === "blocked")
+            // ...and a finished one is today's: finished today, or handled on the work rail today (2026-09-24)
+            && (col.key !== "agentdone" || t.State === "approve" || String(t.ClosedAt || t.UpdatedAt || "").startsWith(today) || t.OnWorkToday));
           // rank mode: the Queued lane reads top-down in the order the funnel will take them
           if (col.key === "queued") cards.sort((a, b) => (b.Queued?.value ?? 0.5) - (a.Queued?.value ?? 0.5));
           return (
@@ -450,8 +452,8 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 <Chip size="small" label={cards.length} sx={{ height: 16, fontSize: 9.5, bgcolor: PANEL,
                   border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />
               </Box>
-              {col.key === "done" && <Typography variant="caption" sx={{ display: "block", color: FAINT, fontSize: 10, px: 0.4, mb: 0.85, lineHeight: 1.3 }}>
-                Finished today, or handled on the work rail today — older finished work lives in Tasks, reopenable any time.
+              {col.key === "agentdone" && <Typography variant="caption" sx={{ display: "block", color: FAINT, fontSize: 10, px: 0.4, mb: 0.85, lineHeight: 1.3 }}>
+                Finished today, or a reply it drafted waiting for your yes — older finished work lives in Tasks.
               </Typography>}
               {!cards.length && <Empty>Nothing here.</Empty>}
               {cards.map((t) => {
@@ -517,20 +519,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                   )}
                   {/* a held-back dispatch says so ON the card - who it waits for and why, readable
                       without hovering anything */}
-                  {t.Queued && (
-                    <Box sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: ROLES.working.tint, border: `1px solid ${ROLES.working.bd}`,
-                      borderLeft: `3px solid ${ROLES.working.solid}`, borderRadius: 1.25 }}>
-                      <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, display: "block",
-                        fontSize: 10, lineHeight: 1.4 }}>
-                        ⏳ {t.Queued.behind ? `Waiting on ${t.Queued.behind}` : "Waiting for a free agent slot"}
-                        {t.Queued.behindTitle ? ` — “${t.Queued.behindTitle}”` : ""}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: ROLES.working.ink, display: "block", fontSize: 9.5,
-                        lineHeight: 1.45, mt: 0.2 }}>
-                        {t.Queued.why ? `${t.Queued.why} · ` : t.Queued.reason ? `${t.Queued.reason} · ` : ""}starts by itself when it can
-                      </Typography>
-                    </Box>
-                  )}
+                  <QueuedStart taskId={t.TaskId} queued={t.Queued} onChanged={load} compact />
                   {live[t.TaskId] && <LiveTail run={live[t.TaskId]} chat={chat} name={agentName(t)} />}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mt: 0.6 }}>
                     <Chip size="small" label={t.Kind} sx={{ height: 15, fontSize: 8.5, bgcolor: PANEL2,

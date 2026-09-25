@@ -43,7 +43,7 @@ test("the lead counts what is ready to approve first, and working rows are not w
 });
 
 test("a drafted reply says it is ready, everything else says its lane's word", () => {
-  assert.equal(stateOf(it("approve", "review"), "reply ready"), "draft ready");
+  assert.equal(stateOf(it("approve", "review"), "reply ready"), "reply ready");
   assert.equal(stateOf(it("approve", "action"), "reply ready"), "wants a yes");
   assert.equal(stateOf(it("asked"), "asked you"), "asked you");
 });

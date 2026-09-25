@@ -32,7 +32,7 @@ def units(view):
 
     for row in view.get('messages', ()):
         # History/context remains available in details, not an independent arrival.
-        if row.get('Status') in ('context', 'history', 'skipped') or row.get('Status') is None:
+        if row.get('Status') in ('context', 'history', 'skipped', 'autoreply') or row.get('Status') is None:
             continue
         substance = _pick(row, ('ExternalId', 'ConversationId', 'Channel', 'SourceName',
             'Subject', 'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink',

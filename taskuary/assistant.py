@@ -181,7 +181,7 @@ def _reply_text(review: dict | None) -> str:
     """The words that left through Review, never an unsent draft."""
     return str((review or {}).get('FinalText') or (review or {}).get('DraftText') or '').strip()
 
-_OOO = re.compile(r'^(automatic reply|auto(matic)?[ -]?reply|out of (the )?office)', re.I)
+from .autoreply import SUBJECT as _OOO                      # the mail system's own auto-reply mark (autoreply.py)
 _UNTIL = re.compile(r'\b(until|through|returning( on)?|back (on|in the office on))\s+([A-Z][a-z]+day,?\s+)?([A-Z][a-z]+ \d{1,2}(st|nd|rd|th)?|\d{1,2}/\d{1,2}(/\d{2,4})?)', re.I)
 def ooo(store, days: int = 14) -> dict:
     """{sender email: 'out until Monday August 31st (auto-reply Thu 28 Aug)'} from the auto-replies in the

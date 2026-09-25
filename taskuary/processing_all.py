@@ -93,10 +93,10 @@ def row_lane(row: dict) -> str:
 
 
 SCHEMA = 'taskuary.processing.all.v1'
-MEMBERSHIP_RULES = 'skipped-without-task-ungrouped-1'   # bump when reconcile_membership groups entities differently -
+MEMBERSHIP_RULES = 'skipped-or-autoreply-without-task-ungrouped-2'   # bump when reconcile_membership groups entities differently -
 # reconcile returns already_current while nothing is dirty, so a RULE change leaves a graph nothing marks stale until this moves
 PRESENTATION_VERSION = 1
-HIDDEN_MESSAGES = {'context', 'history', 'skipped'}
+HIDDEN_MESSAGES = {'context', 'history', 'skipped', 'autoreply'}
 
 
 class AllError(Exception):   # not a ValueError: the routes that map ValueError to 422 must not swallow it
@@ -211,7 +211,9 @@ def message_row(message, item, threads, now, *, full=False):
     answered = max((m.get('SentAt') or '' for m in thread
                     if message.get('SentAt') is not None and m.get('Status') == 'context'
                     and (m.get('SentAt') or '') > sent), default=None)
-    last = _newest([m for m in thread if m.get('Status') is not None and m.get('Status') != 'skipped'], 'SentAt', 'MessageId') or {}
+    from .autoreply import is_auto
+    last = _newest([m for m in thread if m.get('Status') is not None and m.get('Status') != 'skipped' and not is_auto(m)],
+                   'SentAt', 'MessageId') or {}
     yours = last.get('Status') == 'context' or last.get('Direction') == 'out'
     decision_at = review.get('DecidedAt') if review.get('DecidedAt') is not None else review.get('CreatedAt')
     sent_unanswered = (review.get('Status') in {'approved', 'edited', 'sent'}
@@ -372,7 +374,10 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
         if (view.get('processing_read') or {}).get('active') and not include_excluded:
             candidates = [m for m in candidates if not _muted_candidate(
                 item, message_row(m, item, threads, now.strftime('%Y-%m-%d %H:%M:%S')))]
-        message = _newest(candidates, 'SentAt', 'MessageId')
+        # an auto-reply never speaks for the item (autoreply.py) - one already filed on a task spoke for it, and the card
+        # read "This is an out-of-office auto-reply" over an urgent ask (2026-09-25)
+        from .autoreply import is_auto
+        message = _newest([m for m in candidates if not is_auto(m)] or candidates, 'SentAt', 'MessageId')
         if message:
             legacy = message_row(message, item, threads, now.strftime('%Y-%m-%d %H:%M:%S'))
             target = {'kind': 'message', 'id': message['MessageId']}

@@ -675,6 +675,8 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     # References threads replies the way Graph's conversationId does
                     'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
                     'sent_at': sent_at, 'source_name': user}
+                from .autoreply import from_headers
+                if from_headers(msg): incoming['auto_reply'] = True
             except Exception as e:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
             conv = incoming['conversation_id']

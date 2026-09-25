@@ -51,8 +51,9 @@ def _arrived_after_close(task, view) -> bool:
     from .ingest import is_ours
     at = processing_all._stamp(task.get('ClosedAt'))
     if not at: return False
+    from .autoreply import is_auto
     return any((processing_all._stamp(m.get('SentAt')) or at) > at
-               for m in view.get('messages') or [] if not is_ours(m))
+               for m in view.get('messages') or [] if not is_ours(m) and not is_auto(m))
 
 
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
@@ -85,9 +86,9 @@ def _noise_hidden(store) -> bool:
 def _noise(row, view) -> bool:
     """Nobody asking anything: withdrawn, an auto-reply, or a thread whose last word is yours. Not a policy-IGNORED
     line: that one stays, saying so (the rail shows what a rule filed; unjudged is not fyi)."""
-    from .assistant import _OOO
+    from .autoreply import is_auto
     from .ingest import is_ours
-    if row.get('MsgStatus') == 'withdrawn' or _OOO.match(str(row.get('Subject') or '')): return True
+    if row.get('MsgStatus') == 'withdrawn' or is_auto({'Subject': row.get('Subject'), 'Status': row.get('MsgStatus')}): return True
     at = processing_all._stamp(row.get('SentAt'))
     msgs = view.get('messages') or []
     last = max(msgs, key=lambda m: processing_all._stamp(m.get('SentAt')) or datetime.min, default=None)

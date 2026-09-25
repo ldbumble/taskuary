@@ -124,6 +124,11 @@ def _connectors(store, o):
     from .assistant import connect_ideas
     return connect_ideas(store, days=o['days'], floor=o['floor']), []
 
+def _automation(store, o):
+    from .assistant import automation_due
+    from .toil import gather
+    return (gather(store, o['days']) if automation_due(store, o.get('report')) else ''), []
+
 def _health(store, o):
     from .assistant import health_ideas
     return health_ideas(store), []
@@ -160,6 +165,11 @@ CATALOGUE = (
     Block('open_work', 'Open work', 'view', ('task', 'run', 'review'),
           'OPEN WORK',
           _open, cap=20),
+    # the weekly Automation ideas report, folded in (2026-09-25): the same counts, read once a week (assistant.automation_due)
+    Block('automation', 'Worth automating', 'view', ('message', 'route', 'review', 'policy'),
+          "WORTH AUTOMATING (read once a week: the last {DAYS} days of my traffic counted - who sends what and what became of "
+          "it, drafts I approved untouched, and the rules that already exist)",
+          _automation, window=('days', 30, 'How far back to count what repeats')),
     Block('already_said', 'Already said', 'query', ('idea',),
           'ALREADY SAID (never repeat)',
           _already_said, sql=ALREADY_SAID_SQL, cap=40),
@@ -347,7 +357,7 @@ def stamp(b: Block, o: dict, *, facts: str = '', report_id=None, source_ids=None
     - they stamped their own and drifted, and the card priced the seeded Assistant's note for every
     report that asked."""
     if b.id == 'knowledge': return o | {'facts': facts}
-    if b.id == 'notes': return o | {'report': report_id}
+    if b.id in ('notes', 'automation'): return o | {'report': report_id}
     if b.id == 'system_checks': return o | {'source_ids': source_ids, 'inline': inline}
     return o
 
@@ -476,6 +486,9 @@ CARDS = (
          (('done_days', 'days of done work', 7, (('done_this_week', 'days'),)),
           ('quiet_days', 'days before work is quiet', 3, (('gone_quiet', 'days'),))),
          'open tasks, what got done, and work that has gone quiet'),
+    Card('automation', 'Automation', ('automation',),
+         (('days', 'days counted', 30, (('automation', 'days'),)),),
+         'once a week, a month of traffic counted - what repeats enough to be worth automating'),
     Card('memory', 'Memory', ('already_said', 'notes', 'knowledge'), (),
          'what it already said, its note from the last check, and the knowledge base'),
     Card('systems', 'Systems', ('health', 'connectors'),

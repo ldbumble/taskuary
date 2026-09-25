@@ -563,6 +563,8 @@ class OwnershipHealTests(unittest.TestCase):
         s = F.store()
         from tests.digest_fixture import add_digest
         add_digest(s)                                        # an older install: it was seeded then, and the heal still owes it
+        from tests.automate_fixture import add_automate
+        add_automate(s)                                      # ...and its Automation ideas, retired the same way (2026-09-25)
         for addr in ('Morning digest', 'Automation ideas', 'Advisor'):
             s._exec("UPDATE source SET Owner='owner' WHERE Channel='report' AND Address=?", (addr,))
         mine = s.save_source({'Channel': 'report', 'Address': 'Assistant for Backend Monitoring', 'Active': 1,
@@ -632,7 +634,7 @@ class OwnershipHealTests(unittest.TestCase):
         seeded = {r['Address']: (r['Owner'], json.loads(r['ConfigJson'] or '{}').get('type'))
                   for r in s.list_sources(active_only=False) if r['Channel'] == 'report'}
         settings = s.get_settings()
-        self.assertEqual(len(SEEDED_REPORTS), 3)
+        self.assertEqual(len(SEEDED_REPORTS), 2)
         live = {s_ for s_, _a, _k in SEEDED_REPORTS}
         for sentinel, address, kind in RETIRED_SEEDS:                    # retired: no longer written, still healed
             self.assertNotIn(address, seeded)

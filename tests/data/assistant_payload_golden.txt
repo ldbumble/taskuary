@@ -29,6 +29,13 @@ OPEN WORK:
 - TQ-0002 [in_progress, writing] Draft the audit answers - <h> since anything happened
 - TQ-0001 [open, coding] Reconcile the Q3 ledger - <h> since anything happened
 
+WORTH AUTOMATING (read once a week: the last 30 days of my traffic counted - who sends what and what became of it, drafts I approved untouched, and the rules that already exist):
+INBOUND BY SENDER (last 30 days; senders with 3+ messages):
+  (nothing repeated 3+ times)
+EXISTING POLICIES (already automated - never propose these again):
+  (none)
+CURRENT SWITCHES: auto-dispatch=on, phone approvals=off
+
 ALREADY SAID (never repeat):
 - (open) The ledger reconciliation repeats monthly - worth automating.  [key idea:weekly-ledger · said <day> <mon> <time>]
 - (open) No answer from Priya on the signed copy.  [key followup:c-invoice · said <day> <mon> <time>]
@@ -64,6 +71,13 @@ DONE THIS WEEK (my own work, with the agent's summary):
 OPEN WORK:
 - TQ-0002 [in_progress, writing] Draft the audit answers - <h> since anything happened
 - TQ-0001 [open, coding] Reconcile the Q3 ledger - <h> since anything happened
+
+WORTH AUTOMATING (read once a week: the last 30 days of my traffic counted - who sends what and what became of it, drafts I approved untouched, and the rules that already exist):
+INBOUND BY SENDER (last 30 days; senders with 3+ messages):
+  (nothing repeated 3+ times)
+EXISTING POLICIES (already automated - never propose these again):
+  (none)
+CURRENT SWITCHES: auto-dispatch=on, phone approvals=off
 
 ALREADY SAID (never repeat):
 - (open) The ledger reconciliation repeats monthly - worth automating.  [key idea:weekly-ledger · said <day> <mon> <time>]

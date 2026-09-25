@@ -14,6 +14,7 @@ export const BLOCKS = [
   { id: "arrivals", label: "What arrived", days: 2 },
   { id: "done_this_week", label: "Done this week", days: 7 },
   { id: "open_work", label: "Open work" },
+  { id: "automation", label: "Worth automating", days: 30 },
   { id: "already_said", label: "Already said" },
   { id: "notes", label: "My notes from last check" },
   { id: "waiting_on", label: "Waiting on them", hours: 24 },
@@ -77,6 +78,9 @@ export const TASKUARY_CARDS = [
   { id: "work", label: "Work", blocks: ["open_work", "done_this_week", "gone_quiet"],
     knobs: [{ name: "done_days", label: "days of done work", default: 7 }, { name: "quiet_days", label: "days before work is quiet", default: 3 }],
     says: "open tasks, what got done, and work that has gone quiet" },
+  { id: "automation", label: "Automation", blocks: ["automation"],
+    knobs: [{ name: "days", label: "days counted", default: 30 }],
+    says: "once a week, a month of traffic counted - what repeats enough to be worth automating" },
   { id: "memory", label: "Memory", blocks: ["already_said", "notes", "knowledge"], knobs: [],
     says: "what it already said, its note from the last check, and the knowledge base" },
   { id: "systems", label: "Systems", blocks: ["health", "connectors"],
@@ -85,7 +89,7 @@ export const TASKUARY_CARDS = [
 ];
 // ...which block's window a card's number stands for, for a report saved before cards existed
 const KNOB_BLOCK = { messages: { days: "threads", hours: "waiting_on" }, calendar: { days: "calendar" },
-  work: { done_days: "done_this_week", quiet_days: "gone_quiet" }, systems: { days: "connectors" } };
+  work: { done_days: "done_this_week", quiet_days: "gone_quiet" }, systems: { days: "connectors" }, automation: { days: "automation" } };
 
 // The cards a saved config amounts to. `taskuary_sources` present (even empty) is the whole truth;
 // absent, the block choice - or the defaults - is shown AS cards (assistantblocks.to_cards), and

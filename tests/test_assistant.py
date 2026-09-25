@@ -425,6 +425,58 @@ class ButtonTests(unittest.TestCase):
                        'action': {'type': 'note', 'why': 'new facts'}}, _ago())
         self.assertEqual(len(assistant._public(s.get_idea(idea['IdeaId']))['action']['chat']), 2)
 
+    def test_a_conversation_comes_before_a_pile_of_forwards_and_the_soul_goes_whole(self):
+        """The chat where the owner and a colleague restarted a frozen app ("try now", "that worked") was cut from WHAT
+        PEOPLE SAID by seven forwards from one sender, and the Advisor read "try now" alone (2026-09-25)."""
+        s = _store()
+        for n in range(7):
+            _mail(s, 'paula@northwind.example', f'Refund form rejected - resident {n}', f'Forwarding batch {n}.', days=0, hours=n,
+                  conv=f'fwd{n}', name='Paula Vance')
+        _mail(s, 'ray@northwind.example', 'Portal help', 'try now', days=1, conv='chat', name='Ray Colton')
+        _mine(s, 'Portal help', 'that worked, thanks - we have to find out why it freezes', 1, 'chat')
+        txt, _ = assistant._people_context(s, 2)
+        heads = [l for l in txt.splitlines() if l.startswith('- ')]
+        self.assertIn('Ray Colton', heads[0]); self.assertIn('why it freezes', txt)         # the exchange leads, whole
+        self.assertEqual(sum('Paula Vance [' in h for h in heads), 1)                      # one forward drawn in full...
+        self.assertTrue(any(h.startswith('- Paula Vance: 6 more') for h in heads))          # ...the rest folded to one line
+        s.save_doc('soul', '# SOUL\n' + 'x' * 3000 + '\n## Systems\nThe portal is the vendor app.', 'owner')
+        seen = {}
+        assistant.think(s, [], lambda system, user, **k: seen.update(system=system) or '{"say": []}')
+        self.assertIn('The portal is the vendor app.', seen['system'])                     # past the old 1500-char cut
+
+    def test_the_month_of_counts_is_read_once_a_week_and_only_a_real_run_starts_the_week(self):
+        """Automation ideas, folded into the Advisor (the owner, 2026-09-25): its evidence rides in the Advisor's payload
+        as the Automation card - once a week, because it is ~17k characters and the check runs every 30 minutes."""
+        s = _store()
+        for n in range(4):
+            _mail(s, 'digest@vendor.example', f'Weekly numbers {n}', 'Numbers attached.', days=n, name='Vendor Digest')
+        self.assertIn(assistant.AUTOMATION_HEAD, assistant.facts(s))                         # never read: due
+        self.assertIn('[taskuary.automation]', assistant.PROMPT)                            # the prompt places it
+        self.assertIsNone(s.get_settings().get('assistant_automation_read'))                # a preview starts nothing
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            assistant.run(s, llm=lambda *a, **k: '{"say": []}', force=True)
+        self.assertTrue(s.get_settings().get('assistant_automation_read'))                  # the check that read it did
+        self.assertNotIn(assistant.AUTOMATION_HEAD, assistant.facts(s))                     # ...so the week is quiet
+        s.set_setting('assistant_automation_read', _ago(days=8), 't')
+        self.assertIn(assistant.AUTOMATION_HEAD, assistant.facts(s))                        # ...until it has passed
+
+    def test_an_unedited_copy_of_the_last_shipped_prompt_is_healed_and_an_edited_one_is_kept(self):
+        import hashlib, os
+        from taskuary.store import SQLiteStore
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:        # Windows holds the sqlite file past close
+            path = os.path.join(d, 'h.db'); s = SQLiteStore(path)
+            adv = next(r for r in s.list_sources(active_only=False) if r['Address'] == 'Advisor')
+            for text in ('the prompt as it shipped last week', 'the prompt as the owner rewrote it'):
+                c = json.loads(adv['ConfigJson']) | {'ai_prompt': text}
+                s._exec('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), adv['SourceId'])); s.cx.close()
+                shipped = (hashlib.sha256(b'the prompt as it shipped last week').hexdigest(),)
+                with mock.patch.object(assistant, 'OLD_PROMPT_SHA', shipped):
+                    s = SQLiteStore(path)
+                got = json.loads(next(r for r in s.list_sources(active_only=False) if r['Address'] == 'Advisor')['ConfigJson'])['ai_prompt']
+                self.assertEqual(got, assistant.PROMPT if 'shipped' in text else text)
+            s.cx.close()
+        self.assertNotIn(hashlib.sha256(assistant.PROMPT.encode()).hexdigest(), assistant.OLD_PROMPT_SHA)
+
     def test_an_idea_about_work_just_handled_is_not_said(self):
         """"it should not make another advice if we just did it" (the owner, 2026-09-25): a loop fixed and closed yesterday
         came back as a fresh idea - and a fresh task - the next morning. For a week after a task closes, the Advisor's

@@ -1,8 +1,9 @@
 """What a fresh install already has running.
 
-Three reports ship: the end-of-day Inbox checkup, the Assistant (a voice on the Timeline) and
-Automation ideas (the weekly 'what should you automate next' brief). The Morning digest used to be a
-fourth; since 2026-09-23 the walk opens the day with who wants what, so a fresh install has none.
+Two reports ship: the end-of-day Inbox checkup and the Advisor (a voice on the Timeline). The Morning
+digest used to be a third; since 2026-09-23 the walk opens the day with who wants what. Automation ideas
+(the weekly 'what should you automate next' brief) was the fourth; since 2026-09-25 the Advisor reads
+the same month of counts once a week, so a fresh install has neither - older installs keep theirs.
 Each is a real report - prompt on the Reports tab, deleting the row is the off switch, and a
 sentinel setting keeps a deletion deleted across restarts.
 
@@ -28,11 +29,15 @@ def _ago(days):
 
 
 class WhatShipsTests(unittest.TestCase):
-    def test_the_three_shipped_reports_are_there_and_active(self):
+    def test_the_two_shipped_reports_are_there_and_active(self):
         got = _reports(MemoryStore())
-        self.assertEqual(sorted(got), ['Advisor', 'Automation ideas', 'End of day checkup'])
-        self.assertEqual([got[n]['type'] for n in ('End of day checkup', 'Automation ideas', 'Advisor')],
-                         ['evening_inbox', 'automate', 'assistant'])
+        self.assertEqual(sorted(got), ['Advisor', 'End of day checkup'])
+        self.assertEqual([got[n]['type'] for n in ('End of day checkup', 'Advisor')], ['evening_inbox', 'assistant'])
+
+    def test_a_fresh_install_gets_no_automation_ideas_the_advisor_counts_the_month_itself(self):
+        s = MemoryStore()
+        self.assertNotIn('automate', {c.get('type') for c in _reports(s).values()})
+        self.assertIsNone(s.get_settings().get('automate_report_seeded'))
 
     def test_a_fresh_install_gets_no_morning_digest(self):
         """The walk's opener does its job now; the report type stays for anyone who makes one."""
@@ -42,8 +47,9 @@ class WhatShipsTests(unittest.TestCase):
 
     def test_the_startup_reports_have_something_to_say_the_moment_the_app_opens(self):
         """The evening ritual alone waits for evening; the other shipped reports greet launch."""
-        got = _reports(MemoryStore())
-        for name in ('Automation ideas', 'Advisor'):
+        from tests.automate_fixture import add_automate
+        s = MemoryStore(); add_automate(s); got = _reports(s)
+        for name in ('Automation ideas', 'Advisor'):                     # an older install's Automation ideas too
             self.assertTrue(is_due(got[name], None, startup=True), name)
 
     def test_the_evening_checkup_is_eight_hours_at_six_and_waits_for_its_first_slot(self):
@@ -54,7 +60,8 @@ class WhatShipsTests(unittest.TestCase):
         self.assertIn('Focused and Other', cfg['ai_prompt'])
 
     def test_automation_ideas_keeps_its_monday_clock(self):
-        cfg = _reports(MemoryStore())['Automation ideas']
+        from tests.automate_fixture import add_automate
+        s = MemoryStore(); add_automate(s); cfg = _reports(s)['Automation ideas']
         self.assertEqual(cfg['cron'], '0 8 * * 1')
         self.assertTrue(cfg['once_per_week'])
 

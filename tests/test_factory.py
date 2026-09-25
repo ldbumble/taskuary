@@ -172,7 +172,7 @@ class TimelineDeskTests(unittest.TestCase):
         fx, path = _file_fx()
         fx.desk()
         reports = [s for s in fx.s.list_sources() if s['Channel'] == 'report']
-        self.assertGreaterEqual(len(reports), 4)  # census picture + digest + automate + assistant
+        self.assertGreaterEqual(len(reports), 3)  # census picture + the two shipped (end of day, Advisor)
         for src in reports:
             cfg = json.loads(src['ConfigJson'] or '{}')
             self.assertTrue(src['LastPolledAt'], src['Address'])

@@ -50,6 +50,7 @@ POST_TOKENS = 900
 WATCH_SOURCE_CHARS = 6_000
 WATCH_TOTAL_CHARS = 18_000
 PEOPLE_THREADS, PEOPLE_CHARS = 14, 5200   # what people said: threads shown, and the block's ceiling
+SOUL_CHARS = 20000                        # SOUL.md goes whole; this only stops a runaway document
 _LOCK = threading.Lock()   # one check at a time: two clocks firing in the same second posted the same line twice (2026-08-29 23:59:02)
 # the owner's last word on a thread ASKED for something - that is what a chase is for...
 _ASKS = re.compile(r'\?|\b(let me know|could you|can you|would you|please (send|confirm|share|advise|review|check)|get back to me|'
@@ -90,7 +91,12 @@ PROMPT = (
     'Work gone quiet (cold): push it or drop it - say which. The fix that keeps coming back, the task that closed without '
     'shipping, the process change worth proposing. Name the evidence: TQ-ref, count, sender. Never restate what I did.\n'
     '4. THE APP AND THE SYSTEMS PEOPLE NAME:\n[taskuary.systems]\n'
-    '5. WHAT I ALREADY KNOW - never repeat anything under ALREADY SAID, reworded or not; use my notes; draw on the knowledge base by name:\n[taskuary.memory]\n'
+    '5. WHAT REPEATS - once a week, a month of my traffic counted:\n[taskuary.automation]\n'
+    'The automation worth having IN THIS APP, ranked by the minutes it saves me a week and resting on the numbers: a skip rule on '
+    'a sender nobody reads, an auto-answer for the question that always gets the same reply, a standing prompt, a scheduled '
+    'report, auto-draft for drafts I always approve untouched. Never one the existing rules already cover; one a week is plenty, '
+    'none when nothing repeats enough.\n'
+    '6. WHAT I ALREADY KNOW - never repeat anything under ALREADY SAID, reworded or not; use my notes; draw on the knowledge base by name:\n[taskuary.memory]\n'
     'Be useful, not busy: a check with nothing NEW posts nothing, and most checks are that. When you do speak, prefer the '
     'specific over the general: a name, a date, a quoted phrase, a cause. One idea about my own work a day is right; three is '
     'noise. A fact that CHANGES an earlier line (they are out of office; the failure has a cause; they answered) is new and worth one line.\n'
@@ -116,6 +122,9 @@ SYSTEMS_CONTRACT = (
     '"notes": ""}. At most {max_lines} entries. Use only CONFIGURED DATA SOURCES. If nothing '
     'needs attention, return {"say": []}.')
 # a stock prompt still starting like one of these is healed to PROMPT (store.__init__)
+# ...and the shipped prompts that open like today's, by their sha256: an unedited copy saved on the seeded row is healed
+# to PROMPT (store.py) - 2026-09-25, the one before the automation card [taskuary.automation] joined it
+OLD_PROMPT_SHA = ('06a4ec48fcec9d8bbc9fc6f423f52360aa1b0a2e7f5affe31582e7da56d1e302',)
 OLD_PROMPT_HEADS = ('You are my assistant. Once an hour,', 'You are my assistant. Every 20 minutes you check in;',
                     'You are my assistant. Every 30 minutes you check in;',
                     'You are my assistant; every 30 minutes you check in.',
@@ -617,13 +626,23 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         k = r.get('ConversationId') or re.sub(r'^((re|fw|fwd|aw)\s*:\s*)+', '', _short(r.get('Subject'), 60), flags=re.I).lower()
         by.setdefault(k, []).append(r)
     me = (store.get_settings().get('owner_email') or '').lower()
-    out, used, mids = [], 0, []
-    for k, rs in list(by.items())[:PEOPLE_THREADS]:
+    mine = lambda c: c.get('Status') == 'context' or c.get('Direction') == 'out' or (c.get('FromEmail') or '').lower() == me
+    def chain_of(rs):
         chain = store.thread_messages(conversation_id=rs[0].get('ConversationId'), subject=rs[0].get('Subject'), limit=12) if rs[0].get('ConversationId') else rs
-        chain = sorted((c for c in chain if c.get('Status') != 'skipped'), key=lambda c: _ts(c.get('SentAt')))[-8:]
+        return sorted((c for c in chain if c.get('Status') != 'skipped'), key=lambda c: _ts(c.get('SentAt')))[-8:] or rs
+    # A CONVERSATION BEFORE A FORWARD (the owner, 2026-09-25): seven refund forwards from one sender filled the block,
+    # and the chat where the owner and a colleague restarted a frozen system - "try now", "that worked" - was cut, so
+    # the Advisor read "try now" as one rolled-up line beside unrelated mail from the same app and joined them. A
+    # thread the owner wrote in goes first; after a sender's first one-way thread the rest fold to one line.
+    threads = [(rs, chain_of(rs)) for rs in by.values()]
+    threads.sort(key=lambda x: not any(mine(c) for c in x[1]))              # stable: newest first within each
+    out, used, mids, shown, folded = [], 0, [], set(), {}
+    for rs, chain in threads:
+        if len(out) >= PEOPLE_THREADS: break
         last = chain[-1]
-        mine = lambda c: c.get('Status') == 'context' or c.get('Direction') == 'out' or (c.get('FromEmail') or '').lower() == me
         who = next((c.get('FromName') or c.get('FromEmail') for c in reversed(chain) if not mine(c)), rs[0].get('FromName') or '?')
+        if who in shown and not any(mine(c) for c in chain):
+            folded.setdefault(who, []).append(rs[0]); continue
         tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
         t = store.get_task(tid) if tid else None
         # A reply sent from Review has a durable send receipt there, but many channels do not
@@ -663,8 +682,12 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         if virtual_reply:
             quotes.append(f"    you {_when(sent_at)[:6]}: \"{_gist(sent_text, 150)}\" [reply sent from Review]")
         block = '\n'.join([head] + [q for q in quotes if not q.endswith(': ""')])
-        if used + len(block) > PEOPLE_CHARS: break
-        out.append(block); used += len(block); mids += [c['MessageId'] for c in chain]
+        if used + len(block) > PEOPLE_CHARS: continue          # a long one is skipped, not the end of the list
+        out.append(block); used += len(block); mids += [c['MessageId'] for c in chain]; shown.add(who)
+    for who, rs in folded.items():
+        subj = '; '.join(dict.fromkeys(_short(r.get('Subject'), 50) for r in rs[:4]))
+        out.append(f"- {who}: {len(rs)} more one-way thread(s) like the one above - re \"{subj}\""
+                   f" (latest mids {', '.join(str(r['MessageId']) for r in rs[:4])})")
     return '\n'.join(out) or f'(no person wrote in the last {said_number(days)} days)', mids
 
 
@@ -1087,7 +1110,9 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     # the report's prompt is the report's own: instruction, data scope, output contract, owner (PW-242).
     # COUNSEL is the chat's document; its walkthrough rules governed idea generation until 2026-09-06.
     system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
-              + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
+              # WHOLE (the owner, 2026-09-25): cut at 1500 chars it stopped inside "Escalate", and the systems, people and
+              # repository map - what FanApp is, who owns what - never reached the voice that reasons about them
+              + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:SOUL_CHARS]}" if soul else ''))
     images = []
     if not systems_only:
         from .llm import readable_images
@@ -1128,6 +1153,21 @@ def notes(store, report_id=None) -> tuple:
     """(text, when) of the note this check's last run left - '' if none yet."""
     s, k = store.get_settings(), notes_key(store, report_id)
     return (s.get(k) or '').strip(), s.get(f'{k}_at') or ''
+
+# WORTH AUTOMATING (the owner, 2026-09-25): the weekly "Automation ideas" report folded into the Advisor. Its
+# evidence - a month of traffic counted - is ~17k characters, so it rides in once a week, not every 30 minutes.
+AUTOMATION_EVERY_DAYS, AUTOMATION_HEAD = 7, 'WORTH AUTOMATING'
+
+
+def automation_key(store, report_id=None) -> str:
+    return f'assistant_automation_read:{report_id}' if own_identity(store, report_id) else 'assistant_automation_read'
+
+
+def automation_due(store, report_id=None) -> bool:
+    """Whether this report's next check should read the month of counts: never read, or a week since."""
+    at = store.get_settings().get(automation_key(store, report_id)) or ''
+    return not at or _ts(at) <= _since(AUTOMATION_EVERY_DAYS)
+
 
 def _notes_block(store, report_id=None) -> str:
     n, at = notes(store, report_id)
@@ -1540,6 +1580,9 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         try:
             say, note, read, mids = think(store, cands, llm, instruction, c['max'],
                                           watch_source_ids, watch_sources, systems_only, blocks, report_id)
+            # the week starts when a check that READ the counts came back - never on a preview or a failed pass
+            if AUTOMATION_HEAD in (read or ''):
+                store.set_setting(automation_key(store, report_id), now.isoformat(sep=' ', timespec='seconds'), 'assistant')
         except Exception as e:
             logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words

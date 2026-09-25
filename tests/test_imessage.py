@@ -535,12 +535,12 @@ class QuickPollTests(unittest.TestCase):
         def tick(_): raise Stop
         try:
             server._QUICK_LAST.clear()
-            with mock.patch.object(server.store, 'get_settings', return_value={'poll_minutes': 0}), \
+            with mock.patch.object(server.store, 'get_setting', side_effect=lambda k, d=None: {'poll_minutes': 0}.get(k, d)), \
                  mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: calls.append(k)), \
                  mock.patch.object(server.time, 'sleep', tick):
                 with self.assertRaises(Stop): server.quick_forever()
             self.assertEqual(calls, [])
-            with mock.patch.object(server.store, 'get_settings', return_value={'poll_minutes': 10}), \
+            with mock.patch.object(server.store, 'get_setting', side_effect=lambda k, d=None: {'poll_minutes': 10}.get(k, d)), \
                  mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: calls.append(k)), \
                  mock.patch.object(server.time, 'sleep', tick):
                 with self.assertRaises(Stop): server.quick_forever()

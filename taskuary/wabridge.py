@@ -45,7 +45,7 @@ def trim_log(store, now: datetime = None) -> dict | None:
     """
     now = now or datetime.now()
     if not LOG.exists(): return None
-    last = str(store.get_settings().get(LOG_RAN_KEY) or '')
+    last = str(store.get_setting(LOG_RAN_KEY) or '')
     if last[:10] == now.strftime('%Y-%m-%d'): return None          # already looked today
     size = LOG.stat().st_size
     since = _stamp(last)

@@ -252,7 +252,7 @@ def draft(store, task_id: int, transcript: str, agent: str = 'coder', llm=None) 
     from .llm import build_llm
     from . import proposals
     try:
-        if store.get_settings().get('playbooks_enabled', '1') != '1' or len(str(transcript or '').strip()) < MIN_SESSION: return None
+        if store.get_setting('playbooks_enabled', '1') != '1' or len(str(transcript or '').strip()) < MIN_SESSION: return None
         task = store.get_task(task_id) or {}
         if of_task(task): return None                     # the second run of a playbook is not a new kind of job
         llm = llm or build_llm(store)

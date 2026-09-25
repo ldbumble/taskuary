@@ -377,6 +377,19 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_a_reopened_pane_puts_the_cursor_back_on_the_input_line(self):
+        """Switching back to a session left the cursor under the "bypass permissions" footer - the seed's last line -
+        until the owner typed and the CLI repainted (2026-09-25). The seed ends with the moves back to where the
+        CLI's own cursor is: up from the last line, then to its column."""
+        from types import SimpleNamespace
+        screen = 'the answer\r\n> dont understand\r\nbypass permissions on\x1b[2;18H'     # the CLI parks on its input line
+        t = SimpleNamespace(scrollback=lambda: screen, cols=80, rows=6)
+        seed = terminal.replay_text(t)
+        self.assertTrue(seed.endswith('bypass permissions on\x1b[1A\x1b[18G'), repr(seed[-40:]))
+        self.assertEqual(terminal.cursor_back(2, 2, 0), '\x1b[1G')                     # already on the last line
+        self.assertEqual(terminal.cursor_back(2, 4, 3), '\r\n\r\n\x1b[4G')             # a blank row below the seed
+        self.assertEqual(terminal.cursor_back(2, None, None), '')                        # unknown: leave it
+
     def test_replay_never_asks_the_terminal_questions(self):
         """The scrollback replay carried the TUI's own terminal queries (ESC[c, ESC[6n...), and
         xterm answered each one AGAIN on every reattach - '[?1;2c' typed into codex's input box.
@@ -974,6 +987,10 @@ class ReplaySeedTests(unittest.TestCase):
         out = self._seed(raw)
         self.assertTrue(out.startswith(terminal.REPLAY_RESET))
         body = out[len(terminal.REPLAY_RESET):]
+        # the one move it ends with is the cursor going back to where the CLI left it, relative (2026-09-25)
+        import re
+        body, n = re.subn(r'\x1b\[\d+A\x1b\[\d+G$', '', body)
+        self.assertEqual(n, 1)
         self.assertNotIn(E, body)                       # nothing left for xterm to mis-position
         self.assertIn('codex is working', body)
         self.assertIn('hello there', body)              # the absolute move was OBEYED, not deleted
@@ -993,7 +1010,8 @@ class ReplaySeedTests(unittest.TestCase):
         the pty, the blank rows under the text became scrollback: a Wall cell grew a scrollbar
         that dragged nothing and parked the cursor at its very bottom (2026-09-18)."""
         body = self._seed('one' + terminal.CRLF + 'two')[len(terminal.REPLAY_RESET):]   # a bare LF would not return the carriage
-        self.assertEqual(body.split(terminal.CRLF), ['one', 'two'])
+        # ...and it ends with the cursor where the CLI left it - after 'two', column 4 (2026-09-25)
+        self.assertEqual(body.split(terminal.CRLF), ['one', 'two' + self.ESC + '[4G'])
 
     def test_the_seed_is_capped_to_the_tail(self):
         raw = chr(10).join('line %d' % n for n in range(1200))

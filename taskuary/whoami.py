@@ -83,6 +83,17 @@ def profile(store) -> dict:
 
 # The card learns these on Discover / Test - which a connector set up before those existed never ran.
 # One live call the first time the page asks, then it is on the card like everything else.
+def github_logins(store) -> set:
+    """Every GitHub login that is the OWNER: each GitHub card's own account (learned from its PAT) and the one typed
+    under About you. An issue or comment written by one of these is the owner's own words, never an ask of them."""
+    out = {str(store.get_setting('owner_github') or '').strip().lstrip('@').lower()}
+    for c in store.list_connectors():
+        if c.get('Type') == 'github':
+            try: out.add(str(_cfg(c).get('login') or '').lower())
+            except ValueError: pass
+    return out - {''}
+
+
 def _learn_github(store, gh):
     try:
         import requests

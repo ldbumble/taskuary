@@ -1054,6 +1054,9 @@ class MemoryTests(unittest.TestCase):
                        'FromName': 'Alex Doyle', 'FromEmail': 'alex@northwind.example', 'SentAt': ago(0), 'BodyText': 'Here is what it does.',
                        'Direction': 'out', 'Status': 'sent'}); settle()
         self.assertIsNone(walk())                                   # ...nor is the owner's own reply going out
+        s.add_message({'TaskId': t, 'ExternalId': 'report:again', 'Channel': 'report', 'SourceName': 'Nightly check', 'Subject': 'Nightly check - the same',
+                       'FromName': 'Nightly check', 'SentAt': ago(0), 'BodyText': 'Same failure as yesterday.', 'Status': 'filed'}); settle()
+        self.assertIsNone(walk())                                   # ...nor a repeat triage FILED on it as nothing new (2026-09-25)
         mail(s, 'Re: Research the CLI tool', who='Erin', email='erin@northwind.example', hours=0, tid=t); settle()
         self.assertEqual(walk(), ('agentdone', t))                  # ...their new mail is
 

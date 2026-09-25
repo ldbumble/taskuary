@@ -344,7 +344,7 @@ def enabled(store) -> bool:
     """The connector card's switch. Default ON - the handbook is only worth anything if it is
     being written while people are not thinking about it."""
     c = store.get_connector_by_type('handbook') or {}
-    if not c: return store.get_settings().get('handbook_enabled', '1') == '1'
+    if not c: return store.get_setting('handbook_enabled', '1') == '1'
     return bool(c.get('Active'))
 
 

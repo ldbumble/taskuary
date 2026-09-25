@@ -49,7 +49,7 @@ def tick(store) -> int:
                 events.append((term, asking, _line(term, waitroom)))
     _state = current
 
-    if store.get_settings().get('notify_level', 'needs_me') == 'off': return 0
+    if store.get_setting('notify_level', 'needs_me') == 'off': return 0
     for term, asking, tail in events:
         tid = int(term.task_id)
         task = store.get_task(tid) or {}

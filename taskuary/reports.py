@@ -1184,7 +1184,7 @@ def judge_for(store, cfg: dict, default_llm):
     because only one of the two jobs can be done by a model that cannot write - which is the whole
     point of a decision model, not a shortcoming of one.
     """
-    pick = str(store.get_settings().get(JUDGE_AI) or '').strip()
+    pick = str(store.get_setting(JUDGE_AI) or '').strip()
     if not pick: return default_llm
     cid = pick[10:] if pick.startswith('connector:') else ''
     row = store.get_connector(int(cid)) if cid.isdigit() else None
@@ -1310,7 +1310,7 @@ def render_report(store, cfg: dict, llm=None):
             rest = '\n\n'.join(s for k, s in sections.items() if k not in used) if used else summary
             data = rest[:AI_CHARS]
             if len(rest) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
-            charts = str(store.get_settings().get('report_images_enabled') or '1') == '1'
+            charts = str(store.get_setting('report_images_enabled') or '1') == '1'
             ai = (llm(report_system(store, cfg, charts),
                       f"Instruction: {instr[:AI_CHARS]}{contract_for(cfg)}\n\nData ({head}):\n"
                       + (data if rest.strip() else '(every source is placed in the instruction above)'),
@@ -1385,7 +1385,7 @@ def note_app_up(store, start: bool = False) -> None:
     Assistant - which reads arrivals, not the scheduler - saw a 17-hour hole in a 140-minute
     report and called the scheduler dead when the app had simply been shut overnight (TQ-0451)."""
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    try: ss = json.loads(store.get_settings().get(APP_SESSIONS) or '[]')
+    try: ss = json.loads(store.get_setting(APP_SESSIONS) or '[]')
     except (ValueError, TypeError): ss = []
     if not isinstance(ss, list): ss = []
     if start or not ss or not isinstance(ss[-1], dict): ss.append({'start': now, 'seen': now})
@@ -1404,7 +1404,7 @@ def uptime_words(store, days: int = 2, gap_minutes: int = 20) -> str:
 
     The fact that turns "silent for 17 hours" into "shut for 15 of them" - and "the 08:00 digest
     is 23 minutes late" into "the app opened at 08:19, so nothing has had its turn yet"."""
-    try: ss = [s for s in json.loads(store.get_settings().get(APP_SESSIONS) or '[]')
+    try: ss = [s for s in json.loads(store.get_setting(APP_SESSIONS) or '[]')
                if isinstance(s, dict) and _stamp(s.get('start'))]
     except (ValueError, TypeError): return ''
     if not ss: return ''

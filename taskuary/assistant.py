@@ -312,7 +312,7 @@ def _agenda(store, *, block: bool = True, days: int = 2) -> list:
     two days and a widened CALENDAR block then share one Graph call instead of evicting each other
     every minute.
     """
-    if store.get_settings().get('calendar_enabled', '1') != '1': return []
+    if store.get_setting('calendar_enabled', '1') != '1': return []
     wide = _AGENDA.get('days', 0) >= days
     if wide and _AGENDA.get('at', 0) > datetime.now().timestamp() - _AGENDA_FRESH: return _within(_AGENDA['events'], days)
     if block: return _read_agenda(store, days)
@@ -421,7 +421,7 @@ def health_ideas(store, now: datetime = None) -> list:
                                    'why': 'a connection that errors reads nothing until somebody looks'}})
     try:
         waiting = len(store.pending_triage(limit=50))
-        brain = str(store.get_settings().get('triage_ai') or '').strip()
+        brain = str(store.get_setting('triage_ai') or '').strip()
         if waiting and not brain and not any(x['active'] and x['has_secret'] for x in appfacts.connections(store) if x['type'] in ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta')):
             out.append({'key': 'health:brain', 'kind': 'health', 'sig': 'no-brain',
                         'text': f'{waiting} messages wait for triage and no brain is set to read them.',
@@ -634,7 +634,7 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         if sender_class(r, team) != 'person': continue
         k = r.get('ConversationId') or re.sub(r'^((re|fw|fwd|aw)\s*:\s*)+', '', _short(r.get('Subject'), 60), flags=re.I).lower()
         by.setdefault(k, []).append(r)
-    me = (store.get_settings().get('owner_email') or '').lower()
+    me = (store.get_setting('owner_email') or '').lower()
     mine = lambda c: c.get('Status') == 'context' or c.get('Direction') == 'out' or (c.get('FromEmail') or '').lower() == me
     def chain_of(rs):
         chain = store.thread_messages(conversation_id=rs[0].get('ConversationId'), subject=rs[0].get('Subject'), limit=12) if rs[0].get('ConversationId') else rs
@@ -721,7 +721,7 @@ def _calendar(store, days: int = 2) -> str:
     from . import calendar as cal
     ev = _agenda(store, days=days)
     return '\n'.join(f"- {_when(e['start'])} {cal.span(e['start'], e.get('end') or '')} \"{e.get('subject')}\"" + (f" with {', '.join(list(e.get('who') or [])[:6])}" if e.get('who') else '')
-                     for e in ev[:8]) or f'(nothing on the calendar for {said_number(days)} days' + (')' if store.get_settings().get('calendar_enabled', '1') == '1' else ' - calendar off)')
+                     for e in ev[:8]) or f'(nothing on the calendar for {said_number(days)} days' + (')' if store.get_setting('calendar_enabled', '1') == '1' else ' - calendar off)')
 
 
 def _done(store, days: float = 7) -> str:
@@ -1174,7 +1174,7 @@ def automation_key(store, report_id=None) -> str:
 
 def automation_due(store, report_id=None) -> bool:
     """Whether this report's next check should read the month of counts: never read, or a week since."""
-    at = store.get_settings().get(automation_key(store, report_id)) or ''
+    at = store.get_setting(automation_key(store, report_id)) or ''
     return not at or _ts(at) <= _since(AUTOMATION_EVERY_DAYS)
 
 

@@ -18,13 +18,13 @@ RETURN_MINUTES = 180
 
 
 def return_minutes(store) -> int:
-    try: return max(1, int(store.get_settings().get('task_return_minutes') or RETURN_MINUTES))
+    try: return max(1, int(store.get_setting('task_return_minutes') or RETURN_MINUTES))
     except (TypeError, ValueError): return RETURN_MINUTES
 
 
 def query_for(store, only=None, *, history=True):
     try:
-        days = int(store.get_settings().get('feed_days') or 14)
+        days = int(store.get_setting('feed_days') or 14)
     except (TypeError, ValueError):
         days = 14
     filters = {}
@@ -80,7 +80,7 @@ def _dismissed_idea(view, compact) -> bool:
 
 
 def _noise_hidden(store) -> bool:
-    return str(store.get_settings().get('rail_hide_noise', '1')).strip() not in ('0', 'false', 'off')
+    return str(store.get_setting('rail_hide_noise', '1')).strip() not in ('0', 'false', 'off')
 
 
 def _noise(row, view) -> bool:
@@ -288,7 +288,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         # ...THEIR message, not ours: the owner's reply to the result going out is a message on the task too,
         # and it brought the result they had just answered straight back to Next (the same ask, again)
         from .ingest import is_ours
-        ours = {str(m['MessageId']) for m in view.get('messages') or [] if is_ours(m)}
+        # ...and not one triage FILED as nothing new: a report that repeats every run joins the task it repeats
+        # (same_as, fyi) and brought the finished result back after every run - read ten times (the owner, 2026-09-25)
+        ours = {str(m['MessageId']) for m in view.get('messages') or [] if is_ours(m) or m.get('Status') == 'filed'}
         units = view.get('processing_read', {}).get('units', ())
         read = read | {'unread': any(not u.get('read') for u in units if u.get('entity_kind') != 'task'
                                      and not (u.get('entity_kind') == 'message' and u.get('local_id') in ours))}

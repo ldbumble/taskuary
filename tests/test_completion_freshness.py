@@ -57,6 +57,24 @@ class FreshnessTests(NoHook):
         rv = s.list_reviews('pending')[0]
         self.assertEqual(rv['Stale'], 0); self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
+    def test_an_issue_the_owner_opened_is_owed_no_reply_and_a_github_comment_is_not_a_letter(self):
+        """An issue opened from the connector's own account came back with a reply drafted to its author - the owner -
+        written as email, "Sincerely," and a name (2026-09-25). Their own ask gets no draft; anyone else's comment on
+        GitHub is drafted like a chat: no greeting, no sign-off."""
+        from taskuary import responder
+        s = MemoryStore()
+        s.save_connector({'Type': 'github', 'Name': 'GitHub', 'ConfigJson': '{"login": "alexdoyle"}', 'Active': 1}, 't')
+        tid = s.create_task({'Title': 'Split long replies', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        s.add_message({'TaskId': tid, 'ExternalId': 'gh:northwind/portal#7', 'ConversationId': 'gh:northwind/portal#7', 'Channel': 'github',
+                       'SourceName': 'northwind/portal', 'Subject': 'Split long replies', 'FromName': 'alexdoyle',
+                       'FromEmail': 'alexdoyle@users.noreply.github.com', 'SentAt': '2026-09-06 09:00:00', 'BodyText': 'Split them.', 'Status': 'routed'})
+        with mock.patch('taskuary.responder.write_draft') as wd:
+            out = coder.finish(s, tid, REP, None, 'coder')
+        wd.assert_not_called(); self.assertFalse(out['drafting'])
+        self.assertTrue(any('You opened this yourself' in c['Body'] for c in s.list_comments(tid)))
+        self.assertTrue(responder.written_as_chat('github') and responder.written_as_chat('discord'))
+        self.assertFalse(responder.written_as_chat('email'))
+
     def test_an_answer_the_owner_already_sent_from_the_mail_client_means_no_reply_is_drafted(self):
         s = MemoryStore(); tid, mid = task_with(s)
         def poll(store, t, m):

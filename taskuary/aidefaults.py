@@ -206,7 +206,7 @@ def state(store, cfg) -> dict:
     """Every slot, plus the options each picker offers."""
     from . import agents as hub_agents
     agents = [a['Name'] for a in store.list_agents()]
-    preferred = [str(store.get_settings().get('default_agent') or 'coder')]
+    preferred = [str(store.get_setting('default_agent') or 'coder')]
     return {'slots': [resolve(store, cfg, s['key']) for s in SLOTS], 'agents': agents,
             'judge_options': judge_options(store),
             'agent_options': hub_agents.cli_agent_options(store, preferred=preferred, coding_only=True)}
@@ -283,7 +283,7 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
     cur = resolve(store, cfg, slot_key)
     model = cur['model'] if model is None else str(model).strip()
     effort = cur['effort'] if effort is None else str(effort).strip()
-    now = str(store.get_settings().get(slot_key) or '')
+    now = str(store.get_setting(slot_key) or '')
     if not now and s['pick'] == 'brain':               # a blank card IS the default brain - its model goes there
         from .agents import default_pick
         now = default_pick(store)

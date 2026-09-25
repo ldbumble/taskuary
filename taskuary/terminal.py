@@ -835,14 +835,14 @@ def remember_geometry(store, rows, cols) -> bool:
     each dimension keeps its maximum instead, floored at the built-in default."""
     have_rows, have_cols = opening_geometry(store)
     want = f'{max(have_rows, int(rows or 0))}x{max(have_cols, int(cols or 0))}'
-    if want == (store.get_settings().get('pane_geometry') or ''): return False
+    if want == (store.get_setting('pane_geometry') or ''): return False
     store.set_setting('pane_geometry', want, 'system')
     return True
 
 def opening_geometry(store) -> tuple:
     """Bookkeeping, never a knob: it is the last pane's size, floored at the built-in default."""
     try:
-        rows, cols = str(store.get_settings().get('pane_geometry') or '').split('x')
+        rows, cols = str(store.get_setting('pane_geometry') or '').split('x')
         return max(DEFAULT_ROWS, int(rows)), max(DEFAULT_COLS, int(cols))
     except (AttributeError, TypeError, ValueError):
         return DEFAULT_ROWS, DEFAULT_COLS
@@ -1060,12 +1060,18 @@ def render(raw: str, cols: int = 110, rows: int = 32) -> str:
 
     pyte is a real VT emulator, pure Python, so the one-file exe is unaffected. Its history is
     the scrollback. Anything it cannot parse falls back to plain() rather than losing the run."""
-    if not (raw or '').strip(): return ''
+    return render_at(raw, cols, rows)[0]
+
+
+def render_at(raw: str, cols: int = 110, rows: int = 32) -> tuple:
+    """render(), and WHERE THE CURSOR IS: (text, the cursor's line index in that text, its column) - (text, None,
+    None) when there is no emulator to ask. A reopened pane needs the cursor back where the CLI left it."""
+    if not (raw or '').strip(): return '', None, None
     try:
         import pyte
     except ImportError:
         logger.warning('pyte is not installed - transcripts will be rendered with the fallback')
-        return plain(raw)
+        return plain(raw), None, None
     try:
         sc = pyte.HistoryScreen(max(40, int(cols or 110)), max(4, int(rows or 32)),
                                 history=HISTORY_LINES, ratio=1.0)
@@ -1073,10 +1079,11 @@ def render(raw: str, cols: int = 110, rows: int = 32) -> str:
         # history rows are sparse Char maps; display rows are already strings
         def line(r):
             return r.rstrip() if isinstance(r, str) else ''.join(r[x].data for x in range(sc.columns)).rstrip()
-        return '\n'.join(line(r) for r in list(sc.history.top) + list(sc.display))
+        top = list(sc.history.top)
+        return '\n'.join(line(r) for r in top + list(sc.display)), len(top) + sc.cursor.y, sc.cursor.x
     except Exception as e:
         logger.warning(f'terminal render failed ({e}) - falling back to plain()')
-        return plain(raw)
+        return plain(raw), None, None
 
 
 REPLAY_LINES = 400          # what a reopened pane is seeded with, in lines
@@ -1099,14 +1106,29 @@ def replay_text(t, lines: int = REPLAY_LINES) -> str:
     The reset prefix leaves the alternate screen and clears, so the pane starts from a known
     state whatever the old bytes left behind - and a terminal QUERY cannot survive a render, so
     the replay can no longer make xterm answer one into the CLI as typed junk."""
-    text = render(t.scrollback(), getattr(t, 'cols', 110), getattr(t, 'rows', 32))
-    tail = text.splitlines()[-max(1, lines):]
-    while tail and not tail[0].strip(): tail.pop(0)
+    text, cy, cx = render_at(t.scrollback(), getattr(t, 'cols', 110), getattr(t, 'rows', 32))
+    rows = text.splitlines()
+    first = max(0, len(rows) - max(1, lines))
+    tail = rows[first:]
+    while tail and not tail[0].strip(): tail.pop(0); first += 1
     # ...nor trailing ones: render() hands back the pty's whole grid, blank rows included, so a
     # 32-row pty seeded into a 26-row Wall cell had six empty rows of "scrollback" - a scrollbar
     # that dragged nothing and the cursor parked at the very bottom (2026-09-18)
     while tail and not tail[-1].strip(): tail.pop()
-    return (REPLAY_RESET + CRLF.join(tail)) if tail else ''
+    if not tail: return ''
+    return REPLAY_RESET + CRLF.join(tail) + cursor_back(len(tail) - 1, (cy - first) if cy is not None else None, cx)
+
+
+def cursor_back(last: int, row, col) -> str:
+    """The moves that put a reopened pane's cursor where the CLI left it. The seed ends on its LAST line - under the
+    "bypass permissions" footer, below the input line the CLI is waiting on - and it stayed there until the owner
+    typed and the CLI repainted (the owner, 2026-09-25). Relative moves, because the seed also fills scrollback: up
+    from the last line (or down onto a blank row below it), then to the column. Nothing when the cursor is unknown
+    or above the seed."""
+    if row is None or col is None or row < 0: return ''
+    up = last - row
+    move = f'\x1b[{up}A' if up > 0 else (CRLF * -up if up < 0 else '')
+    return move + f'\x1b[{int(col) + 1}G'
 
 
 # What a TUI paints over and over and none of it is what the agent SAID: spinner frames, the

@@ -23,7 +23,7 @@ def signature(p: dict) -> str:
 
 
 def _dismissed(store) -> dict:
-    try: return json.loads(store.get_settings().get(DISMISSED) or '{}') or {}
+    try: return json.loads(store.get_setting(DISMISSED) or '{}') or {}
     except (TypeError, ValueError): return {}
 
 

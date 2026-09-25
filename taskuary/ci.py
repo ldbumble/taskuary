@@ -68,7 +68,7 @@ def _save_push(store, task_id: int, info: dict, actor='ci'):
 def flow(store) -> str:
     """'pr' (a draft pull request) or 'direct' (straight onto the default branch). The
     owner's call: on your own repo the PR is ceremony, on a shared one it is the review."""
-    return store.get_settings().get('git_flow', 'pr')
+    return store.get_setting('git_flow', 'pr')
 
 
 def branch_for(store, task_id: int, cwd: str) -> str:
@@ -86,7 +86,7 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     from . import github, terminal as hub_term
     from .store import task_ref
     c = _conn(store)
-    if not store.get_settings().get('agent_push_enabled') == '1':
+    if not store.get_setting('agent_push_enabled') == '1':
         raise RuntimeError("pushing is off - flip 'Agents may push / deploy' on the GitHub card first")
     ses = hub_term.session_for(task_id)
     cwd = getattr(ses, 'cwd', None)
@@ -135,7 +135,7 @@ def push_direct(store, task_id: int, actor='owner') -> dict:
     the branch moved underneath you, and the answer is to pull, not to overwrite."""
     from .agents import _git, _git_rc
     from .store import task_ref
-    if store.get_settings().get('agent_push_enabled') != '1':
+    if store.get_setting('agent_push_enabled') != '1':
         raise RuntimeError("pushing is off - flip 'Agents may push / deploy' on the GitHub card first")
     cwd, repo, base, branch = _where(store, task_id)
     if _git(cwd, 'status', '--porcelain').strip():
@@ -285,7 +285,7 @@ def poll(store, llm=None) -> int:
     whatever the settings say. Handing a RED BUILD to a running agent is the automation, and that
     is what ci_watch gates - it ships off, and gating the comments behind it too would have meant
     the default install never told anybody their PR had been reviewed."""
-    watch = store.get_settings().get('ci_watch', 'off') != 'off'
+    watch = store.get_setting('ci_watch', 'off') != 'off'
     n = 0
     for t in store.list_tasks():
         if t['Status'] in ('done', 'dropped'): continue

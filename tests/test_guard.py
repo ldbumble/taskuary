@@ -73,7 +73,7 @@ class DenyListTests(unittest.TestCase):
         A control an agent can reach is not a control."""
         import inspect
         src = inspect.getsource(guard)
-        for reachable in ('get_settings', 'store.', 'doc(', 'os.getenv'):
+        for reachable in ('get_setting', 'store.', 'doc(', 'os.getenv'):
             self.assertNotIn(reachable, src, f'guard must not consult {reachable}')
 
 

@@ -232,7 +232,7 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
     options = provider_options(store)
     explicit = bool(pick or connector_id is not None or model)
     wanted = str(pick or (f'connector:{connector_id}' if connector_id else '')
-                 or store.get_settings().get('assistant_ai') or '')
+                 or store.get_setting('assistant_ai') or '')
     if wanted and ':' not in wanted and wanted.isdigit(): wanted = f'connector:{wanted}'
     if not wanted:                                     # blank = the default brain (agents.default_pick), as everywhere
         from . import agents as hub_agents
@@ -248,7 +248,7 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
             wanted = f'cli:{hub_agents.default_agent(store)}'
     choice = next((o for o in options if o['pick'] == wanted), None) or (options[0] if options else None)
     if not choice: return '', '', model or ''
-    saved_model = store.get_settings().get('assistant_model') if not explicit else ''
+    saved_model = store.get_setting('assistant_model') if not explicit else ''
     return choice['pick'], choice['label'], model or saved_model or choice['model']
 
 
@@ -287,7 +287,7 @@ def is_dock(task: dict | None) -> bool:
 
 def dock_task(store, actor='owner') -> tuple[dict, bool]:
     """Return the one durable guide conversation shared by desktop and remote chat."""
-    raw = store.get_settings().get('assistant_dock_task_id')
+    raw = store.get_setting('assistant_dock_task_id')
     task = store.get_task(int(raw)) if str(raw or '').isdigit() else None
     if task and is_dock(task) and task.get('Status') not in ('done', 'dropped'):
         return task, False
@@ -310,7 +310,7 @@ def retire_dock(store, actor='owner'):
     restart a new chat should be there not same chat"): the dock task id lives in settings, so
     without this the same conversation - and the same model session - came back forever. A dock
     nobody said anything in is left alone, or every launch would archive an empty guide task."""
-    raw = store.get_settings().get('assistant_dock_task_id')
+    raw = store.get_setting('assistant_dock_task_id')
     task = store.get_task(int(raw)) if str(raw or '').isdigit() else None
     if not (task and is_dock(task) and task.get('Status') not in ('done', 'dropped')): return None
     if not history(store, task['TaskId']): return None

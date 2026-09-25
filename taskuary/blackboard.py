@@ -223,7 +223,7 @@ def roll_daily(store, llm=None) -> int:
     composted. Guarded by a setting, so ten polls a minute do not ten times summarise."""
     from datetime import date
     today = date.today().isoformat()
-    if str(store.get_settings().get(ROLLED_ON) or '') == today: return 0
+    if str(store.get_setting(ROLLED_ON) or '') == today: return 0
     store.set_setting(ROLLED_ON, today, 'system')
     if llm is None:
         from .llm import build_llm

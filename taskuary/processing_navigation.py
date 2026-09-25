@@ -28,7 +28,7 @@ def _state(store):
 
 
 def _chat(store):
-    raw = store.get_settings().get('assistant_dock_task_id')
+    raw = store.get_setting('assistant_dock_task_id')
     task = store.get_task(int(raw)) if str(raw or '').isdigit() else None
     return (str(raw or ''), (task or {}).get('Status'))
 

@@ -605,7 +605,7 @@ def drop_cli_clones(cfg: dict, store) -> list:
         have.pop(name, None)
         if name in rows: store.delete_agent(name)
         gone.append(name)
-    if gone and str(store.get_settings().get('default_agent') or '') in gone:
+    if gone and str(store.get_setting('default_agent') or '') in gone:
         store.set_setting('default_agent', 'coder', 'system')      # the role, which is what that setting names now
     return gone
 
@@ -707,7 +707,7 @@ def default_agent(store) -> str:
     while Taskuary is running; using it to rewrite this answer made ``coder`` (Claude) silently
     become Copilot. The terminal's bounded failover road tries backups after the chosen CLI
     actually refuses to start, which is the only trustworthy time to switch providers."""
-    return str(store.get_settings().get('default_agent') or 'coder').strip()
+    return str(store.get_setting('default_agent') or 'coder').strip()
 
 
 def default_brain(store) -> str:
@@ -716,7 +716,7 @@ def default_brain(store) -> str:
 
     Blank falls back to the CLI behind the legacy `default_agent` profile, so an install that has
     not been migrated keeps running exactly what it ran yesterday."""
-    key = str(store.get_settings().get('default_brain') or '').strip()
+    key = str(store.get_setting('default_brain') or '').strip()
     if key: return key
     legacy = default_agent(store)
     return cli_of(profiles(store).get(legacy) or {}, legacy)
@@ -727,7 +727,7 @@ def default_pick(store) -> str:
     `cli:<worker>` pick on its light gear. It used to mean "the first active AI connector", so which brain
     read the mail depended on which connector happened to be added first (the owner, 2026-09-24: "first
     connected should not matter"). '' only when no default brain is set - a fresh install's own fallback."""
-    key = str(store.get_settings().get('default_brain') or '').strip()
+    key = str(store.get_setting('default_brain') or '').strip()
     if not key: return ''
     row = next((o for o in cli_agent_options(store, preferred=[default_agent(store)]) if o['cli'] == key), None)
     if row: return f"cli:{row['value']}"
@@ -737,7 +737,7 @@ def default_pick(store) -> str:
 def brain_for(store, role: str) -> str:
     """The brain that runs one role. A profile never PINS a brain: this is a setting keyed BY a
     profile, and what it names is a brain - never a model, never an effort."""
-    try: over = json.loads(store.get_settings().get('profile_brains') or '{}')
+    try: over = json.loads(store.get_setting('profile_brains') or '{}')
     except ValueError: over = {}
     key = str(over.get(str(role or '')) or '').strip() if isinstance(over, dict) else ''
     return key or default_brain(store)
@@ -756,7 +756,7 @@ def brain_chain(store, first: str = None, cfg: dict = None) -> list:
     cfg = config.load() if cfg is None else cfg
     known = list(cfg.get('cli_connections') or {})
     head = str(first or default_brain(store) or '').strip()
-    setting = str(store.get_settings().get('backup_brains') or '').strip()
+    setting = str(store.get_setting('backup_brains') or '').strip()
     backups = known if setting == '*' else [x.strip() for x in setting.split(',') if x.strip()]
     # `*` expands from what is configured; a CSV is the owner naming brains outright, and is taken
     # at its word - one that turns out not to start just fails over like any other.
@@ -772,7 +772,7 @@ def adopt_brain_setting(store) -> bool:
     While `default_brain` is blank, `brain_command` stays out of the way and the profile's own
     command still decides - so this is the line that actually moves an install onto the brain
     layer, and it moves it onto exactly what it ran yesterday. Returns whether it wrote anything."""
-    if str(store.get_settings().get('default_brain') or '').strip(): return False
+    if str(store.get_setting('default_brain') or '').strip(): return False
     key = default_brain(store)
     if not key: return False
     store.set_setting('default_brain', key, 'migration')

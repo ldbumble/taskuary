@@ -45,7 +45,7 @@ BREVITY = ('BE SHORT. Two or three sentences, under 60 words. Lead with the answ
 
 # Chat is not email. A signature at the end of a Teams message reads like a form letter, and
 # nobody signs their name in a thread that already says who is talking.
-CHAT = ('This is CHAT (Teams/Slack), not email. NO greeting and NO sign-off or name at the end - '
+CHAT = ('This is a CHAT or a COMMENT THREAD (Teams, Slack, a GitHub issue...), not email. NO greeting and NO sign-off or name at the end - '
         'the channel already says who you are. One short paragraph, written the way a person types '
         'in a chat window.')
 EMAIL = ('This is EMAIL. Use the greeting, sign-off, and exact recurring signature STYLE.md '
@@ -81,6 +81,13 @@ DONE = ('The work this thread asked for is FINISHED - the complete result below 
         'of it.')
 
 CHAT_CHANNELS = ('teams', 'slack', 'telegram', 'whatsapp', 'imessage')
+
+
+def written_as_chat(channel) -> bool:
+    """Everything but EMAIL is written like a chat: no greeting, no sign-off, no name. A GitHub issue comment was
+    drafted as a letter - "Sincerely," and the owner's name - because only five chat apps were listed here and
+    every other channel fell through to email (the owner, 2026-09-25: "a chat does not have that")."""
+    return str(channel or '').strip().lower() != 'email'
 REPLY_TOKENS = 300          # ordinary reply-only mail should remain quick and short
 COMPLETE_REPLY_TOKENS = 1200  # completed multi-item work must have room to answer every item
 
@@ -136,7 +143,7 @@ _SIGN_LINE = re.compile(r'^\s*-?\s*(?:sign[- ]?off|signature)\s*:\s*(.+?)\s*$', 
 def signature_for(store) -> str:
     """The owner's email signature: the `email_signature` setting when set, else the `Sign off:` / `Signature:`
     line in STYLE.md (quotes stripped, literal newlines honoured). '' when neither says anything (PW-065)."""
-    sig = str(store.get_settings().get('email_signature') or '').strip()
+    sig = str(store.get_setting('email_signature') or '').strip()
     if sig: return sig.replace('\\n', '\n')
     doc = store.doc('style') or ''
     q = _SIGN_QUOTED.search(doc)
@@ -217,7 +224,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # one most likely to change how the reply should read
     # only explicit writing instructions ride into a reply (PW-060); the routing verdicts stay with triage
     notes = writing_notes(store)
-    chat = str(last.get('Channel') or '').lower() in CHAT_CHANNELS
+    chat = written_as_chat(last.get('Channel'))
     sty = style_doc(store)
     # The 60-word rule is useful for ordinary mail, but destructive for a completed eight-part
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
@@ -347,7 +354,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
     soul = store.doc('soul') or ''
     owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
-    chat = str(m.get('Channel') or '').lower() in CHAT_CHANNELS
+    chat = written_as_chat(m.get('Channel'))
     sty = style_doc(store)
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
               # every block below describes YOU. They are written in the third person because

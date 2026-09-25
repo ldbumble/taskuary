@@ -99,7 +99,7 @@ def mutes(store) -> list:
     when they sweep the pipe with a reason ("skip all the northwind financial reports, that is taken care
     of") - a sweep alone marked the ones in front of them read and the next batch walked straight back
     in (the owner, 2026-09-03: "was it one time dismiss not a memory")."""
-    try: return json.loads(store.get_settings().get(MUTES_KEY) or '[]') or []
+    try: return json.loads(store.get_setting(MUTES_KEY) or '[]') or []
     except ValueError: return []
 
 
@@ -661,7 +661,7 @@ def from_proposals(store, used_rids: set) -> list:
 def from_calendar(store, now: datetime) -> list:
     out = []
     # how long a started meeting stays on the rail - a setting (the owner, 2026-09-25), STARTED_MIN when unset
-    try: grace = max(0, int(store.get_settings().get('meeting_grace_minutes') or STARTED_MIN))
+    try: grace = max(0, int(store.get_setting('meeting_grace_minutes') or STARTED_MIN))
     except (TypeError, ValueError): grace = STARTED_MIN
     # block=False: the pile is a read the owner is waiting on, and the calendar is a network call
     for e in _agenda(store, block=False):
@@ -1258,7 +1258,7 @@ def fyi_batch_size(store) -> int:
     lo, hi = FYI_BATCH_RANGE
     # ...and a store that cannot answer gets the default rather than an exception: how many fyi to
     # read together is a preference, and no preference is worth failing a selection over.
-    try: n = int(str(store.get_settings().get('fyi_batch') or FYI_BATCH).strip())
+    try: n = int(str(store.get_setting('fyi_batch') or FYI_BATCH).strip())
     except (AttributeError, TypeError, ValueError): return FYI_BATCH
     return max(lo, min(hi, n))
 

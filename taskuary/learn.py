@@ -251,7 +251,7 @@ def reflect(store, llm=None) -> bool:
     llm = llm or build_llm(store)
     doc, verdicts = _without_verdicts(store.get_doc(DOC) or '')   # RAW doc: {{owner}} tokens must survive the rewrite
     if not llm or not doc.strip(): return False
-    since = (store.get_settings().get('learn_last_reflect')
+    since = (store.get_setting('learn_last_reflect')
              or (datetime.now() - timedelta(days=DAYS)).isoformat(sep=' ', timespec='seconds'))
     try:
         new = _unfence(llm(REFLECT_SYSTEM,

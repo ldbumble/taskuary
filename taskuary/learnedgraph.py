@@ -36,7 +36,7 @@ def reflect_log(store, add: str = None) -> list:
     """The dates the reflections actually ran on - the clock decay is measured against. Passing a
     date records one. Capped: a line older than every date we still hold counts as fully quiet,
     which is the right answer for one nothing has confirmed in two hundred reflections."""
-    log = [d for d in str(store.get_settings().get(LOG) or '').split(',') if d.strip()]
+    log = [d for d in str(store.get_setting(LOG) or '').split(',') if d.strip()]
     if add:
         log = (log + [add])[-LOG_KEEP:]
         store.set_setting(LOG, ','.join(log), 'reflect')

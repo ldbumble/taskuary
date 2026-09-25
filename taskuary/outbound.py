@@ -234,7 +234,7 @@ NEVER = {'report', 'own', 'assistant', 'jira', 'asana', 'monday', 'clickup', 'to
 
 def reply_channels(store) -> set:
     """The channels the owner has replies switched ON for (Settings → Replies)."""
-    raw = store.get_settings().get('reply_channels')
+    raw = store.get_setting('reply_channels')
     if raw is None: return set(SENDABLE)
     return {c.strip() for c in str(raw).split(',') if c.strip()}
 

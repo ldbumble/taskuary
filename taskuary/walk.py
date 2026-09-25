@@ -224,7 +224,7 @@ def _fact_reports(s) -> str:
 
 
 def _fact_assistant(s) -> str:
-    return f"speaking on {_brain_name(s, s.get_settings().get('concierge_ai'))}"
+    return f"speaking on {_brain_name(s, s.get_setting('concierge_ai'))}"
 
 
 def _fact_hub(s) -> str:
@@ -233,7 +233,7 @@ def _fact_hub(s) -> str:
 
 
 def _fact_settings(s) -> str:
-    on = [k for k in ('triage_ai', 'default_agent', 'notify_channel') if str(s.get_settings().get(k) or '').strip()]
+    on = [k for k in ('triage_ai', 'default_agent', 'notify_channel') if str(s.get_setting(k) or '').strip()]
     return f"{len(on)} of the three headline settings chosen" if on else 'all on their defaults'
 
 
@@ -274,7 +274,7 @@ def state(store, at=None) -> dict:
 def _at(store) -> int:
     """Where they stopped - clamped, because a stored number outlives the list it indexed and a
     stop that was removed must not strand the walk off the end of it."""
-    try: n = int(str(store.get_settings().get(AT) or 0))
+    try: n = int(str(store.get_setting(AT) or 0))
     except ValueError: return 0
     return n if 0 <= n < len(STOPS) else 0
 

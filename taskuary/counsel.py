@@ -83,7 +83,7 @@ def dossier(store, msg: dict, days: int = DAYS, exclude_mid: int = None, skip_co
 
 def _calendar(store, frm: str, name_toks: set, subj_toks: set) -> str:
     """Meetings a week back and two ahead that involve this sender or this subject."""
-    if store.get_settings().get('calendar_enabled', '1') != '1': return ''
+    if store.get_setting('calendar_enabled', '1') != '1': return ''
     try:
         from . import calendar as cal
         ag = cal.agenda(store, days=21, start=datetime.now(cal.tz_of(store)).replace(second=0, microsecond=0) - timedelta(days=7))

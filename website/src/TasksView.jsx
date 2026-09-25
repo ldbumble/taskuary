@@ -30,7 +30,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -430,6 +430,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // writes a standing verdict triage reads. The two sharpest things in the app were the two
   // easiest to hit by accident.
   const [confirmNAT, setConfirmNAT] = useState(false);
+  // MARK DONE SAYS IT IS WORKING (the owner, 2026-09-25): the close takes seconds with agents busy, and a button that
+  // did nothing visible read as broken; with a live session it also stops an agent, so it asks first
+  const [finishing, setFinishing] = useState(false);
+  const [confirmDone, setConfirmDone] = useState(false);
   const notATask = async () => {
     await api.post(`/api/tasks/${selected}/not-a-task`);
     onSelect(null); await loadTasks(); onChanged?.();
@@ -573,7 +577,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const transition = completionTransition(liveIds, selected, status);
     const before = seenState.current;
     seenState.current = transition.seen;
-    setFilter(transition.filter); setOlder(false); setQuery("");
+    setFilter(transition.filter); setOlder(false); setQuery(""); setFinishing(true);
     try {
       // the shared road (PW-215): the same close the assistant's card runs - draft dismissed, agent stopped
       await runOperation(api, "task.complete", selected);
@@ -582,7 +586,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       setErr(e?.response?.data?.detail || e?.message || "Failed to finish task");
       loadTasks();
       return;
-    }
+    } finally { setFinishing(false); }
     onSelect(transition.next);
     loadTasks(); onChanged?.();
   };
@@ -636,6 +640,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // the page where space is the whole point (the owner, 2026-09-16: "why is it so tall... you
   // are taking away precious agent space"). Live is live, whoever is working.
   const liveSession = !!term?.alive;
+  const askFinish = () => (liveSession ? setConfirmDone(true) : finish("done"));
   // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
   const sessionView = liveSession && !peek;
   // ...and a stage you opened by hand does not outlive the session you opened it on. The agent
@@ -1089,10 +1094,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       four, in the same order, labels dropped to icons after the first. */}
                   {sessionView && !["done", "dropped"].includes(t.Status) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
-                      <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
+                      <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={11} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 13 }} />}
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
                         title="Closes the task and ends the live agent session with it."
-                        onClick={() => finish("done")}>Mark done</Button>
+                        disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
                       <Tooltip title="Not a task — delete it and teach triage why">
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -1144,10 +1149,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
                         {!["done", "dropped"].includes(t.Status) && (
                           <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
-                            <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
+                            <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={12} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 14 }} />}
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               title="Closes the task and ends the live agent session with it."
-                              onClick={() => finish("done")}>Mark done</Button>
+                              disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
                             <Tooltip title="Not a task — delete it and teach triage why">
                               <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                                 <BlockIcon sx={{ fontSize: 16 }} /></IconButton>
@@ -1173,10 +1178,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         unless you click the 3 options" (the owner, 2026-09-16). */}
                     {!["done", "dropped"].includes(t.Status) ? (
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-                        <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 16 }} />}
+                        <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
                           sx={primaryBtn}
                           title="Closes the task and ends the live agent session with it."
-                          onClick={() => finish("done")}>Mark done</Button>
+                          disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
                         <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
                           sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
                           title="Delete it and teach triage why — the sender keeps writing to you."
@@ -2053,6 +2058,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <Button variant="contained" disabled={!nt.Title.trim()} onClick={create}>Create</Button>
         </DialogActions>
       </Dialog>
+      <Confirm open={confirmDone} title="Stop the agent and mark done?"
+        text="An agent session is still open on this task. Mark done ends it - what it did so far is saved with the task."
+        confirmLabel="Stop it and mark done" onClose={() => setConfirmDone(false)}
+        onConfirm={() => { setConfirmDone(false); finish("done"); }} />
       <ConfirmDelete open={confirmNAT} what={t ? `"${(t.Title || "this task").slice(0, 60)}"` : "this task"}
         consequence={"It is deleted, and triage is taught that this topic is never a task. Its messages stay on the Timeline, "
           + "and the sender is not muted — that is \"Skip this sender\"."}

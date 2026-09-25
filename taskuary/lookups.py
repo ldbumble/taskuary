@@ -145,7 +145,7 @@ def pipe_list(store, p: dict) -> str:
 
 def calendar_read(store, p: dict) -> str:
     from . import calendar as cal
-    if store.get_settings().get('calendar_enabled', '1') != '1': return 'The calendar is switched off in Settings.'
+    if store.get_setting('calendar_enabled', '1') != '1': return 'The calendar is switched off in Settings.'
     when, days = str(p.get('from') or 'today').strip().lower(), max(1, min(int(p.get('days') or 7), 31))
     start = datetime.now(cal.tz_of(store)).replace(hour=0, minute=0, second=0, microsecond=0)
     if when == 'tomorrow': start += timedelta(days=1)

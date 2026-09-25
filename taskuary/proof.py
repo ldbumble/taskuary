@@ -420,7 +420,7 @@ def gather(store, task_id: int) -> dict:
         'reported': bool(rep),
         'ci': ci_state(store, task_id),
         # the card's button has to say what it will actually DO, and that is the owner's setting
-        'flow': store.get_settings().get('git_flow', 'pr'),
+        'flow': store.get_setting('git_flow', 'pr'),
         # said plainly so a thin card cannot be mistaken for a clean one
         'gaps': [g for g in (
             'no file changes recorded - the agent may not have committed, or only read'

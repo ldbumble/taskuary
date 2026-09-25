@@ -486,7 +486,7 @@ def images_for_triage(store, items: list) -> list:
     to be saved after ingest, which meant the one classifying "See below." never saw what was
     below it, and filed a screenshot of a stack trace as informational."""
     from .llm import VISION_BYTES, VISION_MAX, VISION_TYPES
-    if str(store.get_settings().get('vision_enabled') or '1') != '1': return []
+    if str(store.get_setting('vision_enabled') or '1') != '1': return []
     out = []
     for a in items:
         if len(out) >= VISION_MAX: break
@@ -1076,7 +1076,7 @@ def gh_login(store, tok: str) -> str:
     """The login this token acts as, cached. Needed to tell Taskuary's OWN comments from a
     person's: the hub posts on issues itself (outbound.comment_issue), so without this it reads
     its own reply on the next poll, triages it, and can answer itself."""
-    me = str(store.get_settings().get('github_login') or '')
+    me = str(store.get_setting('github_login') or '')
     if me: return me
     from . import github
     try: me = github.whoami(tok)
@@ -1217,7 +1217,7 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
             # the screenshot IS the report: read it before the row exists, or the classifier
             # judges an issue template whose headings are empty (see images_for_triage above)
             'images': (body_images(tok, i.get('body') or '')
-                       if str(store.get_settings().get('vision_enabled') or '1') == '1' else []),
+                       if str(store.get_setting('vision_enabled') or '1') == '1' else []),
             'no_auto': not gh_auto_ok(src, i.get('author_association'))},
             llm=llm, file_only=mode == 'feed')
         n += out['status'] != 'duplicate'
@@ -1253,7 +1253,7 @@ def _gh_explicit(store) -> bool:
 # are logged once and swallowed. Protocols with no read state for a bot - Telegram, Discord,
 # the trackers - simply have no marker, and the switch is a no-op for them.
 def wants_read(store) -> bool:
-    try: return str(store.get_settings().get('mark_read_enabled') or '0') == '1'
+    try: return str(store.get_setting('mark_read_enabled') or '0') == '1'
     except Exception: return False
 
 

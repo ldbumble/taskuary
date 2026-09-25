@@ -105,7 +105,7 @@ def listens(store, connector) -> str:
     """
     how = str(_config(connector).get('assistant_listen') or '').strip().lower()
     if how in LISTEN: return how
-    return 'always' if store.get_settings().get('phone_assistant') == '1' else 'walk'
+    return 'always' if store.get_setting('phone_assistant') == '1' else 'walk'
 
 
 def set_listens(store, channel: str, how: str) -> dict:
@@ -216,7 +216,7 @@ def connector_for_chat(store, channel: str, chat: str, connector=None):
 def handoff(store) -> dict | None:
     """The live handoff, or None. Validated against the connectors: a card that was turned off or had
     its chat cleared must never leave the desktop locked out of its own assistant."""
-    try: h = json.loads(store.get_settings().get(HANDOFF_KEY) or 'null')
+    try: h = json.loads(store.get_setting(HANDOFF_KEY) or 'null')
     except ValueError: h = None
     if not isinstance(h, dict) or h.get('channel') not in CHANNELS: return None
     return h if connector_for_chat(store, h['channel'], h.get('chat')) else None
@@ -540,11 +540,11 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             # words (the owner, 2026-09-25: the phone matches the desktop exactly). A list answers ONE reply:
             # whatever comes next, the old numbers are gone, so a stale "2" can never fire.
             acts = acts_for(store, channel, chat)
-            try: offered = json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
+            try: offered = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
             except ValueError: offered = []
             act = acts.get(question) if picked else None
             forget_offered(store, channel, chat); _ACTS.rows = None
-            pending = str(store.get_settings().get(f'{NOTE_KEY}:{channel}:{chat}') or '')
+            pending = str(store.get_setting(f'{NOTE_KEY}:{channel}:{chat}') or '')
             if pending: store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
             if pending and not picked:
                 # the line typed after "Continue session" is what to tell the agent - a text field, not a word to read
@@ -1207,7 +1207,7 @@ def forget_offered(store, channel: str, chat: str):
 
 
 def acts_for(store, channel: str, chat: str) -> dict:
-    try: return json.loads(store.get_settings().get(f'{ACTS_KEY}:{channel}:{chat}') or '{}') or {}
+    try: return json.loads(store.get_setting(f'{ACTS_KEY}:{channel}:{chat}') or '{}') or {}
     except ValueError: return {}
 
 
@@ -1224,7 +1224,7 @@ def resolve_index(store, channel: str, chat: str, text: str, poll: bool = False)
     "this is confusing? I wrote 1 but it asked me again?"). Their own words stay a suggestion, because
     there we are reading intent and can be wrong.
     """
-    try: words = json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
+    try: words = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
     except ValueError: words = []
     # a WhatsApp poll's vote arrives as the option's own words (cut to the poll's 100 characters): the TAP is a pick.
     # Only a vote the bridge marked as one - the same words TYPED are words, and go to the model (the owner,

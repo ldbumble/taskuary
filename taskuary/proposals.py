@@ -74,8 +74,8 @@ SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off'), 'timeline_fade': ('
 
 def _switch_ok(store, name) -> bool:
     if not name: return True
-    if name in ('agent_push_enabled',): return store.get_settings().get(name) == '1'
-    if name == 'playbooks_enabled': return store.get_settings().get(name, '1') == '1'
+    if name in ('agent_push_enabled',): return store.get_setting(name) == '1'
+    if name == 'playbooks_enabled': return store.get_setting(name, '1') == '1'
     import json as _j
     c = store.get_connector_by_type('github') or {}
     try: cfg = _j.loads(c.get('ConfigJson') or '{}')

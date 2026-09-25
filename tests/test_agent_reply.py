@@ -107,5 +107,22 @@ class ChatBlockTests(unittest.TestCase):
         self.assertEqual(selfclose.reply_marker('Should I draft the reply to Dana?'), ('Should I draft the reply to Dana?', None))
 
 
+def test_a_missing_reply_file_is_one_plain_line_not_a_traceback(monkeypatch, capsys):
+    from taskuary import cli
+    monkeypatch.setenv('TASKUARY_TASK', '1')
+    monkeypatch.setattr('sys.argv', ['taskuary', '--reply-file', 'does-not-exist.txt'])
+    cli.main()
+    assert capsys.readouterr().out.strip() == 'not saved: cannot read does-not-exist.txt: No such file or directory'
+
+
+def test_an_undecodable_reply_file_says_why(monkeypatch, capsys, tmp_path):
+    from taskuary import cli
+    f = tmp_path/'reply.txt'; f.write_bytes(bytes([0xff, 0xfe, 0x80]))
+    monkeypatch.setenv('TASKUARY_TASK', '1')
+    monkeypatch.setattr('sys.argv', ['taskuary', '--reply-file', str(f)])
+    cli.main()
+    assert capsys.readouterr().out.startswith(f'not saved: cannot read {f}: ')
+
+
 if __name__ == '__main__':
     unittest.main()

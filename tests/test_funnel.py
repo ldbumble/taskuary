@@ -1057,6 +1057,31 @@ class MemoryTests(unittest.TestCase):
         mail(s, 'Re: Research the CLI tool', who='Erin', email='erin@northwind.example', hours=0, tid=t); settle()
         self.assertEqual(walk(), ('agentdone', t))                  # ...their new mail is
 
+    def test_a_finished_result_stays_read_when_its_mail_was_read_long_before_the_close(self):
+        """The same ask, TQ-0740: the read that counts is the task's own, after the close. A note filed on the closed
+        task changes the task's fingerprint, and the newest read left was the mail's, from BEFORE the agent closed it
+        - so the result read as unread again and Next offered it a second time. Read in the same second it closed,
+        the test above could not see this."""
+        from taskuary import concierge
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'Research the CLI tool', 'Kind': 'general', 'Status': 'open'}, 'o')
+        mail(s, 'Research the CLI tool', who='Erin', email='erin@northwind.example', hours=2, tid=t)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        def walk():
+            with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+                got = concierge.surface(s, llm=lambda *a, **k: 'never')['item']
+            settle(); return got and (got['kind'], got['tid'])
+        walk()                                                      # the owner saw the ask while the agent worked it...
+        s._exec('UPDATE processing_read_receipt SET ReadAt=?', (ago(1),))                  # ...an hour ago
+        s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: it wraps any CLI as an agent tool.')
+        s.update_task(t, {'Status': 'done'}, 'assistant'); settle()
+        self.assertEqual(walk(), ('agentdone', t))
+        self.assertIsNone(walk())
+        s.add_comment(t, 'owner', 'human', 'Thanks - noted.'); settle()
+        self.assertIsNone(walk())                                   # the mail's old read does not un-read the result
+        mail(s, 'Re: Research the CLI tool', who='Erin', email='erin@northwind.example', hours=0, tid=t); settle()
+        self.assertEqual(walk(), ('agentdone', t))                  # ...their new mail still brings it back
+
     def test_a_pty_worker_that_ran_and_left_leaves_a_transcript_not_a_run(self):
         """A coder started from the terminal writes a TRANSCRIPT on its way out and no run row at
         all - the same row the task card reads to offer "Continue previous work". not_started_why

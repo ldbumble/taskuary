@@ -89,10 +89,12 @@ def project(cur, item_id, view):
     for unit in current:
         # WHEN it was read, not just that it was: an open task nobody closed comes back to the work
         # tab once it has been quiet that long, and the receipt is the only record of when it went.
-        row = cur.execute('''SELECT MAX(ReadAt) AS ReadAt FROM processing_read_receipt
-            WHERE EntityKind=? AND LocalId=? AND Fingerprint=?''',
-            (unit['entity_kind'], unit['local_id'], unit['fingerprint'])).fetchone()
-        unit['read_at'] = (row['ReadAt'] if row else None) or None
+        # ...and when ANY version of it was last read: a finished agent result asks "read since the close?", and
+        # a note filed after that read changes the fingerprint without making the result news again (TQ-0740)
+        row = cur.execute('''SELECT MAX(CASE WHEN Fingerprint=? THEN ReadAt END) AS ReadAt, MAX(ReadAt) AS LastReadAt
+            FROM processing_read_receipt WHERE EntityKind=? AND LocalId=?''',
+            (unit['fingerprint'], unit['entity_kind'], unit['local_id'])).fetchone()
+        unit['read_at'],unit['last_read_at'] = (row['ReadAt'] or None, row['LastReadAt'] or None) if row else (None, None)
         unit['read'] = bool(unit['read_at'])
     # Root deferrals survive redirects. Exact legacy entity deferrals follow moves.
     deferrals = {row['Key']: dict(row) for row in cur.execute('''WITH RECURSIVE lineage(ItemId) AS (
@@ -138,8 +140,10 @@ def state(item, now):
     except (TypeError, ValueError):
         until = None
     stamps = [u['read_at'] for u in read.get('units', ()) if u.get('read_at')]
+    seen = [u['last_read_at'] for u in read.get('units', ()) if u.get('last_read_at')]
     return dict(unread=any(not u.get('read') for u in read.get('units', ())),
                 read_at=max(stamps, key=_time) if stamps else None,
+                last_read_at=max(seen, key=_time) if seen else None,
                 deferred=bool(active), defer_until=until)
 
 

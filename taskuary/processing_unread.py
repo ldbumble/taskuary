@@ -196,7 +196,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # AN AGENT FINISHED IT (same message: "same for finished agent task?"): a task its agent closed is a
     # result nobody has looked at yet. It is on the rail once, with Reports, until it is read; a task the
     # owner closed stays closed and gone.
-    finished = _agent_finished(store, tid, active, review, read_at, now)
+    finished = _agent_finished(store, tid, active, review, processing_all._stamp(read.get('last_read_at')) or read_at, now)
     if finished:
         from .coder import no_one_behind
         card.update(kind='agentdone', lane='report', who=finished['who'], summary=finished['summary'], closed=True,

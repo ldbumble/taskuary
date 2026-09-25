@@ -39,10 +39,10 @@ def activate(db):
 
 
 def verdict(value):
-    """The visibility verdict alone. `read_at` rides along on the same dict - it is what the work
-    tab's hourly return reads - but it is a wall-clock stamp, so it is asserted where it means
-    something rather than in every exact comparison here."""
-    return {k: v for k, v in value.items() if k != 'read_at'}
+    """The visibility verdict alone. `read_at` and `last_read_at` ride along on the same dict - the work
+    tab's hourly return and a finished result's "read since the close" read them - but they are wall-clock
+    stamps, so they are asserted where they mean something rather than in every exact comparison here."""
+    return {k: v for k, v in value.items() if k not in ('read_at', 'last_read_at')}
 
 
 def owned_rows(db):

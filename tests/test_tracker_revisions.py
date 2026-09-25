@@ -202,9 +202,10 @@ def gh_comment(cid, body, login='rina', typ='User'):
 class GithubRevisionTests(unittest.TestCase):
     SRC = {'Address': 'o/r', 'ConfigJson': json.dumps({'issues': 'tasks'})}
 
-    def poll(self, s, items, comments=None):
+    def poll(self, s, items, comments=None, closer='ray'):
         with mock.patch.object(github, 'list_items', return_value=items), \
              mock.patch.object(github, 'body_images', return_value=[]), \
+             mock.patch.object(github, 'closed_by', return_value=closer), \
              mock.patch.object(github, 'issue_comments', return_value=comments or [], create=True):
             return channels.ingest_github_issues(s, self.SRC, 'tok', datetime.now() - timedelta(hours=1))
 
@@ -258,9 +259,10 @@ class UpstreamEndingTests(unittest.TestCase):
     task sat in the work list forever (the owner, 2026-09-15, on TQ-0550)."""
     SRC = {'Address': 'o/r', 'ConfigJson': json.dumps({'issues': 'tasks'})}
 
-    def poll(self, s, items, comments=None):
+    def poll(self, s, items, comments=None, closer='ray'):
         with mock.patch.object(github, 'list_items', return_value=items), \
              mock.patch.object(github, 'body_images', return_value=[]), \
+             mock.patch.object(github, 'closed_by', return_value=closer), \
              mock.patch.object(github, 'issue_comments', return_value=comments or [], create=True):
             return channels.ingest_github_issues(s, self.SRC, 'tok', datetime.now() - timedelta(hours=1))
 
@@ -288,6 +290,26 @@ class UpstreamEndingTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'done', 'the work is moot - it must leave the work list')
         said = ' '.join(str(c.get('Body')) for c in s.list_comments(tid))
         self.assertIn('closed', said.lower(), 'a task that closes itself has to say what closed it')
+
+    def test_your_own_merge_is_your_close_not_a_result_to_read(self):
+        """You merged the pull request yourself; the startup catch-up then closed its task as a result "Its pull
+        request" finished, unread on the rail and in the greeting though you had just done it (TQ-0754)."""
+        from taskuary.processing_unread import finish_evidence
+        s = MemoryStore(); s.set_setting('owner_github', 'alex', 'test')
+        self.poll(s, [gh_item()])
+        tid = self.open_task_on(s, 'gh:o/r#42')
+        self.poll(s, [gh_item(state='closed')], closer='Alex')
+        self.assertEqual((s.get_task(tid)['Status'], s.get_task(tid)['UpdatedBy']), ('done', 'owner'))
+        self.assertIn('You closed this issue on GitHub', ' '.join(str(c.get('Body')) for c in s.list_comments(tid)))
+        self.assertIsNone(finish_evidence(s, tid))
+
+    def test_somebody_else_ending_it_is_still_news(self):
+        from taskuary.processing_unread import finish_evidence
+        s = MemoryStore(); s.set_setting('owner_github', 'alex', 'test')
+        self.poll(s, [gh_item()])
+        tid = self.open_task_on(s, 'gh:o/r#42')
+        self.poll(s, [gh_item(state='closed')], closer='ray')
+        self.assertEqual(finish_evidence(s, tid)['who'], 'Its issue')
 
     def test_closing_goes_through_the_normal_ending_with_the_last_message(self):
         """Not a bare status flip: the same wrap every other ending gets, so the report is

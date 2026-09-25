@@ -19,7 +19,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
 const SRC = path.join(ROOT, "docs", "site");
 const OUT = path.join(ROOT, "site", "docs");
-const read = (p) => fs.readFileSync(p, "utf8");
+// LF whatever the checkout wrote: a Windows clone's CRLF rendered callouts differently from CI's Linux build,
+// and the committed site then failed "matches source" for a line ending (the 0.3.6.10 release, 2026-09-25)
+const read = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
 
 const manifest = JSON.parse(read(path.join(SRC, "manifest.json")));
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

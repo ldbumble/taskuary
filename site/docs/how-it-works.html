@@ -144,13 +144,11 @@ rail is what still wants something from you, never a history.</p>
 what routes the work. <code>reply</code> is a kind too. <code>fyi</code> creates nothing at all.</p>
 <p>Only <code>coding</code> is ever dispatched automatically. A conversation you did not ask for is noise, and
 a <code>task</code> is yours by definition, so both land on the Board and wait for your click.</p>
-<p>:::note What &quot;general&quot; means
-It means the assistant&#39;s conversation: there is nothing to type at a system, but thinking,
+<div class="callout note"><p class="eyebrow">What &quot;general&quot; means</p><p>It means the assistant&#39;s conversation: there is nothing to type at a system, but thinking,
 reading or research would help — weigh an option, make sense of a thread, work out what to ask.
 Work a person genuinely has to do in the world (sit a course, sign a form, attend, decide) is the
-<code>task</code> road instead.
-:::</p>
-<h2 id="what-triage-actually-decides">What triage actually decides<a class="anchor" href="#what-triage-actually-decides" aria-label="Link to this section">#</a></h2>
+<code>task</code> road instead.</p>
+</div><h2 id="what-triage-actually-decides">What triage actually decides<a class="anchor" href="#what-triage-actually-decides" aria-label="Link to this section">#</a></h2>
 <p>The verdict is the <em>last</em> thing that happens, not the first. Eleven checks run in a fixed order,
 and only two of them ask a model anything. A <strong>gate</strong> is deterministic: same input, same answer,
 no AI call, no cost. Knowing which is which is how you tell &quot;triage got this wrong&quot; from &quot;a rule
@@ -245,13 +243,11 @@ redraft, reject it, or decide no reply is needed.</p>
 <p>The same gate covers more than mail: a GitHub comment, an invoice, a bill posted to your finance
 system and a file written to a share are all proposals until you approve them. A connector card
 ships at a read-only authority, and raising it is a deliberate act.</p>
-<p>:::rule One way to finish
-A task ends with <strong>Mark done</strong> — on the task page, on the Assistant&#39;s card, or by saying &quot;done&quot; in
+<div class="callout rule"><p class="eyebrow">One way to finish</p><p>A task ends with <strong>Mark done</strong> — on the task page, on the Assistant&#39;s card, or by saying &quot;done&quot; in
 the chat. Sending the reply marks it done too, unless an agent is still working on it or a new
 message arrived meanwhile. An agent that says it is finished closes its own task, and that result
-stays on your work rail until you have read it. See <a href="tasks-and-agents#who-is-allowed-to-close-it">Tasks and agents</a>.
-:::</p>
-<h2 id="correcting-it-teaches-it">Correcting it teaches it<a class="anchor" href="#correcting-it-teaches-it" aria-label="Link to this section">#</a></h2>
+stays on your work rail until you have read it. See <a href="tasks-and-agents#who-is-allowed-to-close-it">Tasks and agents</a>.</p>
+</div><h2 id="correcting-it-teaches-it">Correcting it teaches it<a class="anchor" href="#correcting-it-teaches-it" aria-label="Link to this section">#</a></h2>
 <p>The roads on the Triage tab are not decoration. Correcting a verdict writes the reason into
 <code>TRIAGE.md</code>, the document the classifier reads on the next message — so the correction applies to
 the next message <em>like</em> this one, rather than becoming a rule about this one sender.</p>

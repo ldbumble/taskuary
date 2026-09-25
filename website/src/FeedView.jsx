@@ -1722,7 +1722,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                                 <Typography variant="caption" title="Taskuary sent this"
                                   sx={{ ...mono, fontSize: 9.5, color: ACCENT, flexShrink: 0 }}>out</Typography>
                               )}
-                              {r.TaskId && <LifecycleChip kind="task" phase={phases.task} compact sx={{ flexShrink: 0 }} />}
+                              {/* the TASK's state only on a row that is the task's work: an fyi filed on the thread's task for context
+                                  ("kept on TQ-x for the chain") wore that task's "done" over its own fyi (the owner, 2026-09-25) */}
+                              {r.TaskId && r.MsgStatus !== "filed" && <LifecycleChip kind="task" phase={phases.task} compact sx={{ flexShrink: 0 }} />}
                               {/* work says what is waiting NOW; the Timeline says what TRIAGE said.
                                   The canonical All sends a Lane on every row; /api/feed - still served
                                   behind the "canonical grouping is still finishing" banner, and to an
@@ -3043,7 +3045,8 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
           </Box>
         )}
 
-        {(verdict.existing_task_id || (verdict.related_message_ids || []).length) && (
+        {/* !! - an empty list is 0, and React draws a 0 (it sat under "Why" on every plain verdict, 2026-09-25) */}
+        {!!(verdict.existing_task_id || (verdict.related_message_ids || []).length) && (
           <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.55 }}>
             {verdict.existing_task_id ? `Linked to ${ref(verdict.existing_task_id)}` : ""}
             {verdict.existing_task_id && (verdict.related_message_ids || []).length ? " · " : ""}

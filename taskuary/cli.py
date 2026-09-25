@@ -48,7 +48,7 @@ def main():
     ap = argparse.ArgumentParser(prog='taskuary', description='Your work AI assistant - the local-first agent work hub.')
     ap.add_argument('--host', help='override [server].host (0.0.0.0 to listen on all interfaces)')
     ap.add_argument('--port', type=int, help='override [server].port')
-    ap.add_argument('--no-browser', action='store_true')
+    ap.add_argument('--no-browser', action='store_true', help="don't open a browser tab when the server starts")
     ap.add_argument('--debug', action='store_true', help='verbose console logging (requests, report runs, errors)')
     ap.add_argument('--version', action='version', version=f'taskuary {__version__}')
     # "what is actually in the prompt?" had no answer short of reading the code that builds it,

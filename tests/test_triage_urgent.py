@@ -82,6 +82,25 @@ class RemindMeOnTheWalkTests(unittest.TestCase):
         self.assertIn('Bring it back now', done)
 
 
+class SelectorTests(unittest.TestCase):
+    """On the owner's real pile "clear all fyis" (kind: fyi) cleared forty and "mark all the fyi read" (category: fyi)
+    cleared none - fyi is a kind and a lane, not a category - and "mark them all read" named nothing at all."""
+    PIPE = [{'key': 'a', 'lane': 'fyi', 'kind': 'fyi', 'category': 'info'}, {'key': 'b', 'lane': 'report', 'kind': 'report', 'category': 'report'},
+            {'key': 'c', 'lane': 'blocked', 'kind': 'agent', 'category': ''}]
+
+    def pick(self, sel):
+        with mock.patch.object(concierge, '_pipe', return_value=self.PIPE):
+            return [i['key'] for i in concierge.select_items(MemoryStore(), sel)]
+
+    def test_a_set_word_matches_whichever_field_knows_it(self):
+        for sel in ({'category': 'fyi'}, {'kind': 'fyi'}, {'lane': 'fyi'}):
+            self.assertEqual(self.pick(sel), ['a'], sel)
+
+    def test_everything_is_asked_for_by_name_and_never_sweeps_an_agent(self):
+        self.assertEqual(self.pick({'everything': True}), ['a', 'b'])
+        self.assertEqual(self.pick({}), [])
+
+
 class SweepOnlyClearsTests(unittest.TestCase):
     def test_a_reason_in_the_words_writes_no_rule_and_silences_nobody(self):
         """R8: a phrase list decided a sweep was a standing rule; "from now on" is the model's to call as a tool."""

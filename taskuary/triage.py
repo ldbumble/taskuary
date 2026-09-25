@@ -96,9 +96,13 @@ TASK_FIELDS = (
     'message and exchange actually ask for; never invent a requirement, never list anything as already done.')
 # URGENT IS TRIAGE'S CALL (the owner, 2026-09-25: "we should make urgent a triage decision"). It was only ever an
 # escalate rule on a sender; nothing read the message itself for whether it could wait.
-URGENT = ('Also answer "urgent": true only when this cannot wait until tomorrow - a deadline today, someone blocked right '
-          'now, a system down, money, safety or a person\'s care at risk. The words "urgent" or "ASAP" alone are tone, not '
-          'urgency; an fyi, a newsletter or a report is never urgent. Almost everything is false.')
+# ...and only TIME makes it urgent (the owner, 2026-09-25: "urgent should not be every task unless there is a hurry or
+# time deadline component"): on real mail the first wording also flagged a request for an agenda and a CI failure
+URGENT = ('Also answer "urgent": true ONLY when the message carries a time pressure - a deadline today or tomorrow, a '
+          'meeting or event it serves happening today, or someone blocked right now until this is done. Important is not '
+          'urgent: a failure, a problem or a request with no time on it is false, and so is a suggestion to follow up. The '
+          'words "urgent" or "ASAP" alone are tone, not a deadline; an fyi, a newsletter or a report is never urgent. '
+          'Almost everything is false.')
 
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).

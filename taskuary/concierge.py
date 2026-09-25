@@ -1160,13 +1160,16 @@ def pipe_holds(store) -> str:
 
 def select_items(store, sel: dict) -> list:
     """The items a SELECTOR describes. Every field is optional and they AND together; an empty selector
-    matches nothing, deliberately - "clear everything" must be asked for by naming a field, never by
+    matches nothing, deliberately - "clear everything" is asked for by name (`everything: true`), never by
     leaving them all blank."""
     from .routing import tokens
-    sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [])}
+    sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [], False)}
     if not sel: return []
     want = lambda f: str(sel.get(f) or '').strip().lower()
     cat, kind, lane = want('category'), want('kind'), want('lane')
+    # WHAT IT IS, whichever field named it: "category: fyi" matched nothing, because fyi is a kind and a lane here, and
+    # "mark all the fyi read" left all forty on the rail while "clear all fyis" (kind: fyi) cleared them (2026-09-25)
+    what = lambda i: {str(i.get(f) or '').lower() for f in ('category', 'kind', 'lane')}
     who = want('sender')
     words = [w for w in tokens(str(sel.get('contains') or ''))]
     older = sel.get('older_than_hours')
@@ -1177,9 +1180,7 @@ def select_items(store, sel: dict) -> list:
     # unread. 72 is all time but we don't care about those").
     for i in _pipe(store):
         if i['lane'] in ('blocked', 'working'): continue                  # an agent's question is never swept
-        if cat and str(i.get('category') or '').lower() != cat: continue
-        if kind and str(i.get('kind') or '').lower() != kind: continue
-        if lane and str(i.get('lane') or '').lower() != lane: continue
+        if any(v and v not in what(i) for v in (cat, kind, lane)): continue
         if who:
             hay = f"{i.get('who') or ''} {i.get('email') or ''}".lower()
             if who not in hay: continue
@@ -1439,8 +1440,14 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind == 'pipe.clear':
         sel = params.get('select') or {}
         hits = select_items(store, sel)
+        if not hits and not any(v not in (None, '', [], False) for v in (sel or {}).values()):
+            # a set that names nothing ("mark them all read" with nothing before it) is a question, not "nothing matches"
+            say_ = (f"Which ones? {pipe_holds(store)} Say all the fyi, the reports, everything from one sender - or "
+                    'everything - and I clear that. Nothing has been touched.')
+            record_related(store, tid, item, 'assistant', say_)
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
         if not hits:
-            said = ', '.join(f'{k}: {v}' for k, v in (sel or {}).items()) or 'nothing'
+            said = ', '.join(f'{k}: {v}' for k, v in (sel or {}).items())
             # ...and WHAT IS THERE, so a miss can be re-aimed instead of read as "those items do not
             # exist". The owner was looking at eleven rows while this said nothing matched them
             # (2026-09-10): the selector had been offered a category the pipe could not hold.

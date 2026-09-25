@@ -143,6 +143,7 @@ def selector(store=None) -> str:
     lines += ['  sender     an address or a name, matched on the sender only',
               '  contains   words that must appear in the subject',
               '  older_than_hours  a number',
+              '  everything true - every item in the pipe except an agent waiting or working; only when the owner means all of it',
               'Use SELECT when the owner describes a SET ("all the reports", "everything from Marketing").',
               'Naming a category is not the same as the word appearing in a subject - say category: report,',
               'never contains: report.']

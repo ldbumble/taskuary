@@ -130,6 +130,8 @@ test("reload restores only the latest explicit subject and leaves passive watche
   assert.equal(interactiveCardIndex(withPassiveHistory), 0,
     "a passive history line cannot replace the explicit subject's interactive controls");
   assert.equal(interactiveCardIndex([{ id: 2, card: watcher }]), -1);
+  // a card whose verb was pressed folds at once and nothing older takes its place
+  assert.equal(interactiveCardIndex([{ id: 1, card: { key: "a" } }, { id: 2, card: { key: "fyis:x" }, done: true }]), -1);
 });
 
 test("Assistant echoes one captured selection and never retries a 409 through the plain endpoint", () => {

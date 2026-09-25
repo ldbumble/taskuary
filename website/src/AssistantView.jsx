@@ -1172,7 +1172,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     deferInChat(() => surfaceRef.current?.(), pile ? 120 : 500);
   };
   const done = async (receipt) => {
-    if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt }]);
+    // the card folds to its line the moment its verb is pressed - see interactiveCardIndex
+    setMsgs((m) => { const i = interactiveCardIndex(m), out = i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true } : x));
+      return receipt ? [...out, { id: `r${Date.now()}`, role: "receipt", text: receipt }] : out; });
     let pile = null;
     // `only` rides along so the rail comes back captured under the scope this page walks with
     if (current) { try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current })).data?.pile || null; } catch { /* it may already be gone */ } }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Assistant's buttons — Taskuary documentation</title>
+<title>Assistant buttons — Taskuary documentation</title>
 <meta name="description" content="Every button under an Assistant card, the one question two of them ask, Remind me, and the words that work typed.">
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -55,9 +55,9 @@
       <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry on">
-      <a class="page" href="./assistant" aria-current="page">The Assistant's buttons</a>
-      <button class="chev" type="button" aria-expanded="true" aria-label="Hide The Assistant's buttons's sections"></button>
-      <div class="secs"><a class="sec" href="#the-buttons-on-each-card" data-sec="the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="#the-two-buttons-that-ask-one-question" data-sec="the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="#remind-me" data-sec="remind-me">Remind me</a><a class="sec" href="#words-that-work-typed" data-sec="words-that-work-typed">Words that work typed</a></div>
+      <a class="page" href="./assistant" aria-current="page">Assistant buttons</a>
+      <button class="chev" type="button" aria-expanded="true" aria-label="Hide Assistant buttons's sections"></button>
+      <div class="secs"><a class="sec" href="#the-buttons-on-each-card" data-sec="the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="#the-two-buttons-that-ask-one-question" data-sec="the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="#remind-me" data-sec="remind-me">Remind me</a><a class="sec" href="#everything-the-task-page-can-do" data-sec="everything-the-task-page-can-do">Everything the task page can do</a><a class="sec" href="#words-that-work-typed" data-sec="words-that-work-typed">Words that work typed</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./reports">Reports and the Advisor</a>
@@ -83,7 +83,7 @@
     <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
   </aside>
   <main id="doc">
-    <p class="eyebrow">The Assistant's buttons</p>
+    <p class="eyebrow">Assistant buttons</p>
     <article>
 <p>The Assistant walks you through what is waiting: one card at a time, with a few buttons under it.
 There are eight buttons in all. Anything without a button still works when you ask for it in your own
@@ -197,6 +197,79 @@ words, in the app or on your phone.</p>
 from the calendar. Until that day the task is under <strong>Upcoming</strong> in Tasks and off your work rail. That
 morning a note goes on the task and it is back on your rail, however long ago it arrived. Ask the
 Assistant the same thing — &quot;bring TQ-0123 back in two weeks&quot; — and it does it at once, with an undo.</p>
+<h2 id="everything-the-task-page-can-do">Everything the task page can do<a class="anchor" href="#everything-the-task-page-can-do" aria-label="Link to this section">#</a></h2>
+<p>Anything you can do on a task&#39;s page, you can ask the Assistant to do — about the task in front of you, or any
+task you name (TQ-0123). It shows you a card first, like every other action. It never guesses which task you
+mean.</p>
+<p><figure><img src="img/assistant-task-tools.svg" alt="What you can ask about a task, and what each does" loading="lazy"><figcaption>One tool per action on the task page.</figcaption></figure></p>
+<table>
+<thead>
+<tr>
+<th>Say, about a task</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>&quot;make this urgent&quot;, &quot;rename it&quot;, &quot;I&#39;ll take it&quot;</td>
+<td>Priority, title or owner changed</td>
+</tr>
+<tr>
+<td>&quot;this is a general job, not coding&quot;</td>
+<td>What kind of work it is changes, and a live session is closed if it no longer fits</td>
+</tr>
+<tr>
+<td>&quot;this belongs in the ledger repo&quot;</td>
+<td>The task moves to that repository</td>
+</tr>
+<tr>
+<td>&quot;tick off the first item&quot;</td>
+<td>That checklist box is ticked — the last box is Mark done</td>
+</tr>
+<tr>
+<td>&quot;add a note that Erin wants it by Friday&quot;</td>
+<td>A note on the task</td>
+</tr>
+<tr>
+<td>&quot;forward it to Erin&quot;</td>
+<td>A hand-off is written for your yes — nothing is sent until you approve it</td>
+</tr>
+<tr>
+<td>&quot;ask the sender which date range they need&quot;</td>
+<td>The question is written for your yes</td>
+</tr>
+<tr>
+<td>&quot;start the coding agent on TQ-0123&quot;</td>
+<td>An agent starts on that task; it asks which repository when it is not clear</td>
+</tr>
+<tr>
+<td>&quot;continue the agent where it left off&quot;</td>
+<td>The agent&#39;s own last session picks up again</td>
+</tr>
+<tr>
+<td>&quot;stop the agent on TQ-0123&quot;</td>
+<td>Save and end session on that task&#39;s agent</td>
+</tr>
+<tr>
+<td>&quot;split this in two&quot; / &quot;it&#39;s the same job as TQ-0120&quot;</td>
+<td>Two tasks, or this one folded into the other</td>
+</tr>
+<tr>
+<td>&quot;this isn&#39;t a task&quot;</td>
+<td>Deleted, and triage learns it was not work</td>
+</tr>
+<tr>
+<td>&quot;it&#39;s done&quot; / &quot;reopen TQ-0123&quot;</td>
+<td>Mark done, or open again</td>
+</tr>
+<tr>
+<td>&quot;bring it back in two weeks&quot;</td>
+<td>Remind me — away until that morning</td>
+</tr>
+<tr>
+<td>&quot;send it&quot; / &quot;reject that draft&quot; / &quot;make it shorter&quot;</td>
+<td>The draft is sent, rejected, or written again</td>
+</tr>
+</tbody></table>
 <h2 id="words-that-work-typed">Words that work typed<a class="anchor" href="#words-that-work-typed" aria-label="Link to this section">#</a></h2>
 <p>These have no button. Say them, in the app or on your phone.</p>
 <table>
@@ -228,11 +301,6 @@ Assistant the same thing — &quot;bring TQ-0123 back in two weeks&quot; — and
 <td>at once</td>
 </tr>
 <tr>
-<td>&quot;split it in two&quot;</td>
-<td>Two tasks from one arrival</td>
-<td>you confirm</td>
-</tr>
-<tr>
 <td>&quot;remember that…&quot;</td>
 <td>A fact kept in Settings → Memory, used by triage and the Assistant</td>
 <td>you confirm</td>
@@ -246,16 +314,6 @@ Assistant the same thing — &quot;bring TQ-0123 back in two weeks&quot; — and
 <td>&quot;set up a report that…&quot;</td>
 <td>A walk-through for a report, connection or workflow</td>
 <td>you confirm</td>
-</tr>
-<tr>
-<td>&quot;forward it to Erin&quot;</td>
-<td>A hand-off drafted for your yes</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td>&quot;stop the agent on TQ-0123&quot;</td>
-<td>Saves and ends that agent&#39;s session</td>
-<td>at once</td>
 </tr>
 <tr>
 <td>&quot;turn auto-drafts off&quot;</td>

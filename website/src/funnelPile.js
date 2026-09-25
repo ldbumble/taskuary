@@ -173,9 +173,12 @@ export const chipsOf = (message) => {
   if (options.length) return options;
   return message?.chips || message?.card?.chips || [];
 };
+// A card whose verb was pressed is put down at once (`done`), not when the next card arrives: the
+// settle and the next pick take a second, and a card still standing there gets pressed twice (the
+// owner, 2026-09-25, on "All read, next"). It stays the newest card, so nothing older comes back to life.
 export const interactiveCardIndex = (messages) => {
   for (let index = (messages || []).length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.card && !messages[index].card.background_event) return index;
+    if (messages[index]?.card && !messages[index].card.background_event) return messages[index].done ? -1 : index;
   }
   return -1;
 };

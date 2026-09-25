@@ -1,5 +1,6 @@
 """The blackboard: agents aware of each other, and the affinity dispatch queue."""
 import json, os, unittest
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -184,6 +185,28 @@ class BlackboardTests(unittest.TestCase):
         finally: term.start_on_task = real
         self.assertEqual(started, [t2])
         self.assertEqual(self.s.queued_dispatches(), [])
+
+
+class AgoTests(unittest.TestCase):
+    """`_ago` - the "5m ago" beside every note on the wall (`taskuary --board`)."""
+    def ago(self, **kw): return bb._ago(datetime.now() - timedelta(**kw))
+
+    def test_boundaries(self):
+        for kw,want in [(dict(seconds=20),'just now'), (dict(minutes=59),'59m ago'), (dict(minutes=60),'1h ago'),
+                        (dict(hours=47),'47h ago'), (dict(hours=48),'2d ago')]:
+            with self.subTest(**kw): self.assertEqual(self.ago(**kw), want)
+
+    def test_a_stored_string_stamp_reads_the_same(self):
+        self.assertEqual(bb._ago(str(datetime.now() - timedelta(minutes=5))), '5m ago')
+
+    def test_a_future_stamp_reads_just_now(self):
+        # a clock-skewed stamp has a negative age, which falls under the one-minute branch: pinned, not endorsed
+        self.assertEqual(self.ago(minutes=-5), 'just now')
+        self.assertEqual(self.ago(days=-3), 'just now')
+
+    def test_bad_input_is_blank(self):
+        for o in (None, '', 'not a date'):
+            with self.subTest(stamp=o): self.assertEqual(bb._ago(o), '')
 
 
 if __name__ == '__main__':

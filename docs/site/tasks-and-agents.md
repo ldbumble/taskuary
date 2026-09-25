@@ -19,6 +19,8 @@ when the agent stops.
 
 ### Who is allowed to close it
 
+![Every way a task ends: you press Mark done, send the reply, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges](img/how-a-task-ends.svg "Every road ends in Mark done, or says why the task stays open.")
+
 - **You** end a task with **Mark done**. Every way of saying it — the button, the Assistant's card,
   "done" or "close" in the chat, the phone — does the same thing: the task is done, any unsent
   draft is kept but retired, a live agent is stopped, and it leaves your work rail.
@@ -109,8 +111,8 @@ outlives the job that produced it.
 
 ## Checklists and closing
 
-A task can carry a checklist. Ticking the last box closes an unassigned open task, because
-there is nothing left it was waiting for. Closing a task ticks every remaining box, for the same
+A task can carry a checklist. Ticking the last box marks the task done, because there is nothing
+left it was waiting for, unless an agent is still working on it. Closing a task ticks every remaining box, for the same
 reason in reverse — a closed task with open items is a lie about its own state.
 
 ## Replies

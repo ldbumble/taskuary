@@ -190,5 +190,7 @@ fs.writeFileSync(path.join(OUT, "search.json"), JSON.stringify(index));
 
 fs.copyFileSync(path.join(HERE, "docs.css"), path.join(OUT, "docs.css"));
 fs.copyFileSync(path.join(HERE, "docs.js"), path.join(OUT, "docs.js"));
+// the decision trees, drawn by tools/render-diagrams.mjs
+fs.cpSync(path.join(SRC, "img"), path.join(OUT, "img"), { recursive: true });
 
 console.log(`docs: ${pages.length} pages, ${pages.reduce((n, p) => n + p.sections.length, 0)} sections -> site/docs`);

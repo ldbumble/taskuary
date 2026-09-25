@@ -67,6 +67,13 @@ class TaskWithNoMessageTests(unittest.TestCase):
         card = [i for i in rail(s) if i.get('tid') == t]
         self.assertEqual([(c['lane'], c['promoted']) for c in card], [('yours', False)])
 
+    def test_a_task_waiting_on_them_says_so_on_the_rail(self):
+        # the owner, 2026-09-25: the list said "waiting on them" and the rail "on you" - the rail had no lane for it
+        s, settle = settled()
+        t = s.create_task({'Title': 'Chase the signed contract', 'Kind': 'task', 'Status': 'waiting'}, 'owner')
+        settle()
+        self.assertEqual([c['lane'] for c in rail(s) if c.get('tid') == t], ['theirs'])
+
 
 class MeetingGraceTests(unittest.TestCase):
     def test_how_long_a_started_meeting_stays_is_a_setting(self):

@@ -435,7 +435,7 @@ def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel:
     tag = '"' + store.feed_tag(days, pending_only, channel, source) + '"'
     if request is not None and request.headers.get('if-none-match') == tag:
         return Response(status_code=304, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
-    rows = store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0), source)
+    rows = store.feed(max(1, min(limit, 500)), days, pending_only, channel, max(offset, 0), source)
     memo = {}
     for r in rows:
         r['CanSend'], r['SendBlock'] = _send_state(memo, r.get('Channel'), True)
@@ -2920,7 +2920,7 @@ def hub_list(topic: str = None, q: str = None, kind: str = None, sort: str = 'ne
     """The Hub tab. Topics down the side, high-signal posts in the middle,
     written by whichever agent worked it out, and correctable by whoever knows better.
     status=removed lists what the vote or the owner took off - readable, restorable."""
-    posts = store.lore_posts(topic or None, q or None, min(limit, 200), sort,
+    posts = store.lore_posts(topic or None, q or None, max(1, min(limit, 200)), sort,
                              'live' if status == 'live' else 'removed', kind or None)
     # the owner's own vote rides on each row so the arrow can show which way they leaned
     for p in posts: p['MyVote'] = next((v['Delta'] for v in store.lore_votes(p['LoreId']) if v['Actor'] == ACTOR), 0)
@@ -5726,7 +5726,7 @@ def toggle_memory(mid: int, body: MemoryToggle):
     return {'ok': True}
 
 @app.get('/api/audit/recent')
-def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(limit, 500))}
+def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=max(1, min(limit, 500)))}
 
 # Two lanes. The FULL lane reads every connector, judges the queue, watches CI and runs reports,
 # one at a time in this process (the DB flag is only for the UI). The CHAT lane reads chat
@@ -7101,6 +7101,7 @@ def audit_assistant(limit: int = 60):
     """What the assistant changed, newest first - the rows its handlers audit as `assistant` (settings,
     reports, connections). Settings -> Configuration shows them, with the undo beside the newest while
     it still applies (the tiers: an instant write is always visible and always reversible)."""
+    limit = max(1, min(limit, 200))      # SQLite reads LIMIT -1 as no limit at all
     rows = [r for r in store.list_audit(limit=max(limit * 5, 200)) if r.get('Actor') == 'assistant'][:limit]
     out = []
     for r in rows:

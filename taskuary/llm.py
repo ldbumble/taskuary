@@ -78,6 +78,10 @@ MAX_TOKENS = 400
 # tier up: on haiku it broke its own contract in the 2026-09-24 chat audit ("I don't have the lookup tools"), sonnet held.
 LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': 'gemini-2.5-flash'}
 ASSISTANT_DEFAULT = {'claude': 'sonnet', 'codex': 'effort:medium', 'gemini': 'gemini-2.5-flash'}
+# ...and its EFFORT when the pick names none: a turn is a short answer, and sonnet's own default is high - a plain
+# "next" on the phone waited on a model thinking hard about nothing (the owner, 2026-09-25: "change assistant to
+# effort level of low so it goes faster"). Codex's is already in ASSISTANT_DEFAULT as its gear.
+ASSISTANT_EFFORT = {'claude': 'low'}
 
 
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
@@ -136,8 +140,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         # 'gpt-5.4-mini@low' - a model from codex's own /model list and one of its reasoning levels
         from .climodels import split_pick
         m, eff = split_pick(light)
-        prof['model'] = m
-        if eff: prof['args'] = list(prof.get('args') or []) + ['-c', f'model_reasoning_effort={eff}']
+        prof['model'] = f'{m}@{eff}' if eff else m      # agents.run_cli spells the effort in this CLI's own flag
     if model: prof['model'] = model     # an explicit per-job model outranks the light gear
     # 300s is the CLASSIFIER's leash - one message, one verdict, and a brain that hangs for twenty
     # minutes on a mail run is a bug. An agent the owner scheduled INTO a repo (cwd) is not

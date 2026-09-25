@@ -962,9 +962,9 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     if profile.get('model'):
         # 'gpt-5.4@high' spells a codex model and its reasoning level in one pick (climodels)
         from .climodels import split_pick
+        from .climodels import effort_args
         m, eff = split_pick(profile['model'])
-        cmd += [profile.get('model_arg') or '--model', m]
-        if eff: cmd += ['-c', f'model_reasoning_effort={eff}']
+        cmd += [profile.get('model_arg') or '--model', m] + effort_args(_cli_name(name), eff)
     # A CONVERSATION KEPT OPEN: the Assistant and the general agent name theirs (`keep_alive`), and claude's
     # stream-json input serves every turn from one process instead of starting the CLI per call (clipool).
     keep = profile.get('keep_alive')

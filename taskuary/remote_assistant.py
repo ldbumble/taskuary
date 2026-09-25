@@ -24,6 +24,7 @@ HANDOFF_KEY = 'assistant_handoff'      # {'channel','chat','connector_id','at'} 
 
 _TASK_LINK = re.compile(r'\[([^\]]+)\]\(#task=\d+\)')
 _locks, _locks_guard = {}, threading.Lock()
+_turns: dict = {}                            # chat -> the Event that cancels its turn in flight
 
 OPENED = ('Walking you through it here. Reply in this chat and I keep going; '
           'take it back on the desktop when you want the buttons again.')
@@ -382,13 +383,25 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
         except Exception as e: logger.debug(f'no receipt in {channel}: {e}')
     key = (id(store), channel, connector_id, chat)
     with _locks_guard: lock = _locks.setdefault(key, threading.Lock())
+    # A PICK DOES NOT QUEUE BEHIND THE MODEL (2026-09-25: a poll tap got its thumb and then waited a minute - the
+    # typed turn before it was still waiting on the model). A tap or a typed number is a button: it stops the turn
+    # in flight, whose answer would only have buried it, and runs at once.
+    if poll or question.strip().isdigit():
+        with _locks_guard: busy = _turns.get(key)
+        if busy: busy.set()
     # the desktop hears the turn START (it shows the typing dots, as for its own turns) and END (it reads the
     # conversation at once instead of on its 30 s tick)
     from . import live
     live.emit(live.CHAT, thinking=True, channel=channel)
     try:
         heard = time.time()
-        with lock: respond(store, channel, chat, question, connector_id, poll=poll)
+        with lock:
+            ev = threading.Event()
+            with _locks_guard: _turns[key] = ev
+            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev)
+            finally:
+                with _locks_guard:
+                    if _turns.get(key) is ev: _turns.pop(key, None)
         # WHERE A SLOW TURN SPENT ITS TIME (2026-09-25: a poll tap took a minute and the log could not say why):
         # from reaching the bridge to being heard here, and from heard to answered
         lag = f'{heard - float(arrived):.1f}s to be heard, ' if arrived else ''
@@ -522,8 +535,9 @@ def walk(store, actor: str = 'owner') -> str:
         return carry_out(store, out, None, actor=actor, lead=opener)
 
 
-def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False):
-    """Answer synchronously; the poller runs this on a serialized background worker."""
+def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False, cancel=None):
+    """Answer synchronously; the poller runs this on a serialized background worker. `cancel` is set when a pick
+    arrives behind this turn: the model's answer is dropped, never sent after the pick's."""
     from . import concierge, general
     _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id}
     try:
@@ -543,11 +557,15 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             try: offered = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
             except ValueError: offered = []
             act = acts.get(question) if picked else None
-            forget_offered(store, channel, chat); _ACTS.rows = None
+            # ...spent by a PICK now; words spend it only when their answer goes out - a tap made while the model is
+            # still thinking about typed words must find its list (PickJumpsTheQueueTests)
+            if picked: forget_offered(store, channel, chat)
+            _ACTS.rows = None
             pending = str(store.get_setting(f'{NOTE_KEY}:{channel}:{chat}') or '')
             if pending: store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
             if pending and not picked:
                 # the line typed after "Continue session" is what to tell the agent - a text field, not a word to read
+                forget_offered(store, channel, chat)
                 send(store, channel, chat, _continue(store, pending, question), connector_id)
                 return
             if act:
@@ -570,12 +588,17 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 return
             straight = answer_the_agent(store, item, question, picked)
             if straight:
+                if not picked: forget_offered(store, channel, chat)
                 send(store, channel, chat, straight, connector_id)
                 return
-            out = concierge.say(store, question, key=concierge.current_key(store, tid) or None, actor='owner')
+            out = concierge.say(store, question, key=concierge.current_key(store, tid) or None, actor='owner', cancel=cancel)
+            if cancel is not None and cancel.is_set(): return          # a pick came in behind it and answers instead
+            if not picked: forget_offered(store, channel, chat)
             text = carry_out(store, out, item, picked=picked)
         send(store, channel, chat, text, connector_id)
     except Exception as e:
+        if cancel is not None and cancel.is_set():
+            logger.info(f'{channel}: a turn gave way to a pick'); return
         logger.warning(f'the {channel} assistant could not answer: {e}')
         try: send(store, channel, chat, f"I couldn't answer that: {e}", connector_id)
         except Exception as send_error: logger.warning(f'the {channel} assistant could not send its error: {send_error}')
@@ -1264,7 +1287,9 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
     try: offered = remember_offered(store, channel, chat, text)
     except Exception as e:
         logger.debug(f'could not keep the offered options for {channel}: {e}'); offered = []
-    if channel == 'whatsapp' and len(offered) > 1:
+    # ONE CHOICE IS STILL A POLL (the owner, 2026-09-25: "even if only next we should have poll to go next no?") - a card
+    # that offered only Next printed "Reply with one of: 1 · Next" and nothing to tap
+    if channel == 'whatsapp' and offered:
         # the POLL is the choices (the owner, 2026-09-25: "don't need this choices if you have pick"). A number typed
         # still answers - the list is remembered above - it is only not printed twice. Numbered lines that are the
         # CONTENT (an fyi batch's members, above the lead-in) stay.
@@ -1275,7 +1300,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
         if shown.strip(): msgs.extend(chatformat.split(shown, chatformat.HARD))
     for i, msg in enumerate(msgs):
         # the LAST bubble carries the choices as a poll: WhatsApp's one tappable thing (the owner, 2026-09-25)
-        poll = offered if channel == 'whatsapp' and i == len(msgs) - 1 and len(offered) > 1 else None
+        poll = offered if channel == 'whatsapp' and i == len(msgs) - 1 and offered else None
         kw = {'poll': poll} if poll else {}
         out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id, **kw)
     # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one

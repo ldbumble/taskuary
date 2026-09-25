@@ -33,7 +33,7 @@ SLOTS = [
      'why': 'This is the expensive, capable gear: it reads your repository and writes code.'},
     {'key': 'concierge_ai', 'label': 'Assistant', 'pick': 'brain', 'gear': 'light',
      'model_setting': 'concierge_model',
-     'desc': 'Speaks on the Assistant tab and walks you through the pipe.',
+     'desc': 'Speaks on the Assistant tab and on your phone (WhatsApp, Telegram), and walks you through the pipe.',
      'why': 'Turn by turn and conversational, so it rides the same quick gear as triage.'},
     # The fourth worker had no row here, so the page that exists to say "what will actually run"
     # was silent about half the tasks on the board. `assistant_ai` was buried on the Assistant tab
@@ -44,7 +44,7 @@ SLOTS = [
     {'key': 'assistant_ai', 'label': 'General agent', 'pick': 'brain', 'gear': 'light',
      'model_setting': 'assistant_model',
      'desc': 'Works every general task: research, planning, writing, a job with no repository. Also the '
-             'floating bubble and the WhatsApp doorway.',
+             'floating bubble.',
      'why': 'A CLI here can run tools, drive a browser and post to the wall; an API brain has no shell, '
             'so it can only read and write - quicker, and enough for chat.'},
     # The fifth worker, and the only one that does not have to be able to write. A report's own
@@ -155,6 +155,9 @@ def resolve(store, cfg, slot_key: str) -> dict:
             light, dflt, owner = str(settings.get(s['model_setting']) or ''), ASSISTANT_DEFAULT.get(cli, ''), 'this page'
         else: dflt, owner = LIGHT_DEFAULT.get(cli, ''), f'the {name} profile (light model)'
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
+        if slot_key == 'concierge_ai' and not effort:
+            from .llm import ASSISTANT_EFFORT
+            effort = ASSISTANT_EFFORT.get(cli, '')          # what concierge.brain runs when the pick names no effort
         said = (f"{dflt[7:]} effort" if dflt.startswith('effort:') else dflt) if dflt else f'the {cli} default'
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
                    default_hint=f"{said} - the {'Assistant' if slot_key == 'concierge_ai' else 'light'} default",

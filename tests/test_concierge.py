@@ -340,11 +340,11 @@ class BrainTests(unittest.TestCase):
             self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: triage judged it a reply to write. From you: approve the draft below, or redraft it.')
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
-            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24), tools off
+            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet@low', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24) at low effort, tools off
             self.assertTrue(str(seen['keep']).startswith(f'{concierge.LIVE_KEY}:'))    # one live CLI process per chat (clipool)
             self.assertIn('I am Taskuary', seen['system'])
             concierge.say(s, 'and when did she send it?', key=f'review:{r}')                            # ...and the same conversation, resumed
-            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet', 'sess-1', None))   # tools off
+            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet@low', 'sess-1', None))   # tools off
             self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system'])                                # ...so it is not told it has any
             tid = general.dock_task(s)[0]['TaskId']
             self.assertEqual(concierge._sid(s, tid), 'sess-1')

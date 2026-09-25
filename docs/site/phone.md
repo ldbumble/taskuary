@@ -46,21 +46,25 @@ conversation with two doors.
 
 The phone is the desktop Assistant in a chat, word for word. Every button the desktop card draws is a
 numbered line here, and on WhatsApp the same choices come again as a **poll** under the message, so one
-tap picks. A number or a tap runs exactly what the desktop's button runs, and no model reads it. Only
-words you type go to the model.
+tap picks - even when the only choice is **Next**. A number or a tap runs exactly what the desktop's button runs,
+and no model reads it. Only words you type go to the model.
 
 ![A number or a poll tap runs the desktop's action; Not ours asks how far, Send to agent asks which agent, an unclear checkout asks which repository; typed words go to the model](img/phone-choices.svg "A pick is the button; words are words.")
 
 | You send | What happens |
 |---|---|
-| a number, or a tap in the poll | the desktop button with that name, run at once |
+| a number, or a tap in the poll | the desktop button with that name, run at once - and if the model is still answering something you typed, that answer is dropped and the pick goes first |
 | **Not ours** | "How far?" — just this once, from now on, or a rule in Settings; the answer you pick runs |
 | **Send to agent** | "Which agent?" — triage's pick first, the other one next; the answer you pick runs |
 | a coding job with no clear checkout | "Which repository?" — the best guess first; the one you pick starts |
 | **Undo** (offered under a receipt that can be undone) | puts the last change back, once |
-| **More** | the rest of a long message, then the same choices |
+| **More** | the rest of a long message - or, on a finished agent, its report - then the same choices |
 | an old number, after you have already replied | nothing — a list answers one reply, then its numbers are gone |
 | anything typed - "next", "undo" and "set up" too | the model reads it, with the same tools as the desktop. No typed word is a shortcut; only a number or a poll tap is a pill |
+
+Typed words are answered by the **Assistant's** brain - the same one, and the same model, as the Assistant tab
+(Settings → Triage & agents → Assistant). A Claude Assistant runs at **low effort** unless its model names one
+(`claude-sonnet-5@medium`): a turn is a short answer, and Sonnet's own default is high.
 
 ### Approving things
 

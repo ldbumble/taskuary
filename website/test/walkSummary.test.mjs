@@ -2,6 +2,7 @@
 // already carries, so every lane lands in exactly one group and nothing is judged here.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { groupOf, stateOf, summarize, whoOf, GROUPS } from "../src/walkSummary.js";
 
 const it = (lane, kind = "asked", extra = {}) => ({ key: `${lane}:${kind}:${Math.random()}`, lane, kind, who: "Erin Blake", title: "Q3 numbers", ...extra });
@@ -51,4 +52,10 @@ test("a report's sender is its own title, so the row says Report instead of sayi
   assert.equal(whoOf({ kind: "report", lane: "report", who: "AP ageing over 30 days", title: "AP ageing over 30 days, weekly - 5 rows" }), "Report");
   assert.equal(whoOf({ kind: "asked", who: "Erin Blake", title: "Q3 numbers" }), "Erin Blake");
   assert.equal(whoOf({ kind: "agent", agent: "coder", title: "Reconcile the August GL export" }), "coder");
+});
+
+test("every group the opener draws has a colour role - a missing one crashed the page (2026-09-24)", () => {
+  const src = readFileSync(new URL("../src/assistantCards.jsx", import.meta.url), "utf8");
+  const roles = src.match(/const GROUP_ROLE = \{([^}]*)\}/)[1];
+  for (const g of GROUPS) assert.ok(roles.includes(` ${g.key}: `), `GROUP_ROLE has no ${g.key}`);
 });

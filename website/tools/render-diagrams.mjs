@@ -17,6 +17,7 @@ const DIAGRAMS = {
   "docs/phone-choices.md": ["docs/site/img/phone-choices.svg"],
   "docs/work-rail.md": ["docs/site/img/rail-on.svg", "docs/site/img/rail-off.svg"],
   "docs/agent-lifecycle.md": ["docs/site/img/agent-start.svg", "docs/site/img/agent-run.svg", "docs/site/img/agent-end.svg"],
+  "docs/tasks-and-board.md": ["docs/site/img/task-state.svg"],
 };
 
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: "new" });

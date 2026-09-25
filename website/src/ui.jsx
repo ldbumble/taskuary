@@ -1,6 +1,6 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import { says } from "./laneSays.js";
-import { laneMeta } from "./funnelPile.js";
+import { laneMeta, taskStateMeta } from "./funnelPile.js";
 import { AGENT } from "./taskLifecycle.js";
 import React, { useEffect, useState } from "react";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
@@ -171,7 +171,7 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, categor
   }
   // A finished task outranks everything else the chip could say.
   if (taskStatus === "done" && reviewStatus !== "pending") {
-    return <Chip size="small" label="completed" sx={{ bgcolor: "#dfeade", color: "#47654a", height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+    return <Chip size="small" label="done" sx={{ bgcolor: "#dfeade", color: "#47654a", height: 19, fontSize: 10.5, fontWeight: 700 }} />;
   }
   // and "nobody is moving this" outranks the verdict: what happened to it matters less
   // than whether it is sitting on you right now
@@ -1036,15 +1036,29 @@ const laneState = (lane) => {
   const m = laneMeta(lane), c = ROLES[m.role || "muted"];
   return { key: lane, label: m.word, solid: c.solid, c: { bg: c.tint, fg: c.ink, bd: c.bd } };
 };
+// THE SERVER'S STATE WINS (taskstate.py, T1-T9): one rule for the list and the Board, the rail's own. `key` stays the
+// bucket the list files it under - a closed task, the agent's or yours, is done; a continued one is live work again.
+const fromServer = (k) => {
+  if (k === "closed") return ST.done;
+  if (k === "dropped") return ST.dropped;
+  const m = taskStateMeta(k);
+  if (!m) return null;
+  const c = ROLES[m.role || "muted"];
+  return { key: k === "agentdone" ? "done" : k, state: k, label: m.word, mark: m.mark,
+    solid: c.solid, c: { bg: c.tint, fg: c.ink, bd: c.bd } };
+};
 export const stateOf = (t) => {
   if (!t) return ST.queued;
+  const server = t.State && fromServer(t.State);
+  if (server) return server;
   if (t.Status === "dropped") return ST.dropped;
   if (t.Status === "done") return ST.done;
   return laneState(taskLane(t));
 };
 export const StateChip = ({ task }) => {
   const st = stateOf(task);
-  return <Chip size="small" label={st.label}
+  // the rail's mark leads the word, as it does on the rail (⏳ waiting to start, 👋 agent waiting on you)
+  return <Chip size="small" label={st.mark && st.mark !== "spinner" ? `${st.mark} ${st.label}` : st.label}
     sx={{ bgcolor: st.c.bg, color: st.c.fg, border: `1px solid ${st.c.bd}`, height: 19, fontSize: 10.5, fontWeight: 700 }} />;
 };
 
@@ -1068,7 +1082,7 @@ const LC = {
 const lifecycleColor = (kind, phase) => {
   const value = String(phase || "");
   if (value === AGENT.waiting) return LC.needsYou;        // an agent blocked on you, and only that
-  if (value === "draft ready" || value === "approval needed" || value === "ready") return LC.you;
+  if (value === "reply ready" || value === "approval needed" || value === "ready") return LC.you;
   if (value === AGENT.working || value === "in progress") return LC.working;
   if (value === "done" || value === "sent" || value === AGENT.saved || value === AGENT.finished) return LC.done;
   if (kind === "reply") return LC.reply;

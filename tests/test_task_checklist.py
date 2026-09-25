@@ -94,20 +94,17 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual([i['done'] for i in detail['checklist']], [True, False])
         self.assertIn('- [x] Add Priya to the payroll portal', detail['task']['ChecklistMd'])
 
-    def test_the_owners_last_tick_closes_and_closing_ticks_every_box(self):
-        """PW-077 kept a tick from completing a task, so an AGENT's progress could not end the owner's
-        work. The owner's own last tick is the owner's close (TQ-0626; 2026-09-18: "it did not close
-        even though i ticked the items") - test_api pins the agent-held exception. And the door swings
-        both ways now: closing ticks every box. "The list records what was done" left a coder's
+    def test_a_tick_never_closes_and_closing_ticks_every_box(self):
+        """A tick is a tick: Mark done is the close (T16, the owner, 2026-09-25 - the last tick closed it from
+        2026-09-18 to then). And closing ticks every box. "The list records what was done" left a coder's
         `--done` on TQ-0646 showing three open boxes on a closed card (the owner, 2026-09-18: "part of
         --done should be that, no? same if it's saved manually"). Dropped still ticks nothing."""
         first, last = self.items
         self.c.patch(f'/api/tasks/{self.tid}/checklist/{first["id"]}', json={'done': True})
         self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')            # one box left: still open
         self.c.patch(f'/api/tasks/{self.tid}/checklist/{last["id"]}', json={'done': True})
-        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')            # the last box was the close
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')            # Mark done is the close (T16)
         self.assertEqual([i['done'] for i in self.s.task_checklist(self.tid)], [True, True])
-        self.s.update_task(self.tid, {'Status': 'open'}, 'owner')
         s2 = MemoryStore()
         with mock.patch.object(ingest, '_spawn'):
             tid2 = ingest.ingest_message(s2, dict(MSG), llm=verdict())['task_id']

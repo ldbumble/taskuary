@@ -59,7 +59,7 @@ export const ROLES = {
 const role = (r, label) => ({ bg: ROLES[r].tint, fg: ROLES[r].ink, label });
 export const ACTION_COLORS = {
   auto: role("handled", "auto-answered"),
-  draft: role("you", "needs review"),          // drafted, still yours to send
+  draft: role("you", "reply ready"),          // drafted, still yours to send - lanes.json's word (T4)
   ignore: role("muted", "ignored"),
   report: role("info", "report"),
   feed: role("info", "info"),

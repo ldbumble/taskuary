@@ -12,11 +12,12 @@ const tasks = src("TasksView.jsx");
 test("each control carries the caption that names its effect on task versus agent", () => {
   for (const [label, title] of [
     // ...and while the close runs it greys out and says "Marking done…" (2026-09-25)
-    ['{finishing ? "Marking done…" : "Mark done"}', "Closes the task and ends the live agent session with it."],
+    // ...and says only what it does HERE: the session part when one is live, the kept draft when one waits (T11)
+    ['{finishing ? "Marking done…" : "Mark done"}', "title={markDoneHint}"],
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
     ["Save and end session", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
-    ["Save and end session", "Saves the stopped session's result and report. The task stays open."],
+    ["Save result", "Saves the stopped session's result and report. The task stays open."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
     // was named for (2026-09-22), so the caption says what the press does
@@ -147,7 +148,9 @@ test("the operations helper proposes then executes by version and surfaces a fai
 });
 
 test("interrupted work shows as interrupted and reopening starts nothing", () => {
-  assert.match(tasks, /includes\("interrupted"\) && <Chip/);
+  // the row's state chip says "agent stopped" once - no second chip beside it (T1, 2026-09-25)
+  assert.doesNotMatch(tasks, /includes\("interrupted"\) && <Chip size="small" label="agent stopped"/);
+  assert.match(tasks, /<StateChip task=\{task\} \/>/);
   const from = tasks.indexOf("const reopen =");
   const reopen = tasks.slice(from, tasks.indexOf("};", from));
   assert.doesNotMatch(reopen, /dispatch/);

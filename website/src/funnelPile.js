@@ -28,6 +28,10 @@ export const laneMeta = (lane) => LANE_META[lane] || LANE_META.fyi;
 // the 'report' lane (both just landed), but reading "report" on the coder's own summary is wrong (the
 // owner, 2026-09-03: "it's not a report but agent awaiting little hand no?").
 export const KIND_META = byKey(vocab.kinds);
+export const STATE_META = byKey(vocab.states);
+// A TASK'S STATE (taskstate.py, T1-T9): a lane where the rail has one, else a state (theirs, closed) or a kind (agentdone)
+// - every word the Tasks list and the Board draw comes from lanes.json
+export const taskStateMeta = (key) => LANE_META[key] || STATE_META[key] || KIND_META[key] || null;
 export const rowMeta = (item) => ({ ...laneMeta(item?.lane), ...(KIND_META[item?.kind] || {}) });
 
 // The column is drawn top → bottom = next out → last out: the SERVER sends next-first and the rail

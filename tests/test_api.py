@@ -333,19 +333,15 @@ class ApiTests(unittest.TestCase):
         drawn = json.loads(row['Checklist'])
         self.assertEqual((len(drawn), sum(1 for i in drawn if i.get('done'))), (3, 1))
 
-    def test_ticking_the_last_item_closes_the_task(self):
-        """The list IS the work: when the owner ticks the last box there is nothing left, and the task
-        stayed open anyway - on the rail, in fyi, for a day (TQ-0626; the owner, 2026-09-18: "it did
-        not close even though i ticked the items"). The owner's tick is the owner's close."""
+    def test_ticking_the_last_item_leaves_the_close_to_mark_done(self):
+        """Tick them all, then Mark done (T16, the owner, 2026-09-25: "they should click all the do's and then hit mark
+        done"). The last tick used to close the task (TQ-0626, 2026-09-18) - a second close that behaved unlike the
+        first: it followed the task into Done while Mark done moved on."""
         tid = c.post('/api/tasks', json={'Title': 'two steps'}).json()['taskId']
         a, b = c.put(f'/api/tasks/{tid}/checklist', json={'items': ['fix it', 'tell her']}).json()['checklist']
-        self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True}).json().get('closed'))
+        c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True})
+        self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{b["id"]}', json={'done': True}).json()['closed'])
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'open')
-        self.assertTrue(c.patch(f'/api/tasks/{tid}/checklist/{b["id"]}', json={'done': True}).json()['closed'])
-        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
-        # un-ticking a box on the closed task is a note to self, not a reopen
-        self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': False}).json().get('closed'))
-        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
     def test_closing_the_task_ticks_every_box_and_dropping_it_ticks_none(self):
         """The reverse door. A coder finished TQ-0646 with `--done` and the closed card kept three open
@@ -360,19 +356,6 @@ class ApiTests(unittest.TestCase):
         c.put(f'/api/tasks/{other}/checklist', json={'items': ['one', 'two']})
         c.patch(f'/api/tasks/{other}', json={'Status': 'dropped'})
         self.assertEqual(boxes(other), [False, False])
-
-    def test_the_last_tick_is_mark_done_unless_an_agent_is_working_it(self):
-        """The last box is Mark done - unless an agent is working it right now (the owner, 2026-09-24). It used to
-        need nobody assigned, so a task once handed to an agent never closed this way."""
-        from taskuary import funnel
-        tid = c.post('/api/tasks', json={'Title': 'agent work', 'Assignee': 'agent:coder'}).json()['taskId']
-        (a,) = c.put(f'/api/tasks/{tid}/checklist', json={'items': ['one thing']}).json()['checklist']
-        with mock.patch.object(funnel, 'working_tids', return_value={tid}):
-            self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True}).json().get('closed'))
-        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'open')
-        c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': False})
-        self.assertTrue(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True}).json().get('closed'))
-        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
     def test_active_tasks_omit_old_done(self):
         """Board/Studio ask ?active=1 so they do not ship every finished task ever."""

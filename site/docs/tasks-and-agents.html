@@ -52,7 +52,7 @@
 <div class="entry on">
       <a class="page" href="./tasks-and-agents" aria-current="page">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Tasks and agents's sections"></button>
-      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-a-coding-agent" data-sec="sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="#the-general-agent" data-sec="the-general-agent">The general agent</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-a-coding-agent" data-sec="sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="#the-general-agent" data-sec="the-general-agent">The general agent</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-tasks-list-and-the-board" data-sec="the-tasks-list-and-the-board">The Tasks list and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
@@ -108,7 +108,7 @@ each stage owns exactly one state badge.</p>
 <tbody><tr>
 <td><strong>Task</strong></td>
 <td>The durable job and who owns it</td>
-<td>owner, kind, priority, status, Reopen, Mark done</td>
+<td>owner, kind, priority, Reopen, Mark done</td>
 <td>Starting or ending an agent session does not complete it</td>
 </tr>
 <tr>
@@ -381,9 +381,9 @@ ready for someone else, with read markers for which agents have seen each note. 
 the longer-lived version of the same idea: discoveries and decisions by topic, so knowledge
 outlives the job that produced it.</p>
 <h2 id="checklists-and-closing">Checklists and closing<a class="anchor" href="#checklists-and-closing" aria-label="Link to this section">#</a></h2>
-<p>A task can carry a checklist. Ticking the last box marks the task done, because there is nothing
-left it was waiting for, unless an agent is still working on it. Closing a task ticks every remaining box, for the same
-reason in reverse — a closed task with open items is a lie about its own state.</p>
+<p>A task can carry a checklist. Tick the boxes as you go, then press <strong>Mark done</strong> — ticking the last box does not close
+the task on its own. Closing a task ticks every remaining box: a closed task with open items is a lie about its own
+state.</p>
 <h2 id="replies">Replies<a class="anchor" href="#replies" aria-label="Link to this section">#</a></h2>
 <p>The Reply section exists whenever the task has an incoming sender. It shows one of three things:
 no draft yet, a draft ready, or a reply sent. <strong>Open on the task</strong> is the only road out — type your
@@ -406,6 +406,67 @@ playbook onto the task. Approve it, and the next message like it is matched to t
 triage, and the agent is seeded from it instead of from <code>CODER.md</code>&#39;s repository rules.</p>
 <p>Each connector card lists the playbooks that name it, and the words themselves are edited on the
 <strong>Docs</strong> tab.</p>
+<h2 id="the-tasks-list-and-the-board">The Tasks list and the Board<a class="anchor" href="#the-tasks-list-and-the-board" aria-label="Link to this section">#</a></h2>
+<p>Both pages show the same state for a task, in the work rail&#39;s words — the server decides it once and both draw it.</p>
+<p><figure><img src="img/task-state.svg" alt="Which state a task is in: a live session first, then who closed it, a drafted reply, an agent's session, or you" loading="lazy"><figcaption>The Board's columns are the agent's states.</figcaption></figure></p>
+<table>
+<thead>
+<tr>
+<th>The task</th>
+<th>Tasks list</th>
+<th>Board column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>handed to an agent, nothing started</td>
+<td>⏳ waiting to start</td>
+<td>waiting to start — with what it waits for, or why it could not start, and <strong>Start now</strong> / <strong>Cancel</strong></td>
+</tr>
+<tr>
+<td>its agent is running</td>
+<td>⚙️ agent working</td>
+<td>agent working</td>
+</tr>
+<tr>
+<td>its agent asked, needs approval, or is stuck</td>
+<td>👋 agent waiting on you</td>
+<td>agent waiting on you</td>
+</tr>
+<tr>
+<td>you ended its session / it ended by itself</td>
+<td>💾 session saved / ⏹ agent stopped</td>
+<td>saved or stopped — with <strong>Continue session</strong></td>
+</tr>
+<tr>
+<td>a reply is drafted for your yes</td>
+<td>✉️ reply ready</td>
+<td>agent finished, when an agent drafted it</td>
+</tr>
+<tr>
+<td>its agent closed it</td>
+<td>✅ agent finished</td>
+<td>agent finished (today)</td>
+</tr>
+<tr>
+<td>you closed it</td>
+<td>✅ done</td>
+<td>—</td>
+</tr>
+<tr>
+<td>waiting on somebody else</td>
+<td>📤 waiting on them</td>
+<td>—</td>
+</tr>
+<tr>
+<td>nobody was handed it</td>
+<td>📋 on you</td>
+<td>—</td>
+</tr>
+</tbody></table>
+<p>A task put away with <strong>Remind me</strong> is under <strong>upcoming</strong> and off the Board until its day — unless its agent asks you
+something. Status has no box of its own: <strong>Start</strong>, <strong>Mark done</strong>, <strong>Remind me</strong> and <strong>Reopen</strong> set it, and Reopen clears
+an old reminder. <strong>Mark done</strong> keeps a draft that was waiting; <strong>Bring it back to send</strong> sends it after all. Done is
+listed by task number, highest first.</p>
 <h2 id="the-work-rail">The work rail<a class="anchor" href="#the-work-rail" aria-label="Link to this section">#</a></h2>
 <p>The rail beside the Assistant holds what still wants something from you - nothing finished, and never a history.</p>
 <p><figure><img src="img/rail-on.svg" alt="What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours - then Urgent, Your task, Passed, Reports, FYI or Agents working" loading="lazy"><figcaption>What is on the rail, and under which heading.</figcaption></figure></p>

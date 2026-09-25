@@ -18,15 +18,19 @@ export const taskPhase = (status) => {
 export const AGENT = { waiting: "agent waiting on you", working: "agent working", saved: "session saved",
   stopped: "agent stopped", finished: "agent finished", idle: "waiting to start" };
 
-export const agentPhase = ({ session, run, transcript, report, conversation } = {}) => {
+// `finished`: the agent closed the task itself (the server's state, taskstate.py) - its report is its result, never
+// "session saved" (T6). `handed`: false when no agent was ever given this task - it has no agent state at all, not
+// "waiting to start" (T5).
+export const agentPhase = ({ session, run, transcript, report, conversation, finished, handed } = {}) => {
   if (session?.alive) return session.waiting ? AGENT.waiting : AGENT.working;
   if (run?.Status === "running") return AGENT.working;
+  if (finished) return AGENT.finished;
   if (report) return AGENT.saved;
   if (transcript) return AGENT.stopped;
   // General work keeps its record in the conversation, not in a pty. Its provider session ends
   // with the answer, and the card then read as never started over a chat full of work (owner, 2026-09-07).
   if (conversation) return AGENT.saved;
-  return AGENT.idle;
+  return handed === false ? null : AGENT.idle;
 };
 
 // Action proposals (write a playbook, push a branch, close an issue) share the review table
@@ -64,7 +68,7 @@ export const hasCorrespondent = (m) => !!m && !NO_ONE_BEHIND.includes(String(m?.
 export const replyPhase = (reviews = []) => {
   const replyReviews = reviews.filter((review) => review.Kind !== "action");
   const latest = replyReviews[0];
-  if (pendingReplyReview(replyReviews)) return "draft ready";
+  if (pendingReplyReview(replyReviews)) return "reply ready";
   if (sentReplyReview(replyReviews)) return "sent";
   if (latest?.Status === "no_reply") return "not needed";
   return "not drafted";
@@ -81,7 +85,7 @@ export const replyPhase = (reviews = []) => {
 // (the owner, 2026-09-14: "it should be the task (number 1 pane) ... why is the agent expanded?").
 // A live session never reaches here at all; TasksView pins the agent stage while a pty is alive.
 export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub } = {}) => {
-  if (reply === "draft ready") return "reply";
+  if (reply === "reply ready") return "reply";
   // ONE EVENT SEEN TWICE. An agent parked because it PROPOSED something is not two things wanting
   // the page: approving the proposal is what releases it. Opening the agent stage there would show
   // a terminal at a prompt with the thing that unblocks it folded away one card below. Parked on

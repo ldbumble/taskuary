@@ -76,7 +76,8 @@ class ToolTests(unittest.TestCase):
         self.run_card(s, call(s, 'task.check', key=item['key'], item='1')[0])
         self.assertEqual([i['done'] for i in s.task_checklist(tid)], [True, False])
         self.run_card(s, call(s, 'task.check', key=item['key'], item='filter')[0])
-        self.assertEqual(s.get_task(tid)['Status'], 'done', 'the last box is Mark done')
+        self.assertEqual([i['done'] for i in s.task_checklist(tid)], [True, True])
+        self.assertNotEqual(s.get_task(tid)['Status'], 'done', 'Mark done is the close, never the last box (T16)')
 
     def test_reopen_and_not_a_task(self):
         s, tid, mid, item = table()

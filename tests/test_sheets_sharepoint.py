@@ -87,6 +87,15 @@ class RunTests(unittest.TestCase):
         self.assertEqual(rows[0], {'name': 'Elkton', 'beds': 120, 'col2': ''}); self.assertEqual(rows[1]['col2'], 'note')
         self.assertEqual(sheets.spreadsheet_id('https://docs.google.com/spreadsheets/d/ABC123/edit'), 'ABC123'); self.assertEqual(sheets.spreadsheet_id('XYZ'), 'XYZ')
 
+    def test_a_repeated_header_and_a_long_row_keep_every_cell(self):
+        def get(url, headers=None, params=None, timeout=None):
+            if url.endswith('/values/Sheet1!A:D'): return R(200, {'values': [['Name', 'Name', 'Qty'], ['a', 'b', '1', 'extra']]})
+            return R(404, {})
+        with mock.patch.object(sheets, '_token', return_value='TOK'), mock.patch.object(sheets.requests, 'get', side_effect=get):
+            head, body = sheets.run_google_sheets({'spreadsheet': 'ABC123', 'range': 'Sheet1!A:D'})
+        self.assertEqual([json.loads(l) for l in body.splitlines()], [{'Name': 'a', 'Name_2': 'b', 'Qty': '1', 'col3': 'extra'}])
+        self.assertEqual(sheets._heads(['Name', 'Name', 'Name', 'Name_2', ''], 6), ['Name', 'Name_2', 'Name_3', 'Name_2_2', 'col4', 'col5'])   # a suffix never lands on a real header
+
     def test_the_token_road_and_its_refusals_speak_plainly(self):
         with self.assertRaises(RuntimeError) as e: sheets._token({})
         self.assertIn('client id', str(e.exception))

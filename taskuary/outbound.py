@@ -604,11 +604,15 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         connector_id = _source_connector_id(store, 'imessage', chat)
         return send_text(store, chat, body, connector_id) if connector_id else send_text(store, chat, body)
     if ch == 'discord':
+        from . import chatformat
         from .devtools import discord_send
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'discord:<channel_id>'
         if not chat: raise RuntimeError('this chat message has no channel id to answer in')
         connector_id = _source_connector_id(store, 'discord', chat)
-        return discord_send(store, chat, body, connector_id) if connector_id else discord_send(store, chat, body)
+        pieces = chatformat.split(body, 1900)
+        sent = [discord_send(store, chat, piece, connector_id) if connector_id else
+                discord_send(store, chat, piece) for piece in pieces]
+        return sent[0]
     if ch in CHAT_SERVERS:
         from . import chatservers
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # '<type>:<room id>'

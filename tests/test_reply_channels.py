@@ -48,6 +48,30 @@ class CanReplyTests(unittest.TestCase):
         self.assertFalse(outbound.can_reply(s, None))
 
 
+class DiscordReplyTests(unittest.TestCase):
+    def test_long_reply_is_sent_in_order_without_loss(self):
+        s = MemoryStore()
+        body = 'x' * 5000
+        msg = {'Channel': 'discord', 'ConversationId': 'discord:555', 'ExternalId': 'discord:1'}
+
+        with mock.patch('taskuary.devtools.discord_send', return_value={'channel': 'discord'}) as send:
+            outbound.reply_to_message(s, msg, body)
+
+        pieces = [call.args[2] for call in send.call_args_list]
+        self.assertEqual(len(pieces), 3)
+        self.assertTrue(all(len(piece) <= 2000 for piece in pieces))
+        self.assertEqual(''.join(pieces), body)
+
+    def test_short_reply_is_sent_once_unchanged(self):
+        s = MemoryStore()
+        msg = {'Channel': 'discord', 'ConversationId': 'discord:555', 'ExternalId': 'discord:1'}
+
+        with mock.patch('taskuary.devtools.discord_send', return_value={'channel': 'discord'}) as send:
+            outbound.reply_to_message(s, msg, 'On it.')
+
+        send.assert_called_once_with(s, '555', 'On it.')
+
+
 class FinishTests(unittest.TestCase):
     """coder.finish is the truth, and the UI promises exactly what it did: a channel that cannot carry the
     reply still gets its draft (the always-draft rule, PW-237) - Send is hidden and the reason said."""

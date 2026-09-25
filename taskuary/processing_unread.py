@@ -207,7 +207,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     if worker and active:
         agent_cards = funnel.from_agents(store, live_state=[worker], now=now)
         if agent_cards:
-            card.update(agent_cards[0])
+            # ...but where it came from stays the row's own: the agent card has no channel, and taking its blank
+            # drew every row an agent picked up with a terminal instead of the Advisor, report or mail behind it
+            card.update({k: v for k, v in agent_cards[0].items() if k != 'channel' or v})
         else:
             card.update(kind='agent', lane='working', working=worker.get('agent') or worker.get('label') or 'agent',
                         agent=worker.get('agent') or worker.get('label') or 'agent', sid=worker.get('sid'),

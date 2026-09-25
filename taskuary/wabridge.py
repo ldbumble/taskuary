@@ -77,13 +77,37 @@ def node() -> str:
     return ''
 
 
+def _status() -> dict | None:
+    """The running bridge's /status, or None when nothing answers. WITH the token: the bridge refuses /status
+    without it, and a 401 read as "nothing running" launched a second copy that died on EADDRINUSE while the old
+    one kept serving (2026-09-25 - the owner's poll never came, because the bridge answering was this morning's)."""
+    import requests
+    try: r = requests.get(f'http://127.0.0.1:{port()}/status', headers={'x-bridge-token': token()}, timeout=.75)
+    except requests.RequestException: return None
+    if r.status_code == 401: return {}                    # something answers on the port, just not to us
+    try: return r.json() if r.status_code < 300 else None
+    except ValueError: return {}
+
+
 def _listening() -> bool:
     """Is Taskuary's managed local bridge already answering? The bridge is detached, so a
     Taskuary restart commonly finds the old process still healthy and must adopt it rather than
     launch a second copy that dies with EADDRINUSE."""
-    import requests
-    try: return requests.get(f'http://127.0.0.1:{port()}/status', timeout=.75).status_code < 300
-    except requests.RequestException: return False
+    return _status() is not None
+
+
+def code() -> str:
+    """The fingerprint of the bridge code on disk - the same bytes, the same order, the same hash the bridge reports
+    as `code` in /status (bridge.mjs CODE)."""
+    import hashlib
+    files = sorted(p for p in DIR.glob('*.mjs') if not p.name.endswith('.test.mjs'))
+    return hashlib.sha1(b''.join(p.read_bytes() for p in files)).hexdigest()[:12]
+
+
+def stale() -> bool:
+    """The bridge answering runs older code than is on disk (an update landed while it kept running)."""
+    st = _status()
+    return st is not None and st.get('code') != code()
 
 
 def wait_listening(secs: float) -> bool:
@@ -147,7 +171,11 @@ def start_configured(store) -> dict:
     managed = {'', f'http://127.0.0.1:{port()}', f'http://localhost:{port()}'}
     if raw not in managed:
         return {'started': False, 'reason': 'external bridge URL', 'connectorId': c['ConnectorId']}
-    if _listening():
+    if _listening() and stale():
+        # an update landed while the detached bridge kept running: adopt it and the new code never runs
+        logger.info('wa bridge startup: the running bridge is older than the code on disk - restarting it')
+        out = restart(filter_policy=filter_policy(store, c['ConnectorId']))
+    elif _listening():
         _set('running', f'already listening on http://127.0.0.1:{port()}', pid_on_port())
         out = state()
     else:

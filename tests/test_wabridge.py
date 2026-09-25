@@ -57,12 +57,35 @@ class BridgeManagerTests(unittest.TestCase):
     def test_startup_adopts_a_detached_bridge_that_is_already_running(self):
         s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
         s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'owner')
-        with mock.patch.object(wabridge, '_listening', return_value=True), \
+        with mock.patch.object(wabridge, '_listening', return_value=True), mock.patch.object(wabridge, 'stale', return_value=False), \
              mock.patch.object(wabridge, 'pid_on_port', return_value=4242), \
              mock.patch.object(wabridge, 'start') as start:
             out = wabridge.start_configured(s)
         self.assertTrue(out['started']); self.assertEqual((out['phase'], out['pid']), ('running', 4242))
         start.assert_not_called()
+
+    def test_a_running_bridge_older_than_the_code_on_disk_is_replaced_not_adopted(self):
+        """2026-09-25: the poll code shipped, the app restarted, and the bridge answering was still this morning's -
+        detached, adopted, and running code that knew nothing of polls."""
+        s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
+        s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'owner')
+        with mock.patch.object(wabridge, '_status', return_value={'connected': True, 'code': 'old'}), \
+             mock.patch.object(wabridge, 'restart', return_value={'phase': 'starting'}) as restart:
+            out = wabridge.start_configured(s)
+        self.assertTrue(out['started']); restart.assert_called_once()
+        with mock.patch.object(wabridge, '_status', return_value={'connected': True, 'code': wabridge.code()}):
+            self.assertFalse(wabridge.stale())
+
+    def test_the_status_check_carries_the_token_the_bridge_demands(self):
+        """Without it /status is a 401, which read as "nothing is running" and launched a second bridge onto a busy port."""
+        seen = {}
+        def get(url, headers=None, timeout=None):
+            seen.update(headers or {}); return mock.Mock(status_code=200, json=lambda: {'code': 'x'})
+        with mock.patch('requests.get', side_effect=get):
+            self.assertEqual(wabridge._status(), {'code': 'x'})
+        self.assertEqual(seen.get('x-bridge-token'), wabridge.token())
+        with mock.patch('requests.get', return_value=mock.Mock(status_code=401)):
+            self.assertTrue(wabridge._listening(), 'something answers on the port - never launch a second copy onto it')
 
     def test_no_node_is_a_failed_phase_the_owner_can_act_on(self):
         # wait=True runs the worker inline: a threaded worker outlived its mocks on a slow CI box and

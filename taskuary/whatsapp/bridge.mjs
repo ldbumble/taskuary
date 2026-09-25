@@ -12,6 +12,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "@whiskeysockets/baileys";
 import { createChatGate, nextReconnect, wantsMedia } from "./policy.mjs";
 import { createChatRoster } from "./roster.mjs";
@@ -30,6 +31,11 @@ const PORT = Number(process.env.WA_BRIDGE_PORT || 8977);
 const TOKEN = process.env.WA_BRIDGE_TOKEN || "";
 const PHONE = (process.argv.includes("--phone") && process.argv[process.argv.indexOf("--phone") + 1]) || "";
 const MAX_KEPT = 500;
+// the fingerprint of this code, as Taskuary computes it off disk (wabridge.code): a bridge older than the files
+// is replaced at startup instead of adopted - the running copy is detached and outlives an update
+const CODE = crypto.createHash("sha1").update(Buffer.concat(fs.readdirSync(path.dirname(fileURLToPath(import.meta.url)))
+  .filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs")).sort()
+  .map((f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), f))))).digest("hex").slice(0, 12);
 
 let sock = null, connected = false, me = "", meJid = "", qr = "", pairingCode = "", seq = 0;
 const messages = [];                       // { seq, id, jid, chat, name, text, ts, fromMe }
@@ -220,7 +226,7 @@ http.createServer(async (req, res) => {
     if (req.headers.origin !== undefined) return json(res, 403, { error: "browsers may not call the bridge" });
     if (TOKEN && req.headers["x-bridge-token"] !== TOKEN) return json(res, 401, { error: "bridge token missing or wrong" });
     if (req.method === "GET" && url.pathname === "/status")
-      return json(res, 200, { connected, me, jid: meJid, qr, pairingCode, seq, kept: messages.length,
+      return json(res, 200, { connected, me, jid: meJid, qr, pairingCode, seq, kept: messages.length, code: CODE,
         filter: chatGate.snapshot(), reconnect: reconnectStatus() });
     if (req.method === "POST" && url.pathname === "/filter") {
       const chunks = []; for await (const c of req) chunks.push(c);

@@ -45,7 +45,10 @@ const faint = { color: "#867f74" };
 export function SourceMark({ item, size = 14 }) {
   if (!item) return null;
   if (item.kind === "meeting") return <EventIcon sx={{ fontSize: size, color: "#55697a" }} />;
-  if (item.kind === "agent" || item.kind === "agentdone") return <TerminalIcon sx={{ fontSize: size, color: "#41525f" }} />;
+  // an agent on it is the row's STATE (its chip says so), not where it came from: an Advisor idea, a report or a
+  // mail an agent picked up keeps its own mark (the owner, 2026-09-25: "it should be advisor as that's what it
+  // comes from"). The terminal is left for work with no source at all.
+  if ((item.kind === "agent" || item.kind === "agentdone") && !item.channel) return <TerminalIcon sx={{ fontSize: size, color: "#41525f" }} />;
   if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return <TaskuaryMark size={size} />;
   if (item.kind === "fyis" && !item.channel) return <TaskuaryMark size={size} />;
   return <ChannelIcon channel={item.channel || "email"} sx={{ fontSize: size }} />;
@@ -57,7 +60,7 @@ export function SourceMark({ item, size = 14 }) {
 export function sourceColor(item) {
   if (!item) return "#a9a294";
   if (item.kind === "meeting") return "#55697a";
-  if (item.kind === "agent" || item.kind === "agentdone") return "#41525f";
+  if ((item.kind === "agent" || item.kind === "agentdone") && !item.channel) return "#41525f";
   if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return ASSISTANT.solid;
   if (item.kind === "fyis" && !item.channel) return ASSISTANT.solid;
   return channelColor(item.channel || "email");

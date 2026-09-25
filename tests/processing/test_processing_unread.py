@@ -408,6 +408,8 @@ def test_working_to_waiting_uses_same_root_and_never_writes_read_state(store, ag
     assert working['key'] == waiting['key']
     assert working['order_band'] == 5 and not working['actionable']
     assert waiting['order_band'] == 2 and waiting['actionable']
+    # an agent on it does not change where it came from: the row keeps its source's mark (2026-09-25)
+    assert working['kind'] == 'agent' and working['channel'] == waiting['channel'] == 'email'
     assert list(store.cx.iterdump()) == before
 
 

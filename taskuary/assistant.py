@@ -514,7 +514,8 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'already and yours is ignored for those; this is for idea:* lines>", '
             '"why": "<one line: what this rests on - the mail, the date, the silence, the pattern - named as it appears in what you '
             'were given (sender, subject, mid, TQ-ref), so the owner can check it>", "mid": <the message id it is '
-            'about, or null>, "task": "<idea:* only - a task title the owner could accept as-is, or null>", '
+            'about, or null>, "about": "<the TQ-ref of the task this line is about - open OR closed - or null>", '
+            '"task": "<idea:* only - a task title the owner could accept as-is, or null>", '
             '"kind": "<when task is not null: coding if it needs a repository/system changed, otherwise general>"}], '
             '"notes": "<your note to the next check, under 120 words: FACTS AND TIMINGS ONLY - what you looked at and found nothing in, '
             'the date or silence length at which something becomes worth raising, a fact you settled so it need not be worked out again. '
@@ -529,7 +530,11 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
             'one-day silence from someone who always takes a week is not news) - skipping is free, repeating is not: never say '
             'again, reworded or not, anything under ALREADY SAID - and if a line of yours IS about the same subject as one there, give it '
-            'THAT line\'s key, never a new slug for it. Your own ideas are the point: a thread going in circles, a '
+            'THAT line\'s key, never a new slug for it. A task under DONE was just HANDLED: for a week after it closed, '
+            'never raise its subject again - not that it happened again, not that the fix did not hold, not a new angle on it. '
+            'A recurrence reaches the owner as its own mail, and triage puts it back on that task; a line from you is a second '
+            'copy of work they just finished (the owner, 2026-09-25: "it should not make another advice if we just did it"). '
+            'Your own ideas are the point: a thread going in circles, a '
             'promise buried in a mail, two people asking the same thing, the thing to do now so the next ask never comes. '
             'Facts only from what you are given; never invent a name, a date or a number. Nothing new to say -> {"say": []}.')
 
@@ -692,20 +697,37 @@ def _done(store, days: float = 7) -> str:
     is one. The ideas worth having about the owner's work (the fix that keeps recurring, the report
     nobody reads, the automation) live here, not in today's mail."""
     cut = _since(days)
-    ts = [t for t in store.list_tasks() if t.get('Status') == 'done' and _ts(t.get('ClosedAt') or t.get('UpdatedAt')) >= cut][:25]
+    closed = lambda t: _ts(t.get('ClosedAt') or t.get('UpdatedAt'))
+    # newest first, WHEN it closed and what its agent concluded: the self-close note ("The agent closed this itself:")
+    # never reached this list, so a vendor loop fixed yesterday read as an open question and was raised again (2026-09-25)
+    ts = sorted((t for t in store.list_tasks() if t.get('Status') == 'done' and closed(t) >= cut), key=closed, reverse=True)[:25]
     out = []
     for t in ts:
-        rep = next((c for c in reversed(store.list_comments(t['TaskId'])) if str(c.get('Body') or '').startswith('CODER REPORT')), None)
-        summ = ''
+        notes = [str(c.get('Body') or '') for c in reversed(store.list_comments(t['TaskId']))]
+        said = next((b.split(':', 1)[1] for b in notes if b.startswith('The agent closed this itself:')), None)
+        rep = next((b for b in notes if b.startswith('CODER REPORT')), None) if said is None else None
         if rep:
-            m = re.search(r'(?im)^summary:\s*(.+)$', rep['Body'])
-            summ = ' - ' + _short(m.group(1) if m else rep['Body'].split('\n', 1)[-1], 110)
+            m = re.search(r'(?im)^summary:\s*(.+)$', rep)
+            said = m.group(1) if m else rep.split('\n', 1)[-1]
         repo = (re.search(r'repo:([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
-        out.append(f"- {task_ref(t['TaskId'])} [{t.get('Kind')}{', ' + repo if repo else ''}] {_short(t.get('Title'), 70)}{summ}")
+        out.append(f"- {task_ref(t['TaskId'])} [{t.get('Kind')}{', ' + repo if repo else ''}] {_short(t.get('Title'), 70)}"
+                   f" - closed {_when(closed(t))}" + (f": {_short(said, 160)}" if said else ''))
     return '\n'.join(out) or '(nothing closed in this window)'
 
 
 def _week(store) -> str: return _done(store, 7)
+
+
+JUST_HANDLED_DAYS = 7
+
+
+def just_handled(store, act: dict):
+    """The task an idea's action points at - by its tid, or the task its message went to - when that task was
+    closed within JUST_HANDLED_DAYS; else None."""
+    tid = act.get('tid') or ((store.get_message(act['mid']) or {}).get('TaskId') if act.get('mid') else None)
+    t = store.get_task(tid) if tid else None
+    if not t or t.get('Status') not in ('done', 'dropped'): return None
+    return tid if _ts(t.get('ClosedAt') or t.get('UpdatedAt')) >= _since(JUST_HANDLED_DAYS) else None
 
 
 def _open(store, cap: int = 20) -> str:
@@ -786,10 +808,19 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
             # a line that NAMES a task belongs to it, whatever else it carries: without the tid the
             # pipe could not tell that an agent had the work, so "TQ-0329 July financials hasn't moved"
             # sat in 'slipped' while the task said in_progress (the owner, 2026-09-03)
-            ref = re.search(r'\bTQ-?0*(\d+)\b', f'{txt} {why}', re.I)
-            if ref and not act.get('tid'):
-                rt = int(ref.group(1))
-                if store.get_task(rt): act['tid'] = rt
+            # the model's own `about` first; else an OPEN task the line names - "TQ-0734 granted it, but TQ-0736 says the tab
+            # is still missing" is about 0736, and taking the first ref would have tied it to the closed one
+            refs = [t for t in (store.get_task(int(r)) for r in re.findall(r'\bTQ-?0*(\d+)\b', f'{txt} {why}', re.I)) if t]
+            about = re.search(r'\bTQ-?0*(\d+)\b', str(s.get('about') or ''), re.I)
+            pick = (store.get_task(int(about.group(1))) if about else None) or \
+                   next((t for t in refs if t.get('Status') not in ('done', 'dropped')), None) or (refs[0] if refs else None)
+            if pick and not act.get('tid'): act['tid'] = pick['TaskId']
+            # JUST HANDLED IS NOT NEWS (the owner, 2026-09-25): an idea about a task closed this week is a second copy
+            # of finished work - the vendor loop fixed yesterday came back as a fresh idea and a fresh task. A
+            # recurrence reaches the owner as its own mail; triage puts that back on the task.
+            if just_handled(store, act):
+                logger.info(f"assistant: dropped {key} - it is about {task_ref(just_handled(store, act))}, handled this week")
+                continue
             # where in the post it goes. Only an idea gets to choose: a candidate the hub found is
             # placed by the producer that found it, and no model answer overrides that.
             act['section'] = section_of({'section': s.get('section'), 'kind': 'idea'})

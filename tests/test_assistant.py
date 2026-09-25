@@ -425,6 +425,27 @@ class ButtonTests(unittest.TestCase):
                        'action': {'type': 'note', 'why': 'new facts'}}, _ago())
         self.assertEqual(len(assistant._public(s.get_idea(idea['IdeaId']))['action']['chat']), 2)
 
+    def test_an_idea_about_work_just_handled_is_not_said(self):
+        """"it should not make another advice if we just did it" (the owner, 2026-09-25): a loop fixed and closed yesterday
+        came back as a fresh idea - and a fresh task - the next morning. For a week after a task closes, the Advisor's
+        lines about it are dropped; a recurrence reaches the owner as its own mail, which triage puts back on the task."""
+        s = _store()
+        fixed = s.create_task({'Title': 'Vendor create loop', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        s.add_comment(fixed, 'coder', 'agent', 'The agent closed this itself: the name-keyed delete bug, fixed and deployed.')
+        s.update_task(fixed, {'Status': 'done'}, 'coder')
+        live = s.create_task({'Title': 'Budget tab missing', 'Kind': 'general', 'Status': 'open'}, 'o')
+        mid = _mail(s, 'erin@northwind.example', 'Vendor create', 'Rejected again.', days=0, name='Erin')
+        s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (fixed, mid))
+        say = lambda *lines: json.dumps({'say': [dict(zip(('key', 'text', 'why', 'about', 'mid'), l)) for l in lines]})
+        got = assistant.parse(s, say(('idea:loop-again', 'The vendor loop rejected a new vendor again.', 'mid 1', f'TQ-{fixed:04d}', None),
+                                     ('idea:loop-mail', 'The rejection mail says the fix did not hold.', '', None, mid),
+                                     ('idea:budget', f'TQ-{fixed:04d} is done, but TQ-{live:04d} still has no tab.', '', None, None)), [])
+        self.assertEqual([g['key'] for g in got], ['idea:budget'])                 # the one about OPEN work stands
+        self.assertEqual(got[0]['action']['tid'], live)
+        self.assertIn('closed', assistant._done(s, 7)); self.assertIn('name-keyed delete bug', assistant._done(s, 7))
+        s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (_ago(days=8), fixed))
+        self.assertEqual(len(assistant.parse(s, say(('idea:loop-again', 'The loop is back.', '', f'TQ-{fixed:04d}', None)), [])), 1)
+
     def test_the_advisor_raises_new_ideas_and_never_edits_one(self):
         """"advisor can only send new ideas not edit an existing idea" (the owner, 2026-09-25): the model reworded the
         same key overnight, the new Sig read as new facts, and a read idea was rewritten and back on Next."""

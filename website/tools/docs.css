@@ -85,6 +85,10 @@ article>p:first-of-type{font-size:18.5px;line-height:1.6;color:var(--dim)}
 h1,h2,h3{letter-spacing:-.018em;line-height:1.2}
 h2{font-size:23px;font-weight:700;margin:42px 0 16px;padding-top:22px;border-top:1px solid var(--bd)}
 h3{font-size:16.5px;font-weight:700;margin:28px 0 8px}
+/* a reference entry (the Assistant's tools): the name as the heading, its arguments as a list, and how it runs
+   as a quiet mono line under them */
+h3 code{font-size:14.5px;padding:2px 7px}
+article p.runs{margin:6px 0 0;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
 article p,article li{color:var(--ink)}
 article ul,article ol{padding-left:22px}
 article li{margin:5px 0}

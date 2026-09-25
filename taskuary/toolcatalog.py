@@ -13,7 +13,7 @@ a description rather than one row.
 Nothing here executes. A CALL becomes a proposal exactly as a verb does; the owner's confirmation is
 still what runs it (PW-123/124), and the AUTO verbs are still the only things that go straight through.
 """
-import json
+import json, re
 from . import operations
 
 # What each operation is FOR, in the owner's terms. Kinds absent from here are internal roads the chat
@@ -391,7 +391,7 @@ def _cell(s: str) -> str: return str(s).replace('|', '/').replace('`', '').repla
 
 
 def docs_markdown() -> str:
-    """Two tables, what the Assistant sees: the buckets (every turn) and every tool in full (on demand)."""
+    """What the Assistant sees: the buckets in one table (every turn), then every tool in full under its bucket (on demand)."""
     lines = ['<!-- Written by `python -m taskuary.toolcatalog` from taskuary/toolcatalog.py - edit the catalogue, not this page. -->',
              '',
              'What the Assistant is told about its tools. It gets the **summary** on every turn: the buckets, and',
@@ -406,19 +406,63 @@ def docs_markdown() -> str:
     for name, what, kinds in BUCKETS:
         lines.append(f'| **{name}** | {_cell(what)} | {_cell(", ".join(signature(k) for k in kinds))} |')
     lines.append(f'| **look** | look-ups - they run at once and change nothing | {_cell(", ".join(READS))} |')
-    lines += ['', 'A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.',
-              '', '## Every tool, in detail', '',
-              '| Tool | Bucket | Needs | What it does | Runs |',
-              '|---|---|---|---|---|']
-    for name, _what, kinds in BUCKETS:
-        for k in kinds:
-            text = DECISIONS.get(k) or PURPOSE.get(k) or ''
-            needs = HINTS.get(k) or ', '.join(r for r in (operations.KINDS.get(k, ('', (), None))[1]) if r not in CONTEXT_FILLED) or '-'
-            runs = DECISION_RUNS.get(k) or ('at once, with an undo' if k in INSTANT else 'you confirm')
-            lines.append(f'| `{k}` | {name} | {_cell(needs)} | {_cell(text)} | {runs} |')
-    for k, text in READS.items():
-        lines.append(f'| `{k}` | look | - | {_cell(text)} | at once |')
+    lines += ['', 'A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.', '']
+    # ...and every tool in full, one entry apiece under its bucket: a five-column table of ninety rows squeezed each
+    # sentence into a column a few words wide (the owner, 2026-09-25: "long list - don't use a table but arguments on each one")
+    for name, what, kinds in BUCKETS + (('look', 'look-ups - they run at once and change nothing', tuple(READS)),):
+        lines += [f'## {name.capitalize()}', '', f'{what[0].upper()}{what[1:]}.', '']
+        for k in kinds: lines += _entry(k)
     return '\n'.join(lines) + '\n'
+
+
+def _clauses(text: str) -> list:
+    """[(separator, clause)] at paren depth 0 - '; ', ' - ' and '. ' end a clause, nothing inside brackets does."""
+    out, sep, cur, depth, i = [], '', '', 0, 0
+    while i < len(text):
+        ch = text[i]; depth += (ch in '([') - (ch in ')]')
+        hit = next((s for s in ('; ', ' - ', '. ') if not depth and text.startswith(s, i)), None)
+        if hit: out.append((sep, cur)); sep, cur, i = hit, '', i + len(hit); continue
+        cur += ch; i += 1
+    return out + [(sep, cur)]
+
+
+def _entry(k: str) -> list:
+    """One tool: its name, what it does, each argument with what it means, and whether it waits for a yes. The argument
+    words are the catalogue's own - a clause that opens on `name` is that argument's line - so the page cannot drift."""
+    text = READS.get(k) or DECISIONS.get(k) or PURPOSE.get(k) or ''
+    names = [a for a in (HINTS.get(k) or '').replace('|', ',').split(',') if a.strip()] or \
+            [r for r in operations.KINDS.get(k, ('', (), None))[1] if r not in CONTEXT_FILLED and k not in READS]
+    args = {a.strip().rstrip('?'): '' for a in names}
+    optional = {a.strip().rstrip('?') for a in names if a.strip().endswith('?')}
+    keep = []
+    for sep, c in _clauses(text):
+        c0 = re.sub(r'^any of ', '', c.strip())
+        if not c0.startswith('`'): keep.append((sep, c)); continue
+        # "`title`, `body`: why it matters, `topic`" - one clause naming several, each with its own words
+        for part in re.split(r',? and (?=`)|, (?=`)', c0):
+            m = re.match(r'`([\w.]+)`(.*)$', part.strip())
+            if not m: continue
+            rest = m.group(2).strip()
+            if rest.startswith('optional'): optional.add(m.group(1)); rest = rest[len('optional'):]
+            rest = rest.lstrip(':').strip()
+            if rest.startswith('(') and rest.endswith(')') and rest.count('(') == 1: rest = rest[1:-1]
+            args[m.group(1)] = rest
+    # a name the prose mentions mid-sentence is still an argument, with the words it stands beside
+    for a, said, aside in re.findall(r'`([\w.]+)`(?:: ([^,;)`]+)| \(([^)]*)\))?', ''.join(s + c for s, c in keep)):
+        if a in READS or a in PURPOSE or a in DECISIONS: continue
+        if not args.get(a): args[a] = (said or aside).strip()
+    if 'ref' in args:
+        if k not in READS: optional.add('ref')
+        d = re.sub(r'^names ', '', args['ref'])
+        args['ref'] = (f'the task that {d}' if d.startswith('is ') else f'the task (TQ-0123), {d}' if d.startswith('when')
+                       else d or 'the task (TQ-0123), when it is not the one on the table')
+    prose = ''.join(s + c for s, c in keep).strip(' -;')
+    runs = ('Runs at once and changes nothing.' if k in READS else DECISION_RUNS.get(k, '').capitalize() + '.' if k in DECISION_RUNS
+            else 'Runs at once, with an undo on the receipt.' if k in INSTANT else 'Waits for your yes on a card.')
+    stop = '' if prose.endswith(('.', ')', '"')) else '.'
+    out = [f'### `{k}`', '', f'{prose[:1].upper()}{prose[1:]}{stop}', '']
+    out += [f"- `{a}`{' (optional)' if a in optional else ''}{' - ' + d if d else ''}" for a, d in args.items()]
+    return out + ([''] if args else []) + [f'<p class="runs">{runs}</p>', '']
 
 
 if __name__ == '__main__':

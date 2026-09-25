@@ -62,7 +62,7 @@
 <div class="entry on">
       <a class="page" href="./assistant-tools" aria-current="page">What the Assistant sees</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide What the Assistant sees's sections"></button>
-      <div class="secs"><a class="sec" href="#the-summary-sent-every-turn" data-sec="the-summary-sent-every-turn">The summary, sent every turn</a><a class="sec" href="#every-tool-in-detail" data-sec="every-tool-in-detail">Every tool, in detail</a></div>
+      <div class="secs"><a class="sec" href="#the-summary-sent-every-turn" data-sec="the-summary-sent-every-turn">The summary, sent every turn</a><a class="sec" href="#table" data-sec="table">Table</a><a class="sec" href="#task" data-sec="task">Task</a><a class="sec" href="#agents" data-sec="agents">Agents</a><a class="sec" href="#new" data-sec="new">New</a><a class="sec" href="#pipe" data-sec="pipe">Pipe</a><a class="sec" href="#reports" data-sec="reports">Reports</a><a class="sec" href="#app" data-sec="app">App</a><a class="sec" href="#look" data-sec="look">Look</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./reports">Reports and the Advisor</a>
@@ -145,649 +145,431 @@ except the few that can be undone, which run at once with an undo on the receipt
 </tr>
 </tbody></table>
 <p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
-<h2 id="every-tool-in-detail">Every tool, in detail<a class="anchor" href="#every-tool-in-detail" aria-label="Link to this section">#</a></h2>
-<table>
-<thead>
-<tr>
-<th>Tool</th>
-<th>Bucket</th>
-<th>Needs</th>
-<th>What it does</th>
-<th>Runs</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>reply</code></td>
-<td>table</td>
-<td>text</td>
-<td>write a reply to the sender - text: the gist, in the owner&#39;s words. Nothing is sent</td>
-<td>at once - a draft, nothing sent</td>
-</tr>
-<tr>
-<td><code>approve</code></td>
-<td>table</td>
-<td>-</td>
-<td>send the drafted reply as it stands</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>redraft</code></td>
-<td>table</td>
-<td>text</td>
-<td>write the draft again - text: the change</td>
-<td>at once - a draft, nothing sent</td>
-</tr>
-<tr>
-<td><code>mine</code></td>
-<td>table</td>
-<td>-</td>
-<td>make it a task on the owner&#39;s own list - no agent</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>regular_agent</code></td>
-<td>table</td>
-<td>text, as?</td>
-<td>send it to a non-coding agent - text: the job; as: a profile from agents.list, only when one fits</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>coder</code></td>
-<td>table</td>
-<td>text, as?</td>
-<td>send it to a coding agent - text: what is wanted; as: the repository (repos.list), only when sure. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>not_ours</code></td>
-<td>table</td>
-<td>-</td>
-<td>file it, just this once - its card asks whether from now on, or as a rule</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>not_ours_sender</code></td>
-<td>table</td>
-<td>-</td>
-<td>file everything from this sender from now on - their mail still arrives and stays readable</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>block_sender</code></td>
-<td>table</td>
-<td>-</td>
-<td>an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>close</code></td>
-<td>table</td>
-<td>-</td>
-<td>Mark done - the task behind the item is finished</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>done</code></td>
-<td>table</td>
-<td>-</td>
-<td>the owner handled it - Mark done on a task; on an idea, a report or an fyi it is read and settled</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>next</code></td>
-<td>table</td>
-<td>-</td>
-<td>move on to the next thing</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>answer_agent</code></td>
-<td>table</td>
-<td>text</td>
-<td>answer the agent waiting on the owner - text</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>stop_agent</code></td>
-<td>table</td>
-<td>-</td>
-<td>save and end the agent&#39;s session on the item</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>rerun</code></td>
-<td>table</td>
-<td>-</td>
-<td>run the report on the table again</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>remember</code></td>
-<td>table</td>
-<td>text</td>
-<td>keep a fact - text</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>setup</code></td>
-<td>table</td>
-<td>text</td>
-<td>build a report, a connection to another system or an automation - text: the request. Never a to-do</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>clear</code></td>
-<td>table</td>
-<td>text</td>
-<td>clear these from the pipe - text: which</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>confirm</code></td>
-<td>table</td>
-<td>-</td>
-<td>the owner&#39;s yes to the card already waiting - only when one is</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>cancel</code></td>
-<td>table</td>
-<td>-</td>
-<td>the owner&#39;s no to it</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>task.update</code></td>
-<td>task</td>
-<td>priority/title/assignee</td>
-<td>change a task&#39;s priority, title or owner - any of priority: low / normal / high / urgent, title, assignee (&#39;me&#39;, or an agent&#39;s role); ref when it is not the one on the table</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.set_kind</code></td>
-<td>task</td>
-<td>kind</td>
-<td>say what kind of work a task is - kind: task (the owner does it) / general (a non-coding agent) / coding; ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.set_repo</code></td>
-<td>task</td>
-<td>repo</td>
-<td>put a coding task in the repository it belongs in - repo (its name, as the repositories list says it); ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.check</code></td>
-<td>task</td>
-<td>item, done?</td>
-<td>tick a checklist item on a task - item: its number (1 is the first) or words from it; done: false un-ticks; ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.comment</code></td>
-<td>task</td>
-<td>text</td>
-<td>file a note on a task - text; ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.split</code></td>
-<td>task</td>
-<td>text</td>
-<td>split one arrival into two jobs - text</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.merge</code></td>
-<td>task</td>
-<td>into</td>
-<td>fold a task into the one it duplicates - into: the survivor&#39;s ref (TQ-0123); ref is the one folded away</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.reopen</code></td>
-<td>task</td>
-<td>-</td>
-<td>reopen a task that was marked done - ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.not_a_task</code></td>
-<td>task</td>
-<td>-</td>
-<td>delete a task and teach triage it was never work - ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.complete</code></td>
-<td>task</td>
-<td>-</td>
-<td>Mark done - the task is finished</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.defer</code></td>
-<td>task</td>
-<td>until</td>
-<td>Remind me: put an open task away until a day and bring it back that morning - until: a date (2026-10-09), &quot;2 weeks&quot;, &quot;3 days&quot;, &quot;monday&quot;, or &quot;none&quot; to bring it back now; ref names the task (TQ-0123) when it is not the one on the table</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>task.handoff</code></td>
-<td>task</td>
-<td>who, note?</td>
-<td>hand a task to a PERSON - who (a name or address that has written here), note optional: writes the forward for the owner&#39;s yes, nothing is sent from this card; ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.clarify</code></td>
-<td>task</td>
-<td>text</td>
-<td>prepare a question for the task&#39;s sender - text: the question; it waits for the owner&#39;s yes, never sent from here; ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>review.approve</code></td>
-<td>task</td>
-<td>-</td>
-<td>send the drafted reply as it stands</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>review.reject</code></td>
-<td>task</td>
-<td>-</td>
-<td>reject the draft reply waiting on a task - nothing is sent, the task stays open; ref names the task</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>dispatch.prepare</code></td>
-<td>agents</td>
-<td>kind, instructions?</td>
-<td>start an agent on an EXISTING task - kind: coding / general, instructions optional; a coding task asks which repository when it is not clear; ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>agent.continue</code></td>
-<td>agents</td>
-<td>-</td>
-<td>pick up the agent&#39;s own last session on a task where it left off - ref</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>agent.answer</code></td>
-<td>agents</td>
-<td>text</td>
-<td>answer the agent that is waiting - text; ref names its task when it is not the one on the table</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>agent.stop</code></td>
-<td>agents</td>
-<td>-</td>
-<td>save and end an agent&#39;s session - the one on the table, or the task ref names; never a guess at which</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>routing.remember</code></td>
-<td>agents</td>
-<td>field, value</td>
-<td>remember how work like this should be ROUTED next time - field: kind / profile / system, and value. kind: coding (an agent in a checkout) / general (the assistant) / task (the owner, no agent). system: where the work actually lives when no repository here can touch it, named plainly (&quot;ADP&quot;). It teaches triage and moves nothing - say it when the owner tells you a verdict was wrong, or where a kind of job really belongs.</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.create_from_text</code></td>
-<td>new</td>
-<td>kind, text</td>
-<td>a new job with no message behind it - kind: task (a to-do or reminder the owner does themselves, no agent) / general (a regular agent) / coding, and text. Never for a task that already exists (a TQ ref): starting an agent on one is dispatch.prepare, and its own last session is agent.continue</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.create_from_message</code></td>
-<td>new</td>
-<td>kind</td>
-<td>hand this message to an agent or put it on the list - kind: coding / general / task</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.setup</code></td>
-<td>new</td>
-<td>text</td>
-<td>open a walk-through with the assistant, for a set-up that needs digging first - text</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>pipe.clear</code></td>
-<td>pipe</td>
-<td>-</td>
-<td>clear a SET of items from the pipe at once - takes select (below); read, never deleted</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>item.settle</code></td>
-<td>pipe</td>
-<td>verb</td>
-<td>put the item down - verb: done / later / skip (the item on the table is the target)</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>message.file</code></td>
-<td>pipe</td>
-<td>-</td>
-<td>file it - not ours, just this one</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>message.archive</code></td>
-<td>pipe</td>
-<td>-</td>
-<td>archive it: off the pipe and closed, nothing deleted</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>preference.exclude_sender</code></td>
-<td>pipe</td>
-<td>scope</td>
-<td>teach triage to file this sender or subject from now on - their mail still arrives (scope: sender / subject)</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>preference.sender_rule</code></td>
-<td>pipe</td>
-<td>-</td>
-<td>an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>report.create</code></td>
-<td>reports</td>
-<td>config</td>
-<td>create a scheduled report or workflow - config; the composer builds it from what the owner asked for</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>report.run</code></td>
-<td>reports</td>
-<td>-</td>
-<td>run a report or workflow now - title (or source_id); it lands in the pipe when done</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>report.rerun</code></td>
-<td>reports</td>
-<td>-</td>
-<td>run that report again</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>report.pause</code></td>
-<td>reports</td>
-<td>-</td>
-<td>stop a report or workflow running on its clock - title</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>report.resume</code></td>
-<td>reports</td>
-<td>-</td>
-<td>put a paused report or workflow back on its clock - title</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>report.reach</code></td>
-<td>reports</td>
-<td>reach</td>
-<td>change when a report reaches the owner - title, reach: always / wrong / rule</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>report.edit</code></td>
-<td>reports</td>
-<td>config</td>
-<td>change a report&#39;s configuration - title, config: only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>report.delete</code></td>
-<td>reports</td>
-<td>-</td>
-<td>delete a report or workflow for good - title; asks first</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>setting.set</code></td>
-<td>app</td>
-<td>setting, value</td>
-<td>change one setting - setting (its key, or label: part of its name) and value; the schema says what it takes</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>connection.create</code></td>
-<td>app</td>
-<td>type, name</td>
-<td>add a system Taskuary talks to - type, name; created OFF and never carrying a secret, which the owner gives on the card</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>connection.test</code></td>
-<td>app</td>
-<td>-</td>
-<td>test a connection now and say what it answered - name</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>connection.pause</code></td>
-<td>app</td>
-<td>-</td>
-<td>switch a connection off - name; nothing is deleted</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>connection.resume</code></td>
-<td>app</td>
-<td>-</td>
-<td>switch a connection back on - name</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>script.start</code></td>
-<td>app</td>
-<td>name</td>
-<td>start a script by its name: walk me through my tasks / set up Taskuary / set up a report</td>
-<td>at once, with an undo</td>
-</tr>
-<tr>
-<td><code>memory.remember</code></td>
-<td>app</td>
-<td>note</td>
-<td>keep a fact - note</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>hub.publish</code></td>
-<td>app</td>
-<td>title, body, topic?, kind?, why_earned?</td>
-<td>save to the company Hub - title: one durable claim, body: why it matters and what to do, topic, kind: new_idea / technical_solve / howto / gotcha / decision / system / people, why_earned. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it</td>
-<td>you confirm</td>
-</tr>
-<tr>
-<td><code>task.read</code></td>
-<td>look</td>
-<td>-</td>
-<td>everything on one task - its summary, status, the messages on it, what agents said and did. ref: TQ-0401 (or id)</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>timeline.search</code></td>
-<td>look</td>
-<td>-</td>
-<td>find messages anywhere in the history, however old - takes the same SELECT fields below, plus limit; here contains matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, subjects and dates; open one with message.read or its task with task.read</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>tasks.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>the tasks - status: open (the default: open, in progress or waiting) / done / all; contains: words; limit</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>message.read</code></td>
-<td>look</td>
-<td>-</td>
-<td>one message in full - who, when, its task and the whole text. mid: the m-number timeline.search printed</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>sender.read</code></td>
-<td>look</td>
-<td>-</td>
-<td>one person at a glance - how often they write, their recent messages, their open tasks, when you last wrote back and what the owner told you to remember about them. who: a name or an address</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>docs.search</code></td>
-<td>look</td>
-<td>-</td>
-<td>how Taskuary works and how to set it up (the help pages), and the owner&#39;s own docs (SOUL, TRIAGE, COUNSEL...). query: the words. Use it for any &quot;how do I&quot;, &quot;what does X do&quot; or &quot;why did it&quot; about the app</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>agents.now</code></td>
-<td>look</td>
-<td>-</td>
-<td>every agent session running now - its task, which CLI, and whether it is working, idle, stuck or asking the owner something</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>approvals.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>everything waiting for the owner&#39;s yes: drafted replies and the actions agents proposed, with their tasks</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>pipe.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole work rail. Use it for &quot;what&#39;s waiting&quot;, &quot;what&#39;s left&quot;, &quot;what do I have&quot;</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>calendar.read</code></td>
-<td>look</td>
-<td>-</td>
-<td>the owner&#39;s meetings - from: today (the default) / tomorrow / YYYY-MM-DD; days: how many (7 by default). Reads the calendar live, so it takes a moment</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>activity.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>what happened, from the audit trail: counts by kind and the latest entries. days (1 by default); who: you / agents / all</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>errors.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>what is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, drafts, triage and actions over days (3 by default), and the last errors in the log. Use it for any &quot;what broke&quot;, &quot;why did X not happen&quot;, &quot;is anything wrong&quot;</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>memory.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>everything kept about the owner: the saved notes (from &quot;remember this&quot;, their verdicts, Settings) and what LEARNED.md has learned from their verdicts. about: words to narrow it (a sender, a topic). Use it for &quot;what do you remember&quot;, &quot;what do you know about me&quot;</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>rules.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>the standing filters on the owner&#39;s mail - queue mutes set with a reason, and the policy rules (skip, ignore, escalate...) that decide before any model reads it. about: words to narrow it. Use it for &quot;why did I never see X&quot;, &quot;what am I filtering&quot;</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>report.read</code></td>
-<td>look</td>
-<td>-</td>
-<td>a report or workflow and its last runs - what it said, whether it failed and why, and its source_id. title: part of its name (or source_id)</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>reports.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>every report and workflow: name, source_id, clock, how it reaches the owner, last outcome</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>settings.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>the settings in one group (or, with no group, the groups themselves and how many knobs each has)</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>setting.read</code></td>
-<td>look</td>
-<td>-</td>
-<td>one setting, its value in words and what it does. key (or label: part of its name)</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>connections.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>every live connection: name, type, whether it has a key, last sync, last error - and how many catalogue cards are off</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>connection.read</code></td>
-<td>look</td>
-<td>-</td>
-<td>one connection in full. name: part of its name (or connector_id)</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>agents.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>the agents and profiles, and which brain answers which job</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>repos.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>the repositories a coding agent can work in, and what each one is for</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>tools.list</code></td>
-<td>look</td>
-<td>-</td>
-<td>every tool in one bucket (table, task, agents, new, pipe, reports, app, look) - what each does and needs</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>tools.describe</code></td>
-<td>look</td>
-<td>-</td>
-<td>one tool in full - kind: its name</td>
-<td>at once</td>
-</tr>
-<tr>
-<td><code>knowledge.search</code></td>
-<td>look</td>
-<td>-</td>
-<td>what the company knows - the Hub, the indexed documents and the facts the owner asked to keep. query: the words to look for. Call it FIRST whenever the owner asks about a person, a site, a policy, a system or how something is done here - never offer to look it up instead of looking</td>
-<td>at once</td>
-</tr>
-</tbody></table>
-
+<h2 id="table">Table<a class="anchor" href="#table" aria-label="Link to this section">#</a></h2>
+<p>Decide about the item on the table.</p>
+<h3 id="reply"><code>reply</code><a class="anchor" href="#reply" aria-label="Link to this section">#</a></h3>
+<p>Write a reply to the sender. Nothing is sent.</p>
+<ul>
+<li><code>text</code> - the gist, in the owner&#39;s words</li>
+</ul>
+<p class="runs">At once - a draft, nothing sent.</p><h3 id="approve"><code>approve</code><a class="anchor" href="#approve" aria-label="Link to this section">#</a></h3>
+<p>Send the drafted reply as it stands.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="redraft"><code>redraft</code><a class="anchor" href="#redraft" aria-label="Link to this section">#</a></h3>
+<p>Write the draft again.</p>
+<ul>
+<li><code>text</code> - the change</li>
+</ul>
+<p class="runs">At once - a draft, nothing sent.</p><h3 id="mine"><code>mine</code><a class="anchor" href="#mine" aria-label="Link to this section">#</a></h3>
+<p>Make it a task on the owner&#39;s own list - no agent.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="regular-agent"><code>regular_agent</code><a class="anchor" href="#regular-agent" aria-label="Link to this section">#</a></h3>
+<p>Send it to a non-coding agent.</p>
+<ul>
+<li><code>text</code> - the job</li>
+<li><code>as</code> (optional) - a profile from agents.list, only when one fits</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="coder"><code>coder</code><a class="anchor" href="#coder" aria-label="Link to this section">#</a></h3>
+<p>Send it to a coding agent. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick.</p>
+<ul>
+<li><code>text</code> - what is wanted</li>
+<li><code>as</code> (optional) - the repository (repos.list), only when sure</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="not-ours"><code>not_ours</code><a class="anchor" href="#not-ours" aria-label="Link to this section">#</a></h3>
+<p>File it, just this once - its card asks whether from now on, or as a rule.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="not-ours-sender"><code>not_ours_sender</code><a class="anchor" href="#not-ours-sender" aria-label="Link to this section">#</a></h3>
+<p>File everything from this sender from now on - their mail still arrives and stays readable.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="block-sender"><code>block_sender</code><a class="anchor" href="#block-sender" aria-label="Link to this section">#</a></h3>
+<p>An exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="close"><code>close</code><a class="anchor" href="#close" aria-label="Link to this section">#</a></h3>
+<p>Mark done - the task behind the item is finished.</p>
+<p class="runs">At once.</p><h3 id="done"><code>done</code><a class="anchor" href="#done" aria-label="Link to this section">#</a></h3>
+<p>The owner handled it - Mark done on a task; on an idea, a report or an fyi it is read and settled.</p>
+<p class="runs">At once.</p><h3 id="next"><code>next</code><a class="anchor" href="#next" aria-label="Link to this section">#</a></h3>
+<p>Move on to the next thing.</p>
+<p class="runs">At once.</p><h3 id="answer-agent"><code>answer_agent</code><a class="anchor" href="#answer-agent" aria-label="Link to this section">#</a></h3>
+<p>Answer the agent waiting on the owner.</p>
+<ul>
+<li><code>text</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="stop-agent"><code>stop_agent</code><a class="anchor" href="#stop-agent" aria-label="Link to this section">#</a></h3>
+<p>Save and end the agent&#39;s session on the item.</p>
+<p class="runs">At once.</p><h3 id="rerun"><code>rerun</code><a class="anchor" href="#rerun" aria-label="Link to this section">#</a></h3>
+<p>Run the report on the table again.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="remember"><code>remember</code><a class="anchor" href="#remember" aria-label="Link to this section">#</a></h3>
+<p>Keep a fact.</p>
+<ul>
+<li><code>text</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="setup"><code>setup</code><a class="anchor" href="#setup" aria-label="Link to this section">#</a></h3>
+<p>Build a report, a connection to another system or an automation. Never a to-do.</p>
+<ul>
+<li><code>text</code> - the request</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="clear"><code>clear</code><a class="anchor" href="#clear" aria-label="Link to this section">#</a></h3>
+<p>Clear these from the pipe.</p>
+<ul>
+<li><code>text</code> - which</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="confirm"><code>confirm</code><a class="anchor" href="#confirm" aria-label="Link to this section">#</a></h3>
+<p>The owner&#39;s yes to the card already waiting - only when one is.</p>
+<p class="runs">At once.</p><h3 id="cancel"><code>cancel</code><a class="anchor" href="#cancel" aria-label="Link to this section">#</a></h3>
+<p>The owner&#39;s no to it.</p>
+<p class="runs">At once.</p><h2 id="task">Task<a class="anchor" href="#task" aria-label="Link to this section">#</a></h2>
+<p>Change any task - the one on the table or one named with ref.</p>
+<h3 id="task-update"><code>task.update</code><a class="anchor" href="#task-update" aria-label="Link to this section">#</a></h3>
+<p>Change a task&#39;s priority, title or owner.</p>
+<ul>
+<li><code>priority</code> - low | normal | high | urgent</li>
+<li><code>title</code></li>
+<li><code>assignee</code> - &#39;me&#39;, or an agent&#39;s role</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-set-kind"><code>task.set_kind</code><a class="anchor" href="#task-set-kind" aria-label="Link to this section">#</a></h3>
+<p>Say what kind of work a task is.</p>
+<ul>
+<li><code>kind</code> - task (the owner does it) | general (a non-coding agent) | coding</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-set-repo"><code>task.set_repo</code><a class="anchor" href="#task-set-repo" aria-label="Link to this section">#</a></h3>
+<p>Put a coding task in the repository it belongs in.</p>
+<ul>
+<li><code>repo</code> - its name, as the repositories list says it</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-check"><code>task.check</code><a class="anchor" href="#task-check" aria-label="Link to this section">#</a></h3>
+<p>Tick a checklist item on a task.</p>
+<ul>
+<li><code>item</code> - its number (1 is the first) or words from it</li>
+<li><code>done</code> (optional) - false un-ticks</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-comment"><code>task.comment</code><a class="anchor" href="#task-comment" aria-label="Link to this section">#</a></h3>
+<p>File a note on a task.</p>
+<ul>
+<li><code>text</code></li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-split"><code>task.split</code><a class="anchor" href="#task-split" aria-label="Link to this section">#</a></h3>
+<p>Split one arrival into two jobs.</p>
+<ul>
+<li><code>text</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-merge"><code>task.merge</code><a class="anchor" href="#task-merge" aria-label="Link to this section">#</a></h3>
+<p>Fold a task into the one it duplicates.</p>
+<ul>
+<li><code>into</code> - the survivor&#39;s ref (TQ-0123)</li>
+<li><code>ref</code> (optional) - the task that is the one folded away</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-reopen"><code>task.reopen</code><a class="anchor" href="#task-reopen" aria-label="Link to this section">#</a></h3>
+<p>Reopen a task that was marked done.</p>
+<ul>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-not-a-task"><code>task.not_a_task</code><a class="anchor" href="#task-not-a-task" aria-label="Link to this section">#</a></h3>
+<p>Delete a task and teach triage it was never work.</p>
+<ul>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-complete"><code>task.complete</code><a class="anchor" href="#task-complete" aria-label="Link to this section">#</a></h3>
+<p>Mark done - the task is finished.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-defer"><code>task.defer</code><a class="anchor" href="#task-defer" aria-label="Link to this section">#</a></h3>
+<p>Remind me: put an open task away until a day and bring it back that morning.</p>
+<ul>
+<li><code>until</code> - a date (2026-10-09), &quot;2 weeks&quot;, &quot;3 days&quot;, &quot;monday&quot;, or &quot;none&quot; to bring it back now</li>
+<li><code>ref</code> (optional) - the task (TQ-0123) when it is not the one on the table</li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="task-handoff"><code>task.handoff</code><a class="anchor" href="#task-handoff" aria-label="Link to this section">#</a></h3>
+<p>Hand a task to a PERSON.</p>
+<ul>
+<li><code>who</code> - a name or address that has written here</li>
+<li><code>note</code> (optional) - writes the forward for the owner&#39;s yes, nothing is sent from this card</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-clarify"><code>task.clarify</code><a class="anchor" href="#task-clarify" aria-label="Link to this section">#</a></h3>
+<p>Prepare a question for the task&#39;s sender; it waits for the owner&#39;s yes, never sent from here.</p>
+<ul>
+<li><code>text</code> - the question</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="review-approve"><code>review.approve</code><a class="anchor" href="#review-approve" aria-label="Link to this section">#</a></h3>
+<p>Send the drafted reply as it stands.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="review-reject"><code>review.reject</code><a class="anchor" href="#review-reject" aria-label="Link to this section">#</a></h3>
+<p>Reject the draft reply waiting on a task - nothing is sent, the task stays open.</p>
+<ul>
+<li><code>ref</code> (optional) - the task</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h2 id="agents">Agents<a class="anchor" href="#agents" aria-label="Link to this section">#</a></h2>
+<p>Start, continue, answer or stop the agent on a task, and teach where work belongs.</p>
+<h3 id="dispatch-prepare"><code>dispatch.prepare</code><a class="anchor" href="#dispatch-prepare" aria-label="Link to this section">#</a></h3>
+<p>Start an agent on an EXISTING task; a coding task asks which repository when it is not clear.</p>
+<ul>
+<li><code>kind</code> - coding | general</li>
+<li><code>instructions</code> (optional)</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="agent-continue"><code>agent.continue</code><a class="anchor" href="#agent-continue" aria-label="Link to this section">#</a></h3>
+<p>Pick up the agent&#39;s own last session on a task where it left off.</p>
+<ul>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="agent-answer"><code>agent.answer</code><a class="anchor" href="#agent-answer" aria-label="Link to this section">#</a></h3>
+<p>Answer the agent that is waiting.</p>
+<ul>
+<li><code>text</code></li>
+<li><code>ref</code> (optional) - its task when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="agent-stop"><code>agent.stop</code><a class="anchor" href="#agent-stop" aria-label="Link to this section">#</a></h3>
+<p>Save and end an agent&#39;s session - the one on the table, or the task <code>ref</code> names; never a guess at which.</p>
+<ul>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="routing-remember"><code>routing.remember</code><a class="anchor" href="#routing-remember" aria-label="Link to this section">#</a></h3>
+<p>Remember how work like this should be ROUTED next time. kind: coding (an agent in a checkout) | general (the assistant) | task (the owner, no agent). system: where the work actually lives when no repository here can touch it, named plainly (&quot;ADP&quot;). It teaches triage and moves nothing - say it when the owner tells you a verdict was wrong, or where a kind of job really belongs.</p>
+<ul>
+<li><code>field</code> - kind | profile | system</li>
+<li><code>value</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h2 id="new">New<a class="anchor" href="#new" aria-label="Link to this section">#</a></h2>
+<p>New work with no task yet.</p>
+<h3 id="task-create-from-text"><code>task.create_from_text</code><a class="anchor" href="#task-create-from-text" aria-label="Link to this section">#</a></h3>
+<p>A new job with no message behind it. Never for a task that already exists (a TQ ref): starting an agent on one is dispatch.prepare, and its own last session is agent.continue.</p>
+<ul>
+<li><code>kind</code> - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding</li>
+<li><code>text</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-create-from-message"><code>task.create_from_message</code><a class="anchor" href="#task-create-from-message" aria-label="Link to this section">#</a></h3>
+<p>Hand this message to an agent or put it on the list.</p>
+<ul>
+<li><code>kind</code> - coding | general | task</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-setup"><code>task.setup</code><a class="anchor" href="#task-setup" aria-label="Link to this section">#</a></h3>
+<p>Open a walk-through with the assistant, for a set-up that needs digging first.</p>
+<ul>
+<li><code>text</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h2 id="pipe">Pipe<a class="anchor" href="#pipe" aria-label="Link to this section">#</a></h2>
+<p>The walk and sets of items, and filing mail.</p>
+<h3 id="pipe-clear"><code>pipe.clear</code><a class="anchor" href="#pipe-clear" aria-label="Link to this section">#</a></h3>
+<p>Clear a SET of items from the pipe at once - takes <code>select</code> (below); read, never deleted.</p>
+<ul>
+<li><code>select</code> - below</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="item-settle"><code>item.settle</code><a class="anchor" href="#item-settle" aria-label="Link to this section">#</a></h3>
+<p>Put the item down.</p>
+<ul>
+<li><code>verb</code> - done | later | skip (the item on the table is the target)</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="message-file"><code>message.file</code><a class="anchor" href="#message-file" aria-label="Link to this section">#</a></h3>
+<p>File it - not ours, just this one.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="message-archive"><code>message.archive</code><a class="anchor" href="#message-archive" aria-label="Link to this section">#</a></h3>
+<p>Archive it: off the pipe and closed, nothing deleted.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="preference-exclude-sender"><code>preference.exclude_sender</code><a class="anchor" href="#preference-exclude-sender" aria-label="Link to this section">#</a></h3>
+<p>Teach triage to file this sender or subject from now on - their mail still arrives (<code>scope</code>: sender | subject)</p>
+<ul>
+<li><code>scope</code> - sender | subject</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="preference-sender-rule"><code>preference.sender_rule</code><a class="anchor" href="#preference-sender-rule" aria-label="Link to this section">#</a></h3>
+<p>An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline.</p>
+<p class="runs">Waits for your yes on a card.</p><h2 id="reports">Reports<a class="anchor" href="#reports" aria-label="Link to this section">#</a></h2>
+<p>Reports and workflows.</p>
+<h3 id="report-create"><code>report.create</code><a class="anchor" href="#report-create" aria-label="Link to this section">#</a></h3>
+<p>Create a scheduled report or workflow; the composer builds it from what the owner asked for.</p>
+<ul>
+<li><code>config</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="report-run"><code>report.run</code><a class="anchor" href="#report-run" aria-label="Link to this section">#</a></h3>
+<p>Run a report or workflow now; it lands in the pipe when done.</p>
+<ul>
+<li><code>title</code> - or <code>source_id</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-rerun"><code>report.rerun</code><a class="anchor" href="#report-rerun" aria-label="Link to this section">#</a></h3>
+<p>Run that report again.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="report-pause"><code>report.pause</code><a class="anchor" href="#report-pause" aria-label="Link to this section">#</a></h3>
+<p>Stop a report or workflow running on its clock.</p>
+<ul>
+<li><code>title</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-resume"><code>report.resume</code><a class="anchor" href="#report-resume" aria-label="Link to this section">#</a></h3>
+<p>Put a paused report or workflow back on its clock.</p>
+<ul>
+<li><code>title</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-reach"><code>report.reach</code><a class="anchor" href="#report-reach" aria-label="Link to this section">#</a></h3>
+<p>Change when a report reaches the owner.</p>
+<ul>
+<li><code>reach</code> - always | wrong | rule</li>
+<li><code>title</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-edit"><code>report.edit</code><a class="anchor" href="#report-edit" aria-label="Link to this section">#</a></h3>
+<p>Change a report&#39;s configuration.</p>
+<ul>
+<li><code>config</code> - only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)</li>
+<li><code>title</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-delete"><code>report.delete</code><a class="anchor" href="#report-delete" aria-label="Link to this section">#</a></h3>
+<p>Delete a report or workflow for good; asks first.</p>
+<ul>
+<li><code>title</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h2 id="app">App<a class="anchor" href="#app" aria-label="Link to this section">#</a></h2>
+<p>Settings, connections, scripts and kept facts.</p>
+<h3 id="setting-set"><code>setting.set</code><a class="anchor" href="#setting-set" aria-label="Link to this section">#</a></h3>
+<p>Change one setting; the schema says what it takes.</p>
+<ul>
+<li><code>setting</code> - its key, or <code>label</code>: part of its name</li>
+<li><code>value</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="connection-create"><code>connection.create</code><a class="anchor" href="#connection-create" aria-label="Link to this section">#</a></h3>
+<p>Add a system Taskuary talks to; created OFF and never carrying a secret, which the owner gives on the card.</p>
+<ul>
+<li><code>type</code></li>
+<li><code>name</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="connection-test"><code>connection.test</code><a class="anchor" href="#connection-test" aria-label="Link to this section">#</a></h3>
+<p>Test a connection now and say what it answered.</p>
+<ul>
+<li><code>name</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="connection-pause"><code>connection.pause</code><a class="anchor" href="#connection-pause" aria-label="Link to this section">#</a></h3>
+<p>Switch a connection off; nothing is deleted.</p>
+<ul>
+<li><code>name</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="connection-resume"><code>connection.resume</code><a class="anchor" href="#connection-resume" aria-label="Link to this section">#</a></h3>
+<p>Switch a connection back on.</p>
+<ul>
+<li><code>name</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="script-start"><code>script.start</code><a class="anchor" href="#script-start" aria-label="Link to this section">#</a></h3>
+<p>Start a script by its name: walk me through my tasks | set up Taskuary | set up a report.</p>
+<ul>
+<li><code>name</code></li>
+</ul>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="memory-remember"><code>memory.remember</code><a class="anchor" href="#memory-remember" aria-label="Link to this section">#</a></h3>
+<p>Keep a fact.</p>
+<ul>
+<li><code>note</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="hub-publish"><code>hub.publish</code><a class="anchor" href="#hub-publish" aria-label="Link to this section">#</a></h3>
+<p>Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it.</p>
+<ul>
+<li><code>title</code> - one durable claim</li>
+<li><code>body</code> - why it matters and what to do</li>
+<li><code>topic</code> (optional)</li>
+<li><code>kind</code> (optional) - new_idea | technical_solve | howto | gotcha | decision | system | people</li>
+<li><code>why_earned</code> (optional)</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
+<p>Look-ups - they run at once and change nothing.</p>
+<h3 id="task-read"><code>task.read</code><a class="anchor" href="#task-read" aria-label="Link to this section">#</a></h3>
+<p>Everything on one task - its summary, status, the messages on it, what agents said and did.</p>
+<ul>
+<li><code>ref</code> - TQ-0401 (or <code>id</code>)</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="timeline-search"><code>timeline.search</code><a class="anchor" href="#timeline-search" aria-label="Link to this section">#</a></h3>
+<p>Find messages anywhere in the history, however old - takes the same SELECT fields below, plus <code>limit</code>; here <code>contains</code> matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, subjects and dates; open one with message.read or its task with task.read.</p>
+<ul>
+<li><code>limit</code></li>
+<li><code>contains</code></li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="tasks-list"><code>tasks.list</code><a class="anchor" href="#tasks-list" aria-label="Link to this section">#</a></h3>
+<p>The tasks.</p>
+<ul>
+<li><code>status</code> - open (the default: open, in progress or waiting) | done | all</li>
+<li><code>contains</code> - words</li>
+<li><code>limit</code></li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="message-read"><code>message.read</code><a class="anchor" href="#message-read" aria-label="Link to this section">#</a></h3>
+<p>One message in full - who, when, its task and the whole text.</p>
+<ul>
+<li><code>mid</code> - the m-number timeline.search printed</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="sender-read"><code>sender.read</code><a class="anchor" href="#sender-read" aria-label="Link to this section">#</a></h3>
+<p>One person at a glance - how often they write, their recent messages, their open tasks, when you last wrote back and what the owner told you to remember about them.</p>
+<ul>
+<li><code>who</code> - a name or an address</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="docs-search"><code>docs.search</code><a class="anchor" href="#docs-search" aria-label="Link to this section">#</a></h3>
+<p>How Taskuary works and how to set it up (the help pages), and the owner&#39;s own docs (SOUL, TRIAGE, COUNSEL...). Use it for any &quot;how do I&quot;, &quot;what does X do&quot; or &quot;why did it&quot; about the app.</p>
+<ul>
+<li><code>query</code> - the words</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="agents-now"><code>agents.now</code><a class="anchor" href="#agents-now" aria-label="Link to this section">#</a></h3>
+<p>Every agent session running now - its task, which CLI, and whether it is working, idle, stuck or asking the owner something.</p>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="approvals-list"><code>approvals.list</code><a class="anchor" href="#approvals-list" aria-label="Link to this section">#</a></h3>
+<p>Everything waiting for the owner&#39;s yes: drafted replies and the actions agents proposed, with their tasks.</p>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="pipe-list"><code>pipe.list</code><a class="anchor" href="#pipe-list" aria-label="Link to this section">#</a></h3>
+<p>Everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole work rail. Use it for &quot;what&#39;s waiting&quot;, &quot;what&#39;s left&quot;, &quot;what do I have&quot;</p>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="calendar-read"><code>calendar.read</code><a class="anchor" href="#calendar-read" aria-label="Link to this section">#</a></h3>
+<p>The owner&#39;s meetings. Reads the calendar live, so it takes a moment.</p>
+<ul>
+<li><code>from</code> - today (the default) | tomorrow | YYYY-MM-DD</li>
+<li><code>days</code> - how many (7 by default)</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="activity-list"><code>activity.list</code><a class="anchor" href="#activity-list" aria-label="Link to this section">#</a></h3>
+<p>What happened, from the audit trail: counts by kind and the latest entries.</p>
+<ul>
+<li><code>days</code> - 1 by default</li>
+<li><code>who</code> - you | agents | all</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="errors-list"><code>errors.list</code><a class="anchor" href="#errors-list" aria-label="Link to this section">#</a></h3>
+<p>What is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, drafts, triage and actions over <code>days</code> (3 by default), and the last errors in the log. Use it for any &quot;what broke&quot;, &quot;why did X not happen&quot;, &quot;is anything wrong&quot;</p>
+<ul>
+<li><code>days</code> - 3 by default</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="memory-list"><code>memory.list</code><a class="anchor" href="#memory-list" aria-label="Link to this section">#</a></h3>
+<p>Everything kept about the owner: the saved notes (from &quot;remember this&quot;, their verdicts, Settings) and what LEARNED.md has learned from their verdicts. Use it for &quot;what do you remember&quot;, &quot;what do you know about me&quot;</p>
+<ul>
+<li><code>about</code> - words to narrow it (a sender, a topic)</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="rules-list"><code>rules.list</code><a class="anchor" href="#rules-list" aria-label="Link to this section">#</a></h3>
+<p>The standing filters on the owner&#39;s mail - queue mutes set with a reason, and the policy rules (skip, ignore, escalate...) that decide before any model reads it. Use it for &quot;why did I never see X&quot;, &quot;what am I filtering&quot;</p>
+<ul>
+<li><code>about</code> - words to narrow it</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="report-read"><code>report.read</code><a class="anchor" href="#report-read" aria-label="Link to this section">#</a></h3>
+<p>A report or workflow and its last runs - what it said, whether it failed and why, and its source_id.</p>
+<ul>
+<li><code>title</code> - part of its name (or <code>source_id</code>)</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="reports-list"><code>reports.list</code><a class="anchor" href="#reports-list" aria-label="Link to this section">#</a></h3>
+<p>Every report and workflow: name, source_id, clock, how it reaches the owner, last outcome.</p>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="settings-list"><code>settings.list</code><a class="anchor" href="#settings-list" aria-label="Link to this section">#</a></h3>
+<p>The settings in one <code>group</code> (or, with no group, the groups themselves and how many knobs each has)</p>
+<ul>
+<li><code>group</code> - or, with no group, the groups themselves and how many knobs each has</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="setting-read"><code>setting.read</code><a class="anchor" href="#setting-read" aria-label="Link to this section">#</a></h3>
+<p>One setting, its value in words and what it does.</p>
+<ul>
+<li><code>key</code> - or <code>label</code>: part of its name</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="connections-list"><code>connections.list</code><a class="anchor" href="#connections-list" aria-label="Link to this section">#</a></h3>
+<p>Every live connection: name, type, whether it has a key, last sync, last error - and how many catalogue cards are off.</p>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="connection-read"><code>connection.read</code><a class="anchor" href="#connection-read" aria-label="Link to this section">#</a></h3>
+<p>One connection in full.</p>
+<ul>
+<li><code>name</code> - part of its name (or <code>connector_id</code>)</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="agents-list"><code>agents.list</code><a class="anchor" href="#agents-list" aria-label="Link to this section">#</a></h3>
+<p>The agents and profiles, and which brain answers which job.</p>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="repos-list"><code>repos.list</code><a class="anchor" href="#repos-list" aria-label="Link to this section">#</a></h3>
+<p>The repositories a coding agent can work in, and what each one is for.</p>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="tools-list"><code>tools.list</code><a class="anchor" href="#tools-list" aria-label="Link to this section">#</a></h3>
+<p>Every tool in one <code>bucket</code> (table, task, agents, new, pipe, reports, app, look) - what each does and needs.</p>
+<ul>
+<li><code>bucket</code> - table, task, agents, new, pipe, reports, app, look</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="tools-describe"><code>tools.describe</code><a class="anchor" href="#tools-describe" aria-label="Link to this section">#</a></h3>
+<p>One tool in full.</p>
+<ul>
+<li><code>kind</code> - its name</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="knowledge-search"><code>knowledge.search</code><a class="anchor" href="#knowledge-search" aria-label="Link to this section">#</a></h3>
+<p>What the company knows - the Hub, the indexed documents and the facts the owner asked to keep. Call it FIRST whenever the owner asks about a person, a site, a policy, a system or how something is done here - never offer to look it up instead of looking.</p>
+<ul>
+<li><code>query</code> - the words to look for</li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
     <p class="stamp">Documentation for Taskuary 0.3.5.6 · updated 2026-09-18</p>

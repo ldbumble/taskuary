@@ -545,6 +545,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         if gone: return (f"There is nothing to hand it to - {gone} is not set up on this machine. "
                          'Connections → AI CLI agents, and then say it again.')
     if verb == 'close' and item.get('closed'): return f"{what} is already closed - its agent finished it."
+    if verb == 'stop_agent' and item.get('paused'):
+        # a paused conversation has no live session: the pick answered "no agent is running right now" (A20, 2026-09-25)
+        return f"{what} has no live session - there is nothing to end."
     if verb == 'defer' and item.get('closed'): return f"{what} is closed - there is nothing to put away."
     need = NEEDS.get(verb)
     if need and not item.get(need):

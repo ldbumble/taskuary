@@ -174,3 +174,32 @@ class UndoTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class PhoneCardTests(unittest.TestCase):
+    """The owner, 2026-09-25, on WhatsApp: "don't need this choices if you have pick ... rather actually show the task and
+    then emoji for agent and what it did"."""
+
+    def test_on_whatsapp_the_poll_is_the_choices(self):
+        s, _ = armed()
+        got = offer(s, {'say': 'The export job failed again.', 'item': ITEM, 'chips': CHIPS})
+        self.assertNotIn('Reply with one of', got[-1][0])
+        self.assertEqual(got[-1][1], ['Make a task', 'Next', 'Send to agent', 'Not ours'])
+        self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, '2'), ('Next', True), 'a typed number still answers')
+
+    def test_an_agents_card_is_the_task_then_what_the_agent_did(self):
+        item = {'key': 'agent:9', 'kind': 'agentdone', 'tid': 9, 'ref': 'TQ-0009', 'title': 'Why the nightly export times out',
+                'who': 'coder', 'channel': 'report', 'lane': 'report', 'why': 'the agent finished and closed it'}
+        text = ra.turn_text({'say': 'coder finished TQ-0009: the export timed out on a mass update.', 'item': item})
+        self.assertTrue(text.startswith('TQ-0009 · Why the nightly export times out\n✅ coder finished'))
+        self.assertNotIn('the agent finished and closed it', text)
+
+    def test_save_and_end_session_is_not_offered_where_there_is_no_session(self):
+        paused = {'key': 'agent:7', 'kind': 'agent', 'lane': 'blocked', 'tid': 7, 'paused': True}
+        self.assertNotIn('stop_agent', [c['verb'] for c in concierge.chips_for(MemoryStore(), paused)])
+
+    def test_a_finished_agents_more_is_its_report(self):
+        s = MemoryStore()
+        t = s.create_task({'Title': 'Export timeouts', 'Kind': 'coding', 'Status': 'done'}, 'coder')
+        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nThe mass update made the export 6x larger.')
+        self.assertEqual(ra.more_text(s, {'kind': 'agentdone', 'tid': t}), 'The mass update made the export 6x larger.')

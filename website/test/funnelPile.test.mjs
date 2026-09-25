@@ -247,6 +247,9 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has
   assert.doesNotMatch(cardsSrc(), /Just what came in/);    // no mail-only walk: a set is the model's to name (2026-09-25)
   assert.match(view, /Walk me through my tasks/);
+  // the Timeline: an fyi filed on a thread's task does not wear the task's state, and no stray 0 under a verdict
+  assert.match(read("FeedView.jsx"), /r\.TaskId && r\.MsgStatus !== "filed" && <LifecycleChip kind="task"/);
+  assert.match(read("FeedView.jsx"), /\{!!\(verdict\.existing_task_id \|\| \(verdict\.related_message_ids/);
   assert.match(cardsSrc(), /All read, next/);             // a handful of fyi's goes in one click
   assert.match(cardsSrc(), /<TerminalPane sid=\{card\.sid\}/);   // a stopped agent's own screen, in the chat
   assert.doesNotMatch(view, /left: side, right: side/);    // no taper: every row is a Timeline row's width

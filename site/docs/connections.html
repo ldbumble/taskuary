@@ -134,10 +134,12 @@ readable part of the configuration.</p>
 <td>Send notifications out through it</td>
 </tr>
 </tbody></table>
-<div class="callout rule"><p class="eyebrow">Feed is not a quieter trigger</p><p><code>feed</code> means no model ever reads those items — cheaper, quieter, and no verdict to argue with.
+<p>:::rule Feed is not a quieter trigger
+<code>feed</code> means no model ever reads those items — cheaper, quieter, and no verdict to argue with.
 <code>ignore</code> is a judgement <em>about</em> a message and happens further down, in your routing policies. If
-a source is noisy but you still want to see it, make it a feed.</p>
-</div><p>A card can hold more than one role. A mailbox is usually <code>trigger</code> and <code>notify</code>; a database is
+a source is noisy but you still want to see it, make it a feed.
+:::</p>
+<p>A card can hold more than one role. A mailbox is usually <code>trigger</code> and <code>notify</code>; a database is
 usually <code>report</code> and <code>tool</code>.</p>
 <h2 id="mail">Mail<a class="anchor" href="#mail" aria-label="Link to this section">#</a></h2>
 <table>
@@ -159,10 +161,12 @@ usually <code>report</code> and <code>tool</code>.</p>
 <p>Taskuary reads your <strong>Sent</strong> folder as well as your inbox. That is what makes &quot;has this been
 answered?&quot; a real question rather than a guess, and it is what <code>STYLE.md</code>&#39;s <strong>Generate from
 history</strong> learns your writing voice from.</p>
-<div class="callout note"><p class="eyebrow">A shared mailbox needs saying so</p><p>If the mailbox is shared, mail addressed to the team reads as mail addressed to you unless
+<p>:::note A shared mailbox needs saying so
+If the mailbox is shared, mail addressed to the team reads as mail addressed to you unless
 Taskuary knows otherwise. Name your own addresses in <code>SOUL.md</code> so triage can tell &quot;someone asked
-me&quot; from &quot;someone asked the team&quot;.</p>
-</div><h2 id="chat">Chat<a class="anchor" href="#chat" aria-label="Link to this section">#</a></h2>
+me&quot; from &quot;someone asked the team&quot;.
+:::</p>
+<h2 id="chat">Chat<a class="anchor" href="#chat" aria-label="Link to this section">#</a></h2>
 <table>
 <thead>
 <tr>
@@ -298,14 +302,16 @@ SQLite. Once anything is indexed, a <code>kb_search</code> report answers questi
 agents call the same search as a tool, and the reply drafter, the assistant and coding sessions
 are handed the passages that bear on a thread. Passages are treated as facts to cite, never as
 instructions.</p>
-<div class="callout warn"><p class="eyebrow">Planned is not available</p><p>The Connections page lists cards that are on the roadmap as well as ones that work — NetSuite,
+<p>:::warn Planned is not available
+The Connections page lists cards that are on the roadmap as well as ones that work — NetSuite,
 SAP, Workday, ADP, Epic, Cerner, PointClickCare among them. A planned card tells you so on its
 face. If the assistant suggests connecting one, saying yes is a vote for building it, not a
 connection.</p>
 <p>(This callout used to name &quot;a long tail of market-data providers&quot; here. Eight of them were built
 and the sentence was not updated, so the docs called working cards planned — the market cards
-above all work.)</p>
-</div><h2 id="coding-clis-and-ai-providers">Coding CLIs and AI providers<a class="anchor" href="#coding-clis-and-ai-providers" aria-label="Link to this section">#</a></h2>
+above all work.)
+:::</p>
+<h2 id="coding-clis-and-ai-providers">Coding CLIs and AI providers<a class="anchor" href="#coding-clis-and-ai-providers" aria-label="Link to this section">#</a></h2>
 <p><strong>AI providers</strong> — Anthropic, OpenAI, Azure OpenAI, OpenRouter, Ollama (and any OpenAI-compatible
 local server: LM Studio, llama.cpp, vLLM), and the Meta Model API.</p>
 <p><strong>Coding CLIs</strong> — Claude Code, Codex, Qwen Code, OpenCode, Kimi Code, Gemini, Cursor, Copilot,

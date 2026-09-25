@@ -54,7 +54,6 @@ ACTIONS = {
 # (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
 SETTING_ALLOW = {
     'coder_auto_enabled': 'start the coding agent automatically on new coding work',
-    'auto_draft_enabled': 'write the reply draft in the background, before you look',
     'intent_classify_enabled': 'let the brain classify inbound mail at all',
     'answer_to_agent': 'what happens when an answer arrives for a waiting agent (auto / ask / off)',
     'poll_minutes': 'how often the mailboxes are read',

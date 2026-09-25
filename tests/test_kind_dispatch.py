@@ -14,7 +14,7 @@ import unittest
 from unittest import mock
 
 from taskuary import general, senders
-from taskuary.ingest import auto_code_ok, ingest_message
+from taskuary.ingest import auto_start_ok, ingest_message
 from taskuary.store import MemoryStore
 
 NOTICE = ('Your assignment "Common Scams and How to Avoid Them" is outstanding, due 2026-09-06. '
@@ -101,28 +101,21 @@ class DispatchTests(unittest.TestCase):
 
 
 class GateTests(unittest.TestCase):
-    """auto_code_ok on its own: one question about the work, then the stranger check."""
+    """auto_start_ok, the one gate that decides an unattended start: the switch, then the stranger check. (The old
+    coding-only auto_code_ok was never called outside its tests and is gone - X4, 2026-09-25.)"""
     def _mid(self, s, from_email):
         return s.add_message({'ExternalId': 'x', 'Channel': 'email', 'Subject': 's', 'FromEmail': from_email,
                               'SentAt': '2026-08-30 09:00', 'BodyText': NOTICE, 'Status': 'routed'})
 
-    def test_general_is_not_a_coding_job_and_the_coding_gate_says_so_without_asking_anything_else(self):
-        """auto_code_ok is the CODING gate; general has its own worker (ingest.auto_start_ok, PW-069)."""
-        s = store()
-        with mock.patch.object(senders, 'known') as known:
-            ok, why = auto_code_ok(s, {'channel': 'email', 'from_email': 'a@b.c'}, self._mid(s, 'a@b.c'), 'general')
-        known.assert_not_called()
-        self.assertEqual((ok, 'talk it through with the assistant' in why), (False, True))
-
     def test_coding_falls_through_to_the_stranger_gate(self):
-        s = store()
+        s = store(); s.set_setting('coder_auto_enabled', '1', 't')
         with mock.patch.object(senders, 'wrote_to', return_value=False):
-            ok, why = auto_code_ok(s, {'channel': 'email', 'from_email': 'stranger@evil.example'},
-                                   self._mid(s, 'stranger@evil.example'), 'coding')
+            ok, why = auto_start_ok(s, {'channel': 'email', 'from_email': 'stranger@evil.example'},
+                                    self._mid(s, 'stranger@evil.example'), 'coding')
         self.assertEqual((ok, 'never written to them' in why), (False, True))
         with mock.patch.object(senders, 'wrote_to', return_value=True):
-            ok, _why = auto_code_ok(s, {'channel': 'email', 'from_email': 'client@partner.example'},
-                                    self._mid(s, 'client@partner.example'), 'coding')
+            ok, _why = auto_start_ok(s, {'channel': 'email', 'from_email': 'client@partner.example'},
+                                     self._mid(s, 'client@partner.example'), 'coding')
         self.assertTrue(ok)
 
 
@@ -164,12 +157,12 @@ class ConsistencyTests(unittest.TestCase):
                 self.assertNotIn(phrase, text.lower(), f'{name}: {phrase}')
 
     def test_the_code_asks_triage_and_nothing_else(self):
-        """auto_code_ok reads `kind` and the sender's history. If a keyword or category test ever
+        """auto_start_ok reads the switch and the sender's history. If a keyword or category test ever
         creeps back in beside them, the document stops being where this is decided."""
         import inspect
         from taskuary import ingest
-        src = inspect.getsource(ingest.auto_code_ok)
-        self.assertIn("kind != 'coding'", src)
+        self.assertFalse(hasattr(ingest, 'auto_code_ok'))
+        src = inspect.getsource(ingest.auto_start_ok)
         for leak in ('sender_class', 'BODY_', 'FROM_', 're.search', 'subject'):
             self.assertNotIn(leak, src, leak)
 

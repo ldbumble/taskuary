@@ -70,7 +70,7 @@ def note(store, title: str, body: str = '', when=None, actor: str = 'owner') -> 
 
     It is a task so it can be found, listed and closed like everything else - but kind `note`,
     which is outside every routing rule in the app: triage never sees it (nothing arrived),
-    auto_code_ok refuses anything that is not `coding`, and general.handles does not claim it,
+    auto_start_ok starts only coding and general work, and general.handles does not claim it,
     so it never opens a chat either. Nothing works it. That is the point."""
     title = ' '.join(str(title or '').split())[:300]
     if not title: raise ValueError('a note with no words is not a note')

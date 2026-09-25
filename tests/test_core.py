@@ -48,7 +48,9 @@ class CoreTests(unittest.TestCase):
 
     def test_fyi_files_without_task(self):
         s = MemoryStore()
-        out = ingest_message(s, self.msg(external_id='f1', subject='report', body='this is an automated summary'))
+        # triage reads it and calls it fyi - there is no keyword rule filing it before a model (2026-09-25)
+        out = ingest_message(s, self.msg(external_id='f1', subject='report', body='this is an automated summary'),
+                             llm=lambda *a, **k: '{"intent": "fyi", "why": "an automated summary"}')
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
 
     def test_reply_only_kind(self):
@@ -194,7 +196,8 @@ class CoreTests(unittest.TestCase):
         nothing with it. Neither one sends anything: a draft waits for approval, and a session
         is one you are watching."""
         d = store_mod.DEFAULT_SETTINGS
-        self.assertEqual((d['coder_auto_enabled'], d['auto_draft_enabled']), ('1', '1'))
+        self.assertEqual(d['coder_auto_enabled'], '1')
+        self.assertNotIn('auto_draft_enabled', d)                          # every question is drafted - no setting (2026-09-25)
         self.assertEqual(MemoryStore().get_settings()['coder_auto_enabled'], '1')
 
     def test_out_of_the_box_timeline_fade_is_normal(self):
@@ -542,7 +545,7 @@ class CoreTests(unittest.TestCase):
         pol = {'Name': 'skip:flood@vendor.com', 'Kind': 'sender', 'Pattern': 'flood@vendor.com',
                'Action': 'skip', 'Reason': 'flood', 'SortOrder': 10, 'Active': 1}
         self.assertEqual(apply_retroactively(s, pol), 1)
-        self.assertEqual(s.scan_kwargs.get('statuses'), ('routed', 'ignored', 'filed'))
+        self.assertEqual(s.scan_kwargs.get('statuses'), ('routed', 'ignored', 'filed', 'error', 'triaging'))   # a flood's untriaged rows too (2026-09-25)
         self.assertEqual(s.scan_kwargs.get('from_email'), ['flood@vendor.com'])
         self.assertIs(s.scan_kwargs.get('include_body'), False)   # judged on the envelope: no body fetched
 

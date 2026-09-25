@@ -244,7 +244,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     before the message arrived - see _AsOf) or 'none'; `learned` = whether LEARNED.md's
     promoted sections ride along (the doc has no history, so it is all or nothing). `system`
     replaces the install's TRIAGE.md for the run - how a wording change is scored before it ships."""
-    from .ingest import decided_intent, others_on_thread, owner_addresses, relevant_notes
+    from .ingest import others_on_thread, owner_addresses, relevant_notes
     from .learn import injectable
     from .routing import draft_task_fields
     from .triage import classify_intent
@@ -261,7 +261,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
         thread = others_on_thread(thread_store(c), msg, mine)
         src = store if notes == 'today' else _AsOf(store, c.get('sent_at')) if notes == 'asof' else None
         ns, left = relevant_notes(src, [msg['from_email'] or ''], f"{msg['subject']} {msg['body']}"[:4000], subject=msg['subject']) if src else ([], 0)
-        v = decided_intent(msg, mine)
+        v = {'intent': 'fyi', 'why': 'a calendar invite'} if msg.get('invite') else None      # the funnel's only no-model verdict
         for attempt in range(RETRIES + 1):
             if v and not v.get('degraded'): break
             # a throttled or garbled call is not a verdict: try again before scoring it as one

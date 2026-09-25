@@ -106,10 +106,13 @@ class AddressingTests(unittest.TestCase):
         msg = {'source_name': ME, 'from_email': 'dana@vendor.com', 'subject': 'Ledger',
                'body': 'Alex - can you confirm the ledger?', 'to': ['dana@vendor.com'], 'cc': [ME]}
         out = triage.classify_intent(msg, llm=llm, system='My own rules. Answer JSON only.', mine={ME})
-        # the owner's document arrives first and whole, and the ONLY thing after it is the shape
+        # the owner's document arrives first and whole, and after it only the shape - and "is it coding, first"
+        # (2026-09-25), which defines a kind and weighs no signal
         self.assertTrue(seen['system'].startswith('My own rules. Answer JSON only.'))
         added = seen['system'][len('My own rules. Answer JSON only.'):]
-        self.assertEqual(added.strip(), ('WHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + triage.TASK_FIELDS).strip())
+        kind_block, _, rest = added.strip().partition('\n\nWHATEVER ELSE')
+        self.assertTrue(kind_block.startswith('KIND, DECIDED FIRST') and '\n\n' not in kind_block, kind_block[:120])
+        self.assertEqual(('WHATEVER ELSE' + rest).strip(), ('WHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + triage.TASK_FIELDS).strip())
         for judgement in ('cc', 'weigh', 'prefer fyi', 'escalate', 'urgent'):
             self.assertNotIn(judgement, added.lower(), f'a rule about {judgement} was appended')
         self.assertIn('"addressed_to_you": "cc"', seen['user'])               # the signal is there

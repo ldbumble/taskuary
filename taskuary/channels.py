@@ -791,7 +791,7 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
                              'OwnText': msg.get('own_text') or None,
-                             'SourceLink': msg.get('source_link'), 'Status': 'context',
+                             'SourceLink': msg.get('source_link'), 'Status': 'context', 'Direction': 'out',   # yours: outgoing (X1)
                              'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None})
     sent = store.get_message(mid) or {}
     retire_draft_answered_elsewhere(store, tid, sent)

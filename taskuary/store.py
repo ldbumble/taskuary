@@ -462,7 +462,7 @@ PROCESSING_DIRTY_SETTINGS = (
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
 # draft. Both stop short of anything leaving the building - a draft waits for you to send it,
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
-DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
+DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
                     'chat_keep_days': '15',        # archived assistant chats expire after this many days (retention.py, PW-158)
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
@@ -772,6 +772,9 @@ class SQLiteStore:
                 self.cx.execute('ALTER TABLE task ADD COLUMN Checklist TEXT')
             # Remind me (the owner, 2026-09-25): the day an open task comes back; until then it is Upcoming
             if 'RemindAt' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN RemindAt TEXT')
+            # the owner's own replies were stored as INCOMING (X1, 2026-09-25) - everything that counts senders, and the
+            # triage accuracy measure, counted the owner as one. 'You' on a context row is the owner, never a bot.
+            self.cx.execute("UPDATE message SET Direction='out' WHERE Status='context' AND FromName='You' AND IFNULL(Direction,'in')='in'")
             # WHICH BRAIN ran a session, beside the role that owned it. A role is always the same
             # for coding work, so the session is the only place the actual CLI is recorded
             # (docs/superpowers/specs/2026-09-16-profile-brain-separation-design.md)

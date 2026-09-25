@@ -54,6 +54,5 @@ def gather(store, days: int = 30) -> str:
     out += [f"  [{p['Action']}] {p['Kind']}: {str(p.get('Pattern') or '')[:60]}" for p in pols[:25]] or ['  (none)']
     settings = store.get_settings()
     out.append(f"CURRENT SWITCHES: auto-dispatch={'on' if settings.get('coder_auto_enabled') == '1' else 'off'}, "
-               f"auto-draft={'on' if settings.get('auto_draft_enabled') == '1' else 'off'}, "
                f"phone approvals={'on' if settings.get('phone_approvals') == '1' else 'off'}")
     return '\n'.join(out)

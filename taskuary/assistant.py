@@ -1200,6 +1200,25 @@ def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
     return msg, (tid if task else None), active
 
 
+def retry_stuck_ideas(store) -> int:
+    """L3 (the owner, 2026-09-25): an open idea whose triage FAILED, or that waited for a brain, is judged again on
+    the next Advisor run - not only if the Advisor happens to say it again. Two ideas held a server error for ten days."""
+    stuck = []
+    for i in store.list_ideas('open'):
+        try: t = (json.loads(i.get('ActionJson') or '{}') or {}).get('triage') or {}
+        except ValueError: continue
+        if t.get('error') or t.get('pending'): stuck.append(i)
+    if not stuck: return 0
+    try:
+        from .llm import build_llm
+        brain = build_llm(store)
+    except Exception: brain = None
+    if brain is None: return 0
+    try: return len(triage_ideas(store, stuck, brain))
+    except Exception as e:
+        logger.warning(f'assistant: retrying stuck ideas failed - {e}'); return 0
+
+
 def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
     """The shared verdict for every newly said idea (PW-199/PW-200). Judged once per set of facts (the
     idea's Sig); recorded on the idea as action.triage - intent, kind, why, the task it is linked to - or
@@ -1412,6 +1431,7 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
     if report_id is None and watch_source_ids is None and watch_sources is None:
         watch_source_ids, watch_sources = _watch(store)
     with _LOCK:
+        retry_stuck_ideas(store)
         return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
                     systems_only, report_id, report_title, always_post, blocks, judge)
 

@@ -352,24 +352,10 @@ class WrongThreadTests(unittest.TestCase):
         self.assertNotEqual(out['task_id'], pcc)
         self.assertNotIn('Paul Rivera', ' '.join(str(m.get('BodyText') or '') for m in s.list_messages(pcc)))
 
-    def test_the_guard_itself_refuses_a_third_task_and_says_why(self):
-        """What actually happened: route() scored the reply against the OPEN tasks and the
-        Careview one won on sender plus body similarity. The guard is what stops that."""
-        s = store()
-        fin, pcc = self._two_tasks(s)
-        msg = {'conversation_id': 'c:fin', 'subject': 'RE: July 2026 Financials', 'channel': 'email',
-               'from_email': 'gail@vendor.example', 'body': 'bounced for Paul Rivera'}
-        attached = {'decision': 'attach', 'task_id': pcc, 'score': 0.61, 'reason': 'looked alike'}
-        with_open = ingest.own_thread_only(s, msg, attached)
-        self.assertEqual((with_open['decision'], with_open['task_id']), ('attach', fin))    # its own thread wins
-        self.assertIn(f'TQ-{fin:04d}', with_open['reason'])
-        s.update_task(fin, {'Status': 'done'}, 'owner')
-        closed = ingest.own_thread_only(s, msg, attached)
-        self.assertEqual((closed['decision'], closed['task_id']), ('create', None))         # …or nobody's
-        self.assertIn('is closed', closed['reason'])
-        # a message on ITS OWN task's thread is left exactly as routing decided
-        same = {**msg, 'conversation_id': 'c:pcc'}
-        self.assertEqual(ingest.own_thread_only(s, same, attached), attached)
+    def test_the_old_resemblance_guard_is_gone(self):
+        """own_thread_only guarded a router that scored resemblance; identity_route replaced it and it was only ever
+        called by this test (X4, 2026-09-25). The thread's own task wins by identity now."""
+        self.assertFalse(hasattr(ingest, 'own_thread_only'))
 
     def test_a_reply_while_its_task_is_open_joins_that_one(self):
         s = store()
@@ -984,19 +970,19 @@ class PipeTruthTests(unittest.TestCase):
     """D. What the pipe says is what is: one row per conversation, no ghost agents, and nothing in
     it that says of itself that it could not run."""
 
-    def test_a_chat_opener_waits_for_the_ask_it_opens(self):
+    def test_a_chat_greeting_is_triages_to_judge_not_a_rules(self):
+        """No greeting regex any more (the owner, 2026-09-25): "hey" reaches triage like every line, and what triage
+        says is what happens - here it calls the hello an fyi, so nothing opens."""
         s = store()
+        called = []
+        def llm(*a, **k):
+            called.append(1); return '{"intent": "fyi", "why": "a greeting with nothing asked yet"}'
         with mock.patch.object(ingest, '_spawn'):
             hey = arrive(s, subject='', body='hey', who='Omar Keller', email='', channel='whatsapp',
-                         conv='w:omar', hours=0, external_id='w:1', llm=brain('reply_only', None))
-        self.assertIsNone(hey['task_id'])                                  # no task, no drafted "Hey - what's up?"
-        self.assertEqual(hey['status'], 'filed')
+                         conv='w:omar', hours=0, external_id='w:1', llm=llm)
+        self.assertTrue(called, 'triage read the greeting')
+        self.assertEqual((hey['status'], hey['task_id']), ('filed', None))
         self.assertEqual(s.list_reviews('pending'), [])
-        with mock.patch.object(ingest, '_spawn'):
-            ask = arrive(s, subject='', body='did the invoice for Oak Ridge go out?', who='Omar Keller', email='',
-                         channel='whatsapp', conv='w:omar', hours=0, external_id='w:2', llm=brain('reply_only', None))
-        self.assertTrue(ask['task_id'])                                    # the ASK is the task
-        self.assertIn('Oak Ridge', s.get_task(ask['task_id'])['Title'] + s.get_task(ask['task_id'])['Summary'])
 
     def test_a_pending_draft_speaks_for_its_whole_thread(self):
         s = store()

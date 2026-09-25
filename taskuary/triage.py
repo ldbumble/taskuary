@@ -628,6 +628,13 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'task always goes to the coding worker, so leave the key out. Pick on the WORK the message '
                            'asks for, not on who sent it. Unsure, or none of them fits it better than the others? '
                            'Leave the key out and nobody is named.\n' + str(profiles)[:2000])
+            # IS IT CODING, FIRST (the owner, 2026-09-25): sixteen look-ups - a pay change to check, materials to
+            # confirm, access to grant - were called coding because their topic fits a repository
+            system += ('\n\nKIND, DECIDED FIRST: does this need CODE CHANGED in a repository - a bug to fix, a feature, a '
+                       'script, a pull request? That is coding. Looking something up, checking or confirming a value, granting '
+                       'a permission or a login, sending or finding materials, answering a question, researching - is not coding, whatever '
+                       'system or repository the subject belongs to: kind general (an agent reads, checks and drafts) or task '
+                       '(the owner does it). A repository that fits the topic is never a reason to call it coding.')
             if repos:
                 system += ('\n\nKNOWN REPOSITORIES are listed in known_repositories (owner/name and what each is). For a task an agent '
                            'could work from a keyboard, add "repository": "<exactly one listed owner/name>" or null, '
@@ -732,8 +739,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if j.get('intent') in ('task', 'reply_only', 'fyi'):
                 # `kind` is the model's SECOND verdict and it ROUTES the task to one of three
                 # places: coding starts an agent, general opens the assistant's chat, task goes on
-                # the owner's own list with nothing working it (ingest.auto_code_ok gates the
-                # first and asks nothing about the other two). It used to be a regex over the body
+                # the owner's own list with nothing working it (ingest.auto_start_ok decides who may
+                # start the first two unattended). It used to be a regex over the body
                 # (routing.draft_task_fields), which is how a Teams line about someone's job scope
                 # opened a coding session; the model has read the whole message and TRIAGE.md's
                 # definition, so its word wins when given, and the regex is only the fallback.

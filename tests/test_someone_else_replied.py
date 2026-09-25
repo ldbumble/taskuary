@@ -182,8 +182,12 @@ class RepoWorkTests(unittest.TestCase):
              '[issue by ldbumble - association: OWNER]')
 
     def test_no_gate_answers_for_the_classifier(self):
+        # there is no keyword gate at all now (the owner, 2026-09-25) - every item reaches the model
+        self.assertFalse(hasattr(ingest, 'decided_intent'))
         for head in self.HEADS:
-            self.assertIsNone(ingest.decided_intent(self._gh(head)), head)
+            called = []
+            ingest.ingest_message(MemoryStore(), self._gh(head), llm=lambda *a, **k: called.append(1) or '{"intent": "fyi", "why": "x"}')
+            self.assertTrue(called, head)
 
     def test_a_pull_request_the_model_calls_coding_reaches_the_coder(self):
         """The verdict travels: kind -> Kind on the task -> the coder's own role."""
@@ -207,9 +211,15 @@ class RepoWorkTests(unittest.TestCase):
 
     def test_somebody_elses_issue_is_still_the_models_call(self):
         for head in ('[issue by kai - association: NONE]', '[issue by pat - association: MEMBER]'):
-            self.assertIsNone(ingest.decided_intent(self._gh(head)), head)
+            called = []
+            ingest.ingest_message(MemoryStore(), self._gh(head), llm=lambda *a, **k: called.append(1) or '{"intent": "fyi", "why": "x"}')
+            self.assertTrue(called, head)
 
     def test_mail_is_still_the_models_call(self):
-        self.assertIsNone(ingest.decided_intent({'channel': 'email', 'subject': 'Ledger', 'body': 'Can you check the ledger?'}))
-        self.assertEqual(ingest.decided_intent({'channel': 'email', 'subject': 'Statement ready',
-                                                'body': 'This is an automated message, do not reply.'})['intent'], 'fyi')
+        # even "this is an automated message, do not reply" is the model's to read - an fyi can be a task (2026-09-25)
+        for body in ('Can you check the ledger?', 'This is an automated message, do not reply.'):
+            called = []
+            ingest.ingest_message(MemoryStore(), {'external_id': body, 'channel': 'email', 'from_email': 'dana@vendor.example',
+                                                  'subject': 'Statement', 'body': body},
+                                  llm=lambda *a, **k: called.append(1) or '{"intent": "fyi", "why": "x"}')
+            self.assertTrue(called, body)

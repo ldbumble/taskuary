@@ -155,7 +155,7 @@ class GeneralDefaultTests(unittest.TestCase):
     def test_the_keyword_fallback_no_longer_guesses_coding(self):
         f = routing.draft_task_fields({'subject': 'Stack trace in the nightly export', 'body': 'Traceback (most recent call last): the export crashed with a KeyError again, can someone fix'})
         self.assertEqual(f['kind'], 'task')
-        self.assertEqual(routing.draft_task_fields({'subject': 'x', 'body': 'Are you free Tuesday?'})['kind'], 'reply')
+        self.assertEqual(routing.draft_task_fields({'subject': 'x', 'body': 'Are you free Tuesday?'})['kind'], 'task')   # "?" decides nothing
         self.assertEqual(routing.draft_task_fields({'subject': 'x', 'body': 'x'}, kind='coding')['kind'], 'coding')
 
     def test_the_classifier_instructions_default_to_general(self):

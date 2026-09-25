@@ -47,8 +47,9 @@ class KindTests(unittest.TestCase):
         self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='task')['kind'], 'task')
         self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='robot')['kind'], 'task')
 
-    def test_a_question_is_still_a_reply(self):
-        self.assertEqual(draft_task_fields({'subject': 'T&E', 'body': 'Can you send me the numbers?'})['kind'], 'reply')
+    def test_a_question_mark_never_decides_the_kind(self):
+        # triage's reply_only is the only road to a reply (the owner, 2026-09-25: "? never decides anything")
+        self.assertEqual(draft_task_fields({'subject': 'T&E', 'body': 'Can you send me the numbers?'})['kind'], 'task')
 
     def test_real_work_with_no_code_in_it_is_general_not_coding(self):
         """Chasing a vendor is work with no repository: the assistant can help think it through; no agent is dispatched."""

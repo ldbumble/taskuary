@@ -165,8 +165,10 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     # 2026-09-23: "if a triage is unknown ... it should just be task. I don't like coding by default";
     # it was GENERAL from 2026-09-05, PW-067). `coding` and `general` are the classifier's explicit
     # calls; a plain question is a reply.
-    kind = (kind if kind in ('coding', 'general', 'task') else
-            'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'task')
+    # ...and never a guess from punctuation (the owner, 2026-09-25: "? never decides anything"): a question mark
+    # used to turn a task triage named without a kind into a reply with a drafted answer. Triage's reply_only is
+    # the only road to a reply.
+    kind = kind if kind in ('coding', 'general', 'task') else 'task'
     # THE ASK, NOT THE EMAIL. This stored body[:1000], so a task's own summary was the greeting, the
     # signature, the legal footer and the quoted thread underneath - 5,998 characters of Maya's
     # reply, of which the ask was the first sentence (the owner, 2026-09-14: "why is the whole email

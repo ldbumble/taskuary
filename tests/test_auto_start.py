@@ -95,19 +95,33 @@ class AutoStartTests(unittest.TestCase):
         self.assertIn('no assistant provider is configured', last_reason(s))
         self.assertTrue(any('not auto-started' in c for c in comments(s, out['task_id'])))
 
-    def test_coding_with_no_repository_anyone_can_name_goes_to_the_agent_that_needs_none(self):
-        """Coding is triage's default and the only kind that needs a checkout, so a job with no
-        repository was an open task nobody could ever start (the owner, 2026-09-07: "It should be
-        general agent that does not need a repo no?"). The assistant takes it and actually starts."""
+    def test_coding_with_no_repository_stays_coding_and_the_coding_agent_is_asked_which(self):
+        """Coding stays coding (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it
+        into a general agent?"): the task keeps its kind and its "pick a repository" mark, and the coding agent is
+        asked which checkout before anything starts."""
         s = store()
         with mock.patch.object(ingest, 'repo_candidates', return_value=[{'repo': 'org/a', 'about': 'a'}, {'repo': 'org/b', 'about': 'b'}]):
             out, spawned = ingested(s, mail(subject='fix the thing', body='fix the export in the thing'), 'coding',
                                     needs_repo_choice=True, repo_reason='two repositories are plausible')
-        self.assertEqual(spawned, ['_auto_general'])
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
-        self.assertTrue(s.task_has_tag(out['task_id'], ingest.NEEDS_REPO_TAG), 'the record stays: a later hand-off still asks')
-        self.assertTrue(any('which repository' in c and 'needs none' in c for c in comments(s, out['task_id'])))
-        self.assertIn('sent to the assistant', last_reason(s))
+        self.assertEqual(spawned, ['_choose_then_start'])
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
+        self.assertTrue(s.task_has_tag(out['task_id'], ingest.NEEDS_REPO_TAG))
+        self.assertTrue(any('coding agent is asked to choose' in c for c in comments(s, out['task_id'])))
+
+    def test_the_coding_agents_pick_places_the_task_and_starts_it(self):
+        s = store()
+        tid = s.create_task({'Title': 'fix the export', 'Kind': 'coding', 'Status': 'open'}, 't')
+        s.tag_task(tid, ingest.NEEDS_REPO_TAG)
+        with mock.patch.object(ingest, 'choose_repo', return_value=('org/b', 'the export lives there')), \
+             mock.patch.object(ingest, 'auto_start_ok', return_value=(True, 'a colleague')), \
+             mock.patch.object(ingest, '_auto_code') as start:
+            ingest._choose_then_start(s, tid, {}, None)
+        self.assertTrue(s.task_has_tag(tid, ingest.TRIAGE_REPO_TAG + 'org/b'))
+        self.assertFalse(s.task_has_tag(tid, ingest.NEEDS_REPO_TAG))
+        start.assert_called_once()
+        with mock.patch.object(ingest, 'choose_repo', return_value=(None, 'none fits')), mock.patch.object(ingest, '_auto_code') as start2:
+            ingest._choose_then_start(s, tid, {}, None)
+        start2.assert_not_called()
 
     def test_a_github_item_keeps_its_own_repository_and_its_hand_promotion(self):
         """PW-093: a pull request belongs to the repository it came from, and github work queues for

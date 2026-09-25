@@ -47,18 +47,6 @@
       "desc": "Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.",
       "help": "Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.\n\nThis starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant."
     },
-    "default_action": {
-      "group": "Triage & routing",
-      "label": "When no rule matches",
-      "type": "select",
-      "options": [
-        "draft",
-        "task_only",
-        "escalate"
-      ],
-      "desc": "The fallback when no routing policy claims a message.",
-      "help": "draft = reply-only questions get an AI draft waiting on the task; task_only = file a task, draft nothing; escalate = always put it in front of you undecided.\n\nThis is only the FALLBACK: your routing policies (Settings → Routing policies) always win, and messages triaged as real tasks go to the coder regardless."
-    },
     "learn_enabled": {
       "group": "Triage & routing",
       "label": "Learn from your verdicts",
@@ -89,13 +77,6 @@
       "type": "switch",
       "desc": "\"Tuesday at 1 works for me\" is only drafted if Tuesday at 1 is free. Reads the Outlook card's calendars (needs the Calendars.Read application permission) and a Google calendar if its OAuth fields are on the Gmail card.",
       "help": "When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.\n\nAgents can read the same thing: POST /api/tools/run with type \"calendar\"."
-    },
-    "auto_draft_enabled": {
-      "group": "Replies",
-      "label": "Draft replies automatically",
-      "type": "switch",
-      "desc": "Questions get their AI draft the moment they arrive, waiting on the task.",
-      "help": "Retired: a message triaged as a question always lands on the task with its draft requested at once, and a draft that could not be written says so with a retry. Nothing sends itself — approving is always yours."
     },
     "chat_ack_enabled": {
       "group": "Replies",

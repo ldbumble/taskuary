@@ -283,15 +283,19 @@ class DegradedTriageTests(unittest.TestCase):
         self.assertEqual(route['RawOutput'], raw)
         self.assertIn('JSONDecodeError', route['ParseError'])
 
-    def test_the_cheap_fyi_short_circuit_still_runs_without_a_model(self):
-        """That branch is a keyword rule that only ever FILES, which is the safe direction -
-        it is not degraded and must keep saving the AI call."""
+    def test_there_is_no_keyword_fyi_before_the_model(self):
+        """The cheap short circuit is gone (the owner, 2026-09-25: "fyi can sometimes be tasks"): an "automated
+        message, no action required" is read by triage like anything else. A calendar invite is the one exception."""
         s, called = MemoryStore(), []
         out = ingest.ingest_message(s, {'external_id': 'd2', 'channel': 'email', 'from_email': 'x@y.com',
                                         'subject': 'Weekly digest',
                                         'body': 'This is an automated message. No action required.'},
                                     llm=lambda *a, **k: called.append(1) or '{"intent": "task", "why": "x"}')
-        self.assertEqual((out['status'], called), ('filed', []))
+        self.assertEqual((out['status'], called), ('created', [1]))
+        invite = ingest.ingest_message(s, {'external_id': 'd3', 'channel': 'email', 'from_email': 'x@y.com', 'subject': 'Invitation: sync',
+                                           'body': 'Join the meeting', 'invite': True},
+                                       llm=lambda *a, **k: called.append(2) or '{"intent": "task", "why": "x"}')
+        self.assertEqual((invite['status'], called), ('filed', [1]))
 
     def test_degradation_is_marked_only_when_a_model_was_actually_asked(self):
         from taskuary.triage import classify_intent

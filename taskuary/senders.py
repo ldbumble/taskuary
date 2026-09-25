@@ -43,6 +43,8 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
     stranger's message. A lookup that fails is not proof either way and is said as such."""
     cfg = store.get_settings()
     on = lambda k: cfg.get(k, '1') == '1'
+    from .store import OWN_CHANNELS
+    if msg.get('channel') in OWN_CHANNELS: return True, "Taskuary's own report"          # X3: never "a chat you control"
     if (msg.get('channel') or '') != 'email':
         return (True, 'a chat inside a workspace you control') if on('trust_non_email') else \
                (False, 'a chat sender - chat channels are not trusted for unattended starts (Settings)')

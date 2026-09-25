@@ -61,4 +61,21 @@ class StateTests(unittest.TestCase):
         self.assertIsNone(taskstate.column('yours')); self.assertIsNone(taskstate.column('theirs'))
 
 
+
+class MakeATaskTests(unittest.TestCase):
+    def test_a_message_that_is_already_a_task_is_not_offered_make_a_task(self):
+        # the owner, 2026-09-25: "why am i getting make this a task?? it already is" (desktop and the phone's poll)
+        from taskuary import concierge
+        s = MemoryStore()
+        on = lambda item: [c['verb'] for c in concierge.chips_for(s, item)]
+        self.assertIn('mine', on({'key': 'msg:7', 'kind': 'asked', 'mid': 7}))
+        t = s.create_task({'Title': 'Send the August reports', 'Kind': 'general', 'Status': 'open'}, 'o')
+        mine = {'key': 'msg:7', 'kind': 'asked', 'mid': 7, 'tid': t, 'ref': f'TQ-{t:04d}'}
+        self.assertNotIn('mine', on(mine))
+        self.assertIn('already a task', concierge.cannot(mine, 'mine', s))
+        # ...but on a task an agent holds it takes it back, and says so
+        s.update_task(t, {'Assignee': 'agent:coder'}, 'o')
+        self.assertEqual([c['label'] for c in concierge.chips_for(s, mine) if c['verb'] == 'mine'], ['Take it myself'])
+
+
 if __name__ == '__main__': unittest.main()

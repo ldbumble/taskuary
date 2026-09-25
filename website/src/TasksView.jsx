@@ -803,7 +803,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const agentState = agentPhase({
     session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
-    conversation: generalStarted, finished: rowState === "agentdone",
+    conversation: generalStarted, finished: rowState === "agentdone", state: rowState,
     handed: !!assignedAgent(t?.Assignee) || rowState === "queued" || !!detail?.transcript || !!report || generalStarted,
   });
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping, wrapped });
@@ -1005,7 +1005,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* the third line, and ONLY when it has something to say - a queued task with no list
                     stays two lines, so the rail does not pay for this everywhere */}
                 {/* A START THAT FAILED says so on the row, with the error (T10) - it said "starts by itself when it can" */}
-                {task.Queued?.state === "failed" && (
+                {task.State === "queued" && task.Queued?.state === "failed" && (
                   <Typography noWrap title={task.Queued.lastError || ""} sx={{ fontSize: 10.5, mt: 0.45, color: ALERT, fontWeight: 600 }}>
                     could not start{task.Queued.lastError ? ` - ${task.Queued.lastError}` : ""}
                   </Typography>
@@ -1372,7 +1372,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     short like it is when coder is active"). The bar rides IN the heading now, so
                     the sentence and the row that held it both go. */}
                 {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
-                {!liveSession && listRow?.Queued && <Box sx={{ mb: 1 }}>
+                {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
                 <Box sx={{ ...card, mb: liveSession ? 0.55 : 1.25,
@@ -1462,7 +1462,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                     </Box>
                   )}
-                  {!term?.alive && !isGeneral && (restartOpen || (!report && !detail?.transcript)) && (
+                  {!term?.alive && !liveRun && !isGeneral && (restartOpen || (!report && !detail?.transcript)) && (
                     <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 700, mb: 0.75 }}>
                         {report || detail?.transcript ? "Configure the next run" : "Start an agent"}

@@ -490,7 +490,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                       sx={{ height: 15, fontSize: 8.5, bgcolor: "#e3e6e1", color: "#47654a",
                         "& .MuiChip-label": { px: 0.55 }, "& .MuiChip-icon": { ml: 0.35 } }} />}
                     {t.RunStatus && (
-                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${RUN_WORD[t.RunStatus] || t.RunStatus}`
+                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.State === "blocked" ? AGENT.waiting : RUN_WORD[t.RunStatus] || t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
                         sx={{ height: 15, fontSize: 8.5, fontWeight: 700, "& .MuiChip-label": { px: 0.7 },
                           bgcolor: t.RunStatus === "running" ? "#eae4d8" : t.RunStatus === "error" ? "#f0e2e4" : "#dfeade",
@@ -519,7 +519,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                   )}
                   {/* a held-back dispatch says so ON the card - who it waits for and why, readable
                       without hovering anything */}
-                  <QueuedStart taskId={t.TaskId} queued={t.Queued} onChanged={load} compact />
+                  <QueuedStart taskId={t.TaskId} queued={t.State === "queued" ? t.Queued : null} onChanged={load} compact />
                   {live[t.TaskId] && <LiveTail run={live[t.TaskId]} chat={chat} name={agentName(t)} />}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mt: 0.6 }}>
                     <Chip size="small" label={t.Kind} sx={{ height: 15, fontSize: 8.5, bgcolor: PANEL2,

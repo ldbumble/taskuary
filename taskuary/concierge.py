@@ -532,6 +532,12 @@ def no_agent(store) -> str:
     except Exception: return ''
 
 
+def _agent_holds(store, item) -> bool:
+    """An agent is on this task - "mine" then takes it off the agent's hands rather than making a task."""
+    t = (store.get_task(int(item['tid'])) if store is not None and item.get('tid') else None) or {}
+    return str(t.get('Assignee') or item.get('assignee') or '').startswith('agent:')
+
+
 def cannot(item: dict | None, verb: str, store=None) -> str:
     """Why this card cannot carry that verb - '' when it can. Always phrased "nothing to <verb>",
     because the honest line is the only line: no receipt goes out in front of it."""
@@ -547,6 +553,10 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         gone = no_agent(store)
         if gone: return (f"There is nothing to hand it to - {gone} is not set up on this machine. "
                          'Connections → AI CLI agents, and then say it again.')
+    # ...and a message that is ALREADY a task is not made one again: "Make a task" sat on TQ-0748's own card, on the
+    # desktop and in the phone's poll (the owner, 2026-09-25: "why am i getting make this a task?? it already is")
+    if verb == 'mine' and item.get('tid') and not _agent_holds(store, item):
+        return f"{what} is already a task on your list."
     if verb == 'close' and item.get('closed'): return f"{what} is already closed - its agent finished it."
     if verb == 'stop_agent' and item.get('paused'):
         # a paused conversation has no live session: the pick answered "no agent is running right now" (A20, 2026-09-25)
@@ -598,6 +608,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
                         'hint': 'Marks the task done without sending the draft, and ends any live agent session.'})
         # an agent's proposal runs an action rather than sending a reply, so the word says that
         elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': 'Run it'})
+        # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25)
+        elif v == 'mine' and item.get('tid'): out.append({'verb': v, 'label': 'Take it myself', 'hint': "Takes it off the agent - it stays on your list."})
         else:
             out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
     return out

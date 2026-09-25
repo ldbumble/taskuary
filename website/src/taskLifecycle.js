@@ -21,10 +21,14 @@ export const AGENT = { waiting: "agent waiting on you", working: "agent working"
 // `finished`: the agent closed the task itself (the server's state, taskstate.py) - its report is its result, never
 // "session saved" (T6). `handed`: false when no agent was ever given this task - it has no agent state at all, not
 // "waiting to start" (T5).
-export const agentPhase = ({ session, run, transcript, report, conversation, finished, handed } = {}) => {
+// `state`: the server's word for the task (taskstate.py) - saved, stopped or waiting to start is what the list and the
+// Board say, so the page says it too instead of guessing from the facts it happens to have loaded (2026-09-25 pass).
+const FROM_STATE = { saved: AGENT.saved, stopped: AGENT.stopped, queued: AGENT.idle };
+export const agentPhase = ({ session, run, transcript, report, conversation, finished, handed, state } = {}) => {
   if (session?.alive) return session.waiting ? AGENT.waiting : AGENT.working;
   if (run?.Status === "running") return AGENT.working;
   if (finished) return AGENT.finished;
+  if (FROM_STATE[state]) return FROM_STATE[state];
   if (report) return AGENT.saved;
   if (transcript) return AGENT.stopped;
   // General work keeps its record in the conversation, not in a pty. Its provider session ends

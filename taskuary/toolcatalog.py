@@ -27,6 +27,9 @@ PURPOSE = {
     'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline',
     'item.settle':              'put the item down - `verb`: done | later | skip (the item on the table is the target)',
     'task.complete':            'Mark done - the task is finished',
+    'task.defer':               ('Remind me: put an open task away until a day and bring it back that morning - `until`: a date '
+                                 '(2026-10-09), "2 weeks", "3 days", "monday", or "none" to bring it back now; `ref` names '
+                                 'the task (TQ-0123) when it is not the one on the table'),
     'review.approve':           'send the drafted reply as it stands',
     'agent.answer':             'answer the agent that is waiting - `text`',
     'agent.stop':               'stop the running agent',
@@ -64,7 +67,7 @@ PURPOSE = {
 # THE TIERS (the spec, 2026-09-18). Reads run at once (READS). These WRITES run at once too, because
 # each can be put back: the receipt carries the undo. Everything else waits for the owner's yes -
 # deleting, sending to a person, spending, stopping an agent mid-run.
-INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.reach', 'report.edit', 'setting.set',
+INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.reach', 'report.edit', 'setting.set', 'task.defer',
                      'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
 
 

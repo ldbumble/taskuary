@@ -9,7 +9,7 @@ from loguru import logger
 _LIVE_UNSET = object()
 _POLL_UNSET = object()
 GENESIS = '0' * 64
-TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
+TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
             'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy')
@@ -189,7 +189,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary TEXT,
   Kind TEXT DEFAULT 'general', Status TEXT DEFAULT 'open', Priority TEXT DEFAULT 'normal',
   Assignee TEXT, Source TEXT DEFAULT 'manual', SourceRef TEXT, Tags TEXT,
-  CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT, ClosedAt TEXT);
+  CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT, ClosedAt TEXT, RemindAt TEXT);
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
@@ -766,6 +766,8 @@ class SQLiteStore:
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
                 self.cx.execute('ALTER TABLE task ADD COLUMN Checklist TEXT')
+            # Remind me (the owner, 2026-09-25): the day an open task comes back; until then it is Upcoming
+            if 'RemindAt' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN RemindAt TEXT')
             # WHICH BRAIN ran a session, beside the role that owned it. A role is always the same
             # for coding work, so the session is the only place the actual CLI is recorded
             # (docs/superpowers/specs/2026-09-16-profile-brain-separation-design.md)

@@ -349,7 +349,6 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
         {/* Next, as in the chat: it is read, and the next thing comes up - reading what only wanted knowing scores */}
         {onNext && <Btn kind="mint" disabled={!!busy} onClick={() => onNext(item)} title="Read - on to the next thing (N)">
           Next ▶ · +{(item.lane === "fyi" || item.lane === "report" || item.kind === "fyis") && !item.bad ? 8 : 2}</Btn>}
-        <Btn disabled={!!busy} onClick={() => play("later", item.key, () => api.post("/api/funnel/settle", { key: item.key, verb: "later" }))}>⏭ Later</Btn>
         {item.tid && card !== "agent" && card !== "agentdone" && card !== "wrapup" && item.mid && <Btn onClick={() => open(item.tid)}>Open {item.ref}</Btn>}
       </Row>
     </Box>

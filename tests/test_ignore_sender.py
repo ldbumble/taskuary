@@ -64,11 +64,12 @@ class IgnoreScopeInstructionTests(unittest.TestCase):
         from taskuary import concierge
         blob = ' '.join(str(getattr(concierge, n)) for n in dir(concierge)
                         if n.isupper() and isinstance(getattr(concierge, n), str))
-        for verb in ('not_ours', 'not_ours_remember', 'not_ours_sender'):
+        for verb in ('not_ours', 'not_ours_sender', 'block_sender'):     # "this kind" retired 2026-09-25
             self.assertIn(verb, blob, verb)
         # a blank store loads the shipped template - prove the rule REACHES the model, not just the file
         system = ' '.join(concierge._system(MemoryStore()).split())
-        self.assertIn('OPTIONS: just this once | this kind from now on | everything from this sender', system)
+        # ...and the question itself is the Not ours card's now, not a line of options (2026-09-25)
+        self.assertIn('just this once | from now on | a rule in Settings', system)
 
     def test_an_fyi_says_why_triage_filed_it_and_what_can_be_done(self):
         """"nothing - read it if you like" is not an offer, and the verdict without its reason is

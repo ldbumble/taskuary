@@ -12,7 +12,9 @@ from . import processing_all
 # An open task the owner cleared comes back to the work tab once it has been quiet this long. Done
 # used to be the end of it: the task stayed open in the task tab and the work tab never raised it
 # again (the owner, 2026-09-15: "it should show back up in the work also if it's still open later").
-RETURN_MINUTES = 60
+# ...after a few hours, not one (the owner, 2026-09-25: Tomorrow and Later are gone, so Next on open work is
+# the only "not now" and it must not be back before the next coffee). A date is the task's own Remind me.
+RETURN_MINUTES = 180
 
 
 def return_minutes(store) -> int:
@@ -97,6 +99,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     workers = [w for w in live_state if w.get('taskId') == tid] if tid else []
     worker = workers[-1] if workers else None
     active = task.get('Status') not in ('done', 'dropped')
+    # REMIND ME (2026-09-25): put away until a day - held like a deferral until that morning, then back as asked for
+    from . import remind
+    reminded = str(task.get('RemindAt') or '') if active else ''
+    if reminded and remind.waiting(task, now): read = {**read, 'deferred': True, 'defer_until': reminded}
     persisted_working = active and any(r.get('TaskId') == tid and r.get('Status') == 'running'
                                       for r in view.get('runs', []))
     # handed to an agent and not started: on the rail until it starts, however often it was looked at
@@ -242,6 +248,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                 unread=unread, deferred=bool(read.get('deferred')), defer_until=read.get('defer_until'),
                 more=max(0, compact['counts'].get('messages', 0) - 1),
                 source=row.get('SourceName') or compact['source'], status=row.get('MsgStatus') or compact['status'], order_band=funnel._band(card))
+    # ...and on its day it says why it is back
+    if reminded and not read.get('deferred') and reminded[:10] == f'{now:%Y-%m-%d}': card['why'] = f'you asked to be reminded today ({remind.when(reminded)})'
     # shown-but-not-read exists for the lanes whose unread is NOT the receipt's to give: the mark keeps
     # Next from bouncing straight back to what it just introduced (everything else shown is read - the
     # receipt says so).

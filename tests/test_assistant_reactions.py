@@ -451,18 +451,12 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(run(s, p).json()['status'], 'done')
         self.assertEqual([i['key'] for i in pile(s)], []); self.assertEqual(s.get_task(tid)['Status'], 'done')
 
-    def test_later_and_tomorrow_put_it_back_with_a_clock_on_it(self):
-        s, tid, mid, item = self._asked()
-        p = decide(s, 'later', 'later', key=item['key'])['proposal']
-        self.assertEqual((p['kind'], p['params']['verb'], p['label']), ('item.settle', 'later', 'Push it back'))
-        self.assertEqual(len(pile(s)), 1)                              # still there until the click
-        run(s, p)
-        self.assertEqual(pile(s), [])                                  # gone for now…
-        st = s.funnel_states()[item['key']]
-        self.assertEqual(st['Status'], 'later'); self.assertTrue(st['Until'])   # …and it comes back at its time
-        s2, tid2, mid2, item2 = self._asked()
-        p2 = decide(s2, 'tomorrow', 'skip', key=item2['key'])['proposal']
-        self.assertEqual((p2['params']['verb'], p2['label']), ('skip', 'Skip until tomorrow'))
+    def test_later_and_tomorrow_are_no_longer_words_it_decides(self):
+        """Retired with their buttons (the owner, 2026-09-25): Next on open work comes back after a few hours, and a
+        date is the task's own Remind me. A DECIDE line naming either is read as no decision at all."""
+        for verb in ('later', 'skip', 'setting', 'not_ours_remember'):
+            self.assertNotIn(verb, concierge.VERBS)
+        self.assertIsNone(concierge.parse_decision('Pushed.' + chr(10) + 'DECIDE: later')[1])
 
     def test_reply_carries_the_gist_into_the_draft_at_once_and_sends_nothing(self):
         s, tid, mid, item = self._asked()
@@ -491,12 +485,6 @@ class ResponseTests(unittest.TestCase):
         self.assertNotEqual(s.get_message(mid)['Status'], 'ignored')  # untouched until the click
         run(s, p)
         self.assertEqual(s.get_message(mid)['Status'], 'ignored'); self.assertEqual(s.list_memories(active_only=True), [])
-        s2, tid2, mid2, item2 = self._asked()
-        p2 = decide(s2, 'never again for this kind', 'not_ours_remember', key=item2['key'])['proposal']
-        self.assertEqual((p2['kind'], p2['target'], p2['params']['scope']), ('preference.exclude_sender', mid2, 'subject'))
-        self.assertEqual(s2.list_memories(active_only=True), [])
-        run(s2, p2)
-        self.assertTrue(s2.list_memories(active_only=True), 'the verdict is written down')
         s3, tid3, mid3, item3 = self._asked()
         p3 = decide(s3, 'that sender is junk, block them', 'not_ours_sender', key=item3['key'])['proposal']
         self.assertEqual((p3['kind'], p3['params']['scope'], p3['label']), ('preference.exclude_sender', 'sender', 'Ignore this sender from now on'))
@@ -834,8 +822,8 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
         self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'we will fix it by Friday'}); self.assertIsNone(out.get('proposal'))
 
     def test_the_verbs_the_owner_kept_using_each_have_a_proposal_kind(self):
-        for verb, kind in (('archive', 'message.archive'), ('later', 'item.settle'), ('skip', 'item.settle'), ('not_ours', 'message.file'),
-                           ('not_ours_remember', 'preference.exclude_sender'), ('not_ours_sender', 'preference.exclude_sender'),
+        # later, skip, archive and not_ours_remember were retired with their buttons (the owner, 2026-09-25)
+        for verb, kind in (('not_ours', 'message.file'), ('not_ours_sender', 'preference.exclude_sender'),
                            ('coder', 'task.create_from_message'), ('regular_agent', 'task.create_from_message'),
                            ('mine', 'task.create_from_message'), ('close', 'task.complete'), ('done', 'item.settle')):
             s, tid, mid, item = ResponseTests()._asked()
@@ -851,8 +839,8 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
         self.assertEqual(s.list_memories(), [])
         self.assertEqual(decide(s, 'Just this once', 'not_ours', key=item['key'])['proposal']['kind'], 'message.file')
         s2, tid2, mid2, item2 = ResponseTests()._asked()
-        p = decide(s2, 'Forever for this kind', 'not_ours_remember', key=item2['key'])['proposal']
-        self.assertEqual((p['kind'], p['params']['scope']), ('preference.exclude_sender', 'subject'))
+        p = decide(s2, 'Forever for this sender', 'not_ours_sender', key=item2['key'])['proposal']
+        self.assertEqual((p['kind'], p['params']['scope']), ('preference.exclude_sender', 'sender'))
 
     def test_yes_means_whatever_the_card_in_front_of_them_does(self):
         s, tid, rid, item = ResponseTests()._drafted()
@@ -1422,14 +1410,10 @@ class SettingProposalTests(unittest.TestCase):
     def _call(self, s, kind, **params):
         return concierge.say(s, 'do it', llm=lambda system, user, max_tokens=None: 'On it.\nCALL: ' + json.dumps({'kind': kind, 'params': params}))
 
-    def test_a_switch_named_by_the_verb_alone_changes_nothing_and_says_how(self):
-        s = store()
-        keys = ('agent_issues_enabled', 'coder_auto_enabled', 'poll_minutes', 'calendar_enabled')
-        before = {k: v for k, v in s.get_settings().items() if k in keys}
-        out = decide(s, 'turn PRs into timeline items not tasks', 'setting')
-        self.assertIsNone(out['decision']); self.assertIn('Name the setting and the value', out['say'])
-        self.assertEqual({k: v for k, v in s.get_settings().items() if k in keys}, before)
-        self.assertEqual([r for r in s.list_reviews('pending') if r['Kind'] == 'action'], [])
+    def test_a_switch_is_never_a_verb_only_the_tool(self):
+        """The `setting` verb answered with a canned sentence and changed nothing (retired 2026-09-25): a setting is
+        the setting.set tool, and a DECIDE line naming the old verb is no decision."""
+        self.assertIsNone(concierge.parse_decision('Sure.' + chr(10) + 'DECIDE: setting')[1])
 
     def test_a_number_the_owner_says_out_loud_is_the_value_and_the_receipt_carries_the_undo(self):
         s = store()
@@ -1722,7 +1706,7 @@ class InlineVerbTests(unittest.TestCase):
         self.assertEqual(out['item']['kind'], 'meeting')
         self.assertNotIn('approve', verbs)                                  # there is no draft on a meeting
         self.assertIn('regular_agent', verbs)                               # …but it can be handed off
-        self.assertIn('prep', verbs)
+        self.assertNotIn('prep', verbs)                                     # typed only since 2026-09-25
 
     def test_an_introduction_never_prints_a_decide_line_and_its_verb_becomes_the_first_chip(self):
         s, tid, mid, item = ResponseTests()._asked()

@@ -25,6 +25,8 @@ STAMP = NOW.isoformat(sep=' ')
 def db(tmp_path):
     store = SQLiteStore(str(tmp_path / 'back.db'))
     store.set_setting('funnel_hours', '72', 'fixture')
+    # the mechanism at a round hour; the shipped default is three (2026-09-25), checked below
+    store.set_setting('task_return_minutes', '60', 'fixture')
     funnel.invalidate(); funnel.forget_states()
     yield store
     store.cx.close()
@@ -133,7 +135,7 @@ def test_the_owner_can_change_the_clock_by_saying_so(db):
         == 'task_return_minutes must be a whole number'
 
 
-def test_a_nonsense_setting_falls_back_to_the_hour(db):
+def test_a_nonsense_setting_falls_back_to_the_default_three_hours(db):
     from taskuary import processing_unread
     db.set_setting('task_return_minutes', 'soon', 'owner')
-    assert processing_unread.return_minutes(db) == 60
+    assert processing_unread.return_minutes(db) == 180

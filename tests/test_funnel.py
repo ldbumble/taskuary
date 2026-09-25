@@ -465,12 +465,12 @@ class LanesTests(unittest.TestCase):
             items = funnel.build(s)['items']
             self.assertEqual([(i['key'], i['surfaced']) for i in items], [(f'agent:{t}', True)])   # still in the pipe, marked
             self.assertIsNone(funnel.next_item(s))                                             # but not straight back on the table
-            s.set_funnel_state(f'agent:{t}', 'surfaced', 'owner'); s._exec("UPDATE funnel_state SET At=? WHERE Key=?", (ago(minutes=45), f'agent:{t}'))
+            s.set_funnel_state(f'agent:{t}', 'surfaced', 'owner'); s._exec("UPDATE funnel_state SET At=? WHERE Key=?", (ago(minutes=150), f'agent:{t}'))
             funnel.invalidate()
-            self.assertIsNone(funnel.next_item(s))                                             # passed: not back within the hour (2026-09-23)
-            s._exec("UPDATE funnel_state SET At=? WHERE Key=?", (ago(minutes=75), f'agent:{t}'))
+            self.assertIsNone(funnel.next_item(s))                                             # passed: not back within the three hours (2026-09-25)
+            s._exec("UPDATE funnel_state SET At=? WHERE Key=?", (ago(minutes=190), f'agent:{t}'))
             funnel.invalidate()
-            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')                        # an hour on, it comes round again
+            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')                        # three hours on, it comes round again
             self.assertIn('shown already, still waiting', funnel.summary(funnel.build(s)['items']))
         # ...and when the agent picks the work back up, the shown item rides up to the shelf instead of vanishing
         busy = [dict(live[0], idle=2, waiting=False)]
@@ -953,7 +953,7 @@ class MemoryTests(unittest.TestCase):
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('queued', t))
             again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
             self.assertIsNone(again['item']); self.assertIn('already seen still waits', again['say'])   # put down: read, waiting in Passed (2026-09-23)
-            later = datetime.now() + timedelta(hours=2)
+            later = datetime.now() + timedelta(hours=4)
             on_rail = [(i['lane'], bool(i.get('why_open')), bool(i.get('surfaced'))) for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
             self.assertEqual(on_rail, [('queued', True, False)])                                # the hour brought it back, and the mark went with it
             self.assertEqual(funnel_selection.capture_selection(s, now=later).selected['tid'], t)   # ...so the walk offers it again

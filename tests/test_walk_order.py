@@ -59,8 +59,8 @@ def drafted(s, subject='Export still broken', who='Dana', hours=20):
     return t, m, s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Attached.', 'Status': 'pending'})
 
 
-def shown_a_while_ago(s, key, hours=2):
-    """Shown, and the 30-minute cooldown long spent - the state the item is in when the owner reads
+def shown_a_while_ago(s, key, hours=4):
+    """Shown, and the return clock (three hours since 2026-09-25) long spent - the state the item is in when the owner reads
     it, gets on with their day, and comes back to the walk."""
     s.set_funnel_state(key, 'surfaced', 'owner')
     s._exec('UPDATE funnel_state SET At=? WHERE Key=?', (ago(hours), key))

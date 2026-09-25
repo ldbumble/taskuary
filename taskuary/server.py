@@ -780,6 +780,10 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'task.reopen':
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
         store.update_task(tid, {'Status': 'open'}, ACTOR); return {'status': 'open'}
+    if kind == 'task.defer':
+        from . import remind
+        try: return remind.set_reminder(store, tid, p.get('until'), ACTOR)
+        except ValueError as e: raise HTTPException(422, str(e))
     # the assistant's proposals (concierge.PROPOSALS): each runs the same code the page's own button runs
     if kind == 'task.create_from_text':
         from . import concierge
@@ -1241,6 +1245,17 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
 
     return StreamingResponse(generate(), media_type='application/x-ndjson',
                              headers={'Cache-Control': 'no-cache, no-transform'})
+
+class RemindBody(BaseModel): until: str | None = None
+
+@app.post('/api/tasks/{task_id}/remind')
+def remind_task(task_id: int, body: RemindBody):
+    """Remind me (the task page's picker): off the rail until that morning, Upcoming meanwhile. None brings it back."""
+    from . import remind
+    try: out = remind.set_reminder(store, task_id, body.until, ACTOR)
+    except ValueError as e: raise HTTPException(404 if 'not found' in str(e) else 422, str(e))
+    operations.record_direct(store, 'task.defer', task_id, {'until': body.until or 'none'}, ACTOR, out)
+    return out
 
 @app.patch('/api/tasks/{task_id}')
 def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None):
@@ -3616,13 +3631,13 @@ def concierge_chips(key: str):
     if not item: raise HTTPException(404, 'that one is not in the pipe any more')
     return {'key': key, 'chips': concierge.chips_for(store, item)}
 
-class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False
+class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False
 
 @app.post('/api/concierge/propose')
 def concierge_propose(body: ConciergeProposeBody):
     """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
     from . import concierge
-    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table)
+    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class SetupBody2(BaseModel): text: str
@@ -6191,6 +6206,12 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: boo
             if retried: _status_progress(target_store, status, f'{what} · {retried} retried', phase='triaging')
         except Exception as e:
             logger.warning(f'retrying stranded triage failures failed: {e}')
+        # the morning's Remind me dates, each filed as a note on its task so it is back on the rail (remind.due)
+        try:
+            from . import remind
+            remind.due(target_store)
+        except Exception as e:
+            logger.warning(f'reminders failed: {e}')
         _lap('judging')
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on

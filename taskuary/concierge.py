@@ -58,48 +58,42 @@ _DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?:\s*\[\s*([A-Za-z0-9_./\- ]+?)
 # It exists for the targets a verb cannot say: a SET, described rather than listed.
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
-VERBS = ('reply', 'approve', 'setting', 'not_ours', 'not_ours_remember', 'not_ours_sender', 'block_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
-         'rerun', 'setup', 'clear', 'split', 'done', 'later', 'skip', 'next', 'answer_agent', 'redraft', 'forward', 'archive',
+VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
+         'rerun', 'setup', 'clear', 'split', 'done', 'next', 'answer_agent', 'redraft', 'forward',
          'confirm', 'cancel', 'none')
 # The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
 # CODE's and it is fixed (the owner, 2026-09-07: "make it hardcoded, meaning add inline in the chat words
 # that map to actions"); only which of them fits the thing on the table is decided per item, from its kind.
 # The model still reads free text - it just never invents a button. Every word here maps to a verb the cards
 # and the typed sentence already run, so a chip, a button and a sentence are one road.
-CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Hand it to a coding agent',
-              'regular_agent': 'Hand it to an agent', 'mine': 'Put it on my list', 'not_ours': 'Not ours',
+CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Send to a coding agent',
+              'regular_agent': 'Send to agent', 'mine': 'Make a task', 'not_ours': 'Not ours',
               'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
               'archive': 'Archive it', 'close': 'Mark done',
               'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
               'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
               'prep': 'Prep me', 'followup': 'Draft a follow-up'}
-# What the word will actually DO, on hover - written where the difference matters. "Ignore this
-# sender" and "Block them in Settings" are one line apart and not remotely the same act.
-CHIP_HINTS = {'not_ours_sender': 'Their mail keeps arriving and stays readable - triage learns to file it',
-              'block_sender': 'An exclusion rule in Settings: their mail never reaches triage again, and what already arrived leaves the Timeline. Reversible.',
-              'not_ours': 'File just this one - nothing is remembered',
-              'coder': 'A coding agent, in a repository', 'regular_agent': 'A non-coding agent - reading, checking, drafting',
-              'mine': "Your own list - no agent starts", 'next': 'Read it and move on'}
+# What the word will actually DO, on hover - written where the difference matters.
+CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
+              'regular_agent': 'An agent takes it - triage picks a coding or a non-coding one, and you can change it on the card',
+              'mine': "A task on your own list - no agent starts", 'next': 'Read it and move on'}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
-# `skip` (Tomorrow) on the kinds that come back after the hour: passing one with Next returns it in an
-# hour, and Tomorrow is how to silence it until the morning instead (2026-09-23)
-CHIPS = {'review': ('approve', 'close', 'redraft', 'not_ours', 'skip', 'next'), 'action': ('approve', 'not_ours', 'skip', 'next'),
-         'agent': ('answer_agent', 'stop_agent', 'skip', 'next'), 'meeting': ('prep', 'regular_agent', 'next'),
-         'report': ('rerun', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'done', 'next'), 'task': ('close', 'skip', 'next'),
-         'asked': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
-         'todo': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
-         # ...and an fyi can become WORK for an agent too: "make this job stop emailing me" is a coding job that
-         # arrived as a notification, and the card offered only filing it or putting it on the owner's own list
-         # (the owner, 2026-09-24: "Don't see button to send to agent or coding agent?")
-         'fyi': ('not_ours', 'not_ours_sender', 'block_sender', 'mine', 'regular_agent', 'coder', 'next'),
-         # ...except the handful, which is the one card carrying its own "All read, next" button.
-         # `done` IS that button (it posts verb done) and `next` ends the same way on rows that were
-         # read the moment they were shown - so the owner had three controls for one outcome (2026-09-14:
-         # "we don't need both buttons if they mark them as read. it's doing the same thing"). What is
-         # left here is what the button cannot do: rule on the sender.
-         'fyis': ('not_ours_sender', 'block_sender')}
+# THE SHORT LIST (the owner, 2026-09-25, word by word): eight buttons. Tomorrow and Later are gone - Next on
+# open work brings it back after task_return_minutes, and a date is the task's own Remind me. Redraft, Answer
+# it, Run it again, Prep me, Draft a follow-up and Handled lost their buttons (the words still work typed);
+# the three hand-offs are Make a task (yours) and Send to agent (triage picks which); the sender rules are
+# Not ours's own question. The rest of CHIP_WORDS is what `first` may still promote from a typed decision.
+CHIPS = {'review': ('approve', 'close', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+         'agent': ('stop_agent', 'next'), 'meeting': ('mine', 'regular_agent', 'next'),
+         'report': ('mine', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'next'), 'task': ('close', 'next'),
+         'asked': ('reply', 'mine', 'regular_agent', 'not_ours', 'next'),
+         'todo': ('reply', 'mine', 'regular_agent', 'not_ours', 'next'),
+         # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
+         'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
+         # the handful carries its own "All read, next" button (2026-09-14) and nothing else
+         'fyis': ()}
 # THE CONTRACT is the part code reads: two line shapes and the verb vocabulary behind the card's buttons.
 # How to behave is COUNSEL's - the owner's document, not this file (PW-248/256). Removing prose here
 # removed no safeguard: verbs are validated in parse_decision, targets and freshness in operations.
@@ -121,10 +115,10 @@ DECIDE_RULE = (
     "agent - everything wanted after a colon, in the owner's words; name the repository in brackets only when you are sure: DECIDE: coder[ledger]: fix the login crash), regular_agent (hand it to a non-coding agent - "
     "the job after a colon; when one of the WORKERS fits it, name it in brackets: DECIDE: regular_agent[researcher]: find out "
     "what that project does), mine "
-    "(they will do it themselves), not_ours (file this one), not_ours_remember (file this kind from now on), "
-    "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), archive, close (Mark done - say it that way, never 'close the task'), done (Mark done), later, skip "
-    "(tomorrow), next (move on), remember (a fact to keep - after a colon), setup (building a report, a connection to another system or an automation - a walk-through with the "
-    "assistant, the request after a colon; never a to-do or a reminder, which is a new task for the owner), setting (a switch for the owner to approve), split (two jobs in one arrival), stop_agent (end "
+    "(a task on their own list - they will do it themselves), not_ours (file this one), "
+    "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), close (Mark done - say it that way, never 'close the task'), done (Mark done), next "
+    "(move on), remember (a fact to keep - after a colon), setup (building a report, a connection to another system or an automation - a walk-through with the "
+    "assistant, the request after a colon; never a to-do or a reminder, which is a new task for the owner), split (two jobs in one arrival), stop_agent (end "
     "the running agent), answer_agent (the answer for the parked agent - after a colon), rerun (run the report again), "
     "forward (send it on - to whom after a colon), clear (clear these from the pipe), confirm (their yes to the card "
     "already waiting on it - only when one is), cancel (their no to it). A decision about a DIFFERENT item than "
@@ -471,6 +465,7 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     m = _DECIDE.search(text or '')
     if not m: return (text or '').strip(), None
     verb = m.group(1).lower()
+    verb = {'archive': 'not_ours'}.get(verb, verb)     # Archive it retired into Not ours, its twin (2026-09-25)
     if verb not in VERBS or verb == 'none': return text[:m.start()].strip(), None
     d = {'verb': verb, 'text': (m.group(3) or '').strip()}
     if m.group(2): d['as'] = m.group(2).strip().lower()   # the worker it goes to - checked against the roster, never trusted
@@ -595,7 +590,7 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     does it, instead of a sentence that promised something nothing carried out (the owner, 2026-09-07:
     "It says x, does something else")."""
     if not item: return []
-    verbs = list(CHIPS.get(item.get('kind')) or ('next',))
+    verbs = list(CHIPS[item['kind']] if item.get('kind') in CHIPS else ('next',))    # the handful's () is deliberate
     if first and first in CHIP_WORDS and first != 'next':
         verbs = [first] + [v for v in verbs if v != first]
     out = []
@@ -605,11 +600,16 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         if v == 'prep' and not item.get('event'): continue
         if v == 'followup' and not (item.get('idea') or (item.get('action') or {}).get('mid')): continue
         if v != 'next' and cannot(item, v, store): continue
+        # Reply on a finished agent is for the one it left without a draft - never a pull request's, where
+        # nobody is owed an answer (the owner, 2026-09-25)
+        if v == 'reply' and item.get('kind') == 'agentdone' and str(item.get('channel') or '').lower() == 'github': continue
         # ONE WORD for the one close (the owner, 2026-09-24: "mark done everywhere as the word") - it was "Close the
         # task", "Close without sending" and "Mark task done" for the same act; only the hint says a draft stays unsent
         if v == 'close' and (item.get('kind') == 'review' or item.get('reply_pending')):
             out.append({'verb': v, 'label': 'Mark done',
                         'hint': 'Marks the task done without sending the draft, and ends any live agent session.'})
+        # an agent's proposal runs an action rather than sending a reply, so the word says that
+        elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': 'Run it'})
         else:
             out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
     return out
@@ -1536,6 +1536,12 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # THE APP ITSELF, BY NAME (appfacts). The model says "the AR report"; the id is ours to find, and a
     # name that finds nothing never proposes - the answer lists what exists, so the next words can aim.
     named, tk = '', operations.KINDS[kind][0]
+    if tk == 'task' and kind == 'task.defer':
+        # the task named (TQ-0123) or the one on the table - never its mail's id, which `target` below falls to first
+        ref = re.search(r'(\d+)', str(params.pop('ref', '') or ''))
+        t = int(ref.group(1)) if ref else it.get('tid')
+        if not t or not store.get_task(t): raise CallMiss('Name the task (TQ-0123), or open it first - nothing was put away.')
+        params['target'], named = t, task_ref(t)
     if tk in ('source', 'connector', 'setting', 'script'):
         from . import appfacts
         def _miss(say_): raise CallMiss(say_)         # the model's to fix (say), never passed on as it stands
@@ -1574,17 +1580,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
 
 
 def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, actor: str) -> dict:
-    """The two decisions that are already a REVIEW for the owner's yes rather than a proposal card: a switch
-    (proposals.py puts it on the task, nothing changes until approved) and a hand-off to a person (a draft,
-    sent only on approval)."""
+    """A hand-off to a person: already a REVIEW for the owner's yes rather than a proposal card (a draft, sent
+    only on approval). A switch used to come here too, as a canned sentence; settings are the setting.set tool."""
     rec = lambda body, card=None: record_related(store, tid, item0, 'assistant', body, card)
-    if words['verb'] == 'setting':
-        # a setting is changed by NAME now (setting.set - validated against the schema, undo in the
-        # receipt); a bare "change a setting" with no name gets the road, not a guess at a switch
-        say_ = ('Name the setting and the value - "auto-drafts off", "poll every 5 minutes" - and I change it; '
-                'the receipt carries the undo.')              # never the look-up's own syntax: that is the model's
-        rec(say_)
-        return {'say': say_, 'options': [], 'decision': None}
     if words['verb'] == 'forward':
         try: out = forward_item(store, item0 or {}, words.get('who') or '', words.get('text') or '', actor)
         except Exception as e:
@@ -1969,6 +1967,35 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': len(p['items']) - 1}
 
 
+# THE CARD'S OWN QUESTION (the owner, 2026-09-25): one button, and the card asks the one thing that differs. Not
+# ours asks how far - just this once, triage learns the sender, or a hard rule in Settings (Ignore this sender and
+# Block them were two more buttons for that). Send to agent asks which agent - triage's pick is the one proposed.
+# Picking another answer re-proposes through the same road (/api/concierge/propose), so nothing runs until confirmed.
+ALTS = {'not_ours': (('not_ours', 'Just this once'), ('not_ours_sender', 'From now on - triage learns this sender'),
+                     ('block_sender', 'A rule in Settings - it never reaches triage')),
+        'agent': (('coder', 'A coding agent'), ('regular_agent', 'A non-coding agent'))}
+ALT_OF = {v: k for k, vs in ALTS.items() for v, _ in vs}
+
+
+def alts_for(store, item: dict | None, verb: str) -> list:
+    """The answers the card offers to its own question - each one this item can actually carry."""
+    group = ALT_OF.get(verb)
+    if not group or not (item or {}).get('key'): return []
+    out = [{'verb': v, 'label': l, 'current': v == verb} for v, l in ALTS[group] if v == verb or not cannot(item, v, store)]
+    return out if len(out) > 1 else []
+
+
+def triage_agent(store, item: dict) -> str:
+    """Send to agent goes where triage would send it: a coding agent when the task (or the message's verdict)
+    is coding work, a non-coding one otherwise. The card shows the pick, and the other is one click away."""
+    t = store.get_task(item['tid']) if item.get('tid') else None
+    kind = str((t or {}).get('Kind') or '')
+    if not kind and item.get('mid'):
+        try: kind = str(operations.verdict_of_message(store, store.get_message(item['mid']) or {})[0] or '')
+        except Exception: kind = ''
+    return 'coder' if kind == 'coding' else 'regular_agent'
+
+
 # What the owner may decide about the thing on the table, as PROPOSALS (PW-123): verb -> (operation kind,
 # the button's label, whether confirming it settles the item on the table). Nothing here runs on the words;
 # the confirmed proposal runs through server._run_operation, the same handler every entry point uses.
@@ -2196,10 +2223,10 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
             'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'say_card': say_card, 'note': note.strip(),
             # a hand-off in words with no doubt left in it - one worker, one checkout - starts without a card
-            'clear': clear, 'repo_choices': choices}
+            'clear': clear, 'repo_choices': choices, 'alts': alts_for(store, it, verb) if not elsewhere else []}
 
 
-def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False) -> dict:
+def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False, exact: bool = False) -> dict:
     """A card's own button on ONE entry (PW-151): the same proposal the words would make, without the interpreter -
     the target is explicit. From a card it never settles what is on the table and the entry's siblings are not
     touched; from the chips under the composer (`table`) the entry IS the table, so a plain verb runs at once and
@@ -2207,8 +2234,10 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     if verb not in PROPOSALS: raise ValueError(f'{verb} is not something a card proposes')
     item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
     if not item: raise ValueError('that one is not in the pipe any more')
-    # kind routes the task (2026-08-30): a general task goes to a regular agent, whatever the chip is called
-    if verb == 'coder' and item.get('tid') and (store.get_task(item['tid']) or {}).get('Kind') == 'general': verb = 'regular_agent'
+    # kind routes the task (2026-08-30): the Send to agent BUTTON goes where triage would send it (2026-09-25); a
+    # coding agent asked for by name still goes to the regular agent when the task is general work
+    if verb == 'regular_agent' and not text and not exact: verb = triage_agent(store, item)     # exact: the card's own answer
+    elif verb == 'coder' and item.get('tid') and (store.get_task(item['tid']) or {}).get('Kind') == 'general': verb = 'regular_agent'
     tid = general.dock_task(store, actor)[0]['TaskId']
     why = cannot(item, verb, store)
     if why: raise ValueError(why)
@@ -2445,6 +2474,7 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
     if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
+    if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"Remind me: {p.get('until')}"
     return label[0].upper() + label[1:] if label else kind
 
 
@@ -2479,6 +2509,8 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."
     if kind == 'report.delete': return f" {o.get('title') or 'It'} is deleted."
     if kind == 'setting.set': return f" {o.get('said') or ''}"
+    if kind == 'task.defer': return (f" Away until {o['when']} - it is under Upcoming in Tasks, and back on your rail that morning."
+                                     if o.get('remindAt') else ' It is back on your rail now.')
     if kind == 'connection.test': return f" {o.get('name') or 'It'} {'answered' if o.get('ok') else 'did not answer'}: {str(o.get('detail') or '')[:300]}"
     if kind in ('connection.pause', 'connection.resume'): return f" {o.get('name') or 'It'} is {'on' if o.get('active') else 'off'}."
     if kind == 'script.start': return f" Starting: {o.get('script')}."
@@ -2732,7 +2764,6 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     # a switch is already a proposal on the task (proposals.py); a hand-off to a person is a DRAFT for approval
-    if decision and verb == 'setting': return _carry_out(store, tid, text, {**decision, 'said': text}, item, actor)
     if decision and verb == 'forward' and item:
         who = (decision.get('text') or '').split(':')[0].strip()
         return _carry_out(store, tid, text, {'verb': 'forward', 'text': decision.get('text') or '', 'who': who, 'said': text}, item, actor)

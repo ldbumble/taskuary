@@ -77,7 +77,7 @@ def test_the_shipped_document_carries_the_deciding_rules_the_code_used_to():
     text = (Path(concierge.__file__).parent / 'templates' / 'counsel.md').read_text(encoding='utf-8')
     body = counsel.sections(text)[counsel.DECIDING_HEAD]
     # 2026-09-24: research is a hand-off to a regular agent, never a set-up (it used to be sent to setup)
-    for phrase in ('Research is never a set-up', 'just this once | this kind from now on | everything from this sender',
+    for phrase in ('Research is never a set-up', 'just this once | from now on | a rule in Settings', 'task.defer',
                    'Never ask for a password', 'Never answer a correction by moving on', 'Stopping an agent is not closing a task'):
         assert phrase in body, phrase
     assert '<!-- counsel:deciding -->' in text

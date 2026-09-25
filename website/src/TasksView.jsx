@@ -7,6 +7,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
+import RemindMe from "./RemindMe.jsx";
 import BlockIcon from "@mui/icons-material/Block";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
@@ -20,7 +21,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { progressLine } from "./checklist.js";
 import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
-import { completionTransition, cutAway, filterForSelectedState } from "./taskFilter.js";
+import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
@@ -69,18 +70,21 @@ const statusLabel = (s) => String(s || "").replace(/_/g, " ");
 // the pills wear the same colours as the chips on the rows they hold: "in progress" in the
 // slate-blue brand chrome next to a sage "agent working" chip read as two different states
 const ST_C = Object.fromEntries(TASK_STATES.map((s) => [s.key, s.c]));
+// three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and everything.
+// Done went to make room - a finished task is under all.
 const STATE_FILTERS = [
-  { key: "", label: "all" },
   { key: "live", label: "in progress", c: ST_C.working },
-  { key: "done", label: "done", c: ST_C.done },
+  { key: "upcoming", label: "upcoming", c: ST_C.queued },
+  { key: "", label: "all" },
 ];
 // "today" as the person reading the list means it - the server's clock, in local terms
 const isToday = (s) => !!s && asUtc(String(s)).toDateString() === new Date().toDateString();
 const touchedToday = (t) => isToday(t.ClosedAt) || isToday(t.UpdatedAt) || isToday(t.CreatedAt);
 // everything still on somebody's plate - yours or an agent's. Dropped is neither, and only
 // ever shows under "all".
-const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key)
-                                             : stateOf(t).key === key);
+const bucketOf = (t) => (remindWaiting(t) ? "upcoming" : stateOf(t).key);
+const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key) && !remindWaiting(t)
+                                             : bucketOf(t) === key);
 const PRIORITIES = ["low", "normal", "high", "urgent"];
 // what a task IS decides which machinery works it: coding gets a repo session, a reply
 // gets the responder and the review queue, general gets the visual conversation. Keep the
@@ -525,7 +529,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // "in progress 4 · done 2" (the owner, 2026-09-22: "that doesn't add up?").
   // ...and a task the work rail shows, or showed you today, is never history, whatever day it closed (the owner, 2026-09-24)
   const keep = (x) => !!sent || x.OnWorkToday || !cutAway(stateOf(x).key, touchedToday(x), older);
-  const shown = bucket.filter(keep);
+  // upcoming reads as a calendar: soonest first
+  const shown = bucket.filter(keep).sort((a, b) => (filter === "upcoming" && !sent ? String(a.RemindAt).localeCompare(String(b.RemindAt)) : 0));
   const nOlder = bucket.length - shown.length;
   // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says
   // the list is broken, not cut. Each pill counts what clicking it would SHOW, by the same rule.
@@ -542,7 +547,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (!active || !selected || !tasks || search || !filter) return;
     const row = tasks.find((x) => x.TaskId === selected);
     if (!row) return;
-    const key = stateOf(row).key;
+    const key = bucketOf(row);
     const was = seenState.current;
     seenState.current = { id: selected, key };
     if (was.id === selected && was.key === key) return;   // nothing moved
@@ -579,6 +584,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       return;
     }
     onSelect(transition.next);
+    loadTasks(); onChanged?.();
+  };
+  // Remind me: put away until a day, the list moves on with it - into Upcoming, or back into In progress
+  // ...and like Mark done, putting it away means you are finished looking at it for now: stay on the work, next row
+  const reminded = (out) => {
+    if (out?.remindAt && filter === "live") {
+      const tr = completionTransition((tasks || []).filter((x) => inBucket(x, "live")).map((x) => x.TaskId), selected, "upcoming");
+      seenState.current = tr.seen; onSelect(tr.next);
+    }
     loadTasks(); onChanged?.();
   };
   // The desktop page is a master/detail workspace. Opening it with a populated list but no
@@ -981,7 +995,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     {task.Title}
                   </Typography>
                   <Typography data-tq-task-age="" sx={{ color: FAINT, fontSize: 10.5, whiteSpace: "nowrap", flexShrink: 0 }}>
-                    {timeAgo(task.CreatedAt)}
+                    {remindWaiting(task) ? `back ${remindDay(task.RemindAt)}` : timeAgo(task.CreatedAt)}
                   </Typography>
                 </Box>
                 {/* the identity line. WHO works it stays on every row - the split that decides whether
@@ -1083,6 +1097,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
+                      <RemindMe task={t} compact onDone={reminded} />
                       <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
                         <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
                           <ForwardToInboxIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -1137,6 +1152,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                               <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                                 <BlockIcon sx={{ fontSize: 16 }} /></IconButton>
                             </Tooltip>
+                            <RemindMe task={t} compact onDone={reminded} />
                             <Divider orientation="vertical" flexItem sx={{ mx: 0.25, my: 0.5, borderColor: BORDER }} />
                             <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
                               <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
@@ -1165,6 +1181,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
                           title="Delete it and teach triage why — the sender keeps writing to you."
                           onClick={() => setConfirmNAT(true)}>Not a task</Button>
+                        <RemindMe task={t} sx={barBtn} onDone={reminded} />
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
                         <Button size="small" variant="outlined" sx={barBtn}
                           startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}

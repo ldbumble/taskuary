@@ -1,14 +1,25 @@
 // Keep the master list and detail pane telling the same story. A task can finish while its
 // detail is open; leaving the selected pill on "in progress" makes the accurate Done header
 // look like a second, conflicting status. Explicit "all" and search views remain untouched.
+// `stateKey` is the task's BUCKET: "upcoming" while a Remind me date holds it, its state otherwise. There is no
+// Done pill any more (the owner, 2026-09-25: in progress / upcoming / all) - a finished task lives under all.
 export const filterForSelectedState = (filter, stateKey) => {
-  if (filter === "live" && ["done", "dropped"].includes(stateKey)) {
-    return stateKey === "done" ? "done" : "";
-  }
-  if (filter === "done" && stateKey !== "done") {
-    return ["done", "dropped"].includes(stateKey) ? "" : "live";
-  }
+  const over = ["done", "dropped"].includes(stateKey);
+  if (filter === "live" && (over || stateKey === "upcoming")) return over ? "" : "upcoming";
+  if (filter === "upcoming" && stateKey !== "upcoming") return over ? "" : "live";
   return filter;
+};
+
+// REMIND ME (2026-09-25): an open task put away until a day is Upcoming until that morning. The server writes
+// the day as local 'YYYY-MM-DD 07:00:00', so the comparison is against local time in the same shape.
+const pad = (n) => String(n).padStart(2, "0");
+export const localStamp = (d = new Date()) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+export const remindWaiting = (t, now = localStamp()) =>
+  !!t?.RemindAt && !["done", "dropped"].includes(t.Status) && String(t.RemindAt) > now;
+export const remindDay = (at) => {
+  const [y, m, d] = String(at || "").slice(0, 10).split("-").map(Number);
+  return y ? new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : "";
 };
 
 // Closing the detail on the right advances through the work list on the left. Keep this tiny and

@@ -6,10 +6,19 @@ import { RepoPicker } from "./RepoPicker.jsx";
 // The confirmation box (PW-123): what will happen, on what, with which parameters - and one specifically
 // labelled button that submits the structured proposal. Cancel leaves everything where it is. A card
 // read back from history carries no version, so it shows what was proposed and offers nothing.
-export default function ProposalCard({ p, onConfirm, onCancel, onPreview }) {
+export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview }) {
   const [peek, setPeek] = useState(null);
-  const [repo, setRepo] = useState(p?.params?.repo || "");
+  // THE CARD'S OWN QUESTION (2026-09-25): Not ours asks how far, Send to agent asks which agent. Another answer
+  // is a new proposal from the same road, shown in place - nothing runs until the confirm button.
+  const [p, setP] = useState(given);
+  const [repo, setRepo] = useState(given?.params?.repo || "");
   if (!p) return null;
+  const pick = async (verb) => {
+    try {
+      const { data } = await api.post("/api/concierge/propose", { verb, key: p.key, table: !!p.settles, exact: true });
+      setP(data); setRepo(data?.params?.repo || ""); setPeek(null);
+    } catch (e) { setPeek({ error: e?.response?.data?.detail || e?.message || "that answer is not available here", pick: true }); }
+  };
   const d = describe(p);
   // A CHECKOUT NOBODY NAMED IS CHOSEN HERE, before Start: the dropdown holds every repository, the words' best
   // guess preselected, and Start waits until one is chosen. The card used to say "you pick it when it starts" and
@@ -45,6 +54,14 @@ export default function ProposalCard({ p, onConfirm, onCancel, onPreview }) {
           {rows.map(([k, v]) => <div key={k}><span style={{ fontWeight: 600 }}>{k}:</span> {String(v)}</div>)}
         </div>
       )}
+      {open && !!p.alts?.length && (
+        <div className="tq-alts" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {p.alts.map((a) => (
+            <button key={a.verb} type="button" className={`tq-chip${a.current ? " primary" : ""}`} aria-pressed={!!a.current}
+              onClick={() => !a.current && pick(a.verb)}>{a.label}</button>
+          ))}
+        </div>
+      )}
       {picking && open && (
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "#6b6459", marginTop: 6 }}>
           <span style={{ fontWeight: 600 }}>repository:</span>
@@ -57,7 +74,7 @@ export default function ProposalCard({ p, onConfirm, onCancel, onPreview }) {
       )}
       {peek && !peek.busy && (
         <div style={{ fontSize: 11.5, color: "#55697a", marginTop: 6, whiteSpace: "pre-wrap" }}>
-          {peek.error ? `Dry run: ${peek.error}` : `Dry run - ${peek.headline || ""}\n${peek.summary || ""}`}
+          {peek.error ? (peek.pick ? peek.error : `Dry run: ${peek.error}`) : `Dry run - ${peek.headline || ""}\n${peek.summary || ""}`}
         </div>
       )}
       {p.status === "done" && p.outcome?.link && <div style={{ marginTop: 6 }}><a href={p.outcome.link} style={{ fontSize: 12, color: "#55697a" }}>Open it</a></div>}

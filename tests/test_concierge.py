@@ -986,9 +986,19 @@ class FyiHandOffTests(unittest.TestCase):
         item = {'kind': 'fyi', 'lane': 'fyi', 'mid': mid, 'key': f'msg:{mid}', 'title': 'Nightly job - 0 created, 1 NOT created'}
         with mock.patch.object(concierge, 'no_agent', return_value=''):
             verbs = [c['verb'] for c in concierge.chips_for(s, item)]
-            self.assertIn('regular_agent', verbs); self.assertIn('coder', verbs)
+            # ONE button now, Send to agent (2026-09-25): the card's own question picks coding or not
+            self.assertIn('regular_agent', verbs); self.assertNotIn('coder', verbs)
             dock = general.dock_task(s, 'owner')[0]['TaskId']
             prop = concierge.propose_for(s, dock, {'verb': 'coder', 'text': 'stop it emailing on every run'}, item,
                                          'send this to the coding agent')
         self.assertEqual((prop['kind'], prop['target']), ('task.create_from_message', mid))
         self.assertEqual(prop['params']['kind'], 'coding')
+        self.assertEqual([(x['verb'], x['current']) for x in prop['alts']], [('coder', True), ('regular_agent', False)])
+
+    def test_send_to_agent_goes_where_triage_would_send_it(self):
+        s = store()
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        self.assertEqual(concierge.triage_agent(s, {'tid': t}), 'coder')
+        s.update_task(t, {'Kind': 'general'}, 'o')
+        self.assertEqual(concierge.triage_agent(s, {'tid': t}), 'regular_agent')

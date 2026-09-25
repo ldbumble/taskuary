@@ -75,7 +75,7 @@ class ResearchIsAWalkThroughTests(unittest.TestCase):
     def _proposed(self, said, verb):
         s = MemoryStore(); s.upsert_agent('coder', 'coding', 'cli', '{}')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            return s, concierge.say(s, said, llm=lambda *a, **k: f'On it.\nDECIDE: {verb}: {said}')
+            return s, concierge.say(s, said, llm=lambda *a, **k: 'On it.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {'text': said}}))
 
     def test_research_routes_to_the_regular_agent_not_the_coding_agent(self):
         """Research is work to hand off, but it has no repository or system to change. The brain names

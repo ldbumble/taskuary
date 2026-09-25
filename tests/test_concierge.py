@@ -30,8 +30,8 @@ def _verb(d):
 
 
 def decided(s, text, verb, key=None, arg=None, on=None):
-    """The model named the decision: the DECIDE line is the contract, the words are the owner's (PW-121)."""
-    line = f"Ok.\nDECIDE: {verb}" + (f": {arg}" if arg else '') + (f" ON: {on}" if on else '')
+    """The model named the decision: its CALL line is the contract, the words are the owner's (PW-121)."""
+    line = 'Ok.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {k: v for k, v in (('text', arg), ('on', on)) if v}})
     return concierge.say(s, text, key=key, llm=lambda *a, **k: line)
 
 
@@ -149,7 +149,7 @@ class TurnTests(unittest.TestCase):
         seen = {}
         def model(system, user, **kw):
             seen['user'] = user
-            return 'A regular agent, then.\nDECIDE: regular_agent: do a deep dive on the ECC harness'
+            return 'A regular agent, then.\nCALL: {"kind": "regular_agent", "params": {"text": "do a deep dive on the ECC harness"}}'
         out = concierge.say(s, 'okay send it', llm=model)
         self.assertIn('CONVERSATION SO FAR', seen['user']); self.assertIn('ECC harness', seen['user'])   # the model has what was offered
         p = out['proposal']
@@ -231,20 +231,22 @@ class TurnTests(unittest.TestCase):
         with self.assertRaises(ValueError): concierge.say(s, '   ')
 
     def test_main_assistant_can_publish_a_developed_idea_to_the_hub(self):
+        """The Hub is a tool like any other (2026-09-25): no envelope taught every turn, a card the owner confirms."""
         s = store()
-        payload = {'earned': True,
-                   'why_earned': 'We compared three recurring failure patterns and worked through the operating tradeoffs.',
-                   'topic': 'customer-launch', 'kind': 'new_idea',
-                   'title': 'Make launch dry-runs reversible by default',
-                   'body': 'A reversible dry-run exposes ownership gaps before dates are promised.'}
+        params = {'why_earned': 'We compared three recurring failure patterns and worked through the operating tradeoffs.',
+                  'topic': 'customer-launch', 'kind': 'new_idea', 'title': 'Make launch dry-runs reversible by default',
+                  'body': 'A reversible dry-run exposes ownership gaps before dates are promised.'}
         seen = {}
         def fake(system, user, **kw):
-            seen['system'], seen['user'] = system, user
-            return 'I put the developed idea in the Hub.\n<TASKUARY-HUB>' + json.dumps(payload) + '</TASKUARY-HUB>'
+            seen['system'] = system
+            return 'Saving that to the Hub.\n' + 'CALL: ' + json.dumps({'kind': 'hub.publish', 'params': params})
         out = concierge.say(s, 'Put that launch idea in the Hub', llm=fake)
-        self.assertEqual(out['say'], 'I put the developed idea in the Hub.')
-        self.assertIn('company Hub', seen['system'])
-        self.assertNotIn('TASKUARY-HUB', concierge.history(s, general.dock_task(s)[0]['TaskId'])[-1]['text'])
+        self.assertIn('hub.publish', seen['system']); self.assertNotIn('TASKUARY-HUB', seen['system'])
+        self.assertEqual(out['proposal']['kind'], 'hub.publish')
+        self.assertEqual(s.lore_posts(), [])                                   # nothing until the click
+        with mock.patch.object(server, 'store', s):
+            r = TestClient(server.app).post(f"/api/operations/{out['proposal']['id']}/execute", json={'version': out['proposal']['version']})
+        self.assertEqual(r.status_code, 200, r.text[:200])
         self.assertEqual([(p['Title'], p['Kind'], p['Author']) for p in s.lore_posts()],
                          [('Make launch dry-runs reversible by default', 'new_idea', 'assistant')])
 
@@ -265,23 +267,23 @@ class DecisionTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'Dana wants the file.')
-        out = concierge.say(s, "it's not my issue, let them sort it out", key=f'review:{r}', llm=lambda sy, u, **k: "Not ours, then.\nDECIDE: not_ours")
+        out = concierge.say(s, "it's not my issue, let them sort it out", key=f'review:{r}', llm=lambda sy, u, **k: "Not ours, then.\nCALL: {\"kind\": \"not_ours\", \"params\": {}}")
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['label']), ('message.file', m, 'File it'))
         self.assertEqual(s.get_message(m)['Status'], 'routed')                              # nothing filed on the words
         self.assertIn('confirm below', out['say'])
         # a reply request drafts at once and sends nothing (PW-126): the words ride into the draft
         out = concierge.say(s, 'tell her the file is with the coder, Friday', key=f'review:{r}',
-                            llm=lambda sy, u, **k: "I'll draft that.\nDECIDE: reply: the file is with the coder, Friday")
+                            llm=lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"the file is with the coder, Friday\"}}")
         self.assertEqual(_verb(out['decision']), ('reply', 'the file is with the coder, Friday')); self.assertIsNone(out.get('proposal'))
-        told = lambda sy, u, **k: "I'll draft that.\nDECIDE: reply: mention the Friday delivery"
+        told = lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"mention the Friday delivery\"}}"
         out = concierge.say(s, 'can you mention the Friday delivery in the response', key=f'review:{r}', llm=told)
         self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'mention the Friday delivery'})
         # a remark is not a decision
         out = concierge.say(s, 'who is Dana again?', key=f'review:{r}', llm=lambda *a, **k: 'Dana is the vendor contact on the export.')
         self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal'))
         # ...and nothing on the table means nothing to decide - the words move the WALK instead
-        out = concierge.say(s, 'done', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nDECIDE: done')
+        out = concierge.say(s, 'done', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nCALL: {"kind": "done", "params": {}}')
         self.assertIsNone(out.get('decision'))
         self.assertIn('still wait', out['say'])
 
@@ -290,17 +292,17 @@ class DecisionTests(unittest.TestCase):
         "Nothing is on the table" (2026-09-23). With no item, theirs to do is a new task on their list."""
         s = store()
         out = concierge.say(s, 'remind me to renew the Cardinal contract next week', key=None,
-                            llm=lambda *a, **k: 'Noted.\nDECIDE: mine: renew the Cardinal contract next week')
+                            llm=lambda *a, **k: 'Noted.\nCALL: {"kind": "mine", "params": {"text": "renew the Cardinal contract next week"}}')
         p = out['proposal']
         self.assertEqual((p['kind'], p['label'], p['params']['kind']), ('task.create_from_text', 'Put it on my list', 'task'))
         self.assertIn('renew the Cardinal contract', p['params']['text']); self.assertNotIn('Nothing is on the table', out['say'])
 
     def test_the_contract_line_is_parsed_and_the_words_alone_decide_nothing(self):
-        self.assertEqual(concierge.parse_decision('On it.\nDECIDE: coder: find out why the fix did not stick, and add an admin login')[1],
+        self.assertEqual(concierge.parse_decision('On it.\nCALL: {"kind": "coder", "params": {"text": "find out why the fix did not stick, and add an admin login"}}')[1],
                          {'verb': 'coder', 'text': 'find out why the fix did not stick, and add an admin login'})
-        self.assertEqual(concierge.parse_decision('Filing that one.\nDECIDE: not_ours ON: payroll portal outage')[1],
+        self.assertEqual(concierge.parse_decision('Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "payroll portal outage"}}')[1],
                          {'verb': 'not_ours', 'text': '', 'on': 'payroll portal outage'})
-        self.assertEqual(concierge.parse_decision('Sure.\nDECIDE: bogus'), ('Sure.', None))
+        self.assertEqual(concierge.parse_decision('Sure.\nCALL: {"kind": "bogus", "params": {}}'), ('Sure.', None))
         self.assertFalse(hasattr(concierge, 'decide_words'))                                # no phrase table (PW-121)
         s = store(); t, m, r = drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'Dana wants the file.')
@@ -549,7 +551,7 @@ class ThreadTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         out = concierge.say(s, 'can you ask assistant to look into that server and what the file looks like?', key=f'review:{r}',
-                            llm=lambda *a, **k: 'On it.\nDECIDE: coder: look into that server and what the file looks like')
+                            llm=lambda *a, **k: 'On it.\nCALL: {"kind": "coder", "params": {"text": "look into that server and what the file looks like"}}')
         p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['params']['kind']), ('task.create_from_message', m, 'coding'))
         self.assertIn('server', p['params']['instructions'])
@@ -790,7 +792,7 @@ class ClosingTests(unittest.TestCase):
         key = f'review:{r}'
         # the model itself said "move on" - which is the one answer a correction may not get
         out = concierge.say(s, "that's not a fail, it says all clear?", key=key,
-                            llm=lambda *a, **k: 'Fair enough - the run says all clear.\nDECIDE: next')
+                            llm=lambda *a, **k: 'Fair enough - the run says all clear.\nCALL: {"kind": "next", "params": {}}')
         self.assertIsNone(out['decision'])
         self.assertNotEqual(out['say'].strip(), 'Next.')
         self.assertIn('all clear', out['say'])

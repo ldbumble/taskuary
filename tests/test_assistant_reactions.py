@@ -98,8 +98,8 @@ def session(tid, **kw):
 
 
 def decide(s, text, verb, key=None, live=(), text_arg=None, on=None):
-    """The model read the owner's words and named a verb - the DECIDE line, scripted (PW-121)."""
-    return say(s, text, key=key, live=live, model=f"Ok.\nDECIDE: {verb}" + (f": {text_arg}" if text_arg else '') + (f" ON: {on}" if on else ''))
+    """The model read the owner's words and named a decision - its CALL line, scripted (PW-121; one line since 2026-09-25)."""
+    return say(s, text, key=key, live=live, model='Ok.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {k: v for k, v in (('text', text_arg), ('on', on)) if v}}))
 
 
 def run(s, p, live=(), version=None):
@@ -456,7 +456,7 @@ class ResponseTests(unittest.TestCase):
         date is the task's own Remind me. A DECIDE line naming either is read as no decision at all."""
         for verb in ('later', 'skip', 'setting', 'not_ours_remember'):
             self.assertNotIn(verb, concierge.VERBS)
-        self.assertIsNone(concierge.parse_decision('Pushed.' + chr(10) + 'DECIDE: later')[1])
+        self.assertIsNone(concierge.parse_decision('Pushed.' + chr(10) + 'CALL: {"kind": "later", "params": {}}')[1])
 
     def test_reply_carries_the_gist_into_the_draft_at_once_and_sends_nothing(self):
         s, tid, mid, item = self._asked()
@@ -635,7 +635,7 @@ class ResponseTests(unittest.TestCase):
     def test_a_correction_is_taken_not_shrugged_off(self):
         s, tid, mid, item = self._asked()
         out = say(s, "that's not a fail, it says all clear?", key=item['key'],
-                  model='Fair enough - the run says all clear.' + chr(10) + 'DECIDE: next')
+                  model='Fair enough - the run says all clear.' + chr(10) + 'CALL: {"kind": "next", "params": {}}')
         self.assertIsNone(out['decision'])
         self.assertIn('all clear', out['say'])
 
@@ -937,12 +937,12 @@ class WalkFromWordsTests(unittest.TestCase):
             self.assertIn('Nothing is on the table', out['say'], words)
 
     def test_an_answer_it_looked_up_survives_a_stray_decision_on_the_end(self):
-        """"What happened with TQ-0731" was read and answered, then "DECIDE: reply" - and the owner got
+        """"What happened with TQ-0731" was read and answered, then "CALL: {\"kind\": \"reply\", \"params\": {}}" - and the owner got
         "Nothing is on the table" instead of the answer (the 2026-09-24 audit)."""
         s = self._three()
         tid = s.create_task({'Title': 'Update fails on a DLL', 'Kind': 'coding', 'Status': 'done'}, 'o')
         turns = iter([f'CALL: {{"kind": "task.read", "params": {{"ref": "TQ-{tid:04d}"}}}}',
-                      'The update failed on a DLL; the agent drafted a reply.\nDECIDE: reply: tell them where it stands'])
+                      'The update failed on a DLL; the agent drafted a reply.\nCALL: {"kind": "reply", "params": {"text": "tell them where it stands"}}'])
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, f'what happened with TQ-{tid:04d}?', llm=lambda *a, **k: next(turns))
         self.assertEqual(out['say'], 'The update failed on a DLL; the agent drafted a reply.')
@@ -1417,7 +1417,7 @@ class SettingProposalTests(unittest.TestCase):
     def test_a_switch_is_never_a_verb_only_the_tool(self):
         """The `setting` verb answered with a canned sentence and changed nothing (retired 2026-09-25): a setting is
         the setting.set tool, and a DECIDE line naming the old verb is no decision."""
-        self.assertIsNone(concierge.parse_decision('Sure.' + chr(10) + 'DECIDE: setting')[1])
+        self.assertIsNone(concierge.parse_decision('Sure.' + chr(10) + 'CALL: {"kind": "setting", "params": {}}')[1])
 
     def test_a_number_the_owner_says_out_loud_is_the_value_and_the_receipt_carries_the_undo(self):
         s = store()
@@ -1716,7 +1716,7 @@ class InlineVerbTests(unittest.TestCase):
         s, tid, mid, item = ResponseTests()._asked()
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.surface(s, item['key'],
-                                    llm=lambda *a, **k: 'Craig wants the export fixed.\nDECIDE: regular_agent')
+                                    llm=lambda *a, **k: 'Craig wants the export fixed.\nCALL: {"kind": "regular_agent", "params": {}}')
         self.assertNotIn('DECIDE', out['say'])                              # the marker never reaches the screen
         self.assertEqual(out['say'], 'Craig wants the export fixed.')
         self.assertEqual(out['chips'][0]['verb'], 'regular_agent')          # what it said it would do is the button
@@ -1757,7 +1757,7 @@ class InlineVerbTests(unittest.TestCase):
         self.assertEqual([c['verb'] for c in opened['chips']], ['next'])          # the opening line starts it
         self.assertEqual([c['verb'] for c in opened['card']['chips']], ['next'])  # ...and a reload keeps it
 
-        out = say(s, 'close it', model='Ok.\nDECIDE: close')                     # a verb with nothing on the table
+        out = say(s, 'close it', model='Ok.\nCALL: {"kind": "close", "params": {}}')                     # a verb with nothing on the table
         self.assertIn('Nothing is on the table', out['say'])
         self.assertEqual([c['verb'] for c in out['chips']], ['next'])
 

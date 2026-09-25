@@ -1,3 +1,4 @@
+import json
 """COUNSEL loading must preserve the complete editable instructions."""
 import re
 from pathlib import Path
@@ -5,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import concierge
+from taskuary import concierge, toolcatalog
 from taskuary.store import MemoryStore
 
 
@@ -56,7 +57,9 @@ def test_the_chat_prompt_is_the_document_then_the_machine_contract_and_nothing_e
     system = concierge._system(st)
     assert system.startswith('# Mine')
     assert 'Speak like a pirate.' in system
-    assert 'DECIDE: <verb>' in system and 'OPTIONS: first choice | second choice' in system
+    # one line (2026-09-25): CALL, or OPTIONS - taught once, in the tool index the turn appends; no DECIDE anywhere
+    assert 'WHERE YOU ARE' in system and 'DECIDE' not in system
+    assert 'CALL: {"kind": "<tool>"' in toolcatalog.block() and 'OPTIONS' in toolcatalog.block()
     for phrase in BEHAVIOUR:
         assert phrase not in concierge.CONTRACT, f'behavioural prose still hardcoded: {phrase}'
         assert phrase not in system, f'behaviour reached the prompt from somewhere other than the document: {phrase}'
@@ -68,7 +71,7 @@ def test_the_chat_knows_who_the_owner_is_from_soul_and_the_contract_still_comes_
     st.save_doc('soul', '# SOUL.md\n\n## Repository map\n- **northwind/ledger**: the finance ledger\n', 'owner')
     system = concierge._system(st)
     assert system.startswith('# Mine')
-    assert system.index('Speak plainly.') < system.index('**northwind/ledger**: the finance ledger') < system.index('THE CONTRACT')
+    assert system.index('Speak plainly.') < system.index('**northwind/ledger**: the finance ledger') < system.index('WHERE YOU ARE')
 
 
 def test_the_shipped_document_carries_the_deciding_rules_the_code_used_to():
@@ -86,10 +89,11 @@ def test_the_shipped_document_carries_the_deciding_rules_the_code_used_to():
 def test_the_contract_still_parses_every_verb_and_refuses_the_rest():
     for verb in concierge.VERBS:
         if verb == 'none': continue
-        assert verb in concierge.CONTRACT, f'{verb} is a button the model must be able to name'
-        assert concierge.parse_decision(f'Fine.\nDECIDE: {verb}')[1] == {'verb': verb, 'text': ''}
-    assert concierge.parse_decision('Fine.\nDECIDE: launch_missiles')[1] is None
-    assert concierge.parse_decision('Fine.\nDECIDE: not_ours ON: payroll portal outage')[1] == {'verb': 'not_ours', 'text': '', 'on': 'payroll portal outage'}
+        # the decisions are tools in the index now (2026-09-25), taught once with every other tool
+        assert verb in toolcatalog.DECISIONS and verb in toolcatalog.block(), f'{verb} is a button the model must be able to name'
+        assert concierge.parse_decision('Fine.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {}}))[1] == {'verb': verb, 'text': ''}
+    assert concierge.parse_decision('Fine.\nCALL: {"kind": "launch_missiles", "params": {}}')[1] is None
+    assert concierge.parse_decision('Fine.\nCALL: {"kind": "not_ours", "params": {"on": "payroll portal outage"}}')[1] == {'verb': 'not_ours', 'text': '', 'on': 'payroll portal outage'}
 
 
 def test_editing_the_document_changes_the_loaded_prompt_and_the_backend_still_refuses_bad_actions():
@@ -100,7 +104,7 @@ def test_editing_the_document_changes_the_loaded_prompt_and_the_backend_still_re
     system = concierge._system(st)
     assert 'Speak like a butler.' in system and 'pirate' not in system
     # the machine contract is the only thing code adds, and it is not behaviour
-    assert system.count('THE CONTRACT (code reads your answer)') == 1
+    assert system.count('WHERE YOU ARE') == 1
     # a malformed decision is no decision, whatever the document says
-    assert concierge.parse_decision('Aye.\nDECIDE: plunder')[1] is None
+    assert concierge.parse_decision('Aye.\nCALL: {"kind": "plunder", "params": {}}')[1] is None
     assert concierge.parse_decision('Aye.\nDECIDE:')[1] is None

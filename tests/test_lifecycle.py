@@ -50,7 +50,7 @@ class LifecycleTests(unittest.TestCase):
         #    word of the ask, and only the click on its button starts the agent (PW-123/124)
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             said = concierge.say(s, 'send it to the coding agent and find out why the old fix did not stick', key=f'msg:{m}',
-                                 llm=lambda *a, **k: 'On it.\nDECIDE: coder: find out why the old fix did not stick')
+                                 llm=lambda *a, **k: 'On it.\nCALL: {"kind": "coder", "params": {"text": "find out why the old fix did not stick"}}')
         self.assertIsNone(said['decision']); prop = said['proposal']
         self.assertEqual((prop['kind'], prop['target'], prop['params']['kind']), ('task.create_from_message', m, 'coding'))
         self.assertIn('old fix did not stick', prop['params']['instructions'])
@@ -143,7 +143,7 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(nxt['item']['rid'], r)
             self.assertEqual(c.get('/api/funnel/pile?force=1').json()['items'][0]['surfaced'], True)      # on the table, still in the pipe
             # the words are read by the model and come back as a proposal; the click sends (PW-123/126)
-            with mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Sending it.\nDECIDE: approve'):
+            with mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Sending it.\nCALL: {"kind": "approve", "params": {}}'):
                 said = c.post('/api/concierge/say', json={'text': 'looks good, send it', 'key': f'review:{r}'}).json()
             self.assertIsNone(said['decision']); prop = said['proposal']
             self.assertEqual((prop['kind'], prop['target'], prop['label']), ('review.approve', r, 'Send the reply'))

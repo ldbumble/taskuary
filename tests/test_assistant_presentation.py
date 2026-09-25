@@ -180,7 +180,7 @@ class CounselIntroductionTests(unittest.TestCase):
         self.assertFalse(concierge.INTRO_AI)
         with quiet(): said = concierge.surface(s, llm=model)
         self.assertTrue(said['say'].startswith('Craig at the vendor says'))
-        self.assertIn('I am Taskuary', seen['system']); self.assertIn('THE CONTRACT', seen['system'])   # COUNSEL, then the contract code reads
+        self.assertIn('I am Taskuary', seen['system']); self.assertIn('WHERE YOU ARE', seen['system'])   # COUNSEL, then where the voice is
         self.assertNotIn('THREE BEATS', seen['user']); self.assertNotIn('name the button', seen['user'])
         self.assertIn('Introduce the item on the table', seen['user'])
         self.assertIn('what they wrote:', seen['user'])                                             # code supplies the verified context

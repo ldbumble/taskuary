@@ -67,7 +67,7 @@ class ChipVerbsTests(unittest.TestCase):
     def test_memory_and_the_other_verbs_the_words_reach(self):
         """remember / archive - offered by the words, not the chips (split is the task.split tool since 2026-09-25)."""
         rows = []
-        for verb, text_arg in (('remember', 'Erin handles payroll'), ('archive', None)):
+        for verb, text_arg in (('remember', 'Erin handles payroll'),):      # archive retired into not_ours (2026-09-25)
             s, item = self._table()
             with mock.patch.object(terminal, 'live_sessions', return_value=[]):
                 concierge.surface(s, item['key'], llm=None)

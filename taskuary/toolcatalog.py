@@ -13,6 +13,7 @@ a description rather than one row.
 Nothing here executes. A CALL becomes a proposal exactly as a verb does; the owner's confirmation is
 still what runs it (PW-123/124), and the AUTO verbs are still the only things that go straight through.
 """
+import json
 from . import operations
 
 # What each operation is FOR, in the owner's terms. Kinds absent from here are internal roads the chat
@@ -61,6 +62,10 @@ PURPOSE = {
                                  'a coding task asks which repository when it is not clear; `ref`'),
     'agent.continue':           "pick up the agent's own last session on a task where it left off - `ref`",
     'review.reject':            'reject the draft reply waiting on a task - nothing is sent, the task stays open; `ref` names the task',
+    'hub.publish':              ('save to the company Hub - `title`: one durable claim, `body`: why it matters and what to do, `topic`, '
+                                 '`kind`: new_idea | technical_solve | howto | gotcha | decision | system | people, `why_earned`. Only a '
+                                 'reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, '
+                                 'a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it'),
     'pipe.clear':               'clear a SET of items from the pipe at once - takes `select` (below); read, never deleted',
     'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`',
     # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
@@ -144,48 +149,146 @@ def selector(store=None) -> str:
 
 
 def block(store=None) -> str:
-    """The catalogue as the model sees it: what it can READ, what it can DO, then the selector."""
-    lines = ['WHAT YOU CAN LOOK UP (these run at once and change nothing - use them before you guess,',
-             'and before you say you do not know. They do not move what is on the table.)']
-    for kind, purpose in READS.items():
-        lines.append(f'  {kind} - {purpose}')
-    lines += ['', 'WHAT YOU CAN ASK TO HAPPEN (each becomes a card the owner confirms - nothing runs on its own)']
-    for kind, (target, required, _correction) in operations.KINDS.items():
-        purpose = PURPOSE.get(kind)
-        if not purpose: continue
-        asks = [r for r in required if r not in CONTEXT_FILLED]
-        need = f" needs {', '.join(asks)}" if asks else ''
-        lines.append(f'  {kind} (on a {target}){need} - {purpose}')
-    lines.append('')
-    lines.append(selector(store))
-    lines.append('')
-    lines.append(
-        'To ask for one, end your answer with a single line:\n'
-        '  CALL: {"kind": "<one of the above>", "params": {...}}\n'
-        'The item on the table is the target unless you say otherwise; for a SET put the selector in\n'
-        'params.select. Nothing runs on a CALL - it becomes a card the owner confirms, exactly like a\n'
-        'DECIDE. DECIDE takes only the verbs the contract lists (reply, approve, not_ours, close, next...);\n'
-        'every kind in the list above - task.update, task.check, task.reopen and the rest - is a CALL, even\n'
-        'for the item on the table: CALL: {"kind": "task.update", "params": {"priority": "urgent"}}. A task\n'
-        'the owner names goes in params.ref ("TQ-0123"). Never both in one answer, and never invent a kind.'
-        '\n\nWHICH ONE, in this order:\n'
-        '  1. the owner means one of the ACTION WORDS under your line - do that. It is what the\n'
-        '     buttons run, and it is instant.\n'
-        '  2. they want detail, history or a summary of a task or a message - LOOK IT UP first and\n'
-        '     answer with what you read. Never say you cannot see something you could have read,\n'
-        '     and search the period THEY mean: six months ago means days: 200, not the last week.\n'
-        '  3. they want something DONE and it says what - propose it now. A reminder or a to-do they\n'
-        '     will do themselves is task.create_from_text kind task, with the day in the text; a\n'
-        '     setting changes with setting.set on the key a look-up found (settings.list, setting.read);\n'
-        '     a report is report.create; a system is connection.create; work for an agent is\n'
-        '     task.create_from_text kind general or coding. task.setup only for a set-up that needs\n'
-        '     digging before anything can be configured - never for a plain reminder.\n'
-        '  4. it is not clear which - LOOK first (the setting, the report, the task it might mean);\n'
-        '     then, if two different things still fit, ASK one short question naming both. A CALL\n'
-        '     is only a card the owner confirms, so a clear ask gets the card, not a question about\n'
-        '     details the card lets them change. A question about this app itself - its settings,\n'
-        '     reports, connections, agents - is answered from these look-ups, never handed to an agent.')
+    """How the model acts, then WHERE THINGS ARE, then the tools in buckets - progressive disclosure (the owner,
+    2026-09-25: "tell the assistant where it can find things with examples, then tools disclosed in buckets, then
+    individual tools. It should be an exhaustive list to figure out everything but it doesn't need that up front").
+    Every tool is reachable (tools.list per bucket, tools.describe per tool); only the index rides every turn."""
+    lines = [
+        'HOW YOU ACT (code reads your last line)',
+        'Answer in plain words. To look something up or to do anything, end with ONE line:',
+        '  CALL: {"kind": "<tool>", "params": {...}}',
+        'A look-up runs at once and its answer comes back to you. Anything that changes something becomes a card the',
+        'owner confirms - a few that can be undone run at once, with the undo on the receipt. When two different',
+        'things fit and you cannot tell which, ask one short question and end with OPTIONS: first | second instead.',
+        'Never both, never a tool that is not listed. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
+        'the item on the table is the target. A decision about a DIFFERENT item than the one on the table puts the',
+        'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
+        '',
+        'WHERE THINGS ARE - look before you guess, and before you say you do not know or offer to look:',
+    ]
+    for said, kind, params in WHERE:
+        lines.append(f'  {said} -> CALL: {{"kind": "{kind}", "params": {json.dumps(params)}}}')
+    lines += ['', 'TOOLS, IN BUCKETS. CALL tools.list with {"bucket": "<name>"} to see each tool in a bucket and what it needs,',
+              'or tools.describe with {"kind": "<tool>"}. When you already know a tool and what it needs, CALL it directly.']
+    for name, what, kinds in BUCKETS:
+        lines.append(f'  {name} - {what}: {", ".join(signature(k) for k in kinds)}')
+    lines += ['', selector(store), '',
+        'WHICH ONE, in this order:',
+        '  1. the owner means one of the action words under your line - do that (bucket table).',
+        '  2. they want detail, history or a summary - LOOK IT UP and answer with what you read. Search the period',
+        '     THEY mean: six months ago means days: 200, not the last week.',
+        '  3. they want something DONE and it says what - CALL it now; the card is their confirmation. A reminder or',
+        '     a to-do they will do themselves is task.create_from_text kind task; a task that exists is never a new',
+        '     one - change it with the task bucket.',
+        '  4. it is not clear which - LOOK first; then, if two different things still fit, ASK one short question',
+        '     naming both. A question about this app itself - its settings, reports, connections, agents - is',
+        '     answered from the look-ups, never handed to an agent.']
     return '\n'.join(lines)
+
+
+# THE DECISIONS about the item on the table, as tools like any other (2026-09-25). The model named tools on
+# DECIDE lines and verbs on CALL lines; there is one line now, and concierge turns a CALL to one of these into
+# the decision road the card's buttons take. Each takes `on` for an item other than the one on the table.
+DECISIONS = {
+    'reply':           "write a reply to the sender - `text`: the gist, in the owner's words. Nothing is sent",
+    'approve':         'send the drafted reply as it stands',
+    'redraft':         'write the draft again - `text`: the change',
+    'mine':            "make it a task on the owner's own list - no agent",
+    'regular_agent':   'send it to a non-coding agent - `text`: the job; `as`: a profile from agents.list, only when one fits',
+    'coder':           ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
+                        'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick'),
+    'not_ours':        'file it, just this once - its card asks whether from now on, or as a rule',
+    'not_ours_sender': 'file everything from this sender from now on - their mail still arrives and stays readable',
+    'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule',
+    'close':           'Mark done - the task behind the item is finished',
+    'done':            'the owner handled it - Mark done on a task; on an idea, a report or an fyi it is read and settled',
+    'next':            'move on to the next thing',
+    'answer_agent':    'answer the agent waiting on the owner - `text`',
+    'stop_agent':      "save and end the agent's session on the item",
+    'rerun':           'run the report on the table again',
+    'remember':        'keep a fact - `text`',
+    'setup':           'build a report, a connection to another system or an automation - `text`: the request. Never a to-do',
+    'clear':           'clear these from the pipe - `text`: which',
+    'confirm':         "the owner's yes to the card already waiting - only when one is",
+    'cancel':          "the owner's no to it",
+}
+
+# WHERE THINGS ARE: the owner's question, and the look-up that answers it - an example CALL each.
+WHERE = (
+    ('what is waiting on the owner', 'pipe.list', {}),
+    ("a task's story - its messages, notes, agent and draft", 'task.read', {'ref': 'TQ-0123'}),
+    ('mail or chat about something, however old', 'timeline.search', {'contains': 'invoice', 'days': 60}),
+    ('one message in full', 'message.read', {'mid': 4321}),
+    ('a person - how often they write, their open tasks', 'sender.read', {'who': 'Erin'}),
+    ('open work', 'tasks.list', {'contains': 'export'}),
+    ('how something is done here - a policy, a system, a site', 'knowledge.search', {'query': 'PO approval limit'}),
+    ('how Taskuary itself works', 'docs.search', {'query': 'remind me'}),
+    ('reports and workflows', 'reports.list', {}),
+    ('a setting', 'setting.read', {'label': 'auto-drafts'}),
+    ('connections', 'connections.list', {}),
+    ('agents, profiles and which brain does what', 'agents.list', {}),
+    ('the repositories a coding agent can work in', 'repos.list', {}),
+    ("the owner's meetings", 'calendar.read', {'from': 'tomorrow'}),
+    ('what is failing, or failed', 'errors.list', {}),
+    ('what you remember about the owner', 'memory.list', {}),
+)
+
+# THE BUCKETS. Every tool is in one (a test holds it to that), so the index is exhaustive though no tool's
+# detail rides the turn.
+BUCKETS = (
+    ('table', 'decide about the item on the table', tuple(DECISIONS)),
+    ('task', 'change any task - the one on the table or one named with ref',
+     ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
+      'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'review.approve', 'review.reject')),
+    ('agents', 'start, continue, answer or stop the agent on a task, and teach where work belongs',
+     ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember')),
+    ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'task.setup')),
+    ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'item.settle', 'message.file', 'message.archive',
+                                                            'preference.exclude_sender', 'preference.sender_rule')),
+    ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
+                                          'report.reach', 'report.edit', 'report.delete')),
+    ('app', 'settings, connections, scripts and kept facts', ('setting.set', 'connection.create', 'connection.test', 'connection.pause',
+                                                             'connection.resume', 'script.start', 'memory.remember', 'hub.publish')),
+)
+
+
+# what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
+HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?', 'coder': 'text, as?',
+         'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'clear': 'text', 'task.handoff': 'who, note?',
+         'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?', 'task.defer': 'until'}
+
+
+def signature(kind: str) -> str:
+    """`task.handoff(who, note?)` - the name and what it needs, so a call does not guess its parameter names."""
+    if kind in HINTS: return f'{kind}({HINTS[kind]})'
+    if kind in operations.KINDS:
+        asks = [r for r in operations.KINDS[kind][1] if r not in CONTEXT_FILLED]
+        if asks: return f"{kind}({', '.join(asks)})"
+    return kind
+
+
+def describe(kind: str) -> str:
+    """One tool in full: what it does, what it needs, and whether it waits for the owner's yes."""
+    if kind in DECISIONS:
+        return f'{kind} (bucket table) - {DECISIONS[kind]}. Takes `on` for another item than the one on the table.'
+    if kind in READS: return f'{kind} (a look-up - runs at once, changes nothing) - {READS[kind]}'
+    if kind in PURPOSE:
+        target, required, _ = operations.KINDS[kind]
+        asks = [r for r in required if r not in CONTEXT_FILLED]
+        runs = 'runs at once, with an undo' if kind in INSTANT else 'a card the owner confirms'
+        return f"{kind} (on a {target}; {runs}){' - needs ' + ', '.join(asks) if asks else ''} - {PURPOSE[kind]}"
+    return f'There is no tool {kind!r}. The buckets: ' + ', '.join(n for n, _, _ in BUCKETS) + ', look.'
+
+
+def bucket_list(name: str) -> str:
+    """tools.list: each tool in one bucket, described - or the buckets, when the name is not one."""
+    name = str(name or '').strip().lower()
+    if name in ('look', 'looks', 'look-ups', 'lookups', 'read', 'reads'):
+        return 'LOOK-UPS (run at once, change nothing):\n' + '\n'.join(f'  {describe(k)}' for k in READS)
+    hit = next((b for b in BUCKETS if b[0] == name), None)
+    if not hit:
+        return 'The buckets: ' + '; '.join(f'{n} ({w})' for n, w, _ in BUCKETS) + '; look (every look-up).'
+    return f'{hit[0].upper()} - {hit[1]}:\n' + '\n'.join(f'  {describe(k)}' for k in hit[2])
 
 
 # READS. Everything above CHANGES something and waits for the owner's yes; these change nothing, so
@@ -233,6 +336,9 @@ READS = {
     'connections.list': 'every live connection: name, type, whether it has a key, last sync, last error - and how many catalogue cards are off',
     'connection.read':  'one connection in full. `name`: part of its name (or `connector_id`)',
     'agents.list':      'the agents and profiles, and which brain answers which job',
+    'repos.list':       'the repositories a coding agent can work in, and what each one is for',
+    'tools.list':       'every tool in one `bucket` (table, task, agents, new, pipe, reports, app, look) - what each does and needs',
+    'tools.describe':   'one tool in full - `kind`: its name',
     # WHAT WE KNOW. "What is our PO limit", "who handles AP": the answer offered to "look it up in the
     # Hub" and then searched the mail, because no read reached the Hub, the documents or the kept facts.
     'knowledge.search': ('what the company knows - the Hub, the indexed documents and the facts the owner asked to keep. '
@@ -257,7 +363,8 @@ def valid(kind: str, params: dict) -> str:
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'message.read': ('mid', 'id'),
                 'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (),
-                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': ()}[kind]
+                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': (),
+                'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',)}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
         return ''
@@ -270,3 +377,52 @@ def valid(kind: str, params: dict) -> str:
                and not any(str((params or {}).get(a) or '').strip() for a in alt.get(p, ()))]
     if missing: return f"{kind} needs {', '.join(missing)}"
     return ''
+
+
+# ── the docs site's page (docs/site/assistant-tools.md), written from this file so it cannot drift ─────────────
+# `python -m taskuary.toolcatalog` rewrites it; tests/test_task_tools.py fails when the page and the catalogue differ.
+DOCS_PAGE = 'docs/site/assistant-tools.md'
+# the decisions that do not wait for a card (concierge.AUTO, and the two that only ever write a draft)
+DECISION_RUNS = {'next': 'at once', 'close': 'at once', 'done': 'at once', 'stop_agent': 'at once', 'confirm': 'at once',
+                 'cancel': 'at once', 'reply': 'at once - a draft, nothing sent', 'redraft': 'at once - a draft, nothing sent'}
+
+
+def _cell(s: str) -> str: return str(s).replace('|', '/').replace('`', '').replace('\n', ' ').strip()
+
+
+def docs_markdown() -> str:
+    """Two tables, what the Assistant sees: the buckets (every turn) and every tool in full (on demand)."""
+    lines = ['<!-- Written by `python -m taskuary.toolcatalog` from taskuary/toolcatalog.py - edit the catalogue, not this page. -->',
+             '',
+             'What the Assistant is told about its tools. It gets the **summary** on every turn: the buckets, and',
+             'each tool\'s name and what it needs. It asks for the **detail** of a bucket (`tools.list`) or a tool',
+             '(`tools.describe`) only when a turn needs it. Everything it can change becomes a card you confirm,',
+             'except the few that can be undone, which run at once with an undo on the receipt.',
+             '',
+             '## The summary, sent every turn',
+             '',
+             '| Bucket | What it is for | Tools, and what each needs |',
+             '|---|---|---|']
+    for name, what, kinds in BUCKETS:
+        lines.append(f'| **{name}** | {_cell(what)} | {_cell(", ".join(signature(k) for k in kinds))} |')
+    lines.append(f'| **look** | look-ups - they run at once and change nothing | {_cell(", ".join(READS))} |')
+    lines += ['', 'A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.',
+              '', '## Every tool, in detail', '',
+              '| Tool | Bucket | Needs | What it does | Runs |',
+              '|---|---|---|---|---|']
+    for name, _what, kinds in BUCKETS:
+        for k in kinds:
+            text = DECISIONS.get(k) or PURPOSE.get(k) or ''
+            needs = HINTS.get(k) or ', '.join(r for r in (operations.KINDS.get(k, ('', (), None))[1]) if r not in CONTEXT_FILLED) or '-'
+            runs = DECISION_RUNS.get(k) or ('at once, with an undo' if k in INSTANT else 'you confirm')
+            lines.append(f'| `{k}` | {name} | {_cell(needs)} | {_cell(text)} | {runs} |')
+    for k, text in READS.items():
+        lines.append(f'| `{k}` | look | - | {_cell(text)} | at once |')
+    return '\n'.join(lines) + '\n'
+
+
+if __name__ == '__main__':
+    from pathlib import Path
+    out = Path(__file__).resolve().parent.parent / DOCS_PAGE
+    out.write_text(docs_markdown(), encoding='utf-8', newline='\n')
+    print(f'{DOCS_PAGE}: {len(BUCKETS)} buckets, {sum(len(k) for _, _, k in BUCKETS) + len(READS)} tools')

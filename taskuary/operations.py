@@ -59,6 +59,7 @@ KINDS = {
     'task.clarify':             ('task', ('text',), None),
     'agent.continue':           ('task', (), None),
     'review.reject':            ('review', (), None),
+    'hub.publish':              ('text', ('title', 'body'), None),   # the Assistant's Hub envelope, as a tool (2026-09-25)
     'pipe.clear':               ('pipe', (), None),          # `text` OR `select` - a sentence, or a named set
     'task.setup':               ('text', ('text',), None),
     # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection

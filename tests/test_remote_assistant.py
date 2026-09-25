@@ -265,7 +265,7 @@ class SameWalkTests(unittest.TestCase):
         store, connector = armed_store()
         _t, _m, r = waiting(store)
         concierge.set_current(store, general.dock_task(store)[0]['TaskId'], f'review:{r}')
-        with mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Ok.\nDECIDE: next'), \
+        with mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Ok.\nCALL: {"kind": "next", "params": {}}'), \
              mock.patch.object(concierge, 'surface', return_value={'say': "That's everything for now.",
                                                                    'options': [], 'chips': []}) as nxt, \
              mock.patch.object(messengers, 'wa_send') as send:

@@ -18,7 +18,7 @@ def read(s, kind, **p): return concierge.read_op(s, kind, p)
 
 class LookupTests(unittest.TestCase):
     def test_every_new_read_is_offered_and_validated(self):
-        b = toolcatalog.block()
+        b = toolcatalog.block() + toolcatalog.bucket_list('look')    # reachable: the index, then its bucket (2026-09-25)
         for k in lookups.READ:
             self.assertIn(k, b); self.assertTrue(toolcatalog.is_read(k))
         self.assertTrue(toolcatalog.valid('message.read', {}))

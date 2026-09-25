@@ -22,13 +22,16 @@ class CatalogueTests(unittest.TestCase):
         print(f"\n  catalogue: {len(toolcatalog.PURPOSE)} operations offered of {len(operations.KINDS)} in the registry")
 
     def test_an_invented_operation_is_refused_not_run(self):
-        for bad in ('{"kind": "database.drop", "params": {}}',
-                    '{"kind": "task.set_kind", "params": {}}',      # real, but not the chat's to offer
-                    '{"kind": "memory.remember", "params": {}}',    # real and offered, but missing `note`
-                    '{not json at all}'):
+        for bad in ('{"kind": "database.drop", "params": {}}', '{not json at all}'):
             text, call = concierge.parse_call('Sure.\nCALL: ' + bad)
             self.assertIsNone(call, bad)
             self.assertNotIn('CALL', text)                          # ...and it never prints either
+        # a REAL tool called without what it needs never runs either: it comes back to the model as that tool's
+        # description, to call again in the same turn (2026-09-25)
+        for bad in ('{"kind": "task.set_kind", "params": {}}', '{"kind": "memory.remember", "params": {}}'):
+            text, call = concierge.parse_call('Sure.\nCALL: ' + bad)
+            self.assertEqual(call['kind'], 'tools.describe', bad)
+            self.assertNotIn('CALL', text)
         ok = concierge.parse_call('Sure.\nCALL: {"kind": "memory.remember", "params": {"note": "Erin does payroll"}}')
         self.assertEqual(ok[1]['kind'], 'memory.remember')
         self.assertEqual(ok[0], 'Sure.')
@@ -218,7 +221,7 @@ class ReadsTests(unittest.TestCase):
         return s
 
     def test_reads_are_offered_and_are_not_proposals(self):
-        b = toolcatalog.block()
+        b = toolcatalog.block() + toolcatalog.bucket_list('look')    # reachable: the index, then its bucket (2026-09-25)
         for k in ('task.read', 'timeline.search', 'report.read'):
             self.assertIn(k, b)
             self.assertTrue(toolcatalog.is_read(k))
@@ -227,7 +230,7 @@ class ReadsTests(unittest.TestCase):
         self.assertIn('change nothing', b)
 
     def test_the_setup_roads_are_offered_too(self):
-        b = toolcatalog.block()
+        b = toolcatalog.block() + toolcatalog.bucket_list('look')    # reachable: the index, then its bucket (2026-09-25)
         for k in ('report.create', 'connection.create', 'task.setup'):
             self.assertIn(k, b, f'{k} is reachable but never offered')
             self.assertIn(k, operations.KINDS)
@@ -287,7 +290,7 @@ class ReadsTests(unittest.TestCase):
         def brain(system, user, **kw):
             prompts.append(user)
             if 'last look-up' in user:
-                return 'Nothing here covers it - that needs research.' + chr(10) + 'DECIDE: regular_agent: research the CLI Anything project'
+                return 'Nothing here covers it - that needs research.' + chr(10) + 'CALL: {"kind": "regular_agent", "params": {"text": "research the CLI Anything project"}}'
             return 'CALL: {"kind":"knowledge.search","params":{"query":"CLI Anything"}}'
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'research this GitHub project for me', llm=brain)
@@ -308,7 +311,7 @@ class ReadsTests(unittest.TestCase):
     def test_an_ask_for_a_worker_that_fits_starts_it_at_once(self):
         """The owner, 2026-09-24: "if i ask it to do something especially if we have profile for it it should start
         a general agent" / "start right away if it's clear ... if unclear which profile to choose ... then ask"."""
-        s, out, prop = self._handoff('Research job.' + chr(10) + 'DECIDE: regular_agent[researcher]: find out what the CLI Anything project does')
+        s, out, prop = self._handoff('Research job.' + chr(10) + 'CALL: {"kind": "regular_agent", "params": {"text": "find out what the CLI Anything project does", "as": "researcher"}}')
         self.assertTrue(prop.get('auto'), prop)
         self.assertEqual(prop['params']['profile'], 'researcher')
         self.assertIn('researcher', out['say'])
@@ -317,27 +320,27 @@ class ReadsTests(unittest.TestCase):
         self.assertEqual(s.get_task(t['taskId'])['Assignee'], 'agent:researcher')
 
     def test_a_worker_nobody_named_is_asked_about_not_guessed(self):
-        _s, _out, prop = self._handoff('DECIDE: regular_agent: find out what the CLI Anything project does')
+        _s, _out, prop = self._handoff('CALL: {"kind": "regular_agent", "params": {"text": "find out what the CLI Anything project does"}}')
         self.assertFalse(prop.get('auto'))
         self.assertIsNone((prop.get('params') or {}).get('profile'))
-        _s, _out, prop = self._handoff('DECIDE: regular_agent[astrologer]: find out what it does')    # not on the roster
+        _s, _out, prop = self._handoff('CALL: {"kind": "regular_agent", "params": {"text": "find out what it does", "as": "astrologer"}}')    # not on the roster
         self.assertFalse(prop.get('auto'))
 
     def test_a_coding_ask_starts_when_the_checkout_is_clear_and_asks_when_it_is_not(self):
         soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
                 + '- **northwind/portal**: the expense portal' + chr(10))
         # NAMED - by the model off the map, or in the owner's own words - it starts, in that checkout
-        _s, out, prop = self._handoff('DECIDE: coder[ledger]: fix the login crash in the fan mobile app', soul=soul)
+        _s, out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the fan mobile app", "as": "ledger"}}', soul=soul)
         self.assertTrue(prop.get('auto'))
         self.assertIn('northwind/ledger', out['say'])
-        _s, out, prop = self._handoff('DECIDE: coder: fix the login crash in the ledger app', soul=soul)
+        _s, out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the ledger app"}}', soul=soul)
         self.assertTrue(prop.get('auto'))
         # only MATCHED by the description: a guess, shown on the card for a yes - a weak best match once pointed at
         # a checkout the job was not in
-        _s, _out, prop = self._handoff('DECIDE: coder: fix the login crash in the fan mobile app', soul=soul)
+        _s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the fan mobile app"}}', soul=soul)
         self.assertFalse(prop.get('auto'))
         self.assertEqual(prop['params']['repo'], 'northwind/ledger')
-        _s, _out, prop = self._handoff('DECIDE: coder[nowhere]: tidy up the code', soul=soul)          # not on the map
+        _s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "tidy up the code", "as": "nowhere"}}', soul=soul)          # not on the map
         self.assertFalse(prop.get('auto'))
 
     def test_a_checkout_nobody_named_is_picked_on_the_card_and_the_pick_is_where_it_opens(self):
@@ -346,7 +349,7 @@ class ReadsTests(unittest.TestCase):
         from taskuary import operations
         soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
                 + '- **northwind/portal**: the expense portal' + chr(10))
-        s, _out, prop = self._handoff('DECIDE: coder: tidy up the dashboard code', soul=soul)
+        s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "tidy up the dashboard code"}}', soul=soul)
         self.assertFalse(prop.get('auto'))
         self.assertEqual(set(prop['repo_choices']), {'northwind/ledger', 'northwind/portal'})
         picked = operations.revise(s, prop['id'], {**prop['params'], 'repo': 'northwind/portal'}, 'owner')
@@ -366,14 +369,14 @@ class ReadsTests(unittest.TestCase):
         s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/l', 'northwind/portal': 'C:/x/p'}}))
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload',
-                                llm=lambda system, user, **kw: 'DECIDE: coder: fix the receipt upload')
+                                llm=lambda system, user, **kw: 'CALL: {"kind": "coder", "params": {"text": "fix the receipt upload"}}')
         prop = out.get('proposal') or {}
         self.assertTrue(prop.get('auto'), prop)
         self.assertEqual(prop['params']['repo'], 'northwind/portal')
         self.assertEqual(terminal.repo_named_in(s, 'the portal and the ledger'), '')          # two named: ask
         # ...and the model names a checkout by its FULL name, slash and all - a bracket that could not hold a '/'
         # left the whole DECIDE line unread and printed it to the owner as the reply
-        self.assertEqual(concierge.parse_decision('On it.' + chr(10) + 'DECIDE: coder[northwind/portal]: fix it')[1]['as'], 'northwind/portal')
+        self.assertEqual(concierge.parse_decision('On it.' + chr(10) + 'CALL: {"kind": "coder", "params": {"text": "fix it", "as": "northwind/portal"}}')[1]['as'], 'northwind/portal')
 
     def test_a_brain_that_answers_nothing_never_says_no_ai_is_connected(self):
         s = self._task()
@@ -445,7 +448,7 @@ class AppReadTests(unittest.TestCase):
         return A.store()
 
     def test_every_new_read_is_in_the_catalogue_and_validates(self):
-        b = toolcatalog.block()
+        b = toolcatalog.block() + toolcatalog.bucket_list('look')    # reachable: the index, then its bucket (2026-09-25)
         for k in ('reports.list', 'settings.list', 'setting.read', 'connections.list', 'connection.read', 'agents.list'):
             self.assertTrue(toolcatalog.is_read(k), k); self.assertIn(k, b)
         self.assertEqual(toolcatalog.valid('setting.read', {}), 'setting.read needs key or label')
@@ -498,14 +501,14 @@ class AppReadTests(unittest.TestCase):
         line = concierge._outcome_line('task.create_from_text', {'kind': 'task'}, {'ref': 'TQ-0009', 'title': 'Call Erin'})
         self.assertIn('on your list', line); self.assertNotIn('agent now', line)
 
-    def test_every_general_turn_carries_the_app_state(self):
-        """Asked "run me the AR report" from a chat, the assistant had no list of reports at all. The
-        state block rides the system prompt of the general road - and never the scripts, which reach
-        no model (walk.py)."""
+    def test_the_app_state_is_a_look_up_the_index_points_at_not_a_block_every_turn(self):
+        """Asked "run me the AR report" from a chat, the assistant had no list of reports at all, so the app's
+        state rode every turn. Progressive disclosure (the owner, 2026-09-25): the turn carries where to look,
+        and reports.list answers with the names."""
         s = self._store()
         seen = {}
         def llm(system, user, max_tokens=None): seen['system'] = system; return 'Two reports are set up.'
         concierge.say(s, 'what reports do we have?', llm=llm)
-        self.assertIn('THE APP RIGHT NOW', seen['system'])
-        self.assertIn('Monthly AR Report', seen['system'])
-        self.assertIn('walk me through my tasks', seen['system'])
+        self.assertNotIn('THE APP RIGHT NOW', seen['system'])
+        self.assertIn('"reports.list"', seen['system'])
+        self.assertIn('Monthly AR Report', concierge.read_op(s, 'reports.list', {}))

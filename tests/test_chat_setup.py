@@ -36,9 +36,11 @@ def composer(sort=None, compose=None, seen=None):
     return llm
 
 
-def say(s, text, brain, model='On it.\nDECIDE: setup: '):
+def say(s, text, brain):
+    """The model names the set-up, with the owner's words as its request - its CALL line, scripted."""
+    line = 'On it.\n' + 'CALL: ' + json.dumps({'kind': 'setup', 'params': {'text': text}})
     with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(concierge, '_compose_llm', return_value=brain):
-        return concierge.say(s, text, llm=lambda *a, **k: model + text)
+        return concierge.say(s, text, llm=lambda *a, **k: line)
 
 
 def run(s, p, version=None):
@@ -188,7 +190,7 @@ class ConnectionSetupTests(unittest.TestCase):
         self.assertIn('needs digging', out['say']); self.assertIn('several systems', out['say'])
         self.assertEqual(s.list_tasks(active_only=True), [])                                                # proposed, not opened
         with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(concierge, '_compose_llm', return_value=None):
-            out = concierge.say(s, 'set up a report', llm=lambda *a, **k: 'On it.\nDECIDE: setup: set up a report')
+            out = concierge.say(s, 'set up a report', llm=lambda *a, **k: 'On it.\nCALL: {"kind": "setup", "params": {"text": "set up a report"}}')
         self.assertIsNone(out.get('proposal')); self.assertIn('AI connector', out['say'])
 
 

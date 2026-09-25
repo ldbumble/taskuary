@@ -71,7 +71,7 @@ class ProposalTests(unittest.TestCase):
     def test_a_decision_is_a_proposal_the_owner_confirms_not_an_action_the_words_took(self):
         s, tid, mid, item = asked()
         with mock.patch.object(ingest, '_spawn') as spawn:
-            out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nDECIDE: coder')
+            out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['params']['kind'], p['status']), ('task.create_from_message', mid, 'coding', 'proposed'))
         self.assertEqual(p['label'], 'Send to the coding agent'); self.assertIn(f'TQ-{tid:04d}', p['summary'])
@@ -82,7 +82,7 @@ class ProposalTests(unittest.TestCase):
 
     def test_confirming_runs_it_once_and_a_second_click_is_the_same_receipt(self):
         s, tid, mid, item = asked()
-        out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nDECIDE: coder')
+        out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')
         with mock.patch.object(server, 'dispatch_message', return_value={'taskId': tid, 'ref': f'TQ-{tid:04d}', 'dispatch': 'started'}) as dispatch:
             r1 = run(s, out['proposal']); r2 = run(s, out['proposal'])
         self.assertEqual((r1.status_code, r1.json()['status']), (200, 'done'))
@@ -94,7 +94,7 @@ class ProposalTests(unittest.TestCase):
 
     def test_a_proposal_whose_context_moved_is_refused_at_the_click(self):
         s, tid, mid, item = asked()
-        out = say(s, 'file it', key=item['key'], model='Filing it.\nDECIDE: not_ours')
+        out = say(s, 'file it', key=item['key'], model='Filing it.\nCALL: {"kind": "not_ours", "params": {}}')
         arrive(s, subject='Can you fix the export?', body='Never mind - found it.', conv='c:Can you fix the export?', hours=0)
         r = run(s, out['proposal'])
         self.assertEqual(r.status_code, 409); self.assertIn('context', r.json()['detail'])
@@ -102,8 +102,8 @@ class ProposalTests(unittest.TestCase):
 
     def test_a_correction_before_the_click_revises_the_same_proposal(self):
         s, tid, mid, item = asked()
-        first = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nDECIDE: coder')['proposal']
-        second = say(s, 'no - a regular agent, it is just reading', key=item['key'], model='A regular agent then.\nDECIDE: regular_agent')['proposal']
+        first = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')['proposal']
+        second = say(s, 'no - a regular agent, it is just reading', key=item['key'], model='A regular agent then.\nCALL: {"kind": "regular_agent", "params": {}}')['proposal']
         self.assertEqual((second['id'], second['version'], second['params']['kind']), (first['id'], 2, 'general'))
         self.assertEqual(second['label'], 'Send to a regular agent')
         self.assertEqual(run(s, first).status_code, 409)                             # the old confirmation is stale
@@ -111,14 +111,14 @@ class ProposalTests(unittest.TestCase):
 
     def test_cancel_changes_nothing(self):
         s, tid, mid, item = asked()
-        p = say(s, 'close it', key=item['key'], model='Closing.\nDECIDE: close')['proposal']
+        p = say(s, 'close it', key=item['key'], model='Closing.\nCALL: {"kind": "close", "params": {}}')['proposal']
         with mock.patch.object(server, 'store', s):
             self.assertEqual(TestClient(server.app).delete(f"/api/operations/{p['id']}").json()['status'], 'cancelled')
         self.assertEqual(run(s, p).status_code, 409); self.assertEqual(s.get_task(tid)['Status'], 'open')
 
     def test_a_failed_handler_is_reported_and_settles_nothing(self):
         s, tid, mid, item = asked()
-        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nDECIDE: coder')['proposal']
+        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')['proposal']
         with mock.patch.object(server, 'dispatch_message', side_effect=RuntimeError('agent did not start')):
             r = run(s, p)
         self.assertEqual((r.status_code, r.json()['status']), (200, 'error')); self.assertIn('agent did not start', r.json()['error'])
@@ -146,9 +146,9 @@ class InterpretationTests(unittest.TestCase):
         other = arrive(s, subject='Payroll portal is down', body='Nobody can clock in.', who='Elena', email='elena@ours.com', conv='c:outage', hours=0,
                        llm=brain('task', 'general'))
         mine = next(i for i in pile(s) if i.get('mid') == mid)
-        out = say(s, 'not ours, the payroll portal outage is facilities', key=mine['key'], model='Filing that one.\nDECIDE: not_ours ON: payroll portal outage')
+        out = say(s, 'not ours, the payroll portal outage is facilities', key=mine['key'], model='Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "payroll portal outage"}}')
         self.assertEqual(out['proposal']['target'], other['message_id']); self.assertIn('not the one on the table', out['say'])
-        out = say(s, 'not ours, the badge printer contract is legal', key=mine['key'], model='Filing that one.\nDECIDE: not_ours ON: badge printer contract')
+        out = say(s, 'not ours, the badge printer contract is legal', key=mine['key'], model='Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "badge printer contract"}}')
         self.assertIsNone(out.get('proposal')); self.assertIn('nothing has been touched', out['say'].lower())
 
     def test_a_decision_that_names_one_fyi_targets_that_entry_not_the_handful(self):
@@ -158,7 +158,7 @@ class InterpretationTests(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             batch = concierge.surface(s, llm=None)['item']
         self.assertEqual((batch['kind'], len(batch['items'])), ('fyis', 2))
-        out = say(s, 'not ours, the Rebecca one', key=batch['key'], model='Filing that one.\nDECIDE: not_ours ON: Rebecca is back')
+        out = say(s, 'not ours, the Rebecca one', key=batch['key'], model='Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "Rebecca is back"}}')
         p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['settles']), ('message.file', a['message_id'], False))
         self.assertEqual(run(s, p).json()['status'], 'done')
@@ -168,7 +168,7 @@ class InterpretationTests(unittest.TestCase):
 
     def test_next_moves_on_without_marking_closing_or_deferring(self):
         s, tid, mid, item = asked()
-        out = say(s, 'next', key=item['key'], model='Next.\nDECIDE: next')
+        out = say(s, 'next', key=item['key'], model='Next.\nCALL: {"kind": "next", "params": {}}')
         self.assertEqual(out['decision'], {'verb': 'next'}); self.assertIsNone(out.get('proposal'))
         self.assertNotIn(item['key'], {k for k, st in s.funnel_states().items() if st.get('Status') in ('done', 'later', 'skip')})
         self.assertEqual(s.get_task(tid)['Status'], 'open')
@@ -178,7 +178,7 @@ class InterpretationTests(unittest.TestCase):
     def test_a_reply_request_drafts_at_once_and_sends_nothing(self):
         s, tid, mid, item = asked()
         with mock.patch('taskuary.outbound.reply_to_message') as send:
-            out = say(s, 'reply and tell them the export is fixed', key=item['key'], model="I'll draft that.\nDECIDE: reply: tell them the export is fixed")
+            out = say(s, 'reply and tell them the export is fixed', key=item['key'], model="I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"tell them the export is fixed\"}}")
         self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'tell them the export is fixed'}); self.assertIsNone(out.get('proposal'))
         send.assert_not_called()
 
@@ -186,7 +186,7 @@ class InterpretationTests(unittest.TestCase):
 class ExecutionTests(unittest.TestCase):
     def test_done_is_confirmed_then_settles_the_item_and_closes_its_task(self):
         s, tid, mid, item = asked()
-        p = say(s, 'done, I handled it', key=item['key'], model='Done.\nDECIDE: done')['proposal']
+        p = say(s, 'done, I handled it', key=item['key'], model='Done.\nCALL: {"kind": "done", "params": {}}')['proposal']
         self.assertEqual((p['kind'], p['params']['key'], p['label']), ('item.settle', item['key'], 'Mark it handled'))
         self.assertEqual([i['key'] for i in pile(s)], [item['key']])                # nothing moved yet
         self.assertEqual(run(s, p).json()['status'], 'done')
@@ -196,7 +196,7 @@ class ExecutionTests(unittest.TestCase):
         s = store(); out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', llm=brain('reply_only', None))
         rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Attached - sorry for the wait.')
         item = pile(s)[0]
-        p = say(s, 'approve', key=item['key'], model='Sending it.\nDECIDE: approve')['proposal']
+        p = say(s, 'approve', key=item['key'], model='Sending it.\nCALL: {"kind": "approve", "params": {}}')['proposal']
         self.assertEqual((p['kind'], p['target'], p['label']), ('review.approve', rv['ReviewId'], 'Send the reply'))
         self.assertEqual(s.get_review(rv['ReviewId'])['Status'], 'pending')
         with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['craig@vendor.com'], 'cc': []}):
@@ -205,17 +205,17 @@ class ExecutionTests(unittest.TestCase):
 
     def test_remember_and_close_are_proposals_that_do_what_they_say(self):
         s, tid, mid, item = asked()
-        p = say(s, 'remember that Gail signs off on refunds', key=item['key'], model='Noted.\nDECIDE: remember: Gail signs off on refunds')['proposal']
+        p = say(s, 'remember that Gail signs off on refunds', key=item['key'], model='Noted.\nCALL: {"kind": "remember", "params": {"text": "Gail signs off on refunds"}}')['proposal']
         self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Gail signs off on refunds', False))
         self.assertEqual([m['Note'] for m in s.list_memories()], [])
         run(s, p); self.assertIn('Gail signs off on refunds', [m['Note'] for m in s.list_memories()])
-        p = say(s, 'close it', key=item['key'], model='Closing.\nDECIDE: close')['proposal']
+        p = say(s, 'close it', key=item['key'], model='Closing.\nCALL: {"kind": "close", "params": {}}')['proposal']
         self.assertEqual((p['kind'], p['target']), ('task.complete', tid)); self.assertEqual(s.get_task(tid)['Status'], 'open')
         run(s, p); self.assertEqual(s.get_task(tid)['Status'], 'done')
 
     def test_a_hand_off_with_nothing_on_the_table_proposes_a_new_task(self):
         s = store()
-        out = say(s, 'look into why the bulk approve fix did not stick', model='On it.\nDECIDE: coder: look into why the bulk approve fix did not stick')
+        out = say(s, 'look into why the bulk approve fix did not stick', model='On it.\nCALL: {"kind": "coder", "params": {"text": "look into why the bulk approve fix did not stick"}}')
         p = out['proposal']
         self.assertEqual((p['kind'], p['params']['kind']), ('task.create_from_text', 'coding')); self.assertIn('bulk approve', p['params']['text'])
         self.assertEqual(s.list_tasks(active_only=True), [])
@@ -226,7 +226,7 @@ class ExecutionTests(unittest.TestCase):
 
     def test_the_receipt_after_the_click_is_the_fact_in_the_chat(self):
         s, tid, mid, item = asked()
-        p = say(s, 'close it', key=item['key'], model='Closing.\nDECIDE: close')['proposal']
+        p = say(s, 'close it', key=item['key'], model='Closing.\nCALL: {"kind": "close", "params": {}}')['proposal']
         run(s, p)
         from taskuary import general
         dock, _ = general.dock_task(s, 'owner')
@@ -240,7 +240,7 @@ class HandoffTests(unittest.TestCase):
 
     def _proposed(self):
         s, tid, mid, item = asked()
-        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nDECIDE: coder')['proposal']
+        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')['proposal']
         return s, tid, mid, item, p
 
     def test_a_hand_off_that_starts_is_receipted_moving_on_and_the_task_stays_in_unread_as_working(self):

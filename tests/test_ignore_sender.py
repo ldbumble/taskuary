@@ -61,11 +61,10 @@ class IgnoreScopeInstructionTests(unittest.TestCase):
     def test_the_chat_is_told_to_ask_which_ignore_was_meant(self):
         """A bare "ignore it" names the act and not the scope, and scope is the part that lasts.
         The rule to ask lives in COUNSEL now (PW-248/256); the code keeps only the three verbs."""
-        from taskuary import concierge
-        blob = ' '.join(str(getattr(concierge, n)) for n in dir(concierge)
-                        if n.isupper() and isinstance(getattr(concierge, n), str))
+        from taskuary import concierge, toolcatalog
+        # the three are tools in the index the chat is sent (2026-09-25: one format, decisions included)
         for verb in ('not_ours', 'not_ours_sender', 'block_sender'):     # "this kind" retired 2026-09-25
-            self.assertIn(verb, blob, verb)
+            self.assertIn(verb, toolcatalog.block(), verb)
         # a blank store loads the shipped template - prove the rule REACHES the model, not just the file
         system = ' '.join(concierge._system(MemoryStore()).split())
         # ...and the question itself is the Not ours card's now, not a line of options (2026-09-25)

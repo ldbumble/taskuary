@@ -35,7 +35,7 @@ class SetupInChatTests(unittest.TestCase):
              mock.patch.object(terminal, 'live_sessions', return_value=[]):
             t0 = time.perf_counter()
             out = T.say(s, 'set up a report of overdue invoices every morning',
-                        model='I can do that.' + chr(10) + 'DECIDE: setup: a report of overdue invoices every morning')
+                        model='I can do that.' + chr(10) + 'CALL: {"kind": "setup", "params": {"text": "a report of overdue invoices every morning"}}')
             took = round((time.perf_counter() - t0) * 1000)
         p = out.get('proposal')
         self.assertIsNotNone(p, out.get('say'))
@@ -57,7 +57,7 @@ class SetupInChatTests(unittest.TestCase):
         with mock.patch.object(concierge, '_compose_llm', return_value=sorter()), \
              mock.patch.object(compose, 'compose', return_value={'questions': ['Which mailbox?']}), \
              mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            out = T.say(s, 'set up a daily digest', model='Sure.' + chr(10) + 'DECIDE: setup: a daily digest')
+            out = T.say(s, 'set up a daily digest', model='Sure.' + chr(10) + 'CALL: {"kind": "setup", "params": {"text": "a daily digest"}}')
         self.assertIsNone(out.get('proposal'))
         self.assertIn('Before I put it together', out['say'])
         self.assertIn('Which mailbox?', out['say'])
@@ -72,7 +72,7 @@ class SetupInChatTests(unittest.TestCase):
         with mock.patch.object(concierge, '_compose_llm', return_value=sorter()), \
              mock.patch.object(compose, 'compose', return_value={'questions': ['Which repository?', 'What time each morning?']}), \
              mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            out = T.say(s, 'set up a morning report', model='Sure.' + chr(10) + 'DECIDE: setup: a morning report')
+            out = T.say(s, 'set up a morning report', model='Sure.' + chr(10) + 'CALL: {"kind": "setup", "params": {"text": "a morning report"}}')
         lines = out['say'].split(chr(10))
         self.assertIn('1. Which repository?', lines)
         self.assertIn('2. What time each morning?', lines)
@@ -83,7 +83,7 @@ class SetupInChatTests(unittest.TestCase):
         with mock.patch.object(concierge, '_compose_llm', return_value=sorter('investigate')), \
              mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = T.say(s, 'set up something that reconciles the portal against Intacct',
-                        model='Right.' + chr(10) + 'DECIDE: setup: reconcile the portal against Intacct')
+                        model='Right.' + chr(10) + 'CALL: {"kind": "setup", "params": {"text": "reconcile the portal against Intacct"}}')
         say = out.get('say') or ''
         self.assertIn('digging', say.lower())
         self.assertEqual((out.get('proposal') or {}).get('kind'), 'task.setup')
@@ -93,7 +93,7 @@ class SetupInChatTests(unittest.TestCase):
         s = T.store()
         with mock.patch.object(concierge, '_compose_llm', return_value=sorter('connection')), \
              mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            out = T.say(s, 'connect our Slack', model='Ok.' + chr(10) + 'DECIDE: setup: connect Slack')
+            out = T.say(s, 'connect our Slack', model='Ok.' + chr(10) + 'CALL: {"kind": "setup", "params": {"text": "connect Slack"}}')
         p = out.get('proposal') or {}
         blob = ((out.get('say') or '') + json.dumps(p)).lower()
         # a secret VALUE never rides a proposal (PW-196). The word "password" is allowed to appear -

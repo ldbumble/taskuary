@@ -126,23 +126,33 @@ class ToolTests(unittest.TestCase):
         self.assertIsNone(p)
 
 
-class ModelShapeTests(unittest.TestCase):
-    """The shapes the real brain wrote when it chose a task tool (the replay, 2026-09-25): a DECIDE line naming the
-    tool. Each is read as the CALL it means; anything that would not validate is still no action at all."""
-    def test_a_tool_named_on_a_decide_line_is_the_call_it_means(self):
-        for line, want in (('DECIDE: task.update: priority urgent', ('task.update', {'priority': 'urgent'})),
-                           ('DECIDE: task.reopen ON: TQ-0737', ('task.reopen', {'ref': 'TQ-0737'})),
-                           ('DECIDE: task.comment ON: TQ-0736: Erin wants it by Friday', ('task.comment', {'ref': 'TQ-0736', 'text': 'Erin wants it by Friday'})),
-                           ('DECIDE: task.merge ON: TQ-0735: into TQ-0738', ('task.merge', {'ref': 'TQ-0735', 'into': 'TQ-0738'})),
-                           ('DECIDE: task.clarify: which date range they need', ('task.clarify', {'text': 'which date range they need'}))):
-            got = concierge.parse_call('On it.' + chr(10) + line)[1]
-            self.assertEqual((got['kind'], got['params']), want, line)
-
-    def test_a_plain_verb_or_an_unknown_tool_is_not_a_call(self):
-        for line in ('DECIDE: next', 'DECIDE: made.up: 1', 'DECIDE: task.merge'):
+class OneLineTests(unittest.TestCase):
+    """One line (the owner, 2026-09-25: "don't keep decided as fallback - the assistant should only be AI"): the model
+    ends with a CALL, a decision is a tool like any other, and a DECIDE line is read as nothing at all."""
+    def test_a_decide_line_is_never_read_whatever_it_names(self):
+        for line in ('DECIDE: next', 'DECIDE: task.update: priority urgent', 'DECIDE: not_ours ON: payroll portal outage'):
+            self.assertIsNone(concierge.parse_decision('Ok.' + chr(10) + line)[1], line)
             self.assertIsNone(concierge.parse_call('Ok.' + chr(10) + line)[1], line)
 
-    def test_the_card_runs_from_it(self):
-        s, tid, mid, item = table()
-        out = T.say(s, 'make this one urgent', key=item['key'], model='Setting it.' + chr(10) + 'DECIDE: task.update: priority urgent')
-        self.assertEqual((out['proposal']['kind'], out['proposal']['target']), ('task.update', tid))
+    def test_a_decision_and_an_operation_are_the_same_line(self):
+        d = concierge.parse_decision('Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'coder', 'params': {'text': 'fix it', 'as': 'northwind/ledger'}}))[1]
+        self.assertEqual(d, {'verb': 'coder', 'text': 'fix it', 'as': 'northwind/ledger'})
+        c = concierge.parse_call('Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'task.update', 'params': {'priority': 'urgent'}}))[1]
+        self.assertEqual(c, {'kind': 'task.update', 'params': {'priority': 'urgent'}})
+
+    def test_every_tool_is_in_a_bucket_and_described_on_demand(self):
+        every = set(toolcatalog.PURPOSE) | set(toolcatalog.DECISIONS)
+        bucketed = {k for _, _, ks in toolcatalog.BUCKETS for k in ks}
+        self.assertEqual(every - bucketed, set())
+        for k in every | set(toolcatalog.READS):
+            self.assertNotIn('There is no tool', toolcatalog.describe(k), k)
+        self.assertLess(len(toolcatalog.block()), 7000, 'the index rides every turn - keep it an index')
+
+
+class DocsPageTests(unittest.TestCase):
+    def test_the_docs_page_is_the_catalogue_as_it_stands(self):
+        """docs/site/assistant-tools.md is written from toolcatalog (`python -m taskuary.toolcatalog`) - a tool added,
+        renamed or reworded without rewriting it fails here, so the docs never describe tools that are not there."""
+        from pathlib import Path
+        page = (Path(toolcatalog.__file__).resolve().parent.parent / toolcatalog.DOCS_PAGE).read_text(encoding='utf-8')
+        self.assertEqual(page.replace('\r\n', '\n'), toolcatalog.docs_markdown(), 'run: python -m taskuary.toolcatalog')

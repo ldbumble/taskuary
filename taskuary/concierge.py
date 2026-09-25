@@ -32,10 +32,10 @@ from . import operations, workerstate as ws
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
-READ_ROUNDS = 2          # a look-up may lead to one more; never an open-ended crawl
+READ_ROUNDS = 3          # a bucket, then a look-up, then one more - never an open-ended crawl (tools are disclosed on demand)
 LAST_READ = ('That was your last look-up for this turn - there is no other. Answer now with what you have. If nothing '
              'written down here answers it and it needs somebody to go and find out - research, a repository, a website - '
-             'say so in one line and DECIDE the hand-off: regular_agent to research or read, coder for work in a repository.')
+             'say so in one line and CALL the hand-off: regular_agent to research or read, coder for work in a repository.')
 NEWLINE = chr(10)
 # Introducing an item is a FACT - who wrote, what was done, what you need to do - and the pipe knows all
 # three. So 'next' asks no model: it is instant, and it can never describe the wrong item (the owner,
@@ -52,8 +52,6 @@ INTRO_AI = False
 MARK = '<!-- tq:card '
 _MARK = re.compile(r'\s*<!-- tq:card (\{.*?\}) -->\s*$', re.S)
 _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
-# ...with an optional [worker] after the verb: which profile off the roster takes a hand-off (regular_agent[researcher])
-_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?:\s*\[\s*([A-Za-z0-9_./\- ]+?)\s*\])?(?::\s*(.*?))?(?:\s+ON:\s*(.+?))?\s*$', re.I | re.S)
 # A CALL names an operation out of the registry itself (toolcatalog) instead of a verb out of prose.
 # It exists for the targets a verb cannot say: a SET, described rather than listed.
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
@@ -94,36 +92,16 @@ CHIPS = {'review': ('approve', 'close', 'not_ours', 'next'), 'action': ('approve
          'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else
          'fyis': ()}
-# THE CONTRACT is the part code reads: two line shapes and the verb vocabulary behind the card's buttons.
-# How to behave is COUNSEL's - the owner's document, not this file (PW-248/256). Removing prose here
-# removed no safeguard: verbs are validated in parse_decision, targets and freshness in operations.
-CONTRACT_HEAD = (
-    "THE CONTRACT (code reads your answer)\n"
-    "You are speaking to {owner} in the chat on the Assistant tab. When a decision has two to four clear "
-    "choices and no button covers them, end with one final line exactly like: OPTIONS: first choice | second choice. "
-    "Otherwise no options line.\n"
-    "The action words under your line are the owner's buttons and they are already chosen for this item - never "
-    "list them, and never end a line with an offer to do something. When you cannot tell which of them the owner's "
-    "words mean, say which two you are choosing between and ask - one short question, no DECIDE line. When the "
-    "words say what they want, act on them: a proposal is a card they confirm, so acting on a clear ask is not a guess.\n")
-# The verb vocabulary is the machine half and it is the SAME wherever the turn is read: an item settled
-# from the phone is settled on the desk, because both go through parse_decision and the same operations.
-DECIDE_RULE = (
-    "When the owner has DECIDED about an item, end with one final line exactly like DECIDE: <verb> where verb is one of: "
-    "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Ravi it is not owned here), approve (send the "
-    "drafted reply as it stands), redraft (write the draft again - the change after a colon), coder (hand it to the coding "
-    "agent - everything wanted after a colon, in the owner's words; name the repository in brackets only when you are sure: DECIDE: coder[ledger]: fix the login crash), regular_agent (hand it to a non-coding agent - "
-    "the job after a colon; when one of the WORKERS fits it, name it in brackets: DECIDE: regular_agent[researcher]: find out "
-    "what that project does), mine "
-    "(a task on their own list - they will do it themselves), not_ours (file this one), "
-    "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), close (Mark done - say it that way, never 'close the task'), done (Mark done), next "
-    "(move on), remember (a fact to keep - after a colon), setup (building a report, a connection to another system or an automation - a walk-through with the "
-    "assistant, the request after a colon; never a to-do or a reminder, which is a new task for the owner), stop_agent (end "
-    "the running agent), answer_agent (the answer for the parked agent - after a colon), rerun (run the report again), "
-    "clear (clear these from the pipe), confirm (their yes to the card "
-    "already waiting on it - only when one is), cancel (their no to it). A decision about a DIFFERENT item than "
-    "the one on the table ends the DECIDE line with ON: and the words that name it: DECIDE: not_ours ON: payroll portal outage.")
-CONTRACT = CONTRACT_HEAD + DECIDE_RULE
+# THE CONTRACT: where the voice is and what it must not do. The line code reads - CALL, or OPTIONS - is
+# toolcatalog.block's, the one place it is taught (2026-09-25: one format; the decisions are tools like any other).
+# How to behave is COUNSEL's - the owner's document, not this file (PW-248/256).
+CONTRACT = (
+    "WHERE YOU ARE\n"
+    "You are speaking to {owner} in the chat on the Assistant tab. The action words under your line are the owner's "
+    "buttons and they are already chosen for this item - never list them, and never end a line with an offer to do "
+    "something. When you cannot tell which of two things the owner's words mean, say which two and ask - one short "
+    "question, and OPTIONS instead of a CALL. When the words say what they want, act on them: a card is their "
+    "confirmation, so acting on a clear ask is not a guess.\n")
 SYSTEM = CONTRACT      # the old name, for one release
 
 # The same walk, read in a phone chat. There are no cards there and no action words under the line, so
@@ -131,16 +109,15 @@ SYSTEM = CONTRACT      # the old name, for one release
 # for a screen that has nothing else on it. Only the delivery changes: the pipe, the verbs and the
 # proposals are the desk's, so an item settled from the phone is settled everywhere.
 PHONE_CONTRACT = (
-    "THE CONTRACT (code reads your answer)\n"
+    "WHERE YOU ARE\n"
     "You are speaking to {owner} in their private chat on their phone, not at the Taskuary desktop. They "
     "cannot see a card, a button, a draft or a link here - never tell them to click, open, tap or read one "
     "as if it were in front of them. Say the sender, the subject, why it matters and what you would do, in "
     "no more than four short sentences, and never more than one item at a time.\n"
     "The choices are added under your line by code from the item itself. Do not list them, do not invent "
-    "one, and never end a line with an offer to do something. When you cannot tell which of them the "
-    "owner's words mean, say which two you are choosing between and ask - one short question, no DECIDE "
-    "line. When the words say what they want, act on them: a proposal is a card they confirm, so acting on a "
-    "clear ask is not a guess.\n" + DECIDE_RULE)
+    "one, and never end a line with an offer to do something. When you cannot tell which of two things the "
+    "owner's words mean, say which two and ask - one short question, and OPTIONS instead of a CALL. When the "
+    "words say what they want, act on them: a card is their confirmation, so acting on a clear ask is not a guess.\n")
 
 DESK, PHONE = 'desk', 'phone'
 # Where this turn will be READ. Ambient, not an argument: every path into the voice (surface, say, the
@@ -302,7 +279,7 @@ def tools_block(store) -> str:
             "the API refuses them to you. When the owner asks for something doable from this list, DO it and report what came "
             "back - never say you cannot. When it needs a checkout or a long job, say so and name the coding agent. NEVER use your "
             "own task, todo or plan tools, and never create tasks, files or records yourself: a decision of the owner's is carried out by "
-            "Taskuary from your DECIDE line, and you report it only after the receipt says it happened.")
+            "Taskuary from your CALL line, and you report it only after the receipt says it happened.")
 
 
 def _counsel(store) -> str:
@@ -446,60 +423,43 @@ def parse_call(text: str) -> tuple[str, dict | None]:
     """The model's CALL line, off the end of its answer: {'kind', 'params'} or None. Validated against
     operations.KINDS here, so an invented kind never reaches a handler - it is simply not a call."""
     m = _CALL.search(text or '')
-    if not m: return _tool_decided(text)
+    if not m: return (text or '').strip(), None
     from . import toolcatalog
     try: got = json.loads(m.group(1))
     except ValueError:
         logger.info('concierge: a CALL line was not JSON - ignoring it'); return text[:m.start()].strip(), None
     kind, params = str(got.get('kind') or ''), got.get('params') or {}
     if not isinstance(params, dict): params = {}
+    if kind in toolcatalog.DECISIONS: return (text or '').strip(), None     # a decision: parse_decision's
     why = toolcatalog.valid(kind, params)
     if why:
         logger.info(f'concierge: refusing that CALL - {why}')
+        # A REAL TOOL CALLED WRONG IS A DISCLOSURE, not a dead end (2026-09-25): the model picked task.handoff and
+        # guessed `to` for `who`, and the turn quietly did nothing. It is handed the tool's own description as a
+        # look-up and calls again in the same turn - the round budget still bounds it.
+        if kind in toolcatalog.PURPOSE or kind in toolcatalog.READS:
+            return text[:m.start()].strip(), {'kind': 'tools.describe', 'params': {'kind': kind, 'why': why}}
         return text[:m.start()].strip(), None
     return text[:m.start()].strip(), {'kind': kind, 'params': params}
 
 
-# A TOOL NAMED ON A DECIDE LINE. Replaying the owner's words on the real brain (2026-09-25), the model chose the
-# right task tool every time and wrote it as "DECIDE: task.update: priority urgent" or "DECIDE: task.reopen ON:
-# TQ-0737" - a verb the contract does not have, so the whole answer fell through to prose and nothing happened.
-# It is read as the CALL it means, and validated the same way; the model's own words, never the owner's, are parsed.
-_TOOL_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+\.[a-z_]+)(.*?)\s*$', re.I | re.S)
-_TOOL_ARGS = ('priority', 'title', 'assignee', 'kind', 'repo', 'item', 'done', 'text', 'who', 'note', 'into', 'until', 'instructions')
-
-
-def _tool_decided(text: str) -> tuple[str, dict | None]:
-    from . import toolcatalog
-    m = _TOOL_DECIDE.search(text or '')
-    if not m or m.group(1).lower() not in toolcatalog.PURPOSE: return (text or '').strip(), None
-    kind, rest, params = m.group(1).lower(), m.group(2), {}
-    on = re.search(r'\bON:\s*(TQ-?\d+)', rest, re.I)
-    if on: params['ref'], rest = on.group(1), rest[:on.start()] + rest[on.end():]
-    arg = rest.strip().lstrip(':').strip()
-    if arg:
-        head, _, tail = arg.partition(' ')
-        if head.lower().rstrip(':') in _TOOL_ARGS and tail.strip(): params[head.lower().rstrip(':')] = tail.strip()
-        else:
-            need = [p for p in operations.KINDS[kind][1] if p not in toolcatalog.CONTEXT_FILLED]
-            if kind == 'task.update' and arg.lower() in ('low', 'normal', 'high', 'urgent'): params['priority'] = arg.lower()
-            else: params[need[0] if need else 'text'] = arg
-    why = toolcatalog.valid(kind, params)
-    if why:
-        logger.info(f'concierge: a tool named on a DECIDE line would not run - {why}')
-        return (text or '').strip(), None
-    return text[:m.start()].strip(), {'kind': kind, 'params': params}
-
-
 def parse_decision(text: str) -> tuple[str, dict | None]:
-    """The model's DECIDE line, off the end of its answer: {'verb', 'text'} or None."""
-    m = _DECIDE.search(text or '')
+    """A CALL naming one of the decisions (toolcatalog.DECISIONS): {'verb', 'text'[, 'as', 'on']} or None. The
+    decisions are tools like any other (2026-09-25); this is where the one line reaches the decision road the
+    card's buttons take. There is no other line - the DECIDE line and its fallbacks are gone."""
+    from . import toolcatalog
+    m = _CALL.search(text or '')
     if not m: return (text or '').strip(), None
-    verb = m.group(1).lower()
-    verb = {'archive': 'not_ours'}.get(verb, verb)     # Archive it retired into Not ours, its twin (2026-09-25)
-    if verb not in VERBS or verb == 'none': return text[:m.start()].strip(), None
-    d = {'verb': verb, 'text': (m.group(3) or '').strip()}
-    if m.group(2): d['as'] = m.group(2).strip().lower()   # the worker it goes to - checked against the roster, never trusted
-    if m.group(4): d['on'] = m.group(4).strip()          # the decision is about ANOTHER item, named (PW-121)
+    try: got = json.loads(m.group(1))
+    except ValueError: return (text or '').strip(), None
+    verb, p = str(got.get('kind') or '').lower(), got.get('params') or {}
+    # a tool that does not exist at all is no line to show the owner either; an operation is parse_call's
+    if verb not in toolcatalog.DECISIONS and verb not in toolcatalog.PURPOSE and verb not in toolcatalog.READS:
+        return text[:m.start()].strip(), None
+    if verb not in toolcatalog.DECISIONS or verb not in VERBS or not isinstance(p, dict): return (text or '').strip(), None
+    d = {'verb': verb, 'text': str(p.get('text') or '').strip()}
+    if str(p.get('as') or '').strip(): d['as'] = str(p['as']).strip().lower()       # the worker or repository - checked, never trusted
+    if str(p.get('on') or '').strip(): d['on'] = str(p['on']).strip()               # the decision is about ANOTHER item, named (PW-121)
     return text[:m.start()].strip(), d
 
 
@@ -1420,6 +1380,11 @@ def read_op(store, kind: str, params: dict) -> str:
         out = [f"{task_ref(tid)} [{t.get('Kind')} / {t.get('Status')}] {t.get('Title')}",
                f"opened {str(t.get('CreatedAt') or '')[:16]} by {t.get('CreatedBy')}"]
         if t.get('Summary'): out.append(f"the ask: {_cut(t['Summary'], 900)}")
+        # ...and its checklist, numbered the way task.check takes it: read without it, "tick off the first item" was
+        # answered "there's no checklist on this task" (the replay, 2026-09-25)
+        boxes = store.task_checklist(tid)
+        if boxes: out.append('checklist: ' + '; '.join(f"{n}. [{'x' if b.get('done') else ' '}] {b['text']}" for n, b in enumerate(boxes, 1)))
+        if t.get('RemindAt'): out.append(f"put away until {str(t['RemindAt'])[:10]} (Remind me)")
         for msg in (store.list_messages(tid) or [])[:6]:
             out.append(f"  message {str(msg.get('SentAt') or '')[:16]} from {msg.get('FromName') or msg.get('FromEmail')}: "
                        f"{_cut(msg.get('Subject') or '', 120)} - {_cut(msg.get('BodyText') or '', 400)}")
@@ -1475,9 +1440,22 @@ def read_op(store, kind: str, params: dict) -> str:
                 f"{'has a key' if c['has_secret'] else 'no key yet'}, last sync {c['last_sync'][:16] or 'never'}"
                 + (f"{NEWLINE}last error: {c['last_error']}" if c['last_error'] else ''))
     if kind == 'agents.list':
-        from . import appfacts
+        from . import appfacts, agents as hub_agents
+        # ...and the WORKERS a hand-off can name ([researcher]) - they rode every turn as their own block until the
+        # prompt went to progressive disclosure (2026-09-25)
+        roster = hub_agents.roster(store).strip()
         return ('agents: ' + ', '.join(f"{a['name']} ({a['kind']}{'' if a['active'] else ', off'})" for a in appfacts.agents(store))
-                + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store)))
+                + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store))
+                + (NEWLINE + 'profiles a hand-off can name in `as`:' + NEWLINE + roster if roster else ''))
+    if kind == 'repos.list':
+        from . import terminal as term
+        repos = term.repo_map(store)
+        return ('repositories (name one in `as` on a coder hand-off only when sure):' + NEWLINE
+                + NEWLINE.join(f'- {r}: {d}' for r, d in repos.items())) if repos else 'No repositories are set up.'
+    if kind == 'tools.list': return toolcatalog.bucket_list(str(p.get('bucket') or ''))
+    if kind == 'tools.describe':
+        why = f"That CALL did not run - {p['why']}. Here is the tool; CALL it again with what it needs.{NEWLINE}" if p.get('why') else ''
+        return why + toolcatalog.describe(str(p.get('kind') or '').strip())
     if kind == 'knowledge.search': return know(store, str(p.get('query') or ''))
     if kind == 'timeline.search':
         sel = {k: v for k, v in p.items() if k != 'limit'}
@@ -2511,7 +2489,7 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
     if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
-    label = {'task.update': 'Change the task', 'task.set_kind': 'Change what kind of work it is', 'task.set_repo': 'Put it in that repository',
+    label = {'hub.publish': 'Save it to the Hub', 'task.update': 'Change the task', 'task.set_kind': 'Change what kind of work it is', 'task.set_repo': 'Put it in that repository',
              'task.check': 'Tick the checklist item', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
              'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': 'Reopen it',
              'task.not_a_task': 'Delete it - not a task', 'dispatch.prepare': 'Start an agent on it', 'agent.continue': 'Continue the agent',
@@ -2682,36 +2660,22 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None}
     reply, options, decision, call, did_read = '', [], None, None, False
     try:
-        from . import handbook as hub
         # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a
         # project, the model read internal notes on CLI flags and timeouts, and answered in that register (the
         # 2026-09-24 debug). knowledge.search reads the Hub when a question is about how things are done here.
-        from . import toolcatalog, appfacts
-        # THE APP'S OWN STATE rides every turn of the general road (appfacts): what is set up, so
-        # "run the AR report" can name a report and "is Teams connected" is a read, not a guess.
-        # Never a reason for the chat to fall over: a table that cannot be read leaves the block out.
-        try: state = appfacts.state_block(store)
-        except Exception as e:
-            logger.warning(f'concierge: the app state block was left out - {e}'); state = ''
-        # the workers a hand-off can go to - the roster triage reads, so the chat and the inbox name the same people
-        from . import agents as hub_agents
-        workers = hub_agents.roster(store).strip()
-        from . import terminal as term
-        repos = '\n'.join(f'- {r}: {d}' for r, d in term.repo_map(store).items())
-        system = (_system(store, llm) + '\n\n' + toolcatalog.block(store)
-                  + (f'\n\nWORKERS (a regular_agent hand-off names one in brackets when it fits):\n{workers}' if workers else '')
-                  + (f'\n\nREPOSITORIES (a coder hand-off names one in brackets ONLY when you are sure which; '
-                     f'otherwise none):\n{repos}' if repos else '')
-                  + (f'\n\n{state}' if state else '')
-                  + (f'\n\n{hub.ASSISTANT_LINE}' if hub.enabled(store) else ''))
+        from . import toolcatalog
+        # PROGRESSIVE DISCLOSURE (the owner, 2026-09-25): COUNSEL, SOUL, where the voice is, and the tool index. The
+        # workers, the repositories and the app's state rode every turn as blocks; agents.list, repos.list,
+        # reports.list, connections.list and settings.list read them when a turn needs them.
+        # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
+        system = _system(store, llm) + '\n\n' + toolcatalog.block(store)
         raw = str(llm(system,
                       f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}{trouble(store, text)}\n\n"
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
                       + f"The owner says: {text}\nAnswer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
-                      + ('If this is a decision about the item on the table, name it (DECIDE line).' if item else
-                         'If they ask for something to be done, propose it now (CALL or DECIDE) - the card is their confirmation.'),
+                      + ('If this is a decision about the item on the table, CALL it (bucket table).' if item else
+                         'If they ask for something to be done, CALL it now - the card is their confirmation.'),
                       max_tokens=MAX_TOKENS) or '').strip()
-        if hub.enabled(store): raw = hub.publish_assistant_entries(store, tid, raw, 'assistant')
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
         # nobody. The model then answers with what it read - one round only, so a question can never

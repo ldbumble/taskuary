@@ -34,6 +34,12 @@
       "desc": "Every button under an Assistant card, the one question two of them ask, Remind me, and the words that work typed."
     },
     {
+      "slug": "assistant-tools",
+      "file": "assistant-tools.md",
+      "title": "What the Assistant sees",
+      "desc": "Every tool the Assistant has: the summary it gets on every turn, and each tool in detail. Written from the code."
+    },
+    {
       "slug": "reports",
       "file": "reports.md",
       "title": "Reports and the Advisor",

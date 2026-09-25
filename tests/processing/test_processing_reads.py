@@ -345,7 +345,7 @@ def test_active_concierge_done_accepts_its_own_discussion_without_expanding_memb
     funnel.invalidate()
     try:
         response = concierge.say(db, 'done', key=key, actor='fixture',
-                                 llm=lambda *args, **kwargs: 'I can mark it handled.\nDECIDE: done')
+                                 llm=lambda *args, **kwargs: 'I can mark it handled.\nCALL: {"kind": "done", "params": {}}')
         proposal = response['proposal']
         assert response['decision'] is None
         assert proposal['kind'] == 'item.settle' and proposal['params']['key'] == key

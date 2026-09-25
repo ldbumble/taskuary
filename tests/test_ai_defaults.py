@@ -241,3 +241,16 @@ class AssistantModelTests(unittest.TestCase):
         self.assertEqual(r['default_hint'], 'sonnet - the Assistant default'); self.assertEqual(r['note'], '')
         s.set_setting('concierge_model', 'sonnet', 'owner')
         self.assertEqual(aidefaults.resolve(s, {}, 'concierge_ai')['model'], 'sonnet')
+
+
+class DefaultBrainTests(unittest.TestCase):
+    def test_a_blank_brain_means_the_default_brain_never_the_first_connector(self):
+        """"First connected should not matter" (the owner, 2026-09-24): blank = default_brain, on its worker."""
+        from taskuary import agents
+        real = agents.default_pick.real
+        s = _store()
+        self.assertEqual(real(s), '')                                       # nothing set yet: the install's own fallback
+        s.set_setting('default_brain', 'claude', 'o')
+        self.assertEqual(real(s), 'cli:coder')                              # the worker that runs it
+        s.set_setting('default_brain', 'gemini', 'o')
+        self.assertEqual(real(s), '')                                       # a brain nothing here runs names nobody

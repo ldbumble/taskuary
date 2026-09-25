@@ -471,7 +471,13 @@ def no_connection_brains():
     real = agents.connection_brains
     stub = lambda store: []
     stub.real = real
-    with mock.patch.object(agents, 'connection_brains', stub): yield
+    # ...and the same for the DEFAULT brain. Since a blank brain setting means `default_brain` (2026-09-24), the test
+    # home's migrated `claude` made every background triage drain a CLI run - one that outlived its test on CI and
+    # tripped the next test's P0-ISOLATION guard. A test that is about the default brain sets default_brain itself.
+    # A test about it patches `agents.default_pick.real` back in.
+    no_pick = lambda store: ''
+    no_pick.real = agents.default_pick
+    with mock.patch.object(agents, 'connection_brains', stub), mock.patch.object(agents, 'default_pick', no_pick): yield
 
 
 @pytest.fixture

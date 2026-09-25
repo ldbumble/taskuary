@@ -77,7 +77,7 @@ def install_processing_changes(app, store):
 
             def model(system, user, **options):
                 if 'The owner says: Next' in str(user).splitlines():
-                    return 'Next.\nDECIDE: next'
+                    return 'Next.\nCALL: {"kind": "next", "params": {}}'     # one line since 2026-09-25: CALL, never DECIDE
                 return fallback(system, user, **options)
 
             return model

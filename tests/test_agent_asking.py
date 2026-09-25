@@ -69,7 +69,7 @@ class OneLaneRuleTests(unittest.TestCase):
 
 
 class AgentFinishedTests(unittest.TestCase):
-    """A17: one "agent finished", kept by why the task closed - never by who edited it last."""
+    """A17: one "agent finished". Whoever edited the task last owns the close (the owner, 2026-09-25)."""
 
     def _done(self, s, note, actor='coder'):
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
@@ -77,11 +77,19 @@ class AgentFinishedTests(unittest.TestCase):
         s.update_task(t, {'Status': 'done'}, actor)
         return t
 
-    def test_a_later_edit_by_the_owner_does_not_hide_it(self):
+    def test_the_agent_closing_it_keeps_its_result_with_no_time_limit(self):
         from taskuary.processing_unread import finish_evidence
         s = MemoryStore(); t = self._done(s, 'The agent closed this itself: the export is fixed.')
-        s.update_task(t, {'Title': 'Fix the nightly export'}, 'owner')
+        s.add_comment(t, 'Taskuary', 'system', 'coder finished TQ-0001.')          # notes a day later change nothing
         self.assertEqual(finish_evidence(s, t)['summary'], 'the export is fixed.')
+
+    def test_whoever_edited_it_last_owns_it(self):
+        # the agent finished and drafted a reply; the owner's send closed the task seconds later (TQ-0726, TQ-0734)
+        from taskuary.processing_unread import finish_evidence
+        s = MemoryStore(); t = self._done(s, 'The agent closed this itself: the export is fixed.')
+        s.add_comment(t, 'owner', 'human', 'Closed - the reply went out.')
+        s.update_task(t, {'Status': 'done'}, 'owner')
+        self.assertIsNone(finish_evidence(s, t))
 
     def test_a_merged_pull_request_is_credited_to_the_pull_request(self):
         from taskuary.processing_unread import finish_evidence

@@ -95,15 +95,21 @@ def _noise(row, view) -> bool:
     return bool(at and last and is_ours(last) and (processing_all._stamp(last.get('SentAt')) or at) >= at)
 
 
-def finish_evidence(store, tid, closed_at=None):
-    """{'who', 'summary'} when this task was closed by its agent or its upstream item ending - by WHY it closed, never by
-    who touched the row last (A17, 2026-09-25): keyed on UpdatedBy, any later edit by the owner made an unread finish
-    vanish, and a merged pull request was credited to "The agent". The note must sit at the close (within ten minutes),
-    so a finish the owner later reopened and closed themselves is theirs."""
-    at = closed_at or processing_all._stamp((store.get_task(tid) or {}).get('ClosedAt'))
+# who acts for the owner: the page, the phone and the Assistant's acts write 'owner' (or 'you'). Never 'assistant' - that
+# is a regular agent's own name when it closes its work
+OWNER_ACTORS = ('owner', 'you')
+
+
+def finish_evidence(store, tid):
+    """{'who', 'summary'} when this task was closed by its agent or its upstream item ending, else None.
+    WHOEVER EDITED IT LAST OWNS IT (the owner, 2026-09-25): an edit by the owner - Mark done, sending the reply the
+    agent drafted, anything - makes the close theirs, and the result is not shown again. Otherwise the agent's own
+    note says who finished it and what it found. A ten-minute window around the close stood in for this and got it
+    wrong: sending the drafted reply closed a task seconds after the agent's note, and an answered task came back as
+    "agent finished" (TQ-0726, TQ-0734)."""
+    if str((store.get_task(tid) or {}).get('UpdatedBy') or '') in OWNER_ACTORS: return None
     for c in reversed(store.list_comments(tid) or []):
-        body, made = str(c.get('Body') or ''), processing_all._stamp(c.get('CreatedAt'))
-        if at and made and abs((at - made).total_seconds()) > 600: continue
+        body = str(c.get('Body') or '')
         if body.startswith('The agent closed this itself'):
             return {'who': c.get('Actor') if c.get('Actor') not in (None, '', 'assistant', 'agent', 'system') else 'The agent',
                     'summary': body.split(':', 1)[1].strip() if ':' in body else ''}
@@ -124,7 +130,7 @@ def _agent_finished(store, tid, active, review, read_at, now):
     t = store.get_task(tid) or {}
     closed_at = processing_all._stamp(t.get('ClosedAt'))
     if t.get('Status') != 'done' or t.get('SourceRef') == 'assistant:dock' or closed_at is None: return None
-    ev = finish_evidence(store, tid, closed_at)
+    ev = finish_evidence(store, tid)
     if not ev: return None
     return {**ev, 'unread': not (read_at and read_at >= closed_at)}
 
@@ -292,7 +298,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         # (same_as, fyi) and brought the finished result back after every run - read ten times (the owner, 2026-09-25)
         ours = {str(m['MessageId']) for m in view.get('messages') or [] if is_ours(m) or m.get('Status') == 'filed'}
         units = view.get('processing_read', {}).get('units', ())
-        read = read | {'unread': any(not u.get('read') for u in units if u.get('entity_kind') != 'task'
+        # ...nor an Advisor idea about it: the idea is the Advisor's own card, and one never opened kept a result the
+        # owner had read on the rail for days (2026-09-25)
+        read = read | {'unread': any(not u.get('read') for u in units if u.get('entity_kind') not in ('task', 'idea')
                                      and not (u.get('entity_kind') == 'message' and u.get('local_id') in ours))}
     # OUR OWN SEND IS A RECEIPT, NOT AN ARRIVAL. A report's alert files the message it just sent so
     # you can see that it went (reports.send_alert) - Taskuary writing to you, on WhatsApp or

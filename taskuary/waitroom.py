@@ -97,9 +97,13 @@ def state(store, tid: int) -> tuple:
         return ('working', None) if any(r.get('TaskId') == tid for r in store.running_runs()) else ('no_session', None)
     parked = t.waiting() if hasattr(t, 'waiting') else term.waiting_of(t)
     if not parked: return 'working', t
-    try: asked = bool(ws.asking_of(store, t))
-    except Exception: asked = False
-    return ('asking' if asked or looks_like_question(_screen(t)) else 'parked'), t
+    try: req = ws.asking_of(store, t)
+    except Exception: req = None
+    # A STALL IS NOT A QUESTION (A13, the owner, 2026-09-25): a rate limit or an API error left the CLI at its prompt
+    # with a `stalled` request open, and a note was typed into it as if it had been asked - and marked the stall
+    # answered. Nothing can be answered through a rate limit; the note waits until the limit lifts.
+    if (req or {}).get('kind') == 'stalled': return 'working', t
+    return ('asking' if req or looks_like_question(_screen(t)) else 'parked'), t
 
 
 def add(store, tid: int, note: str, actor: str = 'owner') -> dict:

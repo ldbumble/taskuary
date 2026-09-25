@@ -149,7 +149,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # REMIND ME (2026-09-25): put away until a day - held like a deferral until that morning, then back as asked for
     from . import remind
     reminded = str(task.get('RemindAt') or '') if active else ''
-    if reminded and remind.waiting(task, now): read = {**read, 'deferred': True, 'defer_until': reminded}
+    # ...unless its agent is waiting on you: a new question gets through a reminder (A11, the owner, 2026-09-25) -
+    # Remind me holds a quiet task, never a question nobody would see until its day
+    asking_now = bool(worker and worker.get('waiting'))
+    if reminded and remind.waiting(task, now) and not asking_now: read = {**read, 'deferred': True, 'defer_until': reminded}
     persisted_working = active and any(r.get('TaskId') == tid and r.get('Status') == 'running'
                                       for r in view.get('runs', []))
     # handed to an agent and not started: on the rail until it starts, however often it was looked at
@@ -306,7 +309,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # and done should close it"). Next puts it in Passed like the rest of your work; the quiet hours bring it back.
     stopped = active and card['lane'] in ('stopped', 'saved') and not read.get('deferred') and read_at is None
     # ...and Remind me puts away a live agent or a paused conversation too, until its day (R7, 2026-09-25)
-    away = bool(reminded and remind.waiting(task, now))
+    away = bool(reminded and remind.waiting(task, now)) and not asking_now
     unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or (finished and finished['unread']) or
                                                  (active and not away and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask

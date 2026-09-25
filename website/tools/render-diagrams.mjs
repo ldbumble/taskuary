@@ -14,6 +14,7 @@ const EDGE = process.env.BROWSER_EXE || "C:/Program Files (x86)/Microsoft/Edge/A
 const DIAGRAMS = {
   "docs/how-a-task-ends.md": ["docs/site/img/how-a-task-ends.svg"],
   "docs/assistant-words.md": ["docs/site/img/assistant-buttons.svg", "docs/site/img/assistant-questions.svg", "docs/site/img/assistant-task-tools.svg"],
+  "docs/phone-choices.md": ["docs/site/img/phone-choices.svg"],
 };
 
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: "new" });

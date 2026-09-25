@@ -42,11 +42,34 @@ the actions at the end of each item.
 Answers you give on the phone land in the desktop conversation too, because it is one
 conversation with two doors.
 
+### Choosing
+
+The phone is the desktop Assistant in a chat, word for word. Every button the desktop card draws is a
+numbered line here, and on WhatsApp the same choices come again as a **poll** under the message, so one
+tap picks. A number or a tap runs exactly what the desktop's button runs, and no model reads it. Only
+words you type go to the model.
+
+![A number or a poll tap runs the desktop's action; Not ours asks how far, Send to agent asks which agent, an unclear checkout asks which repository; typed words go to the model](img/phone-choices.svg "A pick is the button; words are words.")
+
+| You send | What happens |
+|---|---|
+| a number, or a tap in the poll | the desktop button with that name, run at once |
+| **Not ours** | "How far?" — just this once, from now on, or a rule in Settings; the answer you pick runs |
+| **Send to agent** | "Which agent?" — triage's pick first, the other one next; the answer you pick runs |
+| a coding job with no clear checkout | "Which repository?" — the best guess first; the one you pick starts |
+| **Undo** (offered under a receipt that can be undone) | puts the last change back, once |
+| **More** | the rest of a long message, then the same choices |
+| **next**, typed | the next item, with no summary reprinted |
+| an old number, after you have already replied | nothing — a list answers one reply, then its numbers are gone |
+| anything else | the model reads it, with the same tools as the desktop |
+
 ### Approving things
 
 A reply drafted for you can be approved from the phone. Tagged answers use `[tq…]` for a task and
 `[rv…]` for a Review item, and the plain words `approve`, `reject` and `no reply` work as
-shortcuts on the item currently in front of you.
+shortcuts on the item currently in front of you. In the chat the Assistant listens in, a bare
+"yes" or "approve" answers the Assistant's own question; to approve a review there, reply to its
+ping or name its `[rv…]`.
 
 The approval gate itself does not move: approving on your phone is the same deliberate human
 action as approving on the page, and nothing goes out without one.

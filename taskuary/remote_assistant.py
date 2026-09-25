@@ -509,7 +509,8 @@ def script_direct(store, question: str) -> str | None:
     if q in ('walk me through my tasks', 'walk me through the tasks', 'walk me through tasks', 'my tasks', 'next'):
         with concierge.delivering(concierge.PHONE):
             from . import funnel
-            try: opener = who_wants_what(funnel.pile(store).get('items') or [])
+            # the day's summary opens the WALK; "next" inside it is the desktop's Next, which reprints nothing
+            try: opener = who_wants_what(funnel.pile(store).get('items') or []) if q != 'next' else ''
             except Exception as e:
                 logger.debug(f'the phone walk opened without its summary: {e}'); opener = ''
             out = concierge.surface(store, actor='owner')
@@ -538,6 +539,17 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
                 send(store, channel, chat, concierge.undo_last(store, 'owner'), connector_id)
                 return
             question, picked = resolve_index(store, channel, chat, question)   # "2" is the words we numbered
+            # A PICK IS THE BUTTON: what the desktop's click would run, run here in code - the model reads only
+            # words (the owner, 2026-09-25: the phone matches the desktop exactly). A list answers ONE reply:
+            # whatever comes next, the old numbers are gone, so a stale "2" can never fire.
+            acts = acts_for(store, channel, chat)
+            try: offered = json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
+            except ValueError: offered = []
+            act = acts.get(question) if picked else None
+            forget_offered(store, channel, chat); _ACTS.rows = None
+            if act:
+                send(store, channel, chat, run_act(store, act, item), connector_id)
+                return
             # ...and on an fyi batch a number names one of the lines we printed: open that one - the item on
             # the table, its own text and its own options under it - as the desktop's "Talk about it" does
             key = next((k for k, line in member_lines(item) if picked and line == question), None)
@@ -547,7 +559,8 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
                 return
             # MORE, picked: the rest of what the card folds, then the same choices again without it
             if picked and question == MORE:
-                again = [w for w in json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') if w != MORE]
+                again = [w for w in offered if w != MORE]
+                _offer([(w, acts[w]) for w in again if w in acts])
                 folded = more_text(store, item) or 'Nothing more on this one.'
                 opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(again, 1)) if again else ''
                 send(store, channel, chat, '\n\n'.join(x for x in (folded, opts) if x), connector_id)
@@ -626,7 +639,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     if picked and verb == 'answer_agent' and not (decision.get('text') or '').strip():
         return '\n\n'.join(said + [f"What should I tell {(on or {}).get('agent') or 'it'}? "
                                    'Say it here and I will pass it straight to the run that is waiting.'])
-    if prop and picked and prop.get('status') == 'proposed':
+    if prop and picked and prop.get('status') == 'proposed' and not asks(prop):
         # the number WAS the yes: run it, and say what happened instead of asking again
         said[0] = turn_text({**out, 'proposal': None}, lead, store)
         done = concierge.run_proposal(store, prop, actor)
@@ -652,6 +665,103 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         nxt = concierge.surface(store, actor=actor)
         return '\n\n'.join(said + [turn_text(nxt, store=store)])
     return '\n\n'.join(x for x in said if x)
+
+
+ALT_QUESTION = {'not_ours': 'How far?', 'agent': 'Which agent?'}
+
+
+def _picking_repo(prop: dict) -> bool:
+    """proposalCard.pickingRepo: a coding hand-off whose checkout nobody named asks for one before it starts."""
+    p = prop.get('params') or {}
+    return (prop.get('kind') == 'task.create_from_text' and p.get('kind') == 'coding' and prop.get('clear') is False
+            and bool(prop.get('repo_choices')))
+
+
+def asks(prop: dict) -> bool:
+    """The card has a question of its own - a pick does not run it until that is answered."""
+    return bool(prop and (prop.get('alts') or _picking_repo(prop)))
+
+
+def proposal_choices(prop: dict) -> tuple[str, list]:
+    """The desktop card as numbered rows: its question, then (label, act) for each answer. The current answer IS the
+    confirm button; another answer is a new proposal from the same road; Cancel leaves everything where it is."""
+    from . import concierge
+    pid, rows, q = prop['id'], [], ''
+    ok = {'id': pid, 'key': prop.get('key'), 'settles': bool(prop.get('settles'))}      # what the run settles, for walking on
+    if _picking_repo(prop):
+        guess = (prop.get('params') or {}).get('repo') or ''
+        q = 'Which repository should the coding agent use?'
+        rows += [(f'{r} (best guess)' if r == guess else r, {'t': 'repo', **ok, 'repo': r})
+                 for r in sorted(prop['repo_choices'], key=lambda r: r != guess)]
+    alts = prop.get('alts') or []
+    if alts:
+        q = q or ALT_QUESTION.get(concierge.ALT_OF.get(prop.get('verb')), '')
+        cur = [a for a in alts if a.get('current')]
+        rows += [(a['label'], {'t': 'confirm', **ok}) for a in cur if not _picking_repo(prop)]
+        rows += [(a['label'], {'t': 'alt', 'verb': a['verb'], 'key': prop.get('key'), 'table': bool(prop.get('settles'))})
+                 for a in alts if not a.get('current')]
+    if not rows: rows = [('yes, go ahead', {'t': 'confirm', **ok})]
+    return q, rows + [('no, leave it' if not q else 'Cancel', {'t': 'cancel', 'id': pid})]
+
+
+def _item_for(store, key: str, item: dict | None) -> dict | None:
+    from . import funnel
+    if item and item.get('key') == key: return item
+    return funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+
+
+def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
+    """After the run: the receipt, an Undo when it offered one, and the next item when the table was settled."""
+    from . import concierge
+    said = concierge.receipt(store, done, actor)
+    undo = [('Undo', {'t': 'undo'})] if ' Undo: ' in said else []
+    if done.get('status') == 'done' and _settled_the_table(prop, item):
+        return '\n\n'.join([said, turn_text(concierge.surface(store, actor=actor), store=store, extra=undo)])
+    if undo: return '\n\n'.join([said, turn_text({}, store=store, extra=undo)])
+    return said
+
+
+def _settle(store, prop: dict, item: dict | None, actor: str) -> str:
+    """A proposal a pick made: run it, unless its card asks something first - then ask that, numbered."""
+    from . import concierge
+    if asks(prop):
+        said = f"{prop['label']}: {prop['summary']}." if prop.get('label') and prop.get('summary') else prop.get('say')
+        return turn_text({'say': said, 'proposal': prop}, store=store)
+    return _ran(store, prop, concierge.run_proposal(store, prop, actor), item, actor)
+
+
+def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
+    """One numbered pick, run the way the desktop's button runs it - never through the model."""
+    from . import concierge, operations
+    t = act.get('t')
+    try:
+        if t == 'next': return carry_out(store, concierge.surface(store, actor=actor), None, actor)
+        if t == 'undo': return concierge.undo_last(store, actor)
+        if t in ('confirm', 'cancel', 'repo'):
+            op = operations.get(store, act.get('id') or '')
+            if not op or op.get('status') != 'proposed': return 'That one is not waiting on you any more - nothing moved.'
+            if t == 'cancel':
+                operations.cancel(store, op['id'], actor)
+                return 'Left it - nothing moved.'
+            if t == 'repo': op = {**op, **operations.revise(store, op['id'], {**(op.get('params') or {}), 'repo': act['repo']}, actor)}
+            prop = {**op, 'settles': bool(act.get('settles')), 'key': act.get('key')}
+            return _ran(store, prop, concierge.run_proposal(store, op, actor), item, actor)
+        key, verb = act.get('key') or '', act.get('verb') or ''
+        on = _item_for(store, key, item)
+        if not on: return 'That one is not in front of you any more - say next and I show what is.'
+        if t == 'alt':
+            prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(act.get('table')), exact=True)
+            # the pick answered the card's question; only a checkout still to choose is left to ask
+            return _settle(store, {**prop, 'alts': []}, item, actor)
+        if verb == 'answer_agent':
+            return f"What should I tell {on.get('agent') or 'it'}? Say it here and I will pass it straight to the run that is waiting."
+        if verb in ('reply', 'redraft') and on.get('mid'):
+            rid = _draft(store, on, verb, '')
+            if not rid: return 'I could not write that draft here - it is waiting on the task page.'
+            return turn_text(concierge.surface(store, f'review:{rid}', actor=actor), store=store)
+        prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(item and item.get('key') == key))
+        return _settle(store, prop, item, actor)
+    except ValueError as e: return f'Not done - {e}. Nothing moved.'
 
 
 def _draft(store, item: dict, verb: str, instruction: str):
@@ -863,12 +973,13 @@ def more_text(store, item: dict | None) -> str:
 THEN = {'approve': 'sends the draft above, in your name.',
         'answer_agent': 'goes straight to the agent; it picks up where it stopped.',
         'reply': 'writes a draft for you to approve here - nothing is sent.',
-        'followup': 'writes a follow-up for you to approve here - nothing is sent.',
-        'regular_agent': 'starts an agent on it; it comes back here when it stops.',
+        'regular_agent': 'hands it to an agent - triage picks a coding or a non-coding one, and you can switch before it starts.',
         'coder': 'starts a coding agent on it; it comes back here when it stops.',
-        'rerun': 'runs the report again in the background; it comes back here.',
-        'prep': 'opens a chat that gets you ready - who is in it and what came before.',
+        'mine': 'puts it on your own list - no agent starts.',
+        'stop_agent': 'saves what the agent did and ends its session; the task stays open.',
         'close': 'ends the task - it stops coming back.'}
+# an action card's Send is "Run it": it runs what the card shows, it sends no mail
+THEN_KIND = {('approve', 'action'): 'runs what the card above shows.'}
 
 
 # words that put a thing DOWN rather than do it: never the card's verb while a real one is offered
@@ -886,7 +997,8 @@ def then_line(out: dict, store=None) -> str:
     """"Send the reply: sends the draft above, in your name." - only on a card that shows what it is about."""
     c = primary(out)
     if store is None or not c or agent_answers(out.get('item')) or out.get('proposal'): return ''
-    return f"{c.get('label')}: {THEN[c['verb']]}" if c['verb'] in THEN else ''
+    said = THEN_KIND.get((c['verb'], (out.get('item') or {}).get('kind'))) or THEN.get(c['verb'])
+    return f"{c.get('label')}: {said}" if said else ''
 
 
 def lead_line(store, item: dict | None, say: str) -> str:
@@ -922,7 +1034,7 @@ def script_words(store, script: str) -> str:
     return '\n'.join(lines)
 
 
-def turn_text(out: dict, lead: str = '', store=None) -> str:
+def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
     """One turn as one message: where it came from, what was said, then what can be said back.
 
     The options used to ride one line joined by dots, which read as a single run-on sentence on a
@@ -949,6 +1061,16 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
         members = member_lines(item)
         head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
     words, first = choices(out), len(member_lines(item)) + 1
+    prop = out.get('proposal') if (out.get('proposal') or {}).get('status', 'proposed') == 'proposed' else None
+    if prop and prop.get('id') and not prop.get('auto'):
+        # THE CARD'S QUESTION, numbered: how far a Not ours goes, which agent, which checkout - each answer runs
+        q, rows = proposal_choices(prop)
+        if q: head = '\n'.join(x for x in (head, q) if x)
+        words = [label for label, _ in rows]
+        _offer(rows)
+    else:
+        _offer([(c['label'], {'t': 'next'} if c.get('verb') == 'next' else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key')})
+                for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') and c.get('label') and item.get('key')])
     # THE CARD'S ORDER: the verb, then Next, then More, then the rest - the desktop's two buttons and its
     # Also line, as one numbered list (2026-09-23). A proposal's yes/no and an agent's own answers keep
     # theirs: those are the answer itself, not a choice of what to do.
@@ -970,13 +1092,18 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
         # card's button, and on the phone it arrives as a word like any other): two ways to say the
         # same move, numbered separately, is the thing that made the desktop drop a button in the
         # first place.
-        if not any('next' in str(w).lower() for w in words): words = words + [concierge.CHIP_WORDS['next']]
+        if not any('next' in str(w).lower() for w in words):
+            words = words + [concierge.CHIP_WORDS['next']]
+            _offer([(concierge.CHIP_WORDS['next'], {'t': 'next'})])
     # ...and what a NUMBER does, said plainly. "Open one" describes a door on a screen that is not
     # here; on a phone the number is the only way to see what the line is actually about.
     # A plain answer with nothing on the table offered "Reply with one of: 1 · Next" under every reply - three
     # lines of menu for the one word the owner can always type (2026-09-24 audit). The desktop's lone Next is
     # one small button; on a phone it is noise.
     if not item and [str(w).strip().lower() for w in words] == ['next']: words = []
+    if extra:
+        words = words + [label for label, _ in extra]
+        _offer(extra)
     lead_in = ('Reply with a number to read that message in full, or:' if item.get('kind') == 'fyis'
                else 'Reply with a number to open one, or:') if first > 1 else 'Reply with one of:'
     opts = (lead_in + '\n'
@@ -989,11 +1116,37 @@ OFFERED_KEY = 'remote_offered'
 _OFFERED = re.compile(r'^\s*(\d+) · (.+?)\s*$', re.M)
 
 
+ACTS_KEY = 'remote_acts'
+_ACTS = threading.local()                    # label -> act, gathered while a turn is written, kept when it is sent
+
+
+def _offer(rows):
+    """Say what a numbered word DOES, as data: the desktop button it stands for. Kept by send() beside the words."""
+    got = getattr(_ACTS, 'rows', None)
+    if got is None: got = _ACTS.rows = {}
+    for label, act in rows or []:
+        if label and act: got[str(label)] = act
+
+
 def remember_offered(store, channel: str, chat: str, text: str) -> list:
-    """The options this message just numbered, kept against the chat that was sent them."""
+    """The options this message just numbered, kept against the chat that was sent them - and, for each one
+    this turn knew the button of, the act it runs."""
     words = [m.group(2) for m in _OFFERED.finditer(str(text or ''))]
-    if words: store.set_setting(f'{OFFERED_KEY}:{channel}:{chat}', json.dumps(words), 'assistant')
+    acts = getattr(_ACTS, 'rows', None) or {}
+    if words:
+        store.set_setting(f'{OFFERED_KEY}:{channel}:{chat}', json.dumps(words), 'assistant')
+        store.set_setting(f'{ACTS_KEY}:{channel}:{chat}', json.dumps({w: acts[w] for w in words if w in acts}), 'assistant')
+    _ACTS.rows = None
     return words
+
+
+def forget_offered(store, channel: str, chat: str):
+    for k in (OFFERED_KEY, ACTS_KEY): store.set_setting(f'{k}:{channel}:{chat}', '', 'assistant')
+
+
+def acts_for(store, channel: str, chat: str) -> dict:
+    try: return json.loads(store.get_settings().get(f'{ACTS_KEY}:{channel}:{chat}') or '{}') or {}
+    except ValueError: return {}
 
 
 def resolve_index(store, channel: str, chat: str, text: str) -> tuple[str, bool]:
@@ -1009,10 +1162,14 @@ def resolve_index(store, channel: str, chat: str, text: str) -> tuple[str, bool]
     "this is confusing? I wrote 1 but it asked me again?"). Their own words stay a suggestion, because
     there we are reading intent and can be wrong.
     """
-    t = str(text or '').strip().lstrip('#').rstrip('.').strip()
-    if not t.isdigit(): return text, False
-    try: words = json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]')
+    try: words = json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
     except ValueError: words = []
+    # a WhatsApp poll's vote arrives as the option's own words (cut to the poll's 100 characters): the tap is a pick
+    said = str(text or '').strip()
+    hit = next((w for w in words if said and (said == w or (len(said) >= 100 and w.startswith(said)))), None)
+    if hit: return hit, True
+    t = said.lstrip('#').rstrip('.').strip()
+    if not t.isdigit(): return text, False
     i = int(t)
     return (words[i - 1], True) if 1 <= i <= len(words) else (text, False)
 
@@ -1040,14 +1197,18 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
     # every road to this chat passes here, so this is where what we offered is written down -
     # off the text AS WRITTEN, before any of it is respelled for the channel
-    try: remember_offered(store, channel, chat, text)
-    except Exception as e: logger.debug(f'could not keep the offered options for {channel}: {e}')
+    try: offered = remember_offered(store, channel, chat, text)
+    except Exception as e:
+        logger.debug(f'could not keep the offered options for {channel}: {e}'); offered = []
     msgs = []
     for part in str(text or '').split(chatformat.BREAK):
         shown = chatformat.render(part, channel)
         if shown.strip(): msgs.extend(chatformat.split(shown, chatformat.HARD))
     for i, msg in enumerate(msgs):
-        out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id)
+        # the LAST bubble carries the choices as a poll: WhatsApp's one tappable thing (the owner, 2026-09-25)
+        poll = offered if channel == 'whatsapp' and i == len(msgs) - 1 and len(offered) > 1 else None
+        kw = {'poll': poll} if poll else {}
+        out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id, **kw)
     # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one
     # that never did (2026-09-24)
     logger.info(f'{channel}: sent {len(msgs)} message(s), {sum(len(m) for m in msgs)} chars, to the assistant chat'

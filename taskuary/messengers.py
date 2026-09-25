@@ -492,10 +492,12 @@ def react(store, channel: str, chat: str, message_id: str, emoji: str = GOT_IT, 
     return False
 
 
-def wa_send(store, jid: str, body: str, connector_id=None) -> dict:
+def wa_send(store, jid: str, body: str, connector_id=None, poll: list = None) -> dict:
+    """`poll`: the choices numbered in `body`, sent again under it as a WhatsApp poll - one tap picks (the bridge
+    turns the vote back into the option's words)."""
     c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
         store.get_connector_by_type('whatsapp', with_secret=True)
     if c and c.get('Type') != 'whatsapp': c = None
     if not c: raise RuntimeError('the WhatsApp connection is not set up')
-    _wa(c, '/send', {'jid': jid, 'text': body[:4000]})
+    _wa(c, '/send', {'jid': jid, 'text': body[:4000], **({'poll': {'name': 'Pick one', 'values': list(poll)}} if poll else {})})
     return {'channel': 'whatsapp', 'chat': jid}

@@ -97,6 +97,11 @@ def intercept(store, channel: str, chat_id: str, text: str, quoted: str = None) 
     if (store.get_settings().get('phone_assistant') == '1' and not explicit_review
             and not (APPROVE.match(t) or REJECT.match(t) or NO_REPLY.match(t))):
         return False
+    # ...and in the chat the ASSISTANT listens in, a bare "yes" answers the Assistant's own question: the
+    # last-ping fallback approved whichever review pinged last while the owner was confirming something else.
+    # A reply quoting the ping, or naming [rvN], is still the verdict.
+    from . import remote_assistant
+    if not explicit_review and remote_assistant.enabled(store, channel, str(chat_id)): return False
     rv, rid = _find_review(store, t, quoted)
     if not rid: return False                      # nothing was ever pinged: a plain chat message
     if not rv or rv['Status'] != 'pending':

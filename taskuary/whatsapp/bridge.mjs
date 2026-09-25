@@ -15,6 +15,8 @@ import path from "node:path";
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "@whiskeysockets/baileys";
 import { createChatGate, nextReconnect, wantsMedia } from "./policy.mjs";
 import { createChatRoster } from "./roster.mjs";
+import { createPolls, pollValues } from "./poll.mjs";
+import crypto from "node:crypto";
 
 // Voice notes are saved beside the bridge and handed to Taskuary as a PATH (same machine); it
 // transcribes them if a voice connector exists and files them with the reason if not. A
@@ -34,6 +36,7 @@ const messages = [];                       // { seq, id, jid, chat, name, text, 
 const taskuarySent = new Set();             // ids sent through localhost /send, never user prompts
 const chatGate = createChatGate();
 const chatRoster = createChatRoster();       // JIDs/names/recency only; never message bodies
+const polls = createPolls();                 // the newest poll per chat and its secret: what opens a vote
 try {
   if (process.env.WA_BRIDGE_FILTER) chatGate.configure(JSON.parse(process.env.WA_BRIDGE_FILTER));
 } catch (e) { console.error("invalid WA_BRIDGE_FILTER; keeping every chat closed:", e?.message || e); }
@@ -155,6 +158,18 @@ async function connect() {
     if (type !== "notify") return;                       // history syncs are not new work
     for (const m of ms) {
       chatRoster.observeMessage(m);
+      // A VOTE on the Assistant's poll is the owner picking one of its choices: it goes on as that choice's
+      // own words, the same as typing them. A vote on anything else (another poll, an older one) is nothing.
+      const pu = m.message?.pollUpdateMessage;
+      if (pu) {
+        const mine = [meJid, thisSock.user?.id, thisSock.user?.lid];
+        const picked = polls.vote(pu, { creators: mine, voters: [m.key.participant, m.key.remoteJid, ...(m.key.fromMe ? mine : [])] });
+        if (picked) messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid, sender: m.key.participant || m.key.remoteJid,
+          group: m.key.remoteJid?.endsWith("@g.us"), name: m.pushName || "", text: picked, poll: true, quoted: "",
+          ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000), fromMe: !!m.key.fromMe, taskuary: false });
+        while (messages.length > MAX_KEPT) messages.shift();
+        continue;
+      }
       const body = text(m.message || {}), quoted = text(context(m.message || {})?.quotedMessage || {});
       if (!body && !m.message) continue;
       const am = m.message?.audioMessage, im = m.message?.imageMessage;
@@ -254,20 +269,32 @@ http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/send") {
       const chunks = []; for await (const c of req) chunks.push(c);
-      const { jid, text: t } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      const { jid, text: t, poll } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
       if (!connected) return json(res, 503, { error: "not connected to WhatsApp" });
       if (!jid || !t) return json(res, 400, { error: "jid and text are required" });
-      const sent = await sock.sendMessage(jid, { text: t });
-      const id = sent?.key?.id || "";
-      if (id) {
+      const keep = (id) => {
         taskuarySent.add(id);
         // Baileys may emit messages.upsert before sendMessage resolves. Mark that already-kept
         // echo as ours as well, closing the race without relying on visible magic text.
         const echo = messages.find((m) => m.id === id);
         if (echo) echo.taskuary = true;
         if (taskuarySent.size > MAX_KEPT * 2) taskuarySent.delete(taskuarySent.values().next().value);
+      };
+      const sent = await sock.sendMessage(jid, { text: t });
+      const id = sent?.key?.id || "";
+      if (id) keep(id);
+      // ...and the choices as a POLL under it, tappable. The secret is ours so the vote can be opened.
+      const values = pollValues(poll?.values);
+      let pollId = "";
+      if (values.length > 1) {
+        try {
+          const secret = crypto.randomBytes(32);
+          const p = await sock.sendMessage(jid, { poll: { name: String(poll.name || "Pick one").slice(0, 255), values, selectableCount: 1, messageSecret: secret } });
+          pollId = p?.key?.id || "";
+          if (pollId) { keep(pollId); polls.remember(jid, pollId, secret, values); }
+        } catch (e) { console.log("poll send failed:", e?.message || e); }
       }
-      return json(res, 200, { ok: true, id });
+      return json(res, 200, { ok: true, id, poll: pollId });
     }
     json(res, 404, { error: "unknown path" });
   } catch (e) { json(res, 500, { error: String(e?.message || e) }); }

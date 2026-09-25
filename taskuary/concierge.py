@@ -117,7 +117,8 @@ PHONE_CONTRACT = (
     "The choices are added under your line by code from the item itself. Do not list them, do not invent "
     "one, and never end a line with an offer to do something. When you cannot tell which of two things the "
     "owner's words mean, say which two and ask - one short question, and OPTIONS instead of a CALL. When the "
-    "words say what they want, act on them: a card is their confirmation, so acting on a clear ask is not a guess.\n")
+    "words say what they want, act on them: the yes-or-no choices code adds under your line are their "
+    "confirmation, so acting on a clear ask is not a guess.\n")
 
 DESK, PHONE = 'desk', 'phone'
 # Where this turn will be READ. Ambient, not an argument: every path into the voice (surface, say, the

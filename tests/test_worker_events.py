@@ -201,9 +201,10 @@ class ProducersTests(Base):
         ws.record(self.s, self.tid, 'run1', 'approval_needed', request_id='scr1', text='Allow rm -rf build?', source='screen')
         hooks.receive({**base, 'hook_event_name': 'PostToolUse', 'tool_name': 'Read', 'tool_input': {'file_path': 'x'}, 'tool_response': {}})
         self.assertEqual([r['request_id'] for r in ws.status(self.s, self.tid)['requests']], ['scr1'])
-        with mock.patch.object(selfclose, 'spawn_on_stop'):
+        with mock.patch.object(selfclose, '_wrap') as w:
             hooks.receive({**base, 'hook_event_name': 'Stop', 'last_assistant_message': 'I have looked into it.'})
         self.assertNotEqual(ws.status(self.s, self.tid)['state'], 'finished')          # Stop = the response ended, not the task
+        w.assert_not_called()                                                           # ...and nothing closes on it
 
     def test_an_explicit_done_is_the_finished_event_with_its_result(self):
         sess = live(self.tid); term.SESSIONS['run1'] = sess

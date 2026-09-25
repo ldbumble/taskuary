@@ -101,6 +101,9 @@ async def _lifespan(_app):
         # Preserve the owner's existing opt-out before bridges, catch-up, or drain
         # admission can ingest anything. Failure must not enable unattended work.
         store.upgrade_auto_start()
+        from . import selfclose as _selfclose
+        try: _selfclose.settle_legacy(store)          # 'ask' was a second mode that no longer differs
+        except Exception as e: logger.warning(f'self-close setting upgrade skipped: {e}')
     if not _open_drain_workers(store):
         raise RuntimeError('previous triage drain still owns this store')
     # the demo builds its world and puts agents on the board BEFORE anything else runs - and
@@ -1326,17 +1329,18 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         # lifecycle, so a later automated run must be allowed to settle again.
         from . import selfclose
         selfclose.forget(task_id)
-    # "Mark done - I took care of it" means the agent's job is over too: a live session left
-    # running on a finished task is an agent nobody is coming back for. close() files the
-    # transcript first, so the record survives the pty as always.
+    # A task DROPPED (or one already closed, marked again) ends its agent too: a live session left
+    # running on a finished task is an agent nobody is coming back for. close() files the transcript
+    # first, so the record survives the pty as always. Mark done never reaches here - its Status was
+    # popped above and concierge.close_task stopped the agent and settled the item itself.
     if fields.get('Status') in ('done', 'dropped'):
         live = hub_term.session_for(task_id)
         if live and live.alive:
             hub_term.close(live.sid)
             store.add_comment(task_id, ACTOR, 'human', 'Task closed - ended the live agent session with it.')
-        # the same read receipt concierge.close_task writes: a task the owner closed leaves Unread from
-        # whichever button closed it, and a later arrival on it is unread again (the owner, 2026-09-07)
-        if t.get('Status') not in ('done', 'dropped'):
+        # the same read receipt concierge.close_task writes: a task dropped leaves Unread too, and a
+        # later arrival on it is unread again (the owner, 2026-09-07)
+        if fields['Status'] == 'dropped' and t.get('Status') not in ('done', 'dropped'):
             from . import funnel as _funnel
             try: _funnel.settle(store, f'task:{task_id}', 'done', ACTOR, note='the task was closed')
             except Exception as e: logger.debug(f'the closed task did not settle its item: {e}')

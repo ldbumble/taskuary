@@ -19,9 +19,9 @@ export const BROWSER_TAG = "needs:browser";
 
 // ...and the one that says WHO this session is for. A task the router made has somebody waiting
 // on an answer, so finishing it should close it and draft the reply - that is the funnel working.
-// A session you opened to sit in is the opposite: you alt-tab, the agent goes quiet, the judge
-// reads the last screen as finished, and the task closes out from under you with a reply drafted
-// to nobody. Tagged, only an explicit `taskuary --done` ends it (selfclose.STAY_TAG).
+// A session you opened to sit in is the opposite: the agent finishing a step is not you finishing
+// the task. Tagged, the agent's `taskuary --done` is refused and you complete it (selfclose.STAY_TAG,
+// taskLifecycle.ownerControlsCompletion).
 export const STAY_TAG = "stay:open";
 export const wantsAsk = (task) => new RegExp(`(^|[\\s,])${ASK_TAG}([\\s,]|$)`).test(String(task?.Tags || ""));
 export const wantsBrowser = (task) => new RegExp(`(^|[\\s,])${BROWSER_TAG}([\\s,]|$)`).test(String(task?.Tags || ""));

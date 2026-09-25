@@ -170,7 +170,7 @@ class Unread(Base):
 class Completion(Base):
     def gates(self):
         return [mock.patch.object(selfclose, 'blocked', return_value=''), mock.patch.object(selfclose, 'stays_open', return_value=False),
-                mock.patch.object(selfclose, 'mode', return_value='auto')]
+                mock.patch.object(selfclose, 'mode', return_value='on')]
 
     def test_save_before_close_a_failed_save_keeps_the_session_and_says_so(self):
         a = live(self.tid); term.SESSIONS['run1'] = a; selfclose.forget(self.tid)

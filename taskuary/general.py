@@ -544,7 +544,9 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # ...and how this task ENDS. Only where an ending means something: a task somebody wrote in
     # about has an answer owed, and closing it drafts that answer. A task the owner opened to
     # think out loud in has nobody waiting, so it stays open until they say otherwise.
-    if sources and selfclose.mode(store) != 'off': system = system + '\n\n' + selfclose.CHAT_LINE
+    # ...and never on a task the owner keeps to complete themselves (stay:open, A14): the close would be refused, so the
+    # chat is not told it may make one
+    if sources and selfclose.mode(store) != 'off' and not selfclose.stays_open(store, tid): system = system + '\n\n' + selfclose.CHAT_LINE
     if sources: system = system + '\n\n' + selfclose.REPLY_LINE
     md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
     head = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"

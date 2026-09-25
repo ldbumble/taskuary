@@ -35,7 +35,10 @@ flowchart LR
   W -->|"you: Not ours / Not a task"| X{"Any work done on it?"}
   X -->|no| X1["Deleted"]
   X -->|yes| F
-  W -->|"agent says done, or its PR merged"| R{"Reply owed?"}
+  W -->|"agent says done"| O{"You opened the session?"}
+  O -->|yes| O1["Refused · its sentence is filed, you mark it done"]
+  O -->|no| R
+  W -->|"its PR merged"| R{"Reply owed?"}
   R -->|yes| R1["Waiting, with the draft for you"]
   R -->|no| R2["Done · stays on the rail until a person reads it"]
 ```
@@ -53,7 +56,7 @@ flowchart LR
 
 | An agent does | What happens | Code |
 |---|---|---|
-| Says it is done (`taskuary --done`) | The session is written up. If a reply is owed, the task **waits** for you with the draft; otherwise it is done. | `selfclose.declare` → `coder.wrap` → `coder.finish` |
+| Says it is done (`taskuary --done`) | The session is written up. If a reply is owed, the task **waits** for you with the draft; otherwise it is done. On a task marked `stay:open` it is refused: the agent's sentence is filed as a comment and you mark it done. | `selfclose.declare` → `coder.wrap` → `coder.finish` |
 | Its pull request is merged or closed | Same as above | `channels.close_upstream_ended` |
 
 ## Rules that follow from this
@@ -62,11 +65,14 @@ flowchart LR
   on the rail, however long ago, until someone reads it (`processing_unread._agent_finished`).
   Agents may open and close tasks; they may not make one silently disappear.
 - **A quiet screen is not an ending.** There is no longer a judge that reads a stopped session
-  and guesses it finished (`selfclose.on_stop` closes nothing). Only the agent saying so, or you,
-  ends a task.
+  and guesses it finished; the Stop hook is an observation and closes nothing. Only the agent saying
+  so, or you, ends a task.
 - **"Yours to end".** When you start or continue a session on a task yourself, the task is quietly
-  marked `stay:open`. It means one thing now: the agent's seed tells it not to run `--done`, because
-  you'll end it. None of your own actions look at the mark, and Mark done removes it.
+  marked `stay:open`. It is one rule: an agent may close its own task only when the task allows it.
+  With the mark on, `taskuary --done` is refused (`selfclose.declare`), and the agent's seed says
+  exactly that. None of your own actions look at the mark, and Mark done removes it.
+- **One setting, on or off.** `agent_self_close` used to offer "auto" and "only when it says so";
+  they differed only by the quiet-screen judge, so they are one now. An old `ask` reads as on.
 
 ## Not endings
 

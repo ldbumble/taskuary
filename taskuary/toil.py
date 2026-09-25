@@ -6,6 +6,7 @@ report. Ships seeded like the Morning digest: lands on the Timeline, prompt edit
 the Reports tab, delete the source to turn it off.
 """
 from datetime import datetime, timedelta
+from .store import auto_code_enabled
 
 PROMPT = (
     'You are looking at one operator\'s inbound-work statistics. Propose AT MOST five '
@@ -53,5 +54,5 @@ def gather(store, days: int = 30) -> str:
     out.append('EXISTING POLICIES (already automated - never propose these again):')
     out += [f"  [{p['Action']}] {p['Kind']}: {str(p.get('Pattern') or '')[:60]}" for p in pols[:25]] or ['  (none)']
     settings = store.get_settings()
-    out.append(f"CURRENT SWITCHES: auto-dispatch={'on' if settings.get('coder_auto_enabled') == '1' else 'off'}")
+    out.append(f"CURRENT SWITCHES: auto-dispatch={'on' if auto_code_enabled(settings) else 'off'}")
     return '\n'.join(out)

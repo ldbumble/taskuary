@@ -108,6 +108,11 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 
 
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
+def auto_code_enabled(src) -> bool:
+    """Does new coding work start its agent by itself? ONE read of `coder_auto_enabled` (a store or its settings
+    dict), missing = the seeded default. Four readers used to disagree: three read missing as off, one as on."""
+    cfg = src if isinstance(src, dict) else src.get_settings()
+    return str(cfg.get('coder_auto_enabled', DEFAULT_SETTINGS['coder_auto_enabled'])) == '1'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 # the model's own thought (idea:<slug>, or report:<id>:idea:<slug> from a report) - not a candidate the hub found
 def is_model_idea(key) -> bool: return ':idea:' in f':{key}'

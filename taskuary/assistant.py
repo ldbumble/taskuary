@@ -39,7 +39,7 @@ import json, math, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
 
-from .store import is_model_idea, task_ref
+from .store import is_model_idea, task_ref, auto_code_enabled
 from .assistantblocks import said_number   # the payload's own English for a window: 'the last two days'
 
 CHANNEL = 'assistant'
@@ -1780,7 +1780,7 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
             # the SAME start as any general task: the slot cap, the queue and the retry budget (A18, 2026-09-25) - this
             # road had its own start with none of the three
             ingest._spawn(ingest._auto_general, store, tid, brief)
-        elif store.get_settings().get('coder_auto_enabled') == '1':
+        elif auto_code_enabled(store):
             ingest._spawn(ingest._auto_code, store, tid)
         out |= {'taskId': tid, 'ref': task_ref(tid)}
     elif verb == 'snooze':

@@ -13,7 +13,8 @@ to do this when it is finished (terminal.seed_text).
 
 There used to be a second road: when the CLI's stop hook fired, a model JUDGED the quiet screen and
 closed on "finished". It is gone (the owner, 2026-09-24): a guess read off a quiet screen is not an
-ending. Only the agent saying so, or the owner's Mark done, ends a task.
+ending. Only the agent saying so, or the owner's Mark done, ends a task - and the agent only on a task
+that allows it: one the owner opened to work in (STAY_TAG) is theirs to complete (2026-09-25).
 
 It lands in coder.wrap, which is exactly what the Done button calls. Nothing about the ending
 is different because a machine started it: the same report, the same proposals, the same drafted
@@ -31,7 +32,7 @@ the Done button is still there.
 import json, re, threading, time
 from loguru import logger
 
-SETTING = 'agent_self_close'      # '1' (default) auto, 'ask' explicit-only, '0' off
+SETTING = 'agent_self_close'      # '1' (default) on, '0' off. A legacy 'ask' reads as on (see mode)
 # A task the owner opened to WORK IN, rather than to have worked FOR them. Set by claim() the
 # moment the OWNER opens a session on a task - by ANY door: + New on the Timeline or the Board, a
 # new task on the Tasks tab, Start session, Continue with coder, the Wall - and never by the
@@ -43,8 +44,9 @@ SETTING = 'agent_self_close'      # '1' (default) auto, 'ask' explicit-only, '0'
 # `taskuary --done`, and the session the owner was sitting in closed under them - the second time
 # on the same task. Who opened the session is a fact the server knows; it is not asked again.
 #
-# Once set it holds BOTH roads: the judge (a screen gone quiet) and the declaration (`--done`).
-# The agent's word is filed on the task and the session stays at its prompt; only the owner ends it.
+# ONE rule (the owner, 2026-09-25): an agent may close its own task only when the task allows it.
+# With the tag on, `declare` refuses - the agent's word is filed on the task, the session stays at
+# its prompt, and the owner keeps completion. The seed (STAY_LINE) tells the agent exactly that.
 STAY_TAG = 'stay:open'
 MIN_AGE = 45.0                    # seconds a session must have lived before it may close itself
 MIN_CHARS = 400                   # ...and printed. A session that produced nothing did nothing.
@@ -53,11 +55,16 @@ _LOCK = threading.Lock()
 
 
 def mode(store) -> str:
-    """'auto' | 'ask' | 'off'. 'ask' is the middle setting people actually want when they are
-    still learning to trust it: an agent that SAYS it is done closes the task, and one that
-    merely stops talking does not."""
+    """'on' | 'off'. There used to be three: 'auto' also let a judge close a quiet screen, 'ask' did not.
+    The judge is gone (2026-09-24), so the two behaved the same and one is left; a stored 'ask' reads as on."""
     v = str(store.get_settings().get(SETTING, '1') or '1').strip().lower()
-    return 'off' if v in ('0', 'off', 'false') else 'ask' if v == 'ask' else 'auto'
+    return 'off' if v in ('0', 'off', 'false') else 'on'
+
+
+def settle_legacy(store) -> bool:
+    """A stored 'ask' becomes '1' once, so Settings' switch shows what the setting does. True when it moved."""
+    if str(store.get_settings().get(SETTING) or '').strip().lower() != 'ask': return False
+    store.set_setting(SETTING, '1', 'upgrade'); return True
 
 
 # ── the gates ───────────────────────────────────────────────────────────────────────────
@@ -109,11 +116,11 @@ def claim(store, tid: int, actor: str = 'owner') -> bool:
 
 
 def stays_open(store, tid: int) -> bool:
-    """Did the owner open this one to sit in? Then the judge does not get to end it.
+    """Did the owner open this one to sit in? Then its agent does not get to end it - the owner does.
 
-    A session started from the Board or + New is a place the owner is working - they alt-tab, the
-    agent goes quiet for forty-five seconds, the judge reads the last screen as 'finished' and the
-    task closes with a reply drafted to nobody. The tag says: only an explicit ending counts."""
+    A session started from the Board or + New is a place the owner is working: an agent finishing a
+    step is not the owner finishing the task, and closing it would drop them out of their own session
+    with a reply drafted to nobody."""
     tags = str((store.get_task(tid) or {}).get('Tags') or '')
     return STAY_TAG in [t.strip() for t in tags.replace(',', ' ').split()]
 
@@ -131,28 +138,26 @@ def forget(tid: int) -> None:
     with _LOCK: _DONE.discard(tid)
 
 
-# ── the two roads ───────────────────────────────────────────────────────────────────────
+# ── the one road ────────────────────────────────────────────────────────────────────────
+OWNER_ENDS = 'the owner opened this session, so they complete the task - your summary is filed on it for them'
+
+
 def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
-    """The EXPLICIT road: the agent ran `taskuary --done`. It said so, so no judge is consulted -
-    only the gates that stop a double close or a task already shut. Its sentence is filed as a
-    comment before the wrap, so the report is written with the agent's own last word in the
+    """The agent ran `taskuary --done`. It said so, so no judge is consulted - only the gates that stop
+    a double close or a task already shut, and the task's own say. A `stay:open` task is the owner's
+    to complete: the agent's sentence is filed as a comment and nothing closes (the owner, 2026-09-25 -
+    the docs and the seed said the tag vetoed `--done` while this road closed anyway). Otherwise the
+    sentence is filed before the wrap, so the report is written with the agent's own last word in the
     transcript rather than instead of it."""
-    from . import coder, terminal as term
+    from . import terminal as term
     if mode(store) == 'off': return {'closed': False, 'why': 'self-closing is switched off in Settings'}
     why = blocked(store, tid, term.session_for(tid))
     # an explicit declaration outranks "it looks like a question": the agent just said otherwise
     if why and 'question' not in why: return {'closed': False, 'why': why}
     line = ' '.join(str(summary or '').split())[:1200]
-    # `--done` CLOSES IT, whoever opened the session. The stay-open tag is the JUDGE's veto and says
-    # so in as many words - "only an explicit ending counts" - but this road had been reading it as
-    # a veto on itself: the agent said it was finished, the run closed, the result was filed, and
-    # the task stayed open wearing "coder is working" with nothing left to work (the owner,
-    # 2026-09-17: "if the agent did it's job and hit --done it should close it").
-    #
-    # This does reverse TQ-0297 (2026-09-01), where an explicit finish closed under the owner
-    # mid-review. What is different is that an ending now leaves the owner everything it used to
-    # take: the agent's sentence is a comment, the report and any drafted reply wait on the task, and
-    # a closed task reopens from the Timeline. The judge is still vetoed - it gets no word here.
+    if stays_open(store, tid):
+        store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
+        return {'closed': False, 'why': OWNER_ENDS}
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     result = _finished(store, tid, term.session_for(tid), line)
     store.add_comment(tid, agent, 'agent',
@@ -176,13 +181,6 @@ def _finished(store, tid: int, s, line: str) -> str:
         logger.debug(f'finished event skipped: {e}'); return line
 
 
-def on_stop(store, term, said: str = '') -> dict:
-    """The CLI's stop hook fired. It used to judge the quiet screen and close on "finished"; that guess is OFF
-    (the owner, 2026-09-24): a task ends when the owner marks it done or its agent SAYS so (`declare`,
-    `taskuary --done`)."""
-    return {'closed': False, 'why': 'a quiet screen is not an ending - only the agent saying done, or you, ends a task'}
-
-
 def _wrap(store, tid: int, agent: str, why: str, final_message: str = '') -> dict:
     """The same ending the Done button gets. A failure here must not take the hook (or the CLI)
     with it, and it must not leave the task looking closed when it is not - so the mark is
@@ -204,11 +202,6 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '') -> dic
     return {'closed': True, 'drafting': bool(out.get('drafting')), 'why': why, **out}
 
 
-def spawn_on_stop(store, term, said: str = '') -> None:
-    """Fire-and-forget: a hook has 3 seconds and the judge is an AI call."""
-    threading.Thread(target=lambda: on_stop(store, term, said), daemon=True).start()
-
-
 # ── what the session is told ────────────────────────────────────────────────────────────
 # The explicit road only exists if the agent knows about it, so this rides in every seed prompt.
 # It is phrased as the CHEAP ending, because that is what it is: the alternative is a human
@@ -220,9 +213,10 @@ SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --r
              'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and drafts the reply unless you saved one.')
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
 # agent must NOT do is end it. Said in the prompt, because CODER.md's finishing rules say the
-# reverse and an agent reading both without this line picks the one with a command in it.
-STAY_LINE = ('THE OWNER OPENED THIS SESSION: only they end it. Never run `taskuary --done`; '
-             'summarize finished work and wait.')
+# reverse and an agent reading both without this line picks the one with a command in it. It says
+# what `declare` does: the command is refused here and the owner completes the task.
+STAY_LINE = ('THE OWNER OPENED THIS SESSION: they complete this task, not you - `taskuary --done` is refused here. '
+             'Summarize finished work and wait.')
 
 
 # ── the general chat's version of the same thing ────────────────────────────────────────

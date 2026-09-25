@@ -89,19 +89,21 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
         self.assertEqual(server.store.get_task(tid)['Status'], 'in_progress')
 
 
-class NeitherRoadEndsIt(unittest.TestCase):
+class TheOwnerKeepsCompletion(unittest.TestCase):
     def setUp(self): selfclose._DONE.clear()
 
-    def test_the_agents_done_ends_it_even_on_a_session_the_owner_opened(self):
-        """Only the JUDGE is vetoed by the tag. The agent saying it in words is the ending
-        (2026-09-17) - the road the seed prompt asks every session to take."""
+    def test_the_agents_done_is_refused_on_a_session_the_owner_opened(self):
+        """ONE rule (2026-09-25): the tag the door set means the agent's `--done` is refused, as its seed says.
+        Its sentence is filed for the owner; Mark done takes the mark off, and then the road is open again."""
         s = MemoryStore(); tid = _task(s, status='in_progress'); selfclose.claim(s, tid, 'owner')
         with mock.patch('taskuary.terminal.session_for', return_value=None), \
              mock.patch.object(selfclose, 'blocked', return_value=''), \
              mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as wrap:
             out = selfclose.declare(s, tid, 'PR 33 is not ready to merge', 'coder')
-        self.assertTrue(out['closed']); wrap.assert_called_once()
-        self.assertIn('The agent closed this itself: PR 33', ' '.join(c['Body'] for c in s.list_comments(tid)))
+            self.assertFalse(out['closed']); wrap.assert_not_called()
+            self.assertIn('The agent says it is finished: PR 33', ' '.join(c['Body'] for c in s.list_comments(tid)))
+            selfclose.unclaim(s, tid)
+            self.assertTrue(selfclose.declare(s, tid, 'PR 33 merged', 'coder')['closed']); wrap.assert_called_once()
 
 
 if __name__ == '__main__':

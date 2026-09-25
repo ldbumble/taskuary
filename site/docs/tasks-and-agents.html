@@ -173,7 +173,7 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <tr>
 <td><strong>An agent says it is finished</strong> (<code>taskuary --done</code>)</td>
 <td>The session is written up; the task waits for you with the draft if a reply is owed, otherwise it is done</td>
-<td>a reply is owed</td>
+<td>a reply is owed, or you opened the session yourself</td>
 </tr>
 <tr>
 <td><strong>Its pull request is merged or closed</strong></td>
@@ -182,7 +182,8 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 </tr>
 </tbody></table>
 <p>A task an agent or a merged pull request closed stays on your work rail until you have read it.
-A session you started yourself tells the agent to leave the ending to you.</p>
+A session you started yourself is yours to complete: the agent is told so, and if it says it is
+finished anyway its sentence is filed on the task and the task stays open until you mark it done.</p>
 <p>These never end a task:</p>
 <table>
 <thead>

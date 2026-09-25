@@ -1743,7 +1743,7 @@ def card_for(item: dict) -> dict:
 
 def move_on(store, key: str, actor: str = 'owner') -> dict:
     """Put down the thing the owner is walking away from. It is READ, and that is all: Next settles
-    nothing. It waits in Passed, still theirs, and comes back after the quiet hour.
+    nothing. It waits in Passed, still theirs, and comes back after task_return_minutes (three hours by default).
 
     Next used to END a draft waiting for a yes as `no_reply` and close its task (2026-09-07: "if you hit
     next then no more reply needed"). The Passed band replaced that - "still yours, you pressed Next" -
@@ -1768,7 +1768,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     breath and marked as shown. Nothing left: says so.
 
     `leaving` is the item the owner is walking away from - Next, and only Next. It is put down on the
-    way out (move_on): read, and any reply it was still waiting on is ended."""
+    way out (move_on): read, and nothing more - a reply it was waiting on still waits, in Passed."""
     if selection is not None and key is not None:
         raise ValueError('a captured automatic selection cannot name a different item')
     put_down = (lambda: move_on(store, leaving, actor)) if leaving else (lambda: None)
@@ -1787,8 +1787,8 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         waiting = [i for i in left if i.get('surfaced') and i['lane'] != 'working']
         if key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
         elif not only and waiting:
-            # Shown in this walk and still on the rail: a task waiting to start or one an agent left, put
-            # down within the hour, or a draft/question seen in the last half hour. Next will not repeat
+            # Shown in this walk and still on the rail: a task waiting to start, one an agent left, or a
+            # draft/question, put down less than task_return_minutes ago (180 by default). Next will not repeat
             # them yet, so the line must not promise it does - it did ("Say next and I'll take them"), and
             # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
             n = len(waiting)
@@ -1882,7 +1882,8 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
         # in the chat = read, without exception (the owner, 2026-09-07: "hitting next or done should mark it
         # read and then move on"). A draft waiting on a yes used to be held back unread; walking past one now
-        # ends the reply obligation instead - see move_on(), which the Next road calls on the way out.
+        # marks it read and leaves it waiting in Passed - move_on(), which the Next road calls on the way out,
+        # settles nothing.
         funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=True)
         set_current(store, tid, item['key'], actor)                          # on the table, written down (PW-162)
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),

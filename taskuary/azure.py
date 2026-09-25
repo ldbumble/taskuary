@@ -34,12 +34,23 @@ def _get(url, tok, **kw):
     return r
 
 
+def _subs(tok) -> list:
+    """Every subscription the app can see - ARM pages the list, and the next page's URL
+    already carries the api-version."""
+    url, params, out = f'{ARM}/subscriptions', {'api-version': '2022-12-01'}, []
+    while url:
+        j = _get(url, tok, params=params).json()
+        out += j.get('value') or []
+        url, params = j.get('nextLink'), None
+    return out
+
+
 def test(cfg: dict) -> dict:
     """Mint a management token, then list what the app can actually SEE - a token with no
     role assignments is a setup half-done, and a bare green would hide that."""
     try:
         tok = token(cfg, f'{ARM}/.default')
-        subs = _get(f'{ARM}/subscriptions', tok, params={'api-version': '2022-12-01'}).json().get('value') or []
+        subs = _subs(tok)
         if not subs:
             return {'ok': True, 'detail': 'token OK, but the app sees no subscriptions - grant it a role '
                                           '(e.g. Reader) on a subscription or resource group for ARM reads. '
@@ -59,9 +70,9 @@ def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
     known = {s['Address'] for s in store.list_sources(active_only=False) if s['Channel'] == 'azure'}
     found, cfgs = [], {}
     tok = token(cfg, f'{ARM}/.default')
-    subs = _get(f'{ARM}/subscriptions', tok, params={'api-version': '2022-12-01'}).json().get('value') or []
+    subs = _subs(tok)
     stok = None
-    for sub in subs[:5]:
+    for sub in subs:
         sid = sub['subscriptionId']
         try:
             for sa in _get(f'{ARM}/subscriptions/{sid}/providers/Microsoft.Storage/storageAccounts',

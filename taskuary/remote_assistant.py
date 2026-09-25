@@ -349,7 +349,7 @@ def _claim(channel: str, message_id) -> bool:
 
 
 def intercept(store, channel: str, chat: str, text: str, *, from_me=False, taskuary=False, connector=None,
-              message_id=None, poll=False) -> bool:
+              message_id=None, poll=False, arrived=None) -> bool:
     """Claim an owner-authored question before it can be discarded or triaged.
 
     ``taskuary`` is stamped by the local bridge on every message Taskuary itself sends. Those echoes are
@@ -367,12 +367,13 @@ def intercept(store, channel: str, chat: str, text: str, *, from_me=False, tasku
     # on a queue nobody reads again. The turn talks to the store underneath instead, like any request.
     threading.Thread(target=_locked_respond,
                      args=(getattr(store, '_store', store), channel, str(chat), question, c.get('ConnectorId'),
-                           message_id, bool(poll)),
+                           message_id, bool(poll), arrived),
                      name=f'taskuary-{channel}-assistant', daemon=True).start()
     return True
 
 
-def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None, poll=False):
+def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None, poll=False,
+                    arrived=None):
     # the thumb goes up BEFORE the lock: it says "heard you", and it must not wait behind the turn
     # already answering (which is exactly when the owner most needs to know they were heard)
     if message_id:
@@ -386,7 +387,12 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
     from . import live
     live.emit(live.CHAT, thinking=True, channel=channel)
     try:
+        heard = time.time()
         with lock: respond(store, channel, chat, question, connector_id, poll=poll)
+        # WHERE A SLOW TURN SPENT ITS TIME (2026-09-25: a poll tap took a minute and the log could not say why):
+        # from reaching the bridge to being heard here, and from heard to answered
+        lag = f'{heard - float(arrived):.1f}s to be heard, ' if arrived else ''
+        logger.info(f"{channel}: {'a poll tap' if poll else 'a message'} answered - {lag}{time.time() - heard:.1f}s to answer")
     finally: live.emit(live.CHAT, thinking=False, channel=channel)
 
 
@@ -591,7 +597,13 @@ def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: 
     out = ws.answer_open(store, int(item['tid']), words, actor) if item.get('tid') else {'delivered': False, 'state': 'no_request'}
     who = item.get('agent') or 'the agent'
     if out.get('delivered'): return f'Told {who}: "{words}".'
-    if out.get('state') == 'no_request': return f'{who} is not waiting on that any more - it is in its waiting room: "{words}".'
+    if out.get('state') == 'no_request':
+        # ...and SAVED, as the desktop saves it (server agent.answer -> waitroom_add): the phone said "it is in its
+        # waiting room" and kept nothing (A12, 2026-09-25). It reaches the agent when it next stops.
+        from . import waitroom
+        try: waitroom.add(store, int(item['tid']), words, actor)
+        except ValueError as e: return f'Could not save that for {who}: {e}'
+        return f'{who} is not asking any more - your answer "{words}" is saved and reaches it when it next stops.'
     return f'Could not get that to {who} ({out.get("state")}): {out.get("why") or ""}'.strip()
 
 

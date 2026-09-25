@@ -262,9 +262,13 @@ class AnAgentsQuestionComesBackAnsweredTests(unittest.TestCase):
     def test_a_run_that_stopped_waiting_says_so_instead_of_swallowing_it(self):
         from taskuary import workerstate as ws
         s = MemoryStore()
-        with mock.patch.object(ws, 'answer_open', return_value={'delivered': False, 'state': 'no_request'}):
+        from taskuary import waitroom
+        with mock.patch.object(ws, 'answer_open', return_value={'delivered': False, 'state': 'no_request'}),              mock.patch.object(waitroom, 'add') as saved:
             said = remote_assistant.answer_the_agent(s, asking_agent(), 'main', picked=True)
-        self.assertIn('waiting room', said)
+        # A12: the answer is kept for the agent, as the desktop keeps it - never just reported as lost
+        saved.assert_called_once()
+        self.assertEqual(saved.call_args[0][2], 'main')
+        self.assertIn('is saved and reaches it when it next stops', said)
 
 
 if __name__ == '__main__':

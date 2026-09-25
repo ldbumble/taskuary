@@ -470,8 +470,18 @@ def not_started_why(store, tid) -> str:
     who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
     tags = str(t.get('Tags') or '')
     old = ' It has been waiting since yesterday.' if str(t.get('CreatedAt') or '')[:10] < datetime.now().strftime('%Y-%m-%d') else ''
+    if terminal.SAVED in [x.strip() for x in tags.split(',')]:
+        return 'You ended the session - its report is written. Continue it, or mark the task done.'
     if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
         return f'Taskuary closed while {who} had this, so the session went with it. Nothing restarts by itself.' + old
+    # THE QUEUE SAYS WHY (A3, 2026-09-25): a full house, a start that keeps failing and a CLI that is not installed all
+    # read "nothing has started it" - only the Tasks list showed the queue
+    q = store.get_dispatch(tid) or {}
+    if q:
+        err = ' '.join(str(q.get('LastError') or '').split())[:160]
+        if q.get('State') == 'failed': return f'{who} could not start: {err or "the start failed"}. Press Start now to try again.' + old
+        if q.get('State') == 'retrying': return f'{who} failed to start ({err or "no reason given"}) - trying again shortly.' + old
+        return f'{who} is next in line - every agent slot is busy, and it starts when one frees up.' + old
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])):
         return f'{who} ran on this and stopped without finishing it.' + old
     # ...and a pty worker leaves NO run row at all - it writes a transcript on the way out, which is
@@ -491,6 +501,13 @@ def not_started_why(store, tid) -> str:
     return f'It was handed to {who} and nothing has started it.' + old
 
 
+def session_saved(store, tid) -> bool:
+    """The owner ended the agent's session and its result is written (Save and end session): `session saved`, never
+    "left without finishing" (A1, 2026-09-25). A new session clears it (terminal.open_session)."""
+    from . import terminal
+    return terminal.SAVED in [x.strip() for x in str((store.get_task(tid) or {}).get('Tags') or '').split(',')]
+
+
 def agent_left(store, tid) -> bool:
     """An agent HAD this and is gone: the interrupted tag, a run that stopped, or a transcript with nothing
     live behind it - the first three causes not_started_why names, in its order. The lane word for that
@@ -499,6 +516,7 @@ def agent_left(store, tid) -> bool:
     from . import terminal
     t = store.get_task(tid) or {}
     if terminal.INTERRUPTED in [x.strip() for x in str(t.get('Tags') or '').split(',')]: return True
+    if session_saved(store, tid): return True
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])): return True
     return bool(store.last_transcript(tid))
 

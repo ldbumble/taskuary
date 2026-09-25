@@ -3257,6 +3257,10 @@ def dispatch_cancel(tid: int):
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     if not store.get_dispatch(tid): raise HTTPException(404, 'that task has no queued start')
     store.clear_dispatch(tid)
+    # ...and the agent comes off it: left assigned, the card still read "waiting to start - nothing has started it"
+    # (A5, 2026-09-25). The task is yours; Send to agent hands it on again.
+    if str((store.get_task(tid) or {}).get('Assignee') or '').startswith('agent:'):
+        store.update_task(tid, {'Assignee': None}, ACTOR)
     store.add_comment(tid, ACTOR, 'human', 'Cancelled the queued start - the task stays on your list.')
     store.audit('task', tid, 'dispatch_cancel', ACTOR)
     return {'ok': True}
@@ -6683,6 +6687,7 @@ def stop_task_agent(task_id: int):
             if r.get('Status') == 'running': store.update_run(r['RunId'], {'Status': 'stopped'}, finished=True)
         if task.get('Status') == 'in_progress':
             store.update_task(task_id, {'Status': 'open'}, ACTOR)
+        hub_term.release_held(store, task_id, ACTOR)          # a reply held while it worked is back for your yes (A6)
         store.add_comment(task_id, ACTOR, 'human',
                           f'Stopped the {label} session. The task is open again - nobody is working it.'
                           if task.get('Status') == 'in_progress' else f'Stopped the {label} session. The task remains {task.get("Status")}.')

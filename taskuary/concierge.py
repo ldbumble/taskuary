@@ -1618,6 +1618,9 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
     while rv:
         store.decide_review(rv['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
         rv = store.pending_review(tid, live_only=False)
+    # ...and a draft HELD while an agent worked it is decided too - it stayed held and invisible for good (A6)
+    for h in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='held'", (tid,)):
+        store.decide_review(h['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
     # a closed task has nobody working it: the PATCH road stops the session and this one did not, so
     # "close it" from the chat left the agent running in the checkout (2026-09-03)
     try:

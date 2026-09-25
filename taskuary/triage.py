@@ -692,7 +692,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'failure it found transient or expected - a new run id or timestamp does not make it new), IS that task '
                            '- same_as, and fyi when its determination already answers it. A different ask, problem, system, or a '
                            'failure the closed task did not explain is new work: "same_as": null. Sharing a sender or a word is '
-                           'not being the same.')
+                           'not being the same. And look at who each task is "from": same_as joins an ask of THIS sender, or a notice from the same '
+                           'system, again. When a task is from someone else and this message is a new thread, this is '
+                           'never same_as, however closely the subject matches and even when that task already did the same fix: '
+                           'their pull request answering that issue, a second person reporting that bug, is THEIR ask - it needs '
+                           'its own task ("same_as": null), and the summary can say which task it relates to.')
             if project:
                 system += ('\n\nPROJECT RELATIONSHIP CONTEXT - selected from the owner\'s prior explicit repository '
                            'choices for this sender/channel. It helps identify what the message is about; it does '

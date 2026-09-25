@@ -70,11 +70,12 @@ CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Re
               'archive': 'Archive it', 'close': 'Mark done',
               'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
               'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
-              'prep': 'Prep me', 'followup': 'Draft a follow-up'}
+              'prep': 'Prep me', 'followup': 'Draft a follow-up', 'defer': 'Remind me'}
 # What the word will actually DO, on hover - written where the difference matters.
 CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
               'regular_agent': 'An agent takes it - triage picks a coding or a non-coding one, and you can change it on the card',
-              'mine': "A task on your own list - no agent starts", 'next': 'Read it and move on'}
+              'mine': "A task on your own list - no agent starts", 'next': 'Read it and move on',
+         'defer': 'Put the task away until a day - it is Upcoming in Tasks and back on your rail that morning'}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
 # THE SHORT LIST (the owner, 2026-09-25, word by word): eight buttons. Tomorrow and Later are gone - Next on
@@ -82,12 +83,14 @@ CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from 
 # it, Run it again, Prep me, Draft a follow-up and Handled lost their buttons (the words still work typed);
 # the three hand-offs are Make a task (yours) and Send to agent (triage picks which); the sender rules are
 # Not ours's own question. The rest of CHIP_WORDS is what `first` may still promote from a typed decision.
-CHIPS = {'review': ('approve', 'close', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
-         'agent': ('stop_agent', 'next'), 'meeting': ('mine', 'regular_agent', 'next'),
+# Remind me (`defer`) is on every card with an open task behind it (the owner, 2026-09-25: "remind me should be a walk
+# button") - it asks for the day, then the walk moves on; cannot() drops it where there is no task to put away
+CHIPS = {'review': ('approve', 'close', 'defer', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+         'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('mine', 'regular_agent', 'next'),
          'report': ('mine', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'next'), 'task': ('close', 'next'),
-         'asked': ('reply', 'mine', 'regular_agent', 'not_ours', 'next'),
-         'todo': ('reply', 'mine', 'regular_agent', 'not_ours', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'next'), 'task': ('close', 'defer', 'next'),
+         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
+         'todo': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
          'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else
@@ -525,11 +528,11 @@ def _pile_hit(store, extra: list, item: dict) -> str | None:
 # through task.create_from_text from the item's facts and the owner's words.
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
-         'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key'}
+         'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coder': 'hand to a coding agent', 'regular_agent': 'hand to a regular agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
-             'split': 'split'}
+             'split': 'split', 'defer': 'put away'}
 
 def no_agent(store) -> str:
     """The coding agent the dispatch would use, when there is not one - so "Sent off to the coding
@@ -557,6 +560,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         if gone: return (f"There is nothing to hand it to - {gone} is not set up on this machine. "
                          'Connections → AI CLI agents, and then say it again.')
     if verb == 'close' and item.get('closed'): return f"{what} is already closed - its agent finished it."
+    if verb == 'defer' and item.get('closed'): return f"{what} is closed - there is nothing to put away."
     need = NEEDS.get(verb)
     if need and not item.get(need):
         return (f"There is nothing to {SAYS_VERB.get(verb, verb)} on this one - {what} is "
@@ -1080,53 +1084,6 @@ _SWEEP_CUES = _CUES | {'remove', 'clear', 'dismiss', 'get', 'rid', 'hide', 'drop
 # setting.set, which code validates against the schema - no phrase list decides a setting.
 
 
-_STANDING = re.compile(r"\b(never|don'?t need|do not need|stop|anymore|always|from now on|not needed|taken care of|"
-                       r"handled|covered|part of|already (done|handled)|no need)\b", re.I)
-
-def _sender_for(store, words: list) -> str:
-    """Whose mail the owner's words name, from what has actually arrived - so a rule written before
-    the next batch lands is still about a person, not just a phrase."""
-    from .routing import tokens
-    tally = {}
-    for r in store.feed(limit=200, days=14):
-        if r.get('Direction') == 'out' or not (r.get('FromEmail') or ''): continue
-        hay = set(tokens(f"{r.get('FromName') or ''} {r.get('FromEmail') or ''} {r.get('Subject') or ''}"))
-        if funnel.like(words, hay) >= 2: tally[r['FromEmail'].lower()] = tally.get(r['FromEmail'].lower(), 0) + 1
-    return max(tally, key=tally.get) if tally else ''
-
-
-# "skip all the fyi from Erin and Dovid" names a LANE, not a subject. Read as subject words it
-# wrote "fyi from erin@ours.com" and "dovid from dovid@ours.com" - one rule about a word nobody
-# writes in a subject line, one about a man's own name (the 2026-09-03 break test).
-LANE_RULE_WORDS = {'fyi': 'fyi', 'fyis': 'fyi', 'report': 'report', 'reports': 'report'}
-
-def _rules_from(swept: list) -> list:
-    """One rule per sender: [{'sender', 'words'}] or [{'sender', 'lane'}]. A sender swept on their
-    name alone gets a rule about them; a sweep that named a LANE gets that lane from that sender;
-    everyone else needs their subject words, so a rule can never quietly grow into "everything from
-    this person"."""
-    by, lanes = {}, {}
-    for x in swept:
-        key = x['email'] or (x['who'] or '').lower()
-        if not key: continue
-        by.setdefault(key, set()).update(x['words'])
-        for w in x['words']:
-            if w in LANE_RULE_WORDS: lanes.setdefault(key, set()).add(LANE_RULE_WORDS[w])
-    out = []
-    for key, words in by.items():
-        if lanes.get(key):
-            out.append({'sender': key, 'lane': sorted(lanes[key])[0], 'words': []}); continue
-        own = set(re.split(r'[@.\s]+', key))
-        subject = sorted(w for w in words if w not in LANE_RULE_WORDS and not any(w in part for part in own))
-        out.append({'sender': key, 'words': subject or sorted(words)})
-    return out
-
-
-def _rule_words(rule: dict) -> str:
-    if rule.get('lane'): return f"every {rule['lane']} from {rule['sender']}"
-    return f"{' '.join(rule['words'][:4])} from {rule['sender']}" if rule.get('sender') else ' '.join(rule['words'][:4])
-
-
 def _sweep_words(text: str) -> list:
     """The TARGET, not the reason and not the rest of the instruction. Sentence by sentence: the first
     one that names anything is the target ("skip all the northwind financial reports"), and what follows is
@@ -1269,8 +1226,7 @@ def clear_selected(store, sel: dict, actor: str = 'owner') -> dict:
 
 def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> dict:
     """'Remove all the Paula Vance reports': every pile item whose sender or subject carries the owner's
-    words is marked read - it leaves the pipe and stays on the Timeline; nothing is deleted. 'Don't need
-    them' / 'never again' also names the sender so the page can write the standing verdict.
+    words is marked read - it leaves the pipe and stays on the Timeline; nothing is deleted.
 
     `hint` is what the owner said just before: "remove them from the pipeline" names nothing on its own,
     and a sweep that matches nothing is worse than none - the assistant promised twice and the mails
@@ -1282,43 +1238,11 @@ def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> di
     if not hit and hint:
         used = _sweep_words(hint)
         hit, titles, mids, swept = _sweep(store, used, actor)
-    remember = bool(re.search(r"\b(never|don'?t need|do not need|stop|anymore|always|from now on|not needed)\b", text, re.I))
-    # a sweep with a REASON in it is a standing fact, not a tidy-up: keep it in the owner's own words
-    # against the sender, so triage reads it on the next one instead of filing it as work again
-    note, sender, rules = '', next((m for m in mids if m), None), []
-    # Nothing in the pipe matches right now - but the words are a standing instruction, so the rule
-    # is written anyway. Told in advance ("don't show me Paula's Northwind financial reports"), it used to
-    # need something on the pile to attach to, so it was written NOWHERE and the next batch walked
-    # straight in (the owner, 2026-09-03: "the memory seems not to be working... how does it work?").
-    if not hit and used and _STANDING.search(text):
-        who = _sender_for(store, used)
-        try:
-            funnel.remember_mute(store, {'sender': who, 'words': used, 'why': _cut(text.strip().rstrip('.') + '.', 200)}, actor)
-            rules.append(_rule_words({'sender': who, 'words': used}))
-            store.add_memory({'Scope': 'sender' if who else 'global', 'ScopeKey': who or None,
-                              'Note': _cut(text.strip().rstrip('.') + '.', 400), 'Source': 'assistant',
-                              'Active': 1, 'CreatedBy': actor})
-        except Exception as e: logger.warning(f'concierge: the standing rule did not save - {e}')
-        return {'cleared': 0, 'titles': [], 'mid': None, 'remember': False,
-                'note': _cut(text.strip(), 400), 'words': used, 'rules': rules, 'ahead': True}
-    if hit and _STANDING.search(f'{text} {hint}'):
-        msg = (store.get_message(sender) or {}) if sender else {}
-        key = (msg.get('FromEmail') or '').lower()
-        note = _cut(text.strip().rstrip('.') + '.', 400)
-        try: store.add_memory({'Scope': 'sender' if key else 'global', 'ScopeKey': key or None, 'Note': note,
-                               'Source': 'assistant', 'Active': 1, 'CreatedBy': actor})
-        except Exception as e: logger.warning(f'concierge: the standing note did not save - {e}'); note = ''
-        # ...and the rules themselves, which are what keep the next batch out of the pipe (the note above
-        # is evidence for triage). ONE PER SENDER: "not surface northwind financials from Paula and resident
-        # refunds stuff from elisheva" is two rules, and a single one carrying both senders' words would
-        # have muted whichever sender happened to come first (the owner, 2026-09-03).
-        for one in _rules_from(swept):
-            try:
-                funnel.remember_mute(store, {**one, 'why': _rule_words(one)}, actor)
-                rules.append(_rule_words(one))
-            except Exception as e: logger.warning(f'concierge: the standing rule did not save - {e}')
-    return {'cleared': hit, 'titles': titles, 'mid': sender, 'remember': remember, 'note': note,
-            'words': used, 'rules': rules}
+    # CLEARING IS ALL THIS DOES (R8, the owner, 2026-09-25: "why is that hard coded again. The assistant should be able to
+    # do that using the tools"). A phrase list used to decide that a sweep was a standing rule, wrote a mute list only
+    # the chat read, and silenced the sender behind it. "From now on" is the model's to hear, and its tools say it:
+    # preference.exclude_sender (triage files this sender or subject) or preference.sender_rule (a rule in Settings).
+    return {'cleared': hit, 'titles': titles, 'mid': next((m for m in mids if m), None), 'words': used}
 
 
 def search_timeline(store, sel: dict, limit: int = 12) -> list:
@@ -2546,12 +2470,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
                     'Read, not deleted; they are on the Timeline.'
                     + (f" {o['stuck']} would not move just then and {'is' if o['stuck'] == 1 else 'are'} still in the pipe"
                        ' - say it again and they go too.' if o.get('stuck') else '')
-                    + (f" And remembered as {'a rule' if len(o['rules']) == 1 else str(len(o['rules'])) + ' rules'}: " + '; '.join(o['rules'])
-                       + ' - the next ones file themselves, and anything that actually asks you something still reaches you.' if o.get('rules') else '')
-                    + (' And that sender goes straight past you from now on.' if o.get('remember') and not o.get('rules') else ''))
-        if o.get('rules'):
-            return (' Nothing of those is in the pipe right now - but it is noted: ' + '; '.join(o['rules'])
-                    + ' files itself from now on. They stay on the Timeline, and anything that actually asks you something still reaches you.')
+                    )
         return ' Nothing in the pipe matches those words.'
     if kind == 'task.split':
         if o.get('newRef'): return f" {o.get('ref') or 'It'} keeps \"{o.get('kept') or ''}\" and {o['newRef']} is \"{o.get('title') or ''}\" - each is its own job now."

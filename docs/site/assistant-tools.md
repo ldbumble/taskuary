@@ -378,7 +378,7 @@ The walk and sets of items, and filing mail.
 
 ### `pipe.clear`
 
-Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted.
+Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. It only clears: when the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule.
 
 - `select` - below
 

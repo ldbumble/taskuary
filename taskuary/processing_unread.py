@@ -174,7 +174,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action,
                         priority=triage.get('priority'), tid=action.get('tid') or tid,
                         mid=action.get('mid'), settling=bool(triage.get('pending')),
-                        urgent_request=lane == 'asked' and funnel.priority_rank(triage.get('priority')) == 0)
+                        urgent_request=lane == 'asked' and (bool(triage.get('urgent')) or funnel.priority_rank(triage.get('priority')) == 0))
             card = funnel._item('', 'idea', lane, compact['title'], **base)
         else:
             card = funnel._item('', 'todo' if kind == 'task' else 'action',
@@ -227,7 +227,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # "not now", never a way to lose it. `queued` used to sit in the force-unread clause below, which
     # made a task handed to an agent the one row Done could not shift - the same question answered two
     # ways in one column (the owner, 2026-09-15: "why is that one showing up but not 575"). It clears
-    # like the rest now, and the hour brings it back. The owner's own Later/Skip still outranks it.
+    # like the rest now, and the quiet hours (task_return_minutes) bring it back. A Remind me date outranks it.
     read_at = processing_all._stamp(read.get('read_at'))
     back = bool(tid and active and not read.get('deferred') and read_at
                 and read_at <= now - timedelta(minutes=quiet))
@@ -278,8 +278,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # Later the only way to put it down - and Later is gone (R6, the owner, 2026-09-25: "next should move it to passed
     # and done should close it"). Next puts it in Passed like the rest of your work; the quiet hours bring it back.
     stopped = active and card['lane'] == 'stopped' and not read.get('deferred') and read_at is None
+    # ...and Remind me puts away a live agent or a paused conversation too, until its day (R7, 2026-09-25)
+    away = bool(reminded and remind.waiting(task, now))
     unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or (finished and finished['unread']) or
-                                                 (active and (worker or row.get('Working') or persisted_working or card.get('paused'))))
+                                                 (active and not away and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] == 'idea' or row.get('Channel') == 'assistant'))
     card.update(key='processing:' + item['item_id'], processing_id=item['item_id'],
@@ -290,7 +292,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                 more=max(0, compact['counts'].get('messages', 0) - 1),
                 source=row.get('SourceName') or compact['source'], status=row.get('MsgStatus') or compact['status'], order_band=funnel._band(card))
     # ...and on its day it says why it is back
-    if reminded and not read.get('deferred') and reminded[:10] == f'{now:%Y-%m-%d}': card['why'] = f'you asked to be reminded today ({remind.when(reminded)})'
+    # ...said off the morning's note: remind.due clears the date as it files the note, so the date alone never said it (R13)
+    due = any(c.get('Body') == remind.DUE_NOTE and str(c.get('CreatedAt') or '')[:10] == f'{now:%Y-%m-%d}' for c in view.get('comments') or [])
+    if active and not read.get('deferred') and due: card['why'] = 'you asked to be reminded about this today'
     # shown-but-not-read exists for the lanes whose unread is NOT the receipt's to give: the mark keeps
     # Next from bouncing straight back to what it just introduced (everything else shown is read - the
     # receipt says so).
@@ -305,11 +309,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # start back unread (`back`, above), the walk skipped it for the mark, and stranded it at the end
     # as "1 unread thing still waits. Say next" for as long as Next was pressed (the owner, 2026-09-18:
     # "it skipped it but then saw it at the end and hitting next just confuses it"). The mark ages out
-    # with the receipt, so the row comes round again when the hour brings it back.
+    # with the receipt, so the row comes round again when the quiet hours bring it back.
     # ONE CLOCK FOR ALL OF THEM (the owner, 2026-09-23: "promote later after an hour or so unless it's
     # silenced until tomorrow"): an agent waving and a reply ready kept a 30-minute cooldown of their own
     # and the mark for good, so the rail's Passed band and the walk disagreed about when they were back.
-    # The mark is the timer now - task_return_minutes, an hour by default - and Tomorrow is the silence.
+    # The mark is the timer now - task_return_minutes, three hours by default - and Remind me is the silence.
     card.pop('surfaced', None); card.pop('surfaced_at', None)
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
     if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped'):

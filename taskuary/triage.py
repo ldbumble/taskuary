@@ -94,6 +94,11 @@ TASK_FIELDS = (
     '"RE: RE: FW: 0 rows returned for period ending 09/15" is a mail header, not a sentence. '
     'For a task, also answer "checklist": ["<one distinct requested outcome each>"] - drawn only from what the '
     'message and exchange actually ask for; never invent a requirement, never list anything as already done.')
+# URGENT IS TRIAGE'S CALL (the owner, 2026-09-25: "we should make urgent a triage decision"). It was only ever an
+# escalate rule on a sender; nothing read the message itself for whether it could wait.
+URGENT = ('Also answer "urgent": true only when this cannot wait until tomorrow - a deadline today, someone blocked right '
+          'now, a system down, money, safety or a person\'s care at risk. The words "urgent" or "ASAP" alone are tone, not '
+          'urgency; an fyi, a newsletter or a report is never urgent. Almost everything is false.')
 
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
@@ -108,7 +113,7 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     p = {'intent': {'type': 'string', 'enum': ['task', 'reply_only', 'fyi']},
          'why': {'type': 'string'}, 'title': {'type': 'string'}, 'summary': {'type': 'string'},
          'kind': {'type': ['string', 'null'], 'enum': ['coding', 'general', 'task', None]},
-         'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}}
+         'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}, 'urgent': {'type': 'boolean'}}
     if playbooks: p['playbook'] = {'type': ['string', 'null']}
     if profiles: p['profile'] = {'type': ['string', 'null']}
     if repos: p.update(repository={'type': ['string', 'null']}, needs_repo_choice={'type': 'boolean'},
@@ -166,6 +171,7 @@ INTENT_SYSTEM = (
     + FIELDS['assistant_said'] + '\n'
     + FIELDS['recently_closed'] + '\n'
     + TASK_FIELDS + '\n'
+    + URGENT + '\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
     'nobody for anything - a task the owner glances at and drops costs less than a job nobody did, and a drafted reply '
     'is no substitute for either.')
@@ -725,6 +731,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if images:
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '
                            'screenshot of the error IS the request. Read them before deciding.')
+            # ...and "urgent" on its own (2026-09-25): a document written before triage decided urgency never asks for
+            # it, and the owner's document is otherwise left as they wrote it
+            if '"urgent"' not in base: system += '\n\n' + URGENT
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\nWHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -776,6 +785,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 summary = str(j.get('summary') or '').strip()[:1000]
                 if title: out['title'] = title
                 if summary: out['summary'] = summary
+                # urgent only means something on work: an fyi that says "urgent" is still an fyi
+                if j.get('urgent') is True and out['intent'] in ('task', 'reply_only'): out['urgent'] = True
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
                     out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
                 return out

@@ -561,7 +561,7 @@ class ResponseTests(unittest.TestCase):
                 import time; time.sleep(0.02)
         self.assertEqual(r.json()['status'], 'done'); self.assertTrue(ran.called, 'the report actually ran')
 
-    def test_a_sweep_is_confirmed_then_clears_these_and_remembers_the_kind(self):
+    def test_a_sweep_is_confirmed_then_clears_these_and_nothing_else(self):
         s = store()
         for n in range(3):
             arrive(s, subject=f'Northwind Financial Report - .0{n}', body='from Intacct', who='Paula Vance',
@@ -576,7 +576,7 @@ class ResponseTests(unittest.TestCase):
         r = run(s, p)
         self.assertEqual(r.json()['outcome']['cleared'], 3)
         self.assertEqual([i['who'] for i in pile(s)], ['Ravi'])
-        self.assertEqual([r['sender'] for r in funnel.mutes(s)], ['pvance@vendor.example'])
+        self.assertEqual(funnel.mutes(s), [])                          # a reason in the words writes no rule (R8)
         self.assertTrue(any('Cleared 3 from the pipe' in b for b in receipts(s)), receipts(s)[-2:])
         self.assertTrue(keep['message_id'])
 
@@ -1026,19 +1026,6 @@ class PipeTruthTests(unittest.TestCase):
         self.assertEqual([i for i in pile(s) if i['kind'] == 'report'], [])
         self.assertTrue(s.get_message(m))                                  # still on the Timeline
 
-    def test_a_sweep_that_names_a_lane_writes_a_lane_rule(self):
-        s = store()
-        arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Erin Blake',
-               email='erin@ours.com', conv='c:f1', hours=2, llm=brain('fyi', None))
-        out = concierge.clear_matching(s, 'skip all the fyi from Erin, I do not need those')
-        self.assertEqual(out['cleared'], 1)
-        rule = funnel.mutes(s)[0]
-        self.assertEqual((rule.get('sender'), rule.get('lane'), rule.get('words')), ('erin@ours.com', 'fyi', []))
-        # ...and it means every fyi from her, not the mails with 'fyi' in the subject
-        self.assertTrue(funnel.muted(rule, {'email': 'erin@ours.com', 'lane': 'fyi', 'title': 'lunch on Thursday'}))
-        self.assertFalse(funnel.muted(rule, {'email': 'erin@ours.com', 'lane': 'asked', 'title': 'fyi about the audit'}))
-
-
 class AgentsStartAndFinishTests(unittest.TestCase):
     """E. An agent Taskuary starts must not park on a question the owner already answered, and what
     it IS asking must reach the card."""
@@ -1221,70 +1208,6 @@ class NeverWorkTests(unittest.TestCase):
         t = s.get_task(out['task_id'])
         self.assertEqual(t['Kind'], 'coding')
         self.assertIn('pto-import', str(t['Tags'] or ''), 'the playbook rides on the task, so the session is seeded from it')
-
-
-class TellingItInAdvanceTests(unittest.TestCase):
-    """"If you tell it something, how does it know to ignore it?" (the owner, 2026-09-03). Said with
-    nothing of that kind in the pipe, the instruction used to be written NOWHERE - the sweep needed
-    something to clear. Now the words alone write the rule."""
-
-    def _history(self, s):
-        for n in range(2):
-            arrive(s, subject=f'Northwind Financial Report - .0{n} P&L', body='from Intacct', who='Paula Vance',
-                   email='pvance@vendor.example', hours=n + 1, llm=brain('fyi', None))
-        for i in pile(s): funnel.settle(s, i['key'], 'done', 'owner')      # read already; the pipe is clear
-        funnel.invalidate()
-
-    def _sweep(self, s, text):
-        """The owner's rule in words, proposed and confirmed."""
-        p = decide(s, text, 'clear')['proposal']
-        return p, run(s, p).json()
-
-    def test_the_words_alone_write_the_rule_and_the_next_batch_never_enters(self):
-        s = store()
-        self._history(s)
-        self.assertEqual(pile(s), [])
-        p = decide(s, 'paula emails about northwind financials reports should not show up anymore', 'clear')['proposal']
-        self.assertEqual(p['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])   # no rule on the words
-        out = run(s, p).json()['outcome']
-        self.assertEqual(out['cleared'], 0)                                  # nothing to clear…
-        self.assertTrue(out['ahead'])                                        # …so it was noted instead
-        self.assertEqual([(r['sender'], r['words']) for r in funnel.mutes(s)],
-                         [('pvance@vendor.example', ['paula', 'northwind', 'financials'])])
-        self.assertTrue(any('it is noted' in b and 'stay on the Timeline' in b for b in receipts(s)), receipts(s)[-2:])
-        # …and it is visible as a memory too, so the owner can see and undo it
-        notes = [n for n in s.list_memories(active_only=True) if (n['ScopeKey'] or '') == 'pvance@vendor.example']
-        self.assertTrue(notes and 'should not show up' in notes[0]['Note'])
-        arrive(s, subject='Northwind Financial Report - .098 P&L Detail ALF', body='from Intacct',
-               who='Paula Vance', email='pvance@vendor.example', hours=0, llm=brain('fyi', None))
-        funnel.invalidate()
-        p = funnel.build(s)
-        self.assertEqual((p['items'], p['muted']), ([], 1))
-
-    def test_a_real_ask_from_a_muted_sender_still_reaches_the_owner(self):
-        s = store()
-        self._history(s)
-        self._sweep(s, 'paula emails about northwind financials reports should not show up anymore')
-        with mock.patch.object(ingest, '_spawn'):
-            arrive(s, subject='Northwind Financial Report - can you re-run .02 for me?', body='please re-run it',
-                   who='Paula Vance', email='pvance@vendor.example', conv='c:rerun', hours=0, llm=brain('task', 'coding'))
-        funnel.invalidate()
-        self.assertEqual([i['lane'] for i in pile(s)], ['queued'])          # a rule only reaches the quiet lanes
-
-    def test_the_rule_is_the_owners_to_take_off_again(self):
-        s = store()
-        self._history(s)
-        self._sweep(s, 'paula emails about northwind financials reports should not show up anymore')
-        c = TestClient(server.app)
-        with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
-            listed = c.get('/api/funnel/mutes').json()['data']
-            self.assertEqual(len(listed), 1)
-            self.assertEqual(c.delete('/api/funnel/mutes/0').status_code, 200)
-        self.assertEqual(funnel.mutes(s), [])
-        arrive(s, subject='Northwind Financial Report - .099 P&L', body='from Intacct', who='Paula Vance',
-               email='pvance@vendor.example', hours=0, llm=brain('fyi', None))
-        funnel.invalidate()
-        self.assertEqual([i['who'] for i in pile(s)], ['Paula Vance'])     # back, because they said so
 
 
 class WhichCheckoutTests(unittest.TestCase):

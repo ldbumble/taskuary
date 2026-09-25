@@ -692,7 +692,7 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
                          who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
                          idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'),
-                         urgent_request=tri.get('intent') in ('task', 'reply_only') and priority_rank(tri.get('priority')) == 0))
+                         urgent_request=tri.get('intent') in ('task', 'reply_only') and (bool(tri.get('urgent')) or priority_rank(tri.get('priority')) == 0)))
     return out
 
 
@@ -1357,9 +1357,10 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
     default). skip: back tomorrow morning. surfaced: shown in this walk - and, with `read`, READ: once
     it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen."""
-    # Handled on a broken connection remembers WHICH error it put down (its sig), so a different failure
-    # comes back rather than staying hidden (processing_unread compares the two)
-    if verb == 'done' and note is None and str(key or '').startswith('conn:'):
+    # Handled - or Next - on a broken connection remembers WHICH error it put down (its sig), so a different failure
+    # comes back rather than staying hidden (processing_unread compares the two). Next from the page wrote no sig, and
+    # the error after it stayed dismissed with the one before (R10, 2026-09-25).
+    if verb in ('done', 'surfaced') and note is None and str(key or '').startswith('conn:'):
         note = next((c.get('sig') for c in broken_connections(store) if c['key'] == key), None)
     if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     if key.startswith('fyis:'):                                   # a batch: the verb lands on every member

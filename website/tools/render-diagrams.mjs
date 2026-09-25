@@ -13,7 +13,7 @@ const EDGE = process.env.BROWSER_EXE || "C:/Program Files (x86)/Microsoft/Edge/A
 // source doc -> the svgs the site shows, one per mermaid block, in order
 const DIAGRAMS = {
   "docs/how-a-task-ends.md": ["docs/site/img/how-a-task-ends.svg"],
-  "docs/assistant-words.md": ["docs/site/img/assistant-buttons.svg", "docs/site/img/assistant-questions.svg"],
+  "docs/assistant-words.md": ["docs/site/img/assistant-buttons.svg", "docs/site/img/assistant-questions.svg", "docs/site/img/assistant-task-tools.svg"],
 };
 
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: "new" });
@@ -31,7 +31,8 @@ for (const [src, outs] of Object.entries(DIAGRAMS)) {
     }, block, `d${i}`);
     const out = path.join(ROOT, outs[i]);
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, svg.replace('style="max-width', 'style="background:#fff;max-width') + "\n");
+    // an <img> parses the svg as XML, where mermaid's <br> (a line break inside a label) is an unclosed tag
+    fs.writeFileSync(out, svg.replace('style="max-width', 'style="background:#fff;max-width').replace(/<br\s*>/g, "<br/>") + "\n");
     console.log(`${src} -> ${outs[i]}`);
   }
 }

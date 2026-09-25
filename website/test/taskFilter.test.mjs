@@ -2,19 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { completionTransition, cutAway, filterForSelectedState, nextTaskId } from "../src/taskFilter.js";
 
-test("a selected task that finishes moves the rail from in progress to done", () => {
-  assert.equal(filterForSelectedState("live", "done"), "done");
+// in progress / upcoming / all - there is no Done pill (the owner, 2026-09-25); a finished task lives under all
+test("a selected task that finishes moves the rail from in progress to all", () => {
+  assert.equal(filterForSelectedState("live", "done"), "");
 });
 
-test("a selected active task reopened from done moves the rail back to in progress", () => {
-  assert.equal(filterForSelectedState("done", "working"), "live");
-  assert.equal(filterForSelectedState("done", "needs_you"), "live");
+test("a task put away with Remind me follows into upcoming, and back when it returns", () => {
+  assert.equal(filterForSelectedState("live", "upcoming"), "upcoming");
+  assert.equal(filterForSelectedState("upcoming", "working"), "live");
+  assert.equal(filterForSelectedState("upcoming", "done"), "");
 });
 
 test("all and matching buckets are left alone", () => {
   assert.equal(filterForSelectedState("", "done"), "");
   assert.equal(filterForSelectedState("live", "working"), "live");
-  assert.equal(filterForSelectedState("done", "done"), "done");
+  assert.equal(filterForSelectedState("upcoming", "upcoming"), "upcoming");
 });
 
 test("mark done advances to the next in-progress task and never back to the closed task", () => {

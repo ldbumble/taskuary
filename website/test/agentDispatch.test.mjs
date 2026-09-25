@@ -5,15 +5,17 @@ import path from "node:path";
 
 const src = (name) => fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
 
-test("the assistant offers an explicit coding or regular agent choice, in ONE place", () => {
+test("the assistant offers ONE Send to agent, and the card asks coding or not", () => {
   const cards = src("assistantCards.jsx");
   // the card is what the thing IS; the verbs are the chat line's (concierge.CHIPS)
   assert.doesNotMatch(cards, /"Coding agent"/);
   assert.doesNotMatch(cards, /"Regular agent"/);
   const py = fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "concierge.py"), "utf8");
-  assert.match(py, /'coder': 'Hand it to a coding agent'/);      // still two separate roads...
-  assert.match(py, /'regular_agent': 'Hand it to an agent'/);    // ...never one guessed kind
-  assert.match(py, /'coder', 'mine', 'not_ours'/);               // both offered on a message
+  // one button (the owner, 2026-09-25) - and still two separate roads, never one guessed kind: the card's own
+  // question offers both, triage's pick first (concierge.ALTS)
+  assert.match(py, /'regular_agent': 'Send to agent'/);
+  assert.match(py, /'mine', 'regular_agent', 'not_ours'/);
+  assert.match(py, /'agent': \(\('coder', 'A coding agent'\), \('regular_agent', 'A non-coding agent'\)\)/);
   assert.doesNotMatch(cards, /kind: coding \? "coding" : "general"/);
 });
 

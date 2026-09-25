@@ -48,6 +48,17 @@ KINDS = {
     # lesson, and reclassifying a closed task to make the point would be a second, unasked act.
     'routing.remember':         ('task', ('field', 'value'), None),
     'task.split':               ('task', ('text',), None),
+    # EVERYTHING THE TASK PAGE CAN DO (the owner, 2026-09-25: "anything you can do on the actual task should be in
+    # the assistant tools"). Each runs the page's own handler in server._run_operation, so a card and a click agree.
+    'task.update':              ('task', (), None),          # priority / title / assignee
+    'task.set_repo':            ('task', ('repo',), None),
+    'task.check':               ('task', ('item',), None),
+    'task.comment':             ('task', ('text',), None),
+    'task.handoff':             ('task', ('who',), None),    # a draft for the owner's yes - never sent from the card
+    'task.merge':               ('task', ('into',), None),
+    'task.clarify':             ('task', ('text',), None),
+    'agent.continue':           ('task', (), None),
+    'review.reject':            ('review', (), None),
     'pipe.clear':               ('pipe', (), None),          # `text` OR `select` - a sentence, or a named set
     'task.setup':               ('text', ('text',), None),
     # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection

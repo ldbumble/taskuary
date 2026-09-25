@@ -59,7 +59,7 @@ _DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?:\s*\[\s*([A-Za-z0-9_./\- ]+?)
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
-         'rerun', 'setup', 'clear', 'split', 'done', 'next', 'answer_agent', 'redraft', 'forward',
+         'rerun', 'setup', 'clear', 'done', 'next', 'answer_agent', 'redraft',
          'confirm', 'cancel', 'none')
 # The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
 # CODE's and it is fixed (the owner, 2026-09-07: "make it hardcoded, meaning add inline in the chat words
@@ -118,9 +118,9 @@ DECIDE_RULE = (
     "(a task on their own list - they will do it themselves), not_ours (file this one), "
     "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), close (Mark done - say it that way, never 'close the task'), done (Mark done), next "
     "(move on), remember (a fact to keep - after a colon), setup (building a report, a connection to another system or an automation - a walk-through with the "
-    "assistant, the request after a colon; never a to-do or a reminder, which is a new task for the owner), split (two jobs in one arrival), stop_agent (end "
+    "assistant, the request after a colon; never a to-do or a reminder, which is a new task for the owner), stop_agent (end "
     "the running agent), answer_agent (the answer for the parked agent - after a colon), rerun (run the report again), "
-    "forward (send it on - to whom after a colon), clear (clear these from the pipe), confirm (their yes to the card "
+    "clear (clear these from the pipe), confirm (their yes to the card "
     "already waiting on it - only when one is), cancel (their no to it). A decision about a DIFFERENT item than "
     "the one on the table ends the DECIDE line with ON: and the words that name it: DECIDE: not_ours ON: payroll portal outage.")
 CONTRACT = CONTRACT_HEAD + DECIDE_RULE
@@ -446,7 +446,7 @@ def parse_call(text: str) -> tuple[str, dict | None]:
     """The model's CALL line, off the end of its answer: {'kind', 'params'} or None. Validated against
     operations.KINDS here, so an invented kind never reaches a handler - it is simply not a call."""
     m = _CALL.search(text or '')
-    if not m: return (text or '').strip(), None
+    if not m: return _tool_decided(text)
     from . import toolcatalog
     try: got = json.loads(m.group(1))
     except ValueError:
@@ -457,6 +457,36 @@ def parse_call(text: str) -> tuple[str, dict | None]:
     if why:
         logger.info(f'concierge: refusing that CALL - {why}')
         return text[:m.start()].strip(), None
+    return text[:m.start()].strip(), {'kind': kind, 'params': params}
+
+
+# A TOOL NAMED ON A DECIDE LINE. Replaying the owner's words on the real brain (2026-09-25), the model chose the
+# right task tool every time and wrote it as "DECIDE: task.update: priority urgent" or "DECIDE: task.reopen ON:
+# TQ-0737" - a verb the contract does not have, so the whole answer fell through to prose and nothing happened.
+# It is read as the CALL it means, and validated the same way; the model's own words, never the owner's, are parsed.
+_TOOL_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+\.[a-z_]+)(.*?)\s*$', re.I | re.S)
+_TOOL_ARGS = ('priority', 'title', 'assignee', 'kind', 'repo', 'item', 'done', 'text', 'who', 'note', 'into', 'until', 'instructions')
+
+
+def _tool_decided(text: str) -> tuple[str, dict | None]:
+    from . import toolcatalog
+    m = _TOOL_DECIDE.search(text or '')
+    if not m or m.group(1).lower() not in toolcatalog.PURPOSE: return (text or '').strip(), None
+    kind, rest, params = m.group(1).lower(), m.group(2), {}
+    on = re.search(r'\bON:\s*(TQ-?\d+)', rest, re.I)
+    if on: params['ref'], rest = on.group(1), rest[:on.start()] + rest[on.end():]
+    arg = rest.strip().lstrip(':').strip()
+    if arg:
+        head, _, tail = arg.partition(' ')
+        if head.lower().rstrip(':') in _TOOL_ARGS and tail.strip(): params[head.lower().rstrip(':')] = tail.strip()
+        else:
+            need = [p for p in operations.KINDS[kind][1] if p not in toolcatalog.CONTEXT_FILLED]
+            if kind == 'task.update' and arg.lower() in ('low', 'normal', 'high', 'urgent'): params['priority'] = arg.lower()
+            else: params[need[0] if need else 'text'] = arg
+    why = toolcatalog.valid(kind, params)
+    if why:
+        logger.info(f'concierge: a tool named on a DECIDE line would not run - {why}')
+        return (text or '').strip(), None
     return text[:m.start()].strip(), {'kind': kind, 'params': params}
 
 
@@ -1536,12 +1566,21 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # THE APP ITSELF, BY NAME (appfacts). The model says "the AR report"; the id is ours to find, and a
     # name that finds nothing never proposes - the answer lists what exists, so the next words can aim.
     named, tk = '', operations.KINDS[kind][0]
-    if tk == 'task' and kind == 'task.defer':
-        # the task named (TQ-0123) or the one on the table - never its mail's id, which `target` below falls to first
+    # ...except a split of a mail that has no task yet, which splits the MESSAGE (split_item, from the pile key)
+    if tk in ('task', 'review') and not (kind == 'task.split' and not params.get('ref') and not it.get('tid') and it.get('mid')):
+        # THE TASK NAMED (TQ-0123) OR THE ONE ON THE TABLE - never a guess, and never its mail's id, which `target`
+        # below falls to first (a CALL on a mail's card put task.complete on the task with the MESSAGE's number).
+        # A review tool acts on the draft waiting on that task. (2026-09-25: every task-page action is a tool.)
         ref = re.search(r'(\d+)', str(params.pop('ref', '') or ''))
         t = int(ref.group(1)) if ref else it.get('tid')
-        if not t or not store.get_task(t): raise CallMiss('Name the task (TQ-0123), or open it first - nothing was put away.')
-        params['target'], named = t, task_ref(t)
+        if not t or not store.get_task(t): raise CallMiss('Name the task (TQ-0123), or open it first - nothing was changed.')
+        if tk == 'review':
+            rv = (store.get_review(it['rid']) if not ref and it.get('rid') else None) or store.pending_review(t)
+            if not rv: raise CallMiss(f'{task_ref(t)} has no draft waiting - nothing to {kind.split(".")[1]}.')
+            params['target'] = rv['ReviewId']
+        else: params['target'] = t
+        named = task_ref(t)
+        if kind == 'agent.stop': params.setdefault('wrap', True)    # the task page's Save and end session: written up, then stopped
     if tk in ('source', 'connector', 'setting', 'script'):
         from . import appfacts
         def _miss(say_): raise CallMiss(say_)         # the model's to fix (say), never passed on as it stands
@@ -1598,15 +1637,13 @@ def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, acto
 
 def _agent_task(store, item0: dict | None, text: str) -> int | None:
     """Which task the owner means when they say "close the agent": the one they NAMED, else the one on
-    the table if an agent is on it, else the only agent running. Never a task just because its card
+    the table if an agent is on it - nothing else. Never a task just because its card
     happens to be open - that is how "close the agent working" closed something else entirely."""
     ref = re.search(r'\bTQ-?0*(\d+)\b', text or '', re.I)
     live = {t.get('taskId'): t for t in _live(store) if t.get('taskId')}
     if ref and int(ref.group(1)) in live: return int(ref.group(1))
     if item0 and item0.get('tid') in live: return item0['tid']
-    running = [r['TaskId'] for r in store.running_runs() if r.get('TaskId')]
-    only = list(live) or running
-    return only[0] if len(only) == 1 else None
+    return None      # never "the only one running": that could be another task's agent (the owner, 2026-09-25)
 
 
 def split_item(store, item: dict, text: str, actor: str = 'owner') -> dict:
@@ -2474,6 +2511,11 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
     if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
+    label = {'task.update': 'Change the task', 'task.set_kind': 'Change what kind of work it is', 'task.set_repo': 'Put it in that repository',
+             'task.check': 'Tick the checklist item', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
+             'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': 'Reopen it',
+             'task.not_a_task': 'Delete it - not a task', 'dispatch.prepare': 'Start an agent on it', 'agent.continue': 'Continue the agent',
+             'review.reject': 'Reject the draft'}.get(kind, label)
     if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"Remind me: {p.get('until')}"
     return label[0].upper() + label[1:] if label else kind
 
@@ -2509,6 +2551,11 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."
     if kind == 'report.delete': return f" {o.get('title') or 'It'} is deleted."
     if kind == 'setting.set': return f" {o.get('said') or ''}"
+    if kind == 'task.update': return ' ' + ', '.join(f"{k.lower()} is now {v}" for k, v in (o.get('changed') or {}).items()) + '.'
+    if kind == 'task.check' and o.get('item'): return f" Ticked: {o['item']}."
+    if kind == 'task.handoff' and o.get('to'): return f" The hand-off to {o['to']} is below for your yes - nothing has gone."
+    if kind == 'task.clarify': return ' The question is below for your yes - nothing has gone.'
+    if kind == 'review.reject': return ' The draft is rejected; the task stays open.'
     if kind == 'task.defer': return (f" Away until {o['when']} - it is under Upcoming in Tasks, and back on your rail that morning."
                                      if o.get('remindAt') else ' It is back on your rail now.')
     if kind == 'connection.test': return f" {o.get('name') or 'It'} {'answered' if o.get('ok') else 'did not answer'}: {str(o.get('detail') or '')[:300]}"
@@ -2764,9 +2811,6 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     # a switch is already a proposal on the task (proposals.py); a hand-off to a person is a DRAFT for approval
-    if decision and verb == 'forward' and item:
-        who = (decision.get('text') or '').split(':')[0].strip()
-        return _carry_out(store, tid, text, {'verb': 'forward', 'text': decision.get('text') or '', 'who': who, 'said': text}, item, actor)
     # the words name ANOTHER subject: resolve it and propose THERE, or ask - never on what happens to be open
     target_item, elsewhere = item, False
     if decision and item and decision.get('on'):

@@ -65,9 +65,9 @@ class ChipVerbsTests(unittest.TestCase):
         self.assertFalse(slow, f'these took over a second with no model in play: {slow}')
 
     def test_memory_and_the_other_verbs_the_words_reach(self):
-        """remember / setup / clear / split / archive - offered by the words, not the chips."""
+        """remember / archive - offered by the words, not the chips (split is the task.split tool since 2026-09-25)."""
         rows = []
-        for verb, text_arg in (('remember', 'Erin handles payroll'), ('archive', None), ('split', None)):
+        for verb, text_arg in (('remember', 'Erin handles payroll'), ('archive', None)):
             s, item = self._table()
             with mock.patch.object(terminal, 'live_sessions', return_value=[]):
                 concierge.surface(s, item['key'], llm=None)

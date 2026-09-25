@@ -780,6 +780,45 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'task.reopen':
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
         store.update_task(tid, {'Status': 'open'}, ACTOR); return {'status': 'open'}
+    # THE TASK PAGE AS TOOLS (2026-09-25): each is the page's own handler, so the card and the click agree
+    if kind == 'task.update':
+        want = {'Priority': str(p.get('priority') or '').lower() or None, 'Title': str(p.get('title') or '').strip()[:200] or None}
+        if want['Priority'] and want['Priority'] not in ('low', 'normal', 'high', 'urgent'):
+            raise HTTPException(422, f"priority is low, normal, high or urgent - not {p.get('priority')!r}")
+        who = str(p.get('assignee') or '').strip()
+        if who: want['Assignee'] = ACTOR if who.lower() in ('me', 'mine', 'owner', 'myself', ACTOR.lower()) else (who if ':' in who else f'agent:{who}')
+        want = {k: v for k, v in want.items() if v}
+        if not want: raise HTTPException(422, 'say what to change - priority, title or who owns it')
+        update_task(tid, TaskBody(**want), background)
+        return {'taskId': tid, 'changed': want}
+    if kind == 'task.set_repo': return set_task_repo(tid, RepoBody(repo=str(p.get('repo') or '').strip() or None), background)
+    if kind == 'task.check':
+        items, want = store.task_checklist(tid), str(p.get('item') or '').strip()
+        hit = (items[int(want) - 1] if want.isdigit() and 0 < int(want) <= len(items) else
+               next((i for i in items if want.lower() in str(i.get('text') or '').lower()), None) if want else None)
+        if not hit: raise HTTPException(422, f"no checklist item {want!r} on {task_ref(tid)} - it has: " + '; '.join(f"{n}. {i['text']}" for n, i in enumerate(items, 1)))
+        out = tick_checklist(tid, hit['id'], ChecklistTick(done=str(p.get('done', True)).lower() not in ('false', '0', 'no')))
+        return {**(out if isinstance(out, dict) else {}), 'item': hit['text']}
+    if kind == 'task.comment':
+        comment(tid, TextBody(body=str(p.get('text') or '').strip()))
+        return {'taskId': tid}
+    if kind == 'task.handoff':
+        from . import concierge
+        t = store.get_task(tid)
+        if not t: raise HTTPException(404, 'task not found')
+        msgs = store.list_messages(tid)
+        try: return concierge.forward_item(store, {'tid': tid, 'mid': msgs[-1]['MessageId'] if msgs else None, 'title': t.get('Title'),
+                                                    'who': msgs[-1].get('FromName') if msgs else None, 'key': f'task:{tid}'},
+                                           str(p.get('who') or ''), str(p.get('note') or ''), ACTOR)
+        except ValueError as e: raise HTTPException(422, str(e))
+    if kind == 'task.merge':
+        import re as _re
+        into = _re.search(r'(\d+)', str(p.get('into') or ''))
+        if not into: raise HTTPException(422, 'name the task it is the same job as (TQ-0123)')
+        return merge_task_api(tid, MergeBody(into=int(into.group(1))))
+    if kind == 'task.clarify': return clarify_with_sender(tid, ClarifyBody(body=str(p.get('text') or '')))
+    if kind == 'agent.continue': return continue_session(tid, CodeBody())
+    if kind == 'review.reject': return decide(tid, DecideBody(verb='reject'), background)
     if kind == 'task.defer':
         from . import remind
         try: return remind.set_reminder(store, tid, p.get('until'), ACTOR)

@@ -532,7 +532,9 @@ class ResponseTests(unittest.TestCase):
         s, tid, mid, item = self._asked()
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
         live = session(tid)
-        p = decide(s, 'close the agent working', 'stop_agent', key=item['key'], live=live)['proposal']
+        # the agent NAMED, never "the only one running" - that could be another task's (2026-09-25)
+        self.assertIn('no agent is running', decide(s, 'close the agent working', 'stop_agent', live=live)['say'])
+        p = decide(s, f'close the agent working on TQ-{tid:04d}', 'stop_agent', key=item['key'], live=live)['proposal']
         self.assertEqual((p['kind'], p['target'], p['params']['wrap'], p['label'], p['settles']), ('agent.stop', tid, False, 'Save and end session', False))
         held = mock.Mock(sid='s1', alive=True, label='coder', agent='coder', task_id=tid)
         with mock.patch.object(server.hub_term, 'session_for', return_value=held), mock.patch.object(server.hub_term, 'close', return_value=True) as close:
@@ -543,7 +545,7 @@ class ResponseTests(unittest.TestCase):
         # the task page's "Save and end session": with a transcript the session is written up, WHATEVER
         # the words - "stop the agent" no longer throws its work away (2026-09-23)
         s.add_transcript(tid, 'sid1', 'ran the tests, fixed the filter', 'coder')
-        p = decide(s, 'stop the agent', 'stop_agent', key=item['key'], live=live)['proposal']
+        p = decide(s, f'stop the agent on TQ-{tid:04d}', 'stop_agent', key=item['key'], live=live)['proposal']
         self.assertTrue(p['params']['wrap']); self.assertEqual(p['label'], 'Save and end session')
 
     def test_the_agent_that_is_named_is_the_one_stopped(self):
@@ -605,7 +607,9 @@ class ResponseTests(unittest.TestCase):
                'second': {'title': 'Add Priya to the payroll distribution list', 'summary': 'mailing list'},
                'move_message_ids': []}
         with mock.patch('taskuary.reshape.propose_split', return_value=two):
-            p = decide(s, 'these are two different things, split it', 'split', key=item['key'])['proposal']
+            # split is a TOOL now, not a DECIDE verb (the owner, 2026-09-25) - the model CALLs it
+            p = say(s, 'these are two different things, split it', key=item['key'],
+                    model='Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'task.split', 'params': {'text': 'split it'}}))['proposal']
             self.assertEqual((p['kind'], p['target'], p['label']), ('task.split', tid, 'Split it in two'))
             self.assertEqual(len(s.list_tasks(active_only=True)), 1)   # one task until the click
             r = run(s, p)

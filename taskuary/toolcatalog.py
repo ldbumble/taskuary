@@ -20,7 +20,9 @@ from . import operations
 PURPOSE = {
     'task.create_from_message': 'hand this message to an agent or put it on the list - `kind`: coding | general | task',
     'task.create_from_text':    ('a new job with no message behind it - `kind`: task (a to-do or reminder the owner does '
-                                 'themselves, no agent) | general (a regular agent) | coding, and `text`'),
+                                 'themselves, no agent) | general (a regular agent) | coding, and `text`. Never for a task that '
+                                 'already exists (a TQ ref): starting an agent on one is dispatch.prepare, and its own last '
+                                 'session is agent.continue'),
     'message.file':             "file it - not ours, just this one",
     'message.archive':          'archive it: off the pipe and closed, nothing deleted',
     'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
@@ -31,8 +33,8 @@ PURPOSE = {
                                  '(2026-10-09), "2 weeks", "3 days", "monday", or "none" to bring it back now; `ref` names '
                                  'the task (TQ-0123) when it is not the one on the table'),
     'review.approve':           'send the drafted reply as it stands',
-    'agent.answer':             'answer the agent that is waiting - `text`',
-    'agent.stop':               'stop the running agent',
+    'agent.answer':             'answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table',
+    'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which",
     'report.rerun':             'run that report again',
     'memory.remember':          'keep a fact - `note`',
     'routing.remember':         ('remember how work like this should be ROUTED next time - `field`: kind | profile | system, '
@@ -41,6 +43,24 @@ PURPOSE = {
                                  'plainly ("ADP"). It teaches triage and moves nothing - say it when the owner tells you a '
                                  'verdict was wrong, or where a kind of job really belongs.'),
     'task.split':               'split one arrival into two jobs - `text`',
+    # THE TASK PAGE, as tools (2026-09-25). A task tool acts on the task on the table, or on the one `ref` names
+    # (TQ-0123) - never a guess. Each is the page's own button.
+    'task.update':              ("change a task's priority, title or owner - any of `priority`: low | normal | high | urgent, "
+                                 "`title`, `assignee` ('me', or an agent's role); `ref` when it is not the one on the table"),
+    'task.set_kind':            'say what kind of work a task is - `kind`: task (the owner does it) | general (a non-coding agent) | coding; `ref`',
+    'task.set_repo':            'put a coding task in the repository it belongs in - `repo` (its name, as the repositories list says it); `ref`',
+    'task.check':               'tick a checklist item on a task - `item`: its number (1 is the first) or words from it; `done`: false un-ticks; `ref`',
+    'task.comment':             'file a note on a task - `text`; `ref`',
+    'task.handoff':             ('hand a task to a PERSON - `who` (a name or address that has written here), `note` optional: '
+                                 "writes the forward for the owner's yes, nothing is sent from this card; `ref`"),
+    'task.merge':               "fold a task into the one it duplicates - `into`: the survivor's ref (TQ-0123); `ref` is the one folded away",
+    'task.clarify':             "prepare a question for the task's sender - `text`: the question; it waits for the owner's yes, never sent from here; `ref`",
+    'task.reopen':              'reopen a task that was marked done - `ref`',
+    'task.not_a_task':          'delete a task and teach triage it was never work - `ref`',
+    'dispatch.prepare':         ('start an agent on an EXISTING task - `kind`: coding | general, `instructions` optional; '
+                                 'a coding task asks which repository when it is not clear; `ref`'),
+    'agent.continue':           "pick up the agent's own last session on a task where it left off - `ref`",
+    'review.reject':            'reject the draft reply waiting on a task - nothing is sent, the task stays open; `ref` names the task',
     'pipe.clear':               'clear a SET of items from the pipe at once - takes `select` (below); read, never deleted',
     'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`',
     # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
@@ -144,8 +164,10 @@ def block(store=None) -> str:
         '  CALL: {"kind": "<one of the above>", "params": {...}}\n'
         'The item on the table is the target unless you say otherwise; for a SET put the selector in\n'
         'params.select. Nothing runs on a CALL - it becomes a card the owner confirms, exactly like a\n'
-        'DECIDE. Use DECIDE for the ordinary one-item verbs; use CALL when the target is a SET, or when\n'
-        'the operation has no verb. Never both in one answer, and never invent a kind.'
+        'DECIDE. DECIDE takes only the verbs the contract lists (reply, approve, not_ours, close, next...);\n'
+        'every kind in the list above - task.update, task.check, task.reopen and the rest - is a CALL, even\n'
+        'for the item on the table: CALL: {"kind": "task.update", "params": {"priority": "urgent"}}. A task\n'
+        'the owner names goes in params.ref ("TQ-0123"). Never both in one answer, and never invent a kind.'
         '\n\nWHICH ONE, in this order:\n'
         '  1. the owner means one of the ACTION WORDS under your line - do that. It is what the\n'
         '     buttons run, and it is instant.\n'

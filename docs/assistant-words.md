@@ -49,3 +49,20 @@ flowchart LR
 - **Reply on a finished agent** is for the one that left no draft. A pull request's result offers none.
 - **Retired words** (`parse_decision` maps the model's old verbs): Archive it is Not ours; Later, Tomorrow,
   "file this kind", and the `setting` verb are gone - a setting is the `setting.set` tool.
+
+## Everything the task page can do, asked for in words
+
+Every action on a task's page is also one of the Assistant's tools (`toolcatalog.PURPOSE`), run by the page's own
+handler (`server._run_operation`). A tool acts on the task on the table or the one named (TQ-0123) - never a guess.
+Replayed against the owner's real Assistant on 2026-09-25: 25 of 26 asks took the right tool on the right task.
+
+```mermaid
+flowchart LR
+  Q{"What do you ask about a task?"}
+  Q -->|change it| C["priority · title · owner → task.update<br/>kind → task.set_kind<br/>repository → task.set_repo<br/>tick a box → task.check"]
+  Q -->|note or people| P["a note → task.comment<br/>hand to a person → task.handoff (draft for your yes)<br/>ask the sender → task.clarify (draft for your yes)"]
+  Q -->|its agent| A["start one → dispatch.prepare<br/>pick up its last session → agent.continue<br/>save and end → agent.stop<br/>answer it → agent.answer"]
+  Q -->|its shape| S["two jobs → task.split<br/>a duplicate → task.merge<br/>not work → task.not_a_task"]
+  Q -->|its life| L["finished → task.complete (Mark done)<br/>back again → task.reopen<br/>not now → task.defer (Remind me)"]
+  Q -->|its draft| D["send → review.approve<br/>reject → review.reject<br/>rewrite → redraft"]
+```

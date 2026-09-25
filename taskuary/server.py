@@ -817,7 +817,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
         if not into: raise HTTPException(422, 'name the task it is the same job as (TQ-0123)')
         return merge_task_api(tid, MergeBody(into=int(into.group(1))))
     if kind == 'task.clarify': return clarify_with_sender(tid, ClarifyBody(body=str(p.get('text') or '')))
-    if kind == 'agent.continue': return continue_session(tid, CodeBody())
+    if kind == 'agent.continue': return continue_work(tid, ContinueBody(note=str(p.get('note') or '') or None))
     if kind == 'review.reject': return decide(tid, DecideBody(verb='reject'), background)
     if kind == 'hub.publish':
         from . import handbook
@@ -1446,6 +1446,37 @@ def continue_session(task_id: int, body: CodeBody = None):
         raise HTTPException(422, str(e))
     store.audit('task', task_id, 'continue-session', ACTOR, detail={'agent': row['Agent'], 'fromSid': row['Sid']})
     return {'resumed': row['ExtId'], 'agent': row['Agent'], 'fromSession': row['Sid'], 'session': session}
+
+
+class ContinueBody(BaseModel):
+    note: str | None = None          # what to tell it as it picks up - optional
+
+
+@app.post('/api/tasks/{task_id}/continue-work')
+def continue_work(task_id: int, body: ContinueBody = None):
+    """CONTINUE SESSION - one road for every agent (A19, the owner, 2026-09-25: "should work for both coding and non coding
+    agents? Maybe add a new prompt inside that continue session"). A regular agent resumes its saved conversation; a
+    coding agent reopens its own CLI session by the id its CLI gave it, or - where there is none to reopen - a fresh
+    one seeded with the handover. The owner's note, when there is one, is the first thing it hears."""
+    from . import continuity, general
+    task = store.get_task(task_id)
+    if not task: raise HTTPException(404, 'task not found')
+    if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
+    note = ' '.join(str((body.note if body else '') or '').split())[:4000]
+    if general.handles(task):
+        if not general.provider_options(store): raise HTTPException(422, 'Connect an AI provider in Connections to continue this work.')
+        if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
+        def go():
+            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(note or continuity.RESUME_PROMPT, as_owner=bool(note), echo=bool(note))
+            except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
+        threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
+        store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': bool(note)})
+        return {'continued': True, 'taskId': task_id, 'kind': 'general'}
+    row, _why = _resumable(task_id)
+    if row: out = continue_session(task_id, CodeBody(instruction=note or None))
+    else: out = continue_task(task_id, CodeBody(instruction=continuity.RESUME_PROMPT + (f'\n\nThe owner adds: {note}' if note else '')))
+    store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'coding', 'resumed': bool(row), 'note': bool(note)})
+    return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': bool(row), **(out if isinstance(out, dict) else {})}
 
 
 @app.post('/api/tasks/{task_id}/comments')

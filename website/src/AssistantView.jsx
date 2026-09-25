@@ -30,6 +30,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
+import ContinueBox from "./ContinueBox.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
@@ -600,6 +601,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const [old, setOld] = useState(null);               // an earlier chat, read-only
   const [aiEl, setAiEl] = useState(null);
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
+  const [continueOn, setContinueOn] = useState(null);  // the walk's Continue session: { task, anchor, ref }
   const [emojiEl, setEmojiEl] = useState(null);
   const [speakOnState, setSpeak] = useState(speakOn);
   const [stageMode, setStageMode] = useState("chat");   // what a click on a row does: chat (default) or task view
@@ -1140,6 +1142,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     const key = item?.key || current;
     if (c.verb === "next") { surface(null, null, key); return; }
     // REMIND ME asks for the day - the task page's own picker - and the walk moves on once it is put away
+    // CONTINUE SESSION asks what to tell it (optional), then the agent picks up - the walk moves on (A19)
+    if (c.verb === "continue") { if (item?.tid) setContinueOn({ task: { TaskId: item.tid }, anchor: anchor || null, ref: item.ref }); return; }
     if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     setBusy(true); setErr("");
@@ -1450,6 +1454,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>
+      {continueOn && <ContinueBox task={continueOn.task} anchor={continueOn.anchor || document.body} onClose={() => setContinueOn(null)}
+        onDone={(_out, note) => {
+          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: continueOn.task.TaskId, ref: continueOn.ref,
+            text: `Continuing${note ? " with your note" : ""} - it picks up where it left off, and comes back here when it stops or asks.` }]);
+          advance();
+        }} />}
       {remindOn && <RemindPicker task={remindOn.task} anchor={remindOn.anchor || document.body} onClose={() => setRemindOn(null)}
         onDone={(out) => {
           setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: remindOn.task.TaskId, ref: remindOn.ref,

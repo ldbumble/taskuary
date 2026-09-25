@@ -61,7 +61,8 @@ PURPOSE = {
     'task.not_a_task':          'delete a task and teach triage it was never work - `ref`',
     'dispatch.prepare':         ('start an agent on an EXISTING task - `kind`: coding | general, `instructions` optional; '
                                  'a coding task asks which repository when it is not clear; `ref`'),
-    'agent.continue':           "pick up the agent's own last session on a task where it left off - `ref`",
+    'agent.continue':           "pick up the agent's own last session on a task where it left off, coding or not - `ref`, "
+                                "and `note` when the owner said what to tell it as it picks up",
     'review.reject':            'reject the draft reply waiting on a task - nothing is sent, the task stays open; `ref` names the task',
     'hub.publish':              ('save to the company Hub - `title`: one durable claim, `body`: why it matters and what to do, `topic`, '
                                  '`kind`: new_idea | technical_solve | howto | gotcha | decision | system | people, `why_earned`. Only a '

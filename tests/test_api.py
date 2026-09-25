@@ -1263,6 +1263,16 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post('/api/ingest/poll').json(), {'report': 'running'})
         self.assertNotIn('ingest_status', {s['Name'] for s in c.get('/api/settings').json()['data']})
 
+    def test_list_limits_clamp_to_one_and_the_cap(self):
+        # SQLite reads LIMIT -1 as "no limit": a negative limit used to hand back the whole table (#55)
+        n = len(server.store.list_audit(limit=600))
+        for i in range(max(0, 505 - n)): server.store.audit('task', 0, 'limit-probe', 'tester', detail={'i': i})
+        for lim, want in ((-1, 1), (0, 1), (10000, 500)):
+            self.assertEqual(len(c.get('/api/audit/recent', params={'limit': lim}).json()['data']), want)
+        server.store.audit('setting', 0, 'limit-probe', 'assistant')
+        self.assertEqual(len(c.get('/api/audit/assistant', params={'limit': -1}).json()['data']), 1)
+        for u in ('/api/feed', '/api/handbook'): self.assertEqual(c.get(u, params={'limit': -1}).status_code, 200)
+
     def test_token_gate(self):
         # put it BACK, do not pop it: an install with no owner token is not a state that exists any
         # more (guard.ensure_tokens mints one), and popping it left every later test in the process

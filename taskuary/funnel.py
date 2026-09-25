@@ -368,7 +368,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             # open_only: the row is here for the open task alone (its own line was a thank-you, an
             # fyi) - build() lets the wrap-up outrank exactly these, and never a line triage kept as work
             out.append(_item(f"msg:{r['MessageId']}", 'todo', lane, subj, coding=cat == 'coding', open_only=open_only,
-                             why=('an urgent sender - ' if urgent else '') + (r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
+                             why=('urgent - ' if urgent else '') + (r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working') or open_work):   # a worked row is kept, tagged, and let go in build()
             _work(); continue

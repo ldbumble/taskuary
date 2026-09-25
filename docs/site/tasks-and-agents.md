@@ -159,6 +159,36 @@ triage, and the agent is seeded from it instead of from `CODER.md`'s repository 
 Each connector card lists the playbooks that name it, and the words themselves are edited on the
 **Docs** tab.
 
+## The work rail
+
+The rail beside the Assistant holds what still wants something from you - nothing finished, and never a history.
+
+![What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours - then Urgent, Your task, Passed, Reports, FYI or Agents working](img/rail-on.svg "What is on the rail, and under which heading.")
+
+| Heading | What lands there | Comes back to it |
+|---|---|---|
+| **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
+| **Your task** | A person's ask, a reply ready for your yes, an agent waiting on you, a hand-off that has not started, a stopped agent, a check that failed, a task an agent finished | Passed work after 3 hours |
+| **Passed** | Your work you pressed **Next** on - still yours, not offered again by the walk | - |
+| **Reports** | A report run that landed | - |
+| **FYI** | People told you things; rows whose triage failed | - |
+| **Agents working** | An agent busy on a task - nothing for you until it stops or asks | - |
+
+![Every way off the rail and what brings it back](img/rail-off.svg "Nothing leaves for good while it is still yours.")
+
+| You or it does | It goes | Back when |
+|---|---|---|
+| **Next** on your open work | Passed | after 3 hours (Settings → Passed work comes back after), or a new message |
+| **Next** on anything else | off | a new message, note or edit on it |
+| **Mark done** | off | THEY write after the close - your own reply does not count |
+| **Remind me** | Upcoming in Tasks | 07:00 on that day, saying "you asked to be reminded about this today" |
+| Its agent closes the task | "Agent finished" until you read it | a new message on it |
+| A draft decided anywhere, an idea dismissed | off | they write again |
+| An auto-reply, a withdrawn message, a thread where yours is the last word | never shown (Settings → Hide auto-replies and answered threads) | - |
+| A meeting starts | off 5 minutes in (Settings) | - |
+| **Next** on a failed connection | off | a different error |
+| Older than 14 days | off - search Tasks for it | a new message; a Remind me date |
+
 ## How work is ordered
 
 Each inbound connector chooses how the tasks it creates reach agents:

@@ -101,6 +101,23 @@ class StoppedGoesToPassedTests(unittest.TestCase):
             self.assertEqual(back, [True])
 
 
+class UrgentGoesToPassedTests(unittest.TestCase):
+    def test_next_on_an_urgent_task_puts_it_in_passed(self):
+        """R3: urgent open work left the rail for three hours on Next - Passed was for the other lanes only."""
+        from taskuary import concierge
+        s, settle = settled()
+        t = s.create_task({'Title': 'Send the August financials', 'Kind': 'task', 'Status': 'open', 'Priority': 'urgent'}, 'triage')
+        mid = mail(s, 'August financials', who='Paula Vance', email='paula@vendor.example', hours=1, tid=t)
+        s.add_route(mid, t, 'route', 1.0, 'triage: task', [], 'triage')
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            first = concierge.surface(s, llm=lambda *a, **k: 'never')
+            self.assertEqual(first['item']['tid'], t)
+            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            now = [(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t]
+        self.assertEqual(now, [(True, False)], 'in Passed, not gone')
+
+
 class RemindMeTests(unittest.TestCase):
     def test_remind_me_puts_away_a_live_agent_until_its_day(self):
         """R7: a working agent forced its row unread, whatever the date said."""

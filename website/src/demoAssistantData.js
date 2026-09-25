@@ -197,7 +197,7 @@ export function createDemoAssistantState(fx = {}) {
         { key: `alert:${census?.key}`, item: census?.key, kind: "agent", lane: "blocked", text: `coder asked you something on ${census?.ref}` },
       ],
       lanes: [
-        { lane: "blocked", word: "agent waving", role: "you", n: 1 },
+        { lane: "blocked", word: "agent waiting on you", role: "you", n: 1 },
         { lane: "approve", word: "reply pending", role: "you", n: 1 },
         { lane: "asked", word: "asked you", role: "working", n: 1 },
         { lane: "forgotten", word: "slipped", role: "info", n: 1 },

@@ -64,9 +64,9 @@ is rarely knowable from one message — and a correction teaches the class, not 
 
 ## An agent is stuck
 
-**It is waiting on you.** A raised hand on the Studio floor, a waving badge on the Board, or a
-`stopped` lane row in the work rail all mean the same thing: the session asked something. Open
-the task and answer it.
+**It is waiting on you.** A raised hand on the Studio floor, or a 👋 **agent waiting on you** row
+on the Board or the work rail, all mean the same thing: the session asked something. Open the task
+and answer it.
 
 **It is waiting on its CLI.** A headless agent without its noninteractive flag hangs forever on a
 prompt that cannot be answered. The connector presets set the flag; a custom CLI needs it added.
@@ -75,7 +75,7 @@ The card's **Test** action reproduces it in ten seconds.
 **It hit a limit.** The saved result says so. **Start new coding session** picks a different
 harness and keeps the checkout and the history.
 
-**It is gone.** If the process died, the row moves to the `stopped` lane and is forced unread, so
+**It is gone.** If the process died, the row reads ⏹ **agent stopped** and is forced unread, so
 it comes back to you rather than disappearing. Only **Later** holds it.
 
 **Stop session** ends the process and deliberately changes nothing else — not the task state, not

@@ -31,7 +31,7 @@ const CHAT = new Set(["teams", "slack", "whatsapp", "telegram", "imessage", "dis
 export const channelKind = (item) => MAIL.has(item?.channel) ? "email" : CHAT.has(item?.channel) ? "chat" : "tool";
 
 const LANE_ZONE = {
-  blocked: "floor", working: "floor", queued: "floor", stopped: "floor",
+  blocked: "floor", working: "floor", queued: "floor", stopped: "floor", saved: "floor",
   approve: "meeting", asked: "meeting", time: "meeting", unjudged: "meeting", yours: "gym",
   fyi: "coffee", report: "coffee", broken: "coffee",
   forgotten: "archive",
@@ -50,7 +50,7 @@ export function zoneItems(items = []) {
 }
 
 // what waits on YOU: a room's red count. fyi, reports and a working agent do not.
-const ON_YOU = new Set(["blocked", "approve", "asked", "yours", "unjudged", "broken", "stopped"]);
+const ON_YOU = new Set(["blocked", "approve", "asked", "yours", "unjudged", "broken", "stopped", "saved"]);
 export const needsYou = (item) => ON_YOU.has(item?.lane);
 // THE INBOX BOSS is the walk to the bottom: its health is everything you have not seen yet. Seen is the chat's
 // own mark (`surfaced` - read in the chat, or with Next here) or handled outright (gone from the pile). An agent

@@ -1,6 +1,7 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import { says } from "./laneSays.js";
 import { laneMeta } from "./funnelPile.js";
+import { AGENT } from "./taskLifecycle.js";
 import React, { useEffect, useState } from "react";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
@@ -996,9 +997,9 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
 // table handed it the same beige as `queued`, so the single row in the rail that had stopped and
 // was waiting on the owner looked exactly like the rows that were merely parked (2026-09-16).
 export const TASK_STATES = [
-  { key: "needs_you", label: "needs you", solid: ALERT, c: { bg: ALERT, fg: "#fffdfb", bd: ALERT } },
+  { key: "needs_you", label: "agent waiting on you", solid: ALERT, c: { bg: ALERT, fg: "#fffdfb", bd: ALERT } },
   { key: "working", label: "agent working", solid: "#6f8a6e", c: { bg: "#e3e6e1", fg: "#6f8a6e", bd: "#d2d6cf" } },
-  { key: "queued", label: "queued", solid: "#a09787", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
+  { key: "queued", label: "waiting to start", solid: "#a09787", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
   { key: "done", label: "done", solid: "#47654a", c: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" } },
   { key: "dropped", label: "dropped", solid: "#a09787", c: { bg: "#e9e3d8", fg: "#867f74", bd: "#e1dcd5" } },
 ];
@@ -1066,10 +1067,10 @@ const LC = {
 
 const lifecycleColor = (kind, phase) => {
   const value = String(phase || "");
-  if (value === "needs you") return LC.needsYou;          // an agent blocked on you, and only that
+  if (value === AGENT.waiting) return LC.needsYou;        // an agent blocked on you, and only that
   if (value === "draft ready" || value === "approval needed" || value === "ready") return LC.you;
-  if (value === "working" || value === "in progress") return LC.working;
-  if (value === "done" || value === "sent" || value === "result ready") return LC.done;
+  if (value === AGENT.working || value === "in progress") return LC.working;
+  if (value === "done" || value === "sent" || value === AGENT.saved || value === AGENT.finished) return LC.done;
   if (kind === "reply") return LC.reply;
   return LC.neutral;
 };
@@ -1078,7 +1079,8 @@ const lifecycleColor = (kind, phase) => {
 // ambiguity: the task can be done while an agent is stopped and a reply is still unsent.
 export const LifecycleChip = ({ kind, phase, compact = false, sx = {} }) => {
   const c = lifecycleColor(kind, phase);
-  return <Chip size="small" label={`${kind} · ${phase}`}
+  // ...unless the phase names it already: "agent · agent working" says it twice
+  return <Chip size="small" label={String(phase || "").startsWith(kind) ? phase : `${kind} · ${phase}`}
     sx={{ bgcolor: c.bg, color: c.fg, border: `1px solid ${c.bd}`, height: compact ? 17 : 20,
       fontSize: compact ? 9.5 : 10.5, fontWeight: 700, "& .MuiChip-label": { px: compact ? 0.7 : 0.9 }, ...sx }} />;
 };

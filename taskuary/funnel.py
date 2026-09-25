@@ -25,9 +25,9 @@ from .workerstate import says as agent_says, sub_state, request_line   # funnel.
 # the page said 'report', and nothing could tell you which was the mistake (the owner, 2026-09-15:
 # "we built one idea and then it was changed... it's in a bunch of places").
 #
-# 'waving', not 'waiting': the page has said waving since the pile was drawn, and the two
-# vocabularies must say one thing (the owner, 2026-09-14). A waiting agent is passive; that
-# lane is the one where somebody is trying to get your attention.
+# ONE WORD PER AGENT STATE (the owner, 2026-09-25: "let's unify the vocab for agent status ... show
+# it everywhere"): waiting to start, agent working, agent waiting on you, session saved, agent
+# stopped, agent finished - each with one mark, on the rail, the Timeline, the task page and the phone.
 _VOCAB = json.loads((Path(__file__).parent / 'lanes.json').read_text(encoding='utf-8'))
 LANES = tuple(l['key'] for l in _VOCAB['lanes'])
 LANE_WORDS = {l['key']: (l['word'], l['role']) for l in _VOCAB['lanes']}   # the word, and the theme role its dot takes
@@ -760,7 +760,7 @@ def _band(item):
                           # a task an agent FINISHED is still a task - Your task until Next reads it, never a report:
                           # reports are what a report you set up filed (the owner, 2026-09-24: "reports are never
                           # tasks just information" / "it's not agent working if task is done")
-                          actionable=lane in ('broken', 'asked', 'yours', 'queued', 'stopped') or item.get('kind') == 'agentdone',
+                          actionable=lane in ('broken', 'asked', 'yours', 'queued', 'stopped', 'saved') or item.get('kind') == 'agentdone',
                           result=lane == 'report')
 
 

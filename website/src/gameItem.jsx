@@ -280,7 +280,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
         <Btn kind="gold" disabled={!!busy || !answer.trim()} onClick={tell}>Answer · +60</Btn>
       </Box>}
       <Row>
-        {item.paused && <Btn kind="gold" disabled={!!busy} onClick={() => play("resume", item.key, () => api.post(`/api/tasks/${item.tid}/resume`)).then((ok) => ok && open(item.tid))}>▶ Continue this session · +15</Btn>}
+        {item.paused && <Btn kind="gold" disabled={!!busy} onClick={() => play("resume", item.key, () => api.post(`/api/tasks/${item.tid}/resume`)).then((ok) => ok && open(item.tid))}>▶ Continue session · +15</Btn>}
         {item.tid && <Btn onClick={() => open(item.tid)}>⌨ Jump into the code space</Btn>}
       </Row>
     </>;

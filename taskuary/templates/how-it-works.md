@@ -14,7 +14,7 @@ The lanes, in the order a sharp assistant would raise them:
 
 | lane | what it means |
 |---|---|
-| **agent waiting** | an agent stopped and is waiting on you — it is blocking work, so it comes first |
+| **agent waiting on you** | an agent asked you something, needs your approval or is stuck — it is blocking work, so it comes first |
 | **coming up** | a meeting inside two hours, or mail from a sender you marked urgent |
 | **reply pending** | a reply or an action is drafted and waits for your yes |
 | **asked you** | a person asked you for something and nobody is on it |

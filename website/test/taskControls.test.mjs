@@ -15,7 +15,7 @@ test("each control carries the caption that names its effect on task versus agen
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
     ["Save and end session", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
-    ["Save stopped run result", "Saves the stopped session's result and report. The task stays open."],
+    ["Save and end session", "Saves the stopped session's result and report. The task stays open."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
     // was named for (2026-09-22), so the caption says what the press does
@@ -24,10 +24,12 @@ test("each control carries the caption that names its effect on task versus agen
     ["Ask sender", "nothing is sent now."],
     ["Review changes", "Nothing is approved or committed here."],
   ]) {
-    const at = tasks.indexOf(`>${label}</Button>`);
-    assert.notEqual(at, -1, `${label} button`);
-    const opening = tasks.lastIndexOf("<Button", at);
-    assert.ok(tasks.slice(opening, at).includes(title), `${label}: caption "${title}"`);
+    // one name can sit on several buttons (every ending is "Save and end session", 2026-09-25): each
+    // caption must be on one of them
+    const ats = [];
+    for (let at = tasks.indexOf(`>${label}</Button>`); at !== -1; at = tasks.indexOf(`>${label}</Button>`, at + 1)) ats.push(at);
+    assert.ok(ats.length, `${label} button`);
+    assert.ok(ats.some((at) => tasks.slice(tasks.lastIndexOf("<Button", at), at).includes(title)), `${label}: caption "${title}"`);
   }
   // and the one dynamic label still says what it does in every state it can take
   assert.match(tasks, /const replyPrimary = pendingReview \? "Open the draft" : sentReview \? "Write another" : "Write reply";/);

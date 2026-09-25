@@ -8,7 +8,7 @@ import {
 
 test("task, agent and reply phases remain independent", () => {
   assert.equal(taskPhase("in_progress"), "in progress");
-  assert.equal(agentPhase({ session: { alive: true, waiting: false } }), "working");
+  assert.equal(agentPhase({ session: { alive: true, waiting: false } }), "agent working");
   assert.equal(replyPhase([{ Status: "pending", Kind: "draft" }]), "draft ready");
 });
 
@@ -36,7 +36,7 @@ test("owner completion policy is carried by the durable task tag", () => {
 
 test("timeline exposes task state beside current agent or reply attention", () => {
   assert.deepEqual(timelinePhases({ TaskStatus: "waiting", AgentWaiting: true }),
-    { task: "waiting", agent: "needs you", reply: null });
+    { task: "waiting", agent: "agent waiting on you", reply: null });
   assert.deepEqual(timelinePhases({ TaskStatus: "done", ReviewStatus: "sent" }),
     { task: "done", agent: null, reply: "sent" });
 });
@@ -52,19 +52,19 @@ test("terminal output never triggers whole-task HTTP refreshes", () => {
 });
 
 test("one stage is open: the last thing owed wins, and a closed task shows itself", () => {
-  const draftReady = { kind: "coding", task: "open", agent: "result ready", reply: "draft ready", hasSender: true };
+  const draftReady = { kind: "coding", task: "open", agent: "session saved", reply: "draft ready", hasSender: true };
   assert.equal(focusStage(draftReady), "reply");                                    // sending it is what closes the task
-  assert.equal(focusStage({ ...draftReady, agent: "needs you" }), "reply");
-  assert.equal(focusStage({ kind: "reply", task: "open", agent: "not started", reply: "not drafted", hasSender: true }), "reply");
+  assert.equal(focusStage({ ...draftReady, agent: "agent waiting on you" }), "reply");
+  assert.equal(focusStage({ kind: "reply", task: "open", agent: "waiting to start", reply: "not drafted", hasSender: true }), "reply");
   // the kind does not open the agent stage - having work in it does (2026-09-14)
-  assert.equal(focusStage({ kind: "coding", task: "open", agent: "not started", reply: "sent", hasSender: true }), "task");
-  assert.equal(focusStage({ kind: "general", task: "open", agent: "not started", reply: "not needed" }), "task");
-  assert.equal(focusStage({ kind: "coding", task: "open", agent: "working", reply: "not drafted" }), "agent");
-  assert.equal(focusStage({ kind: "general", task: "open", agent: "in conversation", reply: "not drafted" }), "agent");
-  assert.equal(focusStage({ kind: "task", task: "open", agent: "stopped", reply: "not drafted" }), "agent");
-  assert.equal(focusStage({ kind: "task", task: "open", agent: "not started", reply: "not drafted" }), "task");
-  assert.equal(focusStage({ kind: "reply", task: "open", agent: "not started", reply: "not drafted" }), "task");   // no sender to answer
-  assert.equal(focusStage({ kind: "coding", task: "done", agent: "result ready", reply: "sent" }), "task");
+  assert.equal(focusStage({ kind: "coding", task: "open", agent: "waiting to start", reply: "sent", hasSender: true }), "task");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "waiting to start", reply: "not needed" }), "task");
+  assert.equal(focusStage({ kind: "coding", task: "open", agent: "agent working", reply: "not drafted" }), "agent");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "session saved", reply: "not drafted" }), "agent");
+  assert.equal(focusStage({ kind: "task", task: "open", agent: "agent stopped", reply: "not drafted" }), "agent");
+  assert.equal(focusStage({ kind: "task", task: "open", agent: "waiting to start", reply: "not drafted" }), "task");
+  assert.equal(focusStage({ kind: "reply", task: "open", agent: "waiting to start", reply: "not drafted" }), "task");   // no sender to answer
+  assert.equal(focusStage({ kind: "coding", task: "done", agent: "session saved", reply: "sent" }), "task");
   assert.equal(focusStage({}), "task");
 });
 
@@ -87,10 +87,10 @@ test("the task page opens exactly one stage and lets you open the others by hand
 });
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {
-  assert.equal(agentPhase({ conversation: true }), "in conversation");
-  assert.equal(agentPhase({ conversation: true, report: { Body: "x" } }), "result ready");
-  assert.equal(agentPhase({}), "not started");
-  assert.equal(focusStage({ kind: "general", task: "open", agent: "in conversation", reply: "not drafted" }), "agent");
+  assert.equal(agentPhase({ conversation: true }), "session saved");
+  assert.equal(agentPhase({ conversation: true, report: { Body: "x" } }), "session saved");
+  assert.equal(agentPhase({}), "waiting to start");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "session saved", reply: "not drafted" }), "agent");
 });
 
 test("closing the task never hides behind a fold, and a finished chat can be closed out", () => {
@@ -104,7 +104,9 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   // ...and a general conversation is wrappable once its provider session is gone (server.py/coder.py, 2026-09-07)
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
   assert.match(source, /conversation: generalStarted/);
-  assert.ok(source.includes("Save this conversation's result"), "the finished chat needs its own close-out");
+  // ...under the one name every ending wears, a chat's and a coding run's alike (2026-09-25)
+  assert.ok(source.includes("onClick={wrapUp}>Save and end session</Button>}"), "the finished chat needs its own close-out");
+  assert.ok(!source.includes("Save this conversation's result") && !source.includes("Save stopped run result"));
   // interrupted work says so on the task page, not only in the list row
   assert.match(source, /interruptedTask && <Chip/);
 });
@@ -115,9 +117,9 @@ test("the agent heading says what the agent is doing, not that a session exists"
   // (the owner, 2026-09-11, TQ-0499: "is this the same bug?" - yes, the third surface of it).
   const view = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
   assert.doesNotMatch(view, /title=\{term\?\.alive \? `\$\{agentName\(t\)\} is working`/);
-  assert.match(view, /agentState === "needs you" \? `\$\{agentName\(t\)\} needs you`/);
+  assert.match(view, /agentState === AGENT\.waiting \? says\("parked", agentName\(t\)\)/);
   // and the two states still come from one place: agentPhase already reads the session's own word
-  assert.match(readFileSync(fileURLToPath(new URL("../src/taskLifecycle.js", import.meta.url)), "utf8"), /session\?\.alive\) return session\.waiting \? "needs you" : "working"/);
+  assert.match(readFileSync(fileURLToPath(new URL("../src/taskLifecycle.js", import.meta.url)), "utf8"), /session\?\.alive\) return session\.waiting \? AGENT\.waiting : AGENT\.working/);
 });
 
 test("needs you is the one phase that wears the loud colour", () => {
@@ -125,7 +127,7 @@ test("needs you is the one phase that wears the loud colour", () => {
   // the palette has always said so - theme.jsx calls ALERT "the needs-you pill" - but the chip
   // used the pale tint, the same weight as four calmer phases (the owner, 2026-09-11)
   assert.match(ui, /needsYou: \{ bg: ALERT, fg: "#fffdfb", bd: ALERT \}/);
-  assert.match(ui, /if \(value === "needs you"\) return LC\.needsYou;/);
+  assert.match(ui, /if \(value === AGENT\.waiting\) return LC\.needsYou;/);
   // ...and only that one: a draft waiting for a yes is not an agent blocked on you
   assert.match(ui, /if \(value === "draft ready" \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);
 });
@@ -134,7 +136,7 @@ test("needs you is the one phase that wears the loud colour", () => {
 // chat, has no sender and still needs a yes - so the stage cannot be gated on there being someone
 // to reply to, and the page cannot open folded over the only thing asking for you.
 test("a proposal waiting on you opens the stage, sender or no sender", () => {
-  const p = { kind: "coding", task: "open", agent: "not started", reply: "not drafted",
+  const p = { kind: "coding", task: "open", agent: "waiting to start", reply: "not drafted",
               hasSender: false, proposal: true };
   assert.equal(focusStage(p), "reply");
   assert.equal(focusStage({ ...p, proposal: false }), "task");
@@ -155,7 +157,7 @@ test("proposals are not the reply, and the reply is not a proposal", () => {
 // shows a terminal sitting at a prompt with the thing that unblocks it folded away below.
 // Parked on anything else - a question, a wall - the agent is what stopped, and it wins.
 test("a waving agent outranks a proposal, unless the proposal is what it wants", () => {
-  const base = { kind: "coding", task: "open", agent: "needs you", reply: "not drafted", proposal: true };
+  const base = { kind: "coding", task: "open", agent: "agent waiting on you", reply: "not drafted", proposal: true };
   assert.equal(focusStage({ ...base, agentSub: "asking" }), "agent");
   assert.equal(focusStage({ ...base, agentSub: "stalled" }), "agent");
   assert.equal(focusStage({ ...base, agentSub: "parked" }), "agent");
@@ -165,7 +167,7 @@ test("a waving agent outranks a proposal, unless the proposal is what it wants",
 });
 
 test("a drafted reply still outranks a waving agent, whatever it is parked on", () => {
-  const base = { kind: "coding", task: "open", agent: "needs you", reply: "draft ready" };
+  const base = { kind: "coding", task: "open", agent: "agent waiting on you", reply: "draft ready" };
   assert.equal(focusStage({ ...base, agentSub: "asking" }), "reply");
   assert.equal(focusStage({ ...base, agentSub: "approval" }), "reply");
 });

@@ -23,7 +23,7 @@ import { ROLES, ASSISTANT } from "./theme.jsx";
 import { laneMeta, ageText, agoText, assistantFocus } from "./funnelPile.js";
 import { says, subState } from "./laneSays.js";
 // the agent card's kicker, per sub-state of the blocked lane (the sentence itself is laneSays)
-const KICK = { asking: "asked", approval: "asks permission", stalled: "is stuck", parked: "stopped" };
+const KICK = { asking: "asked", approval: "asks permission", stalled: "is stuck", parked: "is waiting on you" };
 import { sendBlockLine, draftState } from "./sendState.js";
 import { progressLine } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -540,7 +540,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   return (
     // who wants what, for an agent: ONE sentence for the state (laneSays) as the lead - when the
     // question and its choices are drawn below, the bare form here - and the task under it
-    <CardShell card={card} kicker={working ? `the ${who} is working again` : card.paused ? "conversation paused" : `the ${who} ${KICK[subState(card)]}`}
+    <CardShell card={card} kicker={working ? "agent working" : card.paused ? "agent stopped" : `the ${who} ${KICK[subState(card)]}`}
       lead={<Lead text={working ? `${card.working || card.agent || who} is back at it - nothing for you until it stops.` : card.paused ? `${card.working || card.agent || who} was saved after Taskuary stopped - ready to resume.`
         : (card.choices || []).length && card.request_id ? says(subState(card), card.working || card.agent || who) : card.why || says(subState(card), card.working || card.agent || who)} who={card.working || card.agent} />}
       sub={card.paused ? null : card.title} err={err}>
@@ -595,14 +595,14 @@ export function AgentCard({ card, onDone, onOpenTask }) {
           into the agent itself, so the box is only for the folded card - and it is not a queue there: the
           waiting room types it in at once when the agent is parked at its prompt */}
       {!card.paused && !live && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
-        placeholder={card.asking ? "Or answer here — it goes straight in, it is waiting for it" : "Tell it what to do next"}
+        placeholder={card.asking ? "Or answer here — it goes straight in, it is waiting for it" : "Leave a note"}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); answer(); } }}
         sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />}
       <Foot close={card} onDone={onDone} covers={["answer_agent"]}
         verb={card.paused
-          ? <Button size="small" variant="contained" disableElevation disabled={busy} onClick={resume} sx={primary}>{busy ? "Continuing…" : "Continue this session"}</Button>
+          ? <Button size="small" variant="contained" disableElevation disabled={busy} onClick={resume} sx={primary}>{busy ? "Continuing…" : "Continue session"}</Button>
           : !live && <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>}
-        then={card.paused ? <><b>Continue this session</b> picks it up where Taskuary stopped.</>
+        then={card.paused ? <><b>Continue session</b> picks it up where Taskuary stopped.</>
           : !live ? <><b>Answer</b> goes straight to {card.working || card.agent || `the ${who}`}; it picks up where it stopped.</>
           : chat ? null : "Type into its screen above - that is the agent itself."}
         where={<Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>
@@ -684,7 +684,7 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
   }, [open, card.tid, card.presentation_revision]);
   const show = () => setOpen((o) => !o);
   return (
-    <CardShell card={card} kicker="an agent finished" lead={<Lead text={`${card.who || "The agent"} finished ${card.title}.`} who={card.who} />} err={err}>
+    <CardShell card={card} kicker="agent finished" lead={<Lead text={`${card.who || "The agent"} finished ${card.title}.`} who={card.who} />} err={err}>
       {card.summary && !open && <div className="tq-card-excerpt">{card.summary}</div>}
       {open && <div className="tq-card-full">{report === null ? "…" : looksMd(report) ? <Md text={report} /> : report}</div>}
       <button type="button" className="tq-card-more" onClick={show}>{open ? "Less" : "More - show the final report"}</button>
@@ -902,13 +902,13 @@ export function TaskCard({ card, onDone, onOpenTask }) {
       {card.summary && <div className="tq-card-excerpt">{card.summary}</div>}
       {idle && card.why_idle && <div className="tq-card-excerpt"><b>Why it has not started:</b> {card.why_idle}</div>}
       {!idle && <TextField fullWidth multiline minRows={1} maxRows={4} value={text} onChange={(e) => setText(e.target.value)}
-        placeholder="Tell the agent on this task something — it is typed in when it next stops"
+        placeholder="Leave a note — it is typed in when the agent next stops"
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); tell(); } }} sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />}
       <Foot close={card} onDone={onDone}
         verb={idle
-          ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={start} sx={primary}>{busy === "start" ? "Starting…" : "Start the agent"}</Button>
+          ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={start} sx={primary}>{busy === "start" ? "Starting…" : "Start now"}</Button>
           : <Button size="small" variant="contained" disableElevation disabled={!!busy || !text.trim()} onClick={tell} sx={primary}>{busy === "tell" ? "Queuing…" : "Tell the agent"}</Button>}
-        then={idle ? <><b>Start the agent</b> hands it to an agent now; it comes back here when it stops.</>
+        then={idle ? <><b>Start now</b> hands it to an agent now; it comes back here when it stops.</>
           : <><b>Tell the agent</b> queues your words; they are typed in when it next stops.</>}
         where={<Button size="small" onClick={() => onOpenTask?.(card.tid)} sx={faint}>Open {card.ref} ↗</Button>} />
     </CardShell>

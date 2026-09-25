@@ -17,11 +17,11 @@ import { agentPhase } from "../src/taskLifecycle.js";
 const src = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
 
 test("a live session anywhere means the agent stage is working, not 'not started'", () => {
-  assert.equal(agentPhase({ session: { alive: true } }), "working");
-  assert.equal(agentPhase({ session: { alive: true, waiting: true } }), "needs you");
+  assert.equal(agentPhase({ session: { alive: true } }), "agent working");
+  assert.equal(agentPhase({ session: { alive: true, waiting: true } }), "agent waiting on you");
   // the shape the task detail actually carries (server: hub_term.for_task)
-  assert.equal(agentPhase({ session: { sid: "c0df3a87bfa1", alive: true, agent: "coder" } }), "working");
-  assert.equal(agentPhase({}), "not started");
+  assert.equal(agentPhase({ session: { sid: "c0df3a87bfa1", alive: true, agent: "coder" } }), "agent working");
+  assert.equal(agentPhase({}), "waiting to start");
 });
 
 test("the open task is reloaded on task-changed, not just the list", () => {
@@ -54,5 +54,5 @@ test("a session that has ENDED is not adopted over the one findTerm kept", () =>
   // for_task only ever returns a live one, so adopting unconditionally would drop the transcript.
   const guard = /const live = detail\?\.session;\s*\n\s*if \(live\?\.alive/;
   assert.match(src, guard, "the adoption must be gated on alive");
-  assert.equal(agentPhase({ session: { alive: false }, transcript: "scrollback" }), "stopped");
+  assert.equal(agentPhase({ session: { alive: false }, transcript: "scrollback" }), "agent stopped");
 });

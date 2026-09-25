@@ -13,15 +13,20 @@ export const taskPhase = (status) => {
   return value;
 };
 
+// ONE WORD PER AGENT STATE, the words lanes.json gives the rail (the owner, 2026-09-25: "let's unify
+// the vocab for agent status ... show it everywhere").
+export const AGENT = { waiting: "agent waiting on you", working: "agent working", saved: "session saved",
+  stopped: "agent stopped", finished: "agent finished", idle: "waiting to start" };
+
 export const agentPhase = ({ session, run, transcript, report, conversation } = {}) => {
-  if (session?.alive) return session.waiting ? "needs you" : "working";
-  if (run?.Status === "running") return "working";
-  if (report) return "result ready";
-  if (transcript) return "stopped";
+  if (session?.alive) return session.waiting ? AGENT.waiting : AGENT.working;
+  if (run?.Status === "running") return AGENT.working;
+  if (report) return AGENT.saved;
+  if (transcript) return AGENT.stopped;
   // General work keeps its record in the conversation, not in a pty. Its provider session ends
-  // with the answer, and the card then read "not started" over a chat full of work (owner, 2026-09-07).
-  if (conversation) return "in conversation";
-  return "not started";
+  // with the answer, and the card then read as never started over a chat full of work (owner, 2026-09-07).
+  if (conversation) return AGENT.saved;
+  return AGENT.idle;
 };
 
 // Action proposals (write a playbook, push a branch, close an issue) share the review table
@@ -83,19 +88,19 @@ export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agen
   // anything else - a question, a wall - the agent is what stopped, and it wins.
   // funnelPile.assistantFocus carries the same exception; the two are asserted against each other.
   if (proposal && agentSub === "approval") return "reply";
-  if (agent === "needs you") return "agent";
+  if (agent === AGENT.waiting) return "agent";
   // a proposal is otherwise the same stage and the same kind of ask. It has no sender and it can
   // outlive the task being closed, so it is judged before either of those gates.
   if (proposal) return "reply";
   if (hasSender && kind === "reply" && !["sent", "not needed"].includes(reply)) return "reply";
   if (["done", "dropped"].includes(task)) return "task";
-  if (agent && agent !== "not started") return "agent";
+  if (agent && agent !== AGENT.idle) return "agent";
   return "task";
 };
 
 export const timelinePhases = (row) => ({
   task: taskPhase(row?.TaskStatus),
-  agent: row?.AgentWaiting ? "needs you" : row?.Working ? "working" : null,
+  agent: row?.AgentWaiting ? AGENT.waiting : row?.Working ? AGENT.working : null,
   reply: row?.ReviewStatus === "pending" ? (row?.HasDraft === 0 ? "needed" : "ready")
     : ["approved", "edited", "sent"].includes(row?.ReviewStatus) ? "sent" : null,
 });

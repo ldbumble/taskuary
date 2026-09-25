@@ -320,7 +320,7 @@ export const statusLine = (items, busy) => {
 
 // New cards and alerts carry the server's band. Old persisted cards use the same
 // five-band fallback until their current presentation is refreshed.
-const BAND = { blocked: 2, time: 1, approve: 2, broken: 2, asked: 2, yours: 2, queued: 2, stopped: 2, forgotten: 4, report: 3, fyi: 4, working: 5 };
+const BAND = { blocked: 2, time: 1, approve: 2, broken: 2, asked: 2, yours: 2, queued: 2, stopped: 2, saved: 2, forgotten: 4, report: 3, fyi: 4, working: 5 };
 export const attentionBand = (item) => {
   if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 5) return item.order_band;
   // a meeting that is not imminent, and any row whose lane this build does not know, are the

@@ -59,7 +59,7 @@ def _arrived_after_close(task, view) -> bool:
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
-OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'time')
+OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time')
 
 
 def _decided(view, allowed) -> bool:
@@ -202,7 +202,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         # ...unless an agent HAD it and is gone. That is not a queue that will clear itself, it is work
         # that stopped, and the owner is the only one who moves it: `stopped`, wearing the cause as its
         # word (the owner, 2026-09-17: "stopped should stay on stopped and shown to user to handle").
-        if funnel.agent_left(store, card['tid']): card.update(lane='stopped', why=card['why_idle'])
+        # ...and a session YOU ended is `session saved`, not `agent stopped` (A1, 2026-09-25): its report is written
+        if funnel.agent_left(store, card['tid']):
+            card.update(lane='saved' if funnel.session_saved(store, card['tid']) else 'stopped', why=card['why_idle'])
     # THE LATEST ACTION IS THE STATUS (the owner, 2026-09-24). An agent parked or asking already spoke
     # for its task over a draft; one still WORKING did not, so a reply it wrote a minute into the session
     # read "reply ready" through forty more minutes of edits. Working is newer than any draft it made -
@@ -280,7 +282,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...and stopped work is on the rail until it is looked at. It used to stay however often it was looked at, with
     # Later the only way to put it down - and Later is gone (R6, the owner, 2026-09-25: "next should move it to passed
     # and done should close it"). Next puts it in Passed like the rest of your work; the quiet hours bring it back.
-    stopped = active and card['lane'] == 'stopped' and not read.get('deferred') and read_at is None
+    stopped = active and card['lane'] in ('stopped', 'saved') and not read.get('deferred') and read_at is None
     # ...and Remind me puts away a live agent or a paused conversation too, until its day (R7, 2026-09-25)
     away = bool(reminded and remind.waiting(task, now))
     unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or (finished and finished['unread']) or
@@ -314,12 +316,12 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # "it skipped it but then saw it at the end and hitting next just confuses it"). The mark ages out
     # with the receipt, so the row comes round again when the quiet hours bring it back.
     # ONE CLOCK FOR ALL OF THEM (the owner, 2026-09-23: "promote later after an hour or so unless it's
-    # silenced until tomorrow"): an agent waving and a reply ready kept a 30-minute cooldown of their own
+    # silenced until tomorrow"): an agent waiting on you and a reply ready kept a 30-minute cooldown of their own
     # and the mark for good, so the rail's Passed band and the walk disagreed about when they were back.
     # The mark is the timer now - task_return_minutes, three hours by default - and Remind me is the silence.
     card.pop('surfaced', None); card.pop('surfaced_at', None)
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
-    if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped'):
+    if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped', 'saved'):
         shown_at = processing_all._stamp(shown.get('At'))
         if shown_at is None or shown_at > now - timedelta(minutes=quiet):
             card.update(surfaced=True, surfaced_at=shown.get('At'))

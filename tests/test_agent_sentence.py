@@ -38,7 +38,7 @@ class Says(unittest.TestCase):
         self.assertEqual(ws.says('approval', 'coder', 'Bash rm -rf build'), 'coder needs your approval: Bash rm -rf build')
 
     def test_parked_has_no_words_to_carry(self):
-        self.assertEqual(ws.says('parked', 'coder', 'whatever the screen said'), 'coder stopped and is waiting on you')
+        self.assertEqual(ws.says('parked', 'coder', 'whatever the screen said'), 'coder is waiting on you')
 
     def test_request_line_is_the_same_table(self):
         self.assertEqual(ws.request_line('coder', {'kind': 'stalled', 'text': 'rate limit'}), ws.says('stalled', 'coder', 'rate limit'))

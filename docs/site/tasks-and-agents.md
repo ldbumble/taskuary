@@ -71,6 +71,20 @@ and topic history, the learned profile, and reports from related closed tasks.
 **Mark done** is stronger than all of them: it closes the task *and* ends any live session,
 because a finished task should not leave an orphan process running.
 
+### What an agent is doing
+
+An agent is always in one of six states. Each has one word and one mark, and the work rail, the
+Timeline, the task page, the Board, the assistant's cards and the phone all use the same ones.
+
+| Mark | State | What it means | Your move |
+|---|---|---|---|
+| ⏳ | **waiting to start** | Handed to an agent, not running yet | **Start now** |
+| ⚙️ | **agent working** | Running, and needs nothing from you | **Leave a note** for when it stops |
+| 👋 | **agent waiting on you** | Running, and it asked you something, needs your approval, or is stuck | Answer it |
+| 💾 | **session saved** | You ended it with **Save and end session**; its report is written | **Continue session**, or **Mark done** |
+| ⏹ | **agent stopped** | It ended without finishing: a crash, a closed pane, Taskuary closing | **Continue session**, or hand it on |
+| ✅ | **agent finished** | The agent, or its merged pull request, closed the task | Read the result |
+
 The saved result is deliberately short. Every finished coding session also writes a full Markdown
 artifact with that result and the complete transcript — **Work details → Full artifact** on the
 task page.
@@ -168,7 +182,7 @@ The rail beside the Assistant holds what still wants something from you - nothin
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
-| **Your task** | A person's ask, a reply ready for your yes, an agent waiting on you, a hand-off that has not started, a stopped agent, a check that failed, a task an agent finished | Passed work after 3 hours |
+| **Your task** | A person's ask, a reply ready for your yes, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a check that failed, a task an agent finished | Passed work after 3 hours |
 | **Passed** | Your work you pressed **Next** on - still yours, not offered again by the walk | - |
 | **Reports** | A report run that landed | - |
 | **FYI** | People told you things; rows whose triage failed | - |

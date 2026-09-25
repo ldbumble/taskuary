@@ -1098,7 +1098,7 @@ def close_upstream_ended(store, tid: int, said: str, final: str):
     from . import coder
     store.add_comment(tid, 'router', 'agent', said)
     try:
-        coder.wrap(store, tid, close=True, actor='router', final_message=final)
+        coder.wrap(store, tid, close=True, actor='router', final_message=final, no_reply=True)   # a merged PR owes nobody a reply (A21)
     except ValueError as e:
         logger.info(f'TQ-{tid:04d}: nothing to wrap up ({e}) - closing it plainly')
         store.update_task(tid, {'Status': 'done'}, 'router')

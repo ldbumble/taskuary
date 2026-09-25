@@ -1777,7 +1777,9 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
             brief += (f"\n\nThe source - {src.get('Subject') or 'the message'}:\n"
                       + src['BodyText'].split('\n--- raw data ---')[0].strip()[:6000])
         if kind == 'general':
-            ingest._spawn(_auto_general, store, tid, brief)
+            # the SAME start as any general task: the slot cap, the queue and the retry budget (A18, 2026-09-25) - this
+            # road had its own start with none of the three
+            ingest._spawn(ingest._auto_general, store, tid, brief)
         elif store.get_settings().get('coder_auto_enabled') == '1':
             ingest._spawn(ingest._auto_code, store, tid)
         out |= {'taskId': tid, 'ref': task_ref(tid)}
@@ -1797,13 +1799,3 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
     return out
 
 
-def _auto_general(store, tid: int, brief: str) -> None:
-    """The regular-agent counterpart to ingest._auto_code for an accepted assistant idea."""
-    from . import general
-    try:
-        session = general.start_session(store, tid, actor='router')
-        store.add_comment(tid, 'router', 'agent', 'sent to the regular agent from the assistant')
-        session.send_prompt(brief)
-    except Exception as e:
-        logger.warning(f'regular-agent dispatch failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f'Regular-agent start failed: {str(e)[:200]}')

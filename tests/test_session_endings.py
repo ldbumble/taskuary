@@ -85,3 +85,20 @@ class HeldReplyComesBackTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class MergedPullRequestOwesNoReplyTests(unittest.TestCase):
+    def test_no_reply_is_drafted_when_the_pull_request_ended_it(self):
+        """A21: close_upstream_ended passes no_reply - nobody is owed an answer on a merged or closed PR."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Export fix', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        s.add_message({'TaskId': tid, 'ExternalId': 'gh-1', 'Channel': 'github', 'Subject': 'Fix the export', 'FromName': 'Erin Blake',
+                       'FromEmail': 'erin@northwind.example', 'BodyText': 'PR opened', 'Status': 'routed'})
+        prev, coder.REFRESH = coder.REFRESH, None
+        try:
+            with mock.patch('taskuary.responder.write_draft', return_value='Merged, thanks.') as draft:
+                out = coder.finish(s, tid, {'summary': 'merged', 'outcome': 'did_work'}, None, 'coder', no_reply=True)
+        finally: coder.REFRESH = prev
+        draft.assert_not_called()
+        self.assertFalse(out.get('drafting'))
+        self.assertEqual(s.list_reviews('pending'), [])

@@ -230,7 +230,7 @@ def freshen(store, task_id: int, mid: int) -> dict:
 
 
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder',
-           complete_result: str = None, owner_done: bool = False, keep_open: bool = False) -> dict:
+           complete_result: str = None, owner_done: bool = False, keep_open: bool = False, no_reply: bool = False) -> dict:
     """The end of finished work: the conversation is refreshed, the ask reassessed, and the responder
     drafts the reply the sender gets from the saved result and the thread as it stands; the task waits
     on you to send it. Nothing to reply to means nothing to wait for, so it just closes.
@@ -264,6 +264,8 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     # their send - dismissing it closes the task too, now that the stay-open mark comes off - but a draft
     # nobody can send does not hold a task the owner just closed
     if owner_done and mid and not can_send: mid = None
+    # ...and when its pull request ended it (merged or closed), nobody is owed an answer (A21, 2026-09-25)
+    if no_reply: mid = None
     # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
     if mid and not held and not own_draft(store, task_id) and nobody_waiting(store, mid, rep):
         store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '
@@ -316,7 +318,7 @@ def _ended(store, tid: int, close: bool, actor: str):
 
 
 def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = None,
-         final_message: str = '') -> dict:
+         final_message: str = '', no_reply: bool = False) -> dict:
     """"We're done" - the whole ending, in one callable. The transcript becomes the report, the
     session dies, proposals become reviews, and finish() drafts the reply the sender gets.
 
@@ -369,7 +371,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         if task.get('Status') not in ('done', 'dropped'):
             fin = finish(store, tid, {'summary': last}, None, 'assistant',
                          reply_source(general.conversation_text(store, tid), final_message or last),
-                         owner_done=close and actor == 'owner', keep_open=not close) or {}
+                         owner_done=close and actor == 'owner', keep_open=not close, no_reply=no_reply) or {}
             if close:
                 from . import selfclose; selfclose.unclaim(store, tid, actor)
         store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
@@ -428,7 +430,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     fin = {}
     if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
         fin = finish(store, tid, rep, None, agent, reply_source(text, final_message),
-                     owner_done=close and actor == 'owner', keep_open=not close) or {}
+                     owner_done=close and actor == 'owner', keep_open=not close, no_reply=no_reply) or {}
         if close:
             from . import selfclose; selfclose.unclaim(store, tid, actor)   # the owner ended it; the mark that kept it open has done its job
     # ...and the last question, once the report and the reply are in hand: was this a KIND of job that

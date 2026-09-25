@@ -34,7 +34,9 @@ class EndingTheRunTests(unittest.TestCase):
             out = coder.wrap(self.s, tid, close=False, actor='owner')
         self.assertTrue(out['drafting'], 'the answer is written when the run ends')
         self.assertTrue(drafted.called)
-        self.assertEqual((self.s.get_task(tid) or {})['Status'], 'in_progress', 'the run ended, not the task')
+        # the run ended, not the task: open and `session saved`, not in progress with nobody on it (A1/A2, 2026-09-25)
+        self.assertEqual((self.s.get_task(tid) or {})['Status'], 'open', 'the run ended, not the task')
+        from taskuary import funnel; self.assertTrue(funnel.session_saved(self.s, tid))
         rv = self.s.pending_review(tid) or {}
         self.assertEqual(rv.get('Kind'), 'draft_reply', 'a reply is waiting for the owner on the task')
         self.assertEqual(drafted.call_args[0][1], tid, 'drafted from THIS task and what the session found')
@@ -56,7 +58,7 @@ class EndingTheRunTests(unittest.TestCase):
         with mock.patch.object(responder, 'write_draft', side_effect=AssertionError('nobody to answer')), self.summary:
             out = coder.wrap(self.s, tid, close=False, actor='owner')
         self.assertFalse(out['drafting'])
-        self.assertEqual((self.s.get_task(tid) or {})['Status'], 'in_progress')
+        self.assertEqual((self.s.get_task(tid) or {})['Status'], 'open')          # not closed - and nobody is working it
 
 
 if __name__ == '__main__':

@@ -146,7 +146,10 @@ def main():
         if not str(tid).isdigit():
             print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to reply on')
             return
-        if args.reply_file: text = open(args.reply_file, encoding='utf-8').read()
+        if args.reply_file:
+            try: text = open(args.reply_file, encoding='utf-8').read()
+            except (OSError, UnicodeDecodeError) as e:
+                print(f'not saved: cannot read {args.reply_file}: {getattr(e, "strerror", None) or e}'); return
         else: text = sys.stdin.read() if args.reply == '-' else args.reply
         srv = config.load()['server']
         host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']

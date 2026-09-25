@@ -1087,7 +1087,7 @@ def gh_login(store, tok: str) -> str:
     return me
 
 
-def close_upstream_ended(store, tid: int, said: str, final: str):
+def close_upstream_ended(store, tid: int, said: str, final: str, actor: str = 'router'):
     """Close a task whose upstream item is over - through the NORMAL ending, not a status flip.
 
     wrap() is the same call the Done button makes: the report is written, the transcript becomes
@@ -1098,16 +1098,16 @@ def close_upstream_ended(store, tid: int, said: str, final: str):
     from . import coder
     store.add_comment(tid, 'router', 'agent', said)
     try:
-        coder.wrap(store, tid, close=True, actor='router', final_message=final, no_reply=True)   # a merged PR owes nobody a reply (A21)
+        coder.wrap(store, tid, close=True, actor=actor, final_message=final, no_reply=True)   # a merged PR owes nobody a reply (A21)
     except ValueError as e:
         logger.info(f'TQ-{tid:04d}: nothing to wrap up ({e}) - closing it plainly')
-        store.update_task(tid, {'Status': 'done'}, 'router')
+        store.update_task(tid, {'Status': 'done'}, actor)
     except Exception as e:
         logger.warning(f'TQ-{tid:04d}: the ending failed ({e}) - closing it plainly')
-        store.update_task(tid, {'Status': 'done'}, 'router')
+        store.update_task(tid, {'Status': 'done'}, actor)
 
 
-def _gh_ended(store, item: dict, base: str, repo: str) -> int:
+def _gh_ended(store, item: dict, base: str, repo: str, tok: str = None) -> int:
     """The item this task came from is over - it was closed or merged upstream.
 
     The work is moot whatever state the task is in, so it leaves the work list rather than
@@ -1123,7 +1123,15 @@ def _gh_ended(store, item: dict, base: str, repo: str) -> int:
     kind = 'pull request' if 'pull_request' in item else 'issue'
     said = (f"The {kind} this task came from was {what} on GitHub "
             f"({repo}#{item['number']}), so there is nothing left to do here.")
-    close_upstream_ended(store, tid, said, f'{repo}#{item["number"]} was {what} on GitHub - {said}')
+    # ...unless the owner ended it. Their own merge came back on the rail as a result "Its pull request" finished,
+    # unread after the startup catch-up (TQ-0754, 2026-09-25): the close is theirs, and theirs is never news
+    from . import github, whoami
+    try: who = github.closed_by(tok, repo, item['number']).lower() if tok else ''
+    except Exception as e:
+        logger.warning(f'github: who ended {base} could not be read ({e})'); who = ''
+    mine = bool(who and who in whoami.github_logins(store))
+    if mine: said = f"You {what} this {kind} on GitHub ({repo}#{item['number']}), so there is nothing left to do here."
+    close_upstream_ended(store, tid, said, f'{repo}#{item["number"]} was {what} on GitHub - {said}', 'owner' if mine else 'router')
     logger.info(f'github: {base} was {what} - closed TQ-{tid:04d}')
     return 0
 
@@ -1193,7 +1201,7 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
         if (i.get('state') or 'open') != 'open':
             # an ending we never saw begin is history: a backfill reaches items closed long
             # before Taskuary existed, and none of those is a job for anybody
-            if known: n += _gh_ended(store, i, base, repo)
+            if known: n += _gh_ended(store, i, base, repo, tok)
             continue
         # a robot filing its own chore (a downloads chart, a dependency bump) is not somebody
         # asking the owner for something - the same rule its comments get

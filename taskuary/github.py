@@ -99,6 +99,13 @@ def pr(tok, repo, number):
             'merged': j.get('merged'), 'mergeable': j.get('mergeable')}
 
 
+def closed_by(tok, repo, number) -> str:
+    """The login that closed an issue or merged a pull request - the list endpoint leaves it out, the item carries it."""
+    r = requests.get(f'{GH}/repos/{repo}/issues/{number}', headers=_h(tok), timeout=20)
+    r.raise_for_status()
+    return str((r.json().get('closed_by') or {}).get('login') or '')
+
+
 def pr_diff(tok, repo, number) -> str:
     """The pull request's own unified diff, as GitHub serves it - what a review of a PR task is
     a review OF. The checkout's diff is the agent's footprint; this is the contributor's."""

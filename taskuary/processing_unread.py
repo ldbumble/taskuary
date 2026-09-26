@@ -59,7 +59,7 @@ def _arrived_after_close(task, view) -> bool:
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
-OWNER_LANES = ('yours', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time')
+OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time')
 
 
 def _decided(view, allowed) -> bool:
@@ -222,6 +222,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...and the row behind it says so too: a mail-backed row read 'asked you' - as if a person were
     # waiting on the owner - while the task under it was already an agent's (the owner, 2026-09-07:
     # "What about all the other tasks?")
+    # WAITING ON THEM (the owner, 2026-09-25): a task set to waiting read "on you" here while the Tasks list and the
+    # task page said "waiting on them" - the rail had no lane for it. The TASK only: a message from them is their
+    # answer, and that is your move again (FollowUpTests)
+    if not row.get('MessageId') and task.get('Status') == 'waiting' and not review and card['lane'] == 'yours': card['lane'] = 'theirs'
     if queued and card['lane'] in ('asked', 'yours'):
         card.update(lane='queued', why=f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'the regular agent'}, not started yet")
     # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a

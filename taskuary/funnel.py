@@ -784,7 +784,7 @@ def _band(item):
                           # a task an agent FINISHED is still a task - Your task until Next reads it, never a report:
                           # reports are what a report you set up filed (the owner, 2026-09-24: "reports are never
                           # tasks just information" / "it's not agent working if task is done")
-                          actionable=lane in ('broken', 'asked', 'yours', 'queued', 'stopped', 'saved') or item.get('kind') == 'agentdone',
+                          actionable=lane in ('broken', 'asked', 'yours', 'theirs', 'queued', 'stopped', 'saved') or item.get('kind') == 'agentdone',
                           result=lane == 'report')
 
 

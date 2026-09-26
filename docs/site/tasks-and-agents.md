@@ -223,7 +223,7 @@ The rail beside the Assistant holds what still wants something from you - nothin
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
-| **Your task** | A person's ask, a reply ready for your yes, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a check that failed, a task an agent finished | Passed work after 3 hours |
+| **Your task** | A person's ask, a reply ready for your yes, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished | Passed work after 3 hours |
 | **Passed** | Your work you pressed **Next** on - still yours, not offered again by the walk | - |
 | **Reports** | A report run that landed | - |
 | **FYI** | People told you things; rows whose triage failed | - |

@@ -46,6 +46,13 @@
       "hint": "real work with nobody on it - do it yourself, or send it to an agent"
     },
     {
+      "key": "theirs",
+      "word": "waiting on them",
+      "role": "muted",
+      "mark": "📤",
+      "hint": "your task, waiting on somebody else - it comes back when they answer"
+    },
+    {
       "key": "queued",
       "word": "waiting to start",
       "role": "working",

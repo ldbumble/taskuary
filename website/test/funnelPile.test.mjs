@@ -17,7 +17,8 @@ test('Current follows only an explicit canonical migration or lineage alias', ()
 
 test("every lane the server knows has a word, a mark and a role the theme can colour", () => {
   // `stopped` is inserted, never a reorder: lane_index IS the rail's sort order (funnel._order).
-  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "yours", "queued", "stopped", "saved", "broken", "unjudged", "forgotten", "report", "fyi", "working"]);
+  // `theirs` follows `yours`: your task, waiting on somebody else (2026-09-25)
+  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "yours", "theirs", "queued", "stopped", "saved", "broken", "unjudged", "forgotten", "report", "fyi", "working"]);
   // the owner's OWN work is a lane, not a kind override: a kind beats its lane (rowMeta), which is
   // right when the kind says more and wrong here - "on you" would have beaten "waiting to start" on
   // every queued row, because both carry kind 'todo' (the owner, 2026-09-16: "shouldn't this show

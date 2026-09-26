@@ -16,6 +16,32 @@ def world():
 def read(s, kind, **p): return concierge.read_op(s, kind, p)
 
 
+class CutTests(unittest.TestCase):
+    """`_cut` trims every look-up's text: a short field reads as one line, a body keeps its own."""
+
+    def test_a_short_field_collapses_whitespace_and_newlines_to_single_spaces(self):
+        self.assertEqual(lookups._cut('a  b\n\nc\td ', 120), 'a b c d')
+
+    def test_a_body_keeps_its_own_lines(self):
+        self.assertEqual(lookups._cut('one\ntwo\n\nthree', 600), 'one\ntwo\n\nthree')
+
+    def test_the_collapse_turns_off_at_six_hundred(self):
+        self.assertEqual(lookups._cut('a\nb', 599), 'a b')
+        self.assertEqual(lookups._cut('a\nb', 600), 'a\nb')
+
+    def test_a_string_exactly_the_limit_is_not_cut(self):
+        self.assertEqual(lookups._cut('x' * 50, 50), 'x' * 50)
+
+    def test_a_longer_string_ends_with_the_marker(self):
+        out = lookups._cut('y' * 80, 50)
+        self.assertEqual(out, 'y' * 50 + ' […]')
+        self.assertTrue(out.endswith(' […]'))
+
+    def test_none_reads_as_empty(self):
+        self.assertEqual(lookups._cut(None, 120), '')
+        self.assertEqual(lookups._cut(None, 600), '')
+
+
 class LookupTests(unittest.TestCase):
     def test_every_new_read_is_offered_and_validated(self):
         b = toolcatalog.block() + toolcatalog.bucket_list('look')    # reachable: the index, then its bucket (2026-09-25)

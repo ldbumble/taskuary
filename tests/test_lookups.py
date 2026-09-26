@@ -115,6 +115,13 @@ class AppAtWorkTests(unittest.TestCase):
         s.set_setting('calendar_enabled', '0', 't')
         self.assertIn('switched off', read(s, 'calendar.read'))
 
+    def test_lookup_arguments_do_not_drop_the_assistant_turn(self):
+        s = world()
+        for kind, days in [('activity.list', 'week'), ('activity.list', 1e9), ('activity.list', -5),
+                           ('errors.list', 'week'), ('errors.list', 1e9), ('errors.list', -5)]:
+            self.assertIsInstance(read(s, kind, days=days), str)
+        self.assertIsInstance(read(s, 'calendar.read', **{'from': '2026-02-30'}), str)
+
     def test_activity_list_keeps_the_owner_and_the_agents_apart(self):
         s = world()
         s.audit('task', 2, 'close_from_assistant', 'owner')

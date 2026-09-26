@@ -8,6 +8,7 @@ back — save() keeps the on-disk [server] block. Empty env is unset, so compose
 a token stored on the volume.
 """
 import json, os
+from loguru import logger
 try: import tomllib
 except ImportError: import tomli as tomllib  # py3.10
 from pathlib import Path
@@ -73,12 +74,21 @@ def _write(d: dict):
         try: p.chmod(0o600)
         except OSError: pass
 
+def port_number(value) -> int:
+    """A TCP port accepted by sockets and server runners."""
+    try: port = int(value)
+    except (TypeError, ValueError): raise ValueError('port must be a number from 1 to 65535') from None
+    if not 1 <= port <= 65535: raise ValueError('port must be a number from 1 to 65535')
+    return port
+
 def _env_server() -> dict:
     """Non-empty TASKUARY_* overlays. Empty is unset — an injected '' must not disable a stored token."""
     out = {}
     h, p, t = os.getenv('TASKUARY_HOST'), os.getenv('TASKUARY_PORT'), os.getenv('TASKUARY_TOKEN')
     if h: out['host'] = h
-    if p: out['port'] = int(p)
+    if p:
+        try: out['port'] = port_number(p)
+        except ValueError as e: logger.warning(f'ignoring TASKUARY_PORT={p!r}: {e}')
     if t: out['token'] = t
     return out
 

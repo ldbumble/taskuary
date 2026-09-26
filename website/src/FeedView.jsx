@@ -518,7 +518,7 @@ const EventPanel = ({ e, onClose, onOpenTask }) => {
         </Box>
         <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap",
           color: u.hot ? "#fffdfb" : "#6b5f45", bgcolor: u.hot ? "#8a3646" : "#eee7d6", px: 0.8, py: 0.15, borderRadius: 99 }}>{u.text}</Typography>
-        <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+        <IconButton aria-label="Close meeting detail" size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
       </Box>
       <Box sx={{ px: 2, py: 1.5, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1.5 }}>
         <Box>
@@ -2382,7 +2382,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
           </Box>
           <RefChip taskId={sel.TaskId} onClick={() => onOpenTask(sel.TaskId)} />
           <StateMark row={sel} state={st} size="md" />
-          <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+          <IconButton aria-label="Close item" size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
         </Box>
 
         {/* a stranger's first message is the one state that needs answering before anything else
@@ -2755,7 +2755,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
                 <ForwardToInboxIcon sx={{ fontSize: 18, color: ACCENT }} />
                 <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
-                <IconButton size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+                <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
               </Box>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
                 {sel.TaskId ? ref(sel.TaskId) : ""} · {sel.Subject}
@@ -2768,7 +2768,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
                 <CallSplitIcon sx={{ fontSize: 18, color: ACCENT2 }} />
                 <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
-                <IconButton size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+                <IconButton aria-label="Close split or merge" size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
               </Box>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
                 {sel.TaskId ? ref(sel.TaskId) : ""} · {sel.Subject}

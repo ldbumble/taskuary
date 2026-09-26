@@ -1104,7 +1104,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {/* ONE X, TWO STEPS BACK. With the session filling the page, X first steps back to
                       the task behind it - the session keeps running; from the task, X goes to the list. */}
                   <Tooltip title={sessionView ? "Back to the task — the session keeps running" : "Close — back to the list (the task stays)"}>
-                    <IconButton size="small" onClick={() => (sessionView ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
+                    <IconButton aria-label={sessionView ? "Back to task" : "Close task"} size="small" onClick={() => (sessionView ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                   </Tooltip>
                 </Box>
                 {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block",
@@ -1565,7 +1565,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1 }}>
                         Which repository is this about?
                       </Typography>
-                      <IconButton size="small" onClick={() => { setRepoPick(false); setResumeAfterRepo(null); }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+                      <IconButton aria-label="Close repository picker" size="small" onClick={() => { setRepoPick(false); setResumeAfterRepo(null); }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
                     </Box>
                     <RepoPicker taskId={selected} agent={term?.agent || run.agent || "coder"}
                       hasSession={!!term?.alive}
@@ -1924,7 +1924,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <Tooltip title="Ask git again — the agent may have written more since you opened this">
             <IconButton size="small" onClick={() => loadDiff(selected)}><RefreshIcon sx={{ fontSize: 16 }} /></IconButton>
           </Tooltip>
-          <IconButton size="small" onClick={() => setDiffOpen(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+          <IconButton aria-label="Close changes" size="small" onClick={() => setDiffOpen(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {diff?.scope === "pr" ? `the pull request's own diff — ${diff.pr?.repo}#${diff.pr?.number}, what is being reviewed`
@@ -1955,7 +1955,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <ForwardToInboxIcon sx={{ fontSize: 18, color: "#55697a" }} />
           <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
-          <IconButton size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+          <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
@@ -1969,7 +1969,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <CallSplitIcon sx={{ fontSize: 18, color: "#6f8a6e" }} />
           <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
-          <IconButton size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+          <IconButton aria-label="Close split or merge" size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
@@ -2121,4 +2121,3 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
       transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />}
   </Box>
 );
-

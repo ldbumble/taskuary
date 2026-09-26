@@ -610,6 +610,8 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         if not chat: raise RuntimeError('this chat message has no channel id to answer in')
         connector_id = _source_connector_id(store, 'discord', chat)
         pieces = chatformat.split(body, 1900)
+        if not pieces:
+            raise RuntimeError("nothing to send")
         sent = [discord_send(store, chat, piece, connector_id) if connector_id else
                 discord_send(store, chat, piece) for piece in pieces]
         return sent[0]

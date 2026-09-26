@@ -563,7 +563,7 @@ def _rail_tids() -> set:
 @app.post('/api/tasks')
 def create_task(body: TaskBody):
     if not body.Title: raise HTTPException(422, 'Title is required')
-    tid = store.create_task({k: v for k, v in body.dict().items() if v is not None}, ACTOR)
+    tid = store.create_task({k: v for k, v in body.model_dump().items() if v is not None}, ACTOR)
     # A task created by the owner is their durable TODO. Agent runs may come and go without
     # silently completing it; only routed/triaged work is eligible for automatic completion.
     from . import selfclose
@@ -1294,7 +1294,7 @@ def remind_task(task_id: int, body: RemindBody):
 def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None):
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
-    fields = {k: v for k, v in body.dict().items() if v is not None}
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
     # One task has one worker mode. Switching the kind from the assistant chat to coding (or
     # back to a human TODO) must close that live assistant session before the coding terminal
     # opens; otherwise both stayed registered on the task and the UI could attach to the wrong
@@ -1812,8 +1812,8 @@ def split_task_api(task_id: int, body: TaskSplitBody):
     """Triage filed two jobs as one. This task keeps its ref, session and report; the second
     job becomes a new task, with the messages you ticked."""
     try:
-        new = reshape.split_task(store, task_id, body.second.dict(),
-                                 body.first.dict() if body.first else None, body.move_message_ids, ACTOR)
+        new = reshape.split_task(store, task_id, body.second.model_dump(),
+                                 body.first.model_dump() if body.first else None, body.move_message_ids, ACTOR)
     except ValueError as e:
         raise HTTPException(404 if 'no task' in str(e) else 422, str(e))
     return {'taskId': new, 'ref': task_ref(new)}
@@ -3226,7 +3226,7 @@ def calendar_prep(body: MeetingPrepBody):
     """
     from . import calendar as cal, ownwork
     subject = (body.subject or 'the meeting').strip()[:120]
-    brief = cal.prep_brief(body.dict())
+    brief = cal.prep_brief(body.model_dump())
     ask = (body.instruction or '').strip() or 'Get me ready for this meeting.'
     tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': f'{ask}\n\n{brief}',
                              'Kind': 'general', 'Tags': ASK_TAG, 'Source': 'calendar',
@@ -3943,7 +3943,7 @@ def _llm(target_store=None):
 
 @app.post('/api/ingest/push')
 def push(body: MsgBody):
-    m = body.dict()
+    m = body.model_dump()
     m['external_id'] = m.get('external_id') or f'api:{datetime.now().isoformat()}'
     m['sent_at'] = m.get('sent_at') or datetime.now().isoformat(sep=' ', timespec='seconds')
     out = ingest_message(store, m, llm=_llm())
@@ -3998,7 +3998,7 @@ def sources():
 
 @app.post('/api/sources')
 def save_source(body: SourceBody):
-    fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
+    fields = {k: (int(v) if k == 'Active' else v) for k, v in body.model_dump().items() if v is not None}
     # Owner is PROVENANCE - who or what put this row here - and only a CREATE sets it. It was set
     # on every save, and `Owner` is in SOURCE_COLS, so an ordinary Reports-tab save (and the on/off
     # toggle, which posts {SourceId, Active}) silently took the row over: a Telegram chat lost the
@@ -4243,7 +4243,7 @@ def brains():
 
 @app.post('/api/connectors')
 def save_connector(body: ConnectorBody):
-    fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
+    fields = {k: (int(v) if k == 'Active' else v) for k, v in body.model_dump().items() if v is not None}
     if fields.get('Name') is not None:
         fields['Name'] = fields['Name'].strip()
         if not fields['Name']: raise HTTPException(422, 'connector name cannot be blank')
@@ -5717,7 +5717,7 @@ def policies(): return {'data': store.list_policies(active_only=False)}
 
 @app.post('/api/policies')
 def save_policy(body: PolicyBody):
-    fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
+    fields = {k: (int(v) if k == 'Active' else v) for k, v in body.model_dump().items() if v is not None}
     if not fields.get('PolicyId') and not all(fields.get(k) for k in ('Name', 'Kind', 'Action', 'Reason')):
         raise HTTPException(422, 'new policies need Name, Kind, Action, Reason')
     pid = store.save_policy(fields, ACTOR)
@@ -6983,7 +6983,7 @@ def metric_delete(mid: int):
 @app.post('/api/semantic/metrics/{mid}/fixtures')
 def metric_add_fixture(mid: int, body: FixtureBody):
     if not store.get_metric(mid): raise HTTPException(404, 'no such metric')
-    fid = store.add_fixture(mid, body.dict(), ACTOR)
+    fid = store.add_fixture(mid, body.model_dump(), ACTOR)
     store.audit('metric', mid, 'fixture_add', ACTOR, detail={'scope': body.Scope, 'period': body.Period, 'expected': body.Expected})
     return _metric_row(store.get_metric(mid)) | {'fixtureId': fid}
 

@@ -158,15 +158,16 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         comes from like email or teams"."""
         said = {'say': 'A reply is drafted and waits for you.', 'options': ['Send it', 'Next'],
                 'item': {'lane': 'approve', 'kind': 'review', 'who': 'Craig Sherman', 'channel': 'email'}}
-        self.assertEqual(remote_assistant.turn_text(said),
-                         '📧 Craig Sherman · email\n✉️ A reply is drafted and waits for you.'
-                         '\n\nReply with one of:\n1 · Send it\n2 · Next')
+        # the story's header wears the item's mark; the asker's line the channel's (2026-09-28: the card as a story)
+        text = remote_assistant.turn_text(said)
+        self.assertTrue(text.startswith('✉️ ready to close out\n📧 **Craig Sherman** asked · Email'), text)
+        self.assertTrue(text.endswith('Reply with one of:\n1 · Send it\n2 · Next'), text)
 
     def test_a_report_wears_the_report_mark_and_a_finished_agent_its_own(self):
         report = {'say': 'Process Error Check - 0 rows landed 8 min ago.', 'item': {'lane': 'report', 'kind': 'report'}}
         self.assertTrue(remote_assistant.turn_text(report).startswith('📄 Process Error Check'))
         done = {'say': 'coder finished TQ-0491.', 'item': {'lane': 'report', 'kind': 'agentdone'}}
-        self.assertTrue(remote_assistant.turn_text(done).startswith('✅ coder finished'), 'the kind outranks the lane')
+        self.assertTrue(remote_assistant.turn_text(done).startswith('✅ agent finished'), 'the kind outranks the lane')
 
     def test_an_fyi_batch_is_its_items_one_per_line_and_no_summary(self):
         """"4 things people told you, nothing to do: someone - 4 fyi; Alex - Run failed..." and under it
@@ -207,7 +208,7 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
 
     def test_an_unknown_source_gets_no_invented_mark(self):
         said = {'say': 'Something landed.', 'item': {'lane': 'fyi', 'kind': 'fyi', 'who': 'Someone', 'channel': 'carrier_pigeon'}}
-        self.assertEqual(remote_assistant.turn_text(said), 'Someone · carrier pigeon\n👀 Something landed.')
+        self.assertEqual(remote_assistant.turn_text(said), '👀 fyi\n**Someone** wrote · Carrier Pigeon\nSomething landed.')
 
     def test_a_bare_number_answers_the_options_we_just_numbered(self):
         """The number is answerable because WE numbered it a moment ago: the code indexes what it
@@ -550,7 +551,9 @@ class CardParityTests(unittest.TestCase):
                'item': {'lane': 'queued', 'kind': 'todo', 'who': 'Robin Vale', 'channel': 'github',
                         'why': 'handed to an agent, not started yet'}}
         text = remote_assistant.turn_text(out)
-        self.assertIn(f'{funnel.LANE_WORDS["queued"][0]} - handed to an agent, not started yet', text)
+        # the lane's word heads the card; why it waits is the move's to say
+        self.assertTrue(text.startswith(f'⏳ {funnel.LANE_WORDS["queued"][0]}'), text)
+        self.assertIn('Why it has not started: handed to an agent, not started yet', text)
 
     def test_a_body_that_looks_like_our_own_numbering_cannot_hijack_the_reply(self):
         """remember_offered scanned the WHOLE message for "N - word". Now that a full body rides along, a

@@ -1081,10 +1081,20 @@ THEN_KIND = {('approve', 'action'): 'runs what the card above shows.'}
 _DOWN = ('close', 'not_ours', 'not_ours_sender', 'block_sender', 'done')
 
 
+# the words that answer "who should take it?" - the move of a task nobody is on (move_title)
+_HAND = ('regular_agent', 'coder')
+
+
 def primary(out: dict) -> dict | None:
     """The card's verb: the first word that DOES the thing - a reply with no draft yet leads with
-    drafting it, not with closing the task (the vocabulary lists close first for a waiting draft)."""
+    drafting it, not with closing the task (the vocabulary lists close first for a waiting draft).
+    ...and the move's own verb where the card names one: "who should take it?" is answered by handing it over,
+    never by a reply (the desktop's button there is Hand to agent, 2026-09-28)."""
     chips = [c for c in (out.get('chips') or []) if isinstance(c, dict) and c.get('verb') and c.get('verb') != 'next']
+    it = out.get('item') or {}
+    if it.get('kind') in STORY_KINDS and move_title(it) in ('who should take it?', 'start it'):
+        hand = next((c for c in chips if c['verb'] in _HAND), None)
+        if hand: return hand
     return next((c for c in chips if c['verb'] not in _DOWN), chips[0] if chips else None)
 
 
@@ -1110,6 +1120,153 @@ def lead_line(store, item: dict | None, say: str) -> str:
         return ''
     first = re.split(r'(?<=[.!?])\s+', summary)[0].strip() if summary else ''
     return first if first and first.lower() not in (say or '').lower() else ''
+
+
+# THE CARD'S STORY, ON THE PHONE (the owner, 2026-09-28: the desktop's "the story is quiet, your move is loud", and "same
+# for whatsapp"): who asked and what the agent did as plain lines, then one bold YOUR MOVE with the thing to decide under
+# it. WhatsApp has no frame and no colour - a rule and the one bold header are the only loud things it allows. The words
+# match assistantCards.jsx Story / YourMove, so the two surfaces say the same card.
+STORY_KINDS = {'review', 'action', 'agent', 'agentdone', 'todo', 'message', 'asked', 'fyi', 'wrapup', 'task'}
+_CHANNEL_WORDS = {'email': 'Email', 'github': 'GitHub', 'whatsapp': 'WhatsApp', 'teams': 'Teams', 'slack': 'Slack', 'telegram': 'Telegram',
+                  'sms': 'Text', 'discord': 'Discord', 'google_chat': 'Google Chat', 'assistant': 'Advisor', 'gitlab': 'GitLab'}
+_VIA = {'whatsapp': 'on WhatsApp', 'teams': 'in Teams', 'slack': 'in Slack', 'telegram': 'on Telegram', 'sms': 'by text',
+        'github': 'on GitHub', 'discord': 'on Discord', 'google_chat': 'in Google Chat'}
+_PLAIN_PROFILE = {'coder', 'coding', 'claude', 'codex', 'agent', 'assistant', 'general', 'regular', 'the agent', ''}
+RULE = '──────────'
+
+
+def channel_word(ch) -> str:
+    k = str(ch or '').lower()
+    return _CHANNEL_WORDS.get(k) or k.replace('_', ' ').title()
+
+
+def is_own(item: dict | None) -> bool:
+    """Work the owner started: its "sender" is the owner ("owner" from CreatedBy, "You" from ownwork)."""
+    it = item or {}
+    return str(it.get('channel') or '') == 'own' or str(it.get('who') or '').strip().lower() in ('owner', 'you', 'me')
+
+
+def agent_label(item: dict | None, name: str = None) -> str:
+    """What an agent IS - never the profile's bare name ("coder"); the profile only when it says more."""
+    it = item or {}
+    p = str(name or it.get('working') or it.get('agent') or '').strip()
+    kind = 'General agent' if str(it.get('mode') or '') in ('chat', 'assistant') or p.lower() == 'assistant' else 'Coding agent'
+    return f'{kind} · {p}' if p.lower() not in _PLAIN_PROFILE else kind
+
+
+def agent_report(store, tid) -> dict:
+    """The report an agent files (coder.py): Summary = what it found, Actions = what it did, Determination = its verdict."""
+    if store is None or not tid: return {}
+    try: rep = next((str(c.get('Body') or '') for c in reversed(store.list_comments(int(tid)) or [])
+                     if str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE'))), '')
+    except Exception as e:
+        logger.debug(f'the phone could not read the agent report: {e}')
+        return {}
+    body = re.split(r'\n\s*LAST MESSAGE\s*\n', rep)[0]
+    field = lambda k: ((re.search(rf'(?im)^\s*{k}:\s*(.+)$', body) or [None, ''])[1] or '').strip()
+    return {'summary': field('Summary'), 'actions': field('Actions'), 'verdict': field('Determination')} if rep else {}
+
+
+def agent_state(item: dict | None) -> str:
+    it = item or {}
+    kind, lane = it.get('kind'), it.get('lane')
+    if kind == 'agent':
+        return ('working' if lane == 'working' else 'stopped - its session is saved' if it.get('paused')
+                else 'asks you' if it.get('asking') else 'is waiting on you')
+    if kind == 'agentdone': return 'finished'
+    return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': 'session saved'}.get(lane) or ('finished' if it.get('summary') else '')
+
+
+def move_title(item: dict | None, draft: str = '') -> str:
+    """What the move decides, in the desktop's words - '' where nothing waits on the owner."""
+    it = item or {}
+    kind, lane, who = it.get('kind'), it.get('lane'), story_who(it)
+    if kind == 'agent':
+        return '' if lane == 'working' else 'pick it up again' if it.get('paused') else 'answer the agent' if it.get('asking') else "tell the agent what's next"
+    if kind == 'agentdone': return 'answer them from what it found' if it.get('mid') else ''
+    if kind == 'wrapup': return 'close it'
+    if lane == 'queued': return 'start it'
+    if lane in ('stopped', 'saved'): return 'pick it up again'
+    if kind == 'action': return 'close out' if it.get('closeout') else 'do what you asked for' if is_own(it) else 'run what the agent proposed'
+    if kind == 'review':
+        return ('send your draft' if is_own(it) else f'reply to {who}') if draft or it.get('draft') else 'no reply drafted yet'
+    if kind == 'fyi' or lane == 'fyi': return ''
+    if kind == 'todo' or is_own(it): return 'who should take it?'
+    return f'reply to {who}' if it.get('mid') else ''
+
+
+def story_who(item: dict | None) -> str:
+    it = item or {}
+    if is_own(it): return 'You'
+    return re.sub(r'\s*<[^>]*>', '', ' '.join(str(it.get('who') or '').split())) or 'them'
+
+
+def story_block(store, item: dict | None, draft: str = '', say: str = '') -> str:
+    """The quiet part: a header (state · ref), who asked and what they want, then the agent and its evidence."""
+    from . import concierge, funnel
+    it = item or {}
+    kind, ch = it.get('kind'), str(it.get('channel') or '')
+    word = ({'agentdone': 'agent finished', 'wrapup': 'reply sent · task still open'}.get(kind)
+            or ('your task' if is_own(it) and kind not in ('agent', 'review', 'action') else '')
+            or (funnel.LANE_WORDS.get(str(it.get('lane') or '')) or ('',))[0])
+    head = ' · '.join(x for x in (word, str(it.get('ref') or '')) if x)
+    if head and funnel.mark_for(it): head = f'{funnel.mark_for(it)} {head}'
+    age = concierge.funnel_age(it)
+    said = lead_line(store, it, '') or _cut(it.get('title') or '', 160)
+    lines = [head] if head else []
+    # the asker - the TASK where the card's `who` is not the asker (an agent-finished card carries the agent there)
+    if kind in ('agentdone', 'wrapup'):
+        lines.append(' · '.join(x for x in ('🗂 **The task**', channel_word(ch) if ch and ch not in ('own', 'report') else '', age) if x))
+    elif is_own(it):
+        lines.append(' · '.join(x for x in ('📝 **You**', 'your task', age) if x))
+    else:
+        verb = 'wrote' if kind == 'fyi' or it.get('lane') in ('fyi', 'report') else 'asked'
+        lines.append(' · '.join(x for x in (f"{funnel.CHANNEL_MARKS.get(ch, '')} **{story_who(it)}** {verb}".strip(), channel_word(ch), age) if x))
+    if said: lines.append(said[:1].upper() + said[1:])
+    if not it.get('tid') and say and kind != 'agentdone' and (not said or said.lower() not in say.lower()): lines.append(say)
+    # their own words, when nothing of yours answers them yet (a draft puts them behind More)
+    if not draft and kind in ('message', 'asked', 'todo', 'fyi') and not is_own(it):
+        msg, body, is_report = _body(store, it)
+        if body and not is_report:
+            opening = _plain(body)
+            lines.append(_quote(_cut(opening, EXCERPT) if len(opening) > EXCERPT else opening))
+    # the agent: its state and what it found, did and concluded - the evidence the move is decided on
+    rep = agent_report(store, it.get('tid'))
+    found = rep.get('summary') or ' '.join(str(it.get('summary') or '').split())
+    # ...a finished agent with no summary on the card: the assistant's own line says what it found
+    if not found and kind == 'agentdone' and say: found = say
+    state = agent_state(it)
+    if found or state:
+        lines.append('')
+        lines.append(f"🤖 **{agent_label(it, it.get('who') if kind == 'agentdone' else None)}**" + (f' · {state}' if state else ''))
+        if found: lines.append(_cut(found, 400))
+        if rep.get('actions'): lines.append(f"did: {_cut(rep['actions'], 300)}")
+        if rep.get('verdict'): lines.append(f"verdict: {_cut(rep['verdict'], 300)}")
+    elif it.get('tid') and kind in ('todo', 'message', 'asked') and (kind == 'todo' or is_own(it)):
+        lines += ['', '🤖 No agent yet - nobody is working on this.']
+    return '\n'.join(lines).strip()
+
+
+def move_block(store, item: dict | None, draft: str = '') -> str:
+    """The loud part: a rule, **YOUR MOVE · <what>**, and what to decide on - your reply, its question, why it waits."""
+    it = item or {}
+    title = move_title(it, draft)
+    if not title: return ''
+    body = []
+    if it.get('kind') == 'agent' and not it.get('paused') and it.get('lane') != 'working':
+        asked = ' '.join(str((it.get('tail') or [''])[0]).split()) if it.get('asking') else ''
+        if asked: body.append(f'**{_cut(asked, 600)}**')
+        body.append('Pick an answer below, or type your own - it goes straight in.' if it.get('choices')
+                    else 'Type your answer - it goes straight in.')
+    elif draft:
+        via = _VIA.get(str(it.get('channel') or '').lower(), 'by email')
+        body.append('Your draft - it goes when you pick Close out:' if is_own(it) else f'Your reply to {story_who(it)} {via} - it goes when you pick Close out:')
+        body.append(_quote(draft))
+    elif it.get('lane') == 'queued' and (it.get('why_idle') or it.get('why')):
+        body.append(f"Why it has not started: {' '.join(str(it.get('why_idle') or it['why']).split())}")
+    elif it.get('kind') == 'wrapup' and it.get('sent'):
+        body.append(f"You sent: {_cut(it['sent'], 300)}")
+    return '\n'.join([RULE, f'👉 **YOUR MOVE · {title.upper()}**'] + body)
 
 
 def script_words(store, script: str) -> str:
@@ -1160,6 +1317,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
         # sentence already says what it needs)
         why = state if item.get('lane') in ('queued', 'stopped', 'saved') else ''
         head = '\n'.join(x for x in (task, say, why) if x)
+    story = bool(item) and item.get('kind') in STORY_KINDS
+    draft = _draft_text(store, item) if story and store is not None else ''
+    if story: head = story_block(store, item, draft, _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip())
     if item.get('kind') == 'fyis':
         # THE ITEMS, one per line, and nothing else: the say line restated them as one run-on sentence and
         # the status line added "fyi - people told you things" under it, and on a phone that read as
@@ -1167,6 +1327,12 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
         # ...each NUMBERED, so a number opens that one (respond): the desktop's "Talk about it" door
         members = member_lines(item)
         head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
+    if item and is_own(item) and item.get('kind') in STORY_KINDS:
+        # work you started has nobody behind it to answer or to file away (the desktop hides the same two)
+        from . import concierge
+        gone = {concierge.CHIP_WORDS['reply'], concierge.CHIP_WORDS['not_ours']}
+        out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') in ('reply', 'not_ours'))],
+               'options': [o for o in out.get('options') or [] if str(o) not in gone]}
     words, first = choices(out), len(member_lines(item)) + 1
     prop = out.get('proposal') if (out.get('proposal') or {}).get('status', 'proposed') == 'proposed' else None
     if prop and prop.get('id') and not prop.get('auto'):
@@ -1215,7 +1381,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
                else 'Reply with a number to open one, or:') if first > 1 else 'Reply with one of:'
     opts = (lead_in + '\n'
             + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, first))) if words else ''
-    shown = decision_block(store, item) if store is not None else ''
+    shown = move_block(store, item, draft) if story else decision_block(store, item) if store is not None else ''
     return '\n\n'.join(x for x in (lead.strip(), head, shown, then_line(out, store), opts) if x)
 
 

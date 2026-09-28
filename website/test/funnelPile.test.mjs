@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
+import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, railAge, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -398,4 +398,31 @@ test("every lane the Tasks rail can land on has a word and a role", async () => 
     assert.ok(rowMeta({ lane }).word, `lane ${lane} has no word in lanes.json`);
     assert.ok("role" in rowMeta({ lane }), `lane ${lane} has no role, so the chip has no colour`);
   }
+});
+
+test('railAge: empty or unreadable is blank, the past buckets into < 30m / < 1h / Nh / Nd', () => {
+  const now = new Date('2026-09-28T12:00:00').getTime();
+  const ago = (min) => new Date(now - min * 60000).toISOString();
+  assert.strictEqual(railAge('', now), '');
+  assert.strictEqual(railAge(null, now), '');
+  assert.strictEqual(railAge('not a date', now), '');
+  assert.strictEqual(railAge(ago(0), now), '< 30m');
+  assert.strictEqual(railAge(ago(29), now), '< 30m');
+  assert.strictEqual(railAge(ago(30), now), '< 1h');
+  assert.strictEqual(railAge(ago(59), now), '< 1h');
+  assert.strictEqual(railAge(ago(60), now), '1h');
+  assert.strictEqual(railAge(ago(1439), now), '23h');
+  assert.strictEqual(railAge(ago(1440), now), '1d');
+  assert.strictEqual(railAge(ago(3 * 1440 + 600), now), '3d');
+});
+
+test('railAge: the future reads "in ..." and a server stamp with a space parses as local time', () => {
+  const now = new Date('2026-09-28T12:00:00').getTime();
+  const ahead = (min) => new Date(now + min * 60000).toISOString();
+  assert.strictEqual(railAge(ahead(5), now), 'in 5m');
+  assert.strictEqual(railAge(ahead(59), now), 'in 59m');
+  assert.strictEqual(railAge(ahead(60), now), 'in 1h');
+  assert.strictEqual(railAge(ahead(1439), now), 'in 23h');
+  assert.strictEqual(railAge(ahead(1440), now), 'in 1d');
+  assert.strictEqual(railAge('2026-09-28 10:00:00', now), '2h');
 });

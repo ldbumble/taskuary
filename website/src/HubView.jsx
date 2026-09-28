@@ -192,7 +192,7 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
     <Dialog open={!!open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
         <Box sx={{ flex: 1 }}>Write it down</Box>
-        <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+        <IconButton aria-label="Close Hub entry" size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
       </DialogTitle>
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 2 }}>
         <Box>

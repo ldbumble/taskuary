@@ -193,7 +193,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
     <Dialog open={!!open} onClose={close} fullWidth maxWidth="sm" data-tq-keep>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
         <Box sx={{ flex: 1 }}>What are we starting?</Box>
-        <IconButton size="small" onClick={close}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+        <IconButton aria-label="Close new task" size="small" onClick={close}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
       </DialogTitle>
 
       {/* the kinds are tabs, not a select: three doors that all exist is the point of the sheet,

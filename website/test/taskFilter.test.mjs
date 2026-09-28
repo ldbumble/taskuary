@@ -68,7 +68,8 @@ test("closing the detail shows the list rather than re-opening the first task", 
   const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
   assert.match(source, /const dismiss = \(\) => \{ dismissed\.current = true; onSelect\(null\); \}/);
   assert.match(source, /if \(active && !selected && firstShownId && !dismissed\.current\) onSelect\(firstShownId\)/);
-  assert.match(source, /Close — back to the list \(the task stays\)"\}>\s*<IconButton size="small" onClick=\{\(\) => \(sessionView \? setPeek\(true\) : dismiss\(\)\)\}/);
+  assert.match(source, /Close — back to the list \(the task stays\)"\}>/);
+  assert.match(source, /<IconButton aria-label=\{sessionView \? "Back to task" : "Close task"\} size="small" onClick=\{\(\) => \(sessionView \? setPeek\(true\) : dismiss\(\)\)\}/);
   assert.match(source, /if \(selected \|\| !active\) dismissed\.current = false/, "a real pick, or leaving the tab, lifts it");
 });
 

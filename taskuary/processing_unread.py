@@ -72,11 +72,22 @@ def _decided(view, allowed) -> bool:
     return not any((processing_all._stamp(m.get('SentAt')) or max(at)) > max(at) for m in view.get('messages') or [] if not is_ours(m))
 
 
-def _dismissed_idea(view, compact) -> bool:
+def _idea_off(store, view, compact, now) -> bool:
+    """An Advisor idea that is not work on the rail: put down, asleep until a later day, a meeting's prep (the calendar
+    row IS the meeting), one its report's card said is not work, or one a reply you sent has since answered. The old
+    rail kept the last four; the canonical road dropped them (I5, 2026-09-27)."""
     target = compact.get('open_target') or {}
     if target.get('kind') != 'idea': return False
     idea = next((i for i in view.get('ideas') or [] if i['IdeaId'] == target.get('id')), {})
-    return str(idea.get('Status') or 'open') not in ('open', 'snoozed')
+    status = str(idea.get('Status') or 'open')
+    if status == 'snoozed': return str(idea.get('SnoozeUntil') or '9') > now.strftime('%Y-%m-%d %H:%M:%S')
+    if status != 'open' or idea.get('Kind') == 'prep': return True
+    try: action = json.loads(idea.get('ActionJson') or '{}')
+    except (ValueError, TypeError): action = {}
+    if action.get('work') is False: return True
+    from .assistant import sent_reply_for
+    sent = sent_reply_for(store, {'action': action})
+    return bool(sent) and str(sent.get('DecidedAt') or sent.get('CreatedAt') or '') >= str(idea.get('LastSaid') or idea.get('FirstSeen') or '')
 
 
 def _noise_hidden(store) -> bool:
@@ -176,7 +187,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                                             or not _arrived_after_close(task, view))
     # DECIDED IS OFF, WHEREVER IT WAS DECIDED (R4, 2026-09-25): a draft sent, rejected or answered "no reply" on the
     # Review page, or an idea dismissed in the chat, stayed on the rail as an unread fyi. Off until THEY write again.
-    if not tid and not review and not closed: closed = _decided(view, allowed) or _dismissed_idea(view, compact)
+    if not tid and not review and not closed: closed = _decided(view, allowed) or _idea_off(store, view, compact, now)
     # ...and the noise the old rail filtered (R5): withdrawn lines, auto-replies, a thread you already answered
     if not tid and not review and not closed and row.get('MessageId') and _noise_hidden(store): closed = _noise(row, view)
     if row.get('MessageId'):

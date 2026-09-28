@@ -30,6 +30,7 @@ import { timelineDayLabel } from "./timelineDay.js";
 import { splitTimelineMeetings } from "./timelineMeetings.js";
 import { groupThreads, loudest, spanText } from "./threadGroups.js";
 import EventIcon from "@mui/icons-material/Event";
+import { RemindPicker } from "./RemindMe.jsx";
 import { onLive } from "./live.js";
 import { detailPhase, feedHeaders, feedOk, takeFeed, threadDetail } from "./feedLoad.js";
 import { ALERT, ALERT_BD, ALERT_INK, ASSISTANT, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, GRADIENT, card, mono, fadeIn } from "./theme.jsx";
@@ -3572,29 +3573,21 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
   const rv = brief.reviewed;
   const [showSkipped, setShowSkipped] = useState(false);
   const [busy, setBusy] = useState(null);
-  const [notes, setNotes] = useState({});
+  const [remindAt, setRemindAt] = useState(null);     // { idea, anchor }: Remind me's day picker
   const [err, setErr] = useState("");
   const load = useCallback(async () => {
     try { const { data } = await api.get(`/api/assistant/ideas?mid=${sel.MessageId}`); if (data.data?.length) setIdeas(data.data); } catch { /* keep the post's own copy */ }
   }, [sel.MessageId]);
   useEffect(() => { load(); }, [load]);
+  // THE SAME FIVE WORDS AS EVERY OTHER SURFACE (the owner, 2026-09-27): Make a task, Send to agent, Remind me, Not
+  // ours - and Next, which is the walk's. Draft follow-up and Discuss are gone: a task's agent drafts the chase.
   const act = async (i, verb) => {
     setBusy(`${i.id}:${verb}`); setErr("");
     try {
-      const { data } = await api.post(`/api/assistant/ideas/${i.id}/${verb}`, { days: 1 });
-      if (verb === "followup") setNotes((n) => ({ ...n, [i.id]: `drafted — the chase waits on the task on ${data.ref}` }));
-      if (verb === "task" && data.taskId) onOpenTask?.(data.taskId);
+      const { data } = await api.post(`/api/assistant/ideas/${i.id}/${verb}`, {});
+      if ((verb === "task" || verb === "agent") && data.taskId) onOpenTask?.(data.taskId);
     } catch (e) { setErr(e?.response?.data?.detail || "That did not work"); }
     setBusy(null); load(); onChanged?.();
-  };
-  const discuss = async (i) => {
-    setBusy(`${i.id}:discuss`); setErr("");
-    try {
-      const { data } = await api.post(`/api/assistant/ideas/${i.id}/discuss`, {});
-      await load();
-      if (data.taskId) onOpenTask?.(data.taskId);
-    } catch (e) { setErr(e?.response?.data?.detail || "The Assistant workspace could not open"); }
-    setBusy(null);
   };
   const btn = { textTransform: "none", fontSize: 11.5, minWidth: 0, minHeight: 27, px: 1.1, lineHeight: 1.2 };
   const primary = { color: "#fff", background: ASSISTANT.gradient,
@@ -3635,43 +3628,24 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
               </Typography>
             )}
             {open ? (
-              <>
-                {(a.chat || []).map((turn, n) => (
-                  <Box key={`${i.id}:chat:${n}`} sx={{ mt: 0.55, ml: turn.role === "owner" ? 3 : 0,
-                    px: 1, py: 0.55, borderRadius: 1.25,
-                    bgcolor: turn.role === "owner" ? "#e9e3d8" : PANEL,
-                    border: `1px solid ${turn.role === "owner" ? "#d8d0c4" : BORDER}` }}>
-                    <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.4 }}>
-                      <Box component="span" sx={{ fontWeight: 700, color: turn.role === "owner" ? INK : ASSISTANT.ink }}>
-                        {turn.role === "owner" ? "you" : "assistant"} · </Box>{turn.text}
-                    </Typography>
-                  </Box>
-                ))}
-                <Box sx={{ mt: 0.75, display: "flex", gap: 0.6, flexWrap: "wrap", alignItems: "center" }}>
-                  {a.type === "followup" && (
-                    <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "followup")} sx={{ ...btn, ...primary }}>
-                      {busy === `${i.id}:followup` ? "drafting…" : "Draft follow-up"}</Button>
-                  )}
-                  {a.mid && (
-                    <Button size="small" variant={a.type === "task" ? "contained" : "outlined"} disableElevation disabled={!!busy} onClick={() => act(i, "task")}
-                      title={a.title ? `Make it a task: ${a.title}` : "Make it a task"}
-                      sx={{ ...btn, ...(a.type === "task" ? primary : quiet) }}>
-                      {busy === `${i.id}:task` ? "starting…" : "Make it a task"}</Button>
-                  )}
-                  {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
-                  <Button size="small" variant="contained" disableElevation disabled={!!busy}
-                    onClick={() => discuss(i)} sx={{ ...btn, ...primary }}>
-                    {busy === `${i.id}:discuss` ? "opening…" : a.discussion_tid ? `Continue in ${ref(a.discussion_tid)}` : "Discuss in Assistant"}
-                  </Button>
-                </Box>
-                <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.35 }}>
-                  Opens the full Assistant chat with this idea and its context carried over.
-                </Typography>
-              </>
+              <Box sx={{ mt: 0.75, display: "flex", gap: 0.6, flexWrap: "wrap", alignItems: "center" }}>
+                <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "task")}
+                  title="A task on your own list - no agent starts" sx={{ ...btn, ...primary }}>
+                  {busy === `${i.id}:task` ? "making…" : "Make a task"}</Button>
+                <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "agent")}
+                  title="An agent takes it - triage picks a coding or a non-coding one" sx={{ ...btn, ...quiet }}>
+                  {busy === `${i.id}:agent` ? "sending…" : "Send to agent"}</Button>
+                <Button size="small" variant="outlined" disabled={!!busy} onClick={(e) => setRemindAt({ idea: i, anchor: e.currentTarget })}
+                  title="Put it away until a day - it comes back then" sx={{ ...btn, ...quiet }}>Remind me</Button>
+                <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "dismiss")}
+                  title="Put it down - the Advisor never raises it again" sx={{ ...btn, ...quiet }}>
+                  {busy === `${i.id}:dismiss` ? "…" : "Not ours"}</Button>
+                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
+              </Box>
             ) : (
               <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.4 }}>
                 {answered ? `reply sent${answered.at ? ` · ${fmtDateTime(answered.at)}` : ""}`
-                  : notes[i.id] || (i.status === "done" ? "done" : i.status === "dismissed" ? "not this — noted" : i.status === "snoozed" ? "snoozed" : i.status)}
+                  : i.status === "done" ? "done" : i.status === "dismissed" ? "not ours" : i.status === "snoozed" ? "put away until its day" : i.status}
               </Typography>
             )}
           </Box>
@@ -3690,6 +3664,8 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
         {err && <Typography variant="caption" sx={{ color: ALERT_INK }}>{err}</Typography>}
       </Box>
       <DayStats rows={brief.stats} />
+      {remindAt && <RemindPicker task={{ TaskId: `idea-${remindAt.idea.id}` }} path={`/api/assistant/ideas/${remindAt.idea.id}/snooze`}
+        anchor={remindAt.anchor} onClose={() => setRemindAt(null)} onDone={() => { load(); onChanged?.(); }} />}
       {SECTIONS.map((sec) => {
         const rows = bySection(sec.key);
         if (!rows.length) return null;

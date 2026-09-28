@@ -70,7 +70,7 @@ CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Re
               'archive': 'Archive it', 'close': 'Mark done',
               'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
               'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
-              'prep': 'Prep me', 'followup': 'Draft a follow-up', 'defer': 'Remind me', 'continue': 'Continue session'}
+              'prep': 'Prep me', 'defer': 'Remind me', 'continue': 'Continue session'}
 # What the word will actually DO, on hover - written where the difference matters.
 CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
               'regular_agent': 'An agent takes it - triage picks a coding or a non-coding one, and you can change it on the card',
@@ -81,7 +81,7 @@ CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from 
 # and it is the one word that is never a decision about the thing itself.
 # THE SHORT LIST (the owner, 2026-09-25, word by word): eight buttons. Tomorrow and Later are gone - Next on
 # open work brings it back after task_return_minutes, and a date is the task's own Remind me. Redraft, Answer
-# it, Run it again, Prep me, Draft a follow-up and Handled lost their buttons (the words still work typed);
+# it, Run it again, Prep me and Handled lost their buttons (the words still work typed);
 # the three hand-offs are Make a task (yours) and Send to agent (triage picks which); the sender rules are
 # Not ours's own question. The rest of CHIP_WORDS is what `first` may still promote from a typed decision.
 # Remind me (`defer`) is on every card with an open task behind it (the owner, 2026-09-25: "remind me should be a walk
@@ -89,7 +89,7 @@ CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from 
 CHIPS = {'review': ('approve', 'close', 'defer', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('mine', 'regular_agent', 'next'),
          'report': ('mine', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'next'), 'task': ('close', 'defer', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'next'),
          'asked': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
          'todo': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
@@ -472,7 +472,7 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
 
 
 # what the card's primary button does, said as a word. Anything not here has no yes-able action.
-ASSENT_VERB = {'review': 'approve', 'action': 'approve', 'agent': 'answer_agent', 'idea': 'followup'}
+ASSENT_VERB = {'review': 'approve', 'action': 'approve', 'agent': 'answer_agent'}
 
 
 def assent_verb(item: dict | None) -> str | None:
@@ -538,10 +538,15 @@ def _agent_holds(store, item) -> bool:
     return str(t.get('Assignee') or item.get('assignee') or '').startswith('agent:')
 
 
+# an idea's words and what each does to the idea (assistant.act) - the page's Remind me posts its own day
+IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coder': 'agent', 'not_ours': 'dismiss'}
+
+
 def cannot(item: dict | None, verb: str, store=None) -> str:
     """Why this card cannot carry that verb - '' when it can. Always phrased "nothing to <verb>",
     because the honest line is the only line: no receipt goes out in front of it."""
     if not item: return ''
+    if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     what = f"{item.get('ref') or item.get('title') or 'this one'}"
     if verb == 'answer_agent' and item.get('kind') != 'agent':
         return f"There is nothing to answer on this one - no agent is parked on {what}. Say stop the agent, or open the Board."
@@ -593,10 +598,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         verbs = [first] + [v for v in verbs if v != first]
     out = []
     for v in verbs:
-        # the two that are the page's own actions rather than proposals, so NEEDS does not describe them:
-        # prep wants the invite it is preparing for, a follow-up wants something to follow up ON
+        # the page's own action rather than a proposal, so NEEDS does not describe it: prep wants the invite
         if v == 'prep' and not item.get('event'): continue
-        if v == 'followup' and not (item.get('idea') or (item.get('action') or {}).get('mid')): continue
         if v != 'next' and cannot(item, v, store): continue
         # Reply on a finished agent is for the one it left without a draft - never a pull request's, where
         # nobody is owed an answer (the owner, 2026-09-25)
@@ -609,7 +612,7 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         # an agent's proposal runs an action rather than sending a reply, so the word says that
         elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': 'Run it'})
         # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25)
-        elif v == 'mine' and item.get('tid'): out.append({'verb': v, 'label': 'Take it myself', 'hint': "Takes it off the agent - it stays on your list."})
+        elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append({'verb': v, 'label': 'Take it myself', 'hint': "Takes it off the agent - it stays on your list."})
         else:
             out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
     return out
@@ -2062,7 +2065,13 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     d_text = (decision.get('text') or '').strip()
     it = item or {}
     target, params, note, clear, choices = None, {}, '', False, []
-    if verb in ('coder', 'regular_agent', 'mine'):
+    # AN ADVISOR IDEA IS ITS OWN TARGET (C5, 2026-09-27): the same words, on the idea. Make a task reads the task
+    # it already has, Not ours puts the IDEA down - it used to file the mail the idea was about - and each writes
+    # the idea's own status
+    if it.get('kind') == 'idea' and it.get('idea') and verb in IDEA_ACT:
+        kind, target, params, clear = 'idea.act', it['idea'], {'verb': IDEA_ACT[verb]}, True
+        label = op_label(kind, params)
+    elif verb in ('coder', 'regular_agent', 'mine'):
         want = {'coder': 'coding', 'regular_agent': 'general', 'mine': 'task'}[verb]
         if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None}
         elif verb == 'mine': raise ValueError('nothing is on the table to put on your list')
@@ -2418,6 +2427,7 @@ def op_label(kind: str, p: dict) -> str:
              'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': 'Reopen it',
              'task.not_a_task': 'Delete it - not a task', 'dispatch.prepare': 'Start an agent on it', 'agent.continue': 'Continue the agent',
              'review.reject': 'Reject the draft'}.get(kind, label)
+    if kind == 'idea.act': label = {'task': 'Put it on my list', 'agent': 'Send to an agent', 'dismiss': 'Not ours - never raise it again'}.get(str(p.get('verb')), label)
     if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"Remind me: {p.get('until')}"
     return label[0].upper() + label[1:] if label else kind
 
@@ -2748,34 +2758,12 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
 
 
 def act(store, key: str, verb: str, actor: str = 'owner', llm=None, hours: float = None) -> dict:
-    """The verbs that need the pile's own knowledge: a follow-up or a task from a candidate the
-    assistant never posted, the owner's done / later / skip. Everything else - approving a draft,
-    answering an agent, dispatching to the coder, not-ours - is the existing endpoint the card calls."""
+    """The pile's own verbs: done / later / skip / ack, and Not ours on an Advisor idea (dismiss). Everything
+    else - a task, an agent, a draft - is the proposal road every card button takes."""
     if verb in ('done', 'later', 'skip', 'ack'): return funnel.settle(store, key, verb, actor, hours)
+    if verb != 'dismiss': raise ValueError(f'unknown verb: {verb}')
     item = funnel.next_item(store, key) or {}
-    a = item.get('action') or {}
-    if verb == 'followup':
-        if item.get('idea'):
-            from . import assistant
-            out = assistant.act(store, item['idea'], 'followup', actor, llm)
-        elif a.get('mid'):
-            from . import assistant
-            out = assistant.nudge(store, a['mid'], item.get('title') or 'follow up', actor, llm)
-        else: raise ValueError('nothing to follow up on here')
-        funnel.settle(store, key, 'done', actor); return out
-    if verb == 'task':
-        if item.get('idea'):
-            from . import assistant
-            out = assistant.act(store, item['idea'], 'task', actor, llm)
-        elif a.get('mid') or item.get('mid'):
-            from . import ingest
-            tid = ingest.task_from_message(store, a.get('mid') or item['mid'], actor, 'coding')
-            out = {'taskId': tid, 'ref': task_ref(tid)}
-        else: raise ValueError('nothing to make a task from here')
-        funnel.settle(store, key, 'done', actor); return out
-    if verb == 'dismiss':
-        if item.get('idea'):
-            from . import assistant
-            assistant.act(store, item['idea'], 'dismiss', actor)
-        return funnel.settle(store, key, 'done', actor, note='dismissed')
-    raise ValueError(f'unknown verb: {verb}')
+    if item.get('idea'):
+        from . import assistant
+        assistant.act(store, item['idea'], 'dismiss', actor)
+    return funnel.settle(store, key, 'done', actor, note='dismissed')

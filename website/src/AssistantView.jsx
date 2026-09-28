@@ -485,7 +485,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} />,
     agentdone: <AgentDoneCard card={c} onOpenTask={actions.openTask} onDone={actions.done} onSurface={actions.surface} />,
-    idea: <IdeaCard card={c} onAct={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} />,
+    idea: <IdeaCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} />,
     message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} onNavigate={actions.navigate} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
     walk: <WalkCard card={m.card} at={m.card.n} total={m.card.total} onNavigate={actions.navigate}
@@ -1144,16 +1144,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     // REMIND ME asks for the day - the task page's own picker - and the walk moves on once it is put away
     // CONTINUE SESSION asks what to tell it (optional), then the agent picks up - the walk moves on (A19)
     if (c.verb === "continue") { if (item?.tid) setContinueOn({ task: { TaskId: item.tid }, anchor: anchor || null, ref: item.ref }); return; }
+    // ...an Advisor idea's own day when it has no task: the idea sleeps until then (C5, 2026-09-27)
+    if (c.verb === "defer" && item?.kind === "idea" && item?.idea) { setRemindOn({ task: { TaskId: `idea-${item.idea}` }, path: `/api/assistant/ideas/${item.idea}/snooze`, anchor: anchor || null, ref: item.ref }); return; }
     if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     setBusy(true); setErr("");
     try {
       if (c.verb === "prep") await prep(item);
-      else if (c.verb === "followup") {
-        const out = await api.post("/api/concierge/act", { key, verb: "followup" });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: "Follow-up drafted - it waits for your yes.", tid: out.data?.taskId }]);
-        advance();
-      } else {
+      else {
         const pr = await proposeDirect(c.verb, key, true);
         if (pr?.auto) await runProposal(pr);
       }
@@ -1460,9 +1458,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
             text: `Continuing${note ? " with your note" : ""} - it picks up where it left off, and comes back here when it stops or asks.` }]);
           advance();
         }} />}
-      {remindOn && <RemindPicker task={remindOn.task} anchor={remindOn.anchor || document.body} onClose={() => setRemindOn(null)}
+      {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} onClose={() => setRemindOn(null)}
         onDone={(out) => {
-          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: remindOn.task.TaskId, ref: remindOn.ref,
+          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: remindOn.path ? null : remindOn.task.TaskId, ref: remindOn.ref,
             text: out?.remindAt ? `Away until ${out.when} - it is under Upcoming in Tasks, and back on your rail that morning.` : "It is back on your rail now." }]);
           if (out?.remindAt) advance();
         }} />}

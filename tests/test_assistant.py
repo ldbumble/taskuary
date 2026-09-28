@@ -329,53 +329,61 @@ class ButtonTests(unittest.TestCase):
         idea = s.list_ideas('open')[0]
         return s, mid, idea
 
-    def test_follow_up_drafts_the_chase_into_review_and_closes_the_idea(self):
+    def test_make_a_task_is_yours_and_starts_nothing(self):
+        """C5 (the owner, 2026-09-27): Make a task is a task on your own list; Send to agent is the one that starts one."""
         s, mid, idea = self._posted()
-        prompts = []
-        def llm(system, user, **k):
-            prompts.append((system, user)); return 'Hi Dana - any chance of the reconciled ledger this week? It unblocks the Q3 close.'
-        out = assistant.act(s, idea['IdeaId'], 'followup', 'owner', llm=llm)
-        rv = s.get_review(out['reviewId'])
-        self.assertEqual((rv['Status'], rv['Kind'], rv['MessageId']), ('pending', 'draft', mid))
-        self.assertIn('reconciled ledger', rv['DraftText'])
-        self.assertIn('FOLLOW-UP', prompts[0][0])                          # the responder knew what kind of reply this is
-        self.assertIn('WHY YOU ARE WRITING AGAIN', prompts[0][1])
-        self.assertEqual(s.get_task(out['taskId'])['Kind'], 'reply')
-        self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'done')
-        self.assertEqual(s.list_reviews('pending')[0]['ReviewId'], out['reviewId'])   # visible in the queue
-
-    def test_make_it_a_task_opens_a_coding_task_and_dispatches_when_auto_is_on(self):
-        s, mid, idea = self._posted()
-        s.set_setting('coder_auto_enabled', '1', 't')
         with mock.patch('taskuary.ingest._spawn') as spawn:
             out = assistant.act(s, idea['IdeaId'], 'task')
         t = s.get_task(out['taskId'])
-        self.assertEqual(t['Kind'], 'coding')
+        self.assertEqual((t['Kind'], t['Assignee']), ('task', 'owner'))
+        spawn.assert_not_called()
+        self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'done')
+        self.assertEqual(json.loads(s.get_idea(idea['IdeaId'])['ActionJson'])['tid'], out['taskId'])
+
+    def test_send_to_agent_starts_the_agent_its_kind_names(self):
+        s, mid, idea = self._posted()
+        with mock.patch('taskuary.ingest._spawn') as spawn:
+            out = assistant.act(s, idea['IdeaId'], 'agent')
+        self.assertEqual(s.get_task(out['taskId'])['Kind'], 'general')             # coding is never the default
+        self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_general'])
+        s2, _, idea2 = self._posted()
+        s2.set_setting('coder_auto_enabled', '1', 't')
+        s2.set_idea_action(idea2['IdeaId'], json.loads(idea2['ActionJson']) | {'kind': 'coding'})
+        with mock.patch('taskuary.ingest._spawn') as spawn:
+            out = assistant.act(s2, idea2['IdeaId'], 'agent')
+        self.assertEqual(s2.get_task(out['taskId'])['Kind'], 'coding')
         self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_code'])
 
-    def test_make_it_a_task_preserves_a_closed_general_task_and_uses_a_new_regular_agent(self):
+    def test_make_a_task_reads_the_task_triage_already_opened(self):
+        """I1: triage opened a task for the idea, and Make a task opened a second one beside it."""
+        s, mid, idea = self._posted()
+        tid = s.create_task({'Title': 'Chase the ledger', 'Kind': 'task', 'SourceRef': f"assistant:idea:{idea['IdeaId']}"}, 'assistant')
+        n = len(s.list_tasks())
+        with mock.patch('taskuary.ingest._spawn'):
+            self.assertEqual(assistant.act(s, idea['IdeaId'], 'task')['taskId'], tid)
+        self.assertEqual(len(s.list_tasks()), n)
+
+    def test_an_idea_never_reopens_a_closed_task(self):
+        """I7: the finished task keeps its history; the new work is a new task carrying the evidence."""
         s, mid, idea = self._posted()
         tid = s.create_task({'Title': 'Read this', 'Kind': 'general', 'Status': 'open'}, 'router')
         s.attach_message(mid, tid)
         s.update_task(tid, {'Status': 'done'}, 'owner')
         closed_at = s.get_task(tid)['ClosedAt']
-        self.assertTrue(closed_at)
         with mock.patch('taskuary.ingest._spawn') as spawn:
-            out = assistant.act(s, idea['IdeaId'], 'task')
+            out = assistant.act(s, idea['IdeaId'], 'agent')
         self.assertNotEqual(out['taskId'], tid)
-        old = s.get_task(tid)
-        self.assertEqual((old['Title'], old['Status'], old['ClosedAt']), ('Read this', 'done', closed_at))
+        self.assertEqual((s.get_task(tid)['Status'], s.get_task(tid)['ClosedAt']), ('done', closed_at))
         task = s.get_task(out['taskId'])
-        self.assertEqual((task['Kind'], task['Status'], task['ClosedAt']), ('general', 'open', None))
-        self.assertEqual(task['SourceRef'], f'assistant:idea:{idea["IdeaId"]}')
+        self.assertEqual((task['Kind'], task['Status'], task['SourceRef']), ('general', 'open', f"assistant:idea:{idea['IdeaId']}"))
         self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_general'])
 
-    def test_dismiss_teaches_and_stays_dismissed_until_the_facts_change(self):
+    def test_not_ours_teaches_nothing_and_stays_down_until_the_facts_change(self):
+        """I10: Not ours only never repeats - the lesson it wrote went to a block no prompt reads."""
         s, mid, idea = self._posted()
-        s.set_setting('learn_enabled', '1', 't')
         with mock.patch('taskuary.learn.learn_from') as learn:
             assistant.act(s, idea['IdeaId'], 'dismiss')
-        self.assertIn('dismissed', learn.call_args[0][1])
+        learn.assert_not_called()
         self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'dismissed')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertEqual(assistant.run(s, force=True)['said'], 0)                # same silence: not said again
@@ -383,47 +391,24 @@ class ButtonTests(unittest.TestCase):
             self.assertEqual(assistant.run(s, force=True)['said'], 1)                # you wrote again: new facts, new line
         self.assertEqual(s.get_idea(idea['IdeaId'])['SaidCount'], 2)
 
-    def test_snooze_sleeps_a_day_and_wakes(self):
+    def test_remind_me_sleeps_until_its_day_and_wakes(self):
         s, mid, idea = self._posted()
-        out = assistant.act(s, idea['IdeaId'], 'snooze', days=1)
+        out = assistant.act(s, idea['IdeaId'], 'snooze', until='2 weeks')
+        self.assertTrue(out['until'].endswith('07:00:00')); self.assertTrue(out['when'])
         self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'snoozed')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertEqual(assistant.run(s, force=True)['said'], 0)
             s._exec('UPDATE idea SET SnoozeUntil=? WHERE IdeaId=?', (_ago(hours=1), idea['IdeaId']))
             self.assertEqual(assistant.run(s, force=True)['said'], 1)
+        with self.assertRaises(ValueError): assistant.act(s, idea['IdeaId'], 'snooze', until='someday')
 
-    def test_a_note_with_no_message_behind_it_refuses_the_message_buttons(self):
+    def test_a_note_with_no_message_still_becomes_a_task(self):
         s = _store()
         row = s.upsert_idea({'key': 'idea:x', 'kind': 'idea', 'text': 'Book the sign-off.', 'action': {'type': 'note'}}, _ago())
-        with self.assertRaises(ValueError): assistant.act(s, row['IdeaId'], 'followup')
-        with self.assertRaises(ValueError): assistant.act(s, row['IdeaId'], 'task')
-        with self.assertRaises(ValueError): assistant.act(s, row['IdeaId'], 'nonsense')
-
-    def test_talking_back_answers_with_the_thread_and_attachments_and_is_remembered(self):
-        s = _store()
-        mid = _mail(s, 'priya@ours.com', 'Teams chat with Priya', 'Please fill out the review.',
-                    days=0, conv='priya', name='Priya')
-        _mine(s, 'Teams chat with Priya', 'I sent it to you here in the chat.', days=0, conv='priya')
-        with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / 'sent-review.png'; path.write_bytes(b'\x89PNG\r\n\x1a\nproof')
-            s.add_attachment({'MessageId': mid, 'ExternalId': 'priya-proof', 'Name': 'sent-review.png',
-                              'ContentType': 'image/png', 'Path': str(path)})
-            idea = s.upsert_idea({'key': 'idea:priya', 'kind': 'idea', 'text': 'You still owe Priya the review.',
-                                  'action': {'type': 'task', 'mid': mid, 'why': 'Priya asked Friday.'}}, _ago())
-            seen = {}
-            def llm(system, user, **kwargs):
-                seen.update(system=system, user=user, **kwargs)
-                return 'You are right — your chat says you sent it. I missed that line and the attached proof.'
-            out = assistant.talk(s, idea['IdeaId'], 'That is wrong; I sent it in the chat.', llm=llm)
-        self.assertEqual([t['role'] for t in out['chat']], ['owner', 'assistant'])
-        self.assertIn('I sent it to you here in the chat.', seen['user'])
-        self.assertIn('sent-review.png', seen['user'])
-        self.assertEqual(len(seen['images']), 1)
-        self.assertIn('That is wrong', assistant._said(s))
-        # A later check cannot rewrite the suggestion at all, so the correction stays with it.
-        s.upsert_idea({'key': 'idea:priya', 'kind': 'idea', 'text': 'Updated thought.',
-                       'action': {'type': 'note', 'why': 'new facts'}}, _ago())
-        self.assertEqual(len(assistant._public(s.get_idea(idea['IdeaId']))['action']['chat']), 2)
+        tid = assistant.act(s, row['IdeaId'], 'task')['taskId']
+        self.assertEqual((s.get_task(tid)['Title'], s.get_task(tid)['SourceRef']), ('Book the sign-off.', f"assistant:idea:{row['IdeaId']}"))
+        for gone in ('followup', 'discuss', 'nonsense'):
+            with self.assertRaises(ValueError): assistant.act(s, row['IdeaId'], gone)
 
     def test_a_conversation_comes_before_a_pile_of_forwards_and_the_soul_goes_whole(self):
         """The chat where the owner and a colleague restarted a frozen app ("try now", "that worked") was cut from WHAT
@@ -556,37 +541,11 @@ class ApiTests(unittest.TestCase):
         ideas = c.get(f'/api/assistant/ideas?mid={mid}').json()['data']
         self.assertTrue(ideas and ideas[0]['status'] == 'open')
         self.assertEqual(len(s.list_ideas('open')), len(c.get('/api/assistant/ideas?status=open').json()['data']))
-        r = c.post(f"/api/assistant/ideas/{ideas[0]['id']}/snooze", json={'days': 2})
-        self.assertEqual(r.status_code, 200); self.assertEqual(r.json()['verb'], 'snooze')
-        self.assertEqual(c.post(f"/api/assistant/ideas/{ideas[0]['id']}/nonsense").status_code, 422)
-        with mock.patch('taskuary.server._llm', return_value=lambda *a, **k: 'You are right; I missed your reply.'):
-            talked = c.post(f"/api/assistant/talk/{ideas[0]['id']}", json={'body': 'I already sent it.'})
-        self.assertEqual(talked.status_code, 200); self.assertIn('missed your reply', talked.json()['reply'])
-
-    def test_discuss_opens_one_assistant_task_and_carries_the_old_exchange(self):
-        from fastapi.testclient import TestClient
-        from taskuary import general, server
-        s = _store()
-        related = s.create_task({'Title': 'Existing code work', 'Kind': 'coding', 'Status': 'open'}, 't')
-        idea = s.upsert_idea({'key': 'idea:workspace', 'kind': 'idea', 'text': 'Watch this ownership change.',
-                              'action': {'why': 'The source is unresolved.', 'tid': related,
-                                         'chat': [{'role': 'owner', 'text': 'Which source?'},
-                                                  {'role': 'assistant', 'text': 'The state filing.'}]}}, _ago())
-        with mock.patch.object(server, 'store', s):
-            c = TestClient(server.app)
-            first = c.post(f"/api/assistant/ideas/{idea['IdeaId']}/discuss")
-            again = c.post(f"/api/assistant/ideas/{idea['IdeaId']}/discuss")
-        self.assertEqual(first.status_code, 200)
-        self.assertTrue(first.json()['created']); self.assertFalse(again.json()['created'])
-        self.assertEqual(first.json()['taskId'], again.json()['taskId'])
-        task = s.get_task(first.json()['taskId'])
-        self.assertEqual(task['Kind'], 'general')
-        self.assertTrue(general.handles(task))
-        self.assertTrue(general.handles({'Kind': 'assistant'}))  # discussions made before this fix
-        self.assertEqual(s.get_task(related)['Kind'], 'coding')
-        history = general.history(s, task['TaskId'])
-        self.assertEqual([m['role'] for m in history], ['assistant', 'user', 'assistant'])
-        self.assertIn('Why I raised this', history[0]['content'][0]['text'])
+        r = c.post(f"/api/assistant/ideas/{ideas[0]['id']}/snooze", json={'until': 'tomorrow'})
+        self.assertEqual(r.status_code, 200); self.assertEqual(r.json()['verb'], 'snooze'); self.assertTrue(r.json()['when'])
+        # the words that are gone are refused, not quietly run: a follow-up and a discussion are a task's agent's now
+        for gone in ('nonsense', 'followup', 'discuss'):
+            self.assertEqual(c.post(f"/api/assistant/ideas/{ideas[0]['id']}/{gone}").status_code, 422)
 
 
 class NotesToSelf(unittest.TestCase):

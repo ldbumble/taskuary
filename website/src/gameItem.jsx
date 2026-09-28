@@ -181,9 +181,8 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
   const pick = async (c, anchor) => {
     // the words that are the page's own actions rather than proposals - exactly as the chat runs them
     if (c.ask) return null;
-    if (c.verb === "defer") { if (item.tid) setRemindAt(anchor || document.body); return null; }
+    if (c.verb === "defer") { if (item.tid || item.idea) setRemindAt(anchor || document.body); return null; }
     if (c.verb === "continue" && item.tid) return play("dispatch", item.key, () => api.post(`/api/tasks/${item.tid}/continue-work`, { note: null }));
-    if (c.verb === "followup") return play("followup", item.key, () => api.post("/api/concierge/act", { key: item.key, verb: "followup" }));
     if ((c.verb === "reply" || c.verb === "redraft") && item.mid)
       return play("draft", null, () => api.post(`/api/messages/${item.mid}/reply`, { draft: true, redraft: c.verb === "redraft", instruction: null }));
     if (c.verb === "prep" && item.event)
@@ -203,7 +202,8 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
       <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
         {shown.map((c) => <Btn key={c.verb} disabled={!!busy || !!prop} onClick={(e) => pick(c, e?.currentTarget)} title={c.hint}>{c.label}</Btn>)}
       </Box>
-      {remindAt && <RemindPicker task={{ TaskId: item.tid, RemindAt: "" }} anchor={remindAt} onClose={() => setRemindAt(null)}
+      {remindAt && <RemindPicker task={{ TaskId: item.tid || `idea-${item.idea}`, RemindAt: "" }} anchor={remindAt} onClose={() => setRemindAt(null)}
+        path={item.kind === "idea" && item.idea ? `/api/assistant/ideas/${item.idea}/snooze` : undefined}
         onDone={(out) => out?.remindAt && play("later", item.key, async () => out)} />}
       {prop && (
         <Box sx={{ mt: 0.8, p: 1, borderRadius: "9px", border: `1px dashed ${G.gold}`, bgcolor: "rgba(240,192,90,.07)" }}>

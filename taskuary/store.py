@@ -2160,6 +2160,15 @@ class SQLiteStore:
         return self.backfill_processing('canonical-reads-' + uuid.uuid4().hex,
             fixed_now=fixed_now, live_state=live_state, _activate_reads=True)
 
+    def processing_item_ideas(self, key):
+        """The Advisor ideas a rail row IS - none when a task is the row, since the task decides then."""
+        with self._processing_read() as cur:
+            t = self._processing_read_target(cur, key)
+            if not t: return []
+            rows = cur.execute('SELECT EntityKind,LocalId FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL', (t[0],)).fetchall()
+        if any(r['EntityKind'] == 'task' for r in rows): return []
+        return [int(r['LocalId']) for r in rows if r['EntityKind'] == 'idea']
+
     def _processing_read_target(self, cur, key):
         if str(key).startswith('processing:'):
             iid = self._processing_follow(cur, str(key).split(':', 1)[1])

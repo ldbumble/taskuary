@@ -319,14 +319,7 @@ def _generic_target(item, query, cutoff, include_excluded=False, vehicles_only=F
             stamp = entity.get(stamp_field) or entity.get('FirstSeen') or entity.get('CreatedAt')
             candidate = {'Subject': entity.get('Title') or entity.get('Text') or entity.get('Reason'),
                          'FromName': entity.get('CreatedBy'), 'Channel': channel}
-            lane = 'asked' if kind == 'task' else 'approve' if kind == 'review' else 'fyi'
-            if kind == 'idea':
-                try:
-                    action = json.loads(entity.get('ActionJson') or '{}')
-                    if (action.get('triage') or {}).get('intent') in ('task', 'reply_only'):
-                        lane = 'asked'
-                except (ValueError, TypeError):
-                    pass
+            lane = 'asked' if kind == 'task' else 'approve' if kind == 'review' else idea_lane(entity)
             if (_matches(channel, source, query) and _in_history(stamp, cutoff)
                     and (include_excluded or not _muted_candidate(item, candidate, lane))):
                 candidates.append((entity, stamp, channel, source))

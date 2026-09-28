@@ -772,13 +772,21 @@ def _open(store, cap: int = 20) -> str:
     return '\n'.join(line(t) for t in ts[:cap]) or '(nothing open)'
 
 
-def _said(store, cap: int = 40, done_days: float = 7) -> str:
+def owns(store, report_id):
+    """Which idea keys are this report's (I8, 2026-09-27): its own namespace, or - for the Advisor - every key outside
+    one. What was already said, the same-subject key and the retry all read across every report, so one report's
+    open idea could silence another's line."""
+    pre = f'report:{report_id}:' if own_identity(store, report_id) else None
+    return (lambda k: str(k).startswith(pre)) if pre else (lambda k: not str(k).startswith('report:'))
+
+
+def _said(store, cap: int = 40, done_days: float = 7, report_id=None) -> str:
     """Every line the owner has from me, WITH ITS KEY (the owner, 2026-09-25: "advisor should know what it sent in the
     past and not recreate them"). Without the key the model saw a line it half-recognised, minted a new slug for the
     same subject, and the code took it as news - the same budget question four posts running. Seeing the key, it
     reuses it, and fresh() refuses a known key. What was acted on this week is here too, or it comes straight back."""
-    cut = _since(done_days)
-    rows = [i for i in store.list_ideas() if i.get('Status') in ('open', 'dismissed', 'snoozed')
+    cut, mine = _since(done_days), owns(store, report_id)
+    rows = [i for i in store.list_ideas() if mine(i['Key']) and i.get('Status') in ('open', 'dismissed', 'snoozed')
             or (i.get('Status') == 'done' and _ts(i.get('DecidedAt') or i.get('LastSaid') or '') >= cut)][:cap]
     out = []
     for i in rows:
@@ -806,7 +814,7 @@ def raised(store, days: float = 2) -> str:
     return '\n'.join(out) or '(the assistant raised nothing in this window)'
 
 
-def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
+def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=None) -> list:
     """The model's list, kept honest: a key it invents must be idea:*, a candidate key keeps its
     kind and its buttons, and the text is the model's when it gave one. Every line keeps its WHY -
     the hub's facts for a candidate (plus the model's read on them), the model's own for an idea -
@@ -815,10 +823,14 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
     try: j = json.loads(re.sub(r'^```(json)?|```$', '', (text or '').strip(), flags=re.M))
     except ValueError: return []
     by = {c['key']: c for c in cands}
-    # an open idea already about this message or task keeps its key: the model invents a slug per run, and
-    # one situation came back as idea:gail-sample-file, idea:gail-sample-file-compass, idea:gail-in-...
-    aimed = {}
-    for i in store.list_ideas('open'):
+    # an idea already about this message or task keeps its key: the model invents a slug per run, and one
+    # situation came back as idea:gail-sample-file, idea:gail-sample-file-compass, idea:gail-in-... A DISMISSED or
+    # snoozed one too - read only among open ideas, a thought put down came straight back under a new slug (I2,
+    # 2026-09-27). Only the model's own keys, and only this report's: a model line that took a follow-up's key
+    # rewrote it every run, and the follow-up re-raised itself on the next (I3, I8)
+    aimed, mine = {}, owns(store, report_id)
+    for i in store.list_ideas():
+        if i.get('Status') not in ('open', 'dismissed', 'snoozed') or not is_model_idea(i['Key']) or not mine(i['Key']): continue
         try: a = json.loads(i.get('ActionJson') or '{}')
         except (ValueError, TypeError): a = {}
         for f in ('tid', 'mid'):
@@ -846,13 +858,15 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
             about = re.search(r'\bTQ-?0*(\d+)\b', str(s.get('about') or ''), re.I)
             pick = (store.get_task(int(about.group(1))) if about else None) or \
                    next((t for t in refs if t.get('Status') not in ('done', 'dropped')), None) or (refs[0] if refs else None)
-            if pick and not act.get('tid'): act['tid'] = pick['TaskId']
             # JUST HANDLED IS NOT NEWS (the owner, 2026-09-25): an idea about a task closed this week is a second copy
             # of finished work - the vendor loop fixed yesterday came back as a fresh idea and a fresh task. A
             # recurrence reaches the owner as its own mail; triage puts that back on the task.
-            if just_handled(store, act):
-                logger.info(f"assistant: dropped {key} - it is about {task_ref(just_handled(store, act))}, handled this week")
+            if (gone := just_handled(store, {'tid': pick['TaskId']} if pick else act)):
+                logger.info(f"assistant: dropped {key} - it is about {task_ref(gone)}, handled this week")
                 continue
+            # ...and one about work closed LONGER ago stands alone: tied to that task, the rail filed it under a closed
+            # row and nobody saw it (I6, 2026-09-27)
+            if pick and not act.get('tid') and pick.get('Status') not in ('done', 'dropped'): act['tid'] = pick['TaskId']
             # where in the post it goes. Only an idea gets to choose: a candidate the hub found is
             # placed by the producer that found it, and no model answer overrides that.
             act['section'] = section_of({'section': s.get('section'), 'kind': 'idea'})
@@ -1127,7 +1141,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
         from .llm import readable_images
         images = readable_images(store, _people_context(store)[1])
     text = llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {}))
-    return parse(store, text, cands, max_lines), _notes(text), user, mids
+    return parse(store, text, cands, max_lines, report_id), _notes(text), user, mids
 
 
 def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None,
@@ -1280,11 +1294,12 @@ def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
     return msg, (tid if task else None), active
 
 
-def retry_stuck_ideas(store) -> int:
+def retry_stuck_ideas(store, report_id=None, report_title: str = None) -> int:
     """L3 (the owner, 2026-09-25): an open idea whose triage FAILED, or that waited for a brain, is judged again on
-    the next Advisor run - not only if the Advisor happens to say it again. Two ideas held a server error for ten days."""
-    stuck = []
+    the next run of the report that said it - under that report's name, not every report's as "Advisor" (I8)."""
+    stuck, mine = [], owns(store, report_id)
     for i in store.list_ideas('open'):
+        if not mine(i['Key']): continue
         try: t = (json.loads(i.get('ActionJson') or '{}') or {}).get('triage') or {}
         except ValueError: continue
         if t.get('error') or t.get('pending'): stuck.append(i)
@@ -1294,7 +1309,7 @@ def retry_stuck_ideas(store) -> int:
         brain = build_llm(store)
     except Exception: brain = None
     if brain is None: return 0
-    try: return len(triage_ideas(store, stuck, brain))
+    try: return len(triage_ideas(store, stuck, brain, report_title=report_title if own_identity(store, report_id) else None))
     except Exception as e:
         logger.warning(f'assistant: retrying stuck ideas failed - {e}'); return 0
 
@@ -1351,86 +1366,6 @@ def _public(i: dict) -> dict:
     except ValueError: a = {}
     return {'id': i['IdeaId'], 'key': i['Key'], 'kind': i['Kind'], 'text': i['Text'], 'why': a.pop('why', ''), 'action': a, 'status': i.get('Status'),
             'source': a.get('source'), 'section': section_of({'section': a.get('section'), 'kind': i['Kind']})}
-
-
-def talk(store, idea_id: int, text: str, actor: str = 'owner', llm=None) -> dict:
-    """Let the owner challenge or question one suggestion and keep the exchange with it.
-
-    This is deliberately not a verdict. A correction becomes context under ALREADY SAID on
-    later checks, while the assistant answers now from the same people/calendar/work inputs
-    (and the same attached images) that should have informed the suggestion initially.
-    """
-    i = store.get_idea(idea_id)
-    if not i: raise ValueError(f'no idea {idea_id}')
-    text = _short(text, 1200)
-    if not text: raise ValueError('say what the assistant missed or ask a question')
-    try: action = json.loads(i.get('ActionJson') or '{}')
-    except ValueError: action = {}
-    chat = [t for t in (action.get('chat') or []) if isinstance(t, dict)][-10:]
-    if llm is None:
-        from .llm import build_llm
-        llm = build_llm(store)
-    if not llm: raise ValueError('the assistant needs an active AI connector to answer')
-    from . import counsel as _counsel
-    counsel = _counsel.for_discussion(store)
-    system = ((counsel + '\n\n') if counsel else '') + (
-        'The owner is talking back to one of your assistant suggestions. Answer as their assistant, '
-        'not as customer support. If they correct you, acknowledge the mistake plainly and update your '
-        'understanding from the evidence below. If they ask a question, answer it directly. Do not claim '
-        'you performed an action, sent anything, or saw a file that was not provided. Be brief: 2-4 sentences.')
-    history = '\n'.join(f"{t.get('role')}: {t.get('text')}" for t in chat)
-    user = (f"YOUR SUGGESTION:\n{i['Text']}\nWHY YOU GAVE:\n{action.get('why') or '(none)'}"
-            + (f"\nCONVERSATION SO FAR:\n{history}" if history else '')
-            + f"\nOWNER NOW SAYS:\n{text}\n\nCURRENT HUB CONTEXT:\n{inputs(store, [], 'NEW CANDIDATES (not relevant to this reply)')}")
-    from .llm import readable_images
-    images = readable_images(store, _people_context(store)[1])
-    answer = _short(llm(system, user, max_tokens=400, **({'images': images} if images else {})), 1200)
-    if not answer: raise ValueError('the assistant returned no answer')
-    stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    chat = (chat + [{'role': 'owner', 'text': text, 'at': stamp},
-                    {'role': 'assistant', 'text': answer, 'at': stamp}])[-12:]
-    action['chat'] = chat
-    store.set_idea_action(idea_id, action)
-    store.audit('idea', idea_id, 'talk', actor, detail={'owner': text[:300], 'assistant': answer[:300]})
-    return {'ideaId': idea_id, 'reply': answer, 'chat': chat}
-
-
-def discussion_task(store, idea_id: int, actor: str = 'owner') -> dict:
-    """Open one Timeline idea as a normal Assistant workspace conversation.
-
-    The Timeline used to own a second, smaller chat implementation. A discussion now gets
-    one non-coding task and the task's comment history becomes the sole conversation record.
-    ``discussion_tid`` is separate from ``tid`` because an idea about an existing coding task
-    must not turn that task's terminal workspace into an Assistant workspace.
-    """
-    i = store.get_idea(idea_id)
-    if not i: raise ValueError(f'no idea {idea_id}')
-    try: action = json.loads(i.get('ActionJson') or '{}')
-    except ValueError: action = {}
-    existing = action.get('discussion_tid')
-    if existing and store.get_task(existing):
-        return {'ideaId': idea_id, 'taskId': existing, 'ref': task_ref(existing), 'created': False}
-
-    title = str(action.get('title') or i.get('Text') or 'Discuss assistant suggestion').strip()[:200]
-    why = str(action.get('why') or '').strip()
-    summary = str(i.get('Text') or '').strip()
-    if why: summary += f'\n\nWhy the assistant raised it: {why}'
-    tid = store.create_task({'Title': title, 'Summary': summary[:2000], 'Kind': 'general',
-                             'Source': 'assistant', 'SourceRef': f'assistant:idea:{idea_id}'}, actor)
-    seed = str(i.get('Text') or '').strip()
-    if why: seed += f'\n\nWhy I raised this: {why}'
-    if action.get('tid'): seed += f'\n\nRelated task: {task_ref(action["tid"])}'
-    store.add_comment(tid, 'assistant', 'assistant_agent', seed)
-    for turn in [t for t in (action.get('chat') or []) if isinstance(t, dict)]:
-        text = str(turn.get('text') or '').strip()
-        if text:
-            role = 'assistant_agent' if turn.get('role') == 'assistant' else 'assistant_user'
-            store.add_comment(tid, 'assistant' if role == 'assistant_agent' else actor, role, text)
-    action['discussion_tid'] = tid
-    store.set_idea_action(idea_id, action)
-    store.audit('task', tid, 'create_from_assistant_idea', actor,
-                detail={'idea_id': idea_id, 'message_id': i.get('MessageId'), 'related_task_id': action.get('tid')})
-    return {'ideaId': idea_id, 'taskId': tid, 'ref': task_ref(tid), 'created': True}
 
 
 def reviewed(cands: list, say: list, recent: str, open_: str, said: str, model: bool, week: str = '(', people: str = '(') -> dict:
@@ -1511,7 +1446,7 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
     if report_id is None and watch_source_ids is None and watch_sources is None:
         watch_source_ids, watch_sources = _watch(store)
     with _LOCK:
-        retry_stuck_ideas(store)
+        retry_stuck_ideas(store, report_id, report_title)
         return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
                     systems_only, report_id, report_title, always_post, blocks, judge)
 
@@ -1626,7 +1561,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         rv = reviewed([], say, '(', '(', '(', used, '(', '(') | {
             'notes': '', 'scope': 'sources', 'systems': len(_ids(watch_source_ids)) + len(_inline(watch_sources))}
     else:
-        rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {
+        rv = reviewed(cands, say, _recent(store), _open(store), _said(store, report_id=report_id), used, _week(store), _people(store)) | {
             'notes': note, 'blocks': read_blocks(blocks)}
     # ...and what the REPORT proposes on its own: the app's health. Read, not thought; fresh() keeps a declined one
     # from coming back, and a raised one from repeating. A system worth connecting is NOT here any more: it is a
@@ -1637,8 +1572,10 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         on = lambda bid: blocks is None or bool((blocks.get(bid) or {}).get('on'))
         try:
             props = health_ideas(store, now) if on('health') else []
-            say = list(say) + [x | {'why': x['action'].get('why', '')} for x in props
-                               if x['key'] not in have and fresh(state, x, now)]
+            # ...and it is a line like any other: it counts toward "Lines per post", first because it is the app's own
+            # (health rode on top of the cap, and a post said to hold 3 lines held 5 - I9, 2026-09-27)
+            say = ([x | {'why': x['action'].get('why', '')} for x in props if x['key'] not in have and fresh(state, x, now)]
+                   + list(say))[:c['max']]
         except Exception as e: logger.warning(f'assistant: the health and connect checks were skipped - {e}')
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     # the report's routing card reads the lines BEFORE they post. Held back = nothing on the Timeline,
@@ -1709,93 +1646,77 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             **({'decided': d} if d is not None else {})}
 
 
-# ── the buttons ──────────────────────────────────────────────────────────────────────────────
-def nudge(store, mid: int, why: str, actor: str = 'owner', llm=None) -> dict:
-    """The chase, drafted in the owner's voice and parked on the task - never sent by itself."""
-    from .ingest import task_from_message
-    from . import responder
-    m = store.get_message(mid)
-    if not m: raise ValueError(f'no message {mid}')
-    tid = m.get('TaskId') or task_from_message(store, mid, actor, 'reply')
-    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): store.update_task(tid, {'Status': 'waiting'}, actor)
-    rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
-                            'Reason': f'follow-up the assistant suggested: {why[:160]}'})
-    try: responder.write_draft(store, tid, rid, actor=actor, llm=llm, nudge=why)
-    except Exception as e: logger.warning(f'follow-up draft failed for review {rid}: {e}')   # Review keeps the empty draft; 'Draft with AI' retries
-    store.add_comment(tid, 'assistant', 'agent', f'FOLLOW-UP\n{why}\nThe chase is drafted on the task - approving sends it.')
-    return {'taskId': tid, 'ref': task_ref(tid), 'reviewId': rid}
+# ── the buttons: the same five words on every surface (the owner, 2026-09-27) ────────────────
+# Make a task (task: yours, nothing works it), Send to agent (agent), Not ours (dismiss: never said again), Remind me
+# (snooze: back on its day), and done - handled some other way, which is what the rail's Done writes. Next is the
+# walk's own and touches nothing. Draft follow-up, Discuss and the talk-back chat are gone: a task's agent drafts.
+VERBS = ('task', 'agent', 'dismiss', 'snooze', 'done')
 
 
-def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: int = 1, learn_async=None) -> dict:
-    """One click on the panel. followup / task DO the thing and close the idea; dismiss and snooze
-    are verdicts (dismiss teaches LEARNED.md which nudges this owner never wants); done says the
-    owner handled it themselves."""
+def linked_task(store, idea_id: int, a: dict) -> dict | None:
+    """The LIVE task this idea already has: the one triage opened for it, else the one it is about. Make a task
+    ignored both and opened a second task beside the one triage had opened (I1, 2026-09-27). A closed one is
+    history - an idea never reopens it (I7)."""
+    for t in store.dock_tasks(f'assistant:idea:{idea_id}', limit=1) + ([store.get_task(a['tid'])] if a.get('tid') else []):
+        if t and t.get('Status') not in ('done', 'dropped'): return t
+    return None
+
+
+def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
+    from . import ingest
+    m = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
+    prior = store.get_task(m['TaskId']) if m.get('TaskId') else None
+    t = linked_task(store, i['IdeaId'], a) or (prior if prior and prior.get('Status') not in ('done', 'dropped') else None)
+    kind = str(a.get('kind') or (a.get('triage') or {}).get('kind') or (t or {}).get('Kind') or 'general').lower()
+    kind = kind if kind in ('coding', 'general') else 'general'
+    if t:
+        tid = t['TaskId']
+        if agent and t.get('Kind') not in ('coding', 'general'): store.update_task(tid, {'Kind': kind}, actor)
+    elif m and not prior: tid = ingest.task_from_message(store, a['mid'], actor, kind if agent else 'task', None if agent else actor)
+    else:
+        # no message, or its task is CLOSED: new work noticed after the old was done. A message points at one task,
+        # so the closed one keeps it and the evidence is carried into a fresh task
+        summary = str(i.get('Text') or '').strip()
+        body = str(m.get('BodyText') or '').strip()
+        if body and body not in summary: summary += f'\n\nSource message: {body}'
+        tid = store.create_task({'Title': str(a.get('title') or i.get('Text') or 'Advisor idea').strip()[:200], 'Summary': summary[:2000],
+                                 'Kind': kind if agent else 'task', 'Source': 'assistant', 'SourceRef': f"assistant:idea:{i['IdeaId']}",
+                                 **({} if agent else {'Assignee': actor})}, actor)
+        if prior: store.add_comment(tid, 'assistant', 'assistant_agent', f"Opened from an Advisor idea; the earlier task {task_ref(prior['TaskId'])} is done.")
+        store.audit('task', tid, 'create_from_assistant_idea', actor, detail={'idea_id': i['IdeaId'], 'message_id': a.get('mid'),
+                                                                              'related_task_id': (prior or {}).get('TaskId')})
+    if not t and a.get('title'): store.update_task(tid, {'Title': str(a['title'])[:200]}, actor)
+    store.set_idea_action(i['IdeaId'], a | {'tid': tid})
+    if agent:
+        brief = str(a.get('title') or i.get('Text') or '').strip()
+        if a.get('why'): brief += f"\n\nWhy the assistant raised it: {a['why']}"
+        # ...and the report it points at, or the agent can only ask for it to be pasted (2026-09-23)
+        if m and m.get('Channel') != 'assistant' and m.get('BodyText'):
+            brief += f"\n\nThe source - {m.get('Subject') or 'the message'}:\n" + m['BodyText'].split('\n--- raw data ---')[0].strip()[:6000]
+        # the SAME start as any task of its kind: the slot cap, the queue and the retry budget (A18, 2026-09-25)
+        if kind == 'general': ingest._spawn(ingest._auto_general, store, tid, brief)
+        elif auto_code_enabled(store): ingest._spawn(ingest._auto_code, store, tid)
+    return {'taskId': tid, 'ref': task_ref(tid)}
+
+
+def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, until: str = None) -> dict:
+    """One word on one idea. Every word writes the IDEA's own status - the rail's used to write only the rail's,
+    and the Advisor went on listing an idea the owner had put down as open (I4, 2026-09-27)."""
     i = store.get_idea(idea_id)
     if not i: raise ValueError(f'no idea {idea_id}')
+    if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
     out = {'ideaId': idea_id, 'verb': verb}
-    if verb == 'followup':
-        if not a.get('mid'): raise ValueError('this idea is not about a message, so there is nothing to follow up on')
-        out |= nudge(store, a['mid'], i['Text'], actor, llm)
-    elif verb == 'task':
-        if not a.get('mid'): raise ValueError('this idea is not about a message, so there is nothing to make a task from')
-        from . import ingest
-        message = store.get_message(a['mid']) or {}
-        prior = store.get_task(message.get('TaskId')) if message.get('TaskId') else None
-        # The task kind is the router. The old path always launched `_auto_code`, even when the
-        # message already belonged to a GENERAL task; that is how TQ-0367 was silently reopened
-        # in a repository after it had been completed. An explicit kind from this assistant's
-        # one triage wins, then the existing task kind, with coding retained only as the legacy
-        # default for older idea rows that carry neither.
-        kind = str(a.get('kind') or (prior or {}).get('Kind') or 'coding').lower()
-        if kind not in ('coding', 'general'): kind = 'coding'
-        if prior and prior.get('Status') in ('done', 'dropped'):
-            # This is NEW work noticed after an earlier task was completed. A message can point
-            # at only one task, so do not steal it from history or rename/reopen the completed
-            # task. Carry the evidence into a fresh assistant-owned task instead.
-            title = str(a.get('title') or i.get('Text') or 'Advisor follow-up').strip()[:200]
-            source_text = str(message.get('BodyText') or '').strip()
-            summary = str(i.get('Text') or '').strip()
-            if source_text and source_text not in summary: summary += f'\n\nSource message: {source_text}'
-            tid = store.create_task({'Title': title, 'Summary': summary[:2000], 'Kind': kind,
-                                     'Source': 'assistant', 'SourceRef': f'assistant:idea:{idea_id}'}, actor)
-            store.add_comment(tid, 'assistant', 'assistant_agent',
-                              f'Created from assistant idea {idea_id}; related completed task {task_ref(prior["TaskId"])}.')
-            store.audit('task', tid, 'create_from_assistant_idea', actor,
-                        detail={'idea_id': idea_id, 'message_id': a['mid'], 'related_task_id': prior['TaskId']})
-        else:
-            tid = ingest.task_from_message(store, a['mid'], actor, kind)
-        if a.get('title'): store.update_task(tid, {'Title': str(a['title'])[:200]}, actor)
-        task = store.get_task(tid) or {}
-        brief = str(a.get('title') or i.get('Text') or task.get('Title') or '').strip()
-        why = str(a.get('why') or '').strip()
-        if why: brief += f'\n\nWhy the assistant raised it: {why}'
-        # ...and the report it points at, or the agent can only ask for it to be pasted (2026-09-23)
-        src = store.get_message(int(a['mid'])) if str(a.get('mid') or '').isdigit() else None
-        if src and src.get('Channel') != 'assistant' and src.get('BodyText'):
-            brief += (f"\n\nThe source - {src.get('Subject') or 'the message'}:\n"
-                      + src['BodyText'].split('\n--- raw data ---')[0].strip()[:6000])
-        if kind == 'general':
-            # the SAME start as any general task: the slot cap, the queue and the retry budget (A18, 2026-09-25) - this
-            # road had its own start with none of the three
-            ingest._spawn(ingest._auto_general, store, tid, brief)
-        elif auto_code_enabled(store):
-            ingest._spawn(ingest._auto_code, store, tid)
-        out |= {'taskId': tid, 'ref': task_ref(tid)}
-    elif verb == 'snooze':
-        until = (datetime.now() + timedelta(days=max(1, int(days or 1)))).strftime('%Y-%m-%d %H:%M:%S')
-        store.set_idea_status(idea_id, 'snoozed', actor, until)
-        store.audit('idea', idea_id, verb, actor, detail={'until': until})
-        return out | {'until': until}
-    elif verb not in ('dismiss', 'done'): raise ValueError(f'unknown verb: {verb}')
+    if verb == 'snooze':
+        # Remind me reads a day the way the task's own picker does ('2 weeks', a date, 'tomorrow')
+        from . import remind
+        at = remind.parse(until) if until else (datetime.now() + timedelta(days=max(1, int(days or 1)))).strftime('%Y-%m-%d %H:%M:%S')
+        if not at: raise ValueError('say which day to bring it back')
+        store.set_idea_status(idea_id, 'snoozed', actor, at)
+        store.audit('idea', idea_id, verb, actor, detail={'until': at})
+        return out | {'until': at, 'remindAt': at, 'when': remind.when(at)}
+    if verb in ('task', 'agent'): out |= _make_task(store, i, a, verb == 'agent', actor)
     store.set_idea_status(idea_id, 'dismissed' if verb == 'dismiss' else 'done', actor)
-    if verb == 'dismiss':
-        from . import learn
-        ev = f"idea{idea_id}: the owner dismissed the assistant's {i.get('Kind')} suggestion \"{i['Text'][:200]}\" - not worth their eye"
-        if learn_async: learn_async(learn.learn_from, store, ev)
-        else: learn.learn_from(store, ev)
     store.audit('idea', idea_id, verb, actor, detail={'kind': i.get('Kind')})
     return out
-
-

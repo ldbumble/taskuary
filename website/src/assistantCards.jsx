@@ -702,35 +702,30 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
 }
 
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
-export function IdeaCard({ card, onAct, onOpenTask, onTimeline, onNavigate }) {
+export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
   const a = card.action || {};
-  const [busy, setBusy] = useState("");
-  const [err, setErr] = useState("");
+  const [err] = useState("");
   const words = { followup: "waiting on them", promise: "you promised", asked: "slipped", cold: "gone quiet", idea: "worth a thought",
                   connect: "worth connecting", health: "needs a look" };
   // THE REPORT PROPOSES, THE CARD HAS THE DOORS (the assistant-runs-the-app design, 2026-09-18): a
   // system to connect opens its card on the Connections tab; a health finding opens the tab that fixes
-  // it. "Not for us" is the plain done verb - the idea's key is remembered and it never comes back.
+  // it. Putting it down is the chips' Not ours, the same word every idea carries (C5, 2026-09-27).
   const go = (tab, hash) => { if (hash) window.location.hash = hash; onNavigate?.(tab); };
-  const nav = React.useContext(CardNav);
   return (
     <CardShell card={card} kicker={words[card.idea_kind] || "slipped"} title={card.title} err={err}>
       {card.why && <div className="tq-card-excerpt">{card.why}</div>}
       <Foot
         verb={card.idea_kind === "connect" && a.connector_type ? (
           <Button size="small" variant="contained" disableElevation sx={primary}
-            onClick={() => go("Connections", `connector=${a.connector_type}`)}>{a.planned ? `Vote for ${a.title || a.connector_type}` : `Connect ${a.title || a.connector_type}`}</Button>
+            onClick={() => go("Connections", `connector=${a.connector_type}`)}>{a.planned ? `See ${a.title || a.connector_type}` : `Connect ${a.title || a.connector_type}`}</Button>
         ) : card.idea_kind === "health" && a.tab ? (
           <Button size="small" variant="contained" disableElevation sx={primary} onClick={() => go(a.tab, a.hash || "")}>Open {a.tab}</Button>
         ) : null}
-        then={card.idea_kind === "connect" && a.connector_type ? <><b>{a.planned ? "Vote" : "Connect"}</b> opens its card on Connections - nothing changes until you finish there.</>
+        then={card.idea_kind === "connect" && a.connector_type ? <><b>{a.planned ? "See" : "Connect"}</b> opens its card on Connections - nothing changes until you finish there.</>
           : card.idea_kind === "health" && a.tab ? <><b>Open {a.tab}</b> takes you to the tab that fixes it.</>
           // the buttons are the short way; saying it is the real one (2026-09-04: "all the ideas
           // should just say it and I will create it")
           : "Say what you want done with it and I'll create it."}
-        extra={(card.idea_kind === "connect" || card.idea_kind === "health") && onAct && !nav.also?.length
-          ? [{ verb: "seen", label: card.idea_kind === "connect" ? "Not for us" : "Seen",
-               onClick: () => onAct(card.idea_kind === "connect" ? "Not for us - remembered." : "Seen.") }] : []}
         where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
     </CardShell>
   );

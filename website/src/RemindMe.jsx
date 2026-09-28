@@ -13,7 +13,8 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
 
 // the day picker itself, anchored wherever it was asked for: the task page's button, or the walk's own
 // "Remind me" word (the owner, 2026-09-25: "remind me should be a walk button")
-export function RemindPicker({ task, anchor, onClose, onDone }) {
+// `path`: where the day goes - a task's reminder by default, or an Advisor idea's (its Remind me, 2026-09-27)
+export function RemindPicker({ task, anchor, onClose, onDone, path }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const away = remindWaiting(task);
@@ -21,7 +22,7 @@ export function RemindPicker({ task, anchor, onClose, onDone }) {
   const set = async (until) => {
     setBusy(true); setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${task.TaskId}/remind`, { until });
+      const { data } = await api.post(path || `/api/tasks/${task.TaskId}/remind`, { until });
       onClose?.(); onDone?.(data);
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "could not set the reminder"); }
     finally { setBusy(false); }

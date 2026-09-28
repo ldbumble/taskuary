@@ -151,3 +151,13 @@ def test_walk_means_the_assistant_stays_quiet_until_handed_one(store):
 def test_the_endpoint_sets_it(store):
     r = c.post('/api/assistant/doorways/listens', json={'channel': 'telegram', 'listens': 'walk'})
     assert r.status_code in (200, 422)          # 422 only when this test store has no live telegram
+
+
+# ── which chat the Assistant tab offers (the owner, 2026-09-28: "either be whatsapp or telegram") ──
+def test_the_tab_offers_only_the_chat_the_owner_picked(store):
+    remote_assistant.use_chat(store, 'telegram', '4242')
+    assert [d['channel'] for d in remote_assistant.doorways(store)] == ['telegram']       # both, by default
+    store.set_setting('phone_walk_channel', 'whatsapp', 'o')
+    assert remote_assistant.doorways(store) == []                                          # picked, not set up: no button
+    store.set_setting('phone_walk_channel', 'telegram', 'o')
+    assert [d['channel'] for d in remote_assistant.doorways(store)] == ['telegram']

@@ -199,7 +199,10 @@ def doorways(store) -> list:
     no connector, no pairing or no Assistant chat named is not offered at all - the point is to TALK to
     the assistant through it, and a button that opens a setup page instead is a different thing."""
     out = []
+    # ...and only the one the owner picked (the owner, 2026-09-28: "setting to either be whatsapp or telegram")
+    pick = str(store.get_setting('phone_walk_channel') or 'both').strip().lower()
     for ch in CHANNELS:
+        if pick in CHANNELS and ch != pick: continue
         c = doorway(store, ch)
         if c: out.append({'channel': ch, 'label': LABELS[ch], 'chat': chat_of(c),
                           'connectorId': c['ConnectorId'], 'name': c.get('Name') or LABELS[ch]})

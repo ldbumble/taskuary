@@ -15,6 +15,10 @@ pick the chat and whether it may listen.
 3. Pick that chat in Settings. Taskuary adds the notification role, names the chat, and switches
    on the assistant for it.
 
+The Assistant tab then offers **Walk me through them in WhatsApp** (or Telegram) for each chat set up
+this way. **Which chat the Assistant tab offers** in the same section picks one — WhatsApp, Telegram,
+or both.
+
 :::rule Only chats you are alone in
 The picker offers nothing but chats with one member: you. Groups cannot be selected, because an
 answer may name anything in your workspace. The rule is enforced again when a message arrives, so

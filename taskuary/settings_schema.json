@@ -339,6 +339,18 @@
       "desc": "The default for a channel that has never been asked. Each channel above answers for itself once you set it.",
       "help": "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as words because a chat has no buttons.\n\nThis switch is the standing permission. The Assistant tab's own \"in WhatsApp\" button hands the walk over for a session whether or not it is on, and locks the tab while the walk is there.\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before."
     },
+    "phone_walk_channel": {
+      "group": "Assistant on your phone",
+      "label": "Which chat the Assistant tab offers",
+      "type": "select",
+      "options": [
+        "both",
+        "whatsapp",
+        "telegram"
+      ],
+      "desc": "The \"Walk me through them in ...\" button on the Assistant tab: WhatsApp, Telegram, or both.",
+      "help": "both (default) = a button for each chat that is connected and has an Assistant chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names an Assistant chat, so choosing Telegram before setting it up shows no button until you do."
+    },
     "phone_morning_line": {
       "group": "Assistant on your phone",
       "label": "A morning line in the chat",

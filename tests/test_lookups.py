@@ -73,6 +73,39 @@ class LookupTests(unittest.TestCase):
         self.assertIn('Nothing in the help', read(s, 'docs.search', query='zzzqqq'))
 
 
+class CutTests(unittest.TestCase):
+    def test_below_600_collapses_whitespace_and_newlines(self):
+        text = "first line\nsecond   line\tthird line"
+
+        self.assertEqual(
+            lookups._cut(text, 599),
+            "first line second line third line",
+        )
+
+    def test_at_600_keeps_own_lines(self):
+        text = "first line\nsecond   line\tthird line"
+
+        self.assertEqual(lookups._cut(text, 600), text)
+
+    def test_above_600_keeps_own_lines(self):
+        text = "first line\nsecond   line\tthird line"
+
+        self.assertEqual(lookups._cut(text, 601), text)
+
+    def test_exactly_n_characters_is_not_cut(self):
+        text = "abcdefghij"
+
+        self.assertEqual(lookups._cut(text, 10), text)
+
+    def test_longer_text_ends_with_marker(self):
+        text = "abcdefghijk"
+
+        self.assertEqual(lookups._cut(text, 10), "abcdefghij […]")
+
+    def test_none_gives_empty_string(self):
+        self.assertEqual(lookups._cut(None, 100), "")
+
+
 class AppAtWorkTests(unittest.TestCase):
     """What the agents are doing, what waits on a yes, the calendar, what happened, what failed."""
 

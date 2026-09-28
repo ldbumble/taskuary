@@ -53,6 +53,9 @@ export const ROLES = {
   done:    { solid: "#47654a", ink: "#3c5740", tint: "#e2ebe0",  bd: "#c9dcc8" },  // finished
   info:    { solid: "#8a7a5c", ink: "#6b5f45", tint: "#eee7d6",  bd: "#ddd2b9" },  // a report, to read
   muted:   { solid: "#a09787", ink: "#6f6960", tint: "#e6e0d5",  bd: "#dad3c5" },  // filed, ignored
+  // PASSED is still yours, only put off - "your task" softened, never fyi's beige (the owner, 2026-09-28: "in rail
+  // fyi/passed have same color?" - the one read as nothing to do, the other is work waiting on you)
+  passed:  { solid: "#b58790", ink: "#86505b", tint: "#f5eaec",  bd: "#e6d2d6" },
   bad:     { solid: "#7e2d2d", ink: "#7e2d2d", tint: "#f4e7e5",  bd: "#e2c6c2" },  // failed, rejected
 };
 

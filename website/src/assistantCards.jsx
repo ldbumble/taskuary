@@ -231,7 +231,9 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
                 {shortVerdict(r) && <>{r.actions ? " " : ""}<b>Verdict:</b> {shortVerdict(r)}</>}
               </div>
             )}
-            {extra}
+            {/* ...what it last said only when it filed no report - the report already says it, and the card has to fit
+                one screen (the owner, 2026-09-28: "it's too big to see in one screen") */}
+            {!r?.summary && extra}
             {r?.text && <button type="button" className="tq-card-more" onClick={() => setOpen((o) => !o)}>{open ? "Hide its report" : "Its full report"}</button>}
             {open && r?.text && <div className="tq-card-full">{looksMd(r.text) ? <Md text={r.text} /> : r.text}</div>}
           </div>
@@ -811,8 +813,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   ) : chat && !!card.tail?.length && <div className="tq-card-tail">{card.tail.join("\n")}</div>;
   const toggle = (chat || card.sid) && !card.paused && (
     <div className="tq-card-note" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-      <span>{!live ? (chat ? "Conversation folded." : "Its screen is not here - show the whole thing, or open the workspace.")
-        : chat ? "This is the conversation - answer it here." : "This is the agent's own screen - click in and type to answer it there."}</span>
+      <span>{!live ? "" : chat ? "This is the conversation - answer it here." : "This is the agent's own screen - click in and type to answer it there."}</span>
       <span className="sp" />
       {chat && live && <Button size="small" onClick={() => setBig((b) => !b)} sx={faint}>{big ? "Smaller" : "Bigger"}</Button>}
       <Button size="small" onClick={() => setLive((l) => !l)} sx={faint}>
@@ -868,7 +869,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
               </div>
             </div>
           )}
-          {!asked && !card.paused && !live && !!card.why && <div className="tq-move-say">{card.why}</div>}
+          {/* (the agent's state sentence is not repeated here: the step's header already says it) */}
           {toggle}
           {screen}
           {/* ONE place to answer (the owner, 2026-09-23: "why do we need both?"): with the screen open you type into the
@@ -1144,7 +1145,9 @@ const ROWS_PER_GROUP = 5;
 // own list the report beige, and what needs no decision the muted one
 // every group walkSummary.GROUPS draws needs a role here - "passed" had none, and ROLES[undefined].ink took the
 // whole page down the first time a passed row reached the opener (2026-09-24). Unknown keys fall back to muted.
-const GROUP_ROLE = { people: "you", you: "info", agents: "working", read: "muted", passed: "muted" };
+// ...the RAIL's colours, one meaning each (the owner, 2026-09-28: "these colors are weird"): who wants you, your own list and
+// an agent waiting on you are all Your task on the rail; nothing to decide is fyi; you passed is passed
+const GROUP_ROLE = { people: "you", you: "you", agents: "you", read: "muted", passed: "passed" };
 const groupRole = (key) => ROLES[GROUP_ROLE[key]] || ROLES.muted;
 // the groups themselves - also drawn on the empty chat's welcome, which is what the walk starts from
 // `quiet` groups show their pill and count only - on the day's opener, what needs no decision is on the

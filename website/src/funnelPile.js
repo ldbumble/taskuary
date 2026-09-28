@@ -376,7 +376,7 @@ export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).s
 // product (the owner, 2026-09-16: "we don't have importance besides for the 4 categories"), so the
 // heading is the only thing on the rail that carries a role colour - the dot beside a row is its
 // SOURCE, and a row's own word is gone. theme.jsx ROLES, named rather than copied.
-export const LEVEL_ROLE = { urgent: "you", task: "you", reports: "info", fyi: "muted", passed: "muted", agents: "working" };
+export const LEVEL_ROLE = { urgent: "you", task: "you", reports: "info", fyi: "muted", passed: "passed", agents: "working" };
 
 // ── how the rail divides the height it has ────────────────────────────────────────────────────
 // urgent, your task and agents working are NEVER capped: a task behind a "4 more" button is a task

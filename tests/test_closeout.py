@@ -228,6 +228,32 @@ class OnePressTests(unittest.TestCase):
         self.assertTrue(out['ok'], out); merge.assert_called_once(); say.assert_called_once()
         self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'done'))
 
+    def test_close_out_pressed_on_the_reply_card_runs_the_merge_too(self):
+        """The phone and the walk put the task's REPLY on the table (TQ-0777): its Close out sent the reply alone and
+        never merged. It runs the task's close-out, the reply riding as its comment."""
+        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        reply = self._github_reply(s, tid)
+        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=GREEN), \
+             mock.patch.object(github, 'merge_pr', return_value='m') as merge, mock.patch.object(github, 'comment_issue', return_value='u') as say:
+            out = verdicts.decide(s, s.get_review(reply), 'approve')
+        self.assertTrue(out['ok'], out); merge.assert_called_once()
+        self.assertEqual(say.call_args[0][3], 'Thanks - approving.')
+        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('approved', 'done'))
+
+    def test_the_phone_shows_the_reply_a_finished_agent_wrote(self):
+        """`draft_reply` (the agent's own) was never read, so WhatsApp asked for a yes to a reply it did not show."""
+        from taskuary import remote_assistant
+        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        reply = self._github_reply(s, tid)
+        self.assertEqual(remote_assistant._draft_text(s, {'rid': reply}), 'Thanks - approving.')
+        co = proposals.closeout_pending(s, tid)
+        self.assertEqual(remote_assistant._draft_text(s, {'rid': co['ReviewId'], 'closeout': 'x'}), 'Thanks - approving.')
+
+    def test_the_phone_never_shows_the_line_triage_reads(self):
+        from taskuary import remote_assistant
+        said = remote_assistant._plain('[pull request by omarkeller - association: CONTRIBUTOR]\nFixes the export')
+        self.assertEqual(said, 'Fixes the export')
+
     def test_a_close_out_card_does_not_say_the_agent_proposed_it(self):
         s, tid, _ = self._both()
         self.assertEqual(proposals.closeout_pending(s, tid)['Reason'], 'closes the task: merge pull request #7')

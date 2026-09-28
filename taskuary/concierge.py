@@ -664,7 +664,9 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         return ALL_DONE
     if opening and item.get('mid') and item['kind'] in ('review', 'action', 'asked', 'todo', 'fyi'):
         frm = f"{item.get('who') or 'Someone'} wrote on {item.get('channel') or 'email'}" + (f" ({funnel_age(item)})" if funnel_age(item) else '') + f": \"{item['title']}\""
-        done = (f"the agent {item['summary']}" if item.get('summary') else
+        # "the agent removed X" reads; "the agent The PR was reviewed.." did not - a summary that is its own sentence gets a lead-in
+        done = ((lambda sm: f"the agent {sm}" if sm[:1].islower() else f"the agent finished - {sm}")(str(item['summary']).strip().rstrip('.'))
+                if item.get('summary') else
                 'triage judged it a reply to write' if item['kind'] == 'review' else 'an agent proposed an action' if item['kind'] == 'action' else
                 'a coding task with no agent on it yet' if item.get('coding') else 'nothing has been done with it yet' if item['kind'] in ('asked', 'todo')
                 else f'triage filed it as fyi{_verdict_why(item)}')

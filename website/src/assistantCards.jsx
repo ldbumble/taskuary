@@ -34,6 +34,7 @@ import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
 import { summarize, stateOf, whoOf } from "./walkSummary.js";
 import { CLOSE_OUT, closeoutOf, reviewText } from "./reviewProposal.js";
+import { READY } from "./taskLifecycle.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -419,7 +420,9 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   };
   const value = text ?? draft();
   const stale = !!(rv?.Stale ?? card.stale);          // a raw review row's Stale is 0, which React would draw
-  const who = rv ? (rv.FromName && rv.FromEmail ? `${rv.FromName} <${rv.FromEmail}>` : rv.FromName || rv.FromEmail || "them") : "";
+  // a GitHub author is their login - their "address" is GitHub's own noreply mailbox, which nobody reads
+  const gh = String(rv?.Channel || "").toLowerCase() === "github";
+  const who = rv ? (rv.FromName && rv.FromEmail && !gh ? `${rv.FromName} <${rv.FromEmail}>` : rv.FromName || rv.FromEmail || "them") : "";
   const decide = async (verb) => {
     setBusy(verb); setErr("");
     try {
@@ -451,7 +454,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
   const verb = action
     ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? co.label : "Run it"}</Button>
-    : rv?.CanSend === false ? null : rv && !value.trim() && !stale ? (
+    : rv?.CanSend === false && !card.closeout ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
          hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
       <Button size="small" variant="contained" disableElevation disabled={!!busy} startIcon={<RefreshRoundedIcon />}
@@ -472,9 +475,10 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     : action ? <><b>Run it</b> does what the agent proposed - nothing runs until you press it.</>
     : rv && !value.trim() && !stale ? <><b>Draft with AI</b> writes one for you to approve here - nothing is sent.</>
     : stale ? <><b>Refresh the draft</b> rewrites it from the newest message; you still approve it.</>
+    : rv && card.closeout ? <><b>{CLOSE_OUT}</b> {card.closeout}, then the reply above {sendsBy(rv.Channel, who)}.</>
     : rv ? <><b>{card.tid ? CLOSE_OUT : "Send reply"}</b> {sendsBy(rv.Channel, who)}{card.tid ? " and closes the task" : ""}.</> : null;
   return (
-    <CardShell card={card} kicker={co ? "agent finished · close out?" : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
+    <CardShell card={card} kicker={co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
       lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} />} err={err}>
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
@@ -483,7 +487,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       )}
       {!action && stale && <div className="tq-card-err">New messages arrived after this draft. Refresh the draft with the latest context before sending.</div>}
       {!action && rv && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
-      {!action && sendBlockLine(rv) && <div className="tq-card-excerpt">{sendBlockLine(rv)}</div>}
+      {!action && !card.closeout && sendBlockLine(rv) && <div className="tq-card-excerpt">{sendBlockLine(rv)}</div>}
       {/* WHAT YOU ARE ANSWERING, said to be that (the owner, 2026-09-14: "though you need to see what
           you are responding to") - one press away, under the draft */}
       {card.mid && <button type="button" className="tq-card-more" onClick={() => setFull((v) => !v)}>{full ? "Less" : "More - what they wrote"}</button>}

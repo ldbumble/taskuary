@@ -1114,7 +1114,10 @@ export const timeAgo = (s) => {
 // should be removed from everywhere"). The SAME rule as triage._BANNER - test_banner_is_one_rule holds
 // the two together - and it only changes what is shown; the mail as stored stays whole.
 export const BANNER = /(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*)?\s*|\[?\s*you don'?t often get email from \S+\.?( learn why this is important( at \S+)?)?\s*\]?)/gi;
-export const cleanText = (s) => (s || "").replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+// the line Taskuary writes over a GitHub/Asana/monday item for TRIAGE ("[pull request by X - association: Y]") is
+// evidence for the judge, never what they said - remote_assistant.PROVENANCE is the same rule for the phone
+export const PROVENANCE = /^\s*\[(?:pull request|issue) by [^\]\n]*\]\s*|^\s*\[(?:Asana task|Monday item)[^\]\n]*\]\s*/i;
+export const cleanText = (s) => (s || "").replace(PROVENANCE, "").replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
   .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#\d+;|&\w+;/g, " ").replace(BANNER, "")
   .replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 

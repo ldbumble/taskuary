@@ -224,6 +224,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
                         why='A proposed action is waiting for your approval' if review.get('Kind') == 'action' else 'A reply is waiting for your approval')
+            # a REPLY whose task also waits on a merge: its Close out runs both (verdicts.decide), so its card says so
+            if review.get('Kind') != 'action':
+                other = proposals.closeout_pending(store, tid)
+                if other: card.update(closeout=proposals.CLOSEOUT.get(proposals._action(other)), rides=True)
             # the task's close-out (merge the PR, close the issue): ONE word, Close out - the card's sentence says what it does there
             closeout = proposals.CLOSEOUT.get(proposals._action(review)) if review.get('Kind') == 'action' else None
             if closeout:

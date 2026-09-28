@@ -205,6 +205,14 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     combine this? meaning reply on close?"): the merge/close runs first, and only when it succeeded does the task's
     pending reply go out with this text - a refused merge sends nothing. Each lands through its own verdict below."""
     from . import learn, outbound
+    # ONE CLOSE OUT, WHICHEVER CARD IT WAS PRESSED ON (the owner, 2026-09-27): the phone and the walk put the task's REPLY
+    # on the table, and its yes sent the reply alone - on GitHub with replies off a dead end, and never the merge
+    if (verb_in in ('approve', 'edit') and reply_text is None and rv.get('Kind') not in ('action', 'clarification')
+            and rv.get('TaskId') and str(rv.get('Status') or 'pending') == 'pending'):
+        from . import proposals
+        co = proposals.closeout_pending(store, rv['TaskId'])
+        if co: return decide(store, co, 'approve', None, note, actor, learn_async, cc,
+                             reply_text=final_text if (final_text or '').strip() else '')
     if reply_text is not None and rv.get('Kind') == 'action' and verb_in in ('approve', 'edit', 'close_pr', 'merge_anyway'):
         out = decide(store, rv, verb_in, final_text, note, actor, learn_async)
         if not out.get('ok') or not rv.get('TaskId'): return out

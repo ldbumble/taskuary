@@ -920,6 +920,11 @@ _MD = (
 )
 
 
+# the line Taskuary writes over a GitHub/Asana/monday item for TRIAGE (who wrote it, their standing) - evidence for the
+# judge, never what they said; ui.jsx PROVENANCE is the same rule for the desktop
+PROVENANCE = re.compile(r'^\s*\[(?:pull request|issue) by [^\]\n]*\]\s*|^\s*\[(?:Asana task|Monday item)[^\]\n]*\]\s*', re.I)
+
+
 def _plain(text) -> str:
     """Markdown as WORDS. Neither sender sets parse_mode - Telegram's sendMessage and the WhatsApp
     bridge both post plain text - so every ** and ` and [](...) arrived as its own punctuation once
@@ -930,7 +935,7 @@ def _plain(text) -> str:
     def _hold(m):
         kept.append(m.group(1))
         return f'\x00{len(kept) - 1}\x00'
-    out = _CODE.sub(_hold, str(text or ''))
+    out = _CODE.sub(_hold, PROVENANCE.sub('', str(text or ''), count=1))
     for pat, rep in _MD: out = pat.sub(rep, out)
     for i, code in enumerate(kept): out = out.replace(f'\x00{i}\x00', code)
     return out
@@ -985,7 +990,13 @@ def _draft_text(store, item: dict | None) -> str:
     except Exception as e:
         logger.debug(f'the phone could not read the draft: {e}')
         return ''
-    return str(rv.get('DraftText') or '').strip() if rv.get('Kind') == 'draft' else ''
+    # a close-out card's words are the reply riding with it - the yes posts THAT (verdicts reply_text)
+    if rv.get('Kind') == 'action' and item.get('closeout') and rv.get('TaskId'):
+        rv = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft','draft_reply') "
+                        "ORDER BY ReviewId DESC LIMIT 1", (rv['TaskId'],)) or {}
+    # 'draft_reply' is the one an agent writes when it finishes - only 'draft' was read, so the reply a finished
+    # agent's card asked you to approve never appeared on the phone (2026-09-28)
+    return str(rv.get('DraftText') or '').strip() if rv.get('Kind') in ('draft', 'draft_reply') else ''
 
 
 # the one word the phone adds to what the walk offers: the rest of what is folded, as the card's More

@@ -138,6 +138,13 @@ class BridgeManagerTests(unittest.TestCase):
         self.assertEqual(r['bridge'], False); self.assertIn('phase', r['manager'])                    # the manager's phase rides along
         self.assertIn(r['node'], (True, False))                                                        # step 1 of the pairing box: is Node here
 
+    def test_bad_wa_bridge_port_falls_back_to_8977(self):
+        with mock.patch.dict(wabridge.os.environ, {'WA_BRIDGE_PORT': 'abc'}):
+            with mock.patch.object(wabridge.logger, 'warning') as warn:
+                self.assertEqual(wabridge.port(), 8977)
+                warn.assert_called_once()
+                self.assertIn('bad WA_BRIDGE_PORT', warn.call_args[0][0])
+
 
 class LaunchGraceIsSpentByThePollTests(unittest.TestCase):
     """uvicorn accepts no connection until the FastAPI lifespan yields, and wait_listening(8)

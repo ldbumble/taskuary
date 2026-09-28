@@ -224,7 +224,16 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
     return {**state(), 'phase': _STATE['phase'] if _STATE['phase'] != 'idle' else 'starting'}
 
 
-def port() -> int: return int(os.getenv('WA_BRIDGE_PORT') or 8977)
+def port() -> int:
+    from . import config
+    v = os.getenv('WA_BRIDGE_PORT')
+    if v:
+        try:
+            return config.port_number(v)
+        except ValueError as e:
+            logger.warning(f'bad WA_BRIDGE_PORT: {e} - falling back to 8977')
+            return 8977
+    return 8977
 
 
 def token() -> str:

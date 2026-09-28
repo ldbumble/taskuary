@@ -41,7 +41,8 @@ test("the grouped context, the task summary and the checklist stay renderable - 
   // (the owner, 2026-09-23: "let's keep the detail task list on the actual task tab")
   assert.match(combined, /const task = list && /);
   const task = cards.slice(cards.indexOf("export function TaskCard"), cards.indexOf("export function FyisCard"));
-  assert.match(task, /lead=\{<TaskLead card=\{card\}( did=\{!!card\.summary\})? \/>\}/);   // `did`: the agent's summary is AgentDid's line
+  // ...as the story: who asked, then the agent - its summary is the agent's step, never the ask (2026-09-28)
+  assert.match(task, /lead=\{<Story card=\{card\} agent=/);
   assert.doesNotMatch(cards, /<CombinedTaskText card=\{card\} \/>/, "every card in the walk passes list={false}");
 });
 

@@ -8,7 +8,9 @@ const src = (name) => fs.readFileSync(path.join(process.cwd(), "src", name), "ut
 test("the assistant offers ONE Send to agent, and the card asks coding or not", () => {
   const cards = src("assistantCards.jsx");
   // the card is what the thing IS; the verbs are the chat line's (concierge.CHIPS)
-  assert.doesNotMatch(cards, /"Coding agent"/);
+  // ...no BUTTON per kind. The story's agent step names what an agent is ("Coding agent · researcher", 2026-09-28) -
+  // a label, not a verb
+  assert.doesNotMatch(cards, /<Button[^>]*>[^<{]*(Coding|Regular) agent[^<]*<\/Button>/);
   assert.doesNotMatch(cards, /"Regular agent"/);
   const py = fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "concierge.py"), "utf8");
   // one button (the owner, 2026-09-25) - and still two separate roads, never one guessed kind: the card's own

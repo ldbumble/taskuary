@@ -81,6 +81,10 @@ your yes, and the task is not done until you answer it (decided with the owner o
   the same way: the card is retired and the task closes (`ci.pr_ended`).
 - With a reply owed as well, the task page shows them as ONE card under **3 Close out**: **Merge & send** (or
   **Close PR & send**) runs the act first and sends the reply only when it succeeded (`verdicts.decide` `reply_text`).
+  A reply to a GitHub PR or issue is posted by the close-out itself, as the comment on that PR or issue - it does
+  not need the GitHub card's replies switch, which gates separate sends.
+- A merge refused for red checks says which, and offers **Merge anyway** (for a red that fails on the default
+  branch too). A check the repository requires is still GitHub's to enforce.
   Elsewhere they are two cards, the merge first. Sending the reply alone does not close the task while its
   close-out waits.
 - The words are drafted like any reply; the act is plain code on your click. No agent has to still be running.

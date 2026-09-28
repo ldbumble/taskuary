@@ -197,6 +197,37 @@ class OnePressTests(unittest.TestCase):
         verdicts.decide(s, proposals.closeout_pending(s, tid), 'reject', reply_text=None)
         self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('pending', 'open'))
 
+    def _github_reply(self, s, tid):
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'gh:northwind/ledger#7', 'Channel': 'github', 'Subject': 'Fix export',
+                             'FromName': 'omarkeller', 'FromEmail': 'omarkeller@users.noreply.github.com', 'BodyText': 'please review',
+                             'Status': 'routed'})
+        return s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks - approving.'})
+
+    def test_the_merge_carries_a_github_reply_as_its_comment_with_replies_off(self):
+        """TQ-0780: "GitHub replies are off" refused the thank-you; it is the PR comment the close-out posts."""
+        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        reply = self._github_reply(s, tid)
+        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=GREEN), \
+             mock.patch.object(github, 'merge_pr', return_value='m') as merge, \
+             mock.patch.object(github, 'comment_issue', return_value='https://github.com/northwind/ledger/pull/7#c1') as say:
+            out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve', reply_text='Thanks - merged.')
+        self.assertTrue(out['ok'] and out['reply']['ok'], out)
+        self.assertEqual(say.call_args[0][1:], ('northwind/ledger', 7, 'Thanks - merged.'))
+        merge.assert_called_once()
+        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'done'))
+
+    def test_red_checks_say_so_and_merge_anyway_overrules_them(self):
+        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        reply = self._github_reply(s, tid)
+        red = {'state': 'failure', 'total': 1, 'pending': 0, 'failed': [{'name': 'browser', 'url': 'u', 'summary': ''}]}
+        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=red), \
+             mock.patch.object(github, 'merge_pr', return_value='m') as merge, mock.patch.object(github, 'comment_issue', return_value='u') as say:
+            out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve', reply_text='Thanks - merged.')
+            self.assertTrue(out['checks_red']); merge.assert_not_called(); say.assert_not_called()
+            out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'merge_anyway', reply_text='Thanks - merged.')
+        self.assertTrue(out['ok'], out); merge.assert_called_once(); say.assert_called_once()
+        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'done'))
+
     def test_a_close_out_card_does_not_say_the_agent_proposed_it(self):
         s, tid, _ = self._both()
         self.assertEqual(proposals.closeout_pending(s, tid)['Reason'], 'closes the task: merge pull request #7')
@@ -247,6 +278,27 @@ class ContributorPullRequestTests(unittest.TestCase):
             verdicts.decide(s, proposals.closeout_pending(s, tid), 'reject')
             self.assertEqual(proposals.backfill(s), 0)                                      # "not yet" is not asked again
         self.assertIsNone(proposals.closeout_pending(s, tid))
+
+    def test_a_saved_session_that_drafted_its_reply_gets_the_merge_too(self):
+        """TQ-0767: Save and end session wrote "Merging this one." - the answer says the work is done."""
+        s = armed(MemoryStore()); tid = self._reviewed(s)
+        s.add_message({'TaskId': tid, 'ExternalId': 'gh-74', 'Channel': 'email', 'Subject': 'PR', 'FromName': 'Omar Keller',
+                       'FromEmail': 'omar@vendor.example', 'BodyText': 'Adds tests for _cut', 'Status': 'routed'})
+        self.assertEqual(finish(s, tid, pr={**OPEN, 'number': 84}, keep_open=True)['closeout'], 'merge_pr')
+        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')                       # a saved session still leaves the status alone
+
+    def test_an_open_saved_task_with_its_reply_ready_is_backfilled(self):
+        s = armed(MemoryStore()); tid = self._reviewed(s, 'open')
+        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nDetermination: accept')
+        s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Merging this one.'})
+        with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
+            self.assertEqual(proposals.backfill(s), 1)
+
+    def test_an_open_task_without_a_reply_is_not_backfilled(self):
+        s = armed(MemoryStore()); tid = self._reviewed(s, 'open')
+        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nDetermination: half done')
+        with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
+            self.assertEqual(proposals.backfill(s), 0)
 
     def test_an_agent_cannot_mark_its_own_ask_as_a_close_out(self):
         ps = proposals.parse('TASKUARY-PROPOSE {"action": "close_issue", "closeout": true}')

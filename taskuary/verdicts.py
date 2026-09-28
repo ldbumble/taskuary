@@ -11,7 +11,8 @@ from loguru import logger
 
 VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply',
                'close_unsent': 'closed_unsent',   # the owner's explicit close when sending is unavailable (PW-145) - never 'sent'
-               'close_pr': 'rejected'}            # a merge close-out answered "close it unmerged": the merge was turned down
+               'close_pr': 'rejected',            # a merge close-out answered "close it unmerged": the merge was turned down
+               'merge_anyway': 'approved'}        # a merge refused for red checks, overruled by the owner
 
 
 def context_moved(store, rv: dict):
@@ -158,6 +159,39 @@ def _newer_inbound(store, task_id: int, rv: dict) -> bool:
                for m in store.list_messages(task_id) or [])
 
 
+def _carried(store, closeout: dict, reply: dict) -> bool:
+    """Does the close-out itself carry this reply? A reply to a GitHub PR or issue IS a comment on it, so it goes WITH
+    the merge/close the owner approved - not as a separate send that the GitHub card's replies switch refuses (the
+    owner, 2026-09-27: "it should be close pr with message not separate section")."""
+    msg = store.get_message(reply['MessageId']) if reply.get('MessageId') else {}
+    return str((msg or {}).get('Channel') or '').lower() == 'github'
+
+
+def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: str) -> dict:
+    """Post the reply as the comment on the PR/issue the close-out just acted on, and file it as sent."""
+    from . import github, proposals
+    from .ci import _conn
+    p = json.loads(closeout.get('DraftText') or '{}')
+    if p.get('action') == 'merge_pr': repo, num = p['repo'], int(p['number'])
+    else:
+        m = proposals._ISSUE.search(str((store.get_task(closeout['TaskId']) or {}).get('SourceRef') or ''))
+        if not m: return {'ok': False, 'send_error': 'no issue to comment on'}
+        repo, num = m.group(1), int(m.group(2))
+    body = (text or '').strip() or str(reply.get('DraftText') or '').strip()
+    if not body: return {'ok': False, 'send_error': 'the reply is empty'}
+    try: url = github.comment_issue(_conn(store)['Secret'], repo, num, body)
+    except Exception as e:
+        store.add_comment(reply['TaskId'], actor, 'human', f'NOT SENT - the comment on {repo}#{num} failed: {str(e)[:200]}. The text is kept as the draft.')
+        return {'ok': False, 'send_error': f'the comment on {repo}#{num} failed: {str(e)[:200]}'}
+    store.decide_review(reply['ReviewId'], 'edited' if body != str(reply.get('DraftText') or '').strip() else 'approved', body, actor,
+                        f'posted on {repo}#{num} with the close-out')
+    if reply.get('MessageId'): store.set_message_status(reply['MessageId'], 'sent')
+    store.add_comment(reply['TaskId'], actor, 'human', f'Posted on {repo}#{num} with the close-out:\n{body}')
+    store.audit('review', reply['ReviewId'], 'sent_with_closeout', actor, detail={'to': f'{repo}#{num}', 'url': url})
+    _settle_task_after_sent_reply(store, reply, actor, True)
+    return {'ok': True, 'sent': {'channel': 'github', 'to': [f'{repo}#{num}'], 'url': url}}
+
+
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
            actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
@@ -171,13 +205,14 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     combine this? meaning reply on close?"): the merge/close runs first, and only when it succeeded does the task's
     pending reply go out with this text - a refused merge sends nothing. Each lands through its own verdict below."""
     from . import learn, outbound
-    if reply_text is not None and rv.get('Kind') == 'action' and verb_in in ('approve', 'edit', 'close_pr'):
+    if reply_text is not None and rv.get('Kind') == 'action' and verb_in in ('approve', 'edit', 'close_pr', 'merge_anyway'):
         out = decide(store, rv, verb_in, final_text, note, actor, learn_async)
         if not out.get('ok') or not rv.get('TaskId'): return out
         reply = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action' ORDER BY ReviewId DESC LIMIT 1",
                            (rv['TaskId'],))
         if reply:
-            sent = decide(store, reply, 'approve', reply_text, None, actor, learn_async, cc)
+            sent = (_post_with_closeout(store, rv, reply, reply_text, actor) if _carried(store, rv, reply)
+                    else decide(store, reply, 'approve', reply_text, None, actor, learn_async, cc))
             out['reply'] = sent
             if not sent.get('ok'): out['send_error'] = f"Done on GitHub, but the reply was not sent: {sent.get('send_error') or 'it was refused'}"
         return out
@@ -222,8 +257,8 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     # a PROPOSAL is not a draft reply: approving it RUNS the action the agent asked for
     # (proposals.execute re-validates - the approval never grants the permission), and
     # nothing is ever sent to a sender for it
-    if verb == 'close_pr' and rv.get('Kind') != 'action':
-        return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': 'only a pull request close-out can be closed without merging'}
+    if verb in ('close_pr', 'merge_anyway') and rv.get('Kind') != 'action':
+        return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': 'only a pull request close-out can be closed or merged that way'}
     if rv.get('Kind') == 'action':
         from . import proposals
         if verb == 'close_pr':
@@ -234,14 +269,15 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             store.decide_review(rid, 'rejected', None, actor, 'closed the pull request without merging')
             proposals.settle(store, rv, 'approve', actor)       # answered: the task ends like a merge ends it
             return {'ok': True, 'status': 'rejected', 'sent': None, 'send_error': None, 'result': out}
-        if verb in ('approve', 'edit'):
+        if verb in ('approve', 'edit', 'merge_anyway'):
             try:
-                out = proposals.execute(store, rv, actor, final)
+                out = proposals.execute(store, rv, actor, final, skip_checks=verb == 'merge_anyway')
             except Exception as e:
                 store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
-                return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
+                return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300],
+                        **({'checks_red': True} if isinstance(e, proposals.ChecksRed) else {})}
             store.decide_review(rid, VERB2STATUS['approve'], rv.get('DraftText'), actor, note)
-            proposals.settle(store, rv, verb, actor)          # a close-out's yes is what closes the task
+            proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # a close-out's yes closes the task
             return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
         store.decide_review(rid, VERB2STATUS[verb], None, actor, note)
         store.add_comment(rv['TaskId'], actor, 'human', f'Proposal {VERB2STATUS[verb]} - nothing was done.')

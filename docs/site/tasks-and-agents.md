@@ -54,7 +54,9 @@ button. The task is not done until you answer it.
 
 **Not yet** keeps the task open and on you. Merging or closing the pull request on GitHub yourself counts as
 answering it: the task closes by itself. When a reply is owed as well, the two are one card: **Merge & send** merges
-first and sends your reply only if the merge worked. The button is
+first and sends your reply only if the merge worked. On GitHub the reply is posted as the comment on the pull
+request, even with GitHub replies turned off. If its checks are red the merge is refused and nothing is sent;
+**Merge anyway** is there for a red that fails on the default branch too. The button is
 yours, so **Agents may push / deploy** does not have to be on - that switch is about what an agent may do. A task an
 agent finished before this existed gets its card on the next sync.
 A session you started yourself is yours to complete: the agent is told so, and if it says it is

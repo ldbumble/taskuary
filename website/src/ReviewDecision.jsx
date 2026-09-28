@@ -68,14 +68,19 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const ccNow = cc ?? deliveryCc(r);
   const meta = deliveryMeta(r);
   const co = closeout && !proposal ? proposalPresentation(closeout) : null;
-  const sendable = r.CanSend !== false;
+  // a reply to a GitHub PR/issue IS a comment on it, so the close-out carries it whatever the replies switch says
+  const carried = !!co && String(r.Channel || "").toLowerCase() === "github";
+  const sendable = r.CanSend !== false || carried;
+  const [coFail, setCoFail] = useState(null);       // the close-out itself refused: nothing was sent ({red} = checks)
 
   const decideBoth = async (verb) => {
-    setBusy(true); setErr(""); setSendErr("");
+    setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
         { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable ? value : null, cc: sendable ? ccNow : null });
-      if (data.send_error) setSendErr(data.send_error);
+      // refused before anything happened is not "approved, but it did not send"
+      if (!data.ok && data.send_error) setCoFail({ text: data.send_error, red: !!data.checks_red });
+      else if (data.send_error) setSendErr(data.send_error);
       onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
     setBusy(false);
@@ -191,7 +196,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           shows it; here it lived only in the tooltip of the button that replaced Send, so a drafted
           answer with nowhere to go looked like a card that had simply lost its button. The draft is
           real and worth reading - a GitHub task with replies off is still answered, by hand. */}
-      {!proposal && r.CanSend === false && (
+      {!proposal && !carried && r.CanSend === false && (
         <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.5 }}>
           No reply can be sent from here — {r.SendBlock || "this channel cannot be replied to"}. The draft stays for you to use.
         </Typography>
@@ -277,6 +282,16 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           {busy ? <CircularProgress size={12} /> : r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI"}
         </Button>}
       </Box>
+      {coFail && (
+        <Alert severity="warning" sx={{ mt: 1 }} onClose={() => setCoFail(null)}
+          action={coFail.red && (
+            <Button size="small" color="inherit" disabled={busy} onClick={() => decideBoth("merge_anyway")}
+              title="Merges although these checks are red - use it when they fail on the default branch too. A check the repository requires is still GitHub's to enforce.">
+              {sendable ? "Merge anyway & send" : "Merge anyway"}</Button>
+          )}>
+          <b>Not done - nothing was merged or sent.</b> {coFail.text.replace(/ - nothing was merged or sent$/, "")}
+        </Alert>
+      )}
       {sendErr && (
         <Alert severity="error" sx={{ mt: 1 }} onClose={() => setSendErr("")}>
           <b>Approved, but it did not send.</b> {sendErr}

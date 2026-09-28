@@ -404,7 +404,8 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       if (!live) return;
       setRv((data.data || []).find((x) => x.ReviewId === card.rid) || { gone: true });
       const found = (data.data || []).find((x) => x.ReviewId === card.rid);
-      setMate(found && closeoutOf(found) ? (data.data || []).find((x) => x.TaskId === found.TaskId && x.Kind !== "action" && x.CanSend !== false) || null : null);
+      setMate(found && closeoutOf(found) ? (data.data || []).find((x) => x.TaskId === found.TaskId && x.Kind !== "action"
+        && (x.CanSend !== false || String(x.Channel || "").toLowerCase() === "github")) || null : null);   // the close-out carries a GitHub comment
     }).catch((e) => live && setErr(errText(e)));
     return () => { live = false; };
   }, [card.rid, card.mid, card.presentation_revision]);

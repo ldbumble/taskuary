@@ -217,7 +217,9 @@ def backfill(store) -> int:
     busy, n = funnel.working_tids(store), 0
     for t in store.list_tasks():
         tid, ref = t['TaskId'], str(t.get('SourceRef') or '')
-        if t.get('Status') != 'waiting' or tid in busy: continue
+        # waiting on its reply, or a saved session whose answer is drafted - finished work either way (TQ-0767)
+        if t.get('Status') not in ('waiting', 'open') or tid in busy: continue
+        if t.get('Status') == 'open' and not store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (tid,)): continue
         if not (_PULL.search(ref) or _ISSUE.search(ref) or (ci.landing_of(store, tid) or {}).get('kind') == 'pr'): continue
         if not _report(store, tid) and not any(str(c.get('Body') or '').startswith('The agent closed this itself') for c in store.list_comments(tid)): continue
         if store._rows("SELECT 1 x FROM review WHERE TaskId=? AND Kind='action' AND DraftText LIKE '%\"closeout\": true%'", (tid,)): continue
@@ -279,7 +281,11 @@ def close_pr(store, rv: dict, actor='owner') -> dict:
     return out
 
 
-def execute(store, rv: dict, actor='owner', final_text: str = None) -> dict:
+class ChecksRed(RuntimeError):
+    """A merge refused because the PR's checks are red - the one refusal the owner may overrule (Merge anyway)."""
+
+
+def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks: bool = False) -> dict:
     """Run an APPROVED proposal. Called from the verdict road, and it re-validates: the
     switch may have gone off between proposing and approving, and the approval does not
     grant the permission.
@@ -322,9 +328,11 @@ def execute(store, rv: dict, actor='owner', final_text: str = None) -> dict:
         if cur.get('merged'): out = {'merged': f'{repo}#{num}', 'already': True}
         elif cur.get('state') == 'closed': raise RuntimeError(f'#{num} was closed on GitHub without merging - nothing to merge')
         else:
-            ck = github.checks(c['Secret'], repo, cur['sha'])
+            # red checks stop the merge - unless the owner, told which ones, says Merge anyway (a red that is master's own,
+            # not this PR's: the owner, 2026-09-27). A check the REPO requires is still GitHub's to enforce.
+            ck = {'state': 'skipped'} if skip_checks else github.checks(c['Secret'], repo, cur['sha'])
             if ck['state'] == 'failure':
-                raise RuntimeError('its checks are failing (' + ', '.join(f['name'] or '?' for f in ck['failed']) + ') - fix them before merging')
+                raise ChecksRed('its checks are failing (' + ', '.join(f['name'] or '?' for f in ck['failed']) + ') - nothing was merged or sent')
             # the PR's own title leads the squash (GitHub's default); the summary, when there is one, is its body
             sha = github.merge_pr(c['Secret'], repo, num, p.get('sha') or cur['sha'], None, p.get('text') or None)
             out = {'merged': f'{repo}#{num}', 'sha': sha[:7], 'url': cur.get('url')}

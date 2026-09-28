@@ -299,9 +299,10 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     # is honest even while its draft text is being filled in.
     # THE CLOSE-OUT (the owner, 2026-09-27: "it's not closed until then"): a task whose work is an open pull request
     # is finished by merging it, one from an issue by closing it - each waits for the owner's yes like the reply does.
-    # Not on a session only saved, an upstream that already ended it, or the owner's own Mark done (that IS the close).
+    # Not on an upstream that already ended it, or the owner's own Mark done (that IS the close) - nor on a session only
+    # saved, UNLESS it wrote the answer: a drafted reply says the work is done, and it comes with its merge (TQ-0767).
     from . import proposals
-    due = None if (keep_open or no_reply or owner_done) else proposals.closeout_due(store, task_id)
+    due = None if ((keep_open and not mid) or no_reply or owner_done) else proposals.closeout_due(store, task_id)
     if not keep_open: store.update_task(task_id, {'Status': 'waiting' if (mid or due) else 'done'}, actor)
     # the newest pending review is the one shown first: a merge leads its reply (the reply can then say it is merged),
     # a comment on an issue leads its close - and when a reply carries the comment, the close adds none

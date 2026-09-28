@@ -236,9 +236,9 @@ class MatrixTests(unittest.TestCase):
         assistant.triage_ideas(s, [s.get_idea(row['IdeaId'])], brain(intent='fyi'))
         self.assertEqual(json.loads(s.get_idea(row['IdeaId'])['ActionJson'])['triage']['intent'], 'fyi')
 
-    def test_report_triage_off_files_the_run_and_a_workflow_trigger_never_asks_triage_at_all(self):
+    def test_report_work_off_files_the_run_and_a_workflow_trigger_never_asks_triage_at_all(self):
         s = MemoryStore()
-        off = report_src(s, {'type': 'agent', 'title': 'Weekly numbers'})                      # triage off is the default
+        off = report_src(s, {'type': 'agent', 'title': 'Weekly numbers', 'route': {'work': {'how': 'never'}}})   # the card's work line off
         with mock.patch.object(reports, 'render_report', return_value=('12 rows', 'nothing looks off')), \
              mock.patch('taskuary.ingest.judge') as judge:
             reports.run_report_source(s, off, llm=brain())

@@ -131,7 +131,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <tr>
 <td><strong>reports</strong></td>
 <td>reports and workflows</td>
-<td>report.create(config), report.run, report.rerun, report.pause, report.resume, report.reach(reach), report.edit(config), report.delete</td>
+<td>report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete</td>
 </tr>
 <tr>
 <td><strong>app</strong></td>
@@ -394,11 +394,14 @@ except the few that can be undone, which run at once with an undo on the receipt
 <ul>
 <li><code>title</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-reach"><code>report.reach</code><a class="anchor" href="#report-reach" aria-label="Link to this section">#</a></h3>
-<p>Change when a report reaches the owner.</p>
+<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-route"><code>report.route</code><a class="anchor" href="#report-route" aria-label="Link to this section">#</a></h3>
+<p>Change where one line of a report&#39;s route card goes.</p>
 <ul>
-<li><code>reach</code> - always | wrong | rule</li>
+<li><code>line</code> - timeline | work | alert | send</li>
+<li><code>how</code> - always | ai | rule | never</li>
 <li><code>title</code></li>
+<li><code>when</code> - for ai: what to look for</li>
+<li><code>rule</code> - /<code>count</code>/<code>text</code> (for rule)</li>
 </ul>
 <p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-edit"><code>report.edit</code><a class="anchor" href="#report-edit" aria-label="Link to this section">#</a></h3>
 <p>Change a report&#39;s configuration.</p>

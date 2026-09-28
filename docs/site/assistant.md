@@ -16,11 +16,13 @@ words, in the app or on your phone.
 | **Make a task** | an ask, an fyi, an idea | A task on your own list. No agent starts | you confirm |
 | **Send to agent** | an ask, an fyi, an idea, a meeting, a report | A task and an agent on it. The card asks which agent | you confirm |
 | **Not ours** | a draft reply, a proposal (not a close-out), an ask, an fyi | Files it. The card asks how far | you confirm |
+| **Send back to the agent** | a draft reply on a task (under More actions); a close-out GitHub refuses for merge conflicts (the main button) | Picks the task's own agent back up with your note - or, on a conflict, GitHub's reason - as the first thing it hears. The card comes back when it stops | at once |
 | **Save and end session** | an agent waiting on you | Writes up what the session did and stops the agent. The task stays open | at once |
 | **Remind me** | any card with an open task behind it | Asks for a day, then puts the task away until that morning: Upcoming in Tasks, off your rail. On the phone the days come as choices | you pick the day |
 
 A handful of fyi comes as one card with its own **All read, next** button. A close-out card for a pull request also
-shows **Decline** (close it without merging) - on the card only, never as a chat word or a phone choice.
+shows **Decline** (close it without merging) - on the card only, never as a chat word or a phone choice - and no
+separate Reject: the reply on it is edited or redrafted in place.
 
 ## The two buttons that ask one question
 

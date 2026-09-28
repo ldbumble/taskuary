@@ -15,7 +15,7 @@ question a card asks), `PROPOSALS` (what each runs), `toolcatalog.PURPOSE` (the 
 flowchart LR
   C{"What is on the table?"}
   C -->|a draft reply| B1["Close out · Mark done · Remind me · Not ours · Next"]
-  C -->|a task's close-out:<br/>a PR to merge, an issue to close| B0["Close out · Next<br/>(the card adds Decline where it applies)"]
+  C -->|a task's close-out:<br/>a PR to merge, an issue to close| B0["Close out · Next<br/>(or Decline / Send back, where it applies)"]
   C -->|any other agent proposal| B2["Run it · Not ours · Next"]
   C -->|a person's ask| B3["Reply · Make a task · Send to agent · Remind me · Not ours · Next"]
   C -->|an fyi| B4["Make a task · Send to agent · Not ours · Next"]
@@ -53,6 +53,12 @@ flowchart LR
   the issue and posts the reply as its comment - and the line under the card says which. A new connector adds that
   sentence (`proposals.CLOSEOUT`), never a word. **Decline** (close without doing it) is a card button only, never a
   chat or poll word; **Not yet** in the walk is **Next**. Full rules: `docs/how-a-task-ends.md`, The close-out.
+- **Send back to the agent** (the owner, 2026-09-28: "don't see button to send back to agent?") resumes the task's
+  own agent with your note as the first thing it hears (`/continue-work`, the task page's Continue session). It is
+  under More actions on a reply card, and it is the main button when GitHub refuses a close-out for merge conflicts -
+  the refusal is the note. It is not **Send to agent**, which starts a task for an agent that was never on it.
+- **A close-out card has no Reject.** Close out / Decline / Not yet and nothing else; the reply on it is edited or
+  redrafted in place, never rejected apart (the owner, 2026-09-28: "what does reject reply mean here?").
 - **Retired words** (`parse_decision` maps the model's old verbs): Archive it is Not ours; Later, Tomorrow,
   "file this kind", and the `setting` verb are gone - a setting is the `setting.set` tool.
 

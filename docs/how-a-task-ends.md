@@ -99,7 +99,7 @@ doing it" (a PR today) and only on cards - it is not a chat or poll word; in the
   | `unstable` - checks the repo does **not** require are red | merges with a note (setting: "stop and ask" makes it **Close out anyway**) | **Re-run checks** |
   | `blocked` - a required check, review or rule | off, says which | **Re-run checks**; **Close out anyway** only for an admin token with that setting on |
   | `behind` - the repo requires it up to date | off | **Update branch**, when its author allows maintainer edits |
-  | `dirty` - merge conflicts | off | nothing - Continue the agent's session, or ask its author |
+  | `dirty` - merge conflicts | off | **Send back to the agent** as the main button: its session picks up with GitHub's reason as the note |
 
   GitHub's own refusal at the merge is still the last word. Sending the reply alone does not close the task while
   its close-out waits.
@@ -142,7 +142,8 @@ doing it" (a PR today) and only on cards - it is not a chat or poll word; in the
 These never close a task:
 
 - **Save and end session**: stops the agent and writes its report; the task stays open.
-- **Reject** a draft: the draft is rejected; the task is untouched.
+- **Reject** a draft: the draft is rejected; the task is untouched. A close-out card has no Reject - its reply is edited in place.
+- **Send back to the agent**: the task's agent picks up again with your note; the card returns when it stops.
 - **Next**: it moves the walk; open work comes back after `task_return_minutes`.
 - **Remind me**: the task is put away until a day (`remind.py`), then back on the rail that morning.
 

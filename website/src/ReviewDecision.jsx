@@ -287,7 +287,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}
         {co && <Button size="small" disabled={busy} onClick={() => decideBoth("reject")}
           title="Leaves the pull request as it is; the task stays open and on you, the reply unsent">{co.rejectLabel}</Button>}
-        <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")}>{proposal?.rejectLabel || (co ? "Reject reply" : "Reject")}</Button>
+        {/* a close-out card is Close out / Decline / Not yet and nothing else (the owner, 2026-09-28: "what does reject
+            reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart */}
+        {!co && <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")}>{proposal?.rejectLabel || "Reject"}</Button>}
         <Box sx={{ flex: 1 }} />
         {!proposal && meta.kind !== "zoho_invoice" && <Button size="small" disabled={busy} onClick={redraft}>
           {busy ? <CircularProgress size={12} /> : r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI"}

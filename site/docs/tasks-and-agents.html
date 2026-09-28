@@ -201,10 +201,10 @@ button. The task is not done until you answer it.</p>
 </tr>
 </thead>
 <tbody><tr>
-<td>A pull request the agent opened</td>
+<td>A pull request the agent opened, or the one the task came from (a contributor&#39;s PR it reviewed)</td>
 <td><strong>merge?</strong></td>
 <td><strong>Merge</strong></td>
-<td>Marks the draft ready and squash-merges it with the agent&#39;s summary (you can edit it), then Mark done. Refused while its checks are red.</td>
+<td>Marks a draft ready and squash-merges it - with the agent&#39;s summary (you can edit it) when the agent opened it - then Mark done. Refused while its checks are red.</td>
 </tr>
 <tr>
 <td></td>
@@ -226,8 +226,9 @@ button. The task is not done until you answer it.</p>
 </tr>
 </tbody></table>
 <p><strong>Not yet</strong> keeps the task open and on you. Merging or closing the pull request on GitHub yourself counts as
-answering it: the task closes by itself. When a reply is owed as well, both wait, the merge first. The switch the
-act needs must be on (<strong>Agents may push / deploy</strong> to merge); with it off, the task ends as before.
+answering it: the task closes by itself. When a reply is owed as well, both wait, the merge first. The button is
+yours, so <strong>Agents may push / deploy</strong> does not have to be on - that switch is about what an agent may do. A task an
+agent finished before this existed gets its card on the next sync.
 A session you started yourself is yours to complete: the agent is told so, and if it says it is
 finished anyway its sentence is filed on the task and the task stays open until you mark it done.</p>
 <p>These never end a task:</p>

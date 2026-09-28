@@ -47,14 +47,15 @@ button. The task is not done until you answer it.
 
 | The task's work is | The rail says | The button | What it does |
 |---|---|---|---|
-| A pull request the agent opened | **merge?** | **Merge** | Marks the draft ready and squash-merges it with the agent's summary (you can edit it), then Mark done. Refused while its checks are red. |
+| A pull request the agent opened, or the one the task came from (a contributor's PR it reviewed) | **merge?** | **Merge** | Marks a draft ready and squash-merges it - with the agent's summary (you can edit it) when the agent opened it - then Mark done. Refused while its checks are red. |
 | | | **Close PR** | Closes the pull request on GitHub without merging it, then Mark done |
 | An issue the task came from | **close issue?** | **Close issue** | Posts the closing comment, closes the issue, then Mark done |
 | Mail, chat, anything else | ✉️ **reply ready** | **Send reply** | As always |
 
 **Not yet** keeps the task open and on you. Merging or closing the pull request on GitHub yourself counts as
-answering it: the task closes by itself. When a reply is owed as well, both wait, the merge first. The switch the
-act needs must be on (**Agents may push / deploy** to merge); with it off, the task ends as before.
+answering it: the task closes by itself. When a reply is owed as well, both wait, the merge first. The button is
+yours, so **Agents may push / deploy** does not have to be on - that switch is about what an agent may do. A task an
+agent finished before this existed gets its card on the next sync.
 A session you started yourself is yours to complete: the agent is told so, and if it says it is
 finished anyway its sentence is filed on the task and the task stays open until you mark it done.
 

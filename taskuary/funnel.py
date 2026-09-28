@@ -498,7 +498,12 @@ def not_started_why(store, tid) -> str:
     for r in reversed(store.message_routes(msg.get('MessageId')) or []) if msg.get('MessageId') else []:
         reason = str(r.get('Reason') or '')
         if AUTO_OFF in reason:
-            return 'Triage did not start it: ' + reason.split(AUTO_OFF, 1)[1].strip().rstrip('.') + '.' + old
+            said = reason.split(AUTO_OFF, 1)[1].strip().rstrip('.')
+            # the old words read as a queue that clears by itself; a GitHub hold now says who wrote it and whom the repo trusts
+            if said.startswith('github items queue') and str(msg.get('Channel') or '') == 'github':
+                from .ingest import gh_hold_why
+                said = gh_hold_why(store, {'source_name': msg.get('SourceName'), 'body': msg.get('BodyText')})
+            return 'Triage did not start it: ' + said + '.' + old
     if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
         return f'Auto-start is off, so {who} waits for you to press Start.' + old
     return f'It was handed to {who} and nothing has started it.' + old

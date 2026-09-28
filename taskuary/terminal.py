@@ -708,7 +708,10 @@ def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
     every message, every attachment path - and the seed says how many are new and where they are. The words
     stay in the FILE: the seed rides a command line a tty clips at about 1024 bytes."""
     from .continuity import RESUME_PROMPT
-    parts = [RESUME_PROMPT]
+    # THE OWNER'S WORDS LEAD (the owner, 2026-09-27: "i wrote message but it did not show up in prompt"): appended after
+    # the canned paragraph they read as part of it, and the pane showed a wall of our text with theirs as its last words
+    note = str(instruction or '').strip()
+    parts = ([f'FROM THE OWNER: {note}'] if note else []) + [RESUME_PROMPT]
     if store is not None and tid:
         try:
             from . import context as ctx
@@ -721,7 +724,6 @@ def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
                 parts.append(f'NEW SINCE YOUR LAST RUN: {n} message{"" if n == 1 else "s"} - read {"it" if n == 1 else "them"} '
                              f'and any attachments in {cpath} (the thread section) before you answer.')
         except Exception as e: logger.debug(f'resume seed: the new messages could not be named - {e}')
-    if str(instruction or '').strip(): parts.append(instruction.strip())
     return '\n\n'.join(parts)
 
 

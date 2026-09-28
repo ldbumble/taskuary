@@ -1479,7 +1479,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
     row, _why = _resumable(task_id)
     if row: out = continue_session(task_id, CodeBody(instruction=note or None))
-    else: out = continue_task(task_id, CodeBody(instruction=continuity.RESUME_PROMPT + (f'\n\nThe owner adds: {note}' if note else '')))
+    else: out = continue_task(task_id, CodeBody(instruction=(f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT))   # their words lead
     store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'coding', 'resumed': bool(row), 'note': bool(note)})
     return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': bool(row), **(out if isinstance(out, dict) else {})}
 

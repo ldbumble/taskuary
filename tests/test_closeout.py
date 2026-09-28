@@ -103,16 +103,19 @@ class MergeCloseOutTests(unittest.TestCase):
             self.assertFalse(ci.pr_ended(s, tid, ci.landing_of(s, tid)))
         look.assert_not_called()
 
-    def test_mark_done_saved_session_and_switch_off_keep_the_old_ending(self):
+    def test_mark_done_and_a_saved_session_keep_the_old_ending(self):
         s = armed(MemoryStore()); tid = with_pr(s)
         self.assertIsNone(finish(s, tid, owner_done=True)['closeout'])
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         s = armed(MemoryStore()); tid = with_pr(s)
         finish(s, tid, keep_open=True)
         self.assertIsNone(proposals.closeout_pending(s, tid))
+
+    def test_the_close_out_is_the_owners_act_so_agent_switches_do_not_hide_it(self):
         s = armed(MemoryStore()); s.set_setting('agent_push_enabled', '0', 't'); tid = with_pr(s)
         finish(s, tid)
-        self.assertEqual((proposals.closeout_pending(s, tid), s.get_task(tid)['Status']), (None, 'done'))
+        self.assertEqual(s.get_task(tid)['Status'], 'waiting')
+        self.assertTrue(proposals.closeout_pending(s, tid))
 
     def test_close_pr_closes_it_unmerged_and_ends_the_task(self):
         s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
@@ -177,11 +180,69 @@ class IssueCloseOutTests(unittest.TestCase):
         self.assertEqual(close.call_args[0][1:], ('northwind/ledger', 12, 'Fixed in the nightly run.'))
         self.assertEqual(s.get_task(tid)['Status'], 'done')
 
-    def test_tracker_off_keeps_the_old_ending(self):
+    def test_the_tracker_switch_does_not_hide_the_issue_close_out(self):
         s = armed(MemoryStore(), tracker=False)
         tid = s.create_task({'Title': 'Export is empty', 'Kind': 'coding', 'Status': 'in_progress',
                              'SourceRef': 'https://github.com/northwind/ledger/issues/12'}, 'triage')
-        self.assertIsNone(finish(s, tid)['closeout'])
+        self.assertEqual(finish(s, tid)['closeout'], 'close_issue')
+
+
+class ContributorPullRequestTests(unittest.TestCase):
+    """The task came FROM somebody else's PR (the owner, 2026-09-27: "don't see the merge PR button?")."""
+    REF = 'https://github.com/northwind/ledger/pull/84'
+
+    def _reviewed(self, s, status='in_progress'):
+        return s.create_task({'Title': 'Review startup crash-output PR', 'Kind': 'coding', 'Status': status, 'SourceRef': self.REF}, 'triage')
+
+    def test_a_reviewed_contributor_pr_waits_for_merge_without_the_push_switch(self):
+        s = armed(MemoryStore()); s.set_setting('agent_push_enabled', '0', 't'); tid = self._reviewed(s)
+        self.assertEqual(finish(s, tid, pr={**OPEN, 'number': 84})['closeout'], 'merge_pr')
+        p = json.loads(proposals.closeout_pending(s, tid)['DraftText'])
+        self.assertEqual((p['repo'], p['number'], p['text'], p.get('theirs')), ('northwind/ledger', 84, '', True))
+        with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}), mock.patch.object(github, 'checks', return_value=GREEN), \
+             mock.patch.object(github, 'merge_pr', return_value='m') as merge:
+            self.assertTrue(verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve')['ok'])
+        self.assertEqual((merge.call_args[0][2], merge.call_args[0][4]), (84, None))    # GitHub titles the squash
+        self.assertIsNone(ci.pr_of(s, tid))                                               # no "we opened it" mark invented
+
+    def test_a_task_finished_before_the_close_out_existed_is_offered_it_once(self):
+        s = armed(MemoryStore()); tid = self._reviewed(s, 'waiting')
+        s.add_comment(tid, 'coder', 'agent', 'The agent closed this itself: PR #84 reviewed: accept')
+        with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
+            self.assertEqual(proposals.backfill(s), 1)
+            verdicts.decide(s, proposals.closeout_pending(s, tid), 'reject')
+            self.assertEqual(proposals.backfill(s), 0)                                      # "not yet" is not asked again
+        self.assertIsNone(proposals.closeout_pending(s, tid))
+
+    def test_an_agent_cannot_mark_its_own_ask_as_a_close_out(self):
+        ps = proposals.parse('TASKUARY-PROPOSE {"action": "close_issue", "closeout": true}')
+        self.assertNotIn('closeout', ps[0])
+        self.assertFalse(proposals.validate(MemoryStore(), ps[0])[0])                     # the tracker switch still gates it
+
+    def test_your_merge_keeps_the_unsent_thank_you(self):
+        from taskuary import channels
+        s = armed(MemoryStore()); tid = self._reviewed(s, 'waiting')
+        rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks - merged.'})
+        channels.close_upstream_ended(s, tid, 'You merged this pull request on GitHub.', 'merged', 'owner')
+        self.assertEqual((s.get_task(tid)['Status'], s.get_review(rid)['Status']), ('waiting', 'pending'))
+
+
+class ResumeNoteTests(unittest.TestCase):
+    def test_the_owners_note_leads_the_resume(self):
+        from taskuary import terminal
+        seed = terminal.resume_seed('merge it please')
+        self.assertTrue(seed.startswith('FROM THE OWNER: merge it please'))
+
+
+class HeldPullRequestWordsTests(unittest.TestCase):
+    def test_a_first_time_contributor_hold_says_a_free_slot_will_not_start_it(self):
+        from taskuary import ingest
+        s = MemoryStore()
+        s.save_source({'Channel': 'github', 'Address': 'northwind/ledger', 'ConfigJson': json.dumps({'auto': 'contributors'})}, 't')
+        why = ingest.gh_hold_why(s, {'source_name': 'northwind/ledger',
+                                     'body': '[pull request by someone - association: FIRST_TIME_CONTRIBUTOR]\nFix'})
+        self.assertIn('a first-time contributor', why); self.assertIn('the team and past contributors', why)
+        self.assertIn('press Start', why); self.assertIn('free slot will not start it', why)
 
 
 class WordsTests(unittest.TestCase):

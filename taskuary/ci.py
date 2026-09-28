@@ -316,6 +316,10 @@ def poll(store, llm=None) -> int:
     the default install never told anybody their PR had been reviewed."""
     watch = store.get_setting('ci_watch', 'off') != 'off'
     n = 0
+    # a task finished before its close-out existed is offered it here, once (proposals.backfill)
+    from . import proposals
+    try: proposals.backfill(store)
+    except Exception as e: logger.warning(f'close-out backfill failed: {e}')
     for t in store.list_tasks():
         if t['Status'] in ('done', 'dropped'): continue
         at = landing_of(store, t['TaskId'])

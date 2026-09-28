@@ -307,7 +307,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     # a comment on an issue leads its close - and when a reply carries the comment, the close adds none
     if due and due['action'] == 'close_issue': proposals.closeout(store, task_id, due, '' if mid else resolution_text(rep), actor)
     if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result, fresh=fresh)
-    if due and due['action'] == 'merge_pr': proposals.closeout(store, task_id, due, resolution_text(rep), actor)
+    if due and due['action'] == 'merge_pr': proposals.closeout(store, task_id, due, '' if due.get('theirs') else resolution_text(rep), actor)
     return {'drafting': bool(mid), 'message_id': mid, 'can_send': bool(mid) and can_send,
             'send_block': block if mid else '', 'freshness': fresh['state'], 'closeout': (due or {}).get('action')}
 

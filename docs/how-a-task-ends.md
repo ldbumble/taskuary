@@ -73,6 +73,7 @@ your yes, and the task is not done until you answer it (decided with the owner o
 | The task's work is | The card | Its text | Your yes does | Code |
 |---|---|---|---|---|
 | A pull request the agent opened, still open | **Merge** | the agent's summary - the squash message | marks the draft ready, squash-merges it (refused while its checks are red, or if the branch moved after the card was raised), then Mark done | `proposals` `merge_pr` → `github.merge_pr` |
+| A pull request the task came from (a contributor's PR the agent reviewed), still open | **Merge** | empty - GitHub writes the merge message | the same | the same |
 | An issue the task came from | **Close issue** | the closing comment (empty when a reply carries it) | comments, closes the issue, then Mark done | `proposals` `close_issue` |
 
 - **Close PR** (beside Merge) closes the pull request on GitHub without merging it, then Mark done - the work was
@@ -85,8 +86,13 @@ your yes, and the task is not done until you answer it (decided with the owner o
   open on GitHub.
 - The PR body carries `Closes #N` when the task came from an issue in the same repository, so the merge
   closes the issue as well.
-- A close-out needs the switch its act needs: **Agents may push / deploy** to merge, **use as tracker** to close
-  an issue. With it off, the finish ends the task the old way.
+- A close-out is **your** act, so it needs no agent switch: **Agents may push / deploy** and **use as tracker**
+  gate what an agent may ask for, not what you press. Only Taskuary raises one - an agent that writes the
+  close-out mark into its own proposal has it stripped (`proposals.parse`). It needs the GitHub token.
+- A task an agent finished before the close-out existed is offered it on the next sync, once
+  (`proposals.backfill`); after **Not yet** it is not asked again.
+- Your own merge does not swallow an unsent reply: when the pull request the task came from closes because you
+  merged it, a reply still waiting keeps the task open until you send it (`channels.close_upstream_ended`).
 
 ## Rules that follow from this
 

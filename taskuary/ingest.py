@@ -122,6 +122,27 @@ def _gh_no_auto(store, r: dict) -> bool:
     return not gh_auto_ok(src, m.group(1) if m else 'NONE')
 
 
+_GH_WHO = {'FIRST_TIME_CONTRIBUTOR': 'a first-time contributor', 'FIRST_TIMER': 'someone new to GitHub',
+           'NONE': 'someone outside the repository', 'CONTRIBUTOR': 'a past contributor'}
+_GH_WHOM = {'off': 'nobody', 'team': 'the team', 'contributors': 'the team and past contributors'}
+
+
+def gh_hold_why(store, msg: dict) -> str:
+    """Why a GitHub item did not start by itself, in words the card can show: WHO wrote it and whom the repo lets
+    start an agent. "github items queue for you to promote" read as a queue that clears when a slot frees - and it
+    never does (the owner, 2026-09-27: "when slots become available i don't see another PR being sent")."""
+    from .channels import GH_AUTO
+    repo = msg.get('source_name') or 'the repository'
+    src = next((s for s in store.list_sources(active_only=False) if s['Channel'] == 'github' and s['Address'] == msg.get('source_name')), None)
+    try: mode = json.loads((src or {}).get('ConfigJson') or '{}').get('auto') or 'off'
+    except ValueError: mode = 'off'
+    m = _ASSOC.match(str(msg.get('body') or ''))
+    assoc = (m.group(1) if m else 'NONE').upper()
+    who = _GH_WHO.get(assoc, assoc.lower().replace('_', ' '))
+    return (f"it is from {who}, and {repo} starts an agent by itself only for {_GH_WHOM.get(mode, mode) if mode in GH_AUTO else 'nobody'}"
+            ' - it waits for you to press Start, and a free slot will not start it')
+
+
 def _from_row(r: dict, store=None) -> dict:
     """A pending row back into a message, for a drain in a later process (no images then)."""
     rec = json.loads(r.get('RecipientsJson') or 'null') or {}
@@ -916,6 +937,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # Timeline quotes this verbatim, so the panel would have stated a lie under the verdict.
         act = (('a reply draft goes to the task for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
                else 'yours to do - nothing is working it' if f['kind'] == 'task'
+               else f'not auto-worked: {gh_hold_why(store, msg)}' if msg.get('no_auto') and msg.get('channel') == 'github'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
                else f'not auto-worked: {held}' if held
                else 'sent to the coding agent' if f['kind'] == 'coding'

@@ -1096,10 +1096,16 @@ def close_upstream_ended(store, tid: int, said: str, final: str, actor: str = 'r
     is recorded. A task that never had a session has nothing to wrap ('nothing to wrap up') -
     that refusal is expected, and must not leave the dead task sitting in the work list."""
     from . import coder, proposals
-    store.add_comment(tid, 'router', 'agent', said)
+    # said once: a task kept open below for its unsent reply meets this ending again on a later poll
+    if not any(c.get('Body') == said for c in store.list_comments(tid)): store.add_comment(tid, 'router', 'agent', said)
     # a close-out waiting on the owner (close the issue, merge) is answered by the upstream ending itself
     rv = proposals.closeout_pending(store, tid)
     if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, actor, 'the item ended upstream')
+    # ...but YOUR merge does not swallow the answer you have not sent yet: the contributor's thank-you drafted beside the
+    # Merge card stays for your yes, and sending it closes the task (the owner, 2026-09-27)
+    if actor == 'owner' and store.pending_review(tid, live_only=False):
+        store.update_task(tid, {'Status': 'waiting'}, actor)
+        return
     try:
         coder.wrap(store, tid, close=True, actor=actor, final_message=final, no_reply=True)   # a merged PR owes nobody a reply (A21)
     except ValueError as e:

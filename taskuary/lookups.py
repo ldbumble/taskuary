@@ -97,7 +97,12 @@ def docs_search(store, p: dict) -> str:
     if not scored: return f'Nothing in the help pages or your docs mentions "{q}".'
     return (NL * 2).join(f'[{w}]{NL}{_cut(t, CHUNK)}' for sc, w, t in scored[:4] if sc >= scored[0][0] / 2)
 
-def _since(days) -> str: return (datetime.now() - timedelta(days=float(days))).isoformat(' ', 'seconds')
+def _days(p, default):
+    try: days = float(p.get('days') or default)
+    except (TypeError, ValueError): return None
+    return max(1, min(days, 31)) if math.isfinite(days) else None
+
+def _since(days) -> str: return (datetime.now() - timedelta(days=days)).isoformat(' ', 'seconds')
 
 def _title(store, tid) -> str:
     t = store.get_task(int(tid)) if tid else None
@@ -146,11 +151,14 @@ def pipe_list(store, p: dict) -> str:
 def calendar_read(store, p: dict) -> str:
     from . import calendar as cal
     if store.get_setting('calendar_enabled', '1') != '1': return 'The calendar is switched off in Settings.'
-    when, days = str(p.get('from') or 'today').strip().lower(), max(1, min(int(p.get('days') or 7), 31))
+    when, days = str(p.get('from') or 'today').strip().lower(), _days(p, 7)
+    if days is None: return 'calendar.read needs days to be a number.'
     start = datetime.now(cal.tz_of(store)).replace(hour=0, minute=0, second=0, microsecond=0)
     if when == 'tomorrow': start += timedelta(days=1)
-    elif re.fullmatch(r'\d{4}-\d{2}-\d{2}', when): start = start.replace(year=int(when[:4]), month=int(when[5:7]), day=int(when[8:]))
-    ag = cal.agenda(store, days=days, start=start)
+    elif re.fullmatch(r'\d{4}-\d{2}-\d{2}', when):
+        try: start = start.replace(year=int(when[:4]), month=int(when[5:7]), day=int(when[8:]))
+        except ValueError: return f'calendar.read cannot use {when}; that is not a real date.'
+    ag = cal.agenda(store, days=int(days), start=start)
     if not ag['sources']: return 'No calendar is connected - an Outlook or Google mail connection brings its calendar with it.'
     ev = [f"{e['start']}{'-' + e['end'][11:] if e.get('end') and not e['all_day'] else ''} {'(all day) ' if e['all_day'] else ''}"
           f"{e['subject']}{' @ ' + e['where'] if e.get('where') else ''}{' with ' + ', '.join(e['who'][:5]) if e.get('who') else ''}"
@@ -160,7 +168,8 @@ def calendar_read(store, p: dict) -> str:
 
 def activity_list(store, p: dict) -> str:
     """What happened, from the audit trail - the owner and the agents apart."""
-    days, who = float(p.get('days') or 1), str(p.get('who') or 'all').strip().lower()
+    days, who = _days(p, 1), str(p.get('who') or 'all').strip().lower()
+    if days is None: return 'activity.list needs days to be a number.'
     rows = [r for r in store.audit_since(_since(days)) if who == 'all' or (r['ActorType'] == 'agent') == (who == 'agents')]
     if not rows: return 'Nothing was recorded in that period.'
     counts = {}
@@ -187,7 +196,8 @@ def _log_errors(n=12) -> list:
 def errors_list(store, p: dict) -> str:
     """Everything written down as failing: the bell first, then each table that records a failure, then the log."""
     from . import problems
-    days, down = float(p.get('days') or 3), problems._dismissed(store)
+    days, down = _days(p, 3), problems._dismissed(store)
+    if days is None: return 'errors.list needs days to be a number.'
     bell = [f"{'(you dismissed this) ' if down.get(x['key']) == problems.signature(x) else ''}{x['title']} - {_cut(x['detail'], 300)}"
             f"{' since ' + _day(x['since']) if x.get('since') else ''} - fix: {x['fix']} on {x['where']}" for x in problems.collect(store, all_of_them=True)]
     out = (['FAILING NOW:'] + bell) if bell else ['Nothing is failing right now.']

@@ -2062,7 +2062,6 @@ def expire_previous_runs(store, src: dict, cfg: dict, mid: int) -> list:
     # sixty-item pile racing each other.
     with store.one_poke():
         for r in store.report_runs_before(cid, mid):
-            if str(r.get('ExternalId') or '').startswith(('alertfail:', 'outfail:')): continue
             tid = r.get('TaskId')
             if tid and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): continue
             key = f"report:{r['MessageId']}"
@@ -2077,10 +2076,12 @@ def _deliver(store, src: dict, cfg: dict, title: str, subject: str, body: str, m
     """Send it, and say what went wrong if it did not. Returns the error for the run history."""
     try:
         deliver_report(store, src, cfg, subject, body)
+        send_failed(store, src, 'send')
         return None
     except Exception as e:
         logger.warning(f'outbound delivery for {title} failed: {e}')
-        file_delivery_failure(store, src, cfg, title, e)
+        to = (cfg.get('deliver') or {}).get('to')
+        send_failed(store, src, 'send', f"it could not be sent to {', '.join(to) if isinstance(to, list) else to or 'nobody'}", e)
         if mid is not None:
             store.add_route(mid, None, 'feed', None, f'the report ran; sending it out failed: {str(e)[:200]}',
                             [], 'report')
@@ -2088,56 +2089,37 @@ def _deliver(store, src: dict, cfg: dict, title: str, subject: str, body: str, m
 
 
 def alert_or_file(store, src: dict, cfg: dict, why: str, head: str, body: str) -> str | None:
-    """Send the alert; if it cannot go, say so where the owner looks. Returns the error, or None when it went.
+    """Send the alert; if it cannot go, the bell says so. Returns the error, or None when it went.
 
     A refused alert used to be a log line and nothing else: #140's went to a WhatsApp group Taskuary also
     reads, the door refused every one for a week (the owner's own rule, 2026-09-17: never send into an input
-    chat), and the owner simply "was not getting those messages" (2026-09-24). It files the same broken row a
-    failed delivery does - once a day per report, so an hourly check does not stack a card per run."""
+    chat), and the owner simply "was not getting those messages" (2026-09-24)."""
     title = cfg.get('title') or src['Address']
     try:
         send_alert(store, src, cfg, why, head, body)
+        send_failed(store, src, 'alert')
         return None
     except Exception as e:
         logger.warning(f'alert for {title} failed: {e}')
         a = cfg.get('alert') or {}
         to = a.get('to'); who = ', '.join(to) if isinstance(to, list) else str(to or 'nobody')
-        ext = f"alertfail:{src['SourceId']}:{datetime.now().strftime('%Y-%m-%d')}"
-        if not store.message_exists(ext):
-            stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            mid = store.add_message({
-                'TaskId': None, 'ExternalId': ext, 'ConversationId': f'report:{src["SourceId"]}',
-                'Channel': 'report', 'SourceName': title, 'FromName': title, 'SentAt': stamp,
-                'Subject': f'{title} — alert NOT SENT, FAILED',
-                'BodyText': (f'The report found something to tell you ({why}) but the alert to {who} on '
-                             f"{a.get('channel') or 'whatsapp'} was not sent.\n\n{str(e)[:500]}\n\n"
-                             'Pick another chat for "reach me right away" under Reports.'),
-                'SourceLink': cfg.get('link'), 'Status': 'feed'})
-            store.add_route(mid, None, 'feed', None, f'the report found something; its alert to {who} was not sent', [], 'report')
-            store.audit('message', mid, 'report_alert_failed', 'report', 'agent', {'to': to, 'error': str(e)[:200]})
+        send_failed(store, src, 'alert', f"it found something ({why}) but the alert to {who} on {a.get('channel') or 'whatsapp'} was not sent", e)
         return str(e)[:600]
 
 
-def file_delivery_failure(store, src: dict, cfg: dict, title: str, err) -> int:
-    """A send that did not happen is WORK, not an fyi.
+SEND_FAILED = 'report_send_failed:'     # + '<kind>:<SourceId>' -> what the bell says, until the next one goes
 
-    It gets a row of its own, ending in FAILED, because that is what funnel.report_failed reads:
-    the row lands in the `broken` lane and therefore on the work rail, where a report nobody
-    received belongs. Its own row, rather than a note on the report's, because a quiet run has no
-    row to write on - and the silence is exactly when nobody would notice (2026-09-17).
-    """
-    to = (cfg.get('deliver') or {}).get('to')
-    who = ', '.join(to) if isinstance(to, list) else str(to or 'nobody')
+
+def send_failed(store, src: dict, kind: str, what: str = '', err=None) -> None:
+    """A send or an alert that did not go is the BELL'S (the owner, 2026-09-28: "remove to notification"),
+    never a row on the rail. One per report and kind, the latest; the next one that goes clears it."""
+    key = f"{SEND_FAILED}{kind}:{src['SourceId']}"
+    if err is None:
+        if store.get_setting(key): store.set_setting(key, '', 'report')
+        return
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    mid = store.add_message({
-        'TaskId': None, 'ExternalId': f'outfail:{src["SourceId"]}:{stamp}', 'ConversationId': f'report:{src["SourceId"]}',
-        'Channel': 'report', 'SourceName': title, 'FromName': title, 'SentAt': stamp,
-        'Subject': f'{title} — delivery FAILED',
-        'BodyText': f'The report ran, but it could not be sent to {who}.\n\n{str(err)[:500]}',
-        'SourceLink': cfg.get('link'), 'Status': 'feed'})
-    store.add_route(mid, None, 'feed', None, f'the report ran; sending it to {who} failed', [], 'report')
-    store.audit('message', mid, 'report_delivery_failed', 'report', 'agent', {'to': to, 'error': str(err)[:200]})
-    return mid
+    store.set_setting(key, json.dumps({'what': what, 'error': str(err)[:500], 'at': stamp}), 'report')
+    store.audit('source', src['SourceId'], f'report_{kind}_failed', 'report', 'agent', {'error': str(err)[:200]})
 
 
 def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict:

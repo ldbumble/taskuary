@@ -65,6 +65,17 @@ def collect(store, all_of_them: bool = False) -> list:
         out.append({'key': f"report:{src['SourceId']}", 'title': f"Report failed: {name}" if last.get('failed') else f"{name} ran without {', '.join(gone)}",
                     'detail': str(last.get('error') or last.get('subject') or '')[:400], 'since': last.get('at') or '', 'where': 'Reports',
                     'connector': None, 'report': src['SourceId'], 'fix': 'Open the report'})
+    # ...and a report that ran but whose send or alert did not go (reports.send_failed)
+    from .reports import SEND_FAILED
+    for src in store.list_sources():
+        if src.get('Channel') != 'report' or not src.get('Active'): continue
+        for kind, says in (('send', 'was not sent out'), ('alert', 'alert did not reach you')):
+            try: f = json.loads(store.get_setting(f"{SEND_FAILED}{kind}:{src['SourceId']}") or '{}')
+            except ValueError: continue
+            if not f: continue
+            out.append({'key': f"report_{kind}:{src['SourceId']}", 'title': f"{src.get('Address')}: {says}",
+                        'detail': f"{f.get('what')}. {f.get('error')}"[:400], 'since': f.get('at') or '', 'where': 'Reports',
+                        'connector': None, 'report': src['SourceId'], 'fix': 'Open the report'})
     seen, uniq = set(), []
     for p in out:
         if p['key'] in seen: continue

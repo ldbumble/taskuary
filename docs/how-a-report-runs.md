@@ -76,6 +76,8 @@ flowchart LR
   fails has failed the same way.
 - **One source of several failing** is not a failed run: the other sources are read, filed and sent as usual, and
   the bell says which source the run went without.
+- **A send or an alert that did not go** is in the bell too, never on the rail: the latest one per report, until
+  one goes.
 - **No schedule** means the report runs only when you press Run now; its row on the Reports page has a red border
   that says so.
 - **A mute** covers the alert and the morning brief as well as the rail.

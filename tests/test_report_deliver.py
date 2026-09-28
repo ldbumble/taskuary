@@ -62,7 +62,7 @@ def test_a_run_the_timeline_puts_down_still_leaves_the_building():
     sent.assert_called_once()                                      # ...and it still went out
 
 
-def test_a_quiet_run_that_could_not_send_is_work_even_though_the_run_was_clean():
+def test_a_quiet_run_that_could_not_send_rings_the_bell_even_though_the_run_was_clean():
     s = MemoryStore()
     src = _src(s)
     cfg = {'title': 'Monthly invoices', 'route': {'timeline': {'how': 'never'}}, 'deliver': {'to': 'ops@example.com', 'gate': 'auto'}}
@@ -71,18 +71,22 @@ def test_a_quiet_run_that_could_not_send_is_work_even_though_the_run_was_clean()
          mock.patch.object(reports, 'deliver_report', side_effect=RuntimeError('SMTP 535 auth failed')):
         out = reports.run_report_source(s, s.get_source(src['SourceId']), None)
     assert 'SMTP 535' in str(out.get('deliver_error') or '')
-    row = next(r for r in s.feed(limit=5) if str(r['Subject']).endswith('FAILED'))
-    assert funnel.report_failed(s, row['Subject'], row['MessageId']) is True
+    from taskuary import problems
+    assert any(p['key'] == f"report_send:{src['SourceId']}" and '535' in p['detail'] for p in problems.collect(s))
 
 
 # ── a send that did not happen ──────────────────────────────────────────────────────────
-def test_a_failed_delivery_files_a_row_the_funnel_reads_as_a_failed_check():
-    """Not an fyi that scrolls past: `broken` is a lane on the WORK rail, and the owner has to
-    know the people waiting for this did not get it."""
-    s = MemoryStore()
-    mid = reports.file_delivery_failure(s, _src(s), {'title': 'Monthly invoices', 'deliver': {'to': 'ops@example.com'}},
-                                        'Monthly invoices', RuntimeError('SMTP 535 auth failed'))
-    row = s.get_message(mid)
-    assert row['Subject'].endswith('FAILED') and 'deliver' in row['Subject'].lower()
-    assert 'ops@example.com' in row['BodyText'] and '535' in row['BodyText']
-    assert funnel.report_failed(s, row['Subject'], mid) is True
+def test_a_failed_send_is_in_the_bell_not_on_the_rail_and_the_next_send_clears_it():
+    """The owner, 2026-09-28: a send that did not go is a notification - it used to file a `broken` row on
+    the work rail. The bell holds the latest one per report until a send goes."""
+    from taskuary import problems
+    s = MemoryStore(); src = _src(s)
+    cfg = {'title': 'Monthly invoices', 'deliver': {'to': 'ops@example.com'}}
+    with mock.patch.object(reports, 'deliver_report', side_effect=RuntimeError('SMTP 535 auth failed')):
+        assert '535' in reports._deliver(s, src, cfg, 'Monthly invoices', 's', 'b')
+    assert not s.feed(limit=5)
+    bell = [p for p in problems.collect(s) if p['key'] == f"report_send:{src['SourceId']}"]
+    assert len(bell) == 1 and 'ops@example.com' in bell[0]['detail'] and bell[0]['report'] == src['SourceId']
+    with mock.patch.object(reports, 'deliver_report'):
+        assert reports._deliver(s, src, cfg, 'Monthly invoices', 's', 'b') is None
+    assert not [p for p in problems.collect(s) if p['key'] == f"report_send:{src['SourceId']}"]

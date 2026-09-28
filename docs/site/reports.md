@@ -118,7 +118,8 @@ sentence the judge answers yes or no to), **when a rule trips** (a number or wor
   when…** sentence. A task if it needs doing - a bug found, a job that did not run - and otherwise a
   row under Reports, as the Timeline line says.
 - **A failed run** is in the bell, top right, and nowhere else: no row, never a task, never an alert,
-  never sent to anyone. It clears itself when a run works again.
+  never sent to anyone. It clears itself when a run works again. A send or an alert that did not go
+  is in the bell the same way, until the next one goes.
 - **A mute** covers the alert and the morning brief as well as the rail.
 - **Who judges** is one setting for every report, under Settings › Triage & agents › Where runs
   go; blank means the brain that writes the report. **try it on the last 5 runs** shows what the

@@ -17,7 +17,7 @@ import json
 
 import pytest
 
-from taskuary import outbound, reports
+from taskuary import problems, outbound, reports
 from taskuary.store import MemoryStore
 
 
@@ -107,27 +107,30 @@ def test_a_note_you_wrote_still_rides_along(store):
 
 # ── ...and a refused alert is not SILENT ────────────────────────────────────────────────
 # Refused at the door, it was a log line and nothing else: the owner went a week "not getting those
-# messages" (2026-09-24). It files a broken row on the work rail instead - once a day per report.
-def test_a_refused_alert_lands_on_the_work_rail_once_a_day():
-    from taskuary import funnel
+# messages" (2026-09-24). It rings the bell - one item per report, never a row on the rail (2026-09-28).
+def _alerts(s): return [p for p in problems.collect(s) if p['key'].startswith('report_alert:')]
+
+
+def test_a_refused_alert_rings_the_bell_once_and_files_no_row():
     s = MemoryStore()
     s.save_source({'Channel': 'whatsapp', 'Address': 'ops-room@g.test', 'Active': 1, 'Owner': 'test', 'ConfigJson': '{}'}, 'test')
+    sid = s.save_source({'Channel': 'report', 'Address': 'Nightly checks', 'Active': 1, 'ConfigJson': '{}'}, 't')
     cfg = {'title': 'Nightly checks', 'alert': {'channel': 'whatsapp', 'to': 'ops-room@g.test'}}
-    src = {'SourceId': 7, 'Address': 'Nightly checks'}
+    src = {'SourceId': sid, 'Address': 'Nightly checks'}
     err = reports.alert_or_file(s, src, cfg, '1 came back', 'head', 'the ledger job has not run')
     assert 'inbox, not a destination' in err
-    rows = [m for m in s.scan_messages() if 'alert NOT SENT' in (m['Subject'] or '')]
-    assert len(rows) == 1 and rows[0]['ConversationId'] == 'report:7'
-    assert funnel.report_failed(s, rows[0]['Subject'])                 # the broken lane: work, not an fyi
-    assert 'ops-room@g.test' in rows[0]['BodyText']
+    assert not [m for m in s.scan_messages() if m.get('Channel') == 'report']
+    assert len(_alerts(s)) == 1 and 'ops-room@g.test' in _alerts(s)[0]['detail']
     reports.alert_or_file(s, src, cfg, '1 came back', 'head', 'again, an hour later')
-    assert len([m for m in s.scan_messages() if 'alert NOT SENT' in (m['Subject'] or '')]) == 1
+    assert len(_alerts(s)) == 1
 
 
-def test_an_alert_that_went_files_nothing_extra():
+def test_an_alert_that_went_clears_the_bell():
     from unittest import mock
     s = MemoryStore()
+    sid = s.save_source({'Channel': 'report', 'Address': 'x', 'Active': 1, 'ConfigJson': '{}'}, 't')
+    s.set_setting(f'{reports.SEND_FAILED}alert:{sid}', json.dumps({'what': 'w', 'error': 'e', 'at': '2026-09-28 08:00:00'}), 't')
     cfg = {'title': 'Nightly checks', 'alert': {'channel': 'whatsapp', 'to': 'me@s.test'}}
     with mock.patch('taskuary.outbound.send_out', return_value={'ok': True}):
-        assert reports.alert_or_file(s, {'SourceId': 7, 'Address': 'x'}, cfg, 'why', 'head', 'body') is None
-    assert not [m for m in s.scan_messages() if 'alert NOT SENT' in (m['Subject'] or '')]
+        assert reports.alert_or_file(s, {'SourceId': sid, 'Address': 'x'}, cfg, 'why', 'head', 'body') is None
+    assert not _alerts(s)

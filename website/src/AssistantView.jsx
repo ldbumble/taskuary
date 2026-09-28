@@ -325,8 +325,9 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                 if (next.has(level)) next.delete(level); else next.add(level);
                 return next;
               }) : undefined}>
-              {/* one quiet pill for every band; URGENT alone keeps its colour (the owner, 2026-09-28: "the your task red i hate") */}
-              <span style={level === "urgent" ? { color: ROLES.you.ink, background: ROLES.you.tint, borderColor: ROLES.you.bd } : undefined}>{levelLabel(level)}</span>
+              {/* each band its own SUBTLE tint (the owner, 2026-09-28: "now all the pills are the same. make them subtly
+                  different") - light red for your task, never the loud one; urgent alone keeps its colour */}
+              <span className={`lvl-${level}`}>{levelLabel(level)}</span>
               {folds && <i className="fold">{open ? "▾" : "▸"}</i>}
               <hr /><em>{rows.length}</em>
             </div>
@@ -371,7 +372,7 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                         {i.settling && <span className="tq-pile-tag">triaging…</span>}
                         {loud && !i.settling && (
                           <span className="tq-pile-tag loud"
-                            style={{ color: ROLES.working.ink, background: ROLES.working.tint, borderColor: ROLES.working.bd }}>
+                            style={{ color: ROLES.handled.ink, background: ROLES.handled.tint, borderColor: ROLES.handled.bd }}>
                             {meta.mark} {meta.word}</span>
                         )}
                         {!loud && !!word && (

@@ -1151,23 +1151,15 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
 // opener in place of the Morning digest (2026-09-23). Rows come from the LIVE pile, so a row settled
 // since the chat opened is gone from here too; a row's click brings that one card up.
 const ROWS_PER_GROUP = 5;
-// the group's name in the rail band's own pill (the owner, 2026-09-23: "should be circle pills with
-// colors"): who is waiting on you wears the rail's "your task" colour, an agent the working blue, your
-// own list the report beige, and what needs no decision the muted one
-// every group walkSummary.GROUPS draws needs a role here - "passed" had none, and ROLES[undefined].ink took the
-// whole page down the first time a passed row reached the opener (2026-09-24). Unknown keys fall back to muted.
-// ...the RAIL's colours, one meaning each (the owner, 2026-09-28: "these colors are weird"): who wants you, your own list and
-// an agent waiting on you are all Your task on the rail; nothing to decide is fyi; you passed is passed
-const GROUP_ROLE = { people: "muted", you: "muted", agents: "muted", read: "muted", passed: "muted" };
-const groupRole = (key) => ROLES[GROUP_ROLE[key]] || ROLES.muted;
+// the group's name in a pill of its own tint - assistantView.css `.tq-sum-head span.lvl-<group>`, the rail bands' own
+// family (the owner, 2026-09-28: "make them subtly different"); every group of walkSummary.GROUPS has one
 // the groups themselves - also drawn on the empty chat's welcome, which is what the walk starts from
 // `quiet` groups show their pill and count only - on the day's opener, what needs no decision is on the
 // rail already, and its rows were what pushed the way in off the screen (2026-09-23: "one screen")
 export function WhoWantsWhat({ groups, onRow, max = ROWS_PER_GROUP, quiet = [] }) {
   return (groups || []).map((g) => ({ g, n: quiet.includes(g.key) ? 0 : max })).map(({ g, n }) => (
     <div key={g.key} className="tq-sum-group">
-      <div className="tq-sum-head"><span style={{ color: groupRole(g.key).ink, background: groupRole(g.key).tint,
-        borderColor: groupRole(g.key).bd }}>{g.word}</span><em>{g.rows.length}</em></div>
+      <div className="tq-sum-head"><span className={`lvl-${g.key}`}>{g.word}</span><em>{g.rows.length}</em></div>
       {g.rows.slice(0, n).map((i) => (
         <button key={i.key} type="button" className="tq-sum-row" onClick={() => onRow?.(i.key)} title="Bring this one up now">
           <span className="dot" style={{ background: sourceColor(i) }} />

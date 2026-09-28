@@ -10,16 +10,17 @@ words, in the app or on your phone.
 |---|---|---|---|
 | **Next** | every card | Marks it read and moves on. Open work you pass comes back after a few hours (Settings → Passed work comes back after) | at once |
 | **Mark done** | a draft reply, a finished agent, a task | The one close: the task is done, an unsent draft is retired, a live agent is stopped, and it leaves your rail | at once |
-| **Send** | a draft reply | Sends the draft, then Mark done | you confirm |
+| **Close out** | a draft reply, a task's close-out (a pull request to merge, an issue to close) | Finishes the task the normal way for where it lives, then Mark done: sends the draft; on GitHub merges the pull request or closes the issue and posts the reply as its comment. The line under the card says which | you confirm |
 | **Run it** | an agent's proposal | Runs the action the agent proposed | you confirm |
 | **Reply** | a person's ask, a finished agent with no draft | Writes a draft reply. Nothing is sent | at once |
 | **Make a task** | an ask, an fyi, an idea | A task on your own list. No agent starts | you confirm |
 | **Send to agent** | an ask, an fyi, an idea, a meeting, a report | A task and an agent on it. The card asks which agent | you confirm |
-| **Not ours** | a draft reply, a proposal, an ask, an fyi | Files it. The card asks how far | you confirm |
+| **Not ours** | a draft reply, a proposal (not a close-out), an ask, an fyi | Files it. The card asks how far | you confirm |
 | **Save and end session** | an agent waiting on you | Writes up what the session did and stops the agent. The task stays open | at once |
 | **Remind me** | any card with an open task behind it | Asks for a day, then puts the task away until that morning: Upcoming in Tasks, off your rail. On the phone the days come as choices | you pick the day |
 
-A handful of fyi comes as one card with its own **All read, next** button.
+A handful of fyi comes as one card with its own **All read, next** button. A close-out card for a pull request also
+shows **Decline** (close it without merging) - on the card only, never as a chat word or a phone choice.
 
 ## The two buttons that ask one question
 

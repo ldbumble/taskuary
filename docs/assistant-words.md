@@ -14,8 +14,9 @@ question a card asks), `PROPOSALS` (what each runs), `toolcatalog.PURPOSE` (the 
 ```mermaid
 flowchart LR
   C{"What is on the table?"}
-  C -->|a draft reply| B1["Send · Mark done · Remind me · Not ours · Next"]
-  C -->|an agent's proposal| B2["Run it · Not ours · Next"]
+  C -->|a draft reply| B1["Close out · Mark done · Remind me · Not ours · Next"]
+  C -->|a task's close-out:<br/>a PR to merge, an issue to close| B0["Close out · Next<br/>(the card adds Decline where it applies)"]
+  C -->|any other agent proposal| B2["Run it · Not ours · Next"]
   C -->|a person's ask| B3["Reply · Make a task · Send to agent · Remind me · Not ours · Next"]
   C -->|an fyi| B4["Make a task · Send to agent · Not ours · Next"]
   C -->|an agent waiting on you| B5["Save and end session · Remind me · Next"]
@@ -47,6 +48,11 @@ flowchart LR
   (three hours). A date is the task's own **Remind me** (`remind.py`); on that morning a note on the task
   brings it back.
 - **Reply on a finished agent** is for the one that left no draft. A pull request's result offers none.
+- **Close out is one word for every system** (the owner, 2026-09-27: "if we have button to close out per system it
+  will be endless"). It finishes the task the normal way where it lives - sends the reply; merges the PR or closes
+  the issue and posts the reply as its comment - and the line under the card says which. A new connector adds that
+  sentence (`proposals.CLOSEOUT`), never a word. **Decline** (close without doing it) is a card button only, never a
+  chat or poll word; **Not yet** in the walk is **Next**. Full rules: `docs/how-a-task-ends.md`, The close-out.
 - **Retired words** (`parse_decision` maps the model's old verbs): Archive it is Not ours; Later, Tomorrow,
   "file this kind", and the `setting` verb are gone - a setting is the `setting.set` tool.
 

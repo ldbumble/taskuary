@@ -162,3 +162,13 @@ def test_the_store_converts_a_report_written_the_old_way_when_it_opens(tmp_path)
     assert cfg['route'] == {'timeline': rule, 'alert': rule, 'send': {'how': 'always'}, 'work': rule}
     assert cfg['alert'] == {'to': 'me@example.com'} and 'reach' not in cfg and 'triage' not in cfg
     s.cx.close()
+
+
+def test_the_demo_runs_no_reports_on_a_clock(monkeypatch):
+    """A made-up world with its report rows already in it: an Advisor posting mid-session moved the rows a
+    visitor - and the browser tests - were reading (CI, 2026-09-28)."""
+    from taskuary import server
+    monkeypatch.setenv('TASKUARY_DEMO', '1')
+    with mock.patch.object(server, 'run_due_reports') as ran:
+        assert server.report_pass(startup=True) is None
+    ran.assert_not_called()

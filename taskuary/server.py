@@ -6387,7 +6387,9 @@ def report_pass(startup: bool = False) -> int | None:
     inside the mail poll, so turning the mail poll off stopped every report and turning startup catch-up
     off stopped every "on app start" one (the owner, 2026-09-27). A startup pass WAITS for a running
     pass rather than being dropped - it is the only one that runs the "on app start" reports."""
-    if not _REPORTS_BUSY.acquire(blocking=startup): return None
+    # the demo is a made-up world with its report rows already in it: nothing there runs on a clock, and an
+    # Advisor posting into it mid-session moved the rows a visitor (and the browser tests) were reading
+    if demo.enabled() or not _REPORTS_BUSY.acquire(blocking=startup): return None
     try:
         n = run_due_reports(store, startup)
         try:

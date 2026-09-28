@@ -97,7 +97,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
 
   const surfaces = [
     ["Tasks", "selector", '[aria-label="Search all tasks"]', "Reconcile the August GL export"],
-    ["Board", "text", "Agent board", "Waiting on you"],
+    ["Board", "text", "Agent board", "census sync fails when a site has no manager"],
     ["Reports", "text", "Reports & workflows", "Headcount by site, nightly"],
   ];
   const timings = { firstVisibleMs, inputMs };

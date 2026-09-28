@@ -129,7 +129,10 @@ test("PW-106 refreshes same-ID source and drafts while preserving Current and ow
     }
   }
   assert.ok(picked, "target is opened through the rendered Unread row");
-  await page.waitForSelector(".tq-pile-row.current", { timeout: 15000 });
+  // THE ROW WE CLICKED, not whichever row was current a moment before the click landed: waiting for any
+  // `.current` returned at once on a slow runner and read the previous row's title (CI, 2026-09-28)
+  await page.waitForFunction((title) => document.querySelector(".tq-pile-row.current .card b")?.textContent.trim() === title,
+    { timeout: 15000 }, target.title);
   await page.waitForSelector(".tq-msg .tq-card textarea", { timeout: 15000 });
   const heldTitle = await currentTitle(page);
   assert.equal(heldTitle, target.title);

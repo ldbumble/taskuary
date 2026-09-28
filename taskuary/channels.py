@@ -1101,11 +1101,8 @@ def close_upstream_ended(store, tid: int, said: str, final: str, actor: str = 'r
     # a close-out waiting on the owner (close the issue, merge) is answered by the upstream ending itself
     rv = proposals.closeout_pending(store, tid)
     if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, actor, 'the item ended upstream')
-    # ...but YOUR merge does not swallow the answer you have not sent yet: the contributor's thank-you drafted beside the
-    # Merge card stays for your yes, and sending it closes the task (the owner, 2026-09-27)
-    if actor == 'owner' and store.pending_review(tid, live_only=False):
-        store.update_task(tid, {'Status': 'waiting'}, actor)
-        return
+    # ...and a merged or closed item is FINISHED, a thank-you drafted beside it included: it closes, and closing retires
+    # the unsent draft (the owner, 2026-09-28: "if they were merged in, they should just close")
     try:
         coder.wrap(store, tid, close=True, actor=actor, final_message=final, no_reply=True)   # a merged PR owes nobody a reply (A21)
     except ValueError as e:

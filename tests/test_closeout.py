@@ -305,12 +305,13 @@ class ContributorPullRequestTests(unittest.TestCase):
         self.assertNotIn('closeout', ps[0])
         self.assertFalse(proposals.validate(MemoryStore(), ps[0])[0])                     # the tracker switch still gates it
 
-    def test_your_merge_keeps_the_unsent_thank_you(self):
+    def test_your_merge_closes_the_task_and_retires_the_unsent_thank_you(self):
+        """Merged is finished (the owner, 2026-09-28: "if they were merged in, they should just close")."""
         from taskuary import channels
         s = armed(MemoryStore()); tid = self._reviewed(s, 'waiting')
         rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks - merged.'})
         channels.close_upstream_ended(s, tid, 'You merged this pull request on GitHub.', 'merged', 'owner')
-        self.assertEqual((s.get_task(tid)['Status'], s.get_review(rid)['Status']), ('waiting', 'pending'))
+        self.assertEqual(s.get_task(tid)['Status'], 'done'); self.assertNotEqual(s.get_review(rid)['Status'], 'pending')
 
 
 class ResumeNoteTests(unittest.TestCase):

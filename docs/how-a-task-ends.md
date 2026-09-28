@@ -79,8 +79,10 @@ your yes, and the task is not done until you answer it (decided with the owner o
 - **Close PR** (beside Merge) closes the pull request on GitHub without merging it, then Mark done - the work was
   not wanted. **Not yet** keeps the task open and on you. Merging or closing the pull request on GitHub yourself answers it
   the same way: the card is retired and the task closes (`ci.pr_ended`).
-- With a reply owed as well, both wait. The merge comes first, so the reply can say it is merged; the comment
-  comes before an issue closes. Sending the reply does not close the task while its close-out waits.
+- With a reply owed as well, the task page shows them as ONE card under **3 Close out**: **Merge & send** (or
+  **Close PR & send**) runs the act first and sends the reply only when it succeeded (`verdicts.decide` `reply_text`).
+  Elsewhere they are two cards, the merge first. Sending the reply alone does not close the task while its
+  close-out waits.
 - The words are drafted like any reply; the act is plain code on your click. No agent has to still be running.
 - **Mark done** is still the one close. Pressing it yourself skips the close-out, and the pull request stays
   open on GitHub.

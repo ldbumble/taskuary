@@ -168,6 +168,40 @@ class ReplyAndCloseOutTests(unittest.TestCase):
         self.assertEqual([r['Kind'] for r in pending(s, tid)], ['draft_reply'])
 
 
+class OnePressTests(unittest.TestCase):
+    """Merge & send (the owner, 2026-09-27: "shouldn't we combine this?"): the act first, the reply only after it."""
+    def _both(self):
+        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        reply = s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Thanks - approving.'})
+        return s, tid, reply
+
+    def test_merge_and_send_merges_then_sends_the_edited_reply(self):
+        s, tid, reply = self._both()
+        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=GREEN), \
+             mock.patch.object(github, 'merge_pr', return_value='m') as merge:
+            out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve', reply_text='Thanks - merged.')
+        merge.assert_called_once()
+        self.assertTrue(out['ok'] and out['reply']['ok'], out)
+        self.assertEqual((s.get_review(reply)['Status'], s.get_review(reply)['FinalText']), ('edited', 'Thanks - merged.'))
+
+    def test_a_refused_merge_sends_nothing(self):
+        s, tid, reply = self._both()
+        red = {'state': 'failure', 'total': 1, 'pending': 0, 'failed': [{'name': 'ci / test', 'url': 'u', 'summary': ''}]}
+        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=red):
+            out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve', reply_text='Thanks - merged.')
+        self.assertFalse(out['ok']); self.assertNotIn('reply', out)
+        self.assertEqual(s.get_review(reply)['Status'], 'pending')
+
+    def test_not_yet_leaves_the_reply_unsent(self):
+        s, tid, reply = self._both()
+        verdicts.decide(s, proposals.closeout_pending(s, tid), 'reject', reply_text=None)
+        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('pending', 'open'))
+
+    def test_a_close_out_card_does_not_say_the_agent_proposed_it(self):
+        s, tid, _ = self._both()
+        self.assertEqual(proposals.closeout_pending(s, tid)['Reason'], 'closes the task: merge pull request #7')
+
+
 class IssueCloseOutTests(unittest.TestCase):
     def test_a_task_from_an_issue_waits_to_close_it_with_a_comment(self):
         s = armed(MemoryStore(), tracker=True)

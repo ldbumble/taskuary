@@ -52,7 +52,9 @@ export const InvoiceLine = ({ meta }) => (
 );
 
 // `onOpenTask` is optional: on the task page you are already there.
-export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
+// `closeout` is the task's pending close-out (merge the PR, close the issue): given beside its reply, the two are
+// ONE decision on this card, and the close-out runs first (verdicts.decide's reply_text).
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask }) {
   const [text, setText] = useState(null);           // the owner's edit; null means "the draft as filed"
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
   const [busy, setBusy] = useState(false);
@@ -65,6 +67,19 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
   const value = text ?? reviewText(r);
   const ccNow = cc ?? deliveryCc(r);
   const meta = deliveryMeta(r);
+  const co = closeout && !proposal ? proposalPresentation(closeout) : null;
+  const sendable = r.CanSend !== false;
+
+  const decideBoth = async (verb) => {
+    setBusy(true); setErr(""); setSendErr("");
+    try {
+      const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
+        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable ? value : null, cc: sendable ? ccNow : null });
+      if (data.send_error) setSendErr(data.send_error);
+      onChanged?.();
+    } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
+    setBusy(false);
+  };
 
   // Approving IS sending, so a send that failed has to say so HERE, the moment you click - it
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
@@ -141,7 +156,10 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
         const res = resolveInterrupt(interrupt, choice, { [r.ReviewId]: value });
         setText(res.edits[r.ReviewId] ?? value); setCompare(res.compare); setInterrupt(null);
       }} />
-      {r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
+      {/* a close-out says what it closes, whatever an older row's Reason worded it as */}
+      {proposal?.kind === "closeout" ? (
+        <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
+      ) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
       )}
       {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
@@ -158,6 +176,13 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
           {proposal?.destination || replyContext(r)}
         </Typography>
       </Box>
+      {co && (
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
+          <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>{co.destinationLabel}</Typography>
+          <Typography variant="body2" sx={{ color: INK, fontWeight: 650 }} noWrap>{co.destination}</Typography>
+          <Typography variant="caption" sx={{ color: FAINT }} noWrap>· first, then the reply goes out</Typography>
+        </Box>
+      )}
       {!proposal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(r)}
         text={value} channel={r.Channel} onChanged={onChanged} />}
       {!proposal && <CcRow cc={ccNow} setCc={setCc} channel={r.Channel} />}
@@ -193,7 +218,19 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
             asked you to declare something the text already shows. */}
         {/* a channel that cannot carry the reply must SAY so: github with replies
             off gets 'No response required' as THE action, not a send that bounces */}
-        {proposal ? (
+        {co && !r.Stale ? (
+          /* ONE PRESS FOR THE LAST TWO ACTS (the owner, 2026-09-27: "shouldn't we combine this?"): the merge or
+             close runs first, and the reply above goes out only once it succeeded. A reply this channel cannot
+             carry leaves just the close-out. */
+          <>
+            <Button size="small" variant="contained" disableElevation disabled={busy || (sendable && !value.trim())}
+              onClick={() => decideBoth("approve")} title={`${co.approveLabel}, then send this reply to ${replyContext(r)}`}>
+              {busy ? co.busyLabel : sendable ? `${co.approveLabel} & send` : co.approveLabel}</Button>
+            {co.alt && <Button size="small" variant="outlined" disabled={busy || (sendable && !value.trim())}
+              onClick={() => decideBoth(co.alt.verb)} title={`${co.alt.label} - ${co.alt.then}${sendable ? ', then send this reply' : ''}`}>
+              {sendable ? `${co.alt.label} & send` : co.alt.label}</Button>}
+          </>
+        ) : proposal ? (
           <Button size="small" variant="contained" disableElevation disabled={busy}
             onClick={() => decide("approve")}
             title={proposal.kind === "playbook"
@@ -232,7 +269,9 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
         {proposal?.alt && <Button size="small" variant="outlined" disabled={busy} onClick={() => decide(proposal.alt.verb)}
           title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}
-        <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")}>{proposal?.rejectLabel || "Reject"}</Button>
+        {co && <Button size="small" disabled={busy} onClick={() => decideBoth("reject")}
+          title="Leaves the pull request as it is; the task stays open and on you, the reply unsent">{co.rejectLabel}</Button>}
+        <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")}>{proposal?.rejectLabel || (co ? "Reject reply" : "Reject")}</Button>
         <Box sx={{ flex: 1 }} />
         {!proposal && meta.kind !== "zoho_invoice" && <Button size="small" disabled={busy} onClick={redraft}>
           {busy ? <CircularProgress size={12} /> : r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI"}

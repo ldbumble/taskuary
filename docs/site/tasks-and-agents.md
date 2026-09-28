@@ -1,17 +1,17 @@
-A task in Taskuary is three records, not one: the durable job, the agent work done on it, and the
-reply to whoever asked. They start and finish independently, and keeping them apart is what stops
+A task in Taskuary is three records, not one: the durable job, the agent work done on it, and how it
+is closed out - the reply to whoever asked, and on GitHub the merge or the closed issue. They start and finish independently, and keeping them apart is what stops
 the word "done" meaning three different things.
 
 ## A task's three lives
 
-The task page shows them as one numbered workflow — **1 Task → 2 Agent work → 3 Reply** — and
+The task page shows them as one numbered workflow — **1 Task → 2 Agent work → 3 Close out** — and
 each stage owns exactly one state badge.
 
 | Part | What it records | Main controls | What it never does by itself |
 |---|---|---|---|
 | **Task** | The durable job and who owns it | owner, kind, priority, Reopen, Mark done | Starting or ending an agent session does not complete it |
 | **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, new prompt, start, prompt, pause, finish, stop | Stopping does not mark the task done or send a reply |
-| **Reply** | Communication with the person who asked | write, generate, edit, approve and send | Sending it marks the task done — unless an agent is still working or a new message came in |
+| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | write, generate, edit, approve and send; **Merge & send**, **Close PR & send**, **Not yet** | Sending it marks the task done — unless an agent is still working, a new message came in, or its merge still waits |
 
 While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
 the workspace takes most of the page. Full controls, saved results and restart choices come back
@@ -53,7 +53,8 @@ button. The task is not done until you answer it.
 | Mail, chat, anything else | ✉️ **reply ready** | **Send reply** | As always |
 
 **Not yet** keeps the task open and on you. Merging or closing the pull request on GitHub yourself counts as
-answering it: the task closes by itself. When a reply is owed as well, both wait, the merge first. The button is
+answering it: the task closes by itself. When a reply is owed as well, the two are one card: **Merge & send** merges
+first and sends your reply only if the merge worked. The button is
 yours, so **Agents may push / deploy** does not have to be on - that switch is about what an agent may do. A task an
 agent finished before this existed gets its card on the next sync.
 A session you started yourself is yours to complete: the agent is told so, and if it says it is

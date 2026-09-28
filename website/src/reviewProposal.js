@@ -33,7 +33,8 @@ export const proposalPresentation = (review) => {
     return {
       kind: "closeout",
       title: review.Title || review.Subject || (pr ? "Merge the pull request" : "Close the issue"),
-      context: pr ? "The agent finished · the task closes when the pull request merges" : "The agent finished · the task closes with the issue",
+      context: pr ? `The agent finished · the task closes when pull request #${proposal.number || ""} merges, or you close it`
+        : "The agent finished · the task closes with the issue",
       destinationLabel: pr ? "MERGE" : "CLOSE",
       destination: pr ? `${proposal.repo || ""}#${proposal.number || ""}` : "the GitHub issue this task came from",
       approveLabel: co.label,

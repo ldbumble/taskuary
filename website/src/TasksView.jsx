@@ -55,6 +55,7 @@ import { ASK_TAG } from "./newTask.js";
 import {
   AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
+import { closeoutOf } from "./reviewProposal.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -672,7 +673,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // your yes"), and one lane on the rail is one section on the page (the owner, 2026-09-22: "put
   // playbook proposal combined into the reply ready section as it's part of the approval/action").
   const pendingReview = pendingReplyReview(detail?.reviews || []);
-  const proposals = pendingProposals(detail?.reviews || []);
+  const allProposals = pendingProposals(detail?.reviews || []);
+  // the task's close-out beside its reply is ONE decision on the reply's card; alone, it is its own card below
+  const closeoutRv = allProposals.find((p) => closeoutOf(p)) || null;
+  const proposals = allProposals.filter((p) => !(pendingReview && p === closeoutRv));
   const sentReview = sentReplyReview(detail?.reviews || []);
   const unsentReview = sentReview ? null : unsentReplyReview(detail?.reviews || []);
   // A successful Review send is the reply even before (or when) the external channel ingests an
@@ -1681,9 +1685,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {!sessionView && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0,
                   borderLeft: "4px solid #9a7444" }}>
-                  <WorkflowHeading number="3" title="Reply"
+                  {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
+                      request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
+                  <WorkflowHeading number="3" title="Close out"
                     description={term?.alive
-                      ? (replyMessage ? "Reply controls return when the agent stops." : "No inbound sender is attached to this task.")
+                      ? (replyMessage ? "Close-out controls return when the agent stops." : "No inbound sender is attached to this task.")
+                      : closeoutRv
+                        ? (replyMessage ? "Your reply to the sender and the last act on GitHub - approving them closes the task." : "The last act on GitHub - approving it closes the task.")
                       : replyMessage
                         ? "What goes back to the sender. Sending it closes the task."
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
@@ -1739,7 +1747,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
-                        <ReviewDecision review={pendingReview}
+                        <ReviewDecision review={pendingReview} closeout={closeoutRv}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>

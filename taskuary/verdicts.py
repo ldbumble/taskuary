@@ -159,14 +159,28 @@ def _newer_inbound(store, task_id: int, rv: dict) -> bool:
 
 
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
-           actor: str = 'owner', learn_async=None, cc: list = None) -> dict:
+           actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
     call (the API hands FastAPI's background task runner in); None runs it inline.
 
     `cc` loops somebody in on this answer. Replies get the list chosen at approval; a new outbound
     email starts with the list deliberately saved in its delivery envelope, which remains visible
-    and editable on the task."""
+    and editable on the task.
+
+    `reply_text` on a close-out is ONE press for the task's last two acts (the owner, 2026-09-27: "shouldn't we
+    combine this? meaning reply on close?"): the merge/close runs first, and only when it succeeded does the task's
+    pending reply go out with this text - a refused merge sends nothing. Each lands through its own verdict below."""
     from . import learn, outbound
+    if reply_text is not None and rv.get('Kind') == 'action' and verb_in in ('approve', 'edit', 'close_pr'):
+        out = decide(store, rv, verb_in, final_text, note, actor, learn_async)
+        if not out.get('ok') or not rv.get('TaskId'): return out
+        reply = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action' ORDER BY ReviewId DESC LIMIT 1",
+                           (rv['TaskId'],))
+        if reply:
+            sent = decide(store, reply, 'approve', reply_text, None, actor, learn_async, cc)
+            out['reply'] = sent
+            if not sent.get('ok'): out['send_error'] = f"Done on GitHub, but the reply was not sent: {sent.get('send_error') or 'it was refused'}"
+        return out
     rid = rv['ReviewId']
     # A verdict lands ONCE. There was no guard at all, so "approve" typed and the Approve button
     # clicked - or one double click - sent the same mail twice (2026-09-03).

@@ -151,8 +151,10 @@ def queue(store, task_id: int, p: dict, actor='coder') -> dict | None:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
         return None
-    rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p),
-                            'Reason': f'the agent proposes to {why}' + (f" - {p['why'][:200]}" if p.get('why') else '')})
+    # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR)
+    reason = (f"closes the task: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else 'close the issue it came from'}"
+              if p.get('closeout') else f'the agent proposes to {why}' + (f" - {p['why'][:200]}" if p.get('why') else ''))
+    rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
     logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')
     return {'reviewId': rid, 'action': p['action']}

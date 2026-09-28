@@ -276,6 +276,7 @@ class AssistantMessageBody(AssistantSessionBody):
 class DecideBody(BaseModel):
     verb: str; final_text: str | None = None; note: str | None = None
     cc: list[str] | None = None      # loop somebody in on this answer (email only)
+    reply_text: str | None = None    # on a close-out: the task's pending reply, sent once the merge/close succeeded
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
@@ -2822,7 +2823,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                                    + ('I refreshed it with the latest context; review it and approve again.' if draft
                                       else 'Nothing was sent. Redraft it with the latest context before approving.'))}
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
-                learn_async=(background.add_task if background is not None else None), cc=body.cc)
+                learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text)
 
 @app.get('/api/tasks/{tid}/proof')
 def task_proof(tid: int):

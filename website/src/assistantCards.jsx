@@ -395,17 +395,23 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   // behind More and the draft is the thing in the open (2026-09-23)
   const [full, setFull] = useState(false);
   const nav = React.useContext(CardNav);
+  // the reply waiting beside a close-out: the two are ONE decision here, as on the task page - the merge first,
+  // then this reply goes out (the owner, 2026-09-27)
+  const [mate, setMate] = useState(null);
   useEffect(() => {
     let live = true;
     api.get("/api/reviews", { params: { status: "pending" } }).then(({ data }) => {
       if (!live) return;
       setRv((data.data || []).find((x) => x.ReviewId === card.rid) || { gone: true });
+      const found = (data.data || []).find((x) => x.ReviewId === card.rid);
+      setMate(found && closeoutOf(found) ? (data.data || []).find((x) => x.TaskId === found.TaskId && x.Kind !== "action" && x.CanSend !== false) || null : null);
     }).catch((e) => live && setErr(errText(e)));
     return () => { live = false; };
   }, [card.rid, card.mid, card.presentation_revision]);
   const action = rv?.Kind === "action";
   const co = closeoutOf(rv);
   const draft = () => {
+    if (mate) return mate.DraftText || "";
     if (!action) return rv?.DraftText || "";
     if (co) return reviewText(rv);
     try { const p = JSON.parse(rv.DraftText || ""); return p.text || `${p.action}${p.why ? ` — ${p.why}` : ""}`; } catch { return rv?.DraftText || ""; }
@@ -416,9 +422,12 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   const decide = async (verb) => {
     setBusy(verb); setErr("");
     try {
-      const { data } = await api.post(`/api/reviews/${card.rid}/decide`, { verb, final_text: verb === "approve" ? value : null, note: null });
+      const { data } = await api.post(`/api/reviews/${card.rid}/decide`, mate
+        ? { verb, final_text: null, note: null, reply_text: verb !== "reject" ? value : null }
+        : { verb, final_text: verb === "approve" ? value : null, note: null });
       if (data.send_error) throw new Error(data.send_error);
-      onDone?.(verb === co?.alt?.verb ? `Done — ${co.alt.then}.` : verb === "approve" ? (co ? `Done — ${co.then}.` : action ? "Done — the action ran." : `Sent to ${who}.`)
+      const sentTo = mate && verb !== "reject" ? ` The reply went to ${mate.FromName || "them"}.` : "";
+      onDone?.(verb === co?.alt?.verb ? `Done — ${co.alt.then}.${sentTo}` : verb === "approve" ? (co ? `Done — ${co.then}.${sentTo}` : action ? "Done — the action ran." : `Sent to ${who}.`)
         : co ? "Not yet — the task stays open." : action ? "Dismissed — nothing ran." : "Dismissed — no reply goes out.");
     } catch (e) { setErr(errText(e)); }
     setBusy("");
@@ -440,7 +449,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   };
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
   const verb = action
-    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? co.label : "Run it"}</Button>
+    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? (mate ? `${co.label} & send` : co.label) : "Run it"}</Button>
     : rv?.CanSend === false ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
          hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
@@ -458,17 +467,17 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim()} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
         {busy === "approve" ? "Sending…" : "Send reply"}</Button>
     );
-  const then = co ? <><b>{co.label}</b> {co.then}.</>
+  const then = co ? <><b>{mate ? `${co.label} & send` : co.label}</b> {co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>
     : action ? <><b>Run it</b> does what the agent proposed - nothing runs until you press it.</>
     : rv && !value.trim() && !stale ? <><b>Draft with AI</b> writes one for you to approve here - nothing is sent.</>
     : stale ? <><b>Refresh the draft</b> rewrites it from the newest message; you still approve it.</>
     : rv ? <><b>Send reply</b> {sendsBy(rv.Channel, who)}.</> : null;
   return (
-    <CardShell card={card} kicker={co ? `agent finished · ${co.label.toLowerCase()}?` : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
+    <CardShell card={card} kicker={co ? `agent finished · ${co.label.toLowerCase()}${mate ? " & reply" : ""}?` : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
       lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} />} err={err}>
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
-          placeholder={action ? "" : "Write your answer here"}
+          placeholder={action && !mate ? "" : "Write your answer here"}
           sx={{ mt: 1, "& textarea": { fontSize: 12.5, lineHeight: 1.5 } }} />
       )}
       {!action && stale && <div className="tq-card-err">New messages arrived after this draft. Refresh the draft with the latest context before sending.</div>}
@@ -481,7 +490,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
           under More actions */}
       <Foot verb={verb} then={then} covers={["approve", "redraft"]}
-        extra={[...(co?.alt ? [{ verb: co.alt.verb, label: busy === co.alt.verb ? co.alt.busy : co.alt.label, title: `${co.alt.label} ${co.alt.then}.`,
+        extra={[...(co?.alt ? [{ verb: co.alt.verb, label: busy === co.alt.verb ? co.alt.busy : mate ? `${co.alt.label} & send` : co.alt.label, title: `${co.alt.label} ${co.alt.then}.`,
           disabled: !!busy || !rv, onClick: () => decide(co.alt.verb) }] : []),
         ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
           title: "Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.",

@@ -90,11 +90,11 @@
   <main id="doc">
     <p class="eyebrow">Tasks and agents</p>
     <article>
-<p>A task in Taskuary is three records, not one: the durable job, the agent work done on it, and the
-reply to whoever asked. They start and finish independently, and keeping them apart is what stops
+<p>A task in Taskuary is three records, not one: the durable job, the agent work done on it, and how it
+is closed out - the reply to whoever asked, and on GitHub the merge or the closed issue. They start and finish independently, and keeping them apart is what stops
 the word &quot;done&quot; meaning three different things.</p>
 <h2 id="a-tasks-three-lives">A task&#39;s three lives<a class="anchor" href="#a-tasks-three-lives" aria-label="Link to this section">#</a></h2>
-<p>The task page shows them as one numbered workflow — <strong>1 Task → 2 Agent work → 3 Reply</strong> — and
+<p>The task page shows them as one numbered workflow — <strong>1 Task → 2 Agent work → 3 Close out</strong> — and
 each stage owns exactly one state badge.</p>
 <table>
 <thead>
@@ -118,10 +118,10 @@ each stage owns exactly one state badge.</p>
 <td>Stopping does not mark the task done or send a reply</td>
 </tr>
 <tr>
-<td><strong>Reply</strong></td>
-<td>Communication with the person who asked</td>
-<td>write, generate, edit, approve and send</td>
-<td>Sending it marks the task done — unless an agent is still working or a new message came in</td>
+<td><strong>Close out</strong></td>
+<td>The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue)</td>
+<td>write, generate, edit, approve and send; <strong>Merge &amp; send</strong>, <strong>Close PR &amp; send</strong>, <strong>Not yet</strong></td>
+<td>Sending it marks the task done — unless an agent is still working, a new message came in, or its merge still waits</td>
 </tr>
 </tbody></table>
 <p>While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
@@ -226,7 +226,8 @@ button. The task is not done until you answer it.</p>
 </tr>
 </tbody></table>
 <p><strong>Not yet</strong> keeps the task open and on you. Merging or closing the pull request on GitHub yourself counts as
-answering it: the task closes by itself. When a reply is owed as well, both wait, the merge first. The button is
+answering it: the task closes by itself. When a reply is owed as well, the two are one card: <strong>Merge &amp; send</strong> merges
+first and sends your reply only if the merge worked. The button is
 yours, so <strong>Agents may push / deploy</strong> does not have to be on - that switch is about what an agent may do. A task an
 agent finished before this existed gets its card on the next sync.
 A session you started yourself is yours to complete: the agent is told so, and if it says it is

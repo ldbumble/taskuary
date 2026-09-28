@@ -81,7 +81,7 @@ def assess(store, repo: str, number: int, pr: dict = None) -> dict:
         except Exception: red = []
     rerun = ['rerun'] if c['rerun'] and red else []
     if st == 'dirty':
-        return {**out, 'reason': f"it has merge conflicts with {base} - Continue the agent's session to resolve them, or ask its author"}
+        return {**out, 'reason': f"it has merge conflicts with {base} - send it back to the agent to resolve them, or ask its author"}
     if st == 'behind':
         can = p.get('same_repo') or p.get('maintainer_can_modify')
         return {**out, 'reason': f"it is behind {base}, and this repository requires it to be up to date"

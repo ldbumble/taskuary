@@ -464,6 +464,19 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     catch (e) { setErr(errText(e)); }
     setBusy("");
   };
+  // SEND IT BACK TO THE AGENT (the owner, 2026-09-28: "don't see button to send back to agent?"): the one road every
+  // agent continues down (/continue-work), your words the first thing it hears. When GitHub refuses the close-out, the
+  // refusal IS the note - the agent is told what to fix, and the card comes back when it stops.
+  const [back, setBack] = useState(null);
+  const sendBack = async (note) => {
+    setBusy("back"); setErr("");
+    try {
+      await api.post(`/api/tasks/${card.tid}/continue-work`, { note: note || null });
+      onDone?.(`Sent back to ${card.agent || "the agent"}${note ? `: “${note.slice(0, 80)}”` : ""}. It comes back here when it stops.`);
+    } catch (e) { setErr(errText(e)); }
+    setBusy("");
+  };
+  const conflict = blocked && gh?.state === "dirty" && !!card.tid;
   const finish = async () => {
     if (busy || !card.tid) return;
     setBusy("finish"); setErr("");
@@ -474,7 +487,10 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     finally { setBusy(""); }
   };
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
-  const verb = action
+  const verb = conflict
+    ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => sendBack(`Close out was refused: ${gh.reason.split(" - ")[0]}. Resolve that on the pull request and push; the owner closes out once it is clean.`)} sx={primary}>
+        {busy === "back" ? "Sending…" : "Send back to the agent"}</Button>
+    : action
     ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || (co && blocked)} title={co && blocked ? gh.reason : undefined} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? co.label : "Run it"}</Button>
     : rv?.CanSend === false && !card.closeout ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
@@ -493,16 +509,21 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || blocked} title={blocked ? gh.reason : undefined} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
         {busy === "approve" ? "Sending…" : card.tid ? CLOSE_OUT : "Send reply"}</Button>
     );
-  const then = co ? <><b>{co.label}</b> {co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>
+  const then = conflict ? <><b>Send back to the agent</b> tells it to resolve the conflicts and push; this card comes back when it stops, and nothing is merged or sent until then.</>
+    : co ? <><b>{co.label}</b> {co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>
     : action ? <><b>Run it</b> does what the agent proposed - nothing runs until you press it.</>
     : rv && !value.trim() && !stale ? <><b>Draft with AI</b> writes one for you to approve here - nothing is sent.</>
     : stale ? <><b>Refresh the draft</b> rewrites it from the newest message; you still approve it.</>
     : rv && card.closeout ? <><b>{CLOSE_OUT}</b> {card.closeout}, then the reply above {sendsBy(rv.Channel, who)}.</>
     : rv ? <><b>{card.tid ? CLOSE_OUT : "Send reply"}</b> {sendsBy(rv.Channel, who)}{card.tid ? " and closes the task" : ""}.</> : null;
   return (
-    <CardShell card={card} kicker={co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
+    <CardShell card={card} kicker={(co || card.tid) && blocked ? "can't close out yet" : co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
       lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} did={!!card.summary} />} err={err}>
       {(action ? !!co : true) && <AgentDid card={card} />}
+      {/* WHAT THE BOX IS (the owner, 2026-09-28: "what does the words mean?"): unlabelled, the reply read as more of the
+          agent's findings - it is what goes out, and when */}
+      {rv && (!action || mate) && <div className="tq-card-then" style={{ marginTop: 8 }}><b>Your reply to {mate ? mate.FromName || "them" : who}</b>
+        {` - sent ${SENDS_ON[String(mate?.Channel || rv.Channel || "").toLowerCase()] || "by email"} ${card.tid || co ? "when you Close out" : "when you press Send"}. Edit it here first if you like.`}</div>}
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
           placeholder={action && !mate ? "" : "Write your answer here"}
@@ -517,6 +538,14 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
           you are responding to") - one press away, under the draft */}
       {card.mid && <button type="button" className="tq-card-more" onClick={() => setFull((v) => !v)}>{full ? "Less" : "More - what they wrote"}</button>}
       {full && card.mid && <CombinedTaskText card={card} list={false} />}
+      {back !== null && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 8 }}>
+          <TextField fullWidth multiline minRows={1} maxRows={4} autoFocus value={back} onChange={(e) => setBack(e.target.value)}
+            placeholder={`What should ${card.agent || "the agent"} change?`} sx={{ "& textarea": { fontSize: 12.5 } }} />
+          <Button size="small" variant="outlined" disabled={!!busy || !back.trim()} onClick={() => sendBack(back.trim())} sx={quiet}>
+            {busy === "back" ? "Sending…" : "Send back"}</Button>
+        </div>
+      )}
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
           under More actions */}
       <Foot verb={verb} then={then} covers={["approve", "redraft"]}
@@ -529,6 +558,8 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
           } })),
           ...(cop?.alt ? [{ verb: cop.alt.verb, label: busy === cop.alt.verb ? cop.alt.busy : cop.alt.label, title: `${cop.alt.label} ${cop.alt.then}.`,
           disabled: !!busy || !rv, onClick: () => decide(cop.alt.verb) }] : []),
+        ...(card.tid && !conflict ? [{ verb: "back", label: "Send back to the agent", title: "Tell the agent what to change - it picks up where it stopped",
+          disabled: !!busy, onClick: () => setBack((b) => (b === null ? "" : null)) }] : []),
         ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
           title: "Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.",
           disabled: !!busy || !rv, onClick: finish }] : [])]}

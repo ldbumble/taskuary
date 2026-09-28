@@ -34,6 +34,14 @@ def _clean():
     if d.is_dir(): shutil.rmtree(d)
 
 
+class SlugifyTests(unittest.TestCase):
+    def test_slugify_trailing_hyphen(self):
+        self.assertEqual(playbooks.slugify('x' * 59 + ' onboarding'), 'x' * 59)
+        self.assertEqual(playbooks.slugify('x' * 60 + ' onboarding'), 'x' * 60)
+        self.assertEqual(playbooks.slugify('Hello World!'), 'hello-world')
+        self.assertEqual(playbooks.slugify(''), 'playbook')
+
+
 class ParseAndFile(unittest.TestCase):
     def setUp(self): _clean()
 

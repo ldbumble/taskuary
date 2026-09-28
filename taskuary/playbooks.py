@@ -38,7 +38,7 @@ def folder() -> Path:
 
 
 def slugify(title: str) -> str:
-    s = re.sub(r'[^a-z0-9]+', '-', str(title or '').lower()).strip('-')[:60]
+    s = re.sub(r'[^a-z0-9]+', '-', str(title or '').lower())[:60].strip('-')
     return s or 'playbook'
 
 

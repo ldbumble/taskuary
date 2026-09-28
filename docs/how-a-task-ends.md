@@ -89,9 +89,26 @@ doing it" (a PR today) and only on cards - it is not a chat or poll word; in the
   succeeded (`verdicts.decide` `reply_text`). A reply to a GitHub PR or issue is posted by the close-out itself,
   as its comment - it does not need the GitHub card's replies switch, which gates separate sends. The chat's
   and the phone's yes do the same (`server` `review.approve`).
-- A merge refused for red checks says which, and offers **Close out anyway** (for a red that fails on the default
-  branch too). A check the repository requires is still GitHub's to enforce. Sending the reply alone does not
-  close the task while its close-out waits.
+- **The card reads GitHub before it offers anything** (`ghcloseout.assess`, the same reading that guards the merge):
+  the pull request's `mergeable_state` under this repository's rules. Close out is live only when GitHub says it
+  can merge; otherwise the card says why and offers only what fits:
+
+  | GitHub says | Close out | The card also offers |
+  |---|---|---|
+  | `clean` (or unknown) | merges | - |
+  | `unstable` - checks the repo does **not** require are red | merges with a note (setting: "stop and ask" makes it **Close out anyway**) | **Re-run checks** |
+  | `blocked` - a required check, review or rule | off, says which | **Re-run checks**; **Close out anyway** only for an admin token with that setting on |
+  | `behind` - the repo requires it up to date | off | **Update branch**, when its author allows maintainer edits |
+  | `dirty` - merge conflicts | off | nothing - Continue the agent's session, or ask its author |
+
+  GitHub's own refusal at the merge is still the last word. Sending the reply alone does not close the task while
+  its close-out waits.
+- **What Close out does is the GitHub connection's setting** (Connections → GitHub → Close out; `ghcloseout.DEFAULTS`):
+  merge or only close the task, the merge method (used when the repo allows it, else the first it does), red checks
+  the repo does not require, Update branch, Re-run checks, closing issues, posting the reply as the comment, and
+  Close out anyway (off). A followed repository can override them. **Check the token** says per repository whether
+  the token may do what the settings turn on. Your choices live there; what each repository REQUIRES is never
+  copied - it is read from GitHub every time.
 - The words are drafted like any reply; the act is plain code on your click. No agent has to still be running.
 - **Mark done** is still the one close. Pressing it yourself skips the close-out, and the pull request stays
   open on GitHub.
@@ -102,8 +119,8 @@ doing it" (a PR today) and only on cards - it is not a chat or poll word; in the
   close-out mark into its own proposal has it stripped (`proposals.parse`). It needs the GitHub token.
 - A task an agent finished before the close-out existed is offered it on the next sync, once
   (`proposals.backfill`); after **Not yet** it is not asked again.
-- Your own merge does not swallow an unsent reply: when the pull request the task came from closes because you
-  merged it, a reply still waiting keeps the task open until you send it (`channels.close_upstream_ended`).
+- A pull request merged or closed on GitHub - by you or anyone - closes its task, and closing retires a reply
+  still waiting (the owner, 2026-09-28: "if they were merged in, they should just close"; `channels.close_upstream_ended`).
 
 ## Rules that follow from this
 

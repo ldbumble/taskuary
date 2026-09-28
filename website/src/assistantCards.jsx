@@ -34,6 +34,7 @@ import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
 import { summarize, stateOf, whoOf } from "./walkSummary.js";
 import { CLOSE_OUT, closeoutOf, reviewText } from "./reviewProposal.js";
+import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { READY } from "./taskLifecycle.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
@@ -399,6 +400,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   // the reply waiting beside a close-out: the two are ONE decision here, as on the task page - the merge first,
   // then this reply goes out (the owner, 2026-09-27)
   const [mate, setMate] = useState(null);
+  const [coRv, setCoRv] = useState(null);
   useEffect(() => {
     let live = true;
     api.get("/api/reviews", { params: { status: "pending" } }).then(({ data }) => {
@@ -407,11 +409,17 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       const found = (data.data || []).find((x) => x.ReviewId === card.rid);
       setMate(found && closeoutOf(found) ? (data.data || []).find((x) => x.TaskId === found.TaskId && x.Kind !== "action"
         && (x.CanSend !== false || String(x.Channel || "").toLowerCase() === "github")) || null : null);   // the close-out carries a GitHub comment
+      // the task's close-out, whichever card is on the table - the reply's card reads GitHub's state through it too
+      setCoRv(found && closeoutOf(found) ? found : found ? (data.data || []).find((x) => x.TaskId === found.TaskId && closeoutOf(x)) || null : null);
     }).catch((e) => live && setErr(errText(e)));
     return () => { live = false; };
   }, [card.rid, card.mid, card.presentation_revision]);
   const action = rv?.Kind === "action";
   const co = closeoutOf(rv);
+  // THE CARD READS GITHUB FIRST (closeoutState.js): Close out is live only when this repo's rules let it merge now
+  const { gh, reload: reloadGh, act } = useCloseoutState(coRv?.ReviewId);
+  const blocked = !!gh && !gh.ok;
+  const cop = co || closeoutOf(coRv);
   const draft = () => {
     if (mate) return mate.DraftText || "";
     if (!action) return rv?.DraftText || "";
@@ -421,14 +429,18 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   const value = text ?? draft();
   const stale = !!(rv?.Stale ?? card.stale);          // a raw review row's Stale is 0, which React would draw
   // a GitHub author is their login - their "address" is GitHub's own noreply mailbox, which nobody reads
-  const gh = String(rv?.Channel || "").toLowerCase() === "github";
-  const who = rv ? (rv.FromName && rv.FromEmail && !gh ? `${rv.FromName} <${rv.FromEmail}>` : rv.FromName || rv.FromEmail || "them") : "";
+  const onGithub = String(rv?.Channel || "").toLowerCase() === "github";
+  const who = rv ? (rv.FromName && rv.FromEmail && !onGithub ? `${rv.FromName} <${rv.FromEmail}>` : rv.FromName || rv.FromEmail || "them") : "";
   const decide = async (verb) => {
     setBusy(verb); setErr("");
     try {
-      const { data } = await api.post(`/api/reviews/${card.rid}/decide`, mate
+      // Decline and Close out anyway belong to the close-out, whichever card is showing; the reply rides with them
+      const onCo = ["close_pr", "merge_anyway"].includes(verb) && coRv ? coRv.ReviewId : card.rid;
+      const withReply = mate || (onCo !== card.rid && !action);
+      const { data } = await api.post(`/api/reviews/${onCo}/decide`, withReply
         ? { verb, final_text: null, note: null, reply_text: verb !== "reject" ? value : null }
         : { verb, final_text: verb === "approve" ? value : null, note: null });
+      if (data.refused) reloadGh();
       if (data.send_error) throw new Error(data.send_error);
       const sentTo = mate && verb !== "reject" ? ` The reply went to ${mate.FromName || "them"}.` : "";
       onDone?.(verb === co?.alt?.verb ? `Done — ${co.alt.then}.${sentTo}` : verb === "approve" ? (co ? `Done — ${co.then}.${sentTo}` : action ? "Done — the action ran." : `Sent to ${who}.`)
@@ -453,7 +465,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   };
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
   const verb = action
-    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? co.label : "Run it"}</Button>
+    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || (co && blocked)} title={co && blocked ? gh.reason : undefined} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? co.label : "Run it"}</Button>
     : rv?.CanSend === false && !card.closeout ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
          hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
@@ -468,7 +480,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         title="Rewrites the draft from the newest message, then you approve it">
         {busy === "redraft" ? "Refreshing…" : "Refresh the draft"}</Button>
     ) : (
-      <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim()} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
+      <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || blocked} title={blocked ? gh.reason : undefined} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
         {busy === "approve" ? "Sending…" : card.tid ? CLOSE_OUT : "Send reply"}</Button>
     );
   const then = co ? <><b>{co.label}</b> {co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>
@@ -491,6 +503,8 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       {!action && stale && <div className="tq-card-err">New messages arrived after this draft. Refresh the draft with the latest context before sending.</div>}
       {!action && rv && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
       {!action && !card.closeout && sendBlockLine(rv) && <div className="tq-card-excerpt">{sendBlockLine(rv)}</div>}
+      {/* what GitHub says about this pull request now - why Close out is off, or the red it will merge past */}
+      {gh && (blocked || gh.note) && <div className={blocked ? "tq-card-err" : "tq-card-excerpt"}>{blocked ? `Not now - ${gh.reason}.` : `${gh.note}.`}</div>}
       {/* WHAT YOU ARE ANSWERING, said to be that (the owner, 2026-09-14: "though you need to see what
           you are responding to") - one press away, under the draft */}
       {card.mid && <button type="button" className="tq-card-more" onClick={() => setFull((v) => !v)}>{full ? "Less" : "More - what they wrote"}</button>}
@@ -498,8 +512,15 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
           under More actions */}
       <Foot verb={verb} then={then} covers={["approve", "redraft"]}
-        extra={[...(co?.alt ? [{ verb: co.alt.verb, label: busy === co.alt.verb ? co.alt.busy : co.alt.label, title: `${co.alt.label} ${co.alt.then}.`,
-          disabled: !!busy || !rv, onClick: () => decide(co.alt.verb) }] : []),
+        extra={[...(gh?.offers || []).map((o) => ({ verb: o, label: busy === o ? "…" : OFFER_LABEL[o], title: OFFER_HINT[o], disabled: !!busy || !rv,
+          onClick: async () => {
+            if (o === "anyway") return decide("merge_anyway");
+            setBusy(o); setErr("");
+            try { const said = await act(o); onDone?.(`${said}. Close out again once the checks pass.`); } catch (e) { setErr(errText(e)); }
+            setBusy("");
+          } })),
+          ...(cop?.alt ? [{ verb: cop.alt.verb, label: busy === cop.alt.verb ? cop.alt.busy : cop.alt.label, title: `${cop.alt.label} ${cop.alt.then}.`,
+          disabled: !!busy || !rv, onClick: () => decide(cop.alt.verb) }] : []),
         ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
           title: "Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.",
           disabled: !!busy || !rv, onClick: finish }] : [])]}

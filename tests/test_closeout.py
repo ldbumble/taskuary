@@ -8,8 +8,15 @@ from taskuary import ci, coder, concierge, github, proposals, verdicts
 from taskuary.store import MemoryStore
 
 OPEN = {'number': 7, 'url': 'https://github.com/northwind/ledger/pull/7', 'head': 'fix-export', 'sha': 'abc1234def',
-        'state': 'open', 'draft': True, 'merged': False, 'mergeable': True, 'node_id': 'PR_x'}
+        'state': 'open', 'draft': True, 'merged': False, 'mergeable': True, 'node_id': 'PR_x',
+        'mergeable_state': 'clean', 'base': 'main', 'maintainer_can_modify': True, 'same_repo': False}
 GREEN = {'state': 'success', 'total': 1, 'pending': 0, 'failed': []}
+RED = {'state': 'failure', 'total': 1, 'pending': 0, 'failed': [{'name': 'ci / test', 'url': 'u', 'summary': ''}]}
+# what GitHub says about the repository: the merge methods it allows and the token's role there
+REPO = {'methods': ['squash', 'merge', 'rebase'], 'permissions': {'push': True}, 'default_branch': 'main'}
+_repo = mock.patch.object(github, 'repo_info', return_value=REPO)
+def setUpModule(): _repo.start()
+def tearDownModule(): _repo.stop()
 
 
 def armed(s, tracker=False):
@@ -33,6 +40,16 @@ def finish(s, tid, pr=OPEN, **kw):
              mock.patch.object(github, 'pr', return_value=pr):
             return coder.finish(s, tid, {'summary': 'the export reads the new view', 'outcome': 'did_work'}, None, 'coder', **kw)
     finally: coder.REFRESH = prev
+
+
+def closeout_setting(s, repo=None, **choices):
+    """The GitHub card's Close out choices - on the connection, or one repository's override."""
+    if repo:
+        s.save_source({'Channel': 'github', 'Address': repo, 'ConfigJson': json.dumps({'closeout': choices})}, 't')
+        return
+    c = s.get_connector_by_type('github')
+    cfg = json.loads(c.get('ConfigJson') or '{}'); cfg['closeout'] = {**cfg.get('closeout', {}), **choices}
+    s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps(cfg)}, 't')
 
 
 def pending(s, tid): return [r for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,))]
@@ -74,8 +91,8 @@ class MergeCloseOutTests(unittest.TestCase):
 
     def test_red_checks_refuse_the_merge_and_the_task_stays(self):
         s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
-        red = {'state': 'failure', 'total': 1, 'pending': 0, 'failed': [{'name': 'ci / test', 'url': 'u', 'summary': ''}]}
-        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=red), \
+        # the repository's own rules block it (GitHub says "blocked"), with a required check red
+        with mock.patch.object(github, 'pr', return_value={**OPEN, 'mergeable_state': 'blocked'}), mock.patch.object(github, 'checks', return_value=RED), \
              mock.patch.object(github, 'merge_pr') as merge:
             out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve')
         merge.assert_not_called()
@@ -186,8 +203,7 @@ class OnePressTests(unittest.TestCase):
 
     def test_a_refused_merge_sends_nothing(self):
         s, tid, reply = self._both()
-        red = {'state': 'failure', 'total': 1, 'pending': 0, 'failed': [{'name': 'ci / test', 'url': 'u', 'summary': ''}]}
-        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=red):
+        with mock.patch.object(github, 'pr', return_value={**OPEN, 'mergeable_state': 'blocked'}), mock.patch.object(github, 'checks', return_value=RED):
             out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve', reply_text='Thanks - merged.')
         self.assertFalse(out['ok']); self.assertNotIn('reply', out)
         self.assertEqual(s.get_review(reply)['Status'], 'pending')
@@ -217,16 +233,20 @@ class OnePressTests(unittest.TestCase):
         self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'done'))
 
     def test_red_checks_say_so_and_merge_anyway_overrules_them(self):
+        """Red checks the repository does NOT require ("unstable"), with the card set to "stop and ask": the card says so
+        and Close out anyway merges past them - the reply rides along."""
         s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        closeout_setting(s, red='ask')
         reply = self._github_reply(s, tid)
-        red = {'state': 'failure', 'total': 1, 'pending': 0, 'failed': [{'name': 'browser', 'url': 'u', 'summary': ''}]}
-        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=red), \
+        with mock.patch.object(github, 'pr', return_value={**OPEN, 'mergeable_state': 'unstable'}), mock.patch.object(github, 'checks', return_value=RED), \
              mock.patch.object(github, 'merge_pr', return_value='m') as merge, mock.patch.object(github, 'comment_issue', return_value='u') as say:
             out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve', reply_text='Thanks - merged.')
-            self.assertTrue(out['checks_red']); merge.assert_not_called(); say.assert_not_called()
+            self.assertTrue(out['refused']); self.assertIn('anyway', out['offers'])
+            merge.assert_not_called(); say.assert_not_called()
             out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'merge_anyway', reply_text='Thanks - merged.')
         self.assertTrue(out['ok'], out); merge.assert_called_once(); say.assert_called_once()
         self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'done'))
+
 
     def test_close_out_pressed_on_the_reply_card_runs_the_merge_too(self):
         """The phone and the walk put the task's REPLY on the table (TQ-0777): its Close out sent the reply alone and
@@ -257,6 +277,74 @@ class OnePressTests(unittest.TestCase):
     def test_a_close_out_card_does_not_say_the_agent_proposed_it(self):
         s, tid, _ = self._both()
         self.assertEqual(proposals.closeout_pending(s, tid)['Reason'], 'closes the task: merge pull request #7')
+
+
+class GithubStateTests(unittest.TestCase):
+    """THE CARD'S BUTTONS COME FROM GITHUB'S READING of this pull request under this repository's rules (the owner,
+    2026-09-28: "the close out should use api to get the state of the pr and have the correct buttons")."""
+    def _seen(self, s, **pr):
+        from taskuary import ghcloseout
+        with mock.patch.object(github, 'pr', return_value={**OPEN, **pr}), mock.patch.object(github, 'checks', return_value=RED):
+            return ghcloseout.assess(s, 'northwind/ledger', 7)
+
+    def test_red_checks_the_repo_does_not_require_merge_with_a_note_by_default(self):
+        seen = self._seen(armed(MemoryStore()), mergeable_state='unstable')
+        self.assertTrue(seen['ok']); self.assertIn('ci / test', seen['note']); self.assertEqual(seen['offers'], ['rerun'])
+
+    def test_blocked_offers_re_run_and_anyway_only_for_an_admin_who_turned_it_on(self):
+        s = armed(MemoryStore())
+        self.assertEqual(self._seen(s, mergeable_state='blocked')['offers'], ['rerun'])
+        closeout_setting(s, anyway=True)
+        self.assertEqual(self._seen(s, mergeable_state='blocked')['offers'], ['rerun'])            # not an admin here
+        with mock.patch.object(github, 'repo_info', return_value={**REPO, 'permissions': {'admin': True}}):
+            self.assertEqual(self._seen(s, mergeable_state='blocked')['offers'], ['rerun', 'anyway'])
+
+    def test_behind_offers_update_branch_only_when_the_author_allows_it(self):
+        s = armed(MemoryStore())
+        self.assertEqual(self._seen(s, mergeable_state='behind')['offers'], ['update'])
+        seen = self._seen(s, mergeable_state='behind', maintainer_can_modify=False)
+        self.assertEqual(seen['offers'], []); self.assertIn('has not allowed maintainers', seen['reason'])
+
+    def test_conflicts_say_so_and_offer_nothing(self):
+        seen = self._seen(armed(MemoryStore()), mergeable_state='dirty')
+        self.assertFalse(seen['ok']); self.assertIn('merge conflicts', seen['reason']); self.assertEqual(seen['offers'], [])
+
+    def test_the_merge_method_is_the_setting_when_the_repo_allows_it_else_the_repos(self):
+        s = armed(MemoryStore()); closeout_setting(s, method='rebase')
+        self.assertEqual(self._seen(s)['method'], 'rebase')
+        with mock.patch.object(github, 'repo_info', return_value={**REPO, 'methods': ['merge']}):
+            self.assertEqual(self._seen(s)['method'], 'merge')
+
+    def test_a_repository_overrides_the_connection(self):
+        from taskuary import ghcloseout
+        s = armed(MemoryStore()); closeout_setting(s, method='rebase'); closeout_setting(s, repo='northwind/ledger', method='merge')
+        self.assertEqual((ghcloseout.cfg(s, 'northwind/ledger')['method'], ghcloseout.cfg(s, 'northwind/portal')['method']), ('merge', 'rebase'))
+
+    def test_task_only_raises_no_merge_card(self):
+        s = armed(MemoryStore()); closeout_setting(s, pr='task'); tid = with_pr(s)
+        self.assertIsNone(finish(s, tid)['closeout'])
+
+    def test_blocked_refuses_even_close_out_anyway_when_it_is_not_offered(self):
+        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        with mock.patch.object(github, 'pr', return_value={**OPEN, 'mergeable_state': 'blocked'}), mock.patch.object(github, 'checks', return_value=RED), \
+             mock.patch.object(github, 'merge_pr') as merge:
+            out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'merge_anyway')
+        merge.assert_not_called(); self.assertFalse(out['ok'])
+
+    def test_the_card_reads_its_state_and_update_branch_runs_only_when_offered(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        rid = proposals.closeout_pending(s, tid)['ReviewId']
+        with mock.patch.object(server, 'store', s), mock.patch.object(github, 'checks', return_value=RED), \
+             mock.patch.object(github, 'update_branch', return_value='Updating pull request branch.') as upd:
+            c = TestClient(server.app)
+            with mock.patch.object(github, 'pr', return_value={**OPEN, 'mergeable_state': 'behind'}):
+                st = c.get(f'/api/reviews/{rid}/closeout').json()
+                self.assertEqual((st['ok'], st['offers']), (False, ['update']))
+                self.assertEqual(c.post(f'/api/reviews/{rid}/closeout/update').status_code, 200)
+                self.assertEqual(c.post(f'/api/reviews/{rid}/closeout/rerun').status_code, 422)     # not offered
+        upd.assert_called_once()
 
 
 class IssueCloseOutTests(unittest.TestCase):

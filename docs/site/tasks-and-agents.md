@@ -52,7 +52,7 @@ system, the card has the same three buttons - only the line under them says what
 
 | The task's work is | The rail says | What **Close out** does there |
 |---|---|---|
-| A pull request the agent opened, or the one the task came from | ✉️ **ready to close out** | Squash-merges it (a draft is marked ready first), then posts your reply as its comment - on GitHub the reply goes with the merge even with GitHub replies turned off. Refused while its checks are red; **Close out anyway** is there for a red that fails on the default branch too |
+| A pull request the agent opened, or the one the task came from | ✉️ **ready to close out** | Merges it the way you set on the GitHub connection (a draft is marked ready first), then posts your reply as its comment. The card reads the pull request from GitHub first: when the repository's rules say it cannot merge yet it says why and offers what fits - **Update branch**, **Re-run checks**, or **Close out anyway** where you allowed it |
 | An issue the task came from | ✉️ **ready to close out** | Posts your reply as the closing comment and closes the issue |
 | Mail, chat, anything else | ✉️ **ready to close out** | Sends your reply |
 

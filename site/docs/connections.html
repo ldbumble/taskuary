@@ -246,6 +246,61 @@ held until the ask it opens arrives.</p>
 </tbody></table>
 <p>A tracker is the clearest case for <code>trigger</code>: an issue assigned to you is, by definition, work
 addressed to you, and triage settles most of them without an AI call at all.</p>
+<h3 id="github-what-close-out-does">GitHub: what Close out does<a class="anchor" href="#github-what-close-out-does" aria-label="Link to this section">#</a></h3>
+<p>The GitHub connection has a <strong>Close out</strong> step: what finishing a task does on GitHub when you press
+<strong>Close out</strong>. These are your choices - what each repository <em>requires</em> (branch protection, required checks
+and reviews) is read from GitHub for every pull request, and the card only offers what it allows.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Choices (default first)</th>
+<th>The token needs</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Close out on a pull request</td>
+<td>Merges it · Only closes the task</td>
+<td>Contents: write</td>
+</tr>
+<tr>
+<td>Merge method</td>
+<td>Squash · Merge commit · Rebase - used when the repository allows it</td>
+<td>(same)</td>
+</tr>
+<tr>
+<td>Red checks the repository does not require</td>
+<td>Merge anyway, with a note · Stop and ask me</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Offer Update branch</td>
+<td>on - when the pull request is behind and its author allows maintainer edits</td>
+<td>Pull requests: write</td>
+</tr>
+<tr>
+<td>Offer Re-run checks</td>
+<td>on - re-runs the failed Actions jobs</td>
+<td>Actions: write</td>
+</tr>
+<tr>
+<td>Close out on an issue closes it</td>
+<td>on</td>
+<td>Issues: write</td>
+</tr>
+<tr>
+<td>Post your reply as the close-out&#39;s comment</td>
+<td>on - even with <em>Reply to issue/PR authors</em> off</td>
+<td>Issues / Pull requests: write</td>
+</tr>
+<tr>
+<td>Close out anyway, past the repository&#39;s own rules</td>
+<td><strong>off</strong> - admin tokens only, and only on your press</td>
+<td>Administration</td>
+</tr>
+</tbody></table>
+<p>A repository you follow can override the pull-request choice, the merge method and Close out anyway.
+<strong>Check the token</strong> asks GitHub, per repository, whether the token may do what these settings turn on.</p>
 <h2 id="data-and-report-sources">Data and report sources<a class="anchor" href="#data-and-report-sources" aria-label="Link to this section">#</a></h2>
 <p>The full list is long and grows; these are the ones worth knowing about by shape.</p>
 <p><strong>Databases and files</strong> — SQL Server, SQLite, SharePoint Lists, Google Sheets, a Windows/SMB

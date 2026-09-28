@@ -88,6 +88,26 @@ held until the ask it opens arrives.
 A tracker is the clearest case for `trigger`: an issue assigned to you is, by definition, work
 addressed to you, and triage settles most of them without an AI call at all.
 
+### GitHub: what Close out does
+
+The GitHub connection has a **Close out** step: what finishing a task does on GitHub when you press
+**Close out**. These are your choices - what each repository *requires* (branch protection, required checks
+and reviews) is read from GitHub for every pull request, and the card only offers what it allows.
+
+| Setting | Choices (default first) | The token needs |
+|---|---|---|
+| Close out on a pull request | Merges it · Only closes the task | Contents: write |
+| Merge method | Squash · Merge commit · Rebase - used when the repository allows it | (same) |
+| Red checks the repository does not require | Merge anyway, with a note · Stop and ask me | - |
+| Offer Update branch | on - when the pull request is behind and its author allows maintainer edits | Pull requests: write |
+| Offer Re-run checks | on - re-runs the failed Actions jobs | Actions: write |
+| Close out on an issue closes it | on | Issues: write |
+| Post your reply as the close-out's comment | on - even with *Reply to issue/PR authors* off | Issues / Pull requests: write |
+| Close out anyway, past the repository's own rules | **off** - admin tokens only, and only on your press | Administration |
+
+A repository you follow can override the pull-request choice, the merge method and Close out anyway.
+**Check the token** asks GitHub, per repository, whether the token may do what these settings turn on.
+
 ## Data and report sources
 
 The full list is long and grows; these are the ones worth knowing about by shape.

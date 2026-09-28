@@ -188,12 +188,14 @@ def closeout_due(store, tid: int):
     """The close-out this task's finish owes, as the proposal to queue - None when there is none (no open pull
     request, no issue). The pull request is the one the agent opened, else the one the task CAME from - a
     contributor's PR the agent reviewed ends by merging or closing it just the same."""
-    from . import ci
+    from . import ci, ghcloseout
     at, ref = ci.landing_of(store, tid) or {}, str((store.get_task(tid) or {}).get('SourceRef') or '')
     src = _PULL.search(ref)
     own = at.get('kind') == 'pr' and at.get('state') != 'closed' and not at.get('merged')
     if own or src:
         repo, num, sha = (at.get('repo'), at.get('number'), at.get('sha')) if own else (src.group(1), int(src.group(2)), None)
+        # the GitHub card's choice: "Close out on a pull request = only close the task" leaves the PR to you
+        if ghcloseout.cfg(store, repo)['pr'] != 'merge': return None
         # the mark is what was true when the PR opened; the head and the state are read now, so the card neither offers
         # a merge that already happened nor pins a commit older than the last push
         try:
@@ -207,6 +209,7 @@ def closeout_due(store, tid: int):
         p = {'action': 'merge_pr', 'repo': repo, 'number': num, 'sha': sha, 'closeout': True, **({} if own else {'theirs': True}),
              'why': f'pull request #{num} is open'}
     elif _ISSUE.search(ref):
+        if not ghcloseout.cfg(store, _ISSUE.search(ref).group(1))['issue']: return None
         p = {'action': 'close_issue', 'closeout': True, 'why': 'the issue this task came from is still open'}
     else: return None
     return p if validate(store, p)[0] else None
@@ -284,8 +287,7 @@ def close_pr(store, rv: dict, actor='owner') -> dict:
     return out
 
 
-class ChecksRed(RuntimeError):
-    """A merge refused because the PR's checks are red - the one refusal the owner may overrule (Merge anyway)."""
+from .ghcloseout import Refused as ChecksRed      # a close-out GitHub's state refuses now, with what the card may offer instead
 
 
 def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks: bool = False) -> dict:
@@ -325,20 +327,22 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
             github.close_issue(c['Secret'], repo, num, p.get('body') or p.get('text'))
             out = {'closed': f'{repo}#{num}'}
     elif a == 'merge_pr':
-        from . import ci, github
+        from . import ci, github, ghcloseout
         c, repo, num = ci._conn(store), p['repo'], int(p['number'])
-        cur = github.pr(c['Secret'], repo, num)
-        if cur.get('merged'): out = {'merged': f'{repo}#{num}', 'already': True}
-        elif cur.get('state') == 'closed': raise RuntimeError(f'#{num} was closed on GitHub without merging - nothing to merge')
+        # GITHUB'S STATE DECIDES, the same reading that drew the card (ghcloseout.assess): what this repo's rules say about
+        # this pull request, never our guess at them. "Close out anyway" passes only what the card offered it for.
+        seen = ghcloseout.assess(store, repo, num)
+        cur = seen['pr']
+        if seen['state'] == 'merged': out = {'merged': f'{repo}#{num}', 'already': True}
+        elif seen['state'] == 'closed': raise RuntimeError(f'#{num} was closed on GitHub without merging - nothing to merge')
         else:
-            # red checks stop the merge - unless the owner, told which ones, says Merge anyway (a red that is master's own,
-            # not this PR's: the owner, 2026-09-27). A check the REPO requires is still GitHub's to enforce.
-            ck = {'state': 'skipped'} if skip_checks else github.checks(c['Secret'], repo, cur['sha'])
-            if ck['state'] == 'failure':
-                raise ChecksRed('its checks are failing (' + ', '.join(f['name'] or '?' for f in ck['failed']) + ') - nothing was merged or sent')
+            if not seen['ok'] and not (skip_checks and 'anyway' in seen['offers']):
+                raise ChecksRed(seen['reason'] + ' - nothing was merged or sent', seen['offers'])
             # the PR's own title leads the squash (GitHub's default); the summary, when there is one, is its body
-            sha = github.merge_pr(c['Secret'], repo, num, p.get('sha') or cur['sha'], None, p.get('text') or None)
-            out = {'merged': f'{repo}#{num}', 'sha': sha[:7], 'url': cur.get('url')}
+            sha = github.merge_pr(c['Secret'], repo, num, p.get('sha') or cur['sha'], None, p.get('text') or None,
+                                  method=seen['method'], p=cur)
+            out = {'merged': f'{repo}#{num}', 'sha': sha[:7], 'url': cur.get('url'), 'method': seen['method'],
+                   **({'note': seen['note']} if seen['note'] else {})}
         if ci.pr_of(store, tid): ci._save_pr(store, tid, {**ci.pr_of(store, tid), 'state': 'closed', 'merged': True}, actor)
     elif a == 'settings':
         changes, why = setting_changes(p)

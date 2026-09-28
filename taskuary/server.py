@@ -2833,6 +2833,44 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text)
 
+@app.get('/api/reviews/{rid}/closeout')
+def closeout_state(rid: int):
+    """What the close-out card should offer RIGHT NOW, read from GitHub (ghcloseout.assess): the pull request's state
+    under this repository's rules, whether Close out may merge, why not, and the other buttons that fit."""
+    from . import ghcloseout, proposals
+    rv = store.get_review(rid)
+    if not rv or rv.get('Kind') != 'action' or proposals._action(rv) not in proposals.CLOSEOUT: raise HTTPException(404, 'no close-out here')
+    p = json.loads(rv.get('DraftText') or '{}')
+    if p.get('action') != 'merge_pr': return {'state': 'open', 'ok': True, 'reason': '', 'note': '', 'offers': []}
+    try: seen = ghcloseout.assess(store, p['repo'], int(p['number']))
+    except Exception as e: return {'state': 'unknown', 'ok': True, 'reason': '', 'note': f'GitHub could not be read ({str(e)[:120]}) - it decides at the merge', 'offers': []}
+    return {k: v for k, v in seen.items() if k != 'pr'}
+
+@app.post('/api/reviews/{rid}/closeout/{act}')
+def closeout_act(rid: int, act: str):
+    """The close-out card's other buttons: Update branch (GitHub merges the base into the pull request) and Re-run
+    checks (the failed Actions jobs on its head). Neither closes anything - the card is read again afterwards."""
+    from . import ci, github, ghcloseout, proposals
+    rv = store.get_review(rid)
+    if not rv or proposals._action(rv) != 'merge_pr' or act not in ('update', 'rerun'): raise HTTPException(404, 'nothing to do here')
+    p = json.loads(rv.get('DraftText') or '{}')
+    seen = ghcloseout.assess(store, p['repo'], int(p['number']))
+    if act not in seen['offers']: raise HTTPException(422, f"{'Update branch' if act == 'update' else 'Re-run checks'} is not offered for this pull request now")
+    tok = ci._conn(store)['Secret']
+    try:
+        if act == 'update': said = f"Update branch: {github.update_branch(tok, p['repo'], int(p['number']), seen['pr'].get('sha'))}"
+        else: said = f"Re-ran the failed checks on {github.rerun_failed(tok, p['repo'], seen['pr']['sha'])} workflow run(s)"
+    except RuntimeError as e: raise HTTPException(422, str(e))
+    if rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f"{said} - {p['repo']}#{p['number']}. Close out again once the checks pass.")
+    return {'ok': True, 'said': said}
+
+@app.get('/api/github/closeout-check')
+def closeout_check():
+    """For the GitHub card: per followed repository, each close-out act the settings turn on and whether the token may."""
+    from . import ghcloseout
+    try: return {'data': ghcloseout.check(store)}
+    except RuntimeError as e: raise HTTPException(422, str(e))
+
 @app.get('/api/tasks/{tid}/proof')
 def task_proof(tid: int):
     """The evidence behind a task: files git says moved, the test run the session actually

@@ -2127,7 +2127,8 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated, onNavigate })
         body: <RoleStep conn={conn} reload={reload}
           only={CAN_NOTIFY.has(conn.Type) ? ["report", "tool", "notify"] : ["report", "tool"]} /> },
     ]),
-    ...(conn.Type === "github" ? [{ label: "Agent permissions", done: true, body: <GithubPerms conn={conn} reload={reload} /> }] : []),
+    ...(conn.Type === "github" ? [{ label: "Agent permissions", done: true, body: <GithubPerms conn={conn} reload={reload} /> },
+      { label: "Close out — what finishing a task does on GitHub", done: true, body: <GithubCloseout conn={conn} mine={mine} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1, flexWrap: "wrap" }}>
         <Switch checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
@@ -2716,6 +2717,115 @@ const GithubPerms = ({ conn, reload }) => {
         describing this connection. A task whose ask explicitly says "open an issue" or "push"
         may always do so, whatever these say.
       </Typography>
+    </Box>
+  );
+};
+
+/* WHAT CLOSE OUT DOES ON GITHUB (the owner, 2026-09-28: "let's make this on the connector setup ... what close/merge pr
+   does and what permissions they need"). Your CHOICES only: what each repository requires - protection, required checks
+   and reviews - is read from GitHub for every pull request at close-out time (ghcloseout.assess), never copied here.
+   The connection holds the defaults; a repository can override them. The keys and defaults are ghcloseout.DEFAULTS. */
+const CLOSEOUT_DEFAULTS = { pr: "merge", method: "squash", red: "merge", anyway: false, update: true, rerun: true, issue: true, comment: true };
+const CLOSEOUT_PICKS = [
+  ["pr", "Close out on a pull request", [["merge", "Merges it"], ["task", "Only closes the task - you merge on GitHub"]]],
+  ["method", "Merge method", [["squash", "Squash"], ["merge", "Merge commit"], ["rebase", "Rebase"]],
+    "Used when the repository allows it; otherwise the first method it does."],
+  ["red", "Red checks the repository does not require", [["merge", "Merge anyway, with a note"], ["ask", "Stop and ask me"]]],
+];
+const CLOSEOUT_SWITCHES = [
+  ["update", "Offer Update branch", "When a pull request is behind a repository that requires it up to date, and its author allows maintainer edits."],
+  ["rerun", "Offer Re-run checks", "When checks failed - re-runs the failed Actions jobs on the pull request."],
+  ["issue", "Close out on an issue closes it", "Your reply is its closing comment."],
+  ["comment", "Post your reply as the close-out's comment", "On the pull request or issue, with the merge or close - even with Reply to issue/PR authors off."],
+  ["anyway", "Close out anyway, past the repository's own rules", "Off by default. Only for a repository where the token is an admin, and only on your press - the card says it is bypassing."],
+];
+
+const GithubCloseout = ({ conn, mine, reload }) => {
+  const cfg = JSON.parse(conn.ConfigJson || "{}");
+  const co = { ...CLOSEOUT_DEFAULTS, ...(cfg.closeout || {}) };
+  const [check, setCheck] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const save = async (patch) => {
+    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, closeout: { ...co, ...patch } }) });
+    reload();
+  };
+  const saveRepo = async (s, key, v) => {
+    const gc = JSON.parse(s.ConfigJson || "{}");
+    const own = { ...(gc.closeout || {}) };
+    if (v === "") delete own[key]; else own[key] = key === "anyway" ? v === "on" : v;
+    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...gc, closeout: own }) });
+    reload();
+  };
+  const runCheck = async () => {
+    setBusy(true);
+    try { setCheck((await api.get("/api/github/closeout-check")).data.data || []); }
+    catch (e) { setCheck([{ repo: "", error: e?.response?.data?.detail || "could not ask GitHub" }]); }
+    setBusy(false);
+  };
+  const pick = (value, onChange, options, sx) => (
+    <Select size="small" value={value} onChange={(e) => onChange(e.target.value)} sx={{ fontSize: 12, height: 28, ".MuiSelect-select": { py: 0.4 }, ...sx }}>
+      {options.map(([v, label]) => <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>{label}</MenuItem>)}
+    </Select>
+  );
+  return (
+    <Box sx={{ mt: 1, maxWidth: 640 }}>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
+        What <b>Close out</b> does on GitHub when a task an agent finished comes to you. These are your choices; what each
+        repository <b>requires</b> (branch protection, required checks and reviews) is read from GitHub for every pull request,
+        and the card only offers what it allows.
+      </Typography>
+      {CLOSEOUT_PICKS.map(([key, label, options, hint]) => (
+        <Box key={key} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+            {hint && <Typography variant="body2" sx={{ color: DIM }}>{hint}</Typography>}
+          </Box>
+          {pick(co[key], (v) => save({ [key]: v }), options)}
+        </Box>
+      ))}
+      {CLOSEOUT_SWITCHES.map(([key, label, desc]) => (
+        <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
+          <Switch checked={!!co[key]} onChange={() => save({ [key]: !co[key] })} sx={{ mt: -0.5 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+            <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
+          </Box>
+        </Box>
+      ))}
+      {mine.filter((s) => s.Active).length > 0 && (
+        <Box sx={{ mt: 1.5 }}>
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>PER REPOSITORY — WHERE ONE DIFFERS</Typography>
+          {mine.filter((s) => s.Active).map((s) => {
+            const own = JSON.parse(s.ConfigJson || "{}").closeout || {};
+            const val = (k) => (own[k] === undefined ? "" : k === "anyway" ? (own[k] ? "on" : "off") : own[k]);
+            return (
+              <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.75, borderBottom: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
+                <Typography sx={{ ...mono, color: INK, flex: 1, fontSize: 12.5, minWidth: 160 }} noWrap>{s.Address}</Typography>
+                {pick(val("pr"), (v) => saveRepo(s, "pr", v), [["", "PR: as above"], ["merge", "PR: merge"], ["task", "PR: task only"]])}
+                {pick(val("method"), (v) => saveRepo(s, "method", v), [["", "method: as above"], ["squash", "squash"], ["merge", "merge commit"], ["rebase", "rebase"]])}
+                {pick(val("anyway"), (v) => saveRepo(s, "anyway", v), [["", "anyway: as above"], ["off", "anyway: off"], ["on", "anyway: on"]])}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+      <Box sx={{ mt: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
+        <Button size="small" variant="outlined" disabled={busy} onClick={runCheck}>{busy ? "Asking GitHub…" : "Check the token"}</Button>
+        <Typography variant="caption" sx={{ color: FAINT }}>Whether the token may do what these settings turn on, per repository.</Typography>
+      </Box>
+      {check && check.map((row) => (
+        <Box key={row.repo || "err"} sx={{ mt: 1, px: 1.25, py: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
+          <Typography sx={{ ...mono, fontSize: 12, color: INK, fontWeight: 700 }}>
+            {row.repo}{row.role ? ` · your role: ${row.role}` : ""}{row.methods ? ` · merges by ${row.method}` : ""}
+          </Typography>
+          {row.error && <Typography variant="body2" sx={{ color: "#8a2f3a" }}>{row.error}</Typography>}
+          {(row.acts || []).map((a) => (
+            <Typography key={a.key} variant="body2" sx={{ color: a.ok ? DIM : "#8a2f3a" }}>
+              {a.ok ? "✓" : "✗"} {a.what}{a.ok ? "" : ` - needs ${a.needs}`}
+            </Typography>
+          ))}
+        </Box>
+      ))}
     </Box>
   );
 };

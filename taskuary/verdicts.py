@@ -283,7 +283,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             except Exception as e:
                 store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
                 return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300],
-                        **({'checks_red': True} if isinstance(e, proposals.ChecksRed) else {})}
+                        **({'offers': e.offers, 'refused': True} if isinstance(e, proposals.ChecksRed) else {})}
             store.decide_review(rid, VERB2STATUS['approve'], rv.get('DraftText'), actor, note)
             proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # a close-out's yes closes the task
             return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}

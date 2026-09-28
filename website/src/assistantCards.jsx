@@ -145,6 +145,15 @@ const CHANNEL_WORD = { email: "Email", github: "GitHub", whatsapp: "WhatsApp", t
 export const channelWord = (ch) => CHANNEL_WORD[String(ch || "").toLowerCase()] || (ch ? String(ch)[0].toUpperCase() + String(ch).slice(1) : "");
 // work the owner started has nobody behind it: its "sender" is the owner ("owner" from CreatedBy, "You" from ownwork)
 export const isOwn = (card) => card?.channel === "own" || ["owner", "you", "me"].includes(String(card?.who || "").trim().toLowerCase());
+// a display name as a person is called (triage.person_name): Outlook's "Doyle, Alex M. at Northwind" reads "Alex M. Doyle"
+export const personName = (name) => {
+  let n = String(name || "").replace(/\s*<[^>]*>/g, "").replace(/"/g, " ").replace(/\s+/g, " ").trim();
+  if (!n || n.includes("@")) return n;
+  n = n.replace(/\s+at\s+[^,<>@]+$/i, "").trim();
+  const parts = n.split(",");
+  if (parts.length === 2 && parts[0].trim() && parts[1].trim() && parts[0].trim().split(" ").length <= 2) n = `${parts[1].trim()} ${parts[0].trim()}`;
+  return n;
+};
 const initials = (name) => String(name || "?").replace(/<[^>]*>/g, "").trim().split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
 const capital = (s) => { const t = String(s || "").trim(); return t ? t[0].toUpperCase() + t.slice(1) : ""; };
 // WHAT AN AGENT IS, never the profile's bare name (the owner, 2026-09-28: "not sure why it says coder"): a terminal
@@ -197,7 +206,7 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
   const subject = subjectLine(src);
   const showSubject = subject && !said.toLowerCase().includes(subject.replace(/^(PR |Issue )?#\d+(\s·)?\s*/, "").toLowerCase());
   const rest = restOf(doc?.task?.Summary);
-  const who = advisor ? "Advisor" : own ? "You" : by === null ? "The task" : String(by || card?.who || "Someone").replace(/\s*<[^>]*>/g, "").trim();
+  const who = advisor ? "Advisor" : own ? "You" : by === null ? "The task" : personName(by || card?.who || "Someone") || "Someone";
   const from = [advisor ? "an idea" : own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : "your task") : channelWord(card?.channel),
     card?.when ? agoText(card.when) : ""].filter(Boolean).join(" · ");
   const rep = reportOf(doc), r = rep ? readReport(rep.Body) : null;

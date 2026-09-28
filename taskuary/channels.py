@@ -467,6 +467,14 @@ def save_attachments(store, mid: int, items: list, ext_prefix: str) -> int:
     return n
 
 
+def wants_attachments(m: dict) -> bool:
+    """Fetch this mail's attachments? When Graph says it has some - OR its HTML draws a pasted picture (cid:). Graph's
+    hasAttachments is FALSE for a mail whose only attachments are inline, so a screenshot pasted into the body - the
+    whole ask, in a "see below" mail - was never fetched and never reached the card (the owner, 2026-09-28: "images
+    inline of the email are not coming through")."""
+    return bool(m.get('hasAttachments')) or 'cid:' in str((m.get('body') or {}).get('content') or '').lower()
+
+
 def mail_attachments(tok: str, upn: str, graph_id: str) -> list:
     """One message's attachments from Graph, raw. Called only when the mail says it has some -
     an extra request per mail otherwise, for nothing."""
@@ -1501,7 +1509,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                         # ~43 MB, which WAS the catch-up (the owner's mailbox, 2026-09-17). message_exists
                         # is the same indexed question ingest asks, and costs nothing to ask here first.
                         atts = []
-                        if m.get('hasAttachments') and not store.message_exists(f"graph:{m['id']}"):
+                        if wants_attachments(m) and not store.message_exists(f"graph:{m['id']}"):
                             try: atts = mail_attachments(tok, s['Address'], m['id'])
                             except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
                         out = ingest_message(store, file_only=file_only, msg={

@@ -131,7 +131,10 @@
 .tq-chat-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px 8px; scroll-behavior: smooth; }
 .tq-chat-inner { width: min(900px, 100%); margin: 0 auto; }
 .tq-msg { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; margin-bottom: 16px; }
-.tq-msg .avatar { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: linear-gradient(90deg, #55697a, #7d9a7c); }
+.tq-msg .avatar { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box;
+  border: 1.5px solid #7d9a7c; background: #fffdf9; color: #526b53; }
+/* ...once per run: a line that follows another of Taskuary's keeps its place, not the mark */
+.tq-msg:not(.you):not(.receipt) + .tq-msg:not(.you):not(.receipt) .avatar { visibility: hidden; }
 .tq-msg .body { min-width: 0; font-size: 13.5px; line-height: 1.55; color: #262521; padding-top: 3px; }
 .tq-msg .body p { margin: 0 0 6px; }
 .tq-msg .body p:last-child { margin-bottom: 0; }
@@ -265,38 +268,41 @@
 /* THE STORY IS QUIET (assistantCards Story): who asked, then the agent, as a thread of the people in it - avatars
    joined by one rule, muted ink. Colour sits on the avatars only. */
 .tq-story { margin-top: 9px; display: flex; flex-direction: column; gap: 11px; }
-.tq-step { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; position: relative; }
-.tq-step-rail { position: absolute; left: 12px; top: 27px; bottom: -20px; width: 2px; background: #e4ded3; }
+.tq-thr { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; position: relative; }
+.tq-thr-rail { position: absolute; left: 12px; top: 27px; bottom: -20px; width: 2px; background: #e4ded3; }
 /* ...and on into Your move: the thread ends at the decision (the owner, 2026-09-28: "continue the line ... to your move") */
-.tq-step-rail.tail { bottom: -20px; }
+.tq-thr-rail.tail { bottom: -20px; }
 /* the parts are split by a dashed rule, as the phone splits them (the owner, 2026-09-28: "i like the ----- line") */
-.tq-step + .tq-step .tq-step-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
-.tq-step + .tq-step .tq-av { margin-top: 9px; }
-.tq-step + .tq-step .tq-step-rail { top: 36px; }
-.tq-av { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff;
+.tq-thr + .tq-thr .tq-thr-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
+.tq-thr + .tq-thr .tq-av { margin-top: 9px; }
+.tq-thr + .tq-thr .tq-thr-rail { top: 36px; }
+/* ONE STYLE, THREE COLOURS (the owner, 2026-09-28: "colors don't line up"): outlined until it is their turn, filled
+   with a ring while it is. The asker in slate ink, the agent in Taskuary's sage, you in the rail's "on you" oxblood. */
+.tq-av { --c: #41525f; border: 1.5px solid var(--c); background: #fffdf9; color: var(--c); box-sizing: border-box;
+  width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font: 700 9.5px/1 'IBM Plex Sans', sans-serif; letter-spacing: .02em; position: relative; z-index: 1; }
-.tq-step-h { font-size: 11.5px; color: #8a847a; padding-top: 1px; }
-.tq-step-h b { color: #4d4a43; font-weight: 600; }
-.tq-step-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
-.tq-step-subject { margin-top: 3px; font-size: 13px; line-height: 1.4; color: #3d3b36; overflow-wrap: anywhere; }
-.tq-step-rest { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere;
+.tq-thr-h { font-size: 11.5px; color: #8a847a; padding-top: 1px; }
+.tq-thr-h b { color: #4d4a43; font-weight: 600; }
+.tq-thr-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
+.tq-thr-subject { margin-top: 3px; font-size: 13px; line-height: 1.4; color: #3d3b36; overflow-wrap: anywhere; }
+.tq-thr-rest { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.tq-step-did { margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: #4d4a43; overflow-wrap: anywhere; }
-.tq-step-did.muted { color: #8a847a; font-style: italic; }
-.tq-step-more { margin-top: 4px; font-size: 12px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere; }
-.tq-step-more b { color: #4d4a43; font-weight: 600; }
-.tq-step-words { margin-top: 6px; }
+.tq-thr-did { margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: #4d4a43; overflow-wrap: anywhere; }
+.tq-thr-did.muted { color: #8a847a; font-style: italic; }
+.tq-thr-more { margin-top: 4px; font-size: 12px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere; }
+.tq-thr-more b { color: #4d4a43; font-weight: 600; }
+.tq-thr-words { margin-top: 6px; }
 /* ...YOUR MOVE IS LOUD (assistantCards YourMove): the one framed block, full contrast, its main button inside */
 /* ...your step closes the thread: split by the same dashed rule, your avatar on the same line */
 .tq-move { margin-top: 11px; }
-.tq-move .tq-step-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
+.tq-move .tq-thr-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
 .tq-move .tq-av { margin-top: 9px; }
-.tq-av-you { background: #a0643a; font-size: 8.5px; }
-.tq-move.alert .tq-av-you { background: #8a3b2e; }
-/* WHOSE TURN (Story `turn`): the avatar the ball is with is ringed, the rest step back - colour on the mark, never a wash */
-.tq-av.on { box-shadow: 0 0 0 3px #fffdf9, 0 0 0 5px rgba(160,100,58,.45); }
-.tq-move.alert .tq-av.on { box-shadow: 0 0 0 3px #fffdf9, 0 0 0 5px rgba(138,59,46,.5); }
-.tq-av.off { opacity: .5; filter: saturate(.35); }
+.tq-av-asker { --c: #41525f; }
+.tq-av-agent { --c: #5f7a5f; }
+.tq-av-agent.none { --c: #b3ab9e; }
+.tq-av-you { --c: #8a3646; font-size: 8.5px; }
+/* WHOSE TURN (Story `turn`): filled, with a ring of its own colour - the rest stay outlined */
+.tq-av.on { background: var(--c); color: #fff; box-shadow: 0 0 0 2px #fffdf9, 0 0 0 3.5px var(--c); }
 .tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: #1d1c19; }
 .tq-move.alert .tq-move-say:first-of-type { font-weight: 600; color: #6b2b22; }
 .tq-move-to { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }

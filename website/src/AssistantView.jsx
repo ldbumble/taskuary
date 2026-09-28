@@ -27,6 +27,15 @@ import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+// TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
+// taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
+// the avatars on its cards - the bright tile repeated on every line shouted over the card it introduced
+const AssistantMark = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+    <line x1="12" y1="3.5" x2="12" y2="20.5" /><line x1="4.6" y1="7.75" x2="19.4" y2="16.25" /><line x1="4.6" y1="16.25" x2="19.4" y2="7.75" />
+    <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+  </svg>
+);
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
@@ -517,7 +526,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
   return (
     <>
       <div className={passed ? "tq-msg tq-step" : "tq-msg"}>
-        {!passed && <div className="avatar"><TaskuaryMark size={18} /></div>}
+        {!passed && <div className="avatar"><AssistantMark /></div>}
         <div className="body">
           {/* NOT OVER A LIVE CARD: the card's lead says who wants what, and the sentence above it said
               the same thing first (the owner, 2026-09-23: "remove the text above the card - it's duplicate").
@@ -1439,7 +1448,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
-        <Box sx={{ width: 30, height: 30, borderRadius: 2, background: "linear-gradient(90deg, #55697a, #7d9a7c)", display: "grid", placeItems: "center", flexShrink: 0 }}><TaskuaryMark size={22} /></Box>
+        <Box sx={{ width: 30, height: 30, borderRadius: "50%", background: "#5f7a5f", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}><AssistantMark /></Box>
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : resetting ? "new chat" : !pile ? "Loading your items…" : statusLine(items, busy)}</span></div>
         <div className="grow" />
         {/* Setting Taskuary up is not a first-run-only wizard (PW-189): the entry stays on the header, and it
@@ -1514,7 +1523,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
         <div className="tq-chat-inner">
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
           {state && !shown.length && !busy && (
-            <div className="tq-msg tq-welcome-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
+            <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
             <div className="tq-welcome">
               {/* TASKUARY SPEAKING, the way every line of the chat is: the mark is the speaker's avatar in
                   the left column, never inline with the greeting (the owner, 2026-09-23: "it should be the
@@ -1550,7 +1559,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
           {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips}
                                      actions={actions} fresh={currentItem} />)}
           {(busy || phoneBusy || nextComing) && (
-            <div className="tq-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
+            <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
                 {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
               </div>

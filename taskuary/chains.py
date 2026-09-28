@@ -111,7 +111,7 @@ def refresh_outlook(store, tok: str, mailbox: str, conversation_id: str, before:
         added = 0
         for m in fetch_graph(tok, mailbox, missing):
             frm = (m.get('from') or {}).get('emailAddress') or {}
-            atts = _ch.mail_attachments(tok, mailbox, m['id']) if m.get('hasAttachments') else None   # one extra call, only when the mail says so
+            atts = _ch.mail_attachments(tok, mailbox, m['id']) if _ch.wants_attachments(m) else None   # one extra call, only when the mail has some (pasted pictures included)
             added += _keep(store, conversation_id, f"graph:{m['id']}",
                            {'subject': m.get('subject'), 'body': _ch._body(m), 'own_text': _ch._own(m),
                             'from_name': frm.get('name'), 'from_email': frm.get('address'),

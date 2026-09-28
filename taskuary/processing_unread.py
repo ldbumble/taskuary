@@ -228,7 +228,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             closeout = proposals.CLOSEOUT.get(proposals._action(review)) if review.get('Kind') == 'action' else None
             if closeout:
                 ev = finish_evidence(store, tid)
-                card.update(closeout=closeout, why=f"{(ev or {}).get('who') or 'The agent'} finished it - {closeout.lower()} to close the task"
+                # a reply waiting beside it rides WITH it (verdicts reply_text): one button, "Merge & send"
+                rides = bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (tid,)))
+                card.update(closeout=closeout, rides=rides, why=f"{(ev or {}).get('who') or 'The agent'} finished it - {closeout.lower()} to close the task"
                                                    + (f": {ev['summary']}" if (ev or {}).get('summary') else ''))
     # ONE "AGENT FINISHED" (A17, 2026-09-25): a finish that drafted a reply left the task waiting on it, and the owner saw
     # only "reply ready" - never that the agent had finished. The reply is the move, so the card stays the reply to

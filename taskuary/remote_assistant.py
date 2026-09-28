@@ -1078,7 +1078,10 @@ def then_line(out: dict, store=None) -> str:
     """"Send the reply: sends the draft above, in your name." - only on a card that shows what it is about."""
     c = primary(out)
     if store is None or not c or agent_answers(out.get('item')) or out.get('proposal'): return ''
-    said = THEN_KIND.get((c['verb'], (out.get('item') or {}).get('kind'))) or THEN.get(c['verb'])
+    it = out.get('item') or {}
+    said = ((f"{'merges it' if it['closeout'] == 'Merge' else 'closes it'} on GitHub"
+             + (', then posts the reply above as its comment.' if it.get('rides') else '.')) if c['verb'] == 'approve' and it.get('closeout')
+            else THEN_KIND.get((c['verb'], it.get('kind'))) or THEN.get(c['verb']))
     return f"{c.get('label')}: {said}" if said else ''
 
 

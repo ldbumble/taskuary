@@ -85,7 +85,8 @@ your yes, and the task is not done until you answer it (decided with the owner o
   not need the GitHub card's replies switch, which gates separate sends.
 - A merge refused for red checks says which, and offers **Merge anyway** (for a red that fails on the default
   branch too). A check the repository requires is still GitHub's to enforce.
-  Elsewhere they are two cards, the merge first. Sending the reply alone does not close the task while its
+  The Assistant's card, its chat button and the phone say the same ONE button - "Merge & send", "Close issue &
+  send", or "Merge" with no reply - never "Send the reply" (`concierge.closeout_label`). Sending the reply alone does not close the task while its
   close-out waits.
 - The words are drafted like any reply; the act is plain code on your click. No agent has to still be running.
 - **Mark done** is still the one close. Pressing it yourself skips the close-out, and the pull request stays

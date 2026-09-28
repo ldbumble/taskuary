@@ -857,7 +857,11 @@ def _run_operation(op: dict, background: BackgroundTasks):
         return out
     if kind == 'review.approve':
         if not store.get_review(tid): raise HTTPException(404, 'review not found')
-        out = decide(tid, DecideBody(verb='approve'), background)
+        # a close-out's yes carries the reply waiting beside it - the chat's and the phone's "Merge & send"
+        from . import proposals
+        rv = store.get_review(tid)
+        closeout = rv.get('Kind') == 'action' and proposals._action(rv) in proposals.CLOSEOUT
+        out = decide(tid, DecideBody(verb='approve', reply_text='' if closeout else None), background)
         if not out.get('ok'): raise RuntimeError(out.get('send_error') or 'the reply was not sent')
         return out
     if kind == 'agent.answer':

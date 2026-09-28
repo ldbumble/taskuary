@@ -582,6 +582,13 @@ def walk_chips(left) -> list:
     return [{'verb': 'next', 'label': CHIP_WORDS['next']}] if left else []
 
 
+def closeout_label(item: dict) -> str:
+    """The ONE button of a task's close-out, saying what it does (the owner, 2026-09-27: "reply can mean a bunch of
+    things"): "Merge", "Close issue" - and "& send" when the reply waiting beside it goes out with it."""
+    co = (item or {}).get('closeout')
+    return f"{co} & send" if co and item.get('rides') else co or ''
+
+
 def chips_for(store, item: dict | None, first: str = None) -> list:
     """The action words to put under the assistant's line: this kind's vocabulary, minus anything this
     particular item cannot actually carry. An offered chip is a chip that works - which is the whole
@@ -613,7 +620,7 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
                         'hint': 'Marks the task done without sending the draft, and ends any live agent session.'})
         # an agent's proposal runs an action rather than sending a reply, so the word says that
         # ...and a task's close-out says its own act (the owner, 2026-09-27: merge the PR, close the issue)
-        elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': item.get('closeout') or 'Run it'})
+        elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': closeout_label(item) or 'Run it'})
         # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25)
         elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append({'verb': v, 'label': 'Take it myself', 'hint': "Takes it off the agent - it stays on your list."})
         else:
@@ -1760,7 +1767,7 @@ def card_for(item: dict) -> dict:
                                        'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode',
                                        # the agent's own question and the answers it offered: what a chat numbers, and
                                        # the request an answer is bound to (funnel.from_agents, workerstate PW-228)
-                                       'choices', 'request_id', 'request_kind', 'closeout',
+                                       'choices', 'request_id', 'request_kind', 'closeout', 'rides',
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused', 'closed',
                                        'brief_today')}
 
@@ -2127,7 +2134,9 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         # closes and the session ends with it - the shared task.complete road does both
         if verb == 'done' and it.get('kind') == 'agent' and it.get('tid'): kind, label, target, params = 'task.complete', 'Mark done', it['tid'], {'agent': True}
         else: target, params = it.get('tid') or 0, {'key': it['key'], 'verb': verb, 'tid': it.get('tid'), 'rid': it.get('rid'), 'kind': it.get('kind')}
-    elif verb == 'approve': target = it.get('rid')
+    elif verb == 'approve':
+        target = it.get('rid')
+        label = closeout_label(it) or label          # "Send the reply" is not what a merge card's yes does
     elif verb == 'answer_agent': target, params = it.get('tid'), {'text': d_text or 'yes'}
     elif verb == 'stop_agent':
         end = _agent_task(store, item, text)

@@ -336,6 +336,11 @@ class WordsTests(unittest.TestCase):
         item = {'kind': 'action', 'lane': 'approve', 'rid': 1, 'tid': 1, 'mid': 1, 'closeout': 'Merge', 'title': 'Fix the nightly export'}
         labels = [c['label'] for c in concierge.chips_for(MemoryStore(), item)]
         self.assertIn('Merge', labels)
+        # with the reply riding along it is ONE button that says both - on the chat, the confirm and the phone
+        self.assertIn('Merge & send', [c['label'] for c in concierge.chips_for(MemoryStore(), {**item, 'rides': True})])
+        from taskuary import remote_assistant
+        line = remote_assistant.then_line({'chips': [{'verb': 'approve', 'label': 'Merge & send'}], 'item': {**item, 'rides': True}}, MemoryStore())
+        self.assertEqual(line, 'Merge & send: merges it on GitHub, then posts the reply above as its comment.')
         self.assertNotIn('Run it', labels); self.assertNotIn('Not ours', labels)
 
 

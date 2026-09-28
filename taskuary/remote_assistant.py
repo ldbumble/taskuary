@@ -793,7 +793,9 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
                               'item': None}, store=store, extra=rows)
         if verb == 'defer':
             # Remind me asks for the day, as the desktop's picker does; a day typed instead goes to the model's task.defer
-            rows = [(label, {'t': 'remind', 'tid': on.get('tid'), 'until': until}) for label, until in REMIND_DAYS]
+            # ...an Advisor idea's own day, the desktop's picker on the idea (C5, 2026-09-27)
+            aim = {'idea': on['idea']} if on.get('kind') == 'idea' and on.get('idea') else {'tid': on.get('tid')}
+            rows = [(label, {'t': 'remind', **aim, 'until': until}) for label, until in REMIND_DAYS]
             return turn_text({'say': f"Remind you about {on.get('ref') or on.get('title') or 'this'} when? Or say a day.", 'item': None},
                              store=store, extra=rows + [('Cancel', {'t': 'stay'})])
         if verb == 'answer_agent':
@@ -826,6 +828,10 @@ REMIND_DAYS = (('Tomorrow', 'tomorrow'), ('Next week', '1 week'), ('In 2 weeks',
 def _remind(store, act: dict, actor: str) -> str:
     """The day picked: the task page's own road (remind.set_reminder), then the walk moves on - it is off the rail."""
     from . import concierge, operations, remind
+    if act.get('idea'):
+        from . import assistant
+        out = assistant.act(store, int(act['idea']), 'snooze', actor, until=act['until'])
+        return '\n\n'.join([f"Put away until {out['when']} - it comes back that morning.", turn_text(concierge.surface(store, actor=actor), store=store)])
     out = remind.set_reminder(store, int(act['tid']), act['until'], actor)
     operations.record_direct(store, 'task.defer', int(act['tid']), {'until': act['until']}, actor, out)
     if not out.get('remindAt'): return 'It is back on your rail now.'

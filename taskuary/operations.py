@@ -37,6 +37,7 @@ KINDS = {
     'task.create_from_text':    ('text', ('kind', 'text'), None),
     'message.archive':          ('message', (), 'dismissed'),
     'item.settle':              ('item', ('key', 'verb'), None),
+    'idea.act':                 ('idea', ('verb',), None),        # an Advisor idea's own words (assistant.act)
     'review.approve':           ('review', (), None),
     'agent.answer':             ('task', ('text',), None),
     'agent.stop':               ('task', (), None),

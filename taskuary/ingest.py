@@ -779,6 +779,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # and ideas count as one sender, T3). It joins that task: filed on it when it adds nothing for the owner,
         # otherwise on it - and a closed one reopens. Never a second task for one job.
         same = intent.get('same_as') or store.open_task_with_same_ask(intent.get('title'), msg.get('from_email'), msg.get('channel'))
+        # ...but an Advisor idea never reopens finished work: it is the Advisor's own thought about the task, not the
+        # sender writing again, and it brought a task closed yesterday back as waiting (I7, 2026-09-27)
+        if same and re.fullmatch(r'idea:\d+', str(msg.get('external_id') or '')) and (store.get_task(same) or {}).get('Status') in ('done', 'dropped'):
+            same = None
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
             elif intent.get('urgent'): _mark_urgent(store, same, intent, actor)

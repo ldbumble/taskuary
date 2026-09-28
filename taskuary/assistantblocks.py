@@ -96,7 +96,7 @@ def _open(store, o):
 
 def _already_said(store, o):
     from .assistant import _said
-    return _said(store, o.get('cap') or 40), []
+    return _said(store, o.get('cap') or 40, report_id=o.get('report')), []
 
 def _notes(store, o):
     from .assistant import _notes_block
@@ -357,7 +357,7 @@ def stamp(b: Block, o: dict, *, facts: str = '', report_id=None, source_ids=None
     - they stamped their own and drifted, and the card priced the seeded Assistant's note for every
     report that asked."""
     if b.id == 'knowledge': return o | {'facts': facts}
-    if b.id in ('notes', 'automation'): return o | {'report': report_id}
+    if b.id in ('notes', 'automation', 'already_said'): return o | {'report': report_id}
     if b.id == 'system_checks': return o | {'source_ids': source_ids, 'inline': inline}
     return o
 

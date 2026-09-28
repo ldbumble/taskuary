@@ -829,7 +829,7 @@ class GeneralSession:
                     pick=None, trace=None, cancel=None, as_owner=True,
                     delivery_instructions: str = None) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
-        make it open a conversation (server._assistant_opens). It is not written to the history and
+        make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
         rest of this product is built to avoid; the assistant's answer is recorded as normal."""
         text = str(text or '').strip()

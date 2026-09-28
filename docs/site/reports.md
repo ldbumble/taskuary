@@ -151,7 +151,19 @@ The Advisor is a report of type `assistant`. It runs on its own schedule and whe
 opens, and it posts on the Timeline **only** when it finds something worth saying: an unanswered
 reply, context for an upcoming meeting, a task gone quiet, a pattern across incoming work, or
 something in the systems it watches that does not look right. Each suggestion names its evidence
-and offers **Make it a task**, **Done**, **Snooze a day** and **Not this**.
+and carries the same words everywhere it shows up - the Timeline, the Assistant chat, the work rail
+and your phone:
+
+| Word | What it does to the idea |
+|---|---|
+| **Make a task** | A task on your own list; no agent starts. If triage already opened one for it, that task is the answer - never a second. |
+| **Send to agent** | An agent takes it - a coding or a non-coding one, as its kind says. |
+| **Remind me** | Put away until the day you pick; it comes back that morning. |
+| **Not ours** | Put down: the Advisor does not raise it again, reworded or not - only something new on that thread brings a follow-up back. |
+| **Next** | Move on; the idea stays as it is. |
+
+Marking the row done on the rail puts the idea down as handled. An idea never reopens a task that
+is already done - new work it notices becomes a new task, carrying what it saw.
 
 Its pipeline is itself, so its Pipeline step looks different from every other report:
 
@@ -164,8 +176,8 @@ Its pipeline is itself, so its Pipeline step looks different from every other re
   view of your work.
 
 Every post records what it reviewed and leaves a note for its next check, so it does not research
-the same silence twice or repeat a suggestion you have seen. **Not this** teaches it which kinds
-of nudges you do not want.
+the same silence twice or repeat a suggestion you have seen or put down. Each Advisor report keeps
+its own ideas: one report's open idea never silences another's.
 
 Four things shape it:
 
@@ -184,9 +196,10 @@ Timeline daily. Deleting that report turns the brief off.
 ### Ideas it raises
 
 Beyond what it watches, the Advisor looks at the shape of your own work and occasionally raises
-an **idea**: a system your mail keeps naming that nothing here reads, for instance. It raises at
-most one per run and never one you have already answered. If the connector is on the roadmap
-rather than built, saying yes is a vote for building it.
+an **idea**: a system your mail keeps naming that nothing here reads, for instance - at most one
+such system per run, and never one it has raised before. The app's own health (a report failing
+run after run, a connection erroring) is raised the same way, and counts toward the post's
+lines like everything else.
 
 ## Stateful workflows
 

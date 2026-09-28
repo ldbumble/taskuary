@@ -807,23 +807,39 @@ class AgentGotThereFirstTests(unittest.TestCase):
 
 
 class ActTests(unittest.TestCase):
-    def test_done_and_later_go_to_the_pile_and_a_follow_up_drafts_the_chase(self):
+    def _idea(self):
         s = store()
-        m = s.add_message({'ExternalId': 'x:q', 'ConversationId': 'c9', 'Channel': 'email', 'Subject': 'Q3 ledger', 'FromName': 'Dana',
-                           'FromEmail': 'dana@vendor.com', 'SentAt': ago(100), 'BodyText': 'Here is the ledger.', 'Status': 'filed'})
-        s.upsert_idea({'key': 'followup:c9', 'kind': 'followup', 'text': 'No answer from Dana in 4 days - follow up?', 'sig': 'x',
-                       'action': {'type': 'followup', 'mid': m, 'why': 'you asked on Monday'}}, ago(1))
-        key = funnel.build(s)['items'][0]['key']
+        m = s.add_message({'ExternalId': 'x:q', 'ConversationId': 'c9', 'Channel': 'email', 'Subject': 'Q3 ledger', 'FromName': 'Erin Blake',
+                           'FromEmail': 'erin@vendor.example', 'SentAt': ago(100), 'BodyText': 'Here is the ledger.', 'Status': 'filed'})
+        i = s.upsert_idea({'key': 'followup:c9', 'kind': 'followup', 'text': 'No answer from Erin in 4 days - follow up?', 'sig': 'x',
+                           'action': {'type': 'followup', 'mid': m, 'why': 'you asked on Monday'}}, ago(1))
+        return s, i, funnel.build(s)['items'][0]['key']
+
+    def test_done_and_later_go_to_the_pile_and_done_puts_the_idea_down(self):
+        """I4 (2026-09-27): the rail's Done wrote only the rail's state, and the Advisor went on reading the idea as open."""
+        s, i, key = self._idea()
         self.assertEqual(concierge.act(s, key, 'later', hours=1)['verb'], 'later')
         self.assertEqual(funnel.build(s)['items'], [])
-        s.set_funnel_state(key, 'surfaced')                       # back on the table
-        with mock.patch('taskuary.responder.write_draft'):
-            out = concierge.act(s, key, 'followup')
-        self.assertIn('reviewId', out)
-        self.assertEqual(s.get_review(out['reviewId'])['Status'], 'pending')
-        # the line itself is done - and the chase it drafted is now the thing waiting for a yes
-        self.assertEqual([(i['lane'], i['kind']) for i in funnel.build(s)['items']], [('approve', 'review')])
-        with self.assertRaises(ValueError): concierge.act(s, key, 'juggle')
+        self.assertEqual(s.get_idea(i['IdeaId'])['Status'], 'open')             # Later is not a verdict on the idea
+        s.set_funnel_state(key, 'surfaced')
+        concierge.act(s, key, 'done')
+        self.assertEqual(s.get_idea(i['IdeaId'])['Status'], 'done')
+        for gone in ('followup', 'task', 'juggle'):
+            with self.assertRaises(ValueError): concierge.act(s, key, gone)
+
+    def test_not_ours_puts_the_idea_down_not_the_mail_it_was_about(self):
+        s, i, key = self._idea()
+        concierge.act(s, key, 'dismiss')
+        self.assertEqual(s.get_idea(i['IdeaId'])['Status'], 'dismissed')
+        self.assertEqual(funnel.build(s)['items'], [])
+
+    def test_an_idea_offers_the_five_words_and_routes_them_to_the_idea(self):
+        """C5: Make a task, Send to agent, Not ours, Remind me, Next - and Not ours is the idea's, never message.file."""
+        s, i, key = self._idea()
+        item = funnel.next_item(s, key)
+        self.assertEqual([c['verb'] for c in concierge.chips_for(s, item)], ['mine', 'regular_agent', 'not_ours', 'defer', 'next'])
+        prop = concierge.propose_direct(s, 'not_ours', key, table=True)
+        self.assertEqual((prop['kind'], prop['target'], prop['params']), ('idea.act', i['IdeaId'], {'verb': 'dismiss'}))
 
 
 class ApiTests(unittest.TestCase):

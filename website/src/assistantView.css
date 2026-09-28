@@ -34,7 +34,7 @@
 .tq-pile-head.folds:hover span { border-color: #b9c3cb; }
 .tq-pile-head .fold { font-style: normal; font-size: 9px; color: #a09889; margin-left: -4px; }
 .tq-pile-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
-  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid; }
+  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #a09889; font-variant-numeric: tabular-nums; }
 /* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
@@ -73,7 +73,10 @@
 /* NEXT wears a ring in the working colour; CURRENT (on the table in the chat) the deeper one */
 .tq-pile-row.next .card { border-color: #7d9a7c; box-shadow: inset 0 0 0 1px #7d9a7c, 0 2px 10px rgba(47,107,79,.14); }
 .tq-pile-row.current { height: 54px; }
-.tq-pile-row.current .card { border-color: #55697a; background: #f5f8f9; box-shadow: inset 0 0 0 1px #55697a, 0 2px 10px rgba(69,79,70,.14); cursor: default; }
+/* ON THE TABLE in Taskuary's sage (the owner, 2026-09-28: "on the table circle color should be the more green color") */
+.tq-pile-row.current .card { border-color: #6f8a6e; background: #f3f6f1; box-shadow: inset 0 0 0 1px #6f8a6e, 0 2px 10px rgba(69,79,70,.14); cursor: default; }
+.tq-pile-row.current .rail i { background: #6f8a6e !important; }
+.tq-pile-row.current .tq-pile-now { color: #4c6450; border-color: #b9c9b6; }
 /* ONE BRACKET for a batch on the table. It is drawn behind its rows and spans them where they
    already sit: no row moves, no height changes, and ten fyi read as the one thing the assistant is
    holding rather than as ten separate rings or as a single condensed line. */
@@ -203,7 +206,7 @@
 /* the group's name as the rail band's pill (.tq-pile-head span), its count beside it */
 .tq-sum-head { display: flex; align-items: center; gap: 7px; margin: 0 0 4px 4px; }
 .tq-sum-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
-  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid; }
+  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 .tq-sum-head em { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #8a847a; }
 .tq-sum-row { display: grid; grid-template-columns: 8px minmax(0, 150px) minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%;
   min-height: 32px; padding: 0 6px; border: 0; border-top: 1px solid #efeae2; background: none; font: inherit; font-size: 12.5px; color: #262521; text-align: left; cursor: pointer; border-radius: 6px; }
@@ -315,6 +318,8 @@
 .tq-move-q + .tq-move-q { margin-top: 12px; padding-top: 11px; border-top: 1px dashed #e0d6c8; }
 .tq-move-qn { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #a0643a; margin-bottom: 3px; }
 .tq-move-go { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.tq-move-go.first { margin-top: -1px; }
+.tq-move .tq-thr-body > :first-child { margin-top: 3px; }
 .tq-move-then { font-size: 11.5px; color: #6e685f; }
 /* ...a rule under the move: Next / More are the CARD's, not a second row of the move's buttons */
 .tq-card .tq-move ~ .tq-card-actions { border-top: 1px solid #ebe6de; margin-top: 12px; padding-top: 10px; }

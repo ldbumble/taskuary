@@ -26,16 +26,11 @@ import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
-import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ChannelIcon, MicButton, StarMark, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
 // taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
 // the avatars on its cards - the bright tile repeated on every line shouted over the card it introduced
-const AssistantMark = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-    <line x1="12" y1="3.5" x2="12" y2="20.5" /><line x1="4.6" y1="7.75" x2="19.4" y2="16.25" /><line x1="4.6" y1="16.25" x2="19.4" y2="7.75" />
-    <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
-  </svg>
-);
+const AssistantMark = () => <StarMark />;
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
@@ -330,8 +325,8 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                 if (next.has(level)) next.delete(level); else next.add(level);
                 return next;
               }) : undefined}>
-              <span style={{ color: ROLES[LEVEL_ROLE[level]]?.ink, background: ROLES[LEVEL_ROLE[level]]?.tint,
-                borderColor: ROLES[LEVEL_ROLE[level]]?.bd }}>{levelLabel(level)}</span>
+              {/* one quiet pill for every band; URGENT alone keeps its colour (the owner, 2026-09-28: "the your task red i hate") */}
+              <span style={level === "urgent" ? { color: ROLES.you.ink, background: ROLES.you.tint, borderColor: ROLES.you.bd } : undefined}>{levelLabel(level)}</span>
               {folds && <i className="fold">{open ? "▾" : "▸"}</i>}
               <hr /><em>{rows.length}</em>
             </div>
@@ -376,7 +371,7 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                         {i.settling && <span className="tq-pile-tag">triaging…</span>}
                         {loud && !i.settling && (
                           <span className="tq-pile-tag loud"
-                            style={{ color: ROLES.you.ink, background: ROLES.you.tint, borderColor: ROLES.you.bd }}>
+                            style={{ color: ROLES.working.ink, background: ROLES.working.tint, borderColor: ROLES.working.bd }}>
                             {meta.mark} {meta.word}</span>
                         )}
                         {!loud && !!word && (

@@ -154,7 +154,6 @@ export const personName = (name) => {
   if (parts.length === 2 && parts[0].trim() && parts[1].trim() && parts[0].trim().split(" ").length <= 2) n = `${parts[1].trim()} ${parts[0].trim()}`;
   return n;
 };
-const initials = (name) => String(name || "?").replace(/<[^>]*>/g, "").trim().split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
 const capital = (s) => { const t = String(s || "").trim(); return t ? t[0].toUpperCase() + t.slice(1) : ""; };
 // WHAT AN AGENT IS, never the profile's bare name (the owner, 2026-09-28: "not sure why it says coder"): a terminal
 // agent codes, a chat one does general work; the profile shows beside it only when it says more than that
@@ -186,7 +185,6 @@ export function subjectLine(msg) {
 }
 const restOf = (summary) => String(summary || "").trim().split(/(?<=[.!?])\s+/).slice(1).join(" ");
 export const reportOf = (doc) => (doc?.comments || []).slice().reverse().find((c) => /^(CODER REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
-const STAR_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round"><line x1="12" y1="3.5" x2="12" y2="20.5" /><line x1="4.6" y1="7.75" x2="19.4" y2="16.25" /><line x1="4.6" y1="16.25" x2="19.4" y2="7.75" /></svg>;
 const TASK_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3" /><polyline points="8.5 12 11 14.5 15.5 9.5" /></svg>;
 const CODE_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 7 3 12 8 17" /><polyline points="16 7 21 12 16 17" /></svg>;
 
@@ -219,7 +217,7 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
     <div className="tq-story">
       {asker && said && (
         <div className="tq-thr">{(drawAgent || tail) && <span className={`tq-thr-rail${drawAgent ? "" : " tail"}`} />}
-          <span className={`tq-av ${own ? "tq-av-you" : "tq-av-asker"}${lit("asker")}`}>{advisor ? STAR_GLYPH : own ? "You" : by === null ? TASK_GLYPH : initials(who)}</span>
+          <span className={`tq-av ${own ? "tq-av-you" : "tq-av-asker"}${lit("asker")}`}>{TASK_GLYPH}</span>
           <div className="tq-thr-body"><div className="tq-thr-h"><b>{who}</b>{advisor ? " raised · " : own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-thr-say">{said}</div>
             {showSubject && <div className="tq-thr-subject">{subject}</div>}
             {rest && <div className="tq-thr-rest">{rest}</div>}{words}</div>
@@ -261,10 +259,11 @@ export function YourMove({ title, tone, go, then, children }) {
   return (
     <div className={`tq-thr tq-move${tone === "alert" ? " alert" : ""}`}>
       <span className="tq-av tq-av-you on">You</span>
-      <div className="tq-thr-body">
-        <div className="tq-thr-h"><b>You</b>{title ? ` · ${title}` : ""}</div>
+      {/* NO WORDS BESIDE THE CIRCLE (the owner, 2026-09-28: "don't need these words. the you circle says it. just the
+          button move it up"): what there is to read first, then the button - on the circle's line when there is nothing */}
+      <div className="tq-thr-body" title={title ? `You - ${title}` : undefined}>
         {children}
-        {(go || then) && <div className="tq-move-go">{go}{then && <span className="tq-move-then">{then}</span>}</div>}
+        {(go || then) && <div className={`tq-move-go${React.Children.toArray(children).some(Boolean) ? "" : " first"}`}>{go}{then && <span className="tq-move-then">{then}</span>}</div>}
       </div>
     </div>
   );
@@ -421,7 +420,7 @@ function FullText({ mid, revision }) {
     <div className="tq-card-full">
       {morning ? <DigestText text={text} /> : jsonRows(text) ? <RowsTable rows={jsonRows(text)} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
-      {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email"} dense />}
+      {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense />}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
       {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "#55697a" }}>open the original</a></div>}
     </div>
@@ -436,6 +435,9 @@ function FullText({ mid, revision }) {
 // A PASTED PICTURE IS DRAWN, ITS REFERENCE IS NOT (the owner, 2026-09-28: "images inline of the email are not coming
 // through"): the body only carries "[image: ...]" / cid: stand-ins that render as nothing - the picture itself comes
 // from the message's attachments (Attachments, under the message), so the stand-ins are what goes
+// "look for attachments on this mail" only where the body points at a picture that is not here yet - on every message it
+// was a line of noise under mail that never had one
+const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
 export const noImages = (text) => String(text || "")
   .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
   .replace(/<img\b[^>]*>/gi, "")
@@ -507,7 +509,7 @@ function CombinedTaskText({ card, list = true }) {
               {m.Direction === "out" ? "You" : (m.FromName || m.FromEmail || "Someone")}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
             </div>
             {looksMd(body) ? <Md text={body} /> : (body || "(empty)")}
-            {m.MessageId && <Attachments messageId={m.MessageId} canFetch={String(m.Channel || "") === "email"} dense />}
+            {m.MessageId && <Attachments messageId={m.MessageId} canFetch={String(m.Channel || "") === "email" && mentionsPicture(m.BodyText)} dense />}
           </div>
         );
       })}
@@ -1156,7 +1158,7 @@ const ROWS_PER_GROUP = 5;
 // whole page down the first time a passed row reached the opener (2026-09-24). Unknown keys fall back to muted.
 // ...the RAIL's colours, one meaning each (the owner, 2026-09-28: "these colors are weird"): who wants you, your own list and
 // an agent waiting on you are all Your task on the rail; nothing to decide is fyi; you passed is passed
-const GROUP_ROLE = { people: "you", you: "you", agents: "you", read: "muted", passed: "passed" };
+const GROUP_ROLE = { people: "muted", you: "muted", agents: "muted", read: "muted", passed: "muted" };
 const groupRole = (key) => ROLES[GROUP_ROLE[key]] || ROLES.muted;
 // the groups themselves - also drawn on the empty chat's welcome, which is what the walk starts from
 // `quiet` groups show their pill and count only - on the day's opener, what needs no decision is on the

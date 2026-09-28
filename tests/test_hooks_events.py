@@ -139,6 +139,24 @@ class QuestionAndPermissionTests(Base):
         self.assertEqual(self.state()['requests'], [])
 
 
+class FailedToolTests(Base):
+    def test_a_tool_that_failed_closes_its_approval(self):
+        """The permission was decided and the run went on; only PostToolUse closed it, so a failed tool left the row
+        "waiting for your approval" over a working agent (2026-09-28)."""
+        self.session()
+        self.fire('PermissionRequest', tool_name='Bash', tool_input={'command': 'npm test'})
+        self.assertEqual(self.state()['state'], 'approval_needed')
+        self.fire('PostToolUseFailure', tool_name='Bash', tool_input={'command': 'npm test'}, error='exit 1')
+        self.assertEqual(self.state()['requests'], [])
+
+    def test_another_claude_in_the_folder_never_speaks_for_a_bound_pane(self):
+        """The owner's own CLI beside a resumed coder: its question is not the coder's."""
+        self.session(ext_id='coder-thread')
+        out = self.fire('PermissionRequest', sid='owners-own', tool_name='AskUserQuestion',
+                        tool_input={'questions': [{'question': 'Build it?', 'options': [{'label': 'yes'}]}]})
+        self.assertFalse(out['bound']); self.assertEqual(self.state()['requests'], [])
+
+
 class SessionLifeTests(Base):
     def test_session_end_ends_the_run_on_the_record(self):
         self.session()

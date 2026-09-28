@@ -117,6 +117,18 @@ def test_a_resumed_pane_is_not_also_handed_a_new_name(tmp_path):
     assert '--session-id' not in Term.call_args.args[0]
 
 
+def test_a_resumed_pane_is_bound_to_the_conversation_it_reopens(tmp_path):
+    """Blank until a hook named it, a resumed pane went to whichever claude in the folder spoke first - the owner's
+    own CLI, whose questions were then drawn as the coder's (2026-09-28)."""
+    store = MemoryStore(); coder(store); tid = task(store)
+    with mock.patch.object(agents, '_resolve_cmd', return_value=['claude']),          mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'Term') as Term:
+        Term.return_value.sid, Term.return_value.task_id, Term.return_value.store = 'pane-9', tid, store
+        Term.return_value.agent, Term.return_value.cwd, Term.return_value.ext_id = 'claude', str(tmp_path), ''
+        terminal.open_session(store, 'claude', tid, None, str(tmp_path), actor='owner',
+                              seed_fn=lambda here: 'carry on', resume='claude-thread')
+    assert Term.return_value.ext_id == 'claude-thread'
+
+
 def test_a_resumed_pane_carries_the_resume_flag_and_types_its_prompt(tmp_path):
     store = MemoryStore(); coder(store); tid = task(store)
     with mock.patch.object(agents, '_resolve_cmd', return_value=['claude']), \

@@ -239,6 +239,9 @@ def _events(t, p: dict) -> None:
                 ws.record(st, tid, sid, 'answered', request_id=r['RequestId'], text=why, source='hook')
     try:
         if ev == 'UserPromptSubmit': ws.record(st, tid, sid, 'working', source='hook')
+        # a tool that FAILED had its permission decided too - the run went on either way - and a request left open
+        # read "waiting for your approval" over an agent that kept working until its next prompt
+        elif ev == 'PostToolUseFailure': close(('approval_needed',), 'decided in the pane')
         elif ev == 'PostToolUse':
             # PostToolUse fires once the tool has COMPLETED - and AskUserQuestion completes when the owner
             # has answered it in the pane. Recorded as an open request, the question said "coder asked you

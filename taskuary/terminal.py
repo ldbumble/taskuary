@@ -961,6 +961,11 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store, cli=cli_named(profile, argv))
     SESSIONS[t.sid] = t
     if assigned: bind_ext(t, assigned)     # resumable before it has drawn a single character
+    # ...and a RESUMED pane is already named - by the conversation it reopens (`claude --resume <id>` keeps the id: the
+    # prompts typed into TQ-0779's continued pane landed in that id's transcript, 2026-09-28). Left blank, the first
+    # unbound hook from ANY claude in the same folder claimed it: the owner's own CLI there did, its questions were drawn
+    # on the coder's card as the coder asking, and the coder's own hooks were dropped for being someone else's.
+    elif resume and agent: bind_ext(t, resume)
     # The agents already here are not told a newcomer arrived: THIS session was just handed the
     # whole live picture in its seed (blackboard.briefing), which is where peer awareness belongs.
     # The configured profile name is the worker's identity, not just a launch option. Keep it on

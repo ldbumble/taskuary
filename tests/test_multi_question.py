@@ -45,8 +45,9 @@ class Base(unittest.TestCase):
         th = threading.Thread(target=lambda: got.update(out=hooks.ask({'hook_event_name': 'PreToolUse', 'tool_name': 'AskUserQuestion',
                                                                          'session_id': sid, 'cwd': CWD, 'tool_input': QS}, wait=wait)))
         th.start()
-        for _ in range(100):
-            if ws.HELD or not th.is_alive(): break
+        # held AND its questions on the record - the order hooks.ask keeps (CI once read the gap between them)
+        for _ in range(250):
+            if (ws.HELD and len(ws.question_group(self.s, self.t)) == 3) or not th.is_alive(): break
             time.sleep(0.02)
         return th, got
 

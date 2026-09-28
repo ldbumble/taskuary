@@ -409,9 +409,10 @@ def ask(payload: dict, wait: float = None) -> dict:
     qs, g = _questions(payload), _group(payload)
     if not qs: return {}
     rids = [ws.question_id(g, i) for i in range(1, len(qs) + 1)]
-    ws.hold(t.task_id, t.sid, g, rids)
+    # the questions first, then the hold: a card read between the two must never show "held" with nothing to answer
     for rid, (text, choices) in zip(rids, qs):
         ws.record(st, t.task_id, t.sid, 'input_needed', request_id=rid, text=text, choices=choices, source='hook')
+    ws.hold(t.task_id, t.sid, g, rids)
     got = ws.wait_held(g, ASK_WAIT if wait is None else wait)
     if not got: return {}
     inp = dict(payload.get('tool_input') or {})

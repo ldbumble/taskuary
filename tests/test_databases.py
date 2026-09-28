@@ -38,6 +38,13 @@ class TheUrl(unittest.TestCase):
         self.assertIn(':3306/', databases.url_for('mysql', {'host': 'h', 'database': 'd'}))
         self.assertIn(':8123/', databases.url_for('clickhouse', {'host': 'h', 'database': 'd'}))
         self.assertIn(':15432/', databases.url_for('postgresql', {'host': 'h', 'database': 'd', 'port': 15432}))
+        self.assertIn(':15432/', databases.url_for('postgresql', {'host': 'h', 'database': 'd', 'port': '15432'}))
+
+    def test_a_bad_port_says_which_engine_and_which_port(self):
+        for bad in ('abc', '99999', -1, '0', '65536'):
+            with self.subTest(port=bad), self.assertRaisesRegex(RuntimeError, rf"postgresql port {bad!r}"):
+                databases.url_for('postgresql', {'host': 'h', 'database': 'd', 'port': bad})
+        self.assertIn(':65535/', databases.url_for('mysql', {'host': 'h', 'database': 'd', 'port': 65535}))
 
     def test_snowflake_puts_the_account_where_a_host_would_go(self):
         url = databases.url_for('snowflake', {'account': 'xy12345.eu-west-1', 'user': 'u',

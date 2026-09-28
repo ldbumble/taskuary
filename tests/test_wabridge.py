@@ -1,6 +1,6 @@
 """The WhatsApp bridge, managed by Taskuary: install if needed, start detached, report the phase -
 so neither a person nor an agent runs a server in the foreground and waits on it."""
-import json, time, unittest
+import json, os, time, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import server, wabridge
@@ -137,6 +137,30 @@ class BridgeManagerTests(unittest.TestCase):
             r = c_api.get(f"/api/connectors/{wa['ConnectorId']}/wa/status").json()
         self.assertEqual(r['bridge'], False); self.assertIn('phase', r['manager'])                    # the manager's phase rides along
         self.assertIn(r['node'], (True, False))                                                        # step 1 of the pairing box: is Node here
+
+
+class BridgePortTests(unittest.TestCase):
+    def setUp(self): wabridge._BAD_PORTS_SEEN.clear()
+
+    def test_the_port_comes_from_the_environment(self):
+        with mock.patch.dict(os.environ, {'WA_BRIDGE_PORT': '9123'}): self.assertEqual(wabridge.port(), 9123)
+        with mock.patch.dict(os.environ, {'WA_BRIDGE_PORT': ''}): self.assertEqual(wabridge.port(), 8977)
+        with mock.patch.dict(os.environ, clear=False):
+            os.environ.pop('WA_BRIDGE_PORT', None); self.assertEqual(wabridge.port(), 8977)
+
+    def test_a_bad_port_falls_back_and_is_warned_about_once(self):
+        for bad in ('abc', '99999', '0', '-1'):
+            with self.subTest(port=bad), mock.patch.dict(os.environ, {'WA_BRIDGE_PORT': bad}), \
+                    mock.patch.object(wabridge.logger, 'warning') as warn:
+                self.assertEqual(wabridge.port(), 8977); self.assertEqual(wabridge.port(), 8977)
+                warn.assert_called_once(); self.assertIn(repr(bad), warn.call_args.args[0])
+
+    def test_the_status_check_survives_a_bad_port(self):
+        import requests
+        with mock.patch.dict(os.environ, {'WA_BRIDGE_PORT': 'abc'}), mock.patch.object(wabridge, 'token', return_value='t'), \
+                mock.patch('requests.get', side_effect=requests.ConnectionError('refused')) as get:
+            self.assertIsNone(wabridge._status())
+        self.assertEqual(get.call_args.args[0], 'http://127.0.0.1:8977/status')
 
 
 class LaunchGraceIsSpentByThePollTests(unittest.TestCase):

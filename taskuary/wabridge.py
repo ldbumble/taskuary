@@ -205,7 +205,7 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
             _set('starting', 'node bridge.mjs')
             log = open(LOG, 'ab')
             kw = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, 'DETACHED_PROCESS', 0)} if os.name == 'nt' else {'start_new_session': True}
-            env = {**os.environ, 'WA_BRIDGE_TOKEN': token()}
+            env = {**os.environ, 'WA_BRIDGE_TOKEN': token(), 'WA_BRIDGE_PORT': str(port())}   # the bridge listens where we look
             if filter_policy is not None: env['WA_BRIDGE_FILTER'] = json.dumps(filter_policy, separators=(',', ':'))
             p = subprocess.Popen([node(), 'bridge.mjs'], cwd=str(DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                  env=env, **kw)
@@ -213,7 +213,7 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
             if p.poll() is not None:
                 tail = LOG.read_bytes()[-400:].decode('utf-8', 'replace') if LOG.exists() else ''
                 _set('failed', f'the bridge exited at once (code {p.returncode}): {tail}'); return
-            _set('running', f'listening on http://127.0.0.1:{os.getenv("WA_BRIDGE_PORT") or 8977} - log: {LOG}', pid=p.pid)
+            _set('running', f'listening on http://127.0.0.1:{port()} - log: {LOG}', pid=p.pid)
         except Exception as e:
             logger.warning(f'wa bridge start failed: {e}')
             _set('failed', str(e))
@@ -224,7 +224,20 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
     return {**state(), 'phase': _STATE['phase'] if _STATE['phase'] != 'idle' else 'starting'}
 
 
-def port() -> int: return int(os.getenv('WA_BRIDGE_PORT') or 8977)
+_BAD_PORTS_SEEN: set = set()
+
+
+def port() -> int:
+    """WA_BRIDGE_PORT, or 8977 when it is unset or not a port. The status poll calls this every
+    few seconds, so a bad value is warned about once, not on every call."""
+    raw = os.getenv('WA_BRIDGE_PORT')
+    if not raw: return 8977
+    from . import config
+    try: return config.port_number(raw)
+    except ValueError as e:
+        if raw not in _BAD_PORTS_SEEN:
+            _BAD_PORTS_SEEN.add(raw); logger.warning(f'ignoring WA_BRIDGE_PORT={raw!r}: {e}')
+        return 8977
 
 
 def token() -> str:

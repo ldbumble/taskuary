@@ -27,7 +27,7 @@ object read, or a SQL query against any configured database. Nothing here writes
 call is a read, through the same connector card, the same credentials and the same role gate the
 Reports tab uses.
 """
-import json, re, time
+import json, math, re, time
 from calendar import monthrange
 from datetime import date, datetime
 from pathlib import Path
@@ -111,8 +111,9 @@ def _cast(raw) -> float | None:
     s = str(raw if raw is not None else '').strip().replace(',', '').replace('$', '')
     if not s: return None
     neg = s.startswith('(') and s.endswith(')')          # accounting parentheses
-    try: return float(s.strip('()')) * (-1 if neg else 1)
+    try: v = float(s.strip('()')) * (-1 if neg else 1)
     except ValueError: return None
+    return v if math.isfinite(v) else None
 
 
 def _aggregate(rows: list, field: str, how: str, sign: float, sign_field: str = None):

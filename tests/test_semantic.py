@@ -58,6 +58,20 @@ def test_placeholders_are_filled_from_the_fixture():
                    ['BATCH_DATE', '>=', '07/01/2026'], ['BATCH_DATE', '<=', '07/31/2026']]
 
 
+# ── casting one cell ───────────────────────────────────────────────────────────────────
+def test_cast_reads_plain_and_accounting_parentheses():
+    assert semantic._cast('12') == 12.0
+    assert semantic._cast('(12)') == -12.0
+    assert semantic._cast('') is None
+
+
+def test_cast_rejects_non_finite_spreadsheet_exports():
+    """NaN / inf parse as floats but poison any sum - treat them as blank cells."""
+    assert semantic._cast('NaN') is None
+    assert semantic._cast('inf') is None
+    assert semantic._cast('-Infinity') is None
+
+
 # ── the aggregate: Intacct returns every column as text ────────────────────────────────
 def test_amounts_arrive_as_text_and_are_still_summed():
     rows = [{'AMOUNT': '1,200.50'}, {'AMOUNT': '$300'}, {'AMOUNT': '(100)'}]

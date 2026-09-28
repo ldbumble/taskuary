@@ -103,6 +103,9 @@ def touched(cur, rows, follow):
     for kind, local in rows:
         if kind == 'setting': return None, True
         if kind == 'item':
+            # a meeting's Later/Next defer names no processing item (its target id is ''): the calendar card is
+            # built fresh on every read, so there is no root to touch - it used to raise "redirect cycle at"
+            if not local: continue
             structural = True
             root = follow(local)
             if root: roots.add(root)

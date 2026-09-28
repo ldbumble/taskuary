@@ -87,6 +87,28 @@ class MeetingGraceTests(unittest.TestCase):
             self.assertEqual(len(funnel.from_calendar(s, datetime.now())), 1)
 
 
+class NextOnAMeetingHoldsItUntilItStartsTests(unittest.TestCase):
+    def test_next_on_a_coming_meeting_is_quiet_until_it_starts(self):
+        """The owner, 2026-09-28: "i should not have to dismiss invite a 100 times. once i click next within 15
+        minutes it should not come back to actual time" - Next wrote a shown mark only mail and tasks read, so the
+        meeting was back after every fyi batch."""
+        from taskuary import concierge
+        s, settle = settled()
+        st = datetime.now() + timedelta(minutes=10)
+        agenda = [{'start': st.strftime('%Y-%m-%dT%H:%M:%S'), 'end': (st + timedelta(minutes=30)).strftime('%Y-%m-%dT%H:%M:%S'),
+                   'subject': 'Month-end review', 'who': ['Erin Blake']}]
+        mail(s, 'lunch on friday', who='Gail Moreno', email='gail@northwind.example', hours=1)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch.object(funnel, '_agenda', return_value=agenda),              mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            first = concierge.surface(s, llm=lambda *a, **k: 'never')
+            self.assertEqual(first['item']['kind'], 'meeting')
+            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            self.assertFalse([i for i in rail(s) if i['kind'] == 'meeting' and i['actionable']], 'not back before it starts')
+            at = st + timedelta(minutes=1)
+            back = [i for i in processing_unread.build(s, now=at, live_state=[])['items'] if i['kind'] == 'meeting']
+            self.assertEqual([i['actionable'] for i in back], [True], 'back when it starts')
+
+
 class StoppedGoesToPassedTests(unittest.TestCase):
     def test_next_puts_a_stopped_agent_in_passed_and_the_quiet_hours_bring_it_back(self):
         from taskuary import concierge

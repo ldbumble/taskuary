@@ -1421,7 +1421,14 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
             out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read) for k in key[5:].split(',') if k]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
     until = None
-    if verb == 'later': until = (datetime.now() + timedelta(hours=hours or LATER_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
+    # NEXT ON A MEETING HOLDS IT UNTIL IT STARTS (the owner, 2026-09-28: "i should not have to dismiss invite a
+    # 100 times"). A shown mark reaches only mail and task rows, so the calendar card came straight back after
+    # every batch; walked past before its time it is back when it starts, walked past once started it is gone
+    if key.startswith('meeting:') and verb == 'surfaced':
+        start = _activity_time(key.split(':', 1)[1][:16])
+        if start and start > datetime.now(): verb, until = 'later', start.strftime('%Y-%m-%d %H:%M:%S')
+        else: verb = 'done'
+    if verb == 'later' and until is None: until = (datetime.now() + timedelta(hours=hours or LATER_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
     if verb == 'skip':
         tomorrow = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=0, second=0)
         until = tomorrow.strftime('%Y-%m-%d %H:%M:%S')

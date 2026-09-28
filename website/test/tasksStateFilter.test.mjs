@@ -11,7 +11,13 @@ test("clicking a row's state chip narrows In progress to that state, and its pil
   assert.match(s, /const \[only, setOnly\] = useState\(null\);/);
   assert.match(s, /\(!only \|\| filter !== "live" \|\| stateOf\(x\)\.label === only\)/);
   assert.match(s, /setFilter\("live"\); setOnly\(only \? null : st\.label\);/);
-  assert.match(s, /label=\{`\$\{only\} ✕`\} onClick=\{\(\) => setOnly\(null\)\}/);
+});
+
+test("the states are pills on top of In progress, with counts and an 'all' that clears", () => {
+  const s = src("TasksView.jsx");
+  assert.match(s, /filter === "live" && !search && liveStates\.length > 1 &&/);
+  assert.match(s, /<FilterPills value=\{only \|\| ""\} onChange=\{\(k\) => setOnly\(k \|\| null\)\}/);
+  assert.match(s, /\{ key: "", label: "all", n: liveStates\.reduce/);
 });
 
 test("the rail has no state filter - it lives on the Tasks page only", () => {

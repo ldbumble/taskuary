@@ -562,6 +562,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says
   // the list is broken, not cut. Each pill counts what clicking it would SHOW, by the same rule.
   const countIn = (key) => (tasks || []).filter((x) => (!key || inBucket(x, key)) && keep(x)).length;
+  const liveStates = Object.values((tasks || []).filter((x) => inBucket(x, "live") && keep(x)).reduce((acc, x) => {
+    const st = stateOf(x);
+    acc[st.label] = { key: st.label, label: st.label, c: st.c, n: (acc[st.label]?.n || 0) + 1 };
+    return acc;
+  }, {})).sort((a, b) => b.n - a.n);
   // A task may finish while its detail stays open (especially an assistant conversation). Move
   // the selected bucket with it so Done never sits under an In progress filter. Search is a
   // deliberate cross-status view, so it is not changed.
@@ -955,13 +960,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}
               sx={{ flexShrink: 0, minWidth: "auto", px: 1 }}>New</Button>
           </Box>
-          <Box sx={{ px: 1, py: 0.75, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0,
-            display: "flex", alignItems: "center", gap: 0.75 }}>
-            {/* beside the search, not the pills: squeezed in there it cut "upcoming" down to "up" */}
-            {only && filter === "live" && !search && (
-              <Chip size="small" label={`${only} ✕`} onClick={() => setOnly(null)} title="Show everything in progress again"
-                className="tq-tasks-only" sx={{ flexShrink: 0, height: 24, fontSize: 11, fontWeight: 600 }} />
-            )}
+          {/* THE STATES OF WHAT IS IN PROGRESS, ON TOP (the owner, 2026-09-28: "don't see the filter on top of tasks") -
+              the same pills as the row above, a count each, only when there is more than one state to tell apart */}
+          {filter === "live" && !search && liveStates.length > 1 && (
+            <Box className="tq-tasks-states" sx={{ px: 1, pt: 0.75, bgcolor: PANEL2, flexShrink: 0 }}>
+              <FilterPills value={only || ""} onChange={(k) => setOnly(k || null)}
+                options={[{ key: "", label: "all", n: liveStates.reduce((a, x) => a + x.n, 0) }, ...liveStates]} />
+            </Box>
+          )}
+          <Box sx={{ px: 1, py: 0.75, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
             <TextField fullWidth size="small" placeholder="Search system, name, summary, PR…" value={query}
               onChange={(e) => setQuery(e.target.value)}
               inputProps={{ "aria-label": "Search all tasks" }}

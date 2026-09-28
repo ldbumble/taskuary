@@ -298,6 +298,7 @@ export default function TaskHubPage() {
   // A terminal belongs to the task it is working - there is no dock and no terminal tab.
   // Opening a task with start=true means "and put your CLI on it now".
   const [autostart, setAutostart] = useState(null);
+  const [openAct, setOpenAct] = useState(null);         // a card's "Not a task…" etc: open the task with that dialog up
   // #task=123 opens that task - the digest's links, a chat ping, a bookmark
   useEffect(() => {
     const fromHash = () => {
@@ -316,6 +317,7 @@ export default function TaskHubPage() {
   const openTask = (taskId, opts) => {
     selectTask(taskId); go("Tasks");
     setAutostart(opts?.start ? { taskId, agent: opts.agent, model: opts.model } : null);
+    setOpenAct(opts?.act ? { taskId, act: opts.act } : null);
   };
 
   return (
@@ -474,6 +476,7 @@ export default function TaskHubPage() {
             <Box sx={{ display: tab === "Tasks" ? "block" : "none" }}>
               <TasksView key={`t${tick}`} selected={selectedTask} onSelect={selectTask} active={tab === "Tasks"}
                 onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
+                openAct={openAct} onActOpened={() => setOpenAct(null)}
                 onGoReports={(sid) => { window.location.hash = `report=${sid}`; go("Reports"); }} />
             </Box>
           )}

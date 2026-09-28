@@ -160,7 +160,7 @@ const askedAgo = (t) => {
   return `asked you ${mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`} ago`;
 };
 
-export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true }) {
+export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened }) {
   const [tasks, setTasks] = useState(null);
   // "live" on arrival: what is still on somebody's plate is what you came here for. "done"
   // opens on a list whose top is whatever finished most recently.
@@ -442,6 +442,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // writes a standing verdict triage reads. The two sharpest things in the app were the two
   // easiest to hit by accident.
   const [confirmNAT, setConfirmNAT] = useState(false);
+  // a card asked for one of this page's dialogs (assistantCards Foot TASK_ACTS): open it once the task is the one shown
+  useEffect(() => {
+    if (!openAct || openAct.taskId !== selected) return;
+    ({ not_a_task: setConfirmNAT, handoff: setHandoff, reshape: setReshape })[openAct.act]?.(true);
+    onActOpened?.();
+  }, [openAct, selected, onActOpened]);
   // MARK DONE SAYS IT IS WORKING (the owner, 2026-09-25): the close takes seconds with agents busy, and a button that
   // did nothing visible read as broken; with a live session it also stops an agent, so it asks first
   const [finishing, setFinishing] = useState(false);

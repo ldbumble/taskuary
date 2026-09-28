@@ -1966,7 +1966,9 @@ PROPOSALS = {
     'close': ('task.complete', 'Mark done', True), 'done': ('item.settle', 'Mark it handled', True),
     'later': ('item.settle', 'Push it back', True), 'skip': ('item.settle', 'Skip until tomorrow', True),
     'approve': ('review.approve', 'Close out', True), 'answer_agent': ('agent.answer', 'Send the answer to the agent', True),
-    'stop_agent': ('agent.stop', 'Save and end session', False), 'rerun': ('report.rerun', 'Run the report again', True),
+    # ...ending the session SETTLES the table, as AUTO below already says it does: it stayed False, so the walk held the same
+    # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
+    'stop_agent': ('agent.stop', 'Save and end session', True), 'rerun': ('report.rerun', 'Run the report again', True),
     'continue': ('agent.continue', 'Continue session', False),
     'remember': ('memory.remember', 'Remember it', False), 'split': ('task.split', 'Split it in two', False),
     'clear': ('pipe.clear', 'Clear them from the pipe', False), 'setup': ('task.setup', 'Open the walk-through', False),

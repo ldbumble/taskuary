@@ -521,7 +521,9 @@ class ResponseTests(unittest.TestCase):
         # the agent NAMED, never "the only one running" - that could be another task's (2026-09-25)
         self.assertIn('no agent is running', decide(s, 'close the agent working', 'stop_agent', live=live)['say'])
         p = decide(s, f'close the agent working on TQ-{tid:04d}', 'stop_agent', key=item['key'], live=live)['proposal']
-        self.assertEqual((p['kind'], p['target'], p['params']['wrap'], p['label'], p['settles']), ('agent.stop', tid, False, 'Save and end session', False))
+        # it SETTLES the table - the walk moves on (2026-09-28: stuck on the same item and button after it ran) - and the
+        # task still stands, below: settling is the walk's, never a close
+        self.assertEqual((p['kind'], p['target'], p['params']['wrap'], p['label'], p['settles']), ('agent.stop', tid, False, 'Save and end session', True))
         held = mock.Mock(sid='s1', alive=True, label='coder', agent='coder', task_id=tid)
         with mock.patch.object(server.hub_term, 'session_for', return_value=held), mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             self.assertEqual(run(s, p, live=live).json()['status'], 'done')

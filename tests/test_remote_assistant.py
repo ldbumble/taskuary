@@ -160,7 +160,7 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
                 'item': {'lane': 'approve', 'kind': 'review', 'who': 'Craig Sherman', 'channel': 'email'}}
         # the story's header wears the item's mark; the asker's line the channel's (2026-09-28: the card as a story)
         text = remote_assistant.turn_text(said)
-        self.assertTrue(text.startswith('✉️ ready to close out\n📧 **Craig Sherman** asked · Email'), text)
+        self.assertTrue(text.startswith('✉️ ready to close out\n🔵 **Craig Sherman** asked · Email'), text)
         self.assertTrue(text.endswith('Reply with one of:\n1 · Send it\n2 · Next'), text)
 
     def test_a_report_wears_the_report_mark_and_a_finished_agent_its_own(self):
@@ -208,7 +208,7 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
 
     def test_an_unknown_source_gets_no_invented_mark(self):
         said = {'say': 'Something landed.', 'item': {'lane': 'fyi', 'kind': 'fyi', 'who': 'Someone', 'channel': 'carrier_pigeon'}}
-        self.assertEqual(remote_assistant.turn_text(said), '👀 fyi\n**Someone** wrote · Carrier Pigeon\nSomething landed.')
+        self.assertEqual(remote_assistant.turn_text(said), '👀 fyi\n🔵 **Someone** wrote · Carrier Pigeon\nSomething landed.')
 
     def test_a_bare_number_answers_the_options_we_just_numbered(self):
         """The number is answerable because WE numbered it a moment ago: the code indexes what it

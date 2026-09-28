@@ -280,9 +280,10 @@
 .tq-thr + .tq-thr .tq-thr-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
 .tq-thr + .tq-thr .tq-av { margin-top: 9px; }
 .tq-thr + .tq-thr .tq-thr-rail { top: 36px; }
-/* ONE STYLE, THREE COLOURS (the owner, 2026-09-28: "colors don't line up"): outlined until it is their turn, filled
-   with a ring while it is. The asker in slate ink, the agent in Taskuary's sage, you in the rail's "on you" oxblood. */
-.tq-av { --c: #41525f; border: 1.5px solid var(--c); background: #fffdf9; color: var(--c); box-sizing: border-box;
+/* ONE STYLE, THE TASK PAGE'S THREE COLOURS (the owner, 2026-09-28: "the colors of the logos on the card in assistant
+   should match the task card"): its step badges - 1 the task in slate, 2 the agent in sage, 3 close out in tan - so the
+   card's asker, agent and you wear the same three. Outlined until it is their turn, filled with a ring while it is. */
+.tq-av { --c: #55697a; border: 1.5px solid var(--c); background: #fffdf9; color: var(--c); box-sizing: border-box;
   width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font: 700 9.5px/1 'IBM Plex Sans', sans-serif; letter-spacing: .02em; position: relative; z-index: 1; }
 .tq-thr-h { font-size: 11.5px; color: #8a847a; padding-top: 1px; }
@@ -301,10 +302,10 @@
 .tq-move { margin-top: 11px; }
 .tq-move .tq-thr-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
 .tq-move .tq-av { margin-top: 9px; }
-.tq-av-asker { --c: #41525f; }
-.tq-av-agent { --c: #5f7a5f; }
+.tq-av-asker { --c: #55697a; }
+.tq-av-agent { --c: #6f8a6e; }
 .tq-av-agent.none { --c: #b3ab9e; }
-.tq-av-you { --c: #8a3646; font-size: 8.5px; }
+.tq-av-you { --c: #9a7444; font-size: 8.5px; }
 /* WHOSE TURN (Story `turn`): filled, with a ring of its own colour - the rest stay outlined */
 .tq-av.on { background: var(--c); color: #fff; box-shadow: 0 0 0 2px #fffdf9, 0 0 0 3.5px var(--c); }
 .tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: #1d1c19; }
@@ -316,6 +317,8 @@
 .tq-move-qn { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #a0643a; margin-bottom: 3px; }
 .tq-move-go { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .tq-move-then { font-size: 11.5px; color: #6e685f; }
+/* ...a rule under the move: Next / More are the CARD's, not a second row of the move's buttons */
+.tq-card .tq-move ~ .tq-card-actions { border-top: 1px solid #ebe6de; margin-top: 12px; padding-top: 10px; }
 /* THE QUESTION AND ITS ANSWERS. Same amber family as the general workspace's own raised hand
    (generalWorkspace.css .tq-aui-asking), because it is the same event: an agent has stopped and
    named what it needs. The options stack rather than truncate - a chooser's options are sentences,

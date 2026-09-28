@@ -177,6 +177,7 @@ export function subjectLine(msg) {
 }
 const restOf = (summary) => String(summary || "").trim().split(/(?<=[.!?])\s+/).slice(1).join(" ");
 export const reportOf = (doc) => (doc?.comments || []).slice().reverse().find((c) => /^(CODER REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
+const STAR_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round"><line x1="12" y1="3.5" x2="12" y2="20.5" /><line x1="4.6" y1="7.75" x2="19.4" y2="16.25" /><line x1="4.6" y1="16.25" x2="19.4" y2="7.75" /></svg>;
 const TASK_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3" /><polyline points="8.5 12 11 14.5 15.5 9.5" /></svg>;
 const CODE_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 7 3 12 8 17" /><polyline points="16 7 21 12 16 17" /></svg>;
 
@@ -186,14 +187,18 @@ const CODE_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" s
 export function Story({ card, asker = true, agent = "auto", state, did, name, extra, fallback, by, words, tail = false, turn }) {
   const doc = useFetched(card?.tid ? `/api/tasks/${card.tid}` : null, card?.presentation_revision);
   const [open, setOpen] = useState(false);
-  const own = by === undefined && isOwn(card);
+  // THE ADVISOR ASKED (the owner, 2026-09-28: "why does advisor say YOU in the task? it's the advisor"): a task made from
+  // an Advisor idea is created by the assistant - its asker is the Advisor, not the owner
+  const advisor = by === undefined && (String(doc?.task?.Source || "") === "assistant" || String(doc?.task?.SourceRef || "").startsWith("assistant:")
+    || card?.channel === "assistant");
+  const own = by === undefined && !advisor && isOwn(card);
   const said = capital(firstSentence(doc?.task?.Summary) || firstSentence(fallback) || card?.title);
   const src = (doc?.messages || []).find((m) => m.Status !== "context") || null;
   const subject = subjectLine(src);
   const showSubject = subject && !said.toLowerCase().includes(subject.replace(/^(PR |Issue )?#\d+(\s·)?\s*/, "").toLowerCase());
   const rest = restOf(doc?.task?.Summary);
-  const who = own ? "You" : by === null ? "The task" : String(by || card?.who || "Someone").replace(/\s*<[^>]*>/g, "").trim();
-  const from = [own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : "your task") : channelWord(card?.channel),
+  const who = advisor ? "Advisor" : own ? "You" : by === null ? "The task" : String(by || card?.who || "Someone").replace(/\s*<[^>]*>/g, "").trim();
+  const from = [advisor ? "an idea" : own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : "your task") : channelWord(card?.channel),
     card?.when ? agoText(card.when) : ""].filter(Boolean).join(" · ");
   const rep = reportOf(doc), r = rep ? readReport(rep.Body) : null;
   const found = r?.summary || String(did ?? card?.summary ?? "").trim();
@@ -205,8 +210,8 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
     <div className="tq-story">
       {asker && said && (
         <div className="tq-thr">{(drawAgent || tail) && <span className={`tq-thr-rail${drawAgent ? "" : " tail"}`} />}
-          <span className={`tq-av ${own ? "tq-av-you" : "tq-av-asker"}${lit("asker")}`}>{own ? "You" : by === null ? TASK_GLYPH : initials(who)}</span>
-          <div className="tq-thr-body"><div className="tq-thr-h"><b>{who}</b>{own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-thr-say">{said}</div>
+          <span className={`tq-av ${own ? "tq-av-you" : "tq-av-asker"}${lit("asker")}`}>{advisor ? STAR_GLYPH : own ? "You" : by === null ? TASK_GLYPH : initials(who)}</span>
+          <div className="tq-thr-body"><div className="tq-thr-h"><b>{who}</b>{advisor ? " raised · " : own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-thr-say">{said}</div>
             {showSubject && <div className="tq-thr-subject">{subject}</div>}
             {rest && <div className="tq-thr-rest">{rest}</div>}{words}</div>
         </div>
@@ -303,7 +308,13 @@ function useClose(card, onDone) {
 // Everywhere else they sit behind ONE "More actions", opened in place - six underlined words under
 // every card read as a second row of buttons (the owner, 2026-09-23: "maybe a more actions button as
 // it's confusing").
-export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false }) {
+// the task page's own actions, reached from a card (the owner, 2026-09-28: "whatever actions you can do in tasks should
+// have those buttons ... it can be in more") - each opens the task with that dialog up
+const TASK_ACTS = [["not_a_task", "Not a task…", "Delete it and teach triage why - on the task"],
+                   ["handoff", "Hand it to a person…", "The AI writes the forward, you send it - on the task"],
+                   ["reshape", "Split or merge…", "Break it in two, or fold it into the task it repeats - on the task"]];
+
+export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId }) {
   const nav = React.useContext(CardNav);
   const shut = useClose(close || {}, onDone);
   const [open, setOpen] = useState(false);
@@ -314,7 +325,8 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   const words = [...also, ...(close?.tid && !also.some((a) => a.verb === "close")
     ? [{ verb: "close", label: shut.busy ? "Closing…" : "Mark done",
          title: unsent ? "Mark done - the drafted reply is not sent; it stays on the task" : "Mark done - it stops coming back to Work",
-         onClick: shut.run, disabled: shut.busy }] : [])];
+         onClick: shut.run, disabled: shut.busy }] : []),
+    ...((close?.tid || taskId) && openTask ? TASK_ACTS.map(([act, label, title]) => ({ verb: `task:${act}`, label, title, onClick: () => openTask(close?.tid || taskId, { act }) })) : [])];
   return (
     <>
       {then && <div className="tq-card-then">{then}</div>}
@@ -678,7 +690,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       )}
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
           under More actions */}
-      <Foot covers={["approve", "redraft"]}
+      <Foot covers={["approve", "redraft"]} taskId={card.tid} openTask={onOpenTask}
         extra={[...(gh?.offers || []).map((o) => ({ verb: o, label: busy === o ? "…" : OFFER_LABEL[o], title: OFFER_HINT[o], disabled: !!busy || !rv,
           onClick: async () => {
             if (o === "anyway") return decide("merge_anyway");
@@ -869,7 +881,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13 } }} />}
         </YourMove>
       )}
-      <Foot close={card} onDone={onDone} covers={["answer_agent"]}
+      <Foot openTask={onOpenTask} close={card} onDone={onDone} covers={["answer_agent"]}
         where={<Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>
           {chat ? "Open the task" : "Open agent workspace"} ↗</Button>} />
     </CardShell>
@@ -961,7 +973,7 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
           then="drafts an answer from what it found - nothing is sent until you approve it." />
       ) : <div className="tq-card-note">It closed the task itself - nothing waits on you. Next moves on.</div>}
       {/* its agent already closed the task: "Close the task" on it asked for what was done (the owner, 2026-09-24) */}
-      <Foot close={card.closed ? null : card} onDone={onDone} covers={card.mid ? ["reply"] : []}
+      <Foot openTask={onOpenTask} close={card.closed ? null : card} onDone={onDone} covers={card.mid ? ["reply"] : []}
         where={<Button size="small" onClick={() => onOpenTask?.(card.tid)} sx={faint}>Open {card.ref} ↗</Button>} />
     </CardShell>
   );
@@ -1107,7 +1119,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           then={own || mineAlone ? `starts ${suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.`
             : "writes one for you to approve here - nothing is sent."} />
       ) : card.kind === "fyi" && <div className="tq-card-note">Nothing to decide - it only wants you to know.</div>}
-      <Foot close={card} onDone={onDone}
+      <Foot openTask={onOpenTask} close={card} onDone={onDone}
         covers={[...(own || mineAlone ? [suggestedKind === "coding" ? "coder" : "regular_agent"] : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
       {repoAsk && (
@@ -1214,7 +1226,7 @@ export function TaskCard({ card, onDone, onOpenTask }) {
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); tell(); } }}
           sx={{ mt: 1, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13 } }} />}
       </YourMove>
-      <Foot close={card} onDone={onDone}
+      <Foot openTask={onOpenTask} close={card} onDone={onDone}
         where={<Button size="small" onClick={() => onOpenTask?.(card.tid)} sx={faint}>Open {card.ref} ↗</Button>} />
     </CardShell>
   );

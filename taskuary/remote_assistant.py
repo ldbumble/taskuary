@@ -1136,6 +1136,19 @@ _VIA = {'whatsapp': 'on WhatsApp', 'teams': 'in Teams', 'slack': 'in Slack', 'te
         'github': 'on GitHub', 'discord': 'on Discord', 'google_chat': 'in Google Chat'}
 _PLAIN_PROFILE = {'coder', 'coding', 'claude', 'codex', 'agent', 'assistant', 'general', 'regular', 'the agent', ''}
 RULE = '──────────'
+# THE TASK PAGE'S THREE COLOURS, as a chat can wear them (the owner, 2026-09-28: "make sure whatsapp/telegram matches
+# this new color scheme"): 1 the task in slate, 2 the agent in sage, 3 you in tan - the card's avatars, as dots
+DOT_TASK, DOT_AGENT, DOT_YOU = '🔵', '🟢', '🟤'
+
+
+def _advisor(store, item: dict | None) -> bool:
+    """A task made from an Advisor idea: the Advisor asked, never the owner."""
+    it = item or {}
+    if str(it.get('channel') or '') == 'assistant': return True
+    if store is None or not it.get('tid'): return False
+    try: t = store.get_task(int(it['tid'])) or {}
+    except Exception: return False
+    return str(t.get('Source') or '') == 'assistant' or str(t.get('SourceRef') or '').startswith('assistant:')
 
 
 def channel_word(ch) -> str:
@@ -1240,13 +1253,15 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '') -> str
     lines = [head] if head else []
     # the asker - the TASK where the card's `who` is not the asker (an agent-finished card carries the agent there)
     agent_is_who = kind == 'agent' and str(it.get('who') or '').strip().lower() in {str(it.get(k) or '').strip().lower() for k in ('agent', 'working')} - {''}
-    if kind in ('agentdone', 'wrapup') or agent_is_who:
-        lines.append(' · '.join(x for x in ('🗂 **The task**', channel_word(ch) if ch and ch not in ('own', 'report') else '', age) if x))
+    if _advisor(store, it):
+        lines.append(' · '.join(x for x in (f'{DOT_TASK} **Advisor** raised', 'an idea', age) if x))
+    elif kind in ('agentdone', 'wrapup') or agent_is_who:
+        lines.append(' · '.join(x for x in (f'{DOT_TASK} **The task**', channel_word(ch) if ch and ch not in ('own', 'report') else '', age) if x))
     elif is_own(it):
-        lines.append(' · '.join(x for x in ('📝 **You**', 'your task', age) if x))
+        lines.append(' · '.join(x for x in (f'{DOT_TASK} **You**', 'your task', age) if x))
     else:
         verb = 'wrote' if kind == 'fyi' or it.get('lane') in ('fyi', 'report') else 'asked'
-        lines.append(' · '.join(x for x in (f"{funnel.CHANNEL_MARKS.get(ch, '')} **{story_who(it)}** {verb}".strip(), channel_word(ch), age) if x))
+        lines.append(' · '.join(x for x in (f'{DOT_TASK} **{story_who(it)}** {verb}', channel_word(ch), age) if x))
     if said: lines.append(said[:1].upper() + said[1:])
     # what the thing IS, in its own words - a pull request's title and number, an email's subject - and the rest of the
     # summary: the first sentence says who wants what, never what it is (the owner, 2026-09-28: "at least the title")
@@ -1269,12 +1284,12 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '') -> str
     state = agent_state(it)
     if found or state:
         lines.append('')
-        lines.append(f"🤖 **{agent_label(it, it.get('who') if kind == 'agentdone' else None)}**" + (f' · {state}' if state else ''))
+        lines.append(f"{DOT_AGENT} **{agent_label(it, it.get('who') if kind == 'agentdone' else None)}**" + (f' · {state}' if state else ''))
         if found: lines.append(_cut(found, 400))
         if rep.get('actions'): lines.append(f"did: {_cut(rep['actions'], 300)}")
         if rep.get('verdict'): lines.append(f"verdict: {_cut(rep['verdict'], 300)}")
     elif it.get('tid') and kind in ('todo', 'message', 'asked') and (kind == 'todo' or is_own(it)):
-        lines += ['', '🤖 No agent yet - nobody is working on this.']
+        lines += ['', f'{DOT_AGENT} No agent yet - nobody is working on this.']
     return '\n'.join(lines).strip()
 
 
@@ -1305,7 +1320,7 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
     elif it.get('kind') == 'wrapup' and it.get('sent'):
         body.append(f"You sent: {_cut(it['sent'], 300)}")
     # "👉 You · start it" - the thread's last step, in the words every step uses; the rule is the one loud thing
-    return '\n'.join([RULE, f'👉 **You** · {title}'] + body)
+    return '\n'.join([RULE, f'{DOT_YOU} **You** · {title}'] + body)
 
 
 def script_words(store, script: str) -> str:

@@ -309,3 +309,16 @@ def test_a_sql_spec_gets_its_placeholders_filled():
     q = semantic.fill('SELECT x FROM t WHERE site={scope} AND d BETWEEN {period_start} AND {period_end}',
                       'A-SCOPE', '2026-07', 'iso')
     assert q == "SELECT x FROM t WHERE site=A-SCOPE AND d BETWEEN 2026-07-01 AND 2026-07-31"
+
+
+@pytest.mark.parametrize('raw, want', [
+    ('12', 12.0), ('(12)', -12.0), ('$1,234.50', 1234.5), ('', None), (None, None), ('n/a', None),
+    ('NaN', None), ('nan', None), ('inf', None), ('-Infinity', None), ('(inf)', None),
+])
+def test_cast_reads_a_cell_and_refuses_what_is_not_a_finite_number(raw, want):
+    assert semantic._cast(raw) == want
+
+
+def test_a_nan_cell_is_skipped_instead_of_poisoning_the_sum():
+    rows = [{'AMOUNT': '10'}, {'AMOUNT': 'NaN'}, {'AMOUNT': '5'}]
+    assert semantic._aggregate(rows, 'AMOUNT', 'sum', 1) == 15.0

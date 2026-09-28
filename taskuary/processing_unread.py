@@ -224,6 +224,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
                         why='A proposed action is waiting for your approval' if review.get('Kind') == 'action' else 'A reply is waiting for your approval')
+            # WHAT THE AGENT DID, between what triggered the task and what you are approving (the owner, 2026-09-28: "the
+            # goal is to see what triggered the task, agent action, and what we are reviewing") - the rail knew it only
+            # inside the `why` sentence; the older walk (funnel.from_feed) always carried it as `summary`
+            if not card.get('summary'): card['summary'] = funnel.agent_found(store, tid)
             # a REPLY whose task also waits on a merge: its Close out runs both (verdicts.decide), so its card says so
             if review.get('Kind') != 'action':
                 other = proposals.closeout_pending(store, tid)

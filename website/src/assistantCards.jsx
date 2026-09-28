@@ -480,6 +480,9 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   return (
     <CardShell card={card} kicker={co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
       lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} />} err={err}>
+      {/* THE CARD'S THREE PARTS (the owner, 2026-09-28): what triggered it (the lead above), what the agent did (this
+          line), and what you are approving (the box below) - the agent's part was nowhere on the card */}
+      {card.summary && (action ? !!co : true) && <div className="tq-card-excerpt"><b>{card.agent || "The agent"} did:</b> {card.summary}</div>}
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
           placeholder={action && !mate ? "" : "Write your answer here"}

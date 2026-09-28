@@ -496,6 +496,12 @@ def run_datadog(cfg):
     return rows_out(rows, lim, unit='monitors', mine=mine)
 
 
+def days_of(cfg, default: int) -> int:
+    """A report's `days`, read once: a typo like "week" falls back to the default, and never below 1."""
+    try: return max(1, int(cfg.get('days') or default))
+    except (TypeError, ValueError): return default
+
+
 def run_digest(cfg):
     """{"days": 1} - Taskuary's own activity as the data: open work, finished work, pending
     reviews, fresh verdicts, who wrote how often. The Morning digest ships as a report ON
@@ -503,7 +509,7 @@ def run_digest(cfg):
     Reports tab, deleting the source turns it off - and it demonstrates how reports work
     using data every install already has. `store` arrives via resolve_cfg, never persisted."""
     from .digest import gather
-    days = int(cfg.get('days') or 1)
+    days = days_of(cfg, 1)
     head = 'yesterday and today so far, distilled' if days == 1 else f'the last {days} days, distilled'
     return head, gather(cfg['store'], days)
 
@@ -564,7 +570,7 @@ def run_automate(cfg):
     automate, and the concrete policy/report/switch that would kill it. Ships seeded as
     the weekly 'Automation ideas' report; see toil.py. `store` arrives via resolve_cfg."""
     from .toil import gather
-    days = int(cfg.get('days') or 30)
+    days = days_of(cfg, 30)
     return f'the last {days} days of repeated toil', gather(cfg['store'], days)
 
 

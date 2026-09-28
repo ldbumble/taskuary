@@ -75,6 +75,14 @@ class AgendaTests(unittest.TestCase):
             head, body = cal.run_calendar({'store': s, 'days': 1})
         self.assertEqual(head, '1 event(s) in the next 1 days'); self.assertIn('1:00-2:00 PM · x', body)
 
+    def test_a_bad_days_value_falls_back_and_never_goes_below_one(self):
+        s = self._store()
+        empty = {'events': [], 'errors': [], 'sources': [], 'start': '', 'end': '', 'tz': 'UTC'}
+        with mock.patch('taskuary.calendar.agenda', return_value=empty) as ag:
+            self.assertIn(f'in the next {cal.DAYS} days', cal.run_calendar({'store': s, 'days': 'week'})[0])
+            self.assertIn('in the next 1 days', cal.run_calendar({'store': s, 'days': -3})[0])
+        self.assertEqual([c.args[1] for c in ag.call_args_list], [cal.DAYS, 1])
+
 
 class ResponderTests(unittest.TestCase):
     def test_the_draft_prompt_carries_the_calendar_and_the_task_says_so(self):

@@ -23,9 +23,10 @@ another port will happily keep polling and triaging with older code.
 different process owns it, the CLI automatically selects a free port and prints the new address.
 Use `taskuary --port PORT` or set `TASKUARY_PORT` when you need a specific port instead.
 
-**It started and immediately closed.** Read `~/.taskuary/taskuary.log`; the last lines before the
-exit are the reason. A corrupt `config.toml` is the common one — rename it and Taskuary writes a
-fresh default.
+**It started and immediately closed.** A corrupt `config.toml` is the common cause, and it fails
+before Taskuary can write the useful error to `taskuary.log`. If you started Taskuary from pip,
+read the traceback in the terminal where you ran `taskuary`. If you started the desktop app, read
+`~/.taskuary/desktop-error.log`. Rename a corrupt `config.toml` and Taskuary writes a fresh default.
 
 ## A connection stopped
 
@@ -110,6 +111,7 @@ altered" is not, and it names the rows.
 | Thing | Where |
 |---|---|
 | Application log | `~/.taskuary/taskuary.log` |
+| Desktop startup crash | `~/.taskuary/desktop-error.log` |
 | The database | `~/.taskuary/taskuary.db` |
 | Configuration | `~/.taskuary/config.toml` |
 | A coding session's full transcript | the task page → **Work details → Full artifact** |

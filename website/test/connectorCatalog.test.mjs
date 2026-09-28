@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
-import { PLANNED_CONNECTORS, plannedFor } from "../src/connectorCatalog.js";
+import { CATALOGUE, PLANNED_CONNECTORS, plannedFor } from "../src/connectorCatalog.js";
 
 const CATEGORIES = [
   "AI — agents & models", "AI — voice", "Email", "Messaging", "Developer",
@@ -46,6 +46,13 @@ test("catalog identifiers are unique and every card has searchable copy", () => 
     assert.ok(entry.title.trim());
     assert.ok(entry.desc.trim());
   }
+});
+
+test("every card in the catalogue, working or planned, has a one-line description", () => {
+  const blank = CATALOGUE.filter((c) => !String(c.desc || "").trim()).map((c) => c.type);
+  assert.deepEqual(blank, []);
+  const multiline = CATALOGUE.filter((c) => /\n/.test(c.desc)).map((c) => c.type);
+  assert.deepEqual(multiline, []);
 });
 
 test("unknown categories safely return no entries", () => {

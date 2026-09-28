@@ -966,6 +966,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # unbound hook from ANY claude in the same folder claimed it: the owner's own CLI there did, its questions were drawn
     # on the coder's card as the coder asking, and the coder's own hooks were dropped for being someone else's.
     elif resume and agent: bind_ext(t, resume)
+    # ...and it keeps that id as its own for good: Codex FORKS a resumed thread - a new rollout id, `forked_from_id` the
+    # one we asked for - so the rollout renames the pane (witness.RolloutTail) while a hook may still say the old one
+    t.resumed_from = resume or ''
     # The agents already here are not told a newcomer arrived: THIS session was just handed the
     # whole live picture in its seed (blackboard.briefing), which is where peer awareness belongs.
     # The configured profile name is the worker's identity, not just a launch option. Keep it on

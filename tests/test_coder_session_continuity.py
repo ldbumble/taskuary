@@ -36,7 +36,7 @@ def test_a_claude_hook_files_its_session_id_before_the_pane_ever_closes(tmp_path
     store = MemoryStore(); tid = task(store); t = pane(store, tid, str(tmp_path))
     with mock.patch.dict(terminal.SESSIONS, {t.sid: t}, clear=True):
         bound = hooks.receive({'session_id': 'claude-thread', 'cwd': str(tmp_path),
-                               'hook_event_name': 'UserPromptSubmit'})
+                               'hook_event_name': 'SessionStart', 'source': 'startup'})
     assert bound['bound'] and t.ext_id == 'claude-thread'
     assert store.resumable_session(tid)['ExtId'] == 'claude-thread'
 
@@ -51,6 +51,33 @@ def test_a_codex_rollout_files_its_session_id_when_the_tail_binds(tmp_path):
     with mock.patch.object(climodels, 'codex_home', return_value=tmp_path / 'home'):
         assert witness.RolloutTail(t)._find()
     assert store.resumable_session(tid)['ExtId'] == 'codex-thread'
+
+
+def _rollout(day, name, **meta):
+    (day / name).write_text(json.dumps({'type': 'session_meta', 'payload': meta}) + '\n', encoding='utf-8')
+
+
+def test_another_codex_writing_in_the_folder_is_not_this_panes_rollout(tmp_path):
+    """Modified-after-the-pane-opened was the test, and the owner's own codex in the folder writes its rollout all the
+    time - so it read as this pane's (2026-09-28). A rollout must be CREATED after the pane opened."""
+    store = MemoryStore(); cwd = tmp_path / 'repo'; cwd.mkdir(); tid = task(store)
+    t = pane(store, tid, str(cwd), cli='codex')
+    day = tmp_path / 'home' / 'sessions' / '2026' / '09' / '28'; day.mkdir(parents=True)
+    _rollout(day, 'rollout-2026-09-28T07-00-00-owners.jsonl', id='owners', cwd=str(cwd), timestamp='2026-09-28T11:00:00.000Z')
+    with mock.patch.object(climodels, 'codex_home', return_value=tmp_path / 'home'):
+        assert witness.RolloutTail(t)._find() is None
+    assert t.ext_id == ''
+
+
+def test_a_resumed_codex_pane_takes_the_rollout_forked_from_its_thread(tmp_path):
+    store = MemoryStore(); cwd = tmp_path / 'repo'; cwd.mkdir(); tid = task(store)
+    t = pane(store, tid, str(cwd), cli='codex'); t.ext_id, t.resumed_from = 'asked-id', 'asked-id'
+    day = tmp_path / 'home' / 'sessions' / '2026' / '09' / '28'; day.mkdir(parents=True)
+    _rollout(day, 'rollout-2026-09-28T09-00-00-owners.jsonl', id='owners', cwd=str(cwd))
+    _rollout(day, 'rollout-2026-09-28T09-00-01-forked-id.jsonl', id='forked-id', forked_from_id='asked-id', cwd=str(cwd))
+    with mock.patch.object(climodels, 'codex_home', return_value=tmp_path / 'home'):
+        assert witness.RolloutTail(t)._find().endswith('forked-id.jsonl')
+    assert t.ext_id == 'forked-id'
 
 
 def test_filing_the_transcript_keeps_the_session_id_the_hook_already_saved(tmp_path):

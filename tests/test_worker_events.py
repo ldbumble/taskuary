@@ -175,6 +175,7 @@ class ProducersTests(Base):
     def test_claude_code_hooks_become_events_without_guessing(self):
         sess = live(self.tid); sess.store = self.s; term.SESSIONS['run1'] = sess
         base = {'cwd': r'C:\code\repo', 'session_id': 'cc-1'}
+        hooks.receive({**base, 'hook_event_name': 'SessionStart', 'source': 'startup'})       # what names the pane
         hooks.receive({**base, 'hook_event_name': 'UserPromptSubmit', 'prompt': 'fix the cron'})
         self.assertEqual(ws.status(self.s, self.tid)['state'], 'working')
         # PostToolUse fires once the tool has completed, and AskUserQuestion completes when the owner has

@@ -157,6 +157,23 @@ class FailedToolTests(Base):
         self.assertFalse(out['bound']); self.assertEqual(self.state()['requests'], [])
 
 
+class OnlyItsOwnSessionTests(Base):
+    """2026-09-28: a resumed coder pane was claimed by the first hook from ANY claude in the folder - the owner's own
+    CLI, then this checkout's other agent - and their questions were drawn as the coder asking."""
+    def test_a_running_cli_in_the_folder_cannot_claim_an_unnamed_pane(self):
+        t = self.session(argv=('codex',), ext_id='')
+        for ev in ('UserPromptSubmit', 'Stop', 'Notification', 'PermissionRequest'):
+            self.assertFalse(self.fire(ev, cli='codex', sid='owners-own', notification_type='idle_prompt')['bound'], ev)
+        self.assertEqual((t.ext_id, ws.events(self.s, self.tid, 'run1')), ('', []))
+
+    def test_a_forked_codex_resume_answers_to_both_its_ids(self):
+        """Codex forks a resumed thread: the rollout renames the pane while a hook may still carry the old id."""
+        t = self.session(argv=('codex',), ext_id='forked-id'); t.resumed_from = 'asked-id'
+        self.assertTrue(self.fire('Stop', cli='codex', sid='asked-id', last_assistant_message='ok')['bound'])
+        self.assertTrue(self.fire('Stop', cli='codex', sid='forked-id', last_assistant_message='ok')['bound'])
+        self.assertFalse(self.fire('Stop', cli='codex', sid='someone-else', last_assistant_message='ok')['bound'])
+
+
 class SessionLifeTests(Base):
     def test_session_end_ends_the_run_on_the_record(self):
         self.session()
@@ -190,6 +207,7 @@ class SessionLifeTests(Base):
 class CodexTests(Base):
     def test_a_codex_hook_binds_to_the_codex_session_in_that_checkout(self):
         t = self.session(argv=('codex',), ext_id='')
+        self.assertTrue(self.fire('SessionStart', cli='codex', sid='thr-1', source='startup')['bound'])
         out = self.fire('Stop', cli='codex', sid='thr-1', last_assistant_message='done the search')
         self.assertTrue(out['bound']); self.assertEqual(t.ext_id, 'thr-1')
         self.assertEqual(ws.events(self.s, self.tid, 'run1')[-1]['Kind'], 'turn_end')
@@ -222,9 +240,10 @@ class CodexSpoolTests(Base):
 
     def test_spooled_payloads_reach_the_codex_session(self):
         t = self.session(argv=('codex',), ext_id='')
-        raw = b'\xff\xfe' + (json.dumps({'hook_event_name': 'Stop', 'session_id': 'thr-9', 'cwd': CWD, 'last_assistant_message': 'ok'})
+        raw = b'\xff\xfe' + (json.dumps({'hook_event_name': 'SessionStart', 'session_id': 'thr-9', 'cwd': CWD, 'source': 'startup'}) + '\r\n'
+                             + json.dumps({'hook_event_name': 'Stop', 'session_id': 'thr-9', 'cwd': CWD, 'last_assistant_message': 'ok'})
                              + '\r\n').encode('utf-16-le')
-        self.assertEqual(hooks.CodexSpool('unused').feed(raw), 1)
+        self.assertEqual(hooks.CodexSpool('unused').feed(raw), 2)
         self.assertEqual(t.ext_id, 'thr-9')
         self.assertEqual(ws.events(self.s, self.tid, 'run1')[-1]['Kind'], 'turn_end')
 

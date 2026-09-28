@@ -93,6 +93,7 @@ class HookWiringTests(unittest.TestCase):
     def test_a_hook_binds_to_the_claude_session_in_that_checkout(self):
         a = self._fake('a', 1, last=time.time() - 60); b = self._fake('b', 2)             # two claudes, same checkout: the active one gets it
         self._fake('x', 3, argv=['codex'])                                               # codex never takes a claude hook
+        hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'SessionStart', 'source': 'startup'})   # a pane's own CLI opens with it
         r = hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'PostToolUse', 'tool_name': 'Edit', 'tool_input': {'file_path': r'C:\repo\a.py'}})
         # `closing` says whether this event handed the session to selfclose (Stop only)
         self.assertEqual(r, {'bound': True, 'sid': 'b'}); self.assertEqual(b.ext_id, 'S1'); self.assertEqual(b.witness.tool['name'], 'Edit')
@@ -110,6 +111,7 @@ class HookWiringTests(unittest.TestCase):
         chat = general.GeneralSession(server.store, tid)
         term.SESSIONS[chat.sid] = chat
         coding = self._fake('h1', 4)
+        hooks.receive({'session_id': 'S3', 'cwd': CWD, 'hook_event_name': 'SessionStart', 'source': 'startup'})   # a pane's own CLI opens with it
         r = hooks.receive({'session_id': 'S3', 'cwd': CWD, 'hook_event_name': 'Stop', 'last_assistant_message': 'done'})
         self.assertEqual((r.get('bound'), r.get('sid')), (True, 'h1'))
         self.assertTrue(coding.witness.done_at)
@@ -117,6 +119,7 @@ class HookWiringTests(unittest.TestCase):
     def test_the_endpoint_feeds_the_board_and_the_task_page(self):
         tid = c.post('/api/tasks', json={'Title': 'said and did'}).json()['taskId']
         self._fake('s1', tid)
+        c.post('/api/hooks/claude', json={'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'SessionStart', 'source': 'startup'})
         body = {'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'PostToolUse', 'tool_name': 'TodoWrite',
                 'tool_input': {'todos': [{'content': 'edit server.py', 'status': 'in_progress'}]}}
         self.assertEqual(c.post('/api/hooks/claude', json=body).json()['bound'], True)

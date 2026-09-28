@@ -171,6 +171,18 @@ class RolloutTail(threading.Thread):
         self.t, self.path, self.pos, self.buf = term, None, 0, ''
         self.t0 = time.time() - 3
 
+    def _ours(self, meta: dict) -> bool:
+        """Is this rollout THIS pane's? A pane that already knows its thread (resumed - Codex forks it, so the new
+        rollout names the old id as forked_from_id) takes only that thread's. One that does not takes a rollout CREATED
+        after the pty opened: modified-after was the test, and another codex working in the same folder - the owner's
+        own - writes its rollout all the time, so it read as this pane's (2026-09-28)."""
+        ids = {i for i in (getattr(self.t, 'ext_id', ''), getattr(self.t, 'resumed_from', '')) if i}
+        if ids: return bool(ids & {meta.get('id'), meta.get('forked_from_id'), meta.get('session_id')})
+        at = str(meta.get('timestamp') or '')
+        if not at: return True                  # an older codex that does not stamp session_meta: the mtime test stands
+        try: return datetime.fromisoformat(at.replace('Z', '+00:00')).timestamp() >= self.t0
+        except ValueError: return True
+
     def _find(self):
         from .climodels import codex_home
         want = os.path.normcase(os.path.normpath(self.t.cwd))
@@ -181,7 +193,7 @@ class RolloutTail(threading.Thread):
             except (OSError, ValueError): continue
             meta = (first.get('payload') or {}) if first.get('type') == 'session_meta' else {}
             cwd = meta.get('cwd') or ''
-            if cwd and os.path.normcase(os.path.normpath(cwd)) == want:
+            if cwd and os.path.normcase(os.path.normpath(cwd)) == want and self._ours(meta):
                 _BOUND.add(f)
                 # the rollout names the thread codex can be told to resume; the filename carries
                 # the same id for older rollouts that did not write it into session_meta

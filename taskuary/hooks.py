@@ -327,12 +327,19 @@ def receive(payload: dict, cli: str = 'claude') -> dict:
     mine = [t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and getattr(t, 'argv', None)
             and cli in os.path.basename(str(t.argv[0])).lower() and _same_dir(t.cwd, cwd)]
     if not mine: return {'bound': False}
-    t = next((x for x in mine if getattr(x, 'ext_id', '') == sid), None)
+    # the pane's own id, or the one it was resumed from (Codex forks a resumed thread: terminal.open_session)
+    t = next((x for x in mine if sid and sid in (getattr(x, 'ext_id', ''), getattr(x, 'resumed_from', ''))), None)
     if not t:
         # an unbound hook may claim a session only while that session is itself unbound. The hooks are
         # user-wide, so the owner's own CLI in the same folder used to be painted onto the agent's card -
         # and its Stop judged against the agent's task (audit 2026-09-02)
         free = [x for x in mine if not getattr(x, 'ext_id', '')]
+        # ...and only by a session STARTING. Any event used to claim it, so another CLI already running in the folder -
+        # the owner's own, or this checkout's other agents - took the pane with its next prompt or Stop and spoke for
+        # the task from then on (2026-09-28: the owner's questions drawn as the coder asking). A pane's own CLI opens
+        # with SessionStart; one already running never sends it. Claude panes are named at launch (terminal.
+        # open_session); this is Codex's road until its rollout names the thread (witness).
+        if str(payload.get('hook_event_name') or '') != 'SessionStart': return {'bound': False}
         if not free: return {'bound': False}
         t = max(free, key=lambda x: x.last); term.bind_ext(t, sid)
     if cli == 'claude':

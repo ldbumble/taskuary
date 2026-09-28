@@ -226,3 +226,16 @@ class NewWalkRaisesWavingAgentsTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class AdvisorTaskWearsTheAdvisorMarkTests(unittest.TestCase):
+    def test_a_task_the_advisor_raised_is_the_advisors_row_not_your_own_note(self):
+        """The owner, 2026-09-28: "advisor should be more prominent" - its task wore the grey person of a note you wrote."""
+        s, settle = settled()
+        adv = s.create_task({'Title': 'Check the gateway retirement', 'Kind': 'general', 'Status': 'open',
+                             'Source': 'assistant', 'SourceRef': 'assistant:idea:7'}, 'assistant')
+        mine = s.create_task({'Title': 'Call the landlord', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        mail(s, 'lunch on friday', who='Gail Moreno', email='gail@northwind.example', hours=1)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        by = {i.get('tid'): i.get('channel') for i in rail(s)}
+        self.assertEqual((by.get(adv), by.get(mine)), ('assistant', 'own'))

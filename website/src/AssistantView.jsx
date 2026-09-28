@@ -239,6 +239,9 @@ function Pile({ pile, current, onPull, error, onRetry }) {
     return () => ro.disconnect();
   }, [sig]);
   const [opened, setOpened] = useState(() => new Set());        // bands the owner opened by hand
+  // A ROW'S STATE WORD IS THE FILTER (the owner, 2026-09-28: "filter by waiting to start / on you / agent waiting on you
+  // ... as minimal as possible"): click "waiting to start" on a row and its band shows only those; the heading says so
+  const [only, setOnly] = useState(null);                       // {level, word} or null
   // WHAT THE ESTIMATE MISSED. fillCaps costs what it expects the browser to paint; this is the
   // overflow it actually painted, measured once per change and given back in rows. Bounded by the
   // guard below so a band that cannot shrink any further can never spin.
@@ -273,7 +276,10 @@ function Pile({ pile, current, onPull, error, onRetry }) {
       )
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
-      ) : bands.map(({ level, items: rows }) => {
+      ) : bands.map(({ level, items: all }) => {
+        const picked = only?.level === level ? only.word : null;
+        const rows = picked ? all.filter((i) => rowMeta(i).word === picked || i.key === curKey) : all;
+        const pick = (e, w) => { e.stopPropagation(); setOnly(picked ? null : { level, word: w }); };
         const open = opened.has(level);
         const cap = open ? rows.length : (caps[level] ?? rows.length);
         // only the two bands the rail is allowed to cap can be folded; urgent, your task and agents
@@ -332,6 +338,8 @@ function Pile({ pile, current, onPull, error, onRetry }) {
               }) : undefined}>
               <span style={{ color: ROLES[LEVEL_ROLE[level]]?.ink, background: ROLES[LEVEL_ROLE[level]]?.tint,
                 borderColor: ROLES[LEVEL_ROLE[level]]?.bd }}>{levelLabel(level)}</span>
+              {picked && <button type="button" className="tq-pile-only" title="Show all of them again"
+                onClick={(e) => pick(e)}>{picked} ✕</button>}
               {folds && <i className="fold">{open ? "▾" : "▸"}</i>}
               <hr /><em>{rows.length}</em>
             </div>
@@ -375,12 +383,16 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                         {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
                         {i.settling && <span className="tq-pile-tag">triaging…</span>}
                         {loud && !i.settling && (
-                          <span className="tq-pile-tag loud"
+                          <span className="tq-pile-tag loud" role="button" tabIndex={0}
+                            title={picked ? "Show all of them again" : `Show only “${meta.word}”`}
+                            onClick={(e) => pick(e, meta.word)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") pick(e, meta.word); }}
                             style={{ color: ROLES.you.ink, background: ROLES.you.tint, borderColor: ROLES.you.bd }}>
                             {meta.mark} {meta.word}</span>
                         )}
                         {!loud && !!word && (
-                          <span className="tq-pile-word"
+                          <span className="tq-pile-word" role="button" tabIndex={0}
+                            title={picked ? "Show all of them again" : `Show only “${meta.word}”`}
+                            onClick={(e) => pick(e, meta.word)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") pick(e, meta.word); }}
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
                             <i>{meta.mark}</i>{word}</span>
                         )}

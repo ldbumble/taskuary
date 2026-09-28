@@ -314,8 +314,10 @@ def _generic_target(item, query, cutoff, include_excluded=False, vehicles_only=F
         for entity in rows:
             if kind == 'task' and entity.get('SourceRef') == 'assistant:dock':
                 continue  # Existing task-list boundary: persistent application chrome, not work.
-            channel = 'assistant' if kind == 'idea' else 'own'
             source = str(entity.get('Source') or '')
+            # an Advisor idea that became a task is still the Advisor's: it wore the grey "your own note" mark, which
+            # nobody could see (the owner, 2026-09-28: "advisor should be more prominent")
+            channel = 'assistant' if kind == 'idea' or (kind == 'task' and source == 'assistant') else 'own'
             stamp = entity.get(stamp_field) or entity.get('FirstSeen') or entity.get('CreatedAt')
             candidate = {'Subject': entity.get('Title') or entity.get('Text') or entity.get('Reason'),
                          'FromName': entity.get('CreatedBy'), 'Channel': channel}

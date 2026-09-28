@@ -266,20 +266,28 @@
    joined by one rule, muted ink. Colour sits on the avatars only. */
 .tq-story { margin-top: 9px; display: flex; flex-direction: column; gap: 11px; }
 .tq-step { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; position: relative; }
-.tq-step-rail { position: absolute; left: 12px; top: 27px; bottom: -11px; width: 2px; background: #e4ded3; }
+.tq-step-rail { position: absolute; left: 12px; top: 27px; bottom: -20px; width: 2px; background: #e4ded3; }
+/* ...and on into Your move: the thread ends at the decision (the owner, 2026-09-28: "continue the line ... to your move") */
+.tq-step-rail.tail { bottom: -16px; }
+.tq-story + .tq-move, .tq-card-lead + .tq-move { position: relative; }
+/* the parts are split by a dashed rule, as the phone splits them (the owner, 2026-09-28: "i like the ----- line") */
+.tq-step + .tq-step .tq-step-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
+.tq-step + .tq-step .tq-av { margin-top: 9px; }
+.tq-step + .tq-step .tq-step-rail { top: 36px; }
 .tq-av { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff;
   font: 700 9.5px/1 'IBM Plex Sans', sans-serif; letter-spacing: .02em; position: relative; z-index: 1; }
 .tq-step-h { font-size: 11.5px; color: #8a847a; padding-top: 1px; }
 .tq-step-h b { color: #4d4a43; font-weight: 600; }
-.tq-step-say { margin-top: 2px; font: 500 14.5px/1.42 'Newsreader', Georgia, serif; color: #3d3b36; overflow-wrap: anywhere; }
+.tq-step-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
 .tq-step-did { margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: #4d4a43; overflow-wrap: anywhere; }
 .tq-step-did.muted { color: #8a847a; font-style: italic; }
-.tq-step-checks { margin-top: 5px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; line-height: 1.45; color: #4d4a43; }
-.tq-step-checks i { display: inline-block; width: 52px; font: 600 9.5px/1.6 'IBM Plex Mono', monospace; letter-spacing: .08em; text-transform: uppercase; font-style: normal; color: #5f7a5f; }
+.tq-step-more { margin-top: 4px; font-size: 12px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere; }
+.tq-step-more b { color: #4d4a43; font-weight: 600; }
+.tq-step-words { margin-top: 6px; }
 /* ...YOUR MOVE IS LOUD (assistantCards YourMove): the one framed block, full contrast, its main button inside */
-.tq-move { margin-top: 12px; border: 2px solid #a0643a; border-radius: 12px; background: #fff; padding: 11px 13px 11px; box-shadow: 0 6px 18px rgba(160,100,58,.11); }
+.tq-move { margin-top: 14px; border: 2px solid #a0643a; border-radius: 12px; background: #fff; padding: 11px 13px 11px; box-shadow: 0 6px 18px rgba(160,100,58,.11); }
 .tq-move.alert { border-color: #8a3b2e; box-shadow: 0 6px 18px rgba(138,59,46,.11); }
-.tq-move-h { font: 700 10px/1.2 'IBM Plex Mono', monospace; letter-spacing: .14em; text-transform: uppercase; color: #a0643a; }
+.tq-move-h { font: 700 11px/1.2 'IBM Plex Sans', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #a0643a; }
 .tq-move.alert .tq-move-h { color: #8a3b2e; }
 .tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: #1d1c19; }
 .tq-move.alert .tq-move-say:first-of-type { font-weight: 600; color: #6b2b22; }

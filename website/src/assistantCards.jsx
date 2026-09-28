@@ -162,14 +162,15 @@ export function readReport(body) {
   const field = (k) => ((text.match(new RegExp(`^\\s*${k}:\\s*(.+)$`, "im")) || [])[1] || "").trim();
   return { summary: field("Summary"), actions: field("Actions"), verdict: field("Determination"), text: text.trim() };
 }
-const reportOf = (doc) => (doc?.comments || []).slice().reverse().find((c) => /^(CODER REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
+const shortVerdict = (r) => (r?.verdict && r.verdict.length <= 60 && !String(r.summary || "").toLowerCase().includes(r.verdict.toLowerCase()) ? r.verdict : "");
+export const reportOf = (doc) => (doc?.comments || []).slice().reverse().find((c) => /^(CODER REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
 const TASK_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3" /><polyline points="8.5 12 11 14.5 15.5 9.5" /></svg>;
 const CODE_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 7 3 12 8 17" /><polyline points="16 7 21 12 16 17" /></svg>;
 
 // asker: the task's own sentence (default) | false (no task to tell). agent: "auto" (drawn when it has anything) |
 // true (drawn, "No agent yet" when empty) | false. state: the agent's word ("finished", "asks you"...). did: its
 // summary when no report was filed. extra: more lines under the agent (its folded screen, its question's context).
-export function Story({ card, asker = true, agent = "auto", state, did, name, extra, fallback, by }) {
+export function Story({ card, asker = true, agent = "auto", state, did, name, extra, fallback, by, words, tail = false }) {
   const doc = useFetched(card?.tid ? `/api/tasks/${card.tid}` : null, card?.presentation_revision);
   const [open, setOpen] = useState(false);
   const own = by === undefined && isOwn(card);
@@ -183,21 +184,24 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
   return (
     <div className="tq-story">
       {asker && said && (
-        <div className="tq-step">{drawAgent && <span className="tq-step-rail" />}
+        <div className="tq-step">{(drawAgent || tail) && <span className={`tq-step-rail${drawAgent ? "" : " tail"}`} />}
           <span className="tq-av" style={{ background: own ? "#a0643a" : channelColor(card?.channel || "email") }}>{own ? "You" : by === null ? TASK_GLYPH : initials(who)}</span>
-          <div><div className="tq-step-h"><b>{who}</b>{own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-step-say">{said}</div></div>
+          <div className="tq-step-body"><div className="tq-step-h"><b>{who}</b>{own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-step-say">{said}</div>{words}</div>
         </div>
       )}
       {drawAgent && (
-        <div className="tq-step">
+        <div className="tq-step">{tail && <span className="tq-step-rail tail" />}
           <span className="tq-av" style={{ background: found || state ? "#5f7a5f" : "#d8d2c7" }}>{CODE_GLYPH}</span>
-          <div>
+          <div className="tq-step-body">
             <div className="tq-step-h"><b>{found || state ? agentLabel(card, name) : "No agent yet"}</b>{state ? ` · ${state}` : ""}</div>
             {found ? <div className="tq-step-did">{found}</div> : !state && <div className="tq-step-did muted">Nobody is working on this.</div>}
-            {(r?.actions || r?.verdict) && (
-              <div className="tq-step-checks">
-                {r.actions && <div><i>did</i>{r.actions}</div>}
-                {r.verdict && <div><i>verdict</i>{r.verdict}</div>}
+            {/* ONE account of the work (the owner, 2026-09-28: "the agent part has 3 parts? ... combine them"): what it found
+                is the text; what it did follows as one line; its verdict only when it is a short decision the summary
+                does not already say ("accept") - most verdicts restated the summary word for word */}
+            {(r?.actions || shortVerdict(r)) && (
+              <div className="tq-step-more">
+                {r.actions && <><b>It did:</b> {r.actions}</>}
+                {shortVerdict(r) && <>{r.actions ? " " : ""}<b>Verdict:</b> {shortVerdict(r)}</>}
               </div>
             )}
             {extra}
@@ -603,7 +607,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   const via = SENDS_ON[String(mate?.Channel || rv?.Channel || "").toLowerCase()] || "by email";
   return (
     <CardShell card={card} kicker={(co || card.tid) && blocked ? "can't close out yet" : co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
-      lead={action && !co ? <Lead text={rv?.Subject || card.title} /> : <Story card={card} state={card.summary ? "finished" : undefined} fallback={rv?.Subject} />} err={err}>
+      lead={action && !co ? <Lead text={rv?.Subject || card.title} /> : <Story card={card} state={card.summary ? "finished" : undefined} fallback={rv?.Subject} tail />} err={err}>
       <YourMove title={moveTitle} tone={stopped ? "alert" : null} go={verb} then={then}>
         {/* what GitHub says about this pull request now - why Close out is off, or the red it will merge past */}
         {gh && blocked && <div className="tq-move-say">{capital(gh.reason)}.</div>}
@@ -745,10 +749,10 @@ export function AgentCard({ card, onDone, onOpenTask }) {
     : !live && !working ? `goes straight to the agent; it picks up where it stopped.` : null;
   return (
     <CardShell card={card} kicker={working ? "agent working" : card.paused ? "agent stopped" : `the ${who} ${KICK[subState(card)]}`}
-      lead={card.tid ? <Story card={card} agent state={agentState} name={name} extra={lastWords} />
+      lead={card.tid ? <Story card={card} agent state={agentState} name={name} extra={lastWords} tail={!working}
+          words={card.paused ? <div className="tq-step-words"><CombinedTaskText card={card} list={false} /></div> : null} />
         : <Lead text={state} who={name} />}
       sub={card.tid ? null : card.title} err={err}>
-      {card.paused && card.tid && <CombinedTaskText card={card} list={false} />}
       {working ? <>{toggle}{screen}</> : (
         <YourMove title={card.paused ? "pick it up again" : asked ? "answer the agent" : live ? "answer it on its screen" : "tell the agent what's next"}
           go={go} then={then}>
@@ -855,7 +859,7 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
   const show = () => setOpen((o) => !o);
   return (
     <CardShell card={card} kicker="agent finished" err={err}
-      lead={<Story card={card} by={null} agent state="finished" name={card.who} did={card.summary || "finished it, with no summary."} />}>
+      lead={<Story card={card} by={null} agent state="finished" name={card.who} did={card.summary || "finished it, with no summary."} tail={!!card.mid && !!card.summary} />}>
       {/* the final report, when the agent filed it as a comment Story does not read (a self-close note) */}
       {!card.summary && <button type="button" className="tq-card-more" onClick={show}>{open ? "Less" : "More - show the final report"}</button>}
       {open && <div className="tq-card-full">{report === null ? "…" : looksMd(report) ? <Md text={report} /> : report}</div>}
@@ -948,6 +952,10 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   // A BROKEN CONNECTION is not a message and has no task: its row clears itself on the next good check,
   // so the card's verb is the way to FIX it - the connection's own card - and Next puts it down until the
   // error changes (2026-09-23)
+  // hooks first - the connection card below returns early, and a hook after it would change the order per kind
+  const doc = useFetched(card.tid ? `/api/tasks/${card.tid}` : null, card.presentation_revision);
+  const shut = useClose(card, onDone);
+  const [back, setBack] = useState(null);
   if (card.kind === "connection") return (
     <CardShell card={card} kicker="a connection stopped answering" title={card.title} err={err}>
       {card.why && <div className="tq-card-excerpt">{card.why}</div>}
@@ -973,13 +981,37 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         {busy === "agent" ? "Handing it over…" : hand}</Button>
     : card.mid && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={moveSx}>{busy === "reply" ? "Drafting…" : "Draft a reply"}</Button>;
   const asker = String(card.who || "them").replace(/\s*<[^>]*>/g, "");
+  // AN AGENT ALREADY DID IT (the owner, 2026-09-28: TQ-0796 read "who should take it? Hand to agent" under the report of
+  // the agent that took it): once a report is filed the move is to close the task, or send it back with what to change
+  const reported = !!reportOf(doc) && (own || mineAlone);
+  const sendBack = async () => {
+    setBusy("back"); setErr("");
+    try { await api.post(`/api/tasks/${card.tid}/continue-work`, { note: (back || "").trim() || null }); onDone?.(`Sent back to the agent on ${card.ref || "it"}. It comes back here when it stops.`); }
+    catch (e) { setErr(errText(e)); }
+    setBusy("");
+  };
+  // what they wrote, in their words, inside the ask - never for your own task, whose words the story already said
+  const words = card.channel === "assistant" && card.mid ? <div className="tq-step-words"><AdvisorWhy mid={card.mid} /></div>
+    : card.mid && !mineAlone ? <div className="tq-step-words"><Clamp><CombinedTaskText card={card} list={false} /></Clamp></div> : null;
   return (
-    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : suggestedKind === "coding" ? "coding · nobody on it" : own || mineAlone ? "your task" : "asked you"}
-      lead={<Story card={card} agent={own || mineAlone ? true : false} fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
-      {/* what they wrote, in their words - never for your own task, whose words the story already said */}
-      {card.channel === "assistant" && card.mid ? <AdvisorWhy mid={card.mid} />
-        : card.mid && !mineAlone ? <Clamp><CombinedTaskText card={card} list={false} /></Clamp> : null}
-      {verb ? (
+    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : reported ? "agent reported" : suggestedKind === "coding" ? "coding · nobody on it" : own || mineAlone ? "your task" : "asked you"}
+      lead={<Story card={card} agent={own || mineAlone ? true : false} words={words} tail={!!verb || reported}
+        fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
+      {reported ? (
+        <YourMove title="close it, or send it back"
+          go={<><Button size="small" variant="contained" disableElevation disabled={shut.busy || !!busy} onClick={shut.run} sx={moveSx}>{shut.busy ? "Closing…" : "Mark done"}</Button>
+            <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setBack((b) => (b === null ? "" : null))} sx={quiet}>Send back to the agent</Button></>}
+          then={back === null ? "if it is not finished, send it back with what is left." : null}>
+          {back !== null && (
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 8 }}>
+              <TextField fullWidth multiline minRows={1} maxRows={4} autoFocus value={back} onChange={(e) => setBack(e.target.value)}
+                placeholder="What is left for it to do?" sx={{ "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13 } }} />
+              <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={sendBack} sx={moveSx}>{busy === "back" ? "Sending…" : "Send back"}</Button>
+            </div>
+          )}
+          {shut.err && <div className="tq-card-err">{shut.err}</div>}
+        </YourMove>
+      ) : verb ? (
         <YourMove title={own || mineAlone ? "who should take it?" : `reply to ${asker}`} go={verb}
           then={own || mineAlone ? `starts ${suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.`
             : "writes one for you to approve here - nothing is sent."} />
@@ -1078,7 +1110,7 @@ export function TaskCard({ card, onDone, onOpenTask }) {
   };
   return (
     <CardShell card={card} kicker={idle ? "waiting to start" : "the task you asked about"} err={err}
-      lead={<Story card={card} agent={idle ? true : "auto"} state={idle ? "handed over, not started" : undefined} did={card.summary} />}>
+      lead={<Story card={card} agent={idle ? true : "auto"} state={idle ? "handed over, not started" : undefined} did={card.summary} tail />}>
       <YourMove title={idle ? "start it" : "tell the agent"}
         go={idle
           ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={start} sx={moveSx}>{busy === "start" ? "Starting…" : "Start now"}</Button>
@@ -1179,7 +1211,7 @@ export function WrapupCard({ card, onDone, onOpenTask }) {
   };
   return (
     <CardShell card={card} kicker="reply sent · task still open" err={err}
-      lead={<Story card={card} by={null} did={card.summary} />}>
+      lead={<Story card={card} by={null} did={card.summary} tail />}>
       <YourMove title="close it"
         go={<Button size="small" variant="contained" disableElevation disabled={busy} onClick={close} sx={moveSx}>{busy ? "Closing…" : "Mark done"}</Button>}
         then={`ends ${card.ref} - it stops coming back to Work.`}>

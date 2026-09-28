@@ -74,7 +74,8 @@ test("a paused assistant task exposes resume instead of pretending nobody has wo
   assert.match(agent, /card\.paused \? "agent stopped"/);
   assert.match(agent, /\/api\/tasks\/\$\{card\.tid\}\/resume/);
   assert.match(agent, /"Continue session"/);
-  assert.match(agent, /card\.paused && card\.tid && <CombinedTaskText/);
+  // ...its task text inside the ask, where the story tells it (2026-09-28)
+  assert.match(agent, /words=\{card\.paused \? <div className="tq-step-words"><CombinedTaskText/);
   const tasks = read("TasksView.jsx");
   // one set of words for the one act, whichever agent held the conversation (2026-09-15) - and one box, the rail's,
   // with a note for the agent (T14, 2026-09-25)

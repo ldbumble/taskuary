@@ -291,6 +291,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...but the reply is still there behind the agent: closing from its card dismisses it, so the card
     # says so ("Close without sending") rather than losing it quietly
     if review and card.get('kind') == 'agent': card.update(rid=None, draft=False, reply_pending=True)
+    # ...and what an agent already did on it, for the card's middle part (AgentDid) - the reply card had it, the agent's did not
+    if card.get('kind') == 'agent' and not card.get('summary'): card['summary'] = funnel.agent_found(store, tid)
     # ...and an open task nobody closed comes BACK once it has been quiet, so clearing it is a
     # "not now", never a way to lose it. `queued` used to sit in the force-unread clause below, which
     # made a task handed to an agent the one row Done could not shift - the same question answered two

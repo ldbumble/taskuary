@@ -132,10 +132,20 @@ function Lead({ text, who }) {
 }
 
 // who wants what, for a card with a task behind it: the task's own summary, which triage writes
-function TaskLead({ card, fallback }) {
+// (`did`: the card's summary is the AGENT's, drawn by AgentDid - never the trigger's stand-in)
+function TaskLead({ card, fallback, did = false }) {
   const doc = useFetched(card?.tid ? `/api/tasks/${card.tid}` : null, card?.presentation_revision);
   const sum = String(doc?.task?.Summary || "");
-  return <Lead text={firstSentence(sum) || firstSentence(card?.summary) || fallback || card?.title} who={card?.who} />;
+  return <Lead text={firstSentence(sum) || (!did && firstSentence(card?.summary)) || fallback || card?.title} who={did ? null : card?.who} />;
+}
+
+// THE CARD'S THREE PARTS (the owner, 2026-09-28: "the goal is to see what triggered the task, agent action, and what
+// we are reviewing"): every card with a task behind it tells it in that order - the trigger as the lead, this line,
+// then the thing to decide. The agent's part lived only inside a `why` sentence, or unlabelled, or nowhere.
+function AgentDid({ card, who, text }) {
+  const t = String(text ?? card?.summary ?? "").trim();
+  if (!t) return null;
+  return <div className="tq-card-excerpt"><b>{who || card?.agent || "The agent"} did:</b> {t}</div>;
 }
 
 // MORE ONLY WHEN THERE IS MORE (the owner, 2026-09-23: "the less button when there is only one line
@@ -491,10 +501,8 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     : rv ? <><b>{card.tid ? CLOSE_OUT : "Send reply"}</b> {sendsBy(rv.Channel, who)}{card.tid ? " and closes the task" : ""}.</> : null;
   return (
     <CardShell card={card} kicker={co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
-      lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} />} err={err}>
-      {/* THE CARD'S THREE PARTS (the owner, 2026-09-28): what triggered it (the lead above), what the agent did (this
-          line), and what you are approving (the box below) - the agent's part was nowhere on the card */}
-      {card.summary && (action ? !!co : true) && <div className="tq-card-excerpt"><b>{card.agent || "The agent"} did:</b> {card.summary}</div>}
+      lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} did={!!card.summary} />} err={err}>
+      {(action ? !!co : true) && <AgentDid card={card} />}
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
           placeholder={action && !mate ? "" : "Write your answer here"}
@@ -568,6 +576,8 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   };
   const working = card.lane === "working";
   const who = chat ? "assistant" : "agent";
+  const state = working ? `${card.working || card.agent || who} is back at it - nothing for you until it stops.` : card.paused ? `${card.working || card.agent || who} was saved after Taskuary stopped - ready to resume.`
+    : (card.choices || []).length && card.request_id ? says(subState(card), card.working || card.agent || who) : card.why || says(subState(card), card.working || card.agent || who);
   const worker = useFetched(!chat && card.tid ? `/api/tasks/${card.tid}/worker` : null, card.presentation_revision);
   const lastSaid = String(worker?.said || "").trim();
   const resume = async () => {
@@ -586,9 +596,11 @@ export function AgentCard({ card, onDone, onOpenTask }) {
     // who wants what, for an agent: ONE sentence for the state (laneSays) as the lead - when the
     // question and its choices are drawn below, the bare form here - and the task under it
     <CardShell card={card} kicker={working ? "agent working" : card.paused ? "agent stopped" : `the ${who} ${KICK[subState(card)]}`}
-      lead={<Lead text={working ? `${card.working || card.agent || who} is back at it - nothing for you until it stops.` : card.paused ? `${card.working || card.agent || who} was saved after Taskuary stopped - ready to resume.`
-        : (card.choices || []).length && card.request_id ? says(subState(card), card.working || card.agent || who) : card.why || says(subState(card), card.working || card.agent || who)} who={card.working || card.agent} />}
-      sub={card.paused ? null : card.title} err={err}>
+      lead={card.paused || !card.tid ? <Lead text={state} who={card.working || card.agent} /> : <TaskLead card={card} did />}
+      sub={card.paused ? null : card.tid ? null : card.title} err={err}>
+      {/* the three parts (AgentDid): what triggered it leads, then the agent - its state, and what it did so far */}
+      {!card.paused && !!card.tid && <Lead text={state} who={card.working || card.agent} />}
+      <AgentDid card={card} who={card.working || card.agent} />
       {card.paused && card.tid && <CombinedTaskText card={card} list={false} />}
       {/* THE SCREEN FOLDED: what the agent said last, in the card's box - the question it is waiting on
           was only on the screen, so folding it hid the one thing to answer (2026-09-23) */}
@@ -729,8 +741,8 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
   }, [open, card.tid, card.presentation_revision]);
   const show = () => setOpen((o) => !o);
   return (
-    <CardShell card={card} kicker="agent finished" lead={<Lead text={`${card.who || "The agent"} finished ${card.title}.`} who={card.who} />} err={err}>
-      {card.summary && !open && <div className="tq-card-excerpt">{card.summary}</div>}
+    <CardShell card={card} kicker="agent finished" lead={<TaskLead card={card} did />} err={err}>
+      {!open && <AgentDid card={card} who={card.who} text={card.summary || "finished it, with no summary - the final report says what it found."} />}
       {open && <div className="tq-card-full">{report === null ? "…" : looksMd(report) ? <Md text={report} /> : report}</div>}
       <button type="button" className="tq-card-more" onClick={show}>{open ? "Less" : "More - show the final report"}</button>
       {/* its agent already closed the task: "Close the task" on it asked for what was done (the owner, 2026-09-24) */}
@@ -938,8 +950,8 @@ export function TaskCard({ card, onDone, onOpenTask }) {
   };
   return (
     <CardShell card={card} kicker={idle ? "waiting to start" : "the task you asked about"}
-      lead={<TaskLead card={card} />} sub={assistantFocus(card).lead || card.why} err={err}>
-      {card.summary && <div className="tq-card-excerpt">{card.summary}</div>}
+      lead={<TaskLead card={card} did={!!card.summary} />} sub={assistantFocus(card).lead || card.why} err={err}>
+      <AgentDid card={card} />
       {idle && card.why_idle && <div className="tq-card-excerpt"><b>Why it has not started:</b> {card.why_idle}</div>}
       {!idle && <TextField fullWidth multiline minRows={1} maxRows={4} value={text} onChange={(e) => setText(e.target.value)}
         placeholder="Leave a note — it is typed in when the agent next stops"
@@ -1036,9 +1048,9 @@ export function WrapupCard({ card, onDone, onOpenTask }) {
     setBusy(false);
   };
   return (
-    <CardShell card={card} kicker="reply sent · task still open" title={card.title} sub={card.why} err={err}>
-      {card.sent && <div className="tq-card-excerpt">You sent: {card.sent}</div>}
-      {card.summary && <div className="tq-card-excerpt">The agent: {card.summary}</div>}
+    <CardShell card={card} kicker="reply sent · task still open" lead={<TaskLead card={card} did />} sub={card.why} err={err}>
+      <AgentDid card={card} />
+      {card.sent && <div className="tq-card-excerpt"><b>You sent:</b> {card.sent}</div>}
       <Foot covers={["close"]}
         verb={<Button size="small" variant="contained" disableElevation disabled={busy} onClick={close} sx={primary}>{busy ? "Closing…" : "Mark done"}</Button>}
         then={<><b>Mark done</b> ends {card.ref} - it stops coming back to Work.</>}

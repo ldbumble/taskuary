@@ -1711,7 +1711,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 
                 {!sessionView && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0,
-                  borderLeft: "4px solid #9a7444" }}>
+                  borderLeft: "4px solid #8a3646" }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"
@@ -1732,7 +1732,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
                             {openingReply ? "Drafting…" : replyPrimary}</Button>
                           <Tooltip title="Ask sender — a question waits on the task for your approval">
-                            <IconButton size="small" sx={{ color: "#9a7444" }} onClick={() => setAskSenderOpen(true)}>
+                            <IconButton size="small" sx={{ color: "#8a3646" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
                           </Tooltip>
                         </Box>
@@ -1757,7 +1757,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                               onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
                           )}
                           <Button size="small" variant="outlined" sx={barBtn}
-                            startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#9a7444" }} />}
+                            startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
                             title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
                             onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
                           <Box sx={{ flex: 1, minWidth: 12 }} />

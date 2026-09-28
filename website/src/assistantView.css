@@ -301,12 +301,12 @@
 .tq-move .tq-av { margin-top: 9px; }
 .tq-av-asker { --c: #55697a; }
 .tq-av-agent { --c: #6f8a6e; }
-.tq-av-agent.none { --c: #b3ab9e; }
+.tq-av-agent.none { --c: #6f8a6e; }
 /* you: the oxblood that means "on you" everywhere - the rail's Your task, the card's own header dot, the task page's step 3 */
 .tq-av-you { --c: #8a3646; font-size: 9px; letter-spacing: 0; }
 /* WHOSE TURN (Story `turn`): filled, with a ring of its own colour - the rest stay outlined */
 .tq-av.on { outline: 1.5px solid var(--c); outline-offset: 2px; }
-.tq-av.off { opacity: .7; }
+/* ...never faded: the task page never dims its badges, and a faded slate read as grey (2026-09-28) */
 .tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: #1d1c19; }
 .tq-move.alert .tq-move-say:first-of-type { font-weight: 600; color: #6b2b22; }
 .tq-move-to { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }

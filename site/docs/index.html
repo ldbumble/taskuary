@@ -37,7 +37,7 @@
 <div class="entry on">
       <a class="page" href="./" aria-current="page">Start here</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Start here's sections"></button>
-      <div class="secs"><a class="sec" href="#what-taskuary-is" data-sec="what-taskuary-is">What Taskuary is</a><a class="sec" href="#install-on-windows" data-sec="install-on-windows">Install on Windows</a><a class="sec" href="#install-with-python" data-sec="install-with-python">Install with Python</a><a class="sec" href="#docker" data-sec="docker">Docker</a><a class="sec" href="#your-first-run" data-sec="your-first-run">Your first run</a><a class="sec" href="#choosing-the-ai-setup" data-sec="choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="#where-your-data-lives" data-sec="where-your-data-lives">Where your data lives</a><a class="sec" href="#what-leaves-your-machine" data-sec="what-leaves-your-machine">What leaves your machine</a><a class="sec" href="#updating" data-sec="updating">Updating</a><a class="sec" href="#next" data-sec="next">Next</a></div>
+      <div class="secs"><a class="sec" href="#what-taskuary-is" data-sec="what-taskuary-is">What Taskuary is</a><a class="sec" href="#install-on-windows" data-sec="install-on-windows">Install on Windows</a><a class="sec" href="#install-with-python" data-sec="install-with-python">Install with Python</a><a class="sec" href="#command-line-options" data-sec="command-line-options">Command-line options</a><a class="sec" href="#docker" data-sec="docker">Docker</a><a class="sec" href="#your-first-run" data-sec="your-first-run">Your first run</a><a class="sec" href="#choosing-the-ai-setup" data-sec="choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="#where-your-data-lives" data-sec="where-your-data-lives">Where your data lives</a><a class="sec" href="#what-leaves-your-machine" data-sec="what-leaves-your-machine">What leaves your machine</a><a class="sec" href="#updating" data-sec="updating">Updating</a><a class="sec" href="#next" data-sec="next">Next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./how-it-works">How it works</a>
@@ -128,7 +128,34 @@ taskuary-desktop
 <div class="callout note"><p class="eyebrow">Which platform gets the most use</p><p>CI runs the full test matrix on Windows, Linux and macOS. Development happens mostly on Windows,
 so the terminal, the desktop shell and the agent presets are best exercised there; macOS and
 Linux may still have rough edges.</p>
-</div><h2 id="docker">Docker<a class="anchor" href="#docker" aria-label="Link to this section">#</a></h2>
+</div><h2 id="command-line-options">Command-line options<a class="anchor" href="#command-line-options" aria-label="Link to this section">#</a></h2>
+<p>The everyday options for the Python install are:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--port PORT</code></td>
+<td>Overrides the configured server port for this run</td>
+</tr>
+<tr>
+<td><code>--host HOST</code></td>
+<td>Overrides the configured server host; use <code>0.0.0.0</code> to listen on all interfaces</td>
+</tr>
+<tr>
+<td><code>--no-browser</code></td>
+<td>Starts the server without opening a browser tab</td>
+</tr>
+<tr>
+<td><code>--debug</code></td>
+<td>Enables verbose console logging for requests, report runs and errors</td>
+</tr>
+</tbody></table>
+<p>Run <code>taskuary --help</code> for the complete command reference.</p>
+<h2 id="docker">Docker<a class="anchor" href="#docker" aria-label="Link to this section">#</a></h2>
 <p>Runs Taskuary without putting Python on the host:</p>
 <pre><code class="language-bash">git clone https://github.com/ldbumble/taskuary
 cd taskuary

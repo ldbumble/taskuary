@@ -1113,6 +1113,25 @@ def close_upstream_ended(store, tid: int, said: str, final: str, actor: str = 'r
         store.update_task(tid, {'Status': 'done'}, actor)
 
 
+ENDED_SAID = 'so there is nothing left to do here.'
+
+
+def heal_upstream_ended(store) -> list:
+    """Close the tasks an ended item already said were over but that stayed open. Your own merge used to hold its task
+    for an unsent thank-you, and the poll reads only items changed since it last ran - so a PR merged before the fix was
+    never read again and its task sat at "ready to close out" for good (the owner, 2026-09-28). The sync's own comment
+    on the task is the evidence; nothing is asked of GitHub. Returns the tasks it closed."""
+    closed = []
+    for t in store.list_tasks(active_only=True):
+        said = next((c['Body'] for c in reversed(store.list_comments(t['TaskId']))
+                     if c.get('Actor') == 'router' and str(c.get('Body') or '').endswith(ENDED_SAID)), None)
+        if not said: continue
+        close_upstream_ended(store, t['TaskId'], said, said, 'owner' if said.startswith('You ') else 'router')
+        closed.append(t['TaskId'])
+    if closed: logger.info(f"github: closed {len(closed)} task(s) whose item had already ended: {closed}")
+    return closed
+
+
 def _gh_ended(store, item: dict, base: str, repo: str, tok: str = None) -> int:
     """The item this task came from is over - it was closed or merged upstream.
 
@@ -1125,7 +1144,8 @@ def _gh_ended(store, item: dict, base: str, repo: str, tok: str = None) -> int:
     if not tid: return 0
     t = store.get_task(tid) or {}
     if t.get('Status') in ('done', 'dropped'): return 0
-    what = 'merged' if item.get('merged_at') else 'closed'
+    # the issues list carries a PR's merge under pull_request.merged_at, not at the top: every merge read as 'closed'
+    what = 'merged' if item.get('merged_at') or (item.get('pull_request') or {}).get('merged_at') else 'closed'
     kind = 'pull request' if 'pull_request' in item else 'issue'
     said = (f"The {kind} this task came from was {what} on GitHub "
             f"({repo}#{item['number']}), so there is nothing left to do here.")

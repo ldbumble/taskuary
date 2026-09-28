@@ -314,6 +314,28 @@ class ContributorPullRequestTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'done'); self.assertNotEqual(s.get_review(rid)['Status'], 'pending')
 
 
+    def test_a_task_the_old_rule_held_open_is_closed_at_startup(self):
+        """The poll reads only items changed since it ran: a PR merged before the fix is never read again (2026-09-28)."""
+        from taskuary import channels
+        s = armed(MemoryStore()); tid = self._reviewed(s, 'waiting'); other = self._reviewed(s, 'waiting')
+        rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks - merged.'})
+        s.add_comment(tid, 'router', 'agent', 'You merged this pull request on GitHub (org/app#7), so there is nothing left to do here.')
+        self.assertEqual(channels.heal_upstream_ended(s), [tid])
+        self.assertEqual(s.get_task(tid)['Status'], 'done'); self.assertNotEqual(s.get_review(rid)['Status'], 'pending')
+        self.assertEqual(s.get_task(other)['Status'], 'waiting')                    # a PR still open is left alone
+
+
+    def test_a_merged_pr_from_the_issues_list_says_merged(self):
+        """The issues list puts a PR's merge under pull_request.merged_at; it read as "closed" (2026-09-28)."""
+        from unittest import mock
+        from taskuary import channels
+        s = armed(MemoryStore()); tid = self._reviewed(s, 'waiting')
+        item = {'number': 7, 'pull_request': {'merged_at': '2026-09-28T00:00:00Z'}}
+        with mock.patch.object(s, 'task_for_conversation', return_value=tid):
+            channels._gh_ended(s, item, 'gh:org/app#7', 'org/app')
+        self.assertTrue(any('was merged on GitHub' in c['Body'] for c in s.list_comments(tid)))
+
+
 class ResumeNoteTests(unittest.TestCase):
     def test_the_owners_note_leads_the_resume(self):
         from taskuary import terminal

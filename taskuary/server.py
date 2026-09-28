@@ -142,6 +142,10 @@ async def _lifespan(_app):
         wabridge.trim_log(store)
     except Exception as e: logger.warning(f'whatsapp log trim skipped: {e}')
     _heal_owner_docs()
+    try:                           # a task whose PR or issue already ended, held open by the old close-out rule
+        from .channels import heal_upstream_ended
+        heal_upstream_ended(store)
+    except Exception as e: logger.warning(f'ended-item heal skipped: {e}')
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)

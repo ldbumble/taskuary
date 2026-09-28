@@ -268,8 +268,7 @@
 .tq-step { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; position: relative; }
 .tq-step-rail { position: absolute; left: 12px; top: 27px; bottom: -20px; width: 2px; background: #e4ded3; }
 /* ...and on into Your move: the thread ends at the decision (the owner, 2026-09-28: "continue the line ... to your move") */
-.tq-step-rail.tail { bottom: -16px; }
-.tq-story + .tq-move, .tq-card-lead + .tq-move { position: relative; }
+.tq-step-rail.tail { bottom: -20px; }
 /* the parts are split by a dashed rule, as the phone splits them (the owner, 2026-09-28: "i like the ----- line") */
 .tq-step + .tq-step .tq-step-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
 .tq-step + .tq-step .tq-av { margin-top: 9px; }
@@ -279,16 +278,25 @@
 .tq-step-h { font-size: 11.5px; color: #8a847a; padding-top: 1px; }
 .tq-step-h b { color: #4d4a43; font-weight: 600; }
 .tq-step-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
+.tq-step-subject { margin-top: 3px; font-size: 13px; line-height: 1.4; color: #3d3b36; overflow-wrap: anywhere; }
+.tq-step-rest { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .tq-step-did { margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: #4d4a43; overflow-wrap: anywhere; }
 .tq-step-did.muted { color: #8a847a; font-style: italic; }
 .tq-step-more { margin-top: 4px; font-size: 12px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere; }
 .tq-step-more b { color: #4d4a43; font-weight: 600; }
 .tq-step-words { margin-top: 6px; }
 /* ...YOUR MOVE IS LOUD (assistantCards YourMove): the one framed block, full contrast, its main button inside */
-.tq-move { margin-top: 14px; border: 2px solid #a0643a; border-radius: 12px; background: #fff; padding: 11px 13px 11px; box-shadow: 0 6px 18px rgba(160,100,58,.11); }
-.tq-move.alert { border-color: #8a3b2e; box-shadow: 0 6px 18px rgba(138,59,46,.11); }
-.tq-move-h { font: 700 11px/1.2 'IBM Plex Sans', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #a0643a; }
-.tq-move.alert .tq-move-h { color: #8a3b2e; }
+/* ...your step closes the thread: split by the same dashed rule, your avatar on the same line */
+.tq-move { margin-top: 11px; }
+.tq-move .tq-step-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
+.tq-move .tq-av { margin-top: 9px; }
+.tq-av-you { background: #a0643a; font-size: 8.5px; }
+.tq-move.alert .tq-av-you { background: #8a3b2e; }
+/* WHOSE TURN (Story `turn`): the avatar the ball is with is ringed, the rest step back - colour on the mark, never a wash */
+.tq-av.on { box-shadow: 0 0 0 3px #fffdf9, 0 0 0 5px rgba(160,100,58,.45); }
+.tq-move.alert .tq-av.on { box-shadow: 0 0 0 3px #fffdf9, 0 0 0 5px rgba(138,59,46,.5); }
+.tq-av.off { opacity: .5; filter: saturate(.35); }
 .tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: #1d1c19; }
 .tq-move.alert .tq-move-say:first-of-type { font-weight: 600; color: #6b2b22; }
 .tq-move-to { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }

@@ -163,6 +163,18 @@ export function readReport(body) {
   return { summary: field("Summary"), actions: field("Actions"), verdict: field("Determination"), text: text.trim() };
 }
 const shortVerdict = (r) => (r?.verdict && r.verdict.length <= 60 && !String(r.summary || "").toLowerCase().includes(r.verdict.toLowerCase()) ? r.verdict : "");
+// WHAT THE THING IS, in its own words (the owner, 2026-09-28: "you don't see what the PR is? at least the title"): the
+// source's subject - a pull request's title with its number, an email's subject - since the summary's first sentence
+// says who wants what, not what it is. "owner/repo#113 fix: ..." reads "PR #113 · fix: ..."
+export function subjectLine(msg) {
+  const s = String(msg?.Subject || "").replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  const m = s.match(/^[\w.-]+\/[\w.-]+#(\d+)\s+(.*)$/);
+  const kind = /^\s*\[pull request/i.test(String(msg?.BodyText || "")) ? "PR " : /^\s*\[issue/i.test(String(msg?.BodyText || "")) ? "Issue " : "";
+  if (m) return `${kind}#${m[1]} · ${m[2]}`;
+  return s.replace(/^((re|fw|fwd):\s*)+/i, "");
+}
+const restOf = (summary) => String(summary || "").trim().split(/(?<=[.!?])\s+/).slice(1).join(" ");
 export const reportOf = (doc) => (doc?.comments || []).slice().reverse().find((c) => /^(CODER REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
 const TASK_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3" /><polyline points="8.5 12 11 14.5 15.5 9.5" /></svg>;
 const CODE_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 7 3 12 8 17" /><polyline points="16 7 21 12 16 17" /></svg>;
@@ -170,28 +182,37 @@ const CODE_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" s
 // asker: the task's own sentence (default) | false (no task to tell). agent: "auto" (drawn when it has anything) |
 // true (drawn, "No agent yet" when empty) | false. state: the agent's word ("finished", "asks you"...). did: its
 // summary when no report was filed. extra: more lines under the agent (its folded screen, its question's context).
-export function Story({ card, asker = true, agent = "auto", state, did, name, extra, fallback, by, words, tail = false }) {
+export function Story({ card, asker = true, agent = "auto", state, did, name, extra, fallback, by, words, tail = false, turn }) {
   const doc = useFetched(card?.tid ? `/api/tasks/${card.tid}` : null, card?.presentation_revision);
   const [open, setOpen] = useState(false);
   const own = by === undefined && isOwn(card);
   const said = capital(firstSentence(doc?.task?.Summary) || firstSentence(fallback) || card?.title);
+  const src = (doc?.messages || []).find((m) => m.Status !== "context") || null;
+  const subject = subjectLine(src);
+  const showSubject = subject && !said.toLowerCase().includes(subject.replace(/^(PR |Issue )?#\d+(\s·)?\s*/, "").toLowerCase());
+  const rest = restOf(doc?.task?.Summary);
   const who = own ? "You" : by === null ? "The task" : String(by || card?.who || "Someone").replace(/\s*<[^>]*>/g, "").trim();
   const from = [own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : "your task") : channelWord(card?.channel),
     card?.when ? agoText(card.when) : ""].filter(Boolean).join(" · ");
   const rep = reportOf(doc), r = rep ? readReport(rep.Body) : null;
   const found = r?.summary || String(did ?? card?.summary ?? "").trim();
   const drawAgent = agent === true || (agent === "auto" && (found || state || extra));
+  // WHOSE TURN: yours when your step follows, the agent's while it works, theirs while you wait on them
+  const whose = turn || (tail ? "you" : card?.lane === "working" ? "agent" : card?.lane === "theirs" ? "asker" : null);
+  const lit = (who) => (!whose ? "" : whose === who ? " on" : " off");
   return (
     <div className="tq-story">
       {asker && said && (
         <div className="tq-step">{(drawAgent || tail) && <span className={`tq-step-rail${drawAgent ? "" : " tail"}`} />}
-          <span className="tq-av" style={{ background: own ? "#a0643a" : channelColor(card?.channel || "email") }}>{own ? "You" : by === null ? TASK_GLYPH : initials(who)}</span>
-          <div className="tq-step-body"><div className="tq-step-h"><b>{who}</b>{own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-step-say">{said}</div>{words}</div>
+          <span className={`tq-av${lit("asker")}`} style={{ background: own ? "#a0643a" : channelColor(card?.channel || "email") }}>{own ? "You" : by === null ? TASK_GLYPH : initials(who)}</span>
+          <div className="tq-step-body"><div className="tq-step-h"><b>{who}</b>{own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-step-say">{said}</div>
+            {showSubject && <div className="tq-step-subject">{subject}</div>}
+            {rest && <div className="tq-step-rest">{rest}</div>}{words}</div>
         </div>
       )}
       {drawAgent && (
         <div className="tq-step">{tail && <span className="tq-step-rail tail" />}
-          <span className="tq-av" style={{ background: found || state ? "#5f7a5f" : "#d8d2c7" }}>{CODE_GLYPH}</span>
+          <span className={`tq-av${lit("agent")}`} style={{ background: found || state ? "#5f7a5f" : "#d8d2c7" }}>{CODE_GLYPH}</span>
           <div className="tq-step-body">
             <div className="tq-step-h"><b>{found || state ? agentLabel(card, name) : "No agent yet"}</b>{state ? ` · ${state}` : ""}</div>
             {found ? <div className="tq-step-did">{found}</div> : !state && <div className="tq-step-did muted">Nobody is working on this.</div>}
@@ -216,17 +237,23 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
 
 // the one framed block on a card: what you decide, and the button that does it. tone "alert" when something outside
 // (GitHub, a limit) stands in the way - the only place a card shouts
+// ...and it is the THREAD'S LAST STEP, not a framed box (the owner, 2026-09-28: "over designed ... it should not stand
+// out that much ... the logo for your move should stand out"): your avatar on the same line, lit because the turn is
+// yours, the header like every step's ("You · start it"), then what to decide and the button
 export function YourMove({ title, tone, go, then, children }) {
   return (
-    <div className={`tq-move${tone === "alert" ? " alert" : ""}`}>
-      <div className="tq-move-h">Your move{title ? ` · ${title}` : ""}</div>
-      {children}
-      {(go || then) && <div className="tq-move-go">{go}{then && <span className="tq-move-then">{then}</span>}</div>}
+    <div className={`tq-step tq-move${tone === "alert" ? " alert" : ""}`}>
+      <span className="tq-av tq-av-you on">You</span>
+      <div className="tq-step-body">
+        <div className="tq-step-h"><b>You</b>{title ? ` · ${title}` : ""}</div>
+        {children}
+        {(go || then) && <div className="tq-move-go">{go}{then && <span className="tq-move-then">{then}</span>}</div>}
+      </div>
     </div>
   );
 }
 // the move's own button: the card's main verb, larger, in the move's ink
-const moveSx = { color: "#fff", background: "#a0643a", fontWeight: 600, fontSize: 13, px: 1.75, py: 0.7, "&:hover": { background: "#8d5631" },
+const moveSx = { color: "#fff", background: "#a0643a", fontWeight: 600, fontSize: 12.5, px: 1.5, py: 0.55, "&:hover": { background: "#8d5631" },
   "&.Mui-disabled": { color: "#fff", background: "#cdb7a4" } };
 const alertSx = { ...moveSx, background: "#8a3b2e", "&:hover": { background: "#76321f" } };
 
@@ -365,7 +392,7 @@ function FullText({ mid, revision }) {
   const read = doc.ReadText != null ? cleanText(doc.ReadText) : raw;
   const body = whole ? raw : read;
   const cut = body.indexOf("\n--- raw data ---");
-  const text = cut >= 0 ? body.slice(0, cut) : body;
+  const text = noImages(cut >= 0 ? body.slice(0, cut) : body);
   const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
   return (
     <div className="tq-card-full">
@@ -381,6 +408,14 @@ function FullText({ mid, revision }) {
 // combined. Context rows helped triage decide, but are not part of the grouped ask shown to the owner.
 // `list={false}` on the walk's cards: the checklist and the task's history live on the Tasks tab, and
 // the card links there rather than repeating them (the owner, 2026-09-23)
+// NO PICTURES ON A CARD (the owner, 2026-09-28: "no images??"): a signature's logo, an inline screenshot or a
+// "[image: ...]" placeholder is the task page's to show - the card reads the words
+export const noImages = (text) => String(text || "")
+  .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+  .replace(/<img\b[^>]*>/gi, "")
+  .replace(/\[(?:image|cid|inline image)[^\]]*\]/gi, "")
+  .replace(/\n{3,}/g, "\n\n");
+
 function CombinedTaskText({ card, list = true }) {
   // the TASK is the identity - which of its messages the item happens to name does not change what the
   // task bundles, so a moved mid neither blanks nor refetches it; a newer presentation refreshes quietly
@@ -388,7 +423,9 @@ function CombinedTaskText({ card, list = true }) {
   if (!card?.tid) return <FullText mid={card?.mid} revision={card?.presentation_revision} />;
   if (!doc) return <div className="tq-card-full">…</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
-  const messages = (doc.messages || []).filter((m) => String(m.Status || "") !== "context");
+  // NEWEST FIRST (the owner, 2026-09-28): the latest word is what the card is about; the thread reads back from it
+  const messages = (doc.messages || []).filter((m) => String(m.Status || "") !== "context")
+    .slice().sort((a, b) => String(b.SentAt || "").localeCompare(String(a.SentAt || "")));
   // The job is the reason this card exists, so it sits above the source thread as a todo rather than
   // disappearing into the thread's pale metadata. The list is read-only here; ticking stays on the task.
   const taskText = String(doc.task?.Summary || doc.task?.Title || card.title || "").trim();
@@ -437,7 +474,7 @@ function CombinedTaskText({ card, list = true }) {
         Email context · {messages.length} messages combined by triage
       </div>
       {messages.map((m, n) => {
-        const body = cleanText(m.ReadText ?? m.BodyText ?? "");
+        const body = noImages(cleanText(m.ReadText ?? m.BodyText ?? ""));
         return (
           <div key={m.MessageId || n} style={{ padding: "7px 0", borderTop: n ? "1px solid #e2ddd4" : 0 }}>
             <div className="tq-card-note" style={{ marginBottom: 3 }}>

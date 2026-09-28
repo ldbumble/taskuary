@@ -1205,6 +1205,26 @@ def story_who(item: dict | None) -> str:
     return re.sub(r'\s*<[^>]*>', '', ' '.join(str(it.get('who') or '').split())) or 'them'
 
 
+def subject_of(store, item: dict | None) -> str:
+    """The source's own subject: "owner/repo#113 fix: ..." as "#113 · fix: ...", an email's without its Re:/Fwd:."""
+    if store is None or not (item or {}).get('tid'): return ''
+    try: msg = next((m for m in store.list_messages(int(item['tid'])) or [] if m.get('Status') != 'context'), None)
+    except Exception: return ''
+    s = ' '.join(str((msg or {}).get('Subject') or '').split())
+    m = re.match(r'^[\w.-]+/[\w.-]+#(\d+)\s+(.*)$', s)
+    body = str((msg or {}).get('BodyText') or '').lstrip().lower()
+    kind = 'PR ' if body.startswith('[pull request') else 'Issue ' if body.startswith('[issue') else ''
+    return f'{kind}#{m.group(1)} · {m.group(2)}' if m else re.sub(r'^((re|fw|fwd):\s*)+', '', s, flags=re.I)
+
+
+def summary_rest(store, item: dict | None) -> str:
+    """The task summary after its first sentence - what it changes, what it needs."""
+    if store is None or not (item or {}).get('tid'): return ''
+    try: summary = str((store.get_task(int(item['tid'])) or {}).get('Summary') or '').strip()
+    except Exception: return ''
+    return ' '.join(re.split(r'(?<=[.!?])\s+', summary)[1:]).strip()
+
+
 def story_block(store, item: dict | None, draft: str = '', say: str = '') -> str:
     """The quiet part: a header (state · ref), who asked and what they want, then the agent and its evidence."""
     from . import concierge, funnel
@@ -1228,6 +1248,12 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '') -> str
         verb = 'wrote' if kind == 'fyi' or it.get('lane') in ('fyi', 'report') else 'asked'
         lines.append(' · '.join(x for x in (f"{funnel.CHANNEL_MARKS.get(ch, '')} **{story_who(it)}** {verb}".strip(), channel_word(ch), age) if x))
     if said: lines.append(said[:1].upper() + said[1:])
+    # what the thing IS, in its own words - a pull request's title and number, an email's subject - and the rest of the
+    # summary: the first sentence says who wants what, never what it is (the owner, 2026-09-28: "at least the title")
+    subj = subject_of(store, it)
+    if subj and re.sub(r'^(PR |Issue )?#\d+( ·)?\s*', '', subj).lower() not in (said or '').lower(): lines.append(subj)
+    rest = summary_rest(store, it)
+    if rest: lines.append(_cut(rest, 280))
     if not it.get('tid') and say and kind != 'agentdone' and (not said or said.lower() not in say.lower()): lines.append(say)
     # their own words, when nothing of yours answers them yet (a draft puts them behind More)
     if not draft and kind in ('message', 'asked', 'todo', 'fyi') and not is_own(it):
@@ -1278,7 +1304,8 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
         body.append(f"Why it has not started: {' '.join(str(it.get('why_idle') or it['why']).split())}")
     elif it.get('kind') == 'wrapup' and it.get('sent'):
         body.append(f"You sent: {_cut(it['sent'], 300)}")
-    return '\n'.join([RULE, f'👉 **YOUR MOVE · {title.upper()}**'] + body)
+    # "👉 You · start it" - the thread's last step, in the words every step uses; the rule is the one loud thing
+    return '\n'.join([RULE, f'👉 **You** · {title}'] + body)
 
 
 def script_words(store, script: str) -> str:

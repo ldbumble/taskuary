@@ -50,9 +50,9 @@ class ShowWhatYouAreApprovingTests(unittest.TestCase):
                'chips': [{'verb': 'approve', 'label': 'Send the reply'}, {'verb': 'redraft', 'label': 'Redraft it'},
                          {'verb': 'next', 'label': 'Next'}]}
         text = remote_assistant.turn_text(out, store=s)
-        self.assertIn('YOUR MOVE · REPLY TO', text)
+        self.assertIn('👉 **You** · reply to', text)
         self.assertIn('the refund cleared this morning', text)          # in full: it is sent in your name
-        self.assertLess(text.index('YOUR MOVE'), text.index('Reply with one of:'))   # read it, then choose
+        self.assertLess(text.index('👉 **You**'), text.index('Reply with one of:'))   # read it, then choose
         self.assertNotIn('THEY WROTE', text)
         self.assertIn('Send the reply: sends the draft above, in your name.', text)
         self.assertIn('Reply with one of:\n1 · Send the reply\n2 · Next\n3 · More\n4 · Redraft it', text)
@@ -228,7 +228,7 @@ class AnAgentsQuestionComesBackAnsweredTests(unittest.TestCase):
         text = remote_assistant.turn_text({'say': 'codex asked you something.', 'item': item,
                                            'chips': [{'verb': 'answer_agent', 'label': 'Answer it'},
                                                      {'verb': 'next', 'label': 'Next'}]}, store=s)
-        self.assertIn('YOUR MOVE · ANSWER THE AGENT', text)
+        self.assertIn('👉 **You** · answer the agent', text)
         self.assertIn('Which branch should I build from?', text)
         self.assertIn('1 · main', text)                      # the agent's own answers, numbered first
         self.assertIn('2 · dev', text)

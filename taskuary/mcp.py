@@ -3,7 +3,7 @@ on the timeline. Config: {"cmd": "npx", "args": [...], "tool": "query", "tool_ar
 "env": {...}}. Minimal stdio JSON-RPC client (initialize -> initialized -> tools/call), no
 SDK dependency - keeps the single-exe desktop build lean. Spec: modelcontextprotocol.io.
 """
-import json, os, subprocess, threading, queue
+import json, math, os, subprocess, threading, queue
 from . import spawn
 
 PROTOCOL = '2025-06-18'
@@ -111,13 +111,23 @@ class HTTPMCPClient:
     def close(self): pass                       # nothing to reap: no child process
 
 
+def _timeout(cfg) -> float:
+    """Seconds per request. A cleared form field sends '' or None, which means the default too."""
+    raw = cfg.get('timeout')
+    if raw is None or not str(raw).strip(): return 60
+    try: t = float(raw)
+    except (TypeError, ValueError): raise ValueError('timeout must be a number of seconds') from None
+    if not (t > 0 and math.isfinite(t)): raise ValueError('timeout must be a number of seconds')
+    return t
+
+
 def _session(cfg):
     """stdio when the config names a command, HTTP when it names a url. A card may carry both
     (a `cmd` bridge in front of a remote server); the url wins, since it needs no local install."""
     if cfg.get('url'):
-        return HTTPMCPClient(cfg['url'], cfg.get('token'), cfg.get('headers'), int(cfg.get('timeout', 60))).start()
+        return HTTPMCPClient(cfg['url'], cfg.get('token'), cfg.get('headers'), _timeout(cfg)).start()
     if not cfg.get('cmd'): raise ValueError('mcp connector needs "cmd" (a local server) or "url" (a hosted one)')
-    return MCPClient(cfg['cmd'], cfg.get('args'), cfg.get('env'), int(cfg.get('timeout', 60))).start()
+    return MCPClient(cfg['cmd'], cfg.get('args'), cfg.get('env'), _timeout(cfg)).start()
 
 
 def read_only(tool: dict) -> bool:

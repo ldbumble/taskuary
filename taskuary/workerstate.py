@@ -288,8 +288,11 @@ def answer_group(store, tid: int, answers: dict, actor: str = 'owner') -> dict:
     reqs.sort(key=lambda r: int(_QID.match(r['request_id']).group(2)) if _QID.match(r['request_id']) else 0)
     from . import terminal as term
     try:
-        if hasattr(sess, 'send_prompt'):
-            sess.send_prompt('\n'.join(f"{i}. {r['text']} - {answers[r['request_id']]}" for i, r in enumerate(reqs, 1)))
+        said = '\n'.join(f"{i}. {r['text']} - {answers[r['request_id']]}" for i, r in enumerate(reqs, 1))
+        if hasattr(sess, 'send_prompt'): sess.send_prompt(said)
+        elif getattr(sess, 'cli', '') == 'codex':
+            # codex asked in words: its answers are its next turn, through its own queue (typed only if that refuses)
+            if not term.queue_codex(sess, said): term.type_into(sess, said)
         elif all(r.get('choices') for r in reqs) and all(r.get('source') == 'hook' for r in reqs):
             term.answer_form(sess, [(r.get('choices') or [], answers[r['request_id']]) for r in reqs])
         else:
@@ -354,7 +357,8 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
     try:
         if hasattr(sess, 'send_prompt'): sess.send_prompt(send)
         # a codex question asked in WORDS is answered through its own queue - a chooser or an approval is still a keystroke
-        elif req['kind'] == 'input_needed' and req.get('source') != 'screen' and not req.get('choices') and term.queue_codex(sess, send): pass
+        elif req['kind'] == 'input_needed' and req.get('source') != 'screen' and (not req.get('choices') or getattr(sess, 'cli', '') == 'codex') \
+                and term.queue_codex(sess, send): pass
         else: term.type_into(sess, send)
     except Exception as e:
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered to {who}: {str(e)[:200]}')

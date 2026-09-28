@@ -330,7 +330,14 @@ def _events(t, p: dict) -> None:
             ws.record(st, tid, sid, 'answered', request_id=ws.request_id_for(text), text=str(p.get('response') or 'answered'), source='hook')
         elif ev == 'Stop':
             close(('stalled',), 'the run spoke again')
-            ws.record(st, tid, sid, 'turn_end', text=str(p.get('last_assistant_message') or '')[:4000], source='hook')
+            # a CLI with no question tool (codex) asks with the marker: every line of it is a question, one group
+            from . import selfclose
+            said, asks = selfclose.ask_markers(str(p.get('last_assistant_message') or ''))
+            ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook')
+            g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None
+            for i, (q, choices) in enumerate(asks, 1):
+                ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
+                          text=q, choices=choices, source='hook')
         elif ev == 'Interrupt': ws.record(st, tid, sid, 'turn_end', text='interrupted', source='hook')
         elif ev == 'SessionEnd':
             # the run's own ending, before the pty's EOF gets there - unless the process lives on

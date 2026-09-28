@@ -953,6 +953,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # One scrub for BOTH roads: the prompt is about to go either into argv (seed_argv) or be
     # typed into the pane, and either way it reaches the CLI's provider. See redact.py.
     seed = redact.scrub(' '.join(seed_fn(cwd).split())) if (seed_fn and agent) else None
+    # CODEX ASKS IN WORDS (the owner, 2026-09-28: "you can't do this for codex"): it has no question tool and its hooks
+    # cannot wait on us, so it is told the marker regular agents use - one line per question - and its Stop hook turns
+    # them into questions the card answers together (hooks._events). Claude asks through AskUserQuestion instead.
+    if seed and cli_named(profile, argv) == 'codex':
+        from . import selfclose as _sc
+        seed = f'{seed} {_sc.ASK_LINE}'
     extra = seed_argv(profile, seed) if seed and not resume else None
     # pywinpty joins argv with list2cmdline - correct for a direct .exe - but an npm .CMD shim
     # runs through `cmd /c`, and cmd.exe parses & | < > and stray quotes as ITS OWN syntax:

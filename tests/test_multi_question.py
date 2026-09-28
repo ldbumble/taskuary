@@ -160,6 +160,41 @@ class RegularAgentTests(unittest.TestCase):
         self.assertEqual(sent, ['1. Which vendor? - Payworth\n2. Which quarter? - Q3'])
 
 
+class CodexTests(Base):
+    """Codex has no question tool and its hooks cannot wait on us (they only write a spool file): it is told the marker,
+    its Stop hook turns the marker lines into one group, and its answers go back as ONE turn through codex queue."""
+    def setUp(self):
+        super().setUp()
+        self.t.argv, self.t.cli = ['codex'], 'codex'
+
+    def test_its_last_message_is_read_for_every_question(self):
+        said = 'Found the cap.\n[[TASKUARY-ASK]] Which branch? | main | release\n[[TASKUARY-ASK]] Backfill September? | Yes | No'
+        hooks.receive({'hook_event_name': 'Stop', 'session_id': 'sess-1', 'cwd': CWD, 'last_assistant_message': said}, cli='codex')
+        qs = ws.question_group(self.s, self.t)
+        self.assertEqual([(q['text'], q['choices']) for q in qs], [('Which branch?', ['main', 'release']), ('Backfill September?', ['Yes', 'No'])])
+        turn = [e for e in ws.events(self.s, self.tid, 'run1') if e['Kind'] == 'turn_end'][-1]
+        self.assertEqual(turn['Text'], 'Found the cap.', 'the marker never reaches the card as text')
+
+    def test_its_answers_go_back_as_one_turn_through_its_queue(self):
+        for i, q in enumerate(['Which branch?', 'Backfill September?'], 1):
+            ws.record(self.s, self.tid, 'run1', 'input_needed', request_id=ws.question_id('abcdef0123', i), text=q, choices=['a', 'b'], source='hook')
+        with mock.patch.object(term, 'queue_codex', return_value=True) as queued, mock.patch.object(term, 'answer_form') as keys:
+            out = ws.answer_group(self.s, self.tid, {ws.question_id('abcdef0123', 1): 'main', ws.question_id('abcdef0123', 2): 'Yes'})
+        self.assertTrue(out['delivered'])
+        self.assertEqual(queued.call_args[0][1], '1. Which branch? - main\n2. Backfill September? - Yes')
+        keys.assert_not_called()
+
+    def test_only_codex_is_told_the_marker(self):
+        from taskuary import agents
+        for cli, told in (('codex', True), ('claude', False)):
+            s = MemoryStore(); tid = Factory(s).task(title='Fix the export', kind='coding')
+            s.upsert_agent(cli, 'coding', 'cli', json.dumps({'cmd': cli, 'args': []}))
+            with mock.patch.object(agents, '_resolve_cmd', return_value=[cli]), mock.patch.dict(term.SESSIONS, {}, clear=True), \
+                 mock.patch.object(term, 'Term') as Term, tempfile.TemporaryDirectory() as here:
+                term.open_session(s, cli, tid, None, here, actor='owner', seed_fn=lambda cwd: 'fix the export')
+            self.assertEqual(selfclose.ASK_MARKER in ' '.join(map(str, Term.call_args.args[0])), told, cli)
+
+
 class PhoneTests(unittest.TestCase):
     ITEM = {'kind': 'agent', 'lane': 'blocked', 'asking': True, 'tid': 3, 'ref': 'TQ-0003', 'title': 'Fix the export', 'who': 'coder',
             'agent': 'coder', 'choices': ['main', 'release'],

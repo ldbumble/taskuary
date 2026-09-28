@@ -19,6 +19,11 @@ SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
 # scrollback measured 1.9s against 0.10s here, per request, per session (2026-09-08: one working
 # claude pane was 77% of all server CPU, and a first Board load waited on it).
 PHASE_TAIL = 8_000
+# ...and how often it is read while output keeps coming. A working agent's spinner writes several times a
+# second, so "only when something new was printed" still re-rendered on every call - status_tail was 40% of
+# all server time with one agent running, and a Start agent then Next waited 15 s (the owner, 2026-09-28).
+# A screen that has gone quiet (a question drawn, a prompt waiting) is read at once; a busy one once a second.
+PHASE_EVERY, PHASE_QUIET = 1.0, 0.3
 SESSIONS = {}               # sid -> Term. Iterate a list(...) copy: readers run on FastAPI worker threads while
                             # close()/reap() pop from it - "dictionary changed size during iteration" mid-wrap-up
 SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and what 'settled' means
@@ -209,7 +214,8 @@ class Term:
         # parked for a frame, then working again on the next. The raw observation may move that
         # quickly, but the state people see must hold before it changes.
         self._phase_stable, self._phase_candidate, self._phase_since = 'working', None, time.time()
-        self._phase_screen = (-1, [])                     # rendered screen, keyed on self.writes
+        self._phase_screen = (-1, [], 0.0)                # rendered screen: self.writes, its lines, when
+        self.wrote_at = 0.0                               # when output last arrived (PHASE_QUIET)
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
         # what lets files() attribute later dirt to this agent (see blackboard.py)
         from . import blackboard as _bb, witness as _w
@@ -229,7 +235,7 @@ class Term:
         threading.Thread(target=self._pump, daemon=True).start()
 
     def _append(self, s):
-        self.buf.append(s); self.n += len(s); self.writes += 1     # monotonic: self.n falls back on trim
+        self.buf.append(s); self.n += len(s); self.writes += 1; self.wrote_at = time.time()   # monotonic: self.n falls back on trim
         while self.n > SCROLLBACK and len(self.buf) > 1: self.n -= len(self.buf.popleft())
 
     def _emit(self, data):
@@ -416,6 +422,13 @@ class Term:
     def subscribe(self, loop, q): self.subs.append((loop, q))
     def unsubscribe(self, q): self.subs = [(l, x) for l, x in self.subs if x is not q]
     def scrollback(self): return ''.join(self.buf)
+    def tail_chars(self, n):
+        """The last n characters, without joining the whole 200 KB scrollback to slice off its end."""
+        out, got = [], 0
+        for chunk in reversed(self.buf):
+            out.append(chunk); got += len(chunk)
+            if got >= n: break
+        return ''.join(reversed(out))[-n:]
     def write(self, s):
         if self.alive: self.pty.write(s)
     def _saw_output(self):
@@ -471,13 +484,14 @@ class Term:
         for lifecycle: Claude's current "esc to interrupt" footer was visible on screen while the
         raw tail contained only fragments such as "Gallivanting…" and reported `unknown`.
         """
-        wrote, lines = self._phase_screen
+        wrote, lines, at = self._phase_screen
         # A screen nothing has printed to cannot have a new answer, so reading it again is free -
         # a parked agent costs nothing at all. The old 0.5s clock expired while one request was
         # still running, so every poll re-rendered the whole scrollback to reach the same word.
-        if wrote != self.writes:
-            lines = render(self.scrollback()[-PHASE_TAIL:], self.cols, self.rows).splitlines()
-            self._phase_screen = (self.writes, lines)
+        now = time.time()
+        if wrote != self.writes and (now - at >= PHASE_EVERY or now - self.wrote_at >= PHASE_QUIET or wrote < 0):
+            lines = render(self.tail_chars(PHASE_TAIL), self.cols, self.rows).splitlines()
+            self._phase_screen = (self.writes, lines, now)
         # ...the last n lines that SAY something: a pane opens taller than a young session's output, so
         # Claude's first chooser sat mid-screen over blank rows and the bottom eight rows said nothing.
         # The phase read `unknown` until the 45 s idle fallback, and only then did the card wave.

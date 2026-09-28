@@ -1416,13 +1416,36 @@ class PhaseRenderTests(unittest.TestCase):
                 time.sleep(.6)          # past the old 0.5s window: the SCREEN is what is unchanged
         self.assertEqual(len(seen), 1, f'rendered {len(seen)} times for one unchanged screen')
 
-    def test_new_output_is_picked_up_rather_than_served_from_the_cache(self):
-        """The counter must not freeze the answer: real output has to reach the next reader."""
+    def test_new_output_is_picked_up_once_the_screen_settles(self):
+        """The counter must not freeze the answer: real output reaches the next reader as soon as the screen stops
+        moving - a question drawn, a prompt waiting - which is when an answer on it matters."""
         t = self._dead()
         self._paint(t, '? for shortcuts')
         self.assertEqual(terminal.phase_of(t.status_tail(8)), 'parked')
         self._paint(t, 'Levitating... (12s - esc to interrupt)')
+        time.sleep(terminal.PHASE_QUIET + .05)
         self.assertEqual(terminal.phase_of(t.status_tail(8)), 'working')
+
+    def test_a_screen_still_being_written_is_rendered_at_most_once_a_second(self):
+        """A working agent's spinner writes several times a second, and "only when something new was printed"
+        re-rendered on every read: status_tail was 40% of all server time with one agent running, and Start agent
+        then Next waited 15 s (the owner, 2026-09-28). While output streams it is read once a second."""
+        t = self._dead()
+        seen, patched = self._spy()
+        with patched:
+            t0 = time.time()
+            while time.time() - t0 < terminal.PHASE_EVERY * .8:
+                self._paint(t, 'Levitating... (12s - esc to interrupt)'); t.status_tail(8); time.sleep(.02)
+            self.assertEqual(len(seen), 1, f'rendered {len(seen)} times inside one second of streaming output')
+            time.sleep(terminal.PHASE_EVERY * .3)
+            self._paint(t, 'Levitating... (13s - esc to interrupt)'); t.status_tail(8)
+        self.assertEqual(len(seen), 2, 'a second later the newest screen is read')
+
+    def test_the_tail_is_read_without_joining_the_whole_scrollback(self):
+        t = self._dead()
+        for i in range(50): t._append(f'chunk {i:02d} ' * 20)
+        self.assertEqual(t.tail_chars(500), t.scrollback()[-500:])
+        self.assertEqual(t.tail_chars(10 ** 9), t.scrollback())
 
     def test_phase_reads_a_bounded_tail_not_the_whole_scrollback(self):
         """pyte costs 3.0s for a full 200k scrollback and 0.13s for its last few KB, and the

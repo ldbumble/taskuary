@@ -1716,7 +1716,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         ? "What goes back to the sender. Sending it closes the task."
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
                     chip={<LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
-                    tone="#9a7444" {...stageProps("reply")}
+                    tone="#8a3646" {...stageProps("reply")}
                     action={stage !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}

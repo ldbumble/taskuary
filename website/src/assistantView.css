@@ -278,11 +278,11 @@
 .tq-thr + .tq-thr .tq-thr-rail { top: 36px; }
 /* ONE STYLE, THE TASK PAGE'S THREE COLOURS (the owner, 2026-09-28: "the colors of the logos on the card in assistant
    should match the task card"): its step badges - 1 the task in slate, 2 the agent in sage, 3 close out in tan - so the
-   card's asker, agent and you wear the same three - SOLID, as those badges are (outlines read as grey at 26px). The
+   card's asker, agent and you wear the same three (you: oxblood, on both) - SOLID, as those badges are (outlines read as grey at 26px). The
    one whose turn it is wears a ring; the others step back. */
 .tq-av { --c: #55697a; background: var(--c); color: #fff; box-sizing: border-box;
   width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font: 700 9.5px/1 'IBM Plex Sans', sans-serif; letter-spacing: .02em; position: relative; z-index: 1; }
+  font: 700 9.5px/1 'IBM Plex Sans', sans-serif; text-align: center; position: relative; z-index: 1; }
 .tq-thr-h { font-size: 11.5px; color: #8a847a; padding-top: 1px; }
 .tq-thr-h b { color: #4d4a43; font-weight: 600; }
 .tq-thr-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
@@ -302,9 +302,10 @@
 .tq-av-asker { --c: #55697a; }
 .tq-av-agent { --c: #6f8a6e; }
 .tq-av-agent.none { --c: #b3ab9e; }
-.tq-av-you { --c: #9a7444; font-size: 8.5px; }
+/* you: the oxblood that means "on you" everywhere - the rail's Your task, the card's own header dot, the task page's step 3 */
+.tq-av-you { --c: #8a3646; font-size: 9px; letter-spacing: 0; }
 /* WHOSE TURN (Story `turn`): filled, with a ring of its own colour - the rest stay outlined */
-.tq-av.on { box-shadow: 0 0 0 2px #fffdf9, 0 0 0 3.5px var(--c); }
+.tq-av.on { outline: 1.5px solid var(--c); outline-offset: 2px; }
 .tq-av.off { opacity: .7; }
 .tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: #1d1c19; }
 .tq-move.alert .tq-move-say:first-of-type { font-weight: 600; color: #6b2b22; }

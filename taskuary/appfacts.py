@@ -42,7 +42,7 @@ def reports(store) -> list:
         runs = store.report_runs(src['SourceId'], 1) or []
         last = runs[0] if runs else None
         out.append({'source_id': src['SourceId'], 'title': cfg.get('title') or src.get('Address') or '',
-                    'workflow': bool(workflows.is_workflow(cfg)), 'schedule': rep.schedule_words(cfg), 'reach': rep.reach_of(cfg),
+                    'workflow': bool(workflows.is_workflow(cfg)), 'schedule': rep.schedule_words(cfg), 'reach': rep.route_words(cfg),
                     'goes': _goes(cfg), 'active': bool(src.get('Active')), 'last_at': str((last or {}).get('at') or ''),
                     'last_ok': (not last.get('failed')) if last else None,
                     'last_said': str((last or {}).get('error') or (last or {}).get('summary') or (last or {}).get('said') or '')[:200]})

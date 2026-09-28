@@ -19,7 +19,7 @@ def _report(s, title, kind, address=None):
 
 class ReportOrderTests(unittest.TestCase):
     def _run(self, s, ran, boom=()):
-        def fake(store, src, llm=None):
+        def fake(store, src, llm=None, trigger='schedule'):
             cfg = json.loads(src.get('ConfigJson') or '{}')
             ran.append(cfg.get('type'))
             if cfg.get('type') in boom: raise RuntimeError('the server is not there')
@@ -55,12 +55,18 @@ class ReportOrderTests(unittest.TestCase):
         self.assertIn('evening_inbox', ran)                          # the local ones ran too
         self.assertEqual(n, len(ran) - 1)                            # only the raiser is uncounted
 
-    def test_even_a_raising_report_is_touched_so_it_waits_for_its_next_slot(self):
+    def test_a_raising_report_is_owed_again_in_a_quarter_hour_not_at_its_next_slot(self):
+        """A failed scheduled run keeps its slot owed (the owner, 2026-09-27) - but it is not rerun on every
+        pass either: RETRY_MINUTES after the failure."""
         s = MemoryStore()
         _report(s, 'Process Error Check', 'mssql', address='Process Error Check')
-        self._run(s, [], boom=('mssql',))
+        with mock.patch.object(reports, '_run_report_source', side_effect=RuntimeError('the server is not there')), \
+             mock.patch.object(reports, 'is_due', lambda *a, **k: True):
+            reports.run_due_reports(s)
         row = next(x for x in s.list_sources() if x['Address'] == 'Process Error Check')
-        self.assertTrue(row['LastPolledAt'])
+        self.assertFalse(row['LastPolledAt'])                                   # the slot is still owed...
+        self.assertTrue(reports._failed_lately(s, row['SourceId']))              # ...after the wait
+        self.assertNotIn(row['SourceId'], [x['SourceId'] for x in reports.due_reports(s)])
 
     def test_the_split_reuses_resolve_cfg_s_own_list_and_never_crashes_the_poll(self):
         for t in ('assistant', 'digest', 'automate', 'evening_inbox'):

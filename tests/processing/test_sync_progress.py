@@ -24,20 +24,19 @@ def sync_store(monkeypatch):
     store.cx.close()
 
 
-def test_first_triage_and_checks_and_reports_publish_their_phase_while_held(sync_store, monkeypatch):
-    entered = [threading.Event() for _ in range(3)]
-    released = [threading.Event() for _ in range(3)]
+def test_first_triage_and_checks_publish_their_phase_while_held(sync_store, monkeypatch):
+    entered = [threading.Event() for _ in range(2)]
+    released = [threading.Event() for _ in range(2)]
     def hold(n):
         entered[n].set()
         assert released[n].wait(10), 'test did not release the synthetic stage'
     monkeypatch.setattr(server, '_drain_worker', lambda _: SimpleNamespace(submit=lambda **kw: SimpleNamespace(wait=lambda: hold(0), error=None)))
     monkeypatch.setattr(ci, 'poll', lambda _: hold(1))
-    monkeypatch.setattr(server, 'run_due_reports', lambda *a: hold(2))
     with ThreadPoolExecutor(max_workers=1) as pool:
         job = pool.submit(server._poll_reports)
         try:
             client = TestClient(server.app)
-            for n, phase in enumerate(('triaging', 'checking', 'running_reports')):
+            for n, phase in enumerate(('triaging', 'checking')):     # reports run on their own clock (report_pass)
                 assert entered[n].wait(10)
                 data = client.get('/api/ingest/status').json()
                 assert data['status']['state'] == 'running'

@@ -73,7 +73,7 @@ KINDS = {
     'report.run':               ('source', (), None),
     'report.pause':             ('source', (), None),
     'report.resume':            ('source', (), None),
-    'report.reach':             ('source', ('reach',), None),
+    'report.route':             ('source', ('line', 'how'), None),
     'report.edit':              ('source', ('config',), None),
     'report.delete':            ('source', (), None),
     'setting.set':              ('setting', ('setting', 'value'), None),   # `setting`, not `key`: `key` is the pile key the chat fills in

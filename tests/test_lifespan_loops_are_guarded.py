@@ -22,7 +22,7 @@ def _lifespan_threads():
 
 
 def test_the_lifespan_starts_the_loops_we_think_it_does():
-    assert _lifespan_threads() == {'poll_forever', 'quick_forever', 'doorway_forever'}
+    assert _lifespan_threads() == {'poll_forever', 'reports_forever', 'quick_forever', 'doorway_forever'}
 
 
 def test_every_lifespan_loop_is_stopped_in_tests():

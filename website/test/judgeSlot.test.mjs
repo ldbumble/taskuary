@@ -58,7 +58,7 @@ test("a decision model is shown its typed questions, not a prompt it never gets"
   assert.match(view, /export const judgeQuestions/);
   assert.match(view, /judge\?\.kind === "decision" \? judgeQuestions\(cfg, shown\) : judgePrompt\(cfg, shown\)/);
   // ...and the two sides of the judgement are both written out, with the threshold said out loud
-  assert.match(view, /yes:   \$\{routeOf\(c, l\)\[1\]\}/);
+  assert.match(view, /yes:   \$\{lineOf\(c, l\)\.when\.trim\(\)\}/);
   assert.match(view, /no:    \$\{JEV_FALSE\}/);
   assert.match(view, /≥ 0\.50 is yes/);
 });

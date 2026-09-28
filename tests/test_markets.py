@@ -1,6 +1,13 @@
 """Market data: plain REST with a key on a card, mocked at the HTTP edge. What is under test is
 the SHAPE - the row keys a report and a chart consume, the headline that leads with its number so
 a threshold compares the number and not the row count, and the refusal when no key is saved."""
+
+def alert_fires(c, head, body):
+    """The rule an alert line carries, read against one result - __import__("taskuary.reports").reports.condition_fires."""
+    a = c.get('alert') or {}
+    if not str(a.get('when') or '').strip() or not str(a.get('to') or '').strip(): return ''
+    return __import__("taskuary.reports").reports.condition_fires(a['when'], a.get('count'), a.get('text'), res=__import__("taskuary.reports").reports.read_result(head, body))
+
 import json
 import unittest
 from unittest import mock
@@ -19,7 +26,7 @@ def _resp(status, body, text=None):
 
 class TheHelpers(unittest.TestCase):
     def test_a_numeric_headline_leads_with_the_number_so_a_threshold_reads_dollars(self):
-        from taskuary.reports import alert_fires, result_count
+        from taskuary.reports import result_count
         head, body = markets._num({}, 1518.2, 'spent across 2 accounts', [{'a': 1}])
         self.assertTrue(head.startswith('1,518.20 '), head)
         self.assertEqual(result_count(head, body), 1518)
@@ -289,7 +296,6 @@ class TheScreen(unittest.TestCase):
         self.assertIn('1 match', head)
 
     def test_nothing_matching_is_quiet_and_an_alert_stays_silent(self):
-        from taskuary.reports import alert_fires
         with mock.patch.object(markets, 'run_yahoo_quotes', return_value=('1 quotes', json.dumps({'symbol': 'AAPL', 'change_pct': -1.0}))):
             head, body = markets.run_markets_screen({'provider': 'yahoo_quotes', 'conditions': [['change_pct', '<=', -5]]})
         self.assertEqual(alert_fires({'alert': {'when': 'something_came_back', 'to': 'x'}}, head, body), '')

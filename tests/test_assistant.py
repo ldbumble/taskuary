@@ -548,10 +548,11 @@ class ApiTests(unittest.TestCase):
         _mine(s, 'Re: API ledger', 'Could you send the reconciled version?', days=4, conv='api-c1')
         c = TestClient(server.app)
         sid = assistant.source(s)['SourceId']
+        from taskuary import reports
         with mock.patch('taskuary.llm.build_llm', return_value=None):
-            r = c.post(f'/api/sources/{sid}/run')                   # the Reports tab's "Run now" - the only manual trigger left
-        self.assertEqual(r.status_code, 200); self.assertGreaterEqual(r.json()['said'], 1)
-        mid = r.json()['message_id']
+            r = reports.run_one(s, s.get_source(sid), None, 'manual')   # Run now's road (server._rerun_report)
+        self.assertGreaterEqual(r['said'], 1)
+        mid = r['message_id']
         self.assertEqual(c.get('/api/assistant/status').status_code, 404)   # the pinned card is gone (2026-08-30)
         ideas = c.get(f'/api/assistant/ideas?mid={mid}').json()['data']
         self.assertTrue(ideas and ideas[0]['status'] == 'open')

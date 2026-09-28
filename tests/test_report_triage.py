@@ -89,7 +89,7 @@ class ReportTriageTests(unittest.TestCase):
             reports.run_report_source(s, src, llm=TASK_LLM)
         m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
         self.assertEqual((m['Status'], m['TaskId']), ('feed', None)); self.assertIn('FAILED', m['Subject'])
-        self.assertIn('not triaged', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertIn('failed to run', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
 
 class BoardDoneTests(unittest.TestCase):

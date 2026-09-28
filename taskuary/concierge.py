@@ -1485,8 +1485,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             r = appfacts.find_report(store, str(params.pop('title', '') or ''), params.pop('source_id', None) or params.get('target'))
             if not r: return _miss('No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20]) + '.')
             params['target'], named = r['source_id'], r['title']
-            if kind == 'report.reach' and str(params.get('reach') or '').lower() not in ('always', 'wrong', 'rule'):
-                return _miss('A report reaches you always, only when wrong, or by its own rule - say which.')
+            if kind == 'report.route' and (str(params.get('line') or '').lower() not in ('timeline', 'work', 'alert', 'send')
+                                           or str(params.get('how') or '').lower() not in ('always', 'ai', 'rule', 'never')):
+                return _miss('Say which line (timeline, work, alert or send) and how it goes: every run (always), '
+                             'the AI decides (ai, with what to look for), a rule, or never.')
         elif tk == 'connector' and kind != 'connection.create':
             c = appfacts.find_connection(store, str(params.pop('name', '') or ''), params.pop('connector_id', None) or params.get('target'))
             if not c: return _miss('No connection by that name. Connected: ' + ', '.join(x['name'] for x in appfacts.connections(store) if x['active']) + '.')
@@ -2272,11 +2274,8 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
 def _routing_words(cfg: dict) -> str:
     """Where this report's runs go, in the words the card uses - the AI decides a line only where
     the owner wrote a sentence for it to judge (reports.route_of)."""
-    from .reports import LINES, route_of, routed
-    if not routed(cfg): return 'triage reads it' if cfg.get('triage') else 'informational - filed on the Timeline, not triaged'
-    said = [f'{l}: {"every run" if h == "always" else "never" if h == "never" else f"the AI decides - {w}"}'
-            for l in LINES for h, w in [route_of(cfg, l)]]
-    return '; '.join(said)
+    from .reports import route_words
+    return route_words(cfg)
 
 
 def _schedule_words(cfg: dict) -> str:
@@ -2449,7 +2448,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
     if kind == 'report.run': return f" {o.get('title') or 'It'} is running - it lands in the pipe when it is done."
     if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."
-    if kind == 'report.reach': return f" {o.get('title') or 'It'} reaches you: {o.get('reach')}."
+    if kind == 'report.route': return f" {o.get('title') or 'It'} now goes - {o.get('route')}."
     if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."
     if kind == 'report.delete': return f" {o.get('title') or 'It'} is deleted."
     if kind == 'setting.set': return f" {o.get('said') or ''}"

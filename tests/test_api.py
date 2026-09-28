@@ -589,7 +589,8 @@ class ApiTests(unittest.TestCase):
             cfg = {'type': '_t', 'title': 'T', 'every_minutes': 30}
             sid = c.post('/api/sources', json={'Channel': 'report', 'Address': 'T',
                                                'ConfigJson': json.dumps(cfg), 'Active': True}).json()['sourceId']
-            out = c.post(f'/api/sources/{sid}/run', json={}).json()
+            from taskuary import reports
+            out = reports.run_one(server.store, server.store.get_source(sid), None, 'manual')
             self.assertIn('2 rows', out['subject'])
             self.assertEqual(c.delete(f'/api/sources/{sid}').json(), {'ok': True})
             self.assertEqual(c.delete(f'/api/sources/{sid}').status_code, 404)
@@ -905,9 +906,8 @@ class ApiTests(unittest.TestCase):
         lifetime, and the state still lands on idle."""
         import threading
         started, release, calls = threading.Event(), threading.Event(), []
-        def slow_reports(s, startup=False): calls.append(1); started.set(); release.wait(10)
-        with mock.patch.object(server, 'run_due_reports', slow_reports), \
-             mock.patch('taskuary.channels.poll_channels', lambda s, d, progress=None: None):
+        def slow_check(s): calls.append(1); started.set(); release.wait(10)
+        with mock.patch('taskuary.ci.poll', slow_check),              mock.patch('taskuary.channels.poll_channels', lambda s, d, progress=None, **k: None):
             t = threading.Thread(target=server._poll_reports, kwargs={'what': 'catching up'}, daemon=True)
             t.start()
             self.assertTrue(started.wait(10))

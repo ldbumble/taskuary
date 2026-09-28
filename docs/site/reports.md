@@ -10,8 +10,8 @@ One report is one saved configuration on the **Reports** tab, built in four step
 |---|---|
 | **Pipeline** | The title, the sources it reads, and the one prompt that reads all of them |
 | **Test & preview** | Test calls a single source; Preview runs the whole pipeline, AI pass included, filing nothing |
-| **Schedule & save** | How often it runs, and whether each run goes through triage |
-| Delivery and alerts | Optional, on the Pipeline step: send each run somewhere, or say nothing unless the result trips a rule |
+| **Where each run goes** | The route card: Timeline, work rail, alert and send, each every run, ask the AI, when a rule trips, or never |
+| **Schedule & save** | How often it runs |
 
 Sources at the top, one prompt at the bottom. Every source runs on its own connection and query,
 the results are stacked under labelled headers, and the prompt sees all of them at once. One
@@ -84,40 +84,65 @@ file as they are.
   per report. A saved pick that has lost its key stays visible and disabled rather than silently
   vanishing.
 - With a prompt set but no AI connector active, the raw data files and the builder says so.
+- A summary that fails, or comes back empty, is a failed run - the report exists for the summary.
 - When one column is a measure worth plotting, the model that just read every row says so and the
   run hands back a bar chart beside the text.
 
 ## Where a run goes
 
-Every run lands on your Timeline. Two optional additions, both off by default:
+Every report has one route card: four lines, and each line is **every run**, **ask the AI** (a
+sentence the judge answers yes or no to), **when a rule trips** (a number or words - no AI), or
+**never**.
+
+![When a report runs: app start, its own clock, Run due now, or run by hand - one run at a time, and a switched-off connection fails the run](img/report-runs.svg "A manual run is extra: it never uses up the schedule.")
+
+![Where a run goes: a failure stays in the app; otherwise each line of the card answers every run, the AI, a rule, or never](img/report-goes.svg "No answer from the judge counts as yes.")
+
+| Line | every run | ask the AI | when a rule trips | never |
+|---|---|---|---|---|
+| **Timeline** | A row to read | A row when the judge says your sentence holds | A row when the rule trips | No row. With work on, only a task |
+| **Work** | Triage reads it; a task if `TRIAGE.md` says so | Triage, when the judge says so | Triage, when the rule trips | Never a task |
+| **Alert** | Reaches you right away on your channel, no Review | When the judge says so | When the rule trips | Never |
+| **Send** | Out to its people, through Review unless set to send without asking | When the judge says so | When the rule trips | Never |
+
+| Rule | Trips when |
+|---|---|
+| anything came back | at least one row, or the headline's number is above 0 |
+| nothing came back | no rows |
+| fewer than N · more than N | the headline's number - rows, or the total a money report leads with |
+| it mentions · it never mentions | the words, anywhere in the result |
 
 - **Send it somewhere** — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits on
   the task for approval by default. "Send it without asking" is the one place in Taskuary where
   that gate can be switched off, and it is deliberate.
-- **Tell me when it looks wrong** — silence is the normal outcome. An alert fires only when the
-  result trips a rule: nothing came back, anything came back, fewer or more rows than N, the
-  result mentions (or never mentions) something, or the report failed. Alerts send the moment the
-  rule trips, with no Review step.
-
-**Can become work** sends each run through triage like an inbound message, so `TRIAGE.md` decides
-whether it becomes a task. Off by default — a report is informational. A failed run is never
-triaged.
+- **A failed run** reaches you once, in the app: one row, never a task, never an alert, never sent
+  to anyone. The same error again stays in the History.
+- **A mute** covers the alert and the morning brief as well as the rail.
+- **Who judges** is one setting for every report, under Settings › Triage & agents › Where runs
+  go; blank means the brain that writes the report. **try it on the last 5 runs** shows what the
+  card would have done, without posting anything.
 
 Under each report row, the last run shows what it read, what came out, and the error when it
 failed.
 
 ## Schedules
 
-Pick one: every N minutes, daily at `HH:MM`, a five-field cron, or on app startup. Everything
-blank means once a day while the app is open, and a slot missed while the app was closed fires
-once on reopen.
+Pick one or more: every N minutes, daily at `HH:MM`, a five-field cron, or on app start. No
+clock at all means the report runs only when you ask. A slot missed while the app was closed
+fires once on reopen. Reports have their own clock: turning the mail poll or the startup
+catch-up off does not stop them.
 
-**Run due now** on the Reports tab runs everything owed; **Run now** on a row runs that one
-report immediately.
+| Button | What it does |
+|---|---|
+| **Run due now** | Every report that is owed, and nothing else |
+| **Run now** on a row | That report, now. It does not use up "once a day" or move the next slot |
+
+A scheduled run that fails is tried again 15 minutes later. A report runs one at a time; a second
+Run now while it runs is told so.
 
 :::note Once a day means once a day
-A daily slot is a cap on the whole report, not on each way of triggering it. If the 08:00 slot
-has already produced today's run, opening the app at 09:00 does not produce a second one.
+"At most once a day" caps the scheduled runs of the whole report. If the 08:00 slot has already
+produced today's run, opening the app at 09:00 does not produce a second one.
 :::
 
 ## The Advisor

@@ -82,7 +82,7 @@ PURPOSE = {
     'report.run':               'run a report or workflow now - `title` (or `source_id`); it lands in the pipe when done',
     'report.pause':             'stop a report or workflow running on its clock - `title`',
     'report.resume':            'put a paused report or workflow back on its clock - `title`',
-    'report.reach':             'change when a report reaches the owner - `title`, `reach`: always | wrong | rule',
+    'report.route':             'change where one line of a report\'s route card goes - `title`, `line`: timeline | work | alert | send, `how`: always | ai | rule | never, `when` (for ai: what to look for), `rule`/`count`/`text` (for rule)',
     'report.edit':              'change a report\'s configuration - `title`, `config`: only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)',
     'report.delete':            'delete a report or workflow for good - `title`; asks first',
     'setting.set':              'change one setting - `setting` (its key, or `label`: part of its name) and `value`; the schema says what it takes',
@@ -95,7 +95,7 @@ PURPOSE = {
 # THE TIERS (the spec, 2026-09-18). Reads run at once (READS). These WRITES run at once too, because
 # each can be put back: the receipt carries the undo. Everything else waits for the owner's yes -
 # deleting, sending to a person, spending, stopping an agent mid-run.
-INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.reach', 'report.edit', 'setting.set', 'task.defer',
+INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer',
                      'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
 
 
@@ -250,7 +250,7 @@ BUCKETS = (
     ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
-                                          'report.reach', 'report.edit', 'report.delete')),
+                                          'report.route', 'report.edit', 'report.delete')),
     ('app', 'settings, connections, scripts and kept facts', ('setting.set', 'connection.create', 'connection.test', 'connection.pause',
                                                              'connection.resume', 'script.start', 'memory.remember', 'hub.publish')),
 )

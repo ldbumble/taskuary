@@ -166,7 +166,7 @@ class CardsInTheSourceListTests(unittest.TestCase):
         self.assertTrue(chosen['gone_quiet']['on'] and chosen['gone_quiet']['days'] == 9 and not chosen['threads']['on'])
         self.assertEqual([x['type'] for x in assistant._inline(cfg['watch_sources'])], ['rest'])   # the systems reader skips it
         self.assertEqual([x['type'] for x in reports.systems_of(cfg)], ['rest'])
-        self.assertEqual(reports.assistant_default({'type': 'assistant', 'watch_sources': [{'type': 'taskuary', 'card': 'work'}]}) != {}, True)
+        self.assertEqual(reports.route_of({'type': 'assistant', 'watch_sources': [{'type': 'taskuary', 'card': 'work'}]}, 'timeline')[0], 'ai')
 
     def test_the_card_is_a_source_with_a_test_like_any_other(self):
         s = A.store()
@@ -174,7 +174,7 @@ class CardsInTheSourceListTests(unittest.TestCase):
         self.assertTrue(head.startswith('Memory - '))
         self.assertIn('ALREADY SAID (never repeat)', body)
         with self.assertRaises(ValueError): reports.executor_for('taskuary')({'store': s, 'type': 'taskuary', 'card': 'nope'})
-        head, body = reports.run_sources(s, [{'type': 'taskuary', 'card': 'work', 'label': 'my work'}])
+        head, body = reports.stack(reports.run_source_parts(s, [{'type': 'taskuary', 'card': 'work', 'label': 'my work'}]))
         self.assertIn('=== my work (Work - ', body)
 
     def test_a_card_is_named_by_its_card_whatever_it_was_labelled(self):

@@ -84,7 +84,6 @@ class LaneTests(unittest.TestCase):
         self.assertEqual(order[0], 'inputs')                     # the mail is read first
         self.assertEqual(order[-1], 'reports')                   # ...and the reports come after it
         self.assertNotIn('catching up', seen['what'].lower())    # no longer charged to the catch-up
-        self.assertIn('report', seen['what'].lower())
 
     def test_a_full_sync_counts_as_the_chat_fetch_it_included(self):
         """PW-002: the full pass read Teams too, so the fast clock must not fetch it again a moment later."""

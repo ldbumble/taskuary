@@ -265,51 +265,32 @@ const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const isWorkflowSource = (s) => isWorkflowConfig(parse(s?.ConfigJson));
 
-// HOW A REPORT REACHES YOU - one question for every kind of report, and the same reading the
-// server does (reports.reach_of). Absent means what it did before the setting existed: a condition
-// was the only way to ask for quiet, and an assistant check was already quiet when it found nothing.
-export const reachOf = (c) => (["always", "wrong", "rule"].includes(c?.reach) ? c.reach
-  : c?.alert?.when ? "rule" : c?.type === "assistant" ? "wrong" : "always");
-// ...and whether it LEAVES, which is a different question (reports.deliver_how). Delivery sends
-// the result somewhere else entirely, so it answers for itself - absent means every run, because
-// that is what delivery has always done and a setting nobody chose must not stop a report going out.
-export const deliverSendOf = (c) => (["always", "wrong", "rule"].includes(c?.deliver?.send) ? c.deliver.send : "always");
-// A prose answer cannot be counted - "fewer rows than 5" on an AI summary compared five LINES - so
-// a check that answers in words is offered the words, and a query that answers in rows the rows.
-export const answersInProse = (c) => c?.type === "assistant" || !!c?.ai_prompt;
-const CONDITIONS = [
-  { v: "something_came_back", rows: "anything came back", prose: "it found something" },
-  { v: "nothing_came_back", rows: "nothing came back", prose: "it found nothing at all" },
-  { v: "fewer_than", rows: "fewer rows than\u2026" },
-  { v: "more_than", rows: "more rows than\u2026" },
-  { v: "contains", rows: "the result mentions\u2026", prose: "it mentions\u2026" },
-  { v: "missing", rows: "the result never mentions\u2026", prose: "it never mentions\u2026" },
-  { v: "failed", rows: "the report failed to run", prose: "the check failed to run" },
+// The rules a "when a rule trips" line can carry - arithmetic on what came back, which is the one
+// thing a model should not be trusted with ("spend over 500"). Same list as reports.ALERT_WHEN.
+const RULES = [
+  { v: "something_came_back", label: "anything came back" },
+  { v: "nothing_came_back", label: "nothing came back" },
+  { v: "fewer_than", label: "fewer than…", count: true },
+  { v: "more_than", label: "more than…", count: true },
+  { v: "contains", label: "it mentions…", text: true },
+  { v: "missing", label: "it never mentions…", text: true },
 ];
 
-// ── WHERE A RUN GOES, which is a prompt and not a condition ────────────────────────────
-// The same reading the server does (reports.routed / route_of). You cannot write an `if` against
-// prose you have not seen, so the model that read the result answers where it goes - one line per
-// destination, against a sentence the owner wrote (2026-09-17: "make the UI clear that it's ai
-// deciding it, so it's a prompt on the report for routing").
+// ── WHERE A RUN GOES: one card, four lines ─────────────────────────────────────────────
+// Every report is saved as this card (reports.from_old_rules); the server says what it means in
+// words (RouteWords), so the page never re-derives the rules. What is left here is only what an
+// UNSAVED report shows before the server has seen it - reports.default_route, word for word.
 export const ROUTE_LINES = ["timeline", "work", "alert", "send"];
-const ROUTE_HOW = ["always", "ai", "never"];
-// What a line nobody set means: a report you set up is work you wanted done, so it lands on the
-// Timeline AND the work rail every run until you say otherwise (2026-09-17: "default should be on
-// timeline/work rail every run"). Only the interruption stays off until it is asked for.
+const ROUTE_HOW = ["always", "ai", "rule", "never"];
 const LINE_DEFAULT = { timeline: "always", send: "always", work: "always", alert: "never" };
-// ...except the Assistant: a voice that checks in every half hour, and "every run" from a voice is
-// noise (2026-09-20: "only show up when the assistant has an idea that matters, not always"). With
-// no rule of its own it asks this on the Timeline and the work rail alike. Word for word
-// reports.ASSISTANT_WHEN / reports.assistant_default - the card must show what the server asks.
 export const ASSISTANT_WHEN = "it has an idea that matters: something I would act on or need to know today, not a status note or a restatement of what is already on my Timeline";
-// A monitor over connected systems (watch sources) posts its findings - the numbers are what matters there.
-export const assistantDefault = (c) => (c?.type === "assistant" && !isRouted(c) && !["always", "wrong", "rule"].includes(c?.reach) && !(c?.alert?.when || "").trim()
-  && !(c?.watch_source_ids?.length || c?.watch_sources?.length)
-  ? { timeline: { how: "ai", when: ASSISTANT_WHEN }, work: { how: "ai", when: ASSISTANT_WHEN } } : {});
+const isVoice = (c) => c?.type === "assistant" && !c?.watch_source_ids?.length
+  && !(Array.isArray(c?.watch_sources) ? c.watch_sources : []).some((s) => s?.type && s.type !== "taskuary");
+const lineOf = (c, line) => c?.route?.[line]
+  || (isVoice(c) && (line === "timeline" || line === "work") ? { how: "ai", when: ASSISTANT_WHEN } : { how: LINE_DEFAULT[line] });
+export const fullRoute = (c) => Object.fromEntries(ROUTE_LINES.map((l) => [l, lineOf(c, l)]));
 // `alert` is not "the phone" - it goes to whichever live channel you picked, as often email as
-// WhatsApp (2026-09-17: "why does this say phone if it can go to email?"). What makes it an alert
-// is that it goes the moment the run lands and skips Review, not the device it arrives on.
+// WhatsApp (2026-09-17). What makes it an alert is that it skips Review, not the device.
 export const LINE_SAYS = {
   timeline: ["post it on my Timeline", "news to read — it does not wait for me"],
   work: ["put it on my Work rail", "something I have to deal with"],
@@ -317,66 +298,26 @@ export const LINE_SAYS = {
   send: ["send it out", "to the people it is addressed to"],
 };
 // ...and what the model is literally asked, word for word as reports.LINE_SAYS and judge_prompt
-// build it. `see the prompt` showing a paraphrase of the real prompt would be worse than showing
-// nothing: a rule you cannot read is a rule you cannot trust.
+// build it: a rule you cannot read is a rule you cannot trust.
 const PROMPT_SAYS = {
   timeline: "post it on the owner's timeline as news to read",
   work: "put it on the owner's work rail, as something they have to do",
   alert: "reach the owner right away, on whichever channel they chose",
   send: "send the report out to the people it is addressed to",
 };
-export const judgePrompt = (c, lines = ROUTE_LINES) => lines
-  .filter((l) => routeOf(c, l)[0] === "ai")
-  .map((l) => `${l.toUpperCase()}: yes|no — ${PROMPT_SAYS[l]}, but only if: ${routeOf(c, l)[1]}`)
+const aiLines = (c, lines) => lines.filter((l) => lineOf(c, l).how === "ai" && (lineOf(c, l).when || "").trim());
+export const judgePrompt = (c, lines = ROUTE_LINES) => aiLines(c, lines)
+  .map((l) => `${l.toUpperCase()}: yes|no — ${PROMPT_SAYS[l]}, but only if: ${lineOf(c, l).when.trim()}`)
   .join("\n");
-// ...and a decision model is sent no prompt at all: one typed question per line, each with the two
-// sides of the judgement written out. These strings mirror jev.ask and reports.judge_for, for the
-// same reason PROMPT_SAYS mirrors LINE_SAYS - what the card shows has to be what is sent.
+// ...and a decision model is sent typed questions, one per line - mirrors jev.ask and reports.judge_for
 export const JEV_FALSE = "Nothing in the state described above matches that.";
 export const JEV_EVIDENCE = "Judge only what the run actually came back with. If it does not say a thing, that thing did not happen.";
-export const judgeQuestions = (c, lines = ROUTE_LINES) => lines
-  .filter((l) => routeOf(c, l)[0] === "ai")
+export const judgeQuestions = (c, lines = ROUTE_LINES) => aiLines(c, lines)
   .map((l) => `${l}:\n  ask:   Decide whether to ${PROMPT_SAYS[l]}. ${JEV_EVIDENCE}\n`
-    + `  yes:   ${routeOf(c, l)[1]}\n  no:    ${JEV_FALSE}\n  answer: a probability 0–1; ≥ 0.50 is yes`)
+    + `  yes:   ${lineOf(c, l).when.trim()}\n  no:    ${JEV_FALSE}\n  answer: a probability 0–1; ≥ 0.50 is yes`)
   .join("\n\n");
-// ...and the short name a replayed run wears, so that reading down the strip the DIFFERENCE
-// between two runs is what stands out, not the same sentence four times
+// the short name a replayed run wears, so reading down the strip the DIFFERENCE is what stands out
 const LINE_CHIP = { timeline: "Timeline", work: "Work rail", alert: "reached you", send: "sent out" };
-export const isRouted = (c) => ROUTE_LINES.some((l) => ROUTE_HOW.includes(c?.route?.[l]?.how));
-export const routeOf = (c, line) => {
-  const r = (c?.route || assistantDefault(c))[line] || {}, when = (r.when || "").trim();
-  const how = ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line];
-  // a line asking the AI with nothing to judge by is a question the model cannot answer
-  return [how === "ai" && !when ? "always" : how, when];
-};
-export const asksAi = (c) => ROUTE_LINES.some((l) => routeOf(c, l)[0] === "ai");
-
-// The old rules, said as sentences, so that converting a report that predates this card does not
-// silently change what any of its lines meant. The owner can then edit them like any other.
-const asSentence = (a) => ({
-  something_came_back: "anything at all came back",
-  nothing_came_back: "nothing came back",
-  fewer_than: `fewer than ${a?.count ?? 0} things came back`,
-  more_than: `more than ${a?.count ?? 0} things came back`,
-  contains: `the result mentions "${(a?.text || "").trim()}"`,
-  missing: `the result never mentions "${(a?.text || "").trim()}"`,
-  failed: "the report failed to run",
-}[a?.when] || "something in it is wrong, or needs me");
-export const seedRoute = (c) => {
-  const from = (how, cond) => (how === "always" ? { how: "always" }
-    : { how: "ai", when: how === "wrong" ? "something in it is wrong, or needs me" : asSentence(cond) });
-  return {
-    timeline: from(reachOf(c), c?.alert),
-    // ...and the work rail follows the DEFAULT, not the old `triage` switch. That switch was off on
-    // every report that exists - it needed a sentence nobody had been asked for - so inheriting it
-    // would mean "every report you already have stays news forever", which is the opposite of what
-    // the card is for (2026-09-17: "default should be on timeline/work rail every run").
-    work: (c?.watch_for || "").trim() ? { how: "ai", when: c.watch_for.trim() } : { how: "always" },
-    alert: c?.alert?.to ? from(reachOf(c), c?.alert) : { how: "never" },
-    send: c?.deliver?.to ? from(deliverSendOf(c), c?.deliver) : { how: "always" },
-    ...assistantDefault(c),   // the Assistant's own default, on both lines, unless it was given a rule
-  };
-};
 
 export default function ReportsView() {
   const [sources, setSources] = useState(null);
@@ -429,7 +370,7 @@ export default function ReportsView() {
   };
   const syncNow = async () => {
     setSyncing(true);
-    try { await api.post("/api/ingest/poll"); setTimeout(() => { setSyncing(false); load(); }, 3000); }
+    try { await api.post("/api/reports/due"); setTimeout(() => { setSyncing(false); load(); }, 3000); }
     catch { setSyncing(false); }
   };
 
@@ -634,11 +575,6 @@ function SavedReportSummary({ source, workflow = false }) {
     ? [cardsLine(cardsOf(c)), watched ? `${watched} configured data source${watched === 1 ? "" : "s"}` : ""]
       .filter(Boolean).join(" and ") || "nothing yet — add a Taskuary card or a source"
     : labels.length > 1 ? `${labels.length} sources — ${labels.join(", ")}` : labels[0] || "one report source";
-  const destinations = ["the Timeline"];
-  if (c.deliver?.to) destinations.push(`a draft to ${c.deliver.to} on ${c.deliver.channel || "email"}`
-    + (deliverSendOf(c) === "always" ? "" : deliverSendOf(c) === "wrong" ? " when something is wrong"
-      : ` when ${String(c.deliver.when || "the rule matches").replaceAll("_", " ")}`));
-  if (c.alert?.to) destinations.push(`an alert to ${c.alert.to} when ${String(c.alert.when || "the rule matches").replaceAll("_", " ")}`);
   return (
     <Box sx={{ ...card, ml: { xs: 0, sm: 4 }, mt: 2, p: 1.5, maxWidth: 720,
       bgcolor: source.Active ? "#f2f7f1" : PANEL2, borderColor: source.Active ? "#cfdcc9" : BORDER }}>
@@ -649,13 +585,11 @@ function SavedReportSummary({ source, workflow = false }) {
         </Typography>
       </Box>
       <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55, fontSize: 12.5 }}>
-        Reads {reads}. Runs {reportSchedule(c)}. Each result goes to {destinations.join(" and ")}.
+        Reads {reads}. Runs {reportSchedule(c)}.
       </Typography>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.45, lineHeight: 1.5 }}>
         {c.ai_prompt ? "AI writes the summary. " : "Uses the source result as-is. "}
-        {c.triage
-          ? `Triage may turn a matching result into work${c.watch_for ? ` — watching for: ${c.watch_for}` : ""}.`
-          : "Informational only — it cannot become a task."}
+        {source.RouteWords ? `Where each run goes — ${source.RouteWords}.` : ""}
       </Typography>
     </Box>
   );
@@ -828,24 +762,11 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
       .then(({ data }) => setJudge((data.slots || []).find((s) => s.key === "judge_ai") || null))
       .catch(() => {});
   }, []);
-  const routed = isRouted(cfg);
-  // WHAT THE CONTROL SHOWS IS WHAT YOU PICKED, not what the rule currently evaluates to. routeOf
-  // answers "what will this run do", and an `ask the AI` line with no sentence yet does what it
-  // did before - so reading the control off it made picking `ask the AI` snap back to `every run`
-  // and the sentence box could never appear. And an unconverted report shows the sentences its old
-  // rules already mean (seedRoute), so the card never claims it does something else.
-  const view = routed ? (cfg.route || {}) : seedRoute(cfg);
-  // THE BOX SHOWS THE SENTENCE AS TYPED. Trimming it here meant every space you typed was, at that
-  // moment, a trailing space - gone before it was drawn - so no sentence could ever hold two words
-  // (the owner, 2026-09-17: "can't type space here"). Trimming belongs where the sentence is READ:
-  // routeOf here, reports.route_of on the server.
-  const shownAs = (line) => {
-    const r = view[line] || {};
-    return [ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line], r.when || ""];
-  };
-  // an unconverted report keeps answering to the rules it was set up with; the moment a line is
-  // touched, ALL of them are written down as sentences that mean the same thing (seedRoute)
-  const set = (line, patch) => setCfg({ ...cfg, route: { ...(routed ? cfg.route : seedRoute(cfg)), [line]: { ...(routed ? cfg.route?.[line] : seedRoute(cfg)[line]), ...patch } } });
+  const view = fullRoute(cfg);
+  // THE BOX SHOWS THE SENTENCE AS TYPED - trimming it here made every space a trailing space, gone
+  // before it was drawn (the owner, 2026-09-17: "can't type space here"). It is trimmed where it is read.
+  const shownAs = (line) => { const r = view[line] || {}; return [ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line], r.when || "", r]; };
+  const set = (line, patch) => setCfg({ ...cfg, route: { ...view, [line]: { ...view[line], ...patch } } });
   const shown = ROUTE_LINES.filter((l) => l !== "send" || cfg.deliver?.to);
   const ask = shown.some((l) => shownAs(l)[0] === "ai");
   const blank = (when) => !when.trim();
@@ -853,8 +774,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
   const runReplay = async () => {
     setBusy(true);
     try {
-      const body = routed ? cfg : { ...cfg, route: seedRoute(cfg) };
-      setReplay((await api.post(`/api/reports/${sourceId}/replay`, body)).data);
+      setReplay((await api.post(`/api/reports/${sourceId}/replay`, { ...cfg, route: view })).data);
     } catch (e) { setReplay({ error: e?.response?.data?.detail || "the last runs could not be replayed" }); }
     setBusy(false);
   };
@@ -865,7 +785,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
         <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
       </Box>
       {shown.map((line) => {
-        const [how, when] = shownAs(line);
+        const [how, when, r] = shownAs(line);
         const [label, hint] = LINE_SAYS[line];
         return (
           <Box key={line} sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
@@ -875,9 +795,10 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
                 <Typography variant="caption" sx={{ color: FAINT }}>{hint}</Typography>
               </Box>
               <Select size="small" value={how} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 150 }}
-                onChange={(e) => set(line, { how: e.target.value, ...(e.target.value === "ai" && !when ? { when: "" } : {}) })}>
+                onChange={(e) => set(line, { how: e.target.value, ...(e.target.value === "rule" && !r.rule ? { rule: "something_came_back" } : {}) })}>
                 <MenuItem value="always" sx={{ fontSize: 12 }}>every run</MenuItem>
                 <MenuItem value="ai" sx={{ fontSize: 12 }}>ask the AI</MenuItem>
+                <MenuItem value="rule" sx={{ fontSize: 12 }}>when a rule trips</MenuItem>
                 <MenuItem value="never" sx={{ fontSize: 12 }} disabled={line === "timeline" && !canSilenceTimeline}>
                   {line === "timeline" && !canSilenceTimeline ? "never — needs a destination under “Send it somewhere”" : "never"}</MenuItem>
               </Select>
@@ -888,6 +809,22 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
                   : line === "alert" ? "a job has not run in over two hours"
                     : "anything happened that is worth my knowing about"}
                 value={when} onChange={(e) => set(line, { when: e.target.value })} />
+            )}
+            {how === "rule" && (
+              <Box sx={{ display: "flex", gap: 1, mt: 0.8, flexWrap: "wrap", alignItems: "center" }}>
+                <Select size="small" value={r.rule || "something_came_back"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 200 }}
+                  onChange={(e) => set(line, { rule: e.target.value })}>
+                  {RULES.map((o) => <MenuItem key={o.v} value={o.v} sx={{ fontSize: 12 }}>{o.label}</MenuItem>)}
+                </Select>
+                {RULES.find((o) => o.v === r.rule)?.count && (
+                  <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label="how many"
+                    value={r.count ?? ""} onChange={(e) => set(line, { count: e.target.value === "" ? "" : Number(e.target.value) })} />
+                )}
+                {RULES.find((o) => o.v === r.rule)?.text && (
+                  <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label="the words"
+                    value={r.text || ""} onChange={(e) => set(line, { text: e.target.value })} />
+                )}
+              </Box>
             )}
             {how === "ai" && blank(when) && (
               <Typography variant="caption" sx={{ color: "#8c6d3b", display: "block", mt: 0.5 }}>

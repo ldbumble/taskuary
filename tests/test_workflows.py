@@ -105,7 +105,7 @@ class DispatchTests(unittest.TestCase):
             calls.append(cwd); return lambda system, user, **k: 'ran it\n- ok'
         with mock.patch('taskuary.llm.make_cli_llm', make), mock.patch.object(general, 'start_session') as start, mock.patch.object(ingest, '_auto_code') as auto_code:
             reports.run_report_source(s, s.get_source(report), None)
-            with mock.patch.object(ingest, 'ingest_message') as ingested:
+            with mock.patch.object(ingest, 'ingest_message', return_value={'message_id': None}) as ingested:
                 self.assertIsNotNone(reports.run_report_source(s, s.get_source(code), None))
         start.assert_not_called()                                                                          # neither is the regular agent's
         self.assertEqual(calls, [None, 'C:/work/repo'])                                                    # the report reads; the code job runs in its checkout

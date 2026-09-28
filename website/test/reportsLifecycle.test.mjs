@@ -34,9 +34,9 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   assert.match(card, /ONE PROMPT THAT ROUTES EACH RUN/);
   // the sentence box shows what was typed, spaces included: a trimmed value is redrawn without its
   // trailing space, which is every space at the moment it is typed (the owner, 2026-09-17: "can't type
-  // space here"). Trimming happens where the sentence is read (routeOf, reports.route_of), not here.
+  // space here"). Trimming happens where the sentence is read (aiLines, reports.route_of), not here.
   const shownAs = card.slice(card.indexOf("const shownAs"), card.indexOf("const set = "));
-  assert.match(shownAs, /r\.when \|\| ""\]/);
+  assert.match(shownAs, /r\.when \|\| "", r\]/);
   assert.doesNotMatch(shownAs, /\.trim\(\)/);
   assert.match(card, /how === "ai" && blank\(when\) &&/);
   assert.match(card, /<AutoAwesomeIcon/);                                  // the same grammar as the summary prompt
@@ -62,11 +62,9 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
 test("a line the AI is not asked about is not the AI's to answer", () => {
   // `every run` means every run, and a report with no sentence anywhere asks no model at all -
   // the straight-report path the owner asked to keep free of AI (2026-09-17).
-  assert.match(source, /export const asksAi = \(c\) => ROUTE_LINES\.some\(\(l\) => routeOf\(c, l\)\[0\] === "ai"\)/);
+  assert.match(source, /const aiLines = \(c, lines\) => lines\.filter\(\(l\) => lineOf\(c, l\)\.how === "ai" && \(lineOf\(c, l\)\.when \|\| ""\)\.trim\(\)\)/);
   const card = source.slice(source.indexOf("function RoutingCard"), source.indexOf("function ReportWizard"));
   assert.match(card, /No AI is asked/);
-  // a line asking the AI with nothing to judge by is a question the model cannot answer
-  assert.match(source, /how === "ai" && !when \? "always" : how/);
 });
 
 test("the Timeline can only be silenced when the run has somewhere else to go", () => {
@@ -83,7 +81,7 @@ test("see the prompt shows the prompt, word for word as the server builds it", (
   // reports.LINE_SAYS and the line reports.judge_prompt writes.
   assert.match(source, /timeline: "post it on the owner's timeline as news to read"/);
   assert.match(source, /work: "put it on the owner's work rail, as something they have to do"/);
-  assert.match(source, /\$\{l\.toUpperCase\(\)\}: yes\|no .* but only if: \$\{routeOf\(c, l\)\[1\]\}/);
+  assert.match(source, /\$\{l\.toUpperCase\(\)\}: yes\|no .* but only if: \$\{lineOf\(c, l\)\.when\.trim\(\)\}/);
 });
 
 test("the prompt shown is the prompt asked - no sentence anybody stopped asking for", () => {
@@ -95,49 +93,29 @@ test("the prompt shown is the prompt asked - no sentence anybody stopped asking 
   assert.match(source, /judgePrompt/);
 });
 
-test("converting a report written before the card says the old rules out loud", () => {
-  // Touching one line must not silently change the others behind your back, so seedRoute writes the
-  // old rules down AS SENTENCES, on the card, before anything is saved - the owner can then argue
-  // with them like any other. The work rail is the deliberate exception: it follows the new default
-  // rather than the `triage` switch, which was off on every report that exists.
-  assert.match(source, /export const seedRoute = \(c\) => \{/);
-  assert.match(source, /work: \(c\?\.watch_for \|\| ""\)\.trim\(\) \? \{ how: "ai"/);   // the pipe sentence, else the default
-  assert.match(source, /\{ how: "ai", when: c\.watch_for\.trim\(\) \}/);    // the pipe sentence becomes the work line's
-  assert.match(source, /send: c\?\.deliver\?\.to \? from\(deliverSendOf\(c\), c\?\.deliver\) : \{ how: "always" \}/);
+test("every report is the card - the page draws it and never re-derives old rules", () => {
+  // One rule set (the owner, 2026-09-27): the server writes every report down as its route card
+  // (reports.from_old_rules), so the page has nothing left to convert and nothing to guess.
+  for (const gone of ["seedRoute", "reachOf", "deliverSendOf", "assistantDefault", "isRouted", "answersInProse", "c.triage"]) {
+    assert.ok(!source.includes(gone), `${gone} is the old rule set and must not come back`);
+  }
+  assert.match(source, /export const fullRoute = \(c\) =>/);
   assert.match(source, /const LINE_DEFAULT = \{ timeline: "always", send: "always", work: "always", alert: "never" \}/);
-  // ...and the interruption is named for being immediate, not for a device: it goes wherever you
-  // picked, as often email as WhatsApp (2026-09-17: "why does this say phone if it can go to email?")
+  // ...a rule is arithmetic a model is not trusted with, and it is a line's fourth answer
+  assert.match(source, /<MenuItem value="rule"[^>]*>when a rule trips<\/MenuItem>/);
+  // ...and what a saved report does is said in the server's words
+  assert.match(source, /source\.RouteWords/);
+  // the interruption is named for being immediate, not for a device (2026-09-17)
   assert.doesNotMatch(source, /ping my phone/);
   assert.match(source, /alert: \["reach me right away"/);
   assert.match(source, /alert: "reach the owner right away, on whichever channel they chose"/);
 });
 
-test("the reading of an absent setting is the server's own, and prose is offered words", () => {
-  // reports.reach_of does exactly this: a condition was the only way to ask for quiet, and an
-  // assistant check was quiet already. If these two ever disagree the setup screen lies about
-  // what the report will do.
-  assert.match(source, /export const reachOf = \(c\) => \(\["always", "wrong", "rule"\]\.includes\(c\?\.reach\) \? c\.reach/);
-  assert.match(source, /c\?\.alert\?\.when \? "rule" : c\?\.type === "assistant" \? "wrong" : "always"/);
-  // "fewer rows than 5" on an AI summary compared five LINES, so a prose check is not offered it
-  assert.match(source, /export const answersInProse = \(c\) => c\?\.type === "assistant" \|\| !!c\?\.ai_prompt/);
-  const conditions = source.slice(source.indexOf("const CONDITIONS = ["), source.indexOf("];", source.indexOf("const CONDITIONS = [")));
-  for (const row of ["fewer_than", "more_than"]) {
-    const line = conditions.split("\n").find((l) => l.includes(row));
-    assert.ok(line && !line.includes("prose:"), `${row} must not be offered to a check that answers in prose`);
-  }
-  assert.match(conditions, /v: "something_came_back", rows: "anything came back", prose: "it found something"/);
-});
-
-test("delivery keeps its own answer, and the card says where that answer now lives", () => {
-  // Reach is about the OWNER; delivery sends the result somewhere else entirely. Tying them
-  // together meant "only when something is wrong" silently stopped a monthly report going out to
-  // the people waiting for it (the owner, 2026-09-17: "deliver is to push to somewhere not
-  // timeline, that is something else"). Absent must keep meaning every run - reports.deliver_how.
-  assert.match(source, /export const deliverSendOf = \(c\) => \(\["always", "wrong", "rule"\]\.includes\(c\?\.deliver\?\.send\) \? c\.deliver\.send : "always"\)/);
+test("delivery keeps its own line, and the card says where that line lives", () => {
   const panel = source.slice(source.indexOf("SEND IT SOMEWHERE (OPTIONAL)"), source.indexOf("<RoutingCard"));
-  assert.match(panel, /one prompt that routes each run/);       // the rule itself is a line on that card
-  assert.doesNotMatch(panel, /cfg\.deliver\.when/);              // ...not a second row-shaped condition here
-  assert.match(panel, /cfg\.deliver\.gate/);                     // the Review gate stays exactly where it was
+  assert.match(panel, /one prompt that routes each run/);
+  assert.doesNotMatch(panel, /cfg\.deliver\.when/);
+  assert.match(panel, /cfg\.deliver\.gate/);
 });
 
 
@@ -155,10 +133,8 @@ test("on an existing report the routing step's Continue saves before it advances
 });
 
 test("the Assistant with no rule of its own asks whether it matters, on the Timeline and the work rail alike", () => {
-  // 2026-09-20: "only show up when the assistant has an idea that matters, not always" - the card
-  // shows the sentence the server asks (reports.ASSISTANT_WHEN), on both lines, unless a rule was given
+  // 2026-09-20: "only show up when the assistant has an idea that matters, not always" - an unsaved
+  // Assistant report shows the sentence the server asks (reports.ASSISTANT_WHEN, reports.default_route)
   assert.match(source, /export const ASSISTANT_WHEN = "it has an idea that matters: /);
-  assert.match(source, /export const assistantDefault = \(c\) => \(c\?\.type === "assistant" && !isRouted\(c\)/);
-  assert.match(source, /const r = \(c\?\.route \|\| assistantDefault\(c\)\)\[line\] \|\| \{\}/);   // routeOf mirrors reports.route_of
-  assert.match(source, /\.\.\.assistantDefault\(c\),/);                                            // seedRoute writes it down as the card's sentences
+  assert.match(source, /isVoice\(c\) && \(line === "timeline" \|\| line === "work"\) \? \{ how: "ai", when: ASSISTANT_WHEN \}/);
 });

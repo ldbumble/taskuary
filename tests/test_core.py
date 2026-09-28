@@ -461,16 +461,15 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(s.list_tasks(), [])                     # shown, never assigned
         self.assertIn('not a task trigger', row['RouteReason'])
 
-    def test_empty_ai_summary_says_so_instead_of_filing_a_bare_wall(self):
+    def test_an_empty_ai_summary_is_a_failed_run_that_says_why(self):
         from taskuary.reports import REGISTRY, render_report
         s = MemoryStore()
         REGISTRY['_e'] = lambda cfg: ('2 rows', 'a\nb')
         try:
-            # a reasoning model that spends its budget thinking returns '' - the report used
-            # to file starting with '--- raw data ---', which reads like the prompt never ran
-            _, body = render_report(s, {'type': '_e', 'ai_prompt': 'summarize'}, llm=lambda *a, **k: '   ')
-            self.assertTrue(body.startswith('(the model returned an empty summary'))
-            self.assertIn('--- raw data ---', body)
+            # a reasoning model that spends its budget thinking returns '' - the report exists for the
+            # summary, so that run FAILED, and says what to try (the owner, 2026-09-27)
+            with self.assertRaisesRegex(RuntimeError, 'empty summary'):
+                render_report(s, {'type': '_e', 'ai_prompt': 'summarize'}, llm=lambda *a, **k: '   ')
             # and the summary gets a real token budget, not triage's
             seen = {}
             render_report(s, {'type': '_e', 'ai_prompt': 'summarize'},
@@ -937,7 +936,7 @@ class CoreTests(unittest.TestCase):
         s = MemoryStore()
         REGISTRY['_t'] = lambda cfg: ('3 rows', 'a\nb\nc')
         try:
-            out = run_report_source(s, {'SourceId': 1, 'Address': 'Census', 'ConfigJson': '{"type": "_t"}'})
+            out = run_report_source(s, {'SourceId': 1, 'Address': 'Census', 'ConfigJson': '{"type": "_t", "route": {"work": {"how": "never"}}}'})
             m = s.get_message(out['message_id'])
             self.assertEqual((m['Channel'], m['Status'], m['TaskId']), ('report', 'feed', None))
         finally:

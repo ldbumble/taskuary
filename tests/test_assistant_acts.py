@@ -27,7 +27,7 @@ class ActsTests(unittest.TestCase):
 
     def test_the_kinds_are_in_the_registry_and_the_catalogue_with_their_tiers(self):
         b = toolcatalog.block()
-        for k in ('report.run', 'report.pause', 'report.resume', 'report.reach', 'report.edit', 'report.delete',
+        for k in ('report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'report.delete',
                   'setting.set', 'connection.test', 'connection.pause', 'connection.resume', 'script.start'):
             self.assertIn(k, operations.KINDS); self.assertIn(k, b)
         for k in ('report.run', 'setting.set', 'connection.pause', 'script.start'): self.assertTrue(toolcatalog.is_instant(k), k)
@@ -74,11 +74,14 @@ class ActsTests(unittest.TestCase):
         self.assertTrue(self.s.get_source(self.sid)['Active'])
         self.assertIn('Nothing to undo', concierge.undo_last(self.s))
 
-    def test_reach_and_edit_change_the_config_and_can_be_put_back(self):
-        done = concierge.run_proposal(self.s, self._turn('report.reach', title='ar report', reach='wrong')['proposal'])
+    def test_route_and_edit_change_the_config_and_can_be_put_back(self):
+        """The Assistant edits the same route card the Reports page does - one line at a time (2026-09-27)."""
+        done = concierge.run_proposal(self.s, self._turn('report.route', title='ar report', line='timeline', how='ai',
+                                                         when='an invoice is over 90 days')['proposal'])
         cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
-        self.assertEqual(cfg['reach'], 'wrong'); self.assertEqual(done['outcome']['undo']['params'], {'reach': 'always'})
-        self.assertIsNone(self._turn('report.reach', title='ar report', reach='sometimes').get('proposal'))   # not a reach word
+        self.assertEqual(cfg['route']['timeline'], {'how': 'ai', 'when': 'an invoice is over 90 days'})
+        self.assertEqual(done['outcome']['undo']['params'], {'line': 'timeline', 'how': 'always'})
+        self.assertIsNone(self._turn('report.route', title='ar report', line='timeline', how='sometimes').get('proposal'))   # not a way a line goes
         done = concierge.run_proposal(self.s, self._turn('report.edit', title='ar report', config={'daily_at': '08:30'})['proposal'])
         self.assertEqual(json.loads(self.s.get_source(self.sid)['ConfigJson'])['daily_at'], '08:30')
         self.assertEqual(done['outcome']['undo']['params'], {'config': {'daily_at': '07:00'}})
@@ -119,7 +122,7 @@ class ActsTests(unittest.TestCase):
         from taskuary import remote_assistant
         sent = []
         with mock.patch.object(remote_assistant, 'send', lambda store, ch, chat, text, connector_id=None: sent.append((ch, chat, text))), \
-             mock.patch.object(server, 'run_report_source', return_value={'summary': '3 invoices over 30 days', 'subject': 'Monthly AR Report - 3 rows'}), \
+             mock.patch('taskuary.reports.run_report_source', return_value={'summary': '3 invoices over 30 days', 'subject': 'Monthly AR Report - 3 rows'}), \
              mock.patch.object(server, '_spawn_rerun', lambda fn: fn()):                       # the work, inline
             remote_assistant._ASKING.chat = {'channel': 'whatsapp', 'chat': '1555@s.whatsapp.net', 'connector_id': 7}
             try: concierge.run_proposal(self.s, self._turn('report.run', title='ar report')['proposal'])

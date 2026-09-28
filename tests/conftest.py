@@ -419,6 +419,7 @@ def isolated_runtime_boundaries():
             with mock.patch.object(wabridge, 'start_configured', stopped('WhatsApp bridge')), \
                  mock.patch.object(server, 'catch_up_on_startup', stopped('startup catch-up')), \
                  mock.patch.object(server, 'poll_forever', stopped('poll scheduler')), \
+                 mock.patch.object(server, 'reports_forever', stopped('report scheduler')), \
                  mock.patch.object(server, 'quick_forever', stopped('chat poll scheduler')), \
                  mock.patch.object(server, 'doorway_forever', stopped('assistant doorway')), \
                  mock.patch.object(blackboard, 'schedule_due', stopped('dispatch retry scheduler')), \

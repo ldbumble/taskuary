@@ -408,7 +408,7 @@ class BrainTests(unittest.TestCase):
                 lines = [json.loads(l) for l in r.iter_lines() if l.strip()]
             self.assertEqual([l['type'] for l in lines], ['tool_call', 'done'])                          # a question: the model's turn streams
             self.assertIn('I reran it', lines[1]['say'])
-            with mock.patch('taskuary.server.run_report_source', return_value={'ran': True, 'message_id': m}) as ran:
+            with mock.patch('taskuary.reports.run_report_source', return_value={'ran': True, 'message_id': m}) as ran:
                 out = c.post(f'/api/reports/{sid}/rerun').json()
                 import time; time.sleep(0.2)
             self.assertEqual((out['queued'], out['title']), (True, 'GitHub Trending')); self.assertTrue(ran.called)   # queued, run in the background

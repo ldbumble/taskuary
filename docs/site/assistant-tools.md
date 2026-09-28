@@ -14,7 +14,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 | **agents** | start, continue, answer or stop the agent on a task, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule |
-| **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.reach(reach), report.edit(config), report.delete |
+| **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
 | **app** | settings, connections, scripts and kept facts | setting.set(setting, value), connection.create(type, name), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
 | **look** | look-ups - they run at once and change nothing | task.read, timeline.search, tasks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
@@ -461,12 +461,15 @@ Put a paused report or workflow back on its clock.
 
 <p class="runs">Runs at once, with an undo on the receipt.</p>
 
-### `report.reach`
+### `report.route`
 
-Change when a report reaches the owner.
+Change where one line of a report's route card goes.
 
-- `reach` - always | wrong | rule
+- `line` - timeline | work | alert | send
+- `how` - always | ai | rule | never
 - `title`
+- `when` - for ai: what to look for
+- `rule` - /`count`/`text` (for rule)
 
 <p class="runs">Runs at once, with an undo on the receipt.</p>
 

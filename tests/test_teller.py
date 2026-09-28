@@ -1,6 +1,13 @@
 """Teller: the bank and card feed. Mocked at the HTTP edge; what is under test is the shape - the
 token as Basic auth, the certificate outside sandbox, account picking that refuses ambiguity, the
 spend/inflow direction that saves everyone decoding the bank's sign, and the ladder (reads only)."""
+
+def alert_fires(c, head, body):
+    """The rule an alert line carries, read against one result - __import__("taskuary.reports").reports.condition_fires."""
+    a = c.get('alert') or {}
+    if not str(a.get('when') or '').strip() or not str(a.get('to') or '').strip(): return ''
+    return __import__("taskuary.reports").reports.condition_fires(a['when'], a.get('count'), a.get('text'), res=__import__("taskuary.reports").reports.read_result(head, body))
+
 import json
 import unittest
 from unittest import mock
@@ -145,7 +152,7 @@ class TheSpendRollup(TheRows):
         self.assertEqual(self._spend(days=3)[-1]['charges'], 3)     # 08-29 .. 09-01, and the 01-01 row cut
 
     def test_the_headline_leads_with_the_total_so_a_dollar_threshold_works(self):
-        from taskuary.reports import alert_fires, result_count
+        from taskuary.reports import result_count
         with mock.patch.object(teller, 'date') as d:
             d.today.return_value = __import__('datetime').date(2026, 9, 1)
             with mock.patch.object(teller.requests, 'get', side_effect=lambda url, **kw: self._get(url, **kw)):
@@ -187,7 +194,6 @@ class TheSpendReport(unittest.TestCase):
         self.assertIn('"account": "TOTAL"', body.replace("'", '"')) if '"account"' in body else self.assertIn('TOTAL', body)
 
     def test_the_owners_threshold_fires_on_dollars_and_stays_quiet_under_it(self):
-        from taskuary.reports import alert_fires
         head, body = self._run({'type': 'teller_spend', 'days': 3})
         over = {'alert': {'when': 'more_than', 'count': 1000, 'to': '+15550000000', 'channel': 'whatsapp'}}
         under = {'alert': {'when': 'more_than', 'count': 2000, 'to': '+15550000000', 'channel': 'whatsapp'}}
@@ -198,4 +204,4 @@ class TheSpendReport(unittest.TestCase):
         from taskuary import reports
         s = MemoryStore()                      # no card connected: no token
         with self.assertRaisesRegex(teller.TellerError, 'Connect a bank'):
-            reports.render_report(s, reports.resolve_cfg(s, {'type': 'teller_spend', 'days': 0}))
+            reports.executor_for('teller_spend')(reports.resolve_cfg(s, {'type': 'teller_spend', 'days': 0}))

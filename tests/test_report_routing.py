@@ -25,6 +25,12 @@ def res(head='4 rows', body='a\nb', failed=False, n=None):
     return reports.read_result(head, body, failed, n)
 
 
+def judged(cfg, llm):
+    """What the judge answered for the lines set to ask the AI, read off `decide`."""
+    d = reports.decide(cfg, res(), llm)
+    return {l: d[l] for l in reports.LINES if reports.route_of(cfg, l)[0] == 'ai'}
+
+
 def llm_saying(text, seen=None):
     def _llm(system, user, **kw):
         if seen is not None: seen.append((system, user))
@@ -32,18 +38,7 @@ def llm_saying(text, seen=None):
     return _llm
 
 
-# ── the three answers a line can give ───────────────────────────────────────────────────
-def test_a_report_with_no_route_block_is_not_routed():
-    """Every report that exists predates this. None of them may change behaviour."""
-    assert reports.routed({'type': 'sql'}) is False
-    assert reports.routed({'type': 'sql', 'reach': 'wrong', 'triage': True}) is False
-    assert reports.routed({'type': 'sql', 'route': {}}) is False
-
-
-def test_a_line_set_to_anything_makes_the_report_routed():
-    assert reports.routed({'route': {'work': {'how': 'ai', 'when': 'any error'}}}) is True
-
-
+# ── the four answers a line can give ────────────────────────────────────────────────────
 def test_an_unset_line_falls_back_to_what_that_destination_has_always_done():
     """A report you set up is work you wanted done: the Timeline AND the work rail every run,
     and delivery every run. Only the interruption stays off until it is asked for."""
@@ -94,7 +89,7 @@ def test_the_judge_answers_booleans_and_writes_no_prose():
     requirement of routing, and for three of the four lines it was computed and thrown away."""
     cfg = {'route': {'work': {'how': 'ai', 'when': 'a job has not run in over two hours'},
                      'timeline': {'how': 'ai', 'when': 'anything worth reading'}}}
-    said = reports.judge_run(cfg, res(), llm_saying('WORK: yes\nTIMELINE: no'))
+    said = judged(cfg, llm_saying('WORK: yes\nTIMELINE: no'))
     assert said == {'work': True, 'timeline': False}
     assert 'why' not in said
 
@@ -103,17 +98,17 @@ def test_a_judge_that_volunteers_a_reason_is_not_punished_for_it():
     """An older model, or one that ignores the instruction, still routes correctly - the reason is
     simply ignored rather than failing the parse."""
     cfg = {'route': {'work': {'how': 'ai', 'when': 'x'}}}
-    assert reports.judge_run(cfg, res(), llm_saying('WORK: yes - the export is late')) == {'work': True}
+    assert judged(cfg, llm_saying('WORK: yes - the export is late')) == {'work': True}
 
 
 def test_a_line_the_judge_skipped_leaves_the_run_unjudged_and_it_reaches_you():
     cfg = {'route': {'work': {'how': 'ai', 'when': 'x'}, 'alert': {'how': 'ai', 'when': 'y'}}}
-    assert reports.judge_run(cfg, res(), llm_saying('WORK: no')) == {'work': True, 'alert': True}
+    assert judged(cfg, llm_saying('WORK: no')) == {'work': True, 'alert': True}
 
 
 def test_a_judge_that_raises_leaves_the_run_unjudged_and_it_reaches_you():
     def boom(*a, **kw): raise RuntimeError('502')
-    assert reports.judge_run({'route': {'work': {'how': 'ai', 'when': 'x'}}}, res(), boom) == {'work': True}
+    assert judged({'route': {'work': {'how': 'ai', 'when': 'x'}}}, boom) == {'work': True}
 
 
 def test_the_prompt_no_longer_asks_for_a_sentence():
@@ -175,14 +170,16 @@ def test_no_brain_at_all_reaches_you():
     assert reports.decide(cfg, res(), None)['timeline'] is True
 
 
-def test_a_failed_run_reaches_you_without_asking_anyone():
-    """A check that could not run is not a clear one, and there is nothing to judge."""
+def test_a_failed_run_reaches_you_in_the_app_and_nowhere_else():
+    """The owner, 2026-09-27: "it's okay if it errors out only in the app". A check that could not
+    run is one row on the Timeline - never a task, never a ping, never sent to its recipients - and
+    there is nothing to judge, so nobody is asked."""
     seen = []
-    cfg = {'route': {'timeline': {'how': 'ai', 'when': 'any error'}, 'work': {'how': 'never'}}}
+    cfg = {'route': {'timeline': {'how': 'never'}, 'work': {'how': 'always'}, 'alert': {'how': 'always'},
+                     'send': {'how': 'always'}}}
     d = reports.decide(cfg, res(failed=True), llm_saying('TIMELINE: no', seen))
     assert seen == []
-    assert (d['timeline'], d['why']) == (True, 'the report failed to run')
-    assert d['work'] is False        # ...but never still means never
+    assert d == {'timeline': True, 'work': False, 'alert': False, 'send': False, 'why': 'the report failed to run'}
 
 
 # ── which judge answers ─────────────────────────────────────────────────────────────────
@@ -272,31 +269,70 @@ def test_the_judge_reads_the_result_of_a_report_that_has_no_prompt_of_its_own():
     assert 'unit 4 | 68' in seen[0][1]
 
 
-# ── the verdict line goes away for a routed report ──────────────────────────────────────
-def test_a_routed_report_does_not_staple_the_verdict_contract_to_your_prompt():
-    """It was only ever there because code had to read prose. The judge reads it now."""
-    assert reports.contract_for({'route': {'work': {'how': 'ai', 'when': 'x'}}}) == ''
-    assert reports.contract_for({'reach': 'wrong'}) == reports.VERDICT_CONTRACT
+# ── a rule is arithmetic, and stays arithmetic ──────────────────────────────────────────
+def test_a_rule_line_reads_the_number_without_asking_anyone():
+    """"Spend over 500" is a comparison a model should not be trusted with (teller, simplefin)."""
+    seen = []
+    cfg = {'route': {'alert': {'how': 'rule', 'rule': 'more_than', 'count': 500}}}
+    assert reports.decide(cfg, res('1,518 spent', ''), llm_saying('ALERT: no', seen))['alert'] is True
+    assert reports.decide(cfg, res('499 spent', ''), None)['alert'] is False
+    assert seen == [] and not reports.asks_ai(cfg)
+    assert reports.route_of(cfg, 'alert') == ('rule', 'more than 500 came back')
 
 
-# ── and everything that existed before goes on working ──────────────────────────────────
-def test_an_old_report_is_decided_by_the_rules_it_was_set_up_with():
-    assert reports.decide({'reach': 'always'}, res('0 rows', ''), None)['timeline'] is True
-    assert reports.decide({'reach': 'wrong'}, res('0 rows', ''), None)['timeline'] is False
-    quiet = reports.decide({'reach': 'wrong'}, res('0 rows', ''), None)
-    assert quiet['work'] is False
+def test_a_rule_nobody_can_read_means_the_line_is_simply_on():
+    assert reports.route_of({'route': {'alert': {'how': 'rule', 'rule': 'when_it_feels_wrong'}}}, 'alert') == ('always', '')
+
+
+# ── every report is on the card ─────────────────────────────────────────────────────────
+# The old rules (reach, an alert condition, the triage switch) are written down as the card ONCE,
+# meaning exactly what they did (the owner, 2026-09-27: one rule set).
+def test_an_old_report_on_every_run_becomes_every_run_and_no_work():
+    n = reports.from_old_rules({'type': 'mssql', 'title': 'AR'})
+    assert n['route'] == {'timeline': {'how': 'always'}, 'work': {'how': 'never'}, 'alert': {'how': 'never'}, 'send': {'how': 'always'}}
 
 
 def test_an_old_report_that_could_start_work_still_can():
-    d = reports.decide({'reach': 'always', 'triage': True}, res(), None)
-    assert (d['timeline'], d['work']) == (True, True)
+    n = reports.from_old_rules({'type': 'mssql', 'reach': 'always', 'triage': True})
+    assert n['route']['work'] == {'how': 'always'} and 'triage' not in n and 'reach' not in n
 
 
-def test_an_old_report_still_mails_what_it_always_mailed_when_it_goes_quiet_for_you():
-    """44539620: reach and deliver are different questions, and they stay different ones."""
-    cfg = {'reach': 'wrong', 'deliver': {'to': 'cfo@x.com', 'send': 'always'}}
-    d = reports.decide(cfg, res('0 rows', ''), None)
-    assert (d['timeline'], d['send']) == (False, True)
+def test_an_old_rule_moves_onto_the_lines_it_governed():
+    n = reports.from_old_rules({'type': 'assistant', 'alert': {'when': 'something_came_back', 'to': '+15550100', 'channel': 'whatsapp'}})
+    rule = {'how': 'rule', 'rule': 'something_came_back'}
+    assert n['route']['timeline'] == rule and n['route']['alert'] == rule and n['route']['work'] == {'how': 'never'}
+    assert n['alert'] == {'to': '+15550100', 'channel': 'whatsapp'}                  # where it goes stays; what fires it moved
+
+
+def test_only_when_wrong_becomes_the_same_question_asked_of_the_judge():
+    n = reports.from_old_rules({'reach': 'wrong', 'deliver': {'to': 'cfo@example.com', 'send': 'always'}})
+    assert n['route']['timeline'] == {'how': 'ai', 'when': 'something in it is wrong, or needs me'}
+    assert n['route']['send'] == {'how': 'always'} and 'send' not in n['deliver']
+
+
+def test_an_alert_on_failure_is_gone_because_a_failure_stays_in_the_app():
+    n = reports.from_old_rules({'alert': {'when': 'failed', 'to': 'me@example.com'}})
+    assert n['route']['alert'] == {'how': 'never'}
+
+
+def test_the_assistant_on_its_own_default_keeps_its_judge():
+    n = reports.from_old_rules({'type': 'assistant'})
+    assert n['route']['timeline'] == n['route']['work'] == {'how': 'ai', 'when': reports.ASSISTANT_WHEN}
+
+
+def test_a_report_already_on_the_card_is_only_filled_in():
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'any error'}}, 'reach': 'wrong'}
+    n = reports.from_old_rules(cfg)
+    assert n['route']['work'] == {'how': 'ai', 'when': 'any error'} and n['route']['timeline'] == {'how': 'always'}
+    assert 'reach' not in n
+    assert reports.from_old_rules(n) == n                                            # once converted, it stays put
+
+
+def test_a_report_saved_the_old_way_is_stored_as_the_card():
+    s = MemoryStore()
+    sid = s.save_source({'Channel': 'report', 'Address': 'x', 'Active': 1, 'ConfigJson': json.dumps({'type': 'mssql', 'reach': 'wrong'})}, 't')
+    cfg = json.loads(s.get_source(sid)['ConfigJson'])
+    assert 'reach' not in cfg and cfg['route']['timeline']['how'] == 'ai'
 
 
 # ── and you can watch the rule fire before you trust it ─────────────────────────────────
@@ -336,18 +372,6 @@ class ReplayingTheRuleOnRunsThatAlreadyHappened(unittest.TestCase):
         self.assertEqual(c.post('/api/reports/999999/replay', json={}).status_code, 404)
 
 
-# ── a check that could not run is work, when the card says work ─────────────────────────
-def test_a_failed_routed_run_is_work_because_a_broken_monitor_is_something_to_deal_with():
-    """The quietest way for a monitor to break is to file its own outage as news."""
-    cfg = {'route': {'work': {'how': 'ai', 'when': 'any error'}}}
-    assert reports.decide(cfg, res(failed=True), None)['work'] is True
-
-
-def test_an_old_report_still_refuses_to_make_a_task_out_of_an_outage():
-    """Nothing already running starts doing something new on the day this ships."""
-    assert reports.decide({'triage': True, 'reach': 'always'}, res(failed=True), None)['work'] is False
-
-
 # ── the interruption is not "the phone" ─────────────────────────────────────────────────
 def test_the_alert_line_is_named_for_being_immediate_not_for_a_device():
     """It goes to whichever live channel the owner picked - as often email as WhatsApp (the owner,
@@ -362,7 +386,6 @@ def test_the_alert_line_is_named_for_being_immediate_not_for_a_device():
 # show up when the assistant has an idea that matters, not always").
 def test_the_assistant_with_no_rule_asks_whether_it_matters_on_both_lines():
     cfg = {'type': 'assistant'}
-    assert not reports.routed(cfg)                       # nobody set it - the owner's card still reads "not routed"
     assert reports.route_of(cfg, 'timeline') == ('ai', reports.ASSISTANT_WHEN)
     assert reports.route_of(cfg, 'work') == ('ai', reports.ASSISTANT_WHEN)
     assert reports.route_of(cfg, 'alert')[0] == 'never'
@@ -370,14 +393,9 @@ def test_the_assistant_with_no_rule_asks_whether_it_matters_on_both_lines():
     assert reports.ASSISTANT_WHEN in reports.judge_prompt(cfg)
 
 
-def test_an_assistant_that_was_given_a_rule_keeps_it():
-    """reach_of's migration rule holds: a rule the owner asked for means what it always meant."""
-    assert reports.assistant_default({'type': 'assistant', 'reach': 'always'}) == {}
-    assert reports.assistant_default({'type': 'assistant', 'alert': {'when': 'something_came_back'}}) == {}
-    assert reports.assistant_default({'type': 'assistant', 'route': {'timeline': {'how': 'always'}}}) == {}
-    assert reports.assistant_default({'type': 'mssql'}) == {}
-    assert reports.assistant_default({'type': 'assistant', 'watch_source_ids': [3]}) == {}   # a monitor posts its findings
-    assert reports.decide({'type': 'assistant', 'reach': 'always'}, res('0 rows', ''), None)['timeline'] is True
+def test_an_assistant_that_was_given_a_line_keeps_it():
+    assert reports.route_of({'type': 'assistant', 'route': {'timeline': {'how': 'always'}}}, 'timeline') == ('always', '')
+    assert reports.route_of({'type': 'assistant', 'watch_source_ids': [3]}, 'timeline') == ('always', '')   # a monitor posts its findings
     assert reports.route_of({'type': 'mssql'}, 'work') == ('always', '')
 
 

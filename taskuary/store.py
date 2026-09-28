@@ -1201,7 +1201,9 @@ class SQLiteStore:
                     if not c.get('on_startup'):
                         c['on_startup'], c['once_per_week'] = True, True
                         self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
-                if c.get('type') == 'digest' and (c.get('ai_prompt') in OLD_PROMPTS or c.get('ai_prompt') == DIGEST_PROMPT):
+                # only a digest still on an OLD stock prompt: one already healed is the owner's to reschedule,
+                # and healing it on every launch put back an 08:00 they had taken off (2026-09-27)
+                if c.get('type') == 'digest' and c.get('ai_prompt') in OLD_PROMPTS:
                     c['ai_prompt'] = DIGEST_PROMPT
                     # a stock digest on the old default clock (none, or the three-hourly one) becomes the
                     # 8 am brief that also runs on startup; an owner-set cadence is kept
@@ -1210,6 +1212,13 @@ class SQLiteStore:
                     # ...and a brief is once a day: on_startup alone re-filed it on every launch
                     if c.get('on_startup'): c['once_per_day'] = True
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
+            # ONE RULE SET for where a run goes (the owner, 2026-09-27): a report saved before the route
+            # card is written down as the card, meaning exactly what it did - reports.from_old_rules
+            from .reports import from_old_rules
+            for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
+                try: c = json.loads(cj or '{}')
+                except ValueError: continue
+                if (n := from_old_rules(c)) != c: self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(n), sid_))
             # data heal: 'triage' was a fourth Kind the pickers never offered, so those tasks
             # showed a kind the dropdown could not represent - and every one of them had a
             # coding agent dispatched at it, because the gate was "not a reply" and not the
@@ -3544,7 +3553,7 @@ class SQLiteStore:
         """Earlier runs of the SAME report, newest first. One report is one conversation
         (reports.py writes `report:<SourceId>` on every run), so this is what "the previous one"
         means without matching on titles that the owner is free to change."""
-        return self._rows("SELECT MessageId, TaskId, Status FROM message "
+        return self._rows("SELECT MessageId, TaskId, Status, ExternalId FROM message "
                           "WHERE ConversationId=? AND MessageId<>? AND Direction<>'out' "
                           "ORDER BY MessageId DESC", (conversation_id, mid))
     def last_transcript(self, task_id):
@@ -3952,6 +3961,12 @@ class SQLiteStore:
         return self._rows('SELECT * FROM source' + (' WHERE Active=1' if active_only else ''))
     def save_source(self, fields, actor):
         sid = fields.get('SourceId')
+        # a report is saved as its route card, whoever writes it (the page, the Assistant, a test) -
+        # the old reach/triage words never land again (reports.from_old_rules)
+        if fields.get('ConfigJson') and (fields.get('Channel') or (self.get_source(sid) or {}).get('Channel') if sid else fields.get('Channel')) == 'report':
+            from .reports import as_card
+            try: fields = {**fields, 'ConfigJson': json.dumps(as_card(json.loads(fields['ConfigJson'])))}
+            except ValueError: pass
         cols = [c for c in SOURCE_COLS if c in fields and fields[c] is not None]
         if sid:
             self._exec(f"UPDATE source SET {','.join(f'{c}=?' for c in cols)} WHERE SourceId=?", [fields[c] for c in cols] + [sid])

@@ -76,7 +76,7 @@ class BriefVoiceTests(unittest.TestCase):
         from tests.digest_fixture import add_digest
         src = add_digest(s)                                                        # an older install's Morning digest
         seen = {}
-        def llm(system, user, **kw): seen['system'] = system; return '- morning.'
+        def llm(system, user, **kw): seen.setdefault('system', system); return '- morning.'   # the summary's call, not triage's
         reports.run_report_source(s, src, llm=llm)
         self.assertIn('MORNING BRIEF', seen['system'])
         self.assertIn('Plain, direct and short.', seen['system'])

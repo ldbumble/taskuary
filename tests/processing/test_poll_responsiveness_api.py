@@ -119,7 +119,7 @@ def test_second_chat_arrival_is_visible_while_quick_triage_is_held(tmp_path, mon
         db.cx.close()
 
 
-def test_chat_arrival_is_visible_while_full_sync_report_is_held(tmp_path, monkeypatch):
+def test_chat_arrival_is_visible_while_full_sync_is_held(tmp_path, monkeypatch):
     db = SQLiteStore(str(tmp_path / 'poll-report-api.db'))
     monkeypatch.setattr(server, 'store', db)
     monkeypatch.setattr(terminal, 'live_sessions', lambda **kwargs: [])
@@ -134,7 +134,7 @@ def test_chat_arrival_is_visible_while_full_sync_report_is_held(tmp_path, monkey
     started, release = threading.Event(), threading.Event()
     arrived, fetches = [], []
 
-    def held_report(target, startup=False):
+    def held_check(target):
         assert target is db
         started.set()
         assert release.wait(10), 'test must release its owned report'
@@ -148,7 +148,7 @@ def test_chat_arrival_is_visible_while_full_sync_report_is_held(tmp_path, monkey
                                            'SentAt': datetime.now().isoformat(sep=' ')}))
         return 1
 
-    monkeypatch.setattr(server, 'run_due_reports', held_report)
+    monkeypatch.setattr('taskuary.ci.poll', held_check)
     monkeypatch.setattr(channels, 'poll_channels', fetch)
     client = TestClient(server.app)
     try:

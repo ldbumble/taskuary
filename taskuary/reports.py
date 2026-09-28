@@ -2,10 +2,10 @@
 rows on the timeline (never tasks). A report source = a source row with Channel='report'
 and ConfigJson {"type", "title", "every_minutes"/"daily_at", ...executor keys}.
 
-REGISTRY: type -> executor(config) -> (headline, summary). Implemented: sqlite, rest, rss
-(mssql with the [mssql] extra). Planned types fail loudly so a misconfig is visible on the
-timeline instead of silently absent. Adding a type = one ~15-line function + a REGISTRY
-entry - PRs welcome.
+REGISTRY: type -> executor(config) -> (headline, summary). Every type in it is implemented
+except the ones in PLANNED, which fail loudly so a misconfig is visible on the timeline instead
+of silently absent. Building a planned type = one ~15-line function + its REGISTRY entry, and
+taking it out of PLANNED - PRs welcome.
 """
 import io, json, os, re, sqlite3, threading, time
 from datetime import datetime, timedelta

@@ -10,7 +10,8 @@ from pathlib import Path
 from loguru import logger
 
 VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply',
-               'close_unsent': 'closed_unsent'}   # the owner's explicit close when sending is unavailable (PW-145) - never 'sent'
+               'close_unsent': 'closed_unsent',   # the owner's explicit close when sending is unavailable (PW-145) - never 'sent'
+               'close_pr': 'rejected'}            # a merge close-out answered "close it unmerged": the merge was turned down
 
 
 def context_moved(store, rv: dict):
@@ -138,6 +139,11 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
     if _newer_inbound(store, task_id, rv):
         store.add_comment(task_id, actor, 'human', 'Reply sent. A new message came in meanwhile, so the task stays open.')
         return
+    # ...nor while its close-out waits: closing here would dismiss the merge (or the issue's close) the owner has not answered
+    from . import proposals
+    if proposals.closeout_pending(store, task_id):
+        store.add_comment(task_id, actor, 'human', 'Reply sent. The task closes when you answer its close-out.')
+        return
     from . import concierge
     if concierge.close_task(store, task_id, actor):
         store.add_comment(task_id, actor, 'human', 'Closed - the reply went out.')
@@ -202,8 +208,18 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     # a PROPOSAL is not a draft reply: approving it RUNS the action the agent asked for
     # (proposals.execute re-validates - the approval never grants the permission), and
     # nothing is ever sent to a sender for it
+    if verb == 'close_pr' and rv.get('Kind') != 'action':
+        return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': 'only a pull request close-out can be closed without merging'}
     if rv.get('Kind') == 'action':
         from . import proposals
+        if verb == 'close_pr':
+            try: out = proposals.close_pr(store, rv, actor)
+            except Exception as e:
+                store.add_comment(rv['TaskId'], actor, 'human', f'CLOSING THE PULL REQUEST FAILED: {str(e)[:300]}')
+                return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
+            store.decide_review(rid, 'rejected', None, actor, 'closed the pull request without merging')
+            proposals.settle(store, rv, 'approve', actor)       # answered: the task ends like a merge ends it
+            return {'ok': True, 'status': 'rejected', 'sent': None, 'send_error': None, 'result': out}
         if verb in ('approve', 'edit'):
             try:
                 out = proposals.execute(store, rv, actor, final)
@@ -211,9 +227,11 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
                 store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
                 return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
             store.decide_review(rid, VERB2STATUS['approve'], rv.get('DraftText'), actor, note)
+            proposals.settle(store, rv, verb, actor)          # a close-out's yes is what closes the task
             return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
         store.decide_review(rid, VERB2STATUS[verb], None, actor, note)
         store.add_comment(rv['TaskId'], actor, 'human', f'Proposal {VERB2STATUS[verb]} - nothing was done.')
+        proposals.settle(store, rv, verb, actor)
         return {'ok': True, 'status': VERB2STATUS[verb], 'sent': None, 'send_error': None}
     store.decide_review(rid, VERB2STATUS[verb], final, actor, note)
     if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', f'Reviewed draft ({verb}):\n{final}')

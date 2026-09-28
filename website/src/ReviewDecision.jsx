@@ -173,7 +173,7 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
       )}
       <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
         value={value} onChange={(e) => setText(e.target.value)}
-        placeholder={r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
+        placeholder={proposal?.kind === "closeout" ? proposal.placeholder : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
         inputProps={{ style: { fontSize: 12.5, lineHeight: 1.45 } }} />
       {compare?.reviewId === r.ReviewId && (
         <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
@@ -198,6 +198,7 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
             onClick={() => decide("approve")}
             title={proposal.kind === "playbook"
               ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
+              : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it`
               : "Run the proposed action; nothing is sent to the sender"}>
             {busy ? proposal.busyLabel : proposal.approveLabel}
           </Button>
@@ -229,6 +230,8 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
           </Button>
         )}
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
+        {proposal?.alt && <Button size="small" variant="outlined" disabled={busy} onClick={() => decide(proposal.alt.verb)}
+          title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}
         <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")}>{proposal?.rejectLabel || "Reject"}</Button>
         <Box sx={{ flex: 1 }} />
         {!proposal && meta.kind !== "zoho_invoice" && <Button size="small" disabled={busy} onClick={redraft}>

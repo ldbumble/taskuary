@@ -28,7 +28,7 @@
       "word": "reply ready",
       "role": "you",
       "mark": "✉️",
-      "hint": "a reply or an action is drafted and waits for your yes",
+      "hint": "a reply, an action or a task's close-out (merge its pull request, close its issue) waits for your yes",
       "loud": true
     },
     {

@@ -8,14 +8,41 @@ export const proposalFrom = (review) => {
   }
 };
 
+// THE CLOSE-OUT (the owner, 2026-09-27): what finishes a task where it lives - merge the PR the agent opened, close
+// the issue it came from. Its text is the summary a merge is squashed with, or the comment the issue closes with.
+export const CLOSEOUT = {
+  merge_pr: { label: "Merge", busy: "merging…", then: "merges the pull request and closes the task", reject: "Not yet",
+    // the other answer: the work is not wanted - the PR closes unmerged and the task ends with it
+    alt: { verb: "close_pr", label: "Close PR", busy: "closing…", then: "closes the pull request without merging, and the task" } },
+  close_issue: { label: "Close issue", busy: "closing…", then: "closes the issue on GitHub and the task", reject: "Not yet" },
+};
+export const closeoutOf = (review) => CLOSEOUT[proposalFrom(review)?.action] || null;
+
 export const reviewText = (review) => {
   const proposal = proposalFrom(review);
+  if (CLOSEOUT[proposal?.action]) return proposal.text || "";      // never the JSON envelope: an empty box sends nothing extra
   return proposal?.action === "write_playbook" && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
 export const proposalPresentation = (review) => {
   if (review?.Kind !== "action") return null;
   const proposal = proposalFrom(review);
+  const co = CLOSEOUT[proposal?.action];
+  if (co) {
+    const pr = proposal.action === "merge_pr";
+    return {
+      kind: "closeout",
+      title: review.Title || review.Subject || (pr ? "Merge the pull request" : "Close the issue"),
+      context: pr ? "The agent finished · the task closes when the pull request merges" : "The agent finished · the task closes with the issue",
+      destinationLabel: pr ? "MERGE" : "CLOSE",
+      destination: pr ? `${proposal.repo || ""}#${proposal.number || ""}` : "the GitHub issue this task came from",
+      approveLabel: co.label,
+      busyLabel: co.busy,
+      rejectLabel: co.reject,
+      alt: co.alt || null,
+      placeholder: pr ? "No summary - GitHub writes the merge message" : "No comment - the reply carries it",
+    };
+  }
   if (proposal?.action === "write_playbook") {
     const title = String(proposal.text || "").match(/^#\s+(.+)$/m)?.[1]?.trim();
     const slug = String(proposal.slug || "playbook").trim();

@@ -291,7 +291,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
           <>
             <Box component="span" onClick={() => !busy && act("land")}
               title={p.flow === "direct" ? "pushes the commits already in the checkout straight onto the default branch"
-                : "opens a DRAFT pull request from this task's branch — never merges"}
+                : "opens a DRAFT pull request from this task's branch — it merges only when you approve the task's close-out"}
               sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
               {busy === "land" ? "landing…" : p.flow === "direct" ? "push straight to the branch" : "open a draft PR"}
             </Box>

@@ -264,7 +264,7 @@ is what you see if those cards cannot load.</li>
 <p><code>git_flow</code> · type: select</p>
 <p>A draft pull request, or the commits pushed straight onto the default branch.</p>
 <p>Options: <code>pr</code>, <code>direct</code></p>
-<p>pr (default) = a DRAFT pull request from the task&#39;s branch; you review and merge it yourself, and Taskuary never merges. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.</p>
+<p>pr (default) = a DRAFT pull request from the task&#39;s branch; it merges only when you approve the task&#39;s close-out (Merge), or when you merge it on GitHub yourself. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.</p>
 <p>Direct mode is deliberately narrow: it pushes commits that ALREADY EXIST. A dirty checkout is refused rather than committed for you (Taskuary will not write a commit message over work nobody has read), nothing ahead of the remote is simply &#39;nothing to do&#39;, and a rejected push is reported for you to pull and rebase — it never force-pushes.</p>
 <p>Either way &#39;Agents may push / deploy&#39; on the GitHub card is what allows anything to leave the machine at all, and CI watching follows the work to wherever it landed.</p>
 <h3 id="watch-ci-on-the-tasks-pull-request">Watch CI on the task&#39;s pull request<a class="anchor" href="#watch-ci-on-the-tasks-pull-request" aria-label="Link to this section">#</a></h3>
@@ -273,7 +273,7 @@ is what you see if those cards cannot load.</li>
 <p>Options: <code>off</code>, <code>feedback</code>, <code>watch</code></p>
 <p>Once a task has a draft pull request (open it from the task, or let the agent propose one), every sync refreshes its checks.</p>
 <p>feedback = a failing build is typed into the live session — &#39;these checks failed, fix the cause and push again, do not merge&#39; — and recorded on the task; if no session is live the task returns to &#39;open&#39; so it lands on you. watch = the state is shown on the proof card but nothing is handed back. off (default) = no polling at all.</p>
-<p>Each distinct failure reaches the agent ONCE per commit, never on every poll. Taskuary opens drafts and never merges.</p>
+<p>Each distinct failure reaches the agent ONCE per commit, never on every poll. Taskuary opens drafts; a merge waits for your yes on the task&#39;s close-out.</p>
 <h3 id="agents-may-propose-actions">Agents may propose actions<a class="anchor" href="#agents-may-propose-actions" aria-label="Link to this section">#</a></h3>
 <p><code>proposals_enabled</code> · type: switch</p>
 <p>An agent can ASK to open a PR, comment publicly, close an issue or run a tool — each waits for your approval.</p>

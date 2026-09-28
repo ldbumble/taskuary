@@ -211,7 +211,7 @@
         "direct"
       ],
       "desc": "A draft pull request, or the commits pushed straight onto the default branch.",
-      "help": "pr (default) = a DRAFT pull request from the task's branch; you review and merge it yourself, and Taskuary never merges. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.\n\nDirect mode is deliberately narrow: it pushes commits that ALREADY EXIST. A dirty checkout is refused rather than committed for you (Taskuary will not write a commit message over work nobody has read), nothing ahead of the remote is simply 'nothing to do', and a rejected push is reported for you to pull and rebase — it never force-pushes.\n\nEither way 'Agents may push / deploy' on the GitHub card is what allows anything to leave the machine at all, and CI watching follows the work to wherever it landed."
+      "help": "pr (default) = a DRAFT pull request from the task's branch; it merges only when you approve the task's close-out (Merge), or when you merge it on GitHub yourself. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.\n\nDirect mode is deliberately narrow: it pushes commits that ALREADY EXIST. A dirty checkout is refused rather than committed for you (Taskuary will not write a commit message over work nobody has read), nothing ahead of the remote is simply 'nothing to do', and a rejected push is reported for you to pull and rebase — it never force-pushes.\n\nEither way 'Agents may push / deploy' on the GitHub card is what allows anything to leave the machine at all, and CI watching follows the work to wherever it landed."
     },
     "ci_watch": {
       "group": "Coder agent",
@@ -223,7 +223,7 @@
         "watch"
       ],
       "desc": "A red build goes back to the agent that wrote the code, with the failing check named.",
-      "help": "Once a task has a draft pull request (open it from the task, or let the agent propose one), every sync refreshes its checks.\n\nfeedback = a failing build is typed into the live session — 'these checks failed, fix the cause and push again, do not merge' — and recorded on the task; if no session is live the task returns to 'open' so it lands on you. watch = the state is shown on the proof card but nothing is handed back. off (default) = no polling at all.\n\nEach distinct failure reaches the agent ONCE per commit, never on every poll. Taskuary opens drafts and never merges."
+      "help": "Once a task has a draft pull request (open it from the task, or let the agent propose one), every sync refreshes its checks.\n\nfeedback = a failing build is typed into the live session — 'these checks failed, fix the cause and push again, do not merge' — and recorded on the task; if no session is live the task returns to 'open' so it lands on you. watch = the state is shown on the proof card but nothing is handed back. off (default) = no polling at all.\n\nEach distinct failure reaches the agent ONCE per commit, never on every poll. Taskuary opens drafts; a merge waits for your yes on the task's close-out."
     },
     "proposals_enabled": {
       "group": "Coder agent",

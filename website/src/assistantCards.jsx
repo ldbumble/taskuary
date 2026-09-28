@@ -33,6 +33,7 @@ import { RepoPicker } from "./RepoPicker.jsx";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
 import { summarize, stateOf, whoOf } from "./walkSummary.js";
+import { closeoutOf, reviewText } from "./reviewProposal.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -403,8 +404,10 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     return () => { live = false; };
   }, [card.rid, card.mid, card.presentation_revision]);
   const action = rv?.Kind === "action";
+  const co = closeoutOf(rv);
   const draft = () => {
     if (!action) return rv?.DraftText || "";
+    if (co) return reviewText(rv);
     try { const p = JSON.parse(rv.DraftText || ""); return p.text || `${p.action}${p.why ? ` — ${p.why}` : ""}`; } catch { return rv?.DraftText || ""; }
   };
   const value = text ?? draft();
@@ -415,7 +418,8 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     try {
       const { data } = await api.post(`/api/reviews/${card.rid}/decide`, { verb, final_text: verb === "approve" ? value : null, note: null });
       if (data.send_error) throw new Error(data.send_error);
-      onDone?.(verb === "approve" ? (action ? "Done — the action ran." : `Sent to ${who}.`) : action ? "Dismissed — nothing ran." : "Dismissed — no reply goes out.");
+      onDone?.(verb === co?.alt?.verb ? `Done — ${co.alt.then}.` : verb === "approve" ? (co ? `Done — ${co.then}.` : action ? "Done — the action ran." : `Sent to ${who}.`)
+        : co ? "Not yet — the task stays open." : action ? "Dismissed — nothing ran." : "Dismissed — no reply goes out.");
     } catch (e) { setErr(errText(e)); }
     setBusy("");
   };
@@ -436,7 +440,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   };
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
   const verb = action
-    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? "Running…" : "Run it"}</Button>
+    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? co.label : "Run it"}</Button>
     : rv?.CanSend === false ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
          hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
@@ -454,12 +458,13 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim()} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
         {busy === "approve" ? "Sending…" : "Send reply"}</Button>
     );
-  const then = action ? <><b>Run it</b> does what the agent proposed - nothing runs until you press it.</>
+  const then = co ? <><b>{co.label}</b> {co.then}.</>
+    : action ? <><b>Run it</b> does what the agent proposed - nothing runs until you press it.</>
     : rv && !value.trim() && !stale ? <><b>Draft with AI</b> writes one for you to approve here - nothing is sent.</>
     : stale ? <><b>Refresh the draft</b> rewrites it from the newest message; you still approve it.</>
     : rv ? <><b>Send reply</b> {sendsBy(rv.Channel, who)}.</> : null;
   return (
-    <CardShell card={card} kicker={action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
+    <CardShell card={card} kicker={co ? `agent finished · ${co.label.toLowerCase()}?` : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
       lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} />} err={err}>
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
@@ -476,9 +481,11 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
           under More actions */}
       <Foot verb={verb} then={then} covers={["approve", "redraft"]}
-        extra={card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
+        extra={[...(co?.alt ? [{ verb: co.alt.verb, label: busy === co.alt.verb ? co.alt.busy : co.alt.label, title: `${co.alt.label} ${co.alt.then}.`,
+          disabled: !!busy || !rv, onClick: () => decide(co.alt.verb) }] : []),
+        ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
           title: "Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.",
-          disabled: !!busy || !rv, onClick: finish }] : []}
+          disabled: !!busy || !rv, onClick: finish }] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
     </CardShell>
   );

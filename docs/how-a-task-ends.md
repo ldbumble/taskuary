@@ -37,8 +37,13 @@ flowchart LR
   X -->|yes| F
   W -->|"agent says done"| O{"You opened the session?"}
   O -->|yes| O1["Refused · its sentence is filed, you mark it done"]
-  O -->|no| R
-  W -->|"its PR merged"| R{"Reply owed?"}
+  O -->|no| C{"Its pull request still open,<br/>or it came from an issue?"}
+  C -->|yes| C1["Waiting · Merge or Close issue<br/>for your yes, and any reply"]
+  C1 -->|"you answer them"| F
+  C1 -->|"Not yet"| C2["Open · on you"]
+  C1 -->|"merged or closed on GitHub"| F
+  C -->|no| R
+  W -->|"the PR or issue it came from ended"| R{"Reply owed?"}
   R -->|yes| R1["Waiting, with the draft for you"]
   R -->|no| R2["Done · stays on the rail until a person reads it"]
 ```
@@ -56,8 +61,32 @@ flowchart LR
 
 | An agent does | What happens | Code |
 |---|---|---|
-| Says it is done (`taskuary --done`) | The session is written up. If a reply is owed, the task **waits** for you with the draft; otherwise it is done. On a task marked `stay:open` it is refused: the agent's sentence is filed as a comment and you mark it done. | `selfclose.declare` → `coder.wrap` → `coder.finish` |
-| Its pull request is merged or closed | Same as above | `channels.close_upstream_ended` |
+| Says it is done (`taskuary --done`) | The session is written up. If its work is an open pull request, or the task came from a GitHub issue, the task **waits** for its close-out (below). If a reply is owed, it **waits** with the draft too. Otherwise it is done. On a task marked `stay:open` it is refused: the agent's sentence is filed as a comment and you mark it done. | `selfclose.declare` → `coder.wrap` → `coder.finish` |
+| The pull request or issue the task **came from** is merged or closed | Same as above, with no reply and no close-out owed | `channels.close_upstream_ended` |
+
+## The close-out
+
+What finishes a task depends on where it lives. Mail is finished by the reply. A pull request the agent opened
+is finished by merging it, and an issue by closing it. So the finish raises that last act as a card waiting for
+your yes, and the task is not done until you answer it (decided with the owner on 2026-09-27).
+
+| The task's work is | The card | Its text | Your yes does | Code |
+|---|---|---|---|---|
+| A pull request the agent opened, still open | **Merge** | the agent's summary - the squash message | marks the draft ready, squash-merges it (refused while its checks are red, or if the branch moved after the card was raised), then Mark done | `proposals` `merge_pr` → `github.merge_pr` |
+| An issue the task came from | **Close issue** | the closing comment (empty when a reply carries it) | comments, closes the issue, then Mark done | `proposals` `close_issue` |
+
+- **Close PR** (beside Merge) closes the pull request on GitHub without merging it, then Mark done - the work was
+  not wanted. **Not yet** keeps the task open and on you. Merging or closing the pull request on GitHub yourself answers it
+  the same way: the card is retired and the task closes (`ci.pr_ended`).
+- With a reply owed as well, both wait. The merge comes first, so the reply can say it is merged; the comment
+  comes before an issue closes. Sending the reply does not close the task while its close-out waits.
+- The words are drafted like any reply; the act is plain code on your click. No agent has to still be running.
+- **Mark done** is still the one close. Pressing it yourself skips the close-out, and the pull request stays
+  open on GitHub.
+- The PR body carries `Closes #N` when the task came from an issue in the same repository, so the merge
+  closes the issue as well.
+- A close-out needs the switch its act needs: **Agents may push / deploy** to merge, **use as tracker** to close
+  an issue. With it off, the finish ends the task the old way.
 
 ## Rules that follow from this
 

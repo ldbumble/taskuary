@@ -7,7 +7,7 @@ import copy
 import json
 from datetime import datetime, timedelta
 
-from . import processing_all
+from . import processing_all, proposals
 
 # An open task the owner cleared comes back to the work tab once it has been quiet this long. Done
 # used to be the end of it: the task stayed open in the task tab and the work tab never raised it
@@ -224,6 +224,12 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
                         why='A proposed action is waiting for your approval' if review.get('Kind') == 'action' else 'A reply is waiting for your approval')
+            # the task's close-out (merge the PR, close the issue) wears its own verb, so the rail and the walk say what the yes does
+            closeout = proposals.CLOSEOUT.get(proposals._action(review)) if review.get('Kind') == 'action' else None
+            if closeout:
+                ev = finish_evidence(store, tid)
+                card.update(closeout=closeout, why=f"{(ev or {}).get('who') or 'The agent'} finished it - {closeout.lower()} to close the task"
+                                                   + (f": {ev['summary']}" if (ev or {}).get('summary') else ''))
     # ONE "AGENT FINISHED" (A17, 2026-09-25): a finish that drafted a reply left the task waiting on it, and the owner saw
     # only "reply ready" - never that the agent had finished. The reply is the move, so the card stays the reply to
     # send, and says who finished it.

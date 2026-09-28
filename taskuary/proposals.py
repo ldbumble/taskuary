@@ -36,6 +36,8 @@ ACTIONS = {
                     (), 'agent_push_enabled'),
     'comment_issue': ('post a PUBLIC comment on the linked issue/PR', ('body',), 'github_reply'),
     'close_issue': ('close the linked GitHub issue', (), 'use_as_tracker'),
+    # the close-out of a task whose work is an open pull request (CLOSEOUT below): raised by the finish, never by an agent
+    'merge_pr': ('merge the pull request this task opened', ('repo', 'number'), 'agent_push_enabled'),
     'run_tool': ('run one query/script through a tool connection', ('type',), None),
     # the on-close "did this session do a kind of job that will recur?" answer (playbooks.draft),
     # and an agent that knows it did: a playbook is filed only past the owner's click
@@ -90,7 +92,7 @@ def parse(text: str) -> list:
         try: j = json.loads(m.group(1))
         except ValueError: continue
         a = str(j.get('action') or '').strip()
-        if a in ACTIONS: out.append({**j, 'action': a})
+        if a in ACTIONS and a != 'merge_pr': out.append({**j, 'action': a})     # a merge is the owner's close-out, never an agent's ask
         if len(out) >= MAX: break
     return out
 
@@ -152,6 +154,100 @@ def queue(store, task_id: int, p: dict, actor='coder') -> dict | None:
     return {'reviewId': rid, 'action': p['action']}
 
 
+# ── the close-out ────────────────────────────────────────────────────────────────────────
+# What FINISHES a task depends on where it lives (the owner, 2026-09-27): mail is closed out by the reply, a pull
+# request the agent opened by merging it, an issue by closing it with a comment. So a finished agent's task is not
+# done until that last act is approved - the same yes-gated review as any proposal, raised by coder.finish. The
+# words (the summary, the closing comment) are the card's text; the act is plain code on the owner's click.
+CLOSEOUT = {'merge_pr': 'Merge', 'close_issue': 'Close issue'}
+_ISSUE = re.compile(r'github\.com/([^/]+/[^/]+)/issues/(\d+)')
+
+
+def closeout_pending(store, tid: int):
+    """The task's close-out still waiting on the owner, if any."""
+    return next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+                 if _action(r) in CLOSEOUT), None)
+
+
+def _action(rv) -> str:
+    try: return str(json.loads((rv or {}).get('DraftText') or '{}').get('action') or '')
+    except (TypeError, ValueError): return ''
+
+
+def closeout_due(store, tid: int):
+    """The close-out this task's finish owes, as the proposal to queue - None when the old ending stands
+    (no open PR, not an issue, or the switch that would let it run is off)."""
+    from . import ci
+    at = ci.landing_of(store, tid) or {}
+    if at.get('kind') == 'pr' and at.get('state') != 'closed' and not at.get('merged'):
+        # the mark is what was true when the PR opened; the head and the state are read now, so the card neither offers
+        # a merge that already happened nor pins a commit older than the agent's last push
+        try:
+            from . import github
+            cur = github.pr(ci._conn(store)['Secret'], at['repo'], at['number'])
+            if cur.get('state') == 'closed': return None
+            at = {**at, 'sha': cur.get('sha') or at.get('sha')}
+        except Exception as e: logger.warning(f'task {tid}: the pull request could not be read before its close-out ({e})')
+        # `sha` pins the head the card describes: a commit pushed after it was raised is GitHub's 409, not a silent merge
+        p = {'action': 'merge_pr', 'repo': at.get('repo'), 'number': at.get('number'), 'sha': at.get('sha'), 'why': f"pull request #{at.get('number')} is open"}
+    elif _ISSUE.search(str((store.get_task(tid) or {}).get('SourceRef') or '')):
+        p = {'action': 'close_issue', 'why': 'the issue this task came from is still open'}
+    else: return None
+    return p if validate(store, p)[0] else None
+
+
+def _report(store, tid: int) -> str:
+    """The agent's filed result - the summary a close-out raised after the finish carries."""
+    b = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').startswith('CODER REPORT')), '')
+    return b[len('CODER REPORT'):].split('\n\nLAST MESSAGE', 1)[0].strip()
+
+
+def closeout(store, tid: int, p: dict, text: str = '', actor='coder'):
+    """Queue the close-out `closeout_due` named. `text` is what the card shows and the owner may edit:
+    the summary a merge is squashed with, or the comment an issue is closed with."""
+    if closeout_pending(store, tid): return None
+    return queue(store, tid, {**p, 'text': (text or '').strip()}, actor)
+
+
+def settle(store, rv: dict, verb: str, actor='owner') -> None:
+    """After the owner answered a close-out: a yes closes the task unless something else still waits on
+    them (the reply to send); "not yet" leaves it open and on them - it is not closed until the act is."""
+    tid = rv.get('TaskId')
+    if not tid: return
+    # a pull request opened on the owner's yes AFTER the agent finished is still a task that ends by merging it
+    if _action(rv) in ('land', 'open_pr') and verb in ('approve', 'edit') and (store.get_task(tid) or {}).get('Status') != 'dropped':
+        due = closeout_due(store, tid)
+        if due and due['action'] == 'merge_pr' and closeout(store, tid, due, _report(store, tid), actor):
+            store.update_task(tid, {'Status': 'waiting'}, actor)
+        return
+    if _action(rv) not in CLOSEOUT: return
+    if verb not in ('approve', 'edit'):
+        store.update_task(tid, {'Status': 'open'}, actor)
+        return
+    if store.pending_review(tid, live_only=False): return
+    from . import concierge
+    concierge.close_task(store, tid, actor)
+
+
+def close_pr(store, rv: dict, actor='owner') -> dict:
+    """The merge close-out's other answer: the work is not wanted, so the pull request is closed on GitHub without
+    merging and the task ends with it (the owner, 2026-09-27). Same switch as the merge - it acts on the repo."""
+    p = json.loads(rv.get('DraftText') or '{}')
+    if p.get('action') != 'merge_pr': raise RuntimeError('only a pull request close-out can be closed without merging')
+    ok, why = validate(store, p)
+    if not ok: raise RuntimeError(f'refused at execution: {why}')
+    from . import ci, github
+    c, repo, num = ci._conn(store), p['repo'], int(p['number'])
+    cur = github.pr(c['Secret'], repo, num)
+    if cur.get('merged'): raise RuntimeError(f'#{num} is already merged on GitHub - nothing to close')
+    if cur.get('state') != 'closed': github.close_pr(c['Secret'], repo, num)
+    ci._save_pr(store, rv['TaskId'], {**(ci.pr_of(store, rv['TaskId']) or {}), 'state': 'closed', 'merged': False}, actor)
+    out = {'closed': f'{repo}#{num}', 'merged': False}
+    store.add_comment(rv['TaskId'], actor, 'human', f'Closed pull request {repo}#{num} without merging it.')
+    store.audit('review', rv['ReviewId'], 'pr_closed_unmerged', actor, detail=out)
+    return out
+
+
 def execute(store, rv: dict, actor='owner', final_text: str = None) -> dict:
     """Run an APPROVED proposal. Called from the verdict road, and it re-validates: the
     switch may have gone off between proposing and approving, and the approval does not
@@ -161,8 +257,9 @@ def execute(store, rv: dict, actor='owner', final_text: str = None) -> dict:
     playbook the box shows the page itself (not the JSON envelope), so an edited page is
     what gets filed - the owner tightening an `alone:` line before the first run is the point."""
     p = json.loads(rv.get('DraftText') or '{}')
-    if p.get('action') == 'write_playbook' and str(final_text or '').strip() and not str(final_text).lstrip().startswith('{'):
-        p['text'] = final_text
+    edited = str(final_text or '').strip() and not str(final_text).lstrip().startswith('{')
+    if edited and (p.get('action') == 'write_playbook' or (p.get('action') in CLOSEOUT and p.get('text'))):
+        p['text'] = final_text.strip()
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
@@ -185,8 +282,23 @@ def execute(store, rv: dict, actor='owner', final_text: str = None) -> dict:
             url = github.comment_issue(c['Secret'], repo, num, p['body'])
             out = {'commented': f'{repo}#{num}', 'url': url}
         else:
-            github.close_issue(c['Secret'], repo, num, p.get('body'))
+            github.close_issue(c['Secret'], repo, num, p.get('body') or p.get('text'))
             out = {'closed': f'{repo}#{num}'}
+    elif a == 'merge_pr':
+        from . import ci, github
+        from .store import task_ref
+        c, repo, num = ci._conn(store), p['repo'], int(p['number'])
+        cur = github.pr(c['Secret'], repo, num)
+        if cur.get('merged'): out = {'merged': f'{repo}#{num}', 'already': True}
+        elif cur.get('state') == 'closed': raise RuntimeError(f'#{num} was closed on GitHub without merging - nothing to merge')
+        else:
+            ck = github.checks(c['Secret'], repo, cur['sha'])
+            if ck['state'] == 'failure':
+                raise RuntimeError('its checks are failing (' + ', '.join(f['name'] or '?' for f in ck['failed']) + ') - fix them before merging')
+            t = store.get_task(tid) or {}
+            sha = github.merge_pr(c['Secret'], repo, num, p.get('sha') or cur['sha'], f"[{task_ref(tid)}] {t.get('Title') or 'work'} (#{num})"[:200], p.get('text') or None)
+            out = {'merged': f'{repo}#{num}', 'sha': sha[:7], 'url': cur.get('url')}
+        ci._save_pr(store, tid, {**(ci.pr_of(store, tid) or {}), 'state': 'closed', 'merged': True}, actor)
     elif a == 'settings':
         changes, why = setting_changes(p)
         if not changes: raise RuntimeError(why)

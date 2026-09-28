@@ -308,6 +308,9 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                              stale=stale,
                              sig=hashlib.sha1(str(rv.get('DraftText') or '').encode()).hexdigest()[:10],   # the draft's fingerprint: a rewrite is news
                              **base))
+            from . import proposals
+            co = proposals.CLOSEOUT.get(proposals._action(rv)) if action else None
+            if co: out[-1].update(closeout=co, why=f'the agent finished - {co.lower()} to close the task')
             if group: threads[group] = out[-1]                 # the draft speaks for its task/thread
             continue
         if r.get('AgentWaiting') and r.get('TaskId'):

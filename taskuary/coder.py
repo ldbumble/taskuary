@@ -297,10 +297,19 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     # reply-writing AI call: it can take seconds (or fail), and during that time the task used to
     # remain `in_progress` with no live agent. A pending review is already durable, so `waiting`
     # is honest even while its draft text is being filled in.
-    if not keep_open: store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
+    # THE CLOSE-OUT (the owner, 2026-09-27: "it's not closed until then"): a task whose work is an open pull request
+    # is finished by merging it, one from an issue by closing it - each waits for the owner's yes like the reply does.
+    # Not on a session only saved, an upstream that already ended it, or the owner's own Mark done (that IS the close).
+    from . import proposals
+    due = None if (keep_open or no_reply or owner_done) else proposals.closeout_due(store, task_id)
+    if not keep_open: store.update_task(task_id, {'Status': 'waiting' if (mid or due) else 'done'}, actor)
+    # the newest pending review is the one shown first: a merge leads its reply (the reply can then say it is merged),
+    # a comment on an issue leads its close - and when a reply carries the comment, the close adds none
+    if due and due['action'] == 'close_issue': proposals.closeout(store, task_id, due, '' if mid else resolution_text(rep), actor)
     if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result, fresh=fresh)
+    if due and due['action'] == 'merge_pr': proposals.closeout(store, task_id, due, resolution_text(rep), actor)
     return {'drafting': bool(mid), 'message_id': mid, 'can_send': bool(mid) and can_send,
-            'send_block': block if mid else '', 'freshness': fresh['state']}
+            'send_block': block if mid else '', 'freshness': fresh['state'], 'closeout': (due or {}).get('action')}
 
 
 def deliver_findings(store, task_id: int, mid: int, run_id: int, rep: dict, tgt: dict) -> None:

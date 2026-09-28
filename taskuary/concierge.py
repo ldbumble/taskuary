@@ -604,13 +604,16 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         # Reply on a finished agent is for the one it left without a draft - never a pull request's, where
         # nobody is owed an answer (the owner, 2026-09-25)
         if v == 'reply' and item.get('kind') == 'agentdone' and str(item.get('channel') or '').lower() == 'github': continue
+        # a close-out is the task's own last act - "not ours" would file the sender's message out from under it
+        if v in ('not_ours', 'not_ours_sender') and item.get('closeout'): continue
         # ONE WORD for the one close (the owner, 2026-09-24: "mark done everywhere as the word") - it was "Close the
         # task", "Close without sending" and "Mark task done" for the same act; only the hint says a draft stays unsent
         if v == 'close' and (item.get('kind') == 'review' or item.get('reply_pending')):
             out.append({'verb': v, 'label': 'Mark done',
                         'hint': 'Marks the task done without sending the draft, and ends any live agent session.'})
         # an agent's proposal runs an action rather than sending a reply, so the word says that
-        elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': 'Run it'})
+        # ...and a task's close-out says its own act (the owner, 2026-09-27: merge the PR, close the issue)
+        elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': item.get('closeout') or 'Run it'})
         # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25)
         elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append({'verb': v, 'label': 'Take it myself', 'hint': "Takes it off the agent - it stays on your list."})
         else:
@@ -658,7 +661,8 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
                 'triage judged it a reply to write' if item['kind'] == 'review' else 'an agent proposed an action' if item['kind'] == 'action' else
                 'a coding task with no agent on it yet' if item.get('coding') else 'nothing has been done with it yet' if item['kind'] in ('asked', 'todo')
                 else f'triage filed it as fyi{_verdict_why(item)}')
-        need = ('approve the draft below, or redraft it' if item['kind'] == 'review' else 'say whether it may run' if item['kind'] == 'action' else
+        need = ('approve the draft below, or redraft it' if item['kind'] == 'review' else
+                f"{item['closeout'].lower()} to close the task, or not yet" if item.get('closeout') else 'say whether it may run' if item['kind'] == 'action' else
                 'reply, choose a coding or regular agent, or say it is not ours' if item['kind'] in ('asked', 'todo')
                 else 'nothing has to happen - make it a task, tell me to ignore this sender, or move on')
         return f"{frm}. Since then: {done}. From you: {need}."
@@ -680,7 +684,8 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
     lead = {'agent': f"{item.get('why') or ws.says('parked', item.get('agent') or 'An agent')} ({item.get('ref') or item['title']}).",
             'meeting': f"{item['title']} is {item.get('why')}.",
             'review': f"{item.get('who') or 'Someone'} is owed a reply on \"{item['title']}\"" + (' - the draft is below.' if item.get('draft') else ' - nothing is drafted yet.'),
-            'action': f"An agent wants to run something on \"{item['title']}\" - it waits for your yes.",
+            'action': (f"{item.get('why') or item['title']} - it closes when you say so." if item.get('closeout') else
+                       f"An agent wants to run something on \"{item['title']}\" - it waits for your yes."),
             'report': f"\"{item['title']}\" landed" + (' and it FAILED - the cause is inside.' if item.get('bad') else '.'),
             'agentdone': f"{item.get('who') or 'The agent'} finished {item.get('ref') or item['title']}: {item.get('summary') or ''}",
             'idea': item['title'], 'todo': f"{item.get('who') or 'Someone'} - \"{item['title']}\": {item.get('why')}",
@@ -1755,7 +1760,7 @@ def card_for(item: dict) -> dict:
                                        'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode',
                                        # the agent's own question and the answers it offered: what a chat numbers, and
                                        # the request an answer is bound to (funnel.from_agents, workerstate PW-228)
-                                       'choices', 'request_id', 'request_kind',
+                                       'choices', 'request_id', 'request_kind', 'closeout',
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused', 'closed',
                                        'brief_today')}
 

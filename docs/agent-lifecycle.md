@@ -44,7 +44,10 @@ flowchart LR
 ```mermaid
 flowchart LR
   R["⚙️ working or 👋 waiting on you"] --> X{"What ended it?"}
-  X -->|the agent says done,<br/>or its pull request merged| D1["✅ agent finished -<br/>its reply ready, if one is owed"]
+  X -->|the agent says done| CO{"Its pull request open,<br/>or from an issue?"}
+  CO -->|yes| D0["merge? / close issue? -<br/>the close-out waits for your yes"]
+  D0 -->|you approve it| D1
+  CO -->|no| D1["✅ agent finished -<br/>its reply ready, if one is owed"]
   X -->|you: Save and end session| D2["💾 session saved -<br/>report written, the task open"]
   X -->|you: Mark done| D3["The task closed,<br/>the agent stopped"]
   X -->|the session crashed or closed,<br/>Taskuary closed| D4["⏹ agent stopped -<br/>a held reply is back"]
@@ -71,3 +74,4 @@ flowchart LR
 | A20 | Save and end session only where a live session exists | built |
 | A21 | A merged or closed pull request owes nobody a reply | built |
 | A22 | Every start clears the interrupted mark, the saved mark and the queued start | built |
+| A24 | A finished task whose work is an open pull request waits for **Merge**, one from an issue for **Close issue** - it is not done until you answer (docs/how-a-task-ends.md, The close-out) | built |

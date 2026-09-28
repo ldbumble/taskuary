@@ -2,8 +2,9 @@
 and a red build - or a human's review comment - goes back to the agent that wrote the code
 instead of to nobody.
 
-The human gate never moves. Taskuary opens drafts, never merges; pushing at all still needs
-the GitHub card's 'Agents may push / deploy'. What this adds is the half that was missing:
+The human gate never moves. Taskuary opens drafts and merges one only on the owner's yes - the
+task's close-out (proposals.CLOSEOUT); pushing at all still needs the GitHub card's 'Agents may
+push / deploy'. What this adds is the half that was missing:
 after the agent stops typing, something watches what its work did to CI and hands the
 failure back with the failing check named.
 
@@ -100,8 +101,11 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
         raise RuntimeError(f"the checkout is on '{branch or 'a detached HEAD'}' - the agent needs its own "
                            'branch before a pull request can be opened')
     t = store.get_task(task_id) or {}
-    body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{(t.get('Summary') or '')[:1500]}\n\n"
-            '_Draft: review and merge yourself - Taskuary never merges._')
+    # the issue this task came from closes with the merge - GitHub's own keyword, when both live in one repo
+    iss = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', str(t.get('SourceRef') or ''))
+    closes = f"Closes #{iss.group(2)}\n\n" if iss and iss.group(1).lower() == repo.lower() else ''
+    body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{closes}{(t.get('Summary') or '')[:1500]}\n\n"
+            '_Draft: it merges when you approve the task\'s close-out in Taskuary, or merge it here yourself._')
     pr = github.open_pr(c['Secret'], repo, branch, base, f"[{task_ref(task_id)}] {t.get('Title') or 'work'}"[:120], body)
     pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
     _save_pr(store, task_id, pr, actor)
@@ -276,6 +280,31 @@ def pull_comments(store, task_id: int, at: dict) -> int:
     return n
 
 
+def pr_ended(store, task_id: int, at: dict) -> bool:
+    """The task's close-out was a merge, and the owner merged (or closed) the PR on GitHub instead: the question is
+    answered, so the close-out is retired and the task closes - unless a reply still waits on them. Only a task
+    that was OFFERED that merge is asked about (pending, or put off with "not yet"); a working agent's PR is still
+    its business."""
+    from . import github, proposals
+    if at.get('kind') != 'pr': return False
+    offered = [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (task_id,)) if proposals._action(r) == 'merge_pr']
+    if not offered: return False
+    rv = next((r for r in offered if r.get('Status') == 'pending'), None)
+    try: cur = github.pr(_conn(store)['Secret'], at['repo'], at['number'])
+    except Exception as e:
+        logger.warning(f'PR state for task {task_id} could not be read: {e}')
+        return False
+    if cur.get('state') != 'closed': return False
+    what = 'merged' if cur.get('merged') else 'closed without merging'
+    _save_pr(store, task_id, {**{k: v for k, v in at.items() if k != 'kind'}, 'state': 'closed', 'merged': bool(cur.get('merged'))})
+    if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, 'github', f'pull request #{at["number"]} was {what} on GitHub')
+    store.add_comment(task_id, 'github', 'agent', f"Pull request #{at['number']} was {what} on GitHub - its close-out is answered.")
+    if not store.pending_review(task_id, live_only=False):
+        from . import concierge
+        concierge.close_task(store, task_id, 'github')
+    return True
+
+
 def poll(store, llm=None) -> int:
     """Every task whose work has landed - PR or direct push - looked at once. Called from the
     same sync as everything else.
@@ -292,7 +321,7 @@ def poll(store, llm=None) -> int:
         at = landing_of(store, t['TaskId'])
         # a merged/closed PR is finished business; a direct push is only ever checked while
         # its checks could still be running, which the state below settles
-        if not at or at.get('state') == 'closed': continue
+        if not at or at.get('state') == 'closed' or pr_ended(store, t['TaskId'], at): continue
         try:
             n += pull_comments(store, t['TaskId'], at)
         except Exception as e:

@@ -68,8 +68,8 @@ def close_issue(tok, repo, number, comment=None):
 
 def open_pr(tok, repo, head, base, title, body, draft=True):
     """A DRAFT pull request by default: a branch pushed for review is not a merge request
-    yet, and Taskuary never merges. 422 with 'already exists' comes back as the existing PR
-    instead of an error - opening twice is a retry, not a mistake."""
+    yet - it merges only on the owner's yes (merge_pr). 422 with 'already exists' comes back
+    as the existing PR instead of an error - opening twice is a retry, not a mistake."""
     r = requests.post(f'{GH}/repos/{repo}/pulls', headers=_h(tok), timeout=20,
                       json={'title': title, 'body': body, 'head': head, 'base': base, 'draft': draft})
     if r.status_code == 422 and 'already exist' in r.text:
@@ -96,7 +96,32 @@ def pr(tok, repo, number):
     j = r.json()
     return {'number': j['number'], 'url': j['html_url'], 'head': j['head']['ref'],
             'sha': j['head']['sha'], 'state': j['state'], 'draft': j.get('draft'),
-            'merged': j.get('merged'), 'mergeable': j.get('mergeable')}
+            'merged': j.get('merged'), 'mergeable': j.get('mergeable'), 'node_id': j.get('node_id')}
+
+
+def merge_pr(tok, repo, number, sha, title=None, message=None, method='squash') -> str:
+    """Merge a pull request - only ever from the owner's approved close-out (proposals 'merge_pr').
+    GitHub refuses to merge a draft, so it is marked ready first. `sha` pins the head that was
+    reviewed: a commit pushed after the owner looked is a 409, never a silent merge."""
+    p = pr(tok, repo, number)
+    if p.get('draft'):
+        q = 'mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){pullRequest{isDraft}}}'
+        r = requests.post(f'{GH}/graphql', headers=_h(tok), json={'query': q, 'variables': {'id': p['node_id']}}, timeout=20)
+        r.raise_for_status()
+        if r.json().get('errors'): raise RuntimeError(f"GitHub would not mark #{number} ready: {r.json()['errors'][0].get('message')}")
+    body = {'merge_method': method, 'sha': sha, **({'commit_title': title} if title else {}), **({'commit_message': message} if message else {})}
+    r = requests.put(f'{GH}/repos/{repo}/pulls/{number}/merge', headers=_h(tok), json=body, timeout=30)
+    if r.status_code in (405, 409, 422):
+        try: why = r.json().get('message')
+        except ValueError: why = ''
+        raise RuntimeError(f"GitHub refused to merge #{number}: {why or r.text[:200]}")
+    r.raise_for_status()
+    return r.json().get('sha') or ''
+
+
+def close_pr(tok, repo, number):
+    """Close a pull request WITHOUT merging it - the close-out's other answer (proposals.close_pr)."""
+    requests.patch(f'{GH}/repos/{repo}/pulls/{number}', headers=_h(tok), json={'state': 'closed'}, timeout=20).raise_for_status()
 
 
 def closed_by(tok, repo, number) -> str:

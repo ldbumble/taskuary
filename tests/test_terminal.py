@@ -1399,9 +1399,17 @@ class PhaseRenderTests(unittest.TestCase):
         t._append('\r\n' * (t.rows + 8) + footer + '\r\n')
 
     def _spy(self):
-        seen, real = [], terminal.render
+        seen, real = [], terminal.render_visible
         def spy(raw, cols=110, rows=32): seen.append(raw); return real(raw, cols, rows)
-        return seen, mock.patch.object(terminal, 'render', spy)
+        return seen, mock.patch.object(terminal, 'render_visible', spy)
+
+    def test_the_phase_render_keeps_no_history_and_reads_the_same_bottom(self):
+        """status_tail reads a plain Screen - a HistoryScreen's 6,000 lines cost ~2.5x to feed and the readers want 8
+        lines off the bottom (2026-09-28: the 5th agent's Start froze the page). Same bottom lines either way."""
+        raw = 'filler\r\n' * 200 + '\x1b[2J\x1b[H' + ''.join(f'\x1b[{r};1Hrow {r}' for r in range(1, 31)) + '\x1b[32;1H? for shortcuts'
+        tail = lambda text, n=8: [l for l in text.splitlines() if l.strip()][-n:]
+        self.assertEqual(tail(terminal.render_visible(raw, 110, 32)), tail(terminal.render(raw, 110, 32)))
+        self.assertEqual(len(terminal.render_visible(raw, 110, 32).splitlines()), 32)
 
     def test_a_session_with_no_new_output_is_not_rendered_twice(self):
         """A parked agent's screen cannot have changed, so reading its phase again must cost

@@ -490,7 +490,7 @@ class Term:
         # still running, so every poll re-rendered the whole scrollback to reach the same word.
         now = time.time()
         if wrote != self.writes and (now - at >= PHASE_EVERY or now - self.wrote_at >= PHASE_QUIET or wrote < 0):
-            lines = render(self.tail_chars(PHASE_TAIL), self.cols, self.rows).splitlines()
+            lines = render_visible(self.tail_chars(PHASE_TAIL), self.cols, self.rows).splitlines()
             self._phase_screen = (self.writes, lines, now)
         # ...the last n lines that SAY something: a pane opens taller than a young session's output, so
         # Claude's first chooser sat mid-screen over blank rows and the bottom eight rows said nothing.
@@ -1097,6 +1097,22 @@ def render(raw: str, cols: int = 110, rows: int = 32) -> str:
     pyte is a real VT emulator, pure Python, so the one-file exe is unaffected. Its history is
     the scrollback. Anything it cannot parse falls back to plain() rather than losing the run."""
     return render_at(raw, cols, rows)[0]
+
+
+def render_visible(raw: str, cols: int = 110, rows: int = 32) -> str:
+    """The screen as it stands, without the scrollback above it - what status_tail reads its last few lines from. A
+    HistoryScreen keeps 6,000 lines of history to hand a transcript back, and costs ~2.5x a plain Screen to feed; the
+    phase readers want at most 8 lines off the bottom of a 32-row pane, so with five agents running it was work thrown
+    away several times a second (the owner, 2026-09-28: the 5th agent's Start froze the page)."""
+    if not (raw or '').strip(): return ''
+    try:
+        import pyte
+        sc = pyte.Screen(max(40, int(cols or 110)), max(4, int(rows or 32)))
+        pyte.Stream(sc).feed(raw)
+        return '\n'.join(r.rstrip() for r in sc.display)
+    except Exception as e:
+        logger.debug(f'visible render fell back to the full one ({e})')
+        return render(raw, cols, rows)
 
 
 def render_at(raw: str, cols: int = 110, rows: int = 32) -> tuple:

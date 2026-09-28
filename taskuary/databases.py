@@ -18,6 +18,8 @@ these at a read-only account and the ladder holds even if everything above it fa
 """
 from urllib.parse import quote_plus
 
+from .config import port_number
+
 # dialect, default port, the pip package whose absence you will otherwise learn about cryptically
 ENGINES = {
     'postgresql': ('postgresql+psycopg2', 5432, 'psycopg2-binary'),
@@ -59,7 +61,9 @@ def url_for(engine: str, cfg: dict) -> str:
     if not host: raise RuntimeError(f'{engine} needs a host')
     if not db: raise RuntimeError(f'{engine} needs a database name')
     at = f"{quote_plus(user)}:{quote_plus(pw)}@" if user else ''
-    where = f"{host}:{int(cfg.get('port') or port)}"
+    raw = cfg.get('port') or port
+    try: where = f"{host}:{port_number(raw)}"
+    except ValueError: raise RuntimeError(f'{engine} port {raw!r} is not a number from 1 to 65535') from None
     return f'{dialect}://{at}{where}/{db}'
 
 

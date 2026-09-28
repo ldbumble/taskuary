@@ -36,6 +36,16 @@ const secId = (name) => String(name).toLowerCase().replace(/['’]/g, "").replac
 // same label, group and help text the app shows. This is the one page nobody has to remember.
 const schema = JSON.parse(read(path.join(ROOT, "taskuary", "settings_schema.json")));
 const owned = new Set(schema.panel_owned || []);
+// store.DEFAULT_SETTINGS, copied to JSON because this build cannot import Python; a pytest keeps
+// the copy in step. A knob with no entry there gets no default line rather than a guessed one.
+const defaults = JSON.parse(read(path.join(ROOT, "taskuary", "settings_defaults.json"))).defaults;
+
+// How the page would show a stored value: switches read on/off, blank says what blank means.
+function shownDefault(m, value) {
+  if (m.type === "switch") return value === "1" ? "on" : "off";
+  if (value === "") return "blank";
+  return `\`${value}\``;
+}
 
 function settingsMarkdown() {
   const byGroup = new Map(schema.groups.map((g) => [g, []]));
@@ -48,6 +58,7 @@ function settingsMarkdown() {
     for (const [key, m] of rows) {
       out.push(`### ${m.label}\n`);
       const bits = [`\`${key}\``, `type: ${m.type}`];
+      if (key in defaults) bits.push(`default: ${shownDefault(m, defaults[key])}`);
       if (owned.has(key)) bits.push("set on a card at the top of the page");
       out.push(`${bits.join(" · ")}\n`);
       out.push(`${m.desc}\n`);

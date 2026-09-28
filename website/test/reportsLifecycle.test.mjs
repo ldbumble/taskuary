@@ -136,5 +136,5 @@ test("the Assistant with no rule of its own asks whether it matters, on the Time
   // 2026-09-20: "only show up when the assistant has an idea that matters, not always" - an unsaved
   // Assistant report shows the sentence the server asks (reports.ASSISTANT_WHEN, reports.default_route)
   assert.match(source, /export const ASSISTANT_WHEN = "it has an idea that matters: /);
-  assert.match(source, /isVoice\(c\) && \(line === "timeline" \|\| line === "work"\) \? \{ how: "ai", when: ASSISTANT_WHEN \}/);
+  assert.match(source, /c\?\.type === "assistant" && \(line === "timeline" \|\| line === "work"\) \? \{ how: "ai", when: ASSISTANT_WHEN \}/);
 });

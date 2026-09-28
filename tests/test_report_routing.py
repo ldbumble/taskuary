@@ -395,7 +395,8 @@ def test_the_assistant_with_no_rule_asks_whether_it_matters_on_both_lines():
 
 def test_an_assistant_that_was_given_a_line_keeps_it():
     assert reports.route_of({'type': 'assistant', 'route': {'timeline': {'how': 'always'}}}, 'timeline') == ('always', '')
-    assert reports.route_of({'type': 'assistant', 'watch_source_ids': [3]}, 'timeline') == ('always', '')   # a monitor posts its findings
+    # a monitor asks too: "every run" posted "found nothing" every half hour (D5, 2026-09-28)
+    assert reports.route_of({'type': 'assistant', 'watch_source_ids': [3]}, 'timeline')[0] == 'ai'
     assert reports.route_of({'type': 'mssql'}, 'work') == ('always', '')
 
 

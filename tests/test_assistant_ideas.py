@@ -193,6 +193,16 @@ class RunTests(unittest.TestCase):
         again = assistant.run(s, llm=None, force=True, judge=lambda lines, n: {'timeline': True, 'work': True})
         self.assertGreaterEqual(again['said'], 1)
 
+    def test_timeline_never_work_yes_triages_the_ideas_and_puts_down_the_rest(self):
+        """D6 (2026-09-28): it used to hold the whole run back; now the ideas are triaged into tasks, and one that
+        became no task is put down at once - a task or nothing, as for any report."""
+        s = A.store()
+        for at in ('06:00', '07:00', '08:00'):
+            s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
+        out = assistant.run(s, llm=None, force=True, judge=lambda lines, n: {'timeline': False, 'work': True, 'why': ''})
+        self.assertGreaterEqual(out['said'], 1)
+        self.assertTrue(all(i['Status'] == 'done' for i in s.list_ideas()))
+
     def test_work_no_posts_the_news_and_raises_no_row_on_the_rail(self):
         from taskuary import funnel
         s = A.store()

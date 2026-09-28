@@ -15,7 +15,7 @@ One report is one saved configuration on the **Reports** tab, built in four step
 
 Sources at the top, one prompt at the bottom. Every source runs on its own connection and query,
 the results are stacked under labelled headers, and the prompt sees all of them at once. One
-source failing is reported in place and never takes the whole report down.
+source failing is named in the run and gets a FAILED row of its own; the others are filed and sent as usual.
 
 :::rule Connections owns the credential, Reports owns the question
 You do not configure a connection here. A source names the connector card its credentials live
@@ -137,7 +137,7 @@ catch-up off does not stop them.
 | **Run due now** | Every report that is owed, and nothing else |
 | **Run now** on a row | That report, now. It does not use up "once a day" or move the next slot |
 
-A scheduled run that fails is tried again 15 minutes later. A report runs one at a time; a second
+A scheduled run that fails is tried again at its next scheduled time, never in between. A report runs one at a time; a second
 Run now while it runs is told so.
 
 :::note Once a day means once a day

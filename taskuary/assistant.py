@@ -600,9 +600,12 @@ def _recent(store, days: int = 2) -> str:
     line carries the latest message's actual words too: WHAT PEOPLE SAID has fuller human threads,
     but invitations and other machine mail must not collapse to a subject line. A report carries
     its schedule, and a failure its cause (the machines are to be read, not counted)."""
-    by, sched, since = {}, _schedules(store), _since(days)
+    from . import funnel
+    by, sched, since, mutes = {}, _schedules(store), _since(days), funnel.mutes(store)
     for r in store.feed(limit=400, days=math.ceil(days)):
         if r.get('Channel') == CHANNEL or _ts(r.get('SentAt')) < since: continue
+        # a muted report is out of the brief too: a mute is "never show me these again" (G1, 2026-09-28)
+        if r.get('Channel') == 'report' and any(funnel.muted(m, {'who': r.get('SourceName'), 'title': r.get('Subject'), 'lane': 'report'}) for m in mutes): continue
         k = (r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or '?',
              re.sub(r'^((re|fw|fwd|aw)\s*:\s*)+', '', _short(r.get('Subject'), 60), flags=re.I).lower())
         g = by.setdefault(k, {'n': 0, 'r': r, 'cats': set()}); g['n'] += 1; g['cats'].add(r.get('Category') or '')
@@ -1534,7 +1537,10 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             if AUTOMATION_HEAD in (read or ''):
                 store.set_setting(automation_key(store, report_id), now.isoformat(sep=' ', timespec='seconds'), 'assistant')
         except Exception as e:
-            logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
+            # A MODEL THAT FAILED IS A FAILED RUN (R2, the owner 2026-09-28: "same error" as a report's):
+            # posting the facts alone read as a success, moved the clock, and nothing said it broke
+            logger.warning(f'assistant: the model pass failed - {e}')
+            return {'ran': True, 'said': 0, 'failed': True, 'error': f'the model pass failed: {str(e)[:400]}', 'inputs': ''}
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
     if not read:
         if systems_only: read = systems_inputs(store, watch_source_ids, watch_sources)
@@ -1582,7 +1588,9 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # no idea marked said, so the next check raises them again if they still stand; a judge that
     # fails leaves the run unjudged, and an unjudged run reaches the owner (reports.decide's rule)
     d = _judged(judge, say) if say and judge else None
-    if d is not None and not d.get('timeline'):
+    # held only when NEITHER line wants it: "Timeline never, Work every run" is the ideas triaged into tasks
+    # with nothing posted to read, as for any report (D6, 2026-09-28) - it used to hold the whole run
+    if d is not None and not (d.get('timeline') or d.get('work')):
         logger.info(f'assistant: held back {len(say)} line(s) - the card says nothing here matters')
         return {'ran': True, 'said': 0, 'held': len(say), 'reviewed': rv, 'inputs': read, 'decided': d}
     if not say:
@@ -1641,6 +1649,11 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         except Exception: brain = None
         triage_ideas(store, rows, brain, report_title=name if own_post else None)
     except Exception as e: logger.warning(f'assistant: idea triage skipped - {e}')
+    if d is not None and not d.get('timeline'):
+        # TIMELINE NEVER MEANS NEVER: an idea triage made no task of is put down at once - a task or nothing
+        from . import funnel
+        for i in rows:
+            if not linked_task(store, i['IdeaId'], json.loads(i.get('ActionJson') or '{}')): funnel.settle(store, f"idea:{i['IdeaId']}", 'done', 'report')
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
     return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in rows],
             **({'decided': d} if d is not None else {})}

@@ -44,15 +44,14 @@ def test_one_run_of_a_report_at_a_time():
     finally: reports._RUNNING.discard(src['SourceId'])
 
 
-def test_a_failed_scheduled_run_is_owed_again_after_a_quarter_hour():
+def test_a_failed_scheduled_run_waits_for_its_next_slot():
+    # never retried in between: every 15 minutes for ever paid for the AI each time (the owner, 2026-09-28)
     s = MemoryStore()
     src = _report(s, {'type': '_r', 'every_minutes': 60})
-    s.set_setting(f"{reports.LAST_RUN}{src['SourceId']}", json.dumps({'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                                                       'failed': True, 'trigger': 'schedule'}), 't')
-    assert reports._failed_lately(s, src['SourceId'])
-    old = (datetime.now() - timedelta(minutes=reports.RETRY_MINUTES + 1)).strftime('%Y-%m-%d %H:%M:%S')
-    s.set_setting(f"{reports.LAST_RUN}{src['SourceId']}", json.dumps({'at': old, 'failed': True, 'trigger': 'schedule'}), 't')
-    assert not reports._failed_lately(s, src['SourceId'])
+    with mock.patch.object(reports, 'run_report_source', return_value={'failed': True, 'subject': 'r — FAILED'}):
+        assert reports.run_one(s, src, None)['failed']
+    assert s.get_source(src['SourceId'])['LastPolledAt']
+    assert src['SourceId'] not in [x['SourceId'] for x in reports.due_reports(s)]
 
 
 def test_a_report_whose_settings_do_not_parse_never_stops_the_others():
@@ -103,6 +102,36 @@ def test_a_muted_report_does_not_ping_you():
     finally: REGISTRY.pop('_r')
 
 
+def test_a_muted_report_is_out_of_the_morning_brief():
+    # G1: a mute covered the alert and the rail, never the brief the docs said it did
+    from taskuary import assistant
+    s = MemoryStore(); _rows()
+    try:
+        src = _report(s, {'type': '_r', 'route': {'timeline': {'how': 'always'}}})
+        reports.run_report_source(s, src, None)
+        assert 'Ledger check' in assistant._recent(s)
+        s.set_setting('funnel_mutes', json.dumps([{'words': ['ledger', 'check'], 'why': 'handled elsewhere'}]), 't')
+        assert 'Ledger check' not in assistant._recent(s)
+    finally: REGISTRY.pop('_r')
+
+
+def test_one_source_of_two_failing_keeps_the_other_and_files_the_failure_apart():
+    # D7 (2026-09-28): the whole run used to count as failed, and the good source's rows were dropped
+    s = MemoryStore()
+    REGISTRY['_ok'] = lambda cfg: ('3 rows', '\n'.join('abc'))
+    def boom(cfg): raise RuntimeError('login timeout')
+    REGISTRY['_bad'] = boom
+    try:
+        src = _report(s, {'sources': [{'type': '_ok', 'label': 'cash'}, {'type': '_bad', 'label': 'the box'}],
+                          'route': {'timeline': {'how': 'always'}}})
+        out = reports.run_report_source(s, src, None)
+    finally: REGISTRY.pop('_ok'); REGISTRY.pop('_bad')
+    assert not out.get('failed')
+    subjects = [r['Subject'] for r in s.feed(limit=10, days=1, channel='report')]
+    assert 'Ledger check · the box — FAILED' in subjects
+    assert any('cash: 3 rows' in x for x in subjects)
+
+
 # ── C6: a failure stays in the app ─────────────────────────────────────────────────────
 def test_a_failure_files_one_row_and_pings_nobody():
     s = MemoryStore()
@@ -129,9 +158,15 @@ def test_the_same_failure_again_stays_a_failure_in_the_history():
 
 def test_one_test_for_failed():
     assert reports.run_failed('Ledger check — FAILED')
-    assert reports.run_failed('Ledger check — cash: 3 rows · the box: FAILED')
+    assert reports.run_failed('Ledger check — cash: FAILED · the box: FAILED')
+    # one source of two failing is a run that worked without it (D7)
+    assert not reports.run_failed('Ledger check — cash: 3 rows · the box: FAILED')
+    assert reports.failed_sources('Ledger check — cash: 3 rows · the box: FAILED') == ['the box']
     assert not reports.run_failed('Process Error Check — 0 rows')
     assert not reports.run_failed('FAILED jobs — 2 rows')
+    # a title with a dash of its own still fails (R1: it read as a success and mailed its error out)
+    assert reports.run_failed('AP — daily — FAILED')
+    assert not reports.run_failed('AP — daily — 3 rows')
 
 
 # ── W3: Timeline never means never ─────────────────────────────────────────────────────
@@ -172,3 +207,13 @@ def test_the_demo_runs_no_reports_on_a_clock(monkeypatch):
     with mock.patch.object(server, 'run_due_reports') as ran:
         assert server.report_pass(startup=True) is None
     ran.assert_not_called()
+
+
+def test_an_advisor_whose_model_fails_is_a_failed_run():
+    """R2: it posted the facts alone, read as a success and moved the clock (the owner, 2026-09-28: "same error")."""
+    s = MemoryStore()
+    src = _report(s, {'type': 'assistant'}, 'Advisor')
+    with mock.patch('taskuary.assistant.run', return_value={'ran': True, 'said': 0, 'failed': True, 'error': 'the model pass failed: 529'}):
+        out = reports.run_report_source(s, src, None)
+    assert out['failed'] and reports.run_failed(out['subject'])
+    assert s.report_runs(src['SourceId'], 1)[0]['failed']

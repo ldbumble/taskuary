@@ -1635,6 +1635,7 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     if cfg.get('type') == 'zoho_monthly_invoices':
         from .invoice_workflow import run_report
         return run_report(store, src, cfg)
+    failed_model = None
     if cfg.get('type') == 'assistant':
         # not a report row: the assistant posts its own kind of row (ideas with buttons and state),
         # on this report's schedule and with this report's prompt as its instruction - but it is
@@ -1651,6 +1652,9 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                             # held back is not quiet once it is on the Timeline (2026-09-20)
                             judge=lambda lines, n: decide_for(store, cfg, read_result(title, lines, False, n), report_llm(store, cfg, llm)))
         said = int(out.get('said') or 0)
+        # a model pass that failed is a FAILED run, filed below like any report's (R2)
+        if out.get('failed'): failed_model = out.get('error') or 'the model pass failed'
+    if cfg.get('type') == 'assistant' and not failed_model:
         # a report configured to read nothing posts nothing, and the run history says so in words
         if out.get('reads_nothing'):
             return {'message_id': None, 'subject': f'{title} - read nothing', 'files': 0, **out}
@@ -1663,17 +1667,19 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         err = _after(store, src, cfg, d, title, subject, lines, out.get('message_id'))
         return {'message_id': out.get('message_id'), 'subject': subject, 'files': 0, **out, **err}
     try:
+        if failed_model: raise RuntimeError(failed_model)
         head, summary = render_report(store, cfg, llm)
         subject, body = f'{title} — {head}', summary
     except Exception as e:
-        subject, body = f'{title} — FAILED', f'Report error: {str(e)[:500]}'
+        head, subject, body = 'FAILED', f'{title} — FAILED', f'Report error: {str(e)[:500]}'
         logger.warning(f'report {src["Address"]} failed: {e}')
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     # the CHART: line is an instruction to Taskuary about what to draw, not prose for the reader:
     # artifacts reads it off `body`, and what gets filed is the summary without it
     from .artifacts import strip_directive
     failed, text = run_failed(subject), strip_directive(body)
-    d = decide_for(store, cfg, read_result(subject.split('—', 1)[-1].strip(), text, failed), report_llm(store, cfg, llm))
+    if not failed and (gone := failed_sources(subject)): file_source_failure(store, src, cfg, title, gone)
+    d = decide_for(store, cfg, read_result(head, text, failed), report_llm(store, cfg, llm))
     # THE SAME FAILURE, AGAIN, IS NOT NEWS (the owner, 2026-09-23): it stays in the run history - as a
     # failure, so the run after it still compares against it - and reaches nobody
     if failed and same_failure_as_last(store, src['SourceId'], body): d = dict(d, timeline=False)
@@ -1775,19 +1781,12 @@ LINE_SAYS = {'timeline': "post it on the owner's timeline as news to read",
 JUDGE_TOKENS = 60                 # four bare yes/nos
 
 
-def systems_of(cfg: dict) -> list:
-    """The source cards on an Assistant report that are SYSTEMS - a Taskuary card sits in the same
-    list (the owner, 2026-09-20) but is the Assistant's own reading, not a system it monitors."""
-    raw = cfg.get('watch_sources')
-    if isinstance(raw, dict): raw = [raw]
-    return [s for s in (raw if isinstance(raw, list) else []) if isinstance(s, dict) and s.get('type') and s.get('type') != 'taskuary']
-
-
 def default_route(cfg: dict) -> dict:
-    """The card a report gets when nobody has set a line. An Assistant voice asks before it posts; a
-    monitor over connected systems posts its findings - the numbers ARE what matters there."""
-    voice = cfg.get('type') == 'assistant' and not (cfg.get('watch_source_ids') or systems_of(cfg))
-    return {l: ({'how': 'ai', 'when': ASSISTANT_WHEN} if voice and l in ('timeline', 'work') else {'how': LINE_DEFAULT[l]}) for l in LINES}
+    """The card a report gets when nobody has set a line. Every Advisor asks before it posts, the one
+    watching systems too: "every run" had it post "I checked and found nothing" every half hour (D5, the
+    owner 2026-09-28: "default to not show up at all if nothing found")."""
+    ask = cfg.get('type') == 'assistant'
+    return {l: ({'how': 'ai', 'when': ASSISTANT_WHEN} if ask and l in ('timeline', 'work') else {'how': LINE_DEFAULT[l]}) for l in LINES}
 
 
 def route_of(cfg: dict, line: str) -> tuple:
@@ -1894,10 +1893,18 @@ def as_card(cfg: dict) -> dict:
 
 def run_failed(subject: str) -> bool:
     """Did this run fail? The one test (reports, the rail and the run history all ask it). The
-    headline after the title says FAILED, or one of several sources says `label: FAILED` - a check that
-    could not read everything it was set up to read did not run."""
-    head = str(subject or '').split('—', 1)[-1].strip()
-    return head == 'FAILED' or any(p.strip().endswith(': FAILED') for p in head.split('·'))
+    headline after the title says FAILED, or EVERY one of several sources says `label: FAILED`. One
+    source of three failing is a run that worked without it (D7, the owner 2026-09-28): the good
+    sources' results are kept and sent, and the failed one is named (failed_sources) and filed apart."""
+    # the LAST dash: a title may carry one of its own ("AP — daily — FAILED" read as a success, R1)
+    head = str(subject or '').rsplit('—', 1)[-1].strip()
+    return head == 'FAILED' or all(p.strip().endswith(': FAILED') for p in head.split('·'))
+
+
+def failed_sources(subject: str) -> list:
+    """The labels of the sources that failed in a run that otherwise worked."""
+    head = str(subject or '').rsplit('—', 1)[-1]
+    return [p.strip()[:-len(': FAILED')] for p in head.split('·') if p.strip().endswith(': FAILED')]
 
 
 def read_result(head: str, body: str, failed: bool = False, found: int = None) -> dict:
@@ -2157,6 +2164,20 @@ def file_delivery_failure(store, src: dict, cfg: dict, title: str, err) -> int:
     return mid
 
 
+def file_source_failure(store, src: dict, cfg: dict, title: str, labels: list) -> int:
+    """One source of several failed: the run itself worked and went where its card says; this row, ending
+    in FAILED, is what tells the owner which source it went without (D7, 2026-09-28)."""
+    names, stamp = ', '.join(labels), datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    mid = store.add_message({
+        'TaskId': None, 'ExternalId': f'srcfail:{src["SourceId"]}:{stamp}', 'ConversationId': f'report:{src["SourceId"]}',
+        'Channel': 'report', 'SourceName': title, 'FromName': title, 'SentAt': stamp, 'Subject': f'{title} · {names} — FAILED',
+        'BodyText': f'The report ran without {names}: that source could not be read. The other sources were read and the '
+                    'run was filed and sent as usual. The cause is in the run history under Reports.',
+        'SourceLink': cfg.get('link'), 'Status': 'feed'})
+    store.add_route(mid, None, 'feed', None, f'the report ran; {names} failed', [], 'report')
+    return mid
+
+
 def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict:
     """A report that goes OUT: to an address the owner chose, on a channel they picked, either
     after they have read it or straight away.
@@ -2209,34 +2230,24 @@ def _own_data(src: dict) -> bool:
 # job - one held a lock, one did not; one used up the daily cap, one did not; one answered the chat -
 # so the same report could run twice at once, and Run now at 10:00 cancelled the 18:00 checkup.
 _RUNNING, _RUNNING_LOCK = set(), threading.Lock()
-RETRY_MINUTES = 15          # a failed scheduled run is tried again this long after, not on every pass
 
 
 def run_one(store, src: dict, llm=None, trigger: str = 'schedule') -> dict:
     """Run one report now. One run of a report at a time - a second door asking while it runs is
     told so, not queued behind it.
 
-    ONLY A SCHEDULED RUN THAT WORKED MOVES THE CLOCK (LastPolledAt). A manual run is extra: it does
-    not use up "once a day" or push the next slot back (C4). A failed scheduled run is owed: it is
-    tried again RETRY_MINUTES later instead of waiting for tomorrow's slot."""
+    ONLY A SCHEDULED RUN MOVES THE CLOCK (LastPolledAt). A manual run is extra: it does not use up
+    "once a day" or push the next slot back (C4). A failed scheduled run moves it too - it is tried
+    again at its next slot, never in between (the owner, 2026-09-28: every 15 minutes for ever paid
+    for the AI each time), and the failure is told to the owner instead."""
     sid = src['SourceId']
     with _RUNNING_LOCK:
         if sid in _RUNNING: return {'busy': True, 'subject': f"{src.get('Address')} is already running"}
         _RUNNING.add(sid)
-    try:
-        out = run_report_source(store, src, llm, trigger)
-        if trigger == 'schedule' and not out.get('failed'): store.touch_source(sid)
-        return out
+    try: return run_report_source(store, src, llm, trigger)
     finally:
+        if trigger == 'schedule': store.touch_source(sid)
         with _RUNNING_LOCK: _RUNNING.discard(sid)
-
-
-def _failed_lately(store, sid) -> bool:
-    try: last = json.loads(store.get_setting(f'{LAST_RUN}{sid}') or '{}')
-    except ValueError: return False
-    if not last.get('failed') or last.get('trigger', 'schedule') != 'schedule': return False
-    try: return (datetime.now() - datetime.fromisoformat(str(last['at'])[:19])).total_seconds() < RETRY_MINUTES * 60
-    except (KeyError, ValueError): return False
 
 
 def due_reports(store, startup: bool = False) -> list:
@@ -2244,7 +2255,7 @@ def due_reports(store, startup: bool = False) -> list:
     the others (it used to raise out of this list and silence every report and the morning line)."""
     out = []
     for s in store.list_sources():
-        if s['Channel'] != 'report' or _failed_lately(store, s['SourceId']): continue
+        if s['Channel'] != 'report': continue
         try: cfg = json.loads(s.get('ConfigJson') or '{}')
         except ValueError:
             logger.warning(f"report {s.get('Address')} has settings that do not parse - skipped"); continue
@@ -2270,8 +2281,8 @@ def run_due_reports(store, startup: bool = False) -> int:
     except Exception: llm = None
     n = 0
     for src in sorted(due_reports(store, startup), key=lambda s: not _own_data(s)):
-        # a runner that RAISES is a failed run in the history (run_report_source keeps it), retried
-        # RETRY_MINUTES later - never a reason to skip the reports behind it
+        # a runner that RAISES is a failed run in the history (run_report_source keeps it), run again at
+        # its next slot - never a reason to skip the reports behind it
         try: n += not run_one(store, src, llm).get('busy')
         except Exception as e: logger.warning(f"report {src.get('Address')} raised, skipping it and running the rest - {e}")
     return n

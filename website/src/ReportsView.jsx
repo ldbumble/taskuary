@@ -284,10 +284,8 @@ export const ROUTE_LINES = ["timeline", "work", "alert", "send"];
 const ROUTE_HOW = ["always", "ai", "rule", "never"];
 const LINE_DEFAULT = { timeline: "always", send: "always", work: "always", alert: "never" };
 export const ASSISTANT_WHEN = "it has an idea that matters: something I would act on or need to know today, not a status note or a restatement of what is already on my Timeline";
-const isVoice = (c) => c?.type === "assistant" && !c?.watch_source_ids?.length
-  && !(Array.isArray(c?.watch_sources) ? c.watch_sources : []).some((s) => s?.type && s.type !== "taskuary");
 const lineOf = (c, line) => c?.route?.[line]
-  || (isVoice(c) && (line === "timeline" || line === "work") ? { how: "ai", when: ASSISTANT_WHEN } : { how: LINE_DEFAULT[line] });
+  || (c?.type === "assistant" && (line === "timeline" || line === "work") ? { how: "ai", when: ASSISTANT_WHEN } : { how: LINE_DEFAULT[line] });
 export const fullRoute = (c) => Object.fromEntries(ROUTE_LINES.map((l) => [l, lineOf(c, l)]));
 // `alert` is not "the phone" - it goes to whichever live channel you picked, as often email as
 // WhatsApp (2026-09-17). What makes it an alert is that it skips Review, not the device.

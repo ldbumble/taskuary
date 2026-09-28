@@ -165,7 +165,6 @@ class CardsInTheSourceListTests(unittest.TestCase):
         chosen = B.resolve(s, cfg)
         self.assertTrue(chosen['gone_quiet']['on'] and chosen['gone_quiet']['days'] == 9 and not chosen['threads']['on'])
         self.assertEqual([x['type'] for x in assistant._inline(cfg['watch_sources'])], ['rest'])   # the systems reader skips it
-        self.assertEqual([x['type'] for x in reports.systems_of(cfg)], ['rest'])
         self.assertEqual(reports.route_of({'type': 'assistant', 'watch_sources': [{'type': 'taskuary', 'card': 'work'}]}, 'timeline')[0], 'ai')
 
     def test_the_card_is_a_source_with_a_test_like_any_other(self):

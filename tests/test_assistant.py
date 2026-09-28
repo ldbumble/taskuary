@@ -150,7 +150,7 @@ class PostTests(unittest.TestCase):
             cfg_ = reports.resolve_cfg(s, json.loads(src['ConfigJson']))
             _head, preview = reports.run_assistant(cfg_)
             def llm(system, user, **kwargs):
-                seen.update(system=system, user=user, kwargs=kwargs)
+                if 'user' not in seen: seen.update(system=system, user=user, kwargs=kwargs)   # the model pass, not the judge after it
                 return json.dumps({'say': [{'key': 'idea:failed-import',
                     'text': 'Import has a failed run; I would inspect it now.', 'section': 'systems',
                     'why': 'tranCodeRun: process=Import success=0', 'mid': None, 'task': None}],
@@ -315,8 +315,9 @@ class PostTests(unittest.TestCase):
         s = self._seed()
         # unreadable = the model chose silence; never a crash, and nothing enters the idea table
         self.assertEqual(assistant.run(s, llm=lambda *a, **k: 'I have no idea', force=True)['said'], 0)
-        # a model that FAILS is not silence: the facts post in the hub's own words
-        self.assertEqual(assistant.run(s, llm=mock.Mock(side_effect=RuntimeError('boom')), force=True)['said'], 1)
+        # a model that FAILS is not silence either: it is a failed run, posting nothing (R2, 2026-09-28)
+        out = assistant.run(s, llm=mock.Mock(side_effect=RuntimeError('boom')), force=True)
+        self.assertTrue(out['failed']); self.assertEqual(out['said'], 0); self.assertIn('boom', out['error'])
 
 
 class ButtonTests(unittest.TestCase):

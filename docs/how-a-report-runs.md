@@ -13,7 +13,6 @@ flowchart LR
   T -->|Run due now| D
   T -->|Run now, the Assistant, the phone| M["Runs now - it does not use up its schedule"]
   D -->|no clock at all| H["Only by hand"]
-  D -->|failed in the last 15 minutes| R["Waits, then tries again"]
   D -->|already ran today, once a day| X["Waits for tomorrow"]
   D -->|its time came| O["Runs"]
   S --> O
@@ -33,8 +32,7 @@ flowchart LR
 | The reports' clock | Every minute, whatever is due. It is not the mail's clock: turning the mail poll off leaves reports running |
 | Run due now | Everything owed, and nothing else - not a mail sync |
 | Run now, the Assistant's `report.run`, the phone | Runs at once. A manual run is extra: it does not use up "once a day" or move the next slot |
-| A scheduled run that worked | Moves the report's clock |
-| A scheduled run that failed | Tried again 15 minutes later, not tomorrow |
+| A scheduled run, worked or failed | Moves the report's clock. A failure is tried again at its next slot, never in between |
 | A second door while it runs | Told it is already running |
 | A switched-off connection | The run fails and says to turn it on under Connections |
 
@@ -71,10 +69,13 @@ flowchart LR
 | it mentions / it never mentions | the words, anywhere in the result |
 
 - **A failure** reaches you once, in the app: one row, never a task, never an alert, never sent to anyone. The same
-  error again stays in the History, recorded as a failure.
+  error again stays in the History, recorded as a failure. An Advisor whose model fails has failed the same way.
+- **One source of several failing** is not a failed run: the other sources are read, filed and sent as usual, and
+  the failed source gets a row of its own ending in FAILED.
 - **A mute** covers the alert and the morning brief as well as the rail.
 - **Reports saved before the card** were converted once, meaning exactly what they did: `reach` and the alert's
   condition became the Timeline and alert lines, the `triage` switch became the work line, "only when something is
   wrong" became an AI line with that sentence, and an alert on failure became never.
 - **The Advisor** is on the same card. With nothing set it asks the AI on the Timeline and work lines whether an idea
-  matters; its alert and send lines work like any report's.
+  matters - one watching systems too, so a run that found nothing posts nothing. Timeline never with work on means
+  its ideas are triaged into tasks and the rest are put down; its alert and send lines work like any report's.

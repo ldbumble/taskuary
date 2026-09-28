@@ -83,6 +83,19 @@ class HealthTests(unittest.TestCase):
         # the ADP workflow in the fixture failed ONCE: one failure is a bad day, not a broken report
         self.assertNotIn('health:workflow:' + str([r for r in A.appfacts.reports(s) if r['title'] == 'ADP hours export'][0]['source_id']), ideas)
 
+    def test_a_report_that_keeps_failing_the_same_way_is_one_idea_said_once(self):
+        # the owner, 2026-09-28: "as long as it's not the same idea a 100 times" - the sig was the last run's time
+        from datetime import datetime
+        s, now, key = A.store(), datetime.now(), f"health:report:{A.AR['sid']}"
+        def fail(at, err):
+            s.add_report_run(A.AR['sid'], {'at': at, 'title': 'Monthly AR Report', 'failed': True, 'error': err})
+            return next(i for i in assistant.health_ideas(s) if i['key'] == key)
+        for h in (6, 7): s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 0{h}:00:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'x'})
+        s.upsert_idea(fail('2026-09-18 08:00:00', 'login timed out after 30s'), '2026-09-18 08:00:00')
+        state = {i['Key']: i for i in s.list_ideas()}
+        self.assertFalse(assistant.fresh(state, fail('2026-09-18 09:00:00', 'login timed out after 31s'), now))   # the same failure
+        self.assertTrue(assistant.fresh(state, fail('2026-09-18 10:00:00', 'the password was changed'), now))     # a new one
+
     def test_a_seen_failure_stays_seen_until_a_new_one(self):
         s = A.store()
         for at in ('06:00', '07:00', '08:00'):

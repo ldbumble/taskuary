@@ -404,7 +404,11 @@ def health_ideas(store, now: datetime = None) -> list:
         if not r['active']: continue
         runs = store.report_runs(r['source_id'], 3) or []
         if len(runs) >= 3 and all(x.get('failed') for x in runs):
-            out.append({'key': f"health:report:{r['source_id']}", 'kind': 'health', 'sig': str(runs[0].get('at') or '')[:16],
+            # the SAME failure is one idea, said once: the sig is the error, numbers read as one (a timestamp, a run
+            # id). It was the last run's time, so every failed run re-raised it (the owner, 2026-09-28: "as long as
+            # it's not the same idea a 100 times"); a different error is a new fact and comes back
+            sig = re.sub(r'\d+', '#', ' '.join(str(runs[0].get('error') or '').split()))[:120]
+            out.append({'key': f"health:report:{r['source_id']}", 'kind': 'health', 'sig': sig,
                         'text': f"{r['title']} failed its last three runs - {_short(runs[0].get('error') or 'no reason recorded', 80)}.",
                         'action': {'type': 'health', 'tab': 'Reports', 'hash': f"report={r['source_id']}", 'source_id': r['source_id'],
                                    'why': 'three failures in a row is a broken report, not a bad day'}})
@@ -415,7 +419,7 @@ def health_ideas(store, now: datetime = None) -> list:
                                    'why': 'a workflow that never ran is either mis-clocked or waiting on a sign-in'}})
     for c in appfacts.connections(store):
         if c['active'] and c['last_error']:
-            out.append({'key': f"health:connection:{c['connector_id']}", 'kind': 'health', 'sig': _short(c['last_error'], 60),
+            out.append({'key': f"health:connection:{c['connector_id']}", 'kind': 'health', 'sig': re.sub(r'\d+', '#', _short(c['last_error'], 60)),
                         'text': f"{c['name']} is erroring - {_short(c['last_error'], 80)}.",
                         'action': {'type': 'health', 'tab': 'Connections', 'hash': f"connector={c['type']}", 'connector_id': c['connector_id'],
                                    'why': 'a connection that errors reads nothing until somebody looks'}})

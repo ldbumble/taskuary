@@ -38,8 +38,10 @@ class ParseTests(unittest.TestCase):
 
     def test_none_clears_and_nonsense_or_the_past_is_refused(self):
         self.assertIsNone(remind.parse('none', self.NOW)); self.assertIsNone(remind.parse('', self.NOW))
-        for bad in ('whenever', '2026-09-25', '2026-01-01'):
+        for bad in ('whenever', '2026-09-25', '2026-01-01', '2026-02-30'):
             with self.assertRaises(ValueError): remind.parse(bad, self.NOW)
+        for bad in ('whenever', '2026-02-30', '2026-13-45'):
+            with self.assertRaisesRegex(ValueError, 'is not a day I can read'): remind.parse(bad, self.NOW)
 
 
 class RailTests(unittest.TestCase):

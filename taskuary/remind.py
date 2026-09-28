@@ -18,8 +18,11 @@ def parse(until, now: datetime = None) -> str | None:
     now = now or datetime.now()
     s = str(until or '').strip().lower()
     if s in NONE_WORDS: return None
+    unreadable = f'"{until}" is not a day I can read - say a date (2026-10-09) or "in 2 weeks"'
     m = re.fullmatch(r'(\d{4}-\d{2}-\d{2})(?:[ t].*)?', s)
-    if m: day = datetime.strptime(m.group(1), '%Y-%m-%d')
+    if m:
+        try: day = datetime.strptime(m.group(1), '%Y-%m-%d')
+        except ValueError: raise ValueError(unreadable) from None     # 2026-02-30 has the shape, not the day
     elif s == 'tomorrow': day = now + timedelta(days=1)
     elif m := re.fullmatch(r'(?:in\s+)?(\d+|a|an|one|two|three|four)\s+(day|week|month)s?', s):
         n = {'a': 1, 'an': 1, 'one': 1, 'two': 2, 'three': 3, 'four': 4}.get(m.group(1)) or int(m.group(1))
@@ -27,7 +30,7 @@ def parse(until, now: datetime = None) -> str | None:
     elif s.rstrip('s') in DAYS:
         ahead = (DAYS.index(s.rstrip('s')) - now.weekday()) % 7 or 7
         day = now + timedelta(days=ahead)
-    else: raise ValueError(f'"{until}" is not a day I can read - say a date (2026-10-09) or "in 2 weeks"')
+    else: raise ValueError(unreadable)
     if day.date() <= now.date(): raise ValueError('pick a day after today')
     return f"{day:%Y-%m-%d} {MORNING}"
 

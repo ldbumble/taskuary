@@ -101,6 +101,10 @@ class ActsTests(unittest.TestCase):
         bad = concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value='often')['proposal'])
         self.assertEqual(bad['status'], 'error'); self.assertIn('takes a number', bad['error'])
         self.assertEqual(self.s.get_settings()['poll_minutes'], '10')
+        for odd in ('--5', 'nan', 'inf'):
+            bad = concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value=odd)['proposal'])
+            self.assertEqual(bad['status'], 'error'); self.assertIn('takes a number', bad['error'])
+        self.assertEqual(self.s.get_settings()['poll_minutes'], '10')
         self.assertIsNone(self._turn('setting.set', label='warp drive', value='on').get('proposal'))
 
     def test_connections_pause_resume_and_test(self):

@@ -752,7 +752,9 @@ def _run_operation(op: dict, background: BackgroundTasks):
         raw, t = p.get('value'), meta.get('type')
         v = str(raw if raw is not None else '').strip()
         if t == 'switch': v = '1' if v.lower() in ('1', 'true', 'on', 'yes') else '0' if v.lower() in ('0', 'false', 'off', 'no') else None
-        elif t == 'number': v = str(int(float(v))) if v.replace('.', '', 1).lstrip('-').isdigit() else None
+        elif t == 'number':
+            try: v = str(int(float(v)))
+            except (ValueError, OverflowError): v = None        # '--5', 'nan', 'inf' get the same sentence as 'often'
         elif t == 'select': v = v if v in [str(o) for o in (meta.get('options') or [])] else None
         if v is None: raise HTTPException(422, f"{meta['label']} takes {'on or off' if t == 'switch' else 'a number' if t == 'number' else 'one of ' + ', '.join(str(o) for o in meta.get('options') or [])} - not {raw!r}")
         prev = store.get_setting(key)

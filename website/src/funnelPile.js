@@ -59,6 +59,10 @@ export const keysOf = (items) => new Set((items || []).map((i) => i.key));
 // Keeping this fallback lets the static demo and an older server continue to paint normally.
 export const displayRevision = (pile) => pile?.display_revision || pile?.rev || null;
 export const refreshPilePresentation = (current, fresh) => {
+  // AN OLDER ANSWER NEVER UNDOES A NEWER ONE (the owner, 2026-09-28: "read agents working for a split second into your
+  // task, then goes back"): a poll and a turn's answer race, and whichever landed last was drawn - a build from before
+  // the agent spoke put its row back where it had been for a frame
+  if (current && Number(fresh?.generated_at) < Number(current?.generated_at)) return current;
   const revision = displayRevision(fresh);
   if (!(current && revision && displayRevision(current) === revision)) return fresh;
   // Selection capture is intentionally separate from the completed display revision. A transient
@@ -356,6 +360,13 @@ export const LEVEL_META = {
 // working"). A grouping of the rail only: the walk's own order is the server's and is not touched.
 export const LEVEL_ORDER = ["urgent", "task", "reports", "fyi", "passed", "agents"];
 const LEVEL_OF_BAND = { 1: "urgent", 2: "task", 3: "reports", 4: "fyi", 5: "agents" };
+// what puts a row in its section - the RAIL's to say, never the card on the table's older copy (AssistantView `drawn`)
+export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "unread", "kind", "working", "state"];
+export const placed = (row, card) => {
+  const out = { ...row, ...card };
+  for (const k of PLACEMENT) { if (k in row) out[k] = row[k]; else delete out[k]; }
+  return out;
+};
 export const levelOf = (item) => (item?.surfaced && attentionBand(item) === 2 ? "passed" : LEVEL_OF_BAND[attentionBand(item)] || "fyi");
 export const levelLabel = (level) => LEVEL_META[level]?.word || "";
 // the levels actually present, in the order the rail draws them - the jump menu's entries

@@ -146,6 +146,17 @@ def _agent_finished(store, tid, active, review, read_at, now):
     return {**ev, 'unread': not (read_at and read_at >= closed_at)}
 
 
+# the lanes an agent's run puts a row in by stopping - blocked (asking, parked), stopped, saved
+AGENT_STOPS = ('blocked', 'stopped', 'saved')
+
+
+def _agent_spoke_at(store, tid):
+    """When the task's run last said anything (a question, a turn ending, a session ending) - the moment its row became
+    the owner's again. None with no run word, where the old read stands."""
+    evs = store.worker_events(tid) if tid else []
+    return processing_all._stamp(evs[-1].get('CreatedAt')) if evs else None
+
+
 def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES):
     from . import funnel
     from .processing_reads import state
@@ -307,8 +318,13 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # an open task, a draft waiting for a yes, simply gone. Work that is still the owner's stays on the rail
     # for that hour, marked shown, which is what the Passed band draws; the walk does not offer it again.
     # NEXT only - the shown mark, below. Done is "off work for the hour" (2026-09-15) and stays gone.
+    # ...a pass counts only for the state it passed (the owner, 2026-09-28: "If agent stopped working after a next it
+    # should shoot up to your task category"). A Next pressed while the agent worked, or on its last question, read the
+    # row - and when the agent stopped or asked again minutes later, that old receipt and mark filed the NEW stop straight
+    # into Passed. An agent's row is back in Your task when its run spoke after the pass.
+    since = _agent_spoke_at(store, tid) if card['lane'] in AGENT_STOPS else None
     passed = bool(tid and active and read_at and not read['unread'] and not read.get('deferred') and not back
-                  and card['lane'] in OWNER_LANES)
+                  and card['lane'] in OWNER_LANES and not (since and read_at < since))
     # AN AGENT FINISHED IT (same message: "same for finished agent task?"): a task its agent closed is a
     # result nobody has looked at yet. It is on the rail once, with Reports, until it is read; a task the
     # owner closed stays closed and gone.
@@ -351,7 +367,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...and stopped work is on the rail until it is looked at. It used to stay however often it was looked at, with
     # Later the only way to put it down - and Later is gone (R6, the owner, 2026-09-25: "next should move it to passed
     # and done should close it"). Next puts it in Passed like the rest of your work; the quiet hours bring it back.
-    stopped = active and card['lane'] in ('stopped', 'saved') and not read.get('deferred') and read_at is None
+    stopped = active and card['lane'] in ('stopped', 'saved') and not read.get('deferred') and (read_at is None or bool(since and read_at < since))
     # ...and Remind me puts away a live agent or a paused conversation too, until its day (R7, 2026-09-25)
     away = bool(reminded and remind.waiting(task, now)) and not asking_now
     unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or (finished and finished['unread']) or
@@ -392,7 +408,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
     if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped', 'saved'):
         shown_at = processing_all._stamp(shown.get('At'))
-        if shown_at is None or shown_at > now - timedelta(minutes=quiet):
+        if since and shown_at and shown_at < since: shown = None                  # passed before the agent stopped
+        elif shown_at is None or shown_at > now - timedelta(minutes=quiet):
             card.update(surfaced=True, surfaced_at=shown.get('At'))
     passed = passed and shown is not None
     if passed:

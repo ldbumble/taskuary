@@ -41,7 +41,7 @@ import { summarize } from "./walkSummary.js";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX } from "./funnelPile.js";
+import { MORE_PX, placed } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -155,7 +155,9 @@ function Pile({ pile, current, onPull, error, onRetry }) {
   const drawn = [
     ...(curKey && !known ? [{ ...current }] : []),
     ...onTable,
-    ...drawOrder(visibleItems).map((i) => (i.key === curKey ? { ...i, ...current } : i)),
+    // the card on the table lends the row its words; WHERE the row sits is the rail's (placed) - its older lane drew a
+    // working agent under Your task until the next chat read refreshed it (the owner, 2026-09-28)
+    ...drawOrder(visibleItems).map((i) => (i.key === curKey ? placed(i, current) : i)),
   ];
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());

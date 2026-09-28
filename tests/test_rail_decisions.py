@@ -108,6 +108,31 @@ class StoppedGoesToPassedTests(unittest.TestCase):
             self.assertEqual(back, [True])
 
 
+class AStopAfterNextIsYoursTests(unittest.TestCase):
+    def test_an_agent_that_stops_after_the_next_leaves_passed(self):
+        """The owner, 2026-09-28: "If agent stopped working after a next it should shoot up to your task category" -
+        a Next pressed before the agent stopped (or asked again) filed the new stop straight into Passed."""
+        from taskuary import concierge
+        s, settle = settled()
+        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coder'}, 'o')
+        mid = mail(s, 'export', who='Omar Keller', email='omar@northwind.example', hours=3, tid=t)
+        s.add_route(mid, t, 'route', 1.0, 'triage: coding', [], 'triage')
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]),              mock.patch.object(funnel, 'agent_left', return_value=True):
+            first = concierge.surface(s, llm=lambda *a, **k: 'never')
+            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            passed = [(i['lane'], bool(i.get('surfaced'))) for i in rail(s) if i.get('tid') == t]
+            self.assertEqual(passed, [('stopped', True)], 'Next passed it')
+            # the run speaks again after the pass: continued, then stopped with a question
+            later = (datetime.now() + timedelta(minutes=2)).isoformat(sep=' ', timespec='seconds')
+            with mock.patch('taskuary.store._now', return_value=later):
+                s.add_worker_event({'TaskId': t, 'Sid': 's1', 'Kind': 'turn_end', 'Text': 'Done - one question for you.'})
+            funnel.invalidate()
+            now = [(i['lane'], bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t]
+            self.assertEqual(now, [('stopped', False, True)], 'a stop newer than the pass is in Your task')
+
+
 class UrgentGoesToPassedTests(unittest.TestCase):
     def test_next_on_an_urgent_task_puts_it_in_passed(self):
         """R3: urgent open work left the rail for three hours on Next - Passed was for the other lanes only."""

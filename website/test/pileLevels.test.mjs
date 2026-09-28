@@ -63,3 +63,24 @@ test("the card on the table keeps its band - it is passed only once Next moves y
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   assert.match(view, /bandsOf\(drawn\.map\(\(i\) => \(i\.surfaced && atTable\(i\) \? \{ \.\.\.i, surfaced: false \} : i\)\)\)/);
 });
+
+// the owner, 2026-09-28: "the work rail still read agents working for a split second into your task, then goes back"
+test("the card on the table never moves its row: the rail's lane and shown mark win", async () => {
+  const { placed, levelOf } = await import("../src/funnelPile.js");
+  const row = { key: "a", lane: "working", order_band: 5, kind: "agent", title: "Fix the export" };
+  const stale = { key: "a", lane: "blocked", order_band: 2, surfaced: true, kind: "agent", why: "asked you" };
+  const drawn = placed(row, stale);
+  assert.equal(drawn.lane, "working");
+  assert.equal(drawn.surfaced, undefined);
+  assert.equal(drawn.why, "asked you", "the card still lends its words");
+  assert.notEqual(levelOf(drawn), levelOf(stale));
+});
+
+test("an older rail answer never replaces a newer one", async () => {
+  const { refreshPilePresentation } = await import("../src/funnelPile.js");
+  const newer = { generated_at: 2000, items: [{ key: "a", lane: "working" }] };
+  const older = { generated_at: 1000, items: [{ key: "a", lane: "blocked" }] };
+  assert.equal(refreshPilePresentation(newer, older), newer);
+  const newest = { generated_at: 3000, items: [] };
+  assert.equal(refreshPilePresentation(newer, newest), newest);
+});

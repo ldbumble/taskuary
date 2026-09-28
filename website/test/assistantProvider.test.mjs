@@ -43,7 +43,8 @@ test("the workspace and the agent card use those readings", () => {
   assert.ok(body.indexOf("tq-card-chat") < body.indexOf("tq-card-term"),
     "the chat branch must be reached before the terminal one, so an assistant is never drawn as a screen");
   // ...nor beside a live SCREEN: one place to answer, whichever is open (2026-09-23: "why do we need both?")
-  assert.match(body, /!card\.paused && !live && <TextField/, "the box is not offered beside a live chat composer or an open screen");
+  // (...nor for several questions, which each carry their own "Other…" box, 2026-09-28)
+  assert.match(body, /!card\.paused && !live && (!multi && )?<TextField/, "the box is not offered beside a live chat composer or an open screen");
 });
 
 test("a coding screen is shown whole or not at all", () => {

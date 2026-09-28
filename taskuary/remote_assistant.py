@@ -863,6 +863,9 @@ def agent_answers(item: dict | None) -> list:
     numbered pick could only mean the chip "Answer it", which carries no text, and concierge's
     answer_agent sends the literal word "yes" to an agent that asked "which branch?"."""
     it = item or {}
+    # several questions are answered in one line of the owner's own ("1 main, 2 blue") - a poll holds one question's
+    # answers, and offering the first question's as if they were the only one answered the wrong thing (2026-09-28)
+    if len(it.get('questions') or []) > 1: return []
     return [str(c) for c in (it.get('choices') or [])] if it.get('kind') == 'agent' and it.get('asking') else []
 
 
@@ -1182,6 +1185,7 @@ def move_title(item: dict | None, draft: str = '') -> str:
     it = item or {}
     kind, lane, who = it.get('kind'), it.get('lane'), story_who(it)
     if kind == 'agent':
+        if len(it.get('questions') or []) > 1: return f"{len(it['questions'])} questions from the agent"
         return '' if lane == 'working' else 'pick it up again' if it.get('paused') else 'answer the agent' if it.get('asking') else "tell the agent what's next"
     if kind == 'agentdone': return 'answer them from what it found' if it.get('mid') else ''
     if kind == 'wrapup': return 'close it'
@@ -1215,7 +1219,8 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '') -> str
     said = lead_line(store, it, '') or _cut(it.get('title') or '', 160)
     lines = [head] if head else []
     # the asker - the TASK where the card's `who` is not the asker (an agent-finished card carries the agent there)
-    if kind in ('agentdone', 'wrapup'):
+    agent_is_who = kind == 'agent' and str(it.get('who') or '').strip().lower() in {str(it.get(k) or '').strip().lower() for k in ('agent', 'working')} - {''}
+    if kind in ('agentdone', 'wrapup') or agent_is_who:
         lines.append(' · '.join(x for x in ('🗂 **The task**', channel_word(ch) if ch and ch not in ('own', 'report') else '', age) if x))
     elif is_own(it):
         lines.append(' · '.join(x for x in ('📝 **You**', 'your task', age) if x))
@@ -1253,7 +1258,14 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
     title = move_title(it, draft)
     if not title: return ''
     body = []
-    if it.get('kind') == 'agent' and not it.get('paused') and it.get('lane') != 'working':
+    qs = it.get('questions') or []
+    if it.get('kind') == 'agent' and len(qs) > 1:
+        # EVERY question, numbered - the numbers the owner answers with (workerstate.split_answers)
+        for i, q in enumerate(qs, 1):
+            opts = ' / '.join(str(c) for c in q.get('choices') or [])
+            body.append(f"**{i}. {_cut(q.get('text') or '', 300)}**" + (f' ({opts})' if opts else ''))
+        body.append(f"Answer all {len(qs)} in one line - \"1 {((qs[0].get('choices') or ['yes'])[0])}, 2 ...\" - or in your own words. They go back to the agent together.")
+    elif it.get('kind') == 'agent' and not it.get('paused') and it.get('lane') != 'working':
         asked = ' '.join(str((it.get('tail') or [''])[0]).split()) if it.get('asking') else ''
         if asked: body.append(f'**{_cut(asked, 600)}**')
         body.append('Pick an answer below, or type your own - it goes straight in.' if it.get('choices')
@@ -1327,6 +1339,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
         # ...each NUMBERED, so a number opens that one (respond): the desktop's "Talk about it" door
         members = member_lines(item)
         head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
+    if item and len(item.get('questions') or []) > 1:
+        from . import concierge
+        out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') == 'answer_agent')],
+               'options': [o for o in out.get('options') or [] if str(o) != concierge.CHIP_WORDS['answer_agent']]}
     if item and is_own(item) and item.get('kind') in STORY_KINDS:
         # work you started has nobody behind it to answer or to file away (the desktop hides the same two)
         from . import concierge

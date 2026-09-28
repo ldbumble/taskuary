@@ -644,7 +644,7 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
             out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                              tid=tid, agent=agent, priority=task.get('Priority'), since=req.get('at') or t.get('started'), asking=req.get('kind') == 'input_needed', tail=[str(req.get('text') or '')[:300]], sid=t.get('sid'),
                              mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
-                             why=request_line(agent, req)))
+                             why=request_line(agent, req), questions=list(t.get('questions') or []), held=bool(t.get('held'))))
             continue
         # ONE READING of "is it asking" (A15, 2026-09-25): the session's own state and sentence (terminal.worker_fields,
         # general.info) - the rail read the screen with a question regex of its own, and could say "asked you" where the

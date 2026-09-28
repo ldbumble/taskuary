@@ -49,6 +49,8 @@ OWNER, AGENT, ANON = 'owner', 'agent', 'anon'
 # make it conditional on a setting, and never let a document turn an entry off.
 DENIED = (
     (r'POST', r'^/api/tasks/\d+/(resume|continue-session)$', 'resuming previous work is the owner\'s choice'),
+    # an agent never answers its own question - and an answer now lets a held ask go (hooks.ask, 2026-09-28)
+    (r'POST', r'^/api/tasks/\d+/worker/(answer|answers|release)$', 'answering an agent\'s question is the owner\'s'),
     # anything that puts a message in front of a human somewhere else
     (r'POST', r'^/api/reviews/\d+/decide$', 'approving a reply sends it - that is the owner\'s'),
     (r'POST', r'^/api/tasks/\d+/handoff$', 'handing work to a person sends them a message'),

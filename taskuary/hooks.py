@@ -24,6 +24,12 @@ from loguru import logger
 
 HOOKED = ('claude', 'codex')
 MARK = '/api/hooks/claude'
+# THE ASK HOOK (the owner, 2026-09-28: "hook is better if it's supported" - measured: a PreToolUse hook that returns
+# updatedInput.answers answers AskUserQuestion, no form drawn). Its own mark, so the event hooks above never replace
+# it; its own command, whose stdout Claude reads as the decision; held up to ASK_WAIT while the owner answers
+# elsewhere, then let go so the form appears in the pane. Claude's own limit on the hook is ASK_TIMEOUT.
+ASK_MARK = '/api/hooks/claude/ask'
+ASK_WAIT, ASK_TIMEOUT = 540, 600
 # Claude's events. The last five arrived 2026-09-20 and are the ones the screen could never tell apart:
 # a turn that died on a wall (StopFailure: rate_limit, max_output_tokens, overloaded, billing_error...),
 # the agent asking inside its own TUI (Notification agent_needs_input / idle_prompt), the permission
@@ -96,6 +102,14 @@ def command(base: str, token: str = '') -> str:
     return f'{curl} -s -m 3 -o {null} -X POST {base}{MARK} -H "Content-Type: application/json"{tok} --data-binary @-'
 
 
+def ask_command(base: str, token: str = '') -> str:
+    """The ask hook: POST the ask and PRINT our answer (Claude reads a hook's stdout as its decision). -f prints nothing
+    on an error and -m outlives the server's wait, so a failure or a timeout leaves Claude to draw its own form."""
+    curl = 'curl.exe' if os.name == 'nt' else 'curl'
+    tok = f' -H "X-Taskuary-Token: {token}"' if token else ''
+    return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST {base}{ASK_MARK} -H "Content-Type: application/json"{tok} --data-binary @-'
+
+
 def spool_path(home: str = None) -> str:
     """Where Codex's hooks leave their payloads: <taskuary home>/hooks/codex.jsonl."""
     if home: return os.path.join(home, CODEX_MARK)
@@ -151,6 +165,11 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     if not isinstance(hooks, dict): hooks = cur['hooks'] = {}
     before = json.dumps(cur, sort_keys=True)
     _merge(hooks, events, entry, mark)
+    if cli == 'claude':
+        ask = {'type': 'command', 'command': ask_command(base or base_url(), agent_token() if token is None else token), 'timeout': ASK_TIMEOUT}
+        hooks['PreToolUse'] = [g for g in (hooks.get('PreToolUse') or []) if isinstance(g, dict)
+                               and not any(ASK_MARK in str(h.get('command') or '') for h in (g.get('hooks') or []) if isinstance(h, dict))]
+        hooks['PreToolUse'].append({'matcher': 'AskUserQuestion', 'hooks': [ask]})
     if json.dumps(cur, sort_keys=True) == before: return False
     try: _write_json(p, cur)
     except OSError as e:
@@ -213,6 +232,14 @@ def _describe(tool: str, inp) -> str:
     return f'{tool} {what}'.strip() if what else tool
 
 
+def _group(p: dict) -> str:
+    """The id every hook of one AskUserQuestion shares: its questions themselves. Not the tool call's id - not every
+    hook carries it (a PostToolUse without it named the same question differently, and an answered one stayed open);
+    the same keying one question always had (request_id_for)."""
+    from . import workerstate as ws
+    return ws.group_key('|'.join(t for t, _ in _questions(p)))
+
+
 def _questions(p: dict) -> list:
     """AskUserQuestion's questions as (text, choices) pairs, read off its tool_input."""
     out = []
@@ -251,10 +278,12 @@ def _events(t, p: dict) -> None:
             if str(p.get('tool_name') or '') == 'AskUserQuestion':
                 resp = p.get('tool_response') if isinstance(p.get('tool_response'), dict) else {}
                 answers = resp.get('answers') if isinstance(resp.get('answers'), dict) else {}
-                for text, choices in _questions(p):
-                    rid = ws.request_id_for(text)
+                g = _group(p)
+                for i, (text, choices) in enumerate(_questions(p), 1):
+                    rid = ws.question_id(g, i)
                     ws.record(st, tid, sid, 'input_needed', request_id=rid, text=text, choices=choices, source='hook')
-                    ws.record(st, tid, sid, 'answered', request_id=rid, text=str(answers.get(text) or 'answered in the pane'), source='hook')
+                    if rid not in {e['RequestId'] for e in ws.events(st, tid, sid) if e['Kind'] == 'answered'}:
+                        ws.record(st, tid, sid, 'answered', request_id=rid, text=str(answers.get(text) or 'answered in the pane'), source='hook')
             # ...and a tool that RAN had its permission. The notification's request had nothing to close it
             # once the owner clicked yes in the pane - no hook fires for that - so the card said "stopped and
             # is waiting on you" over a coder mid-search, until its next prompt.
@@ -265,8 +294,9 @@ def _events(t, p: dict) -> None:
                 # so every surface read "coder needs your approval: AskUserQuestion {json}" over a chooser of
                 # two plain options, and the chat had nothing to pick from. Recorded as what it is, with its
                 # choices, under the id PostToolUse closes it by once the owner has picked.
-                for text, choices in _questions(p):
-                    ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=choices, source='hook')
+                g = _group(p)
+                for i, (text, choices) in enumerate(_questions(p), 1):
+                    ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i), text=text, choices=choices, source='hook')
             else:
                 # the decision point itself, with the tool and what it wants to do - not a sentence about it
                 text = _describe(str(p.get('tool_name') or 'a tool'), p.get('tool_input'))
@@ -349,6 +379,38 @@ def receive(payload: dict, cli: str = 'claude') -> dict:
     # on it - only `taskuary --done` (selfclose.declare) or the owner ends a task (2026-09-24). The answer
     # used to carry a `closing` flag for a judge that no longer exists; nothing read it.
     return {'bound': True, 'sid': t.sid}
+
+
+def _pane(payload: dict, cli: str = 'claude'):
+    """The live pane this hook's session is BOUND to - never a free one: an ask is held only for a pane of ours."""
+    from . import terminal as term
+    cwd, sid = str(payload.get('cwd') or ''), str(payload.get('session_id') or '')
+    return next((t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and getattr(t, 'argv', None)
+                 and cli in os.path.basename(str(t.argv[0])).lower() and _same_dir(t.cwd, cwd)
+                 and sid and sid in (getattr(t, 'ext_id', ''), getattr(t, 'resumed_from', ''))), None)
+
+
+def ask(payload: dict, wait: float = None) -> dict:
+    """AskUserQuestion, before it draws its form: record the questions as one group and HOLD while the owner answers in
+    the Assistant or on the phone; answered, return the answers as the tool's input and no form is drawn. Not our
+    pane, released, or out of time: {} - Claude draws its form and the terminal answers as it always did."""
+    from . import workerstate as ws
+    if str(payload.get('tool_name') or '') != 'AskUserQuestion': return {}
+    t = _pane(payload)
+    st = getattr(t, 'store', None) if t else None
+    if not t or not st: return {}
+    qs, g = _questions(payload), _group(payload)
+    if not qs: return {}
+    rids = [ws.question_id(g, i) for i in range(1, len(qs) + 1)]
+    ws.hold(t.task_id, t.sid, g, rids)
+    for rid, (text, choices) in zip(rids, qs):
+        ws.record(st, t.task_id, t.sid, 'input_needed', request_id=rid, text=text, choices=choices, source='hook')
+    got = ws.wait_held(g, ASK_WAIT if wait is None else wait)
+    if not got: return {}
+    inp = dict(payload.get('tool_input') or {})
+    inp['answers'] = {text: got[rid] for rid, (text, _c) in zip(rids, qs)}
+    return {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'allow',
+                                   'permissionDecisionReason': 'answered by the owner in Taskuary', 'updatedInput': inp}}
 
 
 # ── Codex's spool: the hook appends, we tail ─────────────────────────────────────────────────────

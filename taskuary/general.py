@@ -1016,13 +1016,18 @@ class GeneralSession:
                 out = coder.agent_reply(self.store, self.task_id, drafted, 'assistant')
                 if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
             reply, closing = selfclose.chat_marker(reply)
-            reply, asked, choices = selfclose.ask_marker(reply)
+            reply, asks = selfclose.ask_markers(reply)
+            asked = asks[0][0] if asks else None
             reply = reply or (closing or '') or (asked or '')
             # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
             try:
                 from . import workerstate as ws
                 ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source='api')
-                if asked: ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.request_id_for(asked), text=asked, choices=choices, source='api')
+                # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group)
+                g = ws.group_key(f'{self.sid}:' + '|'.join(q for q, _ in asks)) if len(asks) > 1 else None
+                for i, (q, choices) in enumerate(asks, 1):
+                    ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
+                              text=q, choices=choices, source='api')
             except Exception as e: logger.debug(f'api worker event skipped: {e}')
             self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
             self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',

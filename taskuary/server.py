@@ -996,6 +996,7 @@ def message_discuss(mid: int, body: DiscussBody):
 
 # ── the worker's own word on its state (workerstate.py) ────────────────────────────────────────
 class WorkerAnswerBody(BaseModel): request_id: str; text: str
+class WorkerAnswersBody(BaseModel): answers: dict
 
 @app.get('/api/tasks/{task_id}/worker')
 def worker_status(task_id: int):
@@ -1016,6 +1017,26 @@ def worker_answer(task_id: int, body: WorkerAnswerBody):
     if not out['delivered']:
         raise HTTPException(409 if out['state'] in ('resolved', 'stale') else 422, f"{out['state']}: {out.get('why') or ''}")
     return out
+
+
+@app.post('/api/tasks/{task_id}/worker/answers')
+def worker_answers(task_id: int, body: WorkerAnswersBody):
+    """ALL the answers to one ask, together (request_id -> words) - a coding agent's three questions go back as one, the
+    way its form takes them (workerstate.answer_group). "noted" while a held ask still waits on the rest."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import workerstate as ws
+    try: out = ws.answer_group(store, task_id, body.answers, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    if not out['delivered']:
+        raise HTTPException(409 if out['state'] in ('resolved', 'stale') else 422, f"{out['state']}: {out.get('why') or ''}")
+    return out
+
+
+@app.post('/api/tasks/{task_id}/worker/release')
+def worker_release(task_id: int):
+    """Answer in the terminal instead: a held ask lets go, and Claude draws its own form in the pane."""
+    from . import workerstate as ws
+    return {'released': ws.release(task_id)}
 
 
 @app.get('/api/tasks/{task_id}')
@@ -2906,6 +2927,17 @@ def task_work(tid: int, diff: bool = True):
             'approved': (approved or {}).get('UpdatedAt') or (approved or {}).get('CreatedAt'), 'status': t.get('Status')}
     return {'work': work, 'files': files, 'prov': prov, 'diffstat': {'added': rev.get('added'), 'removed': rev.get('removed')},
             'session': {'sid': sess.sid, 'alive': sess.alive, 'agent': sess.agent, 'cli': hub_term.cli_of(sess.argv), 'started': sess.started, 'cwd': sess.cwd} if sess else None}
+
+@app.post('/api/hooks/claude/ask')
+def cli_hook_ask(payload: dict):
+    """Claude's AskUserQuestion, BEFORE it draws its form (hooks.ask): held here - a worker thread, up to hooks.ASK_WAIT -
+    while the owner answers in the Assistant or on the phone, then the answers are this hook's reply. {} lets Claude
+    draw its own form; so does anything that goes wrong - a hook must never trouble the agent."""
+    from . import hooks
+    try: return hooks.ask(payload if isinstance(payload, dict) else {})
+    except Exception as e:
+        logger.debug(f'ask hook ignored: {e}'); return {}
+
 
 @app.post('/api/hooks/{cli}')
 async def cli_hook(cli: str, request: Request):

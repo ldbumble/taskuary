@@ -267,8 +267,9 @@ def chat_marker(text: str) -> tuple:
 ASK_MARKER = '[[TASKUARY-ASK]]'
 _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
 ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer, end your reply with a final line: '
-            f'{ASK_MARKER} <the exact question> | <choice> | <choice> (choices optional). Taskuary shows it as a question '
-            f'waiting for them and brings their answer back to you. Only for a real blocker, never for a rhetorical question.')
+            f'{ASK_MARKER} <the exact question> | <choice> | <choice> (choices optional). Several questions: one such line each, '
+            f'at the end. Taskuary shows them as questions waiting for them and brings their answers back to you together. '
+            f'Only for a real blocker, never for a rhetorical question.')
 
 
 def without_ask(text: str) -> str:
@@ -277,6 +278,23 @@ def without_ask(text: str) -> str:
     into the middle of the agent's thinking - `[[TASKUARY-ASK]] Have you signed in? | Signed in |
     Login failed`, verbatim, on screen (2026-09-15). The question itself is shown as a question."""
     return _ASK_RE.sub('', str(text or '')).rstrip()
+
+
+_ASK_ONE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?', re.I)
+
+
+def ask_markers(text: str) -> tuple:
+    """(cleaned reply, [(question, choices)]) - EVERY marker, in order (the owner, 2026-09-28: a regular agent's three
+    questions reached the card as one; the first marker swallowed the rest as its own choices)."""
+    t = str(text or '')
+    cuts = [m for m in _ASK_ONE.finditer(t)]
+    if not cuts: return text, []
+    asks = []
+    for i, m in enumerate(cuts):
+        seg = t[m.end(): cuts[i + 1].start() if i + 1 < len(cuts) else len(t)]
+        parts = [' '.join(p.split()) for p in seg.split('|')]
+        if parts and parts[0]: asks.append((parts[0][:600], [p[:120] for p in parts[1:] if p]))
+    return t[:cuts[0].start()].rstrip(), asks
 
 
 def ask_marker(text: str) -> tuple:

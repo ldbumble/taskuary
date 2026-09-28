@@ -10,7 +10,7 @@ explicit result or an open request the state is `unknown`, never a guessed hand 
 bound to the exact outstanding request and run: delivered once, refused when resolved or when the run
 changed, and written into the task's discussion with its delivery outcome.
 """
-import hashlib, json
+import hashlib, json, re, threading, time
 from pathlib import Path
 from loguru import logger
 
@@ -176,6 +176,149 @@ def status(store, tid: int) -> dict:
     return out
 
 
+# QUESTIONS ASKED TOGETHER (the owner, 2026-09-28: a coding agent's three questions showed as one, and the answer was
+# typed into the wrong question). One ask's questions share a stem - q:<group>:<n> - so every surface reads the group
+# and answers it whole. The group is keyed on the questions themselves (hooks._group), so the three hooks that see the
+# same AskUserQuestion (PreToolUse, PermissionRequest, PostToolUse) name the same requests and record() keeps one of each.
+_QID = re.compile(r'^q:([0-9a-f]{10}):(\d+)$')
+
+
+def group_key(key: str) -> str: return hashlib.sha1(str(key or '').encode('utf-8')).hexdigest()[:10]
+def question_id(group: str, i: int) -> str: return f'q:{group}:{i}'
+
+
+def group_of(request_id) -> str | None:
+    m = _QID.match(str(request_id or ''))
+    return m.group(1) if m else None
+
+
+def group_requests(evs: list, group: str) -> list:
+    """Every request of one group, open or answered, in the order they were asked."""
+    got = {}
+    for e in evs:
+        if e['Kind'] in REQUESTS and group_of(e['RequestId']) == group: got.setdefault(e['RequestId'], e)
+    return sorted(got.values(), key=lambda e: int(_QID.match(e['RequestId']).group(2)))
+
+
+def question_group(store, t) -> list:
+    """The questions of the newest open ask, in order, as public requests - one when it was asked alone."""
+    tid, sid = getattr(t, 'task_id', None), str(getattr(t, 'sid', '') or '')
+    if not tid or not sid: return []
+    evs = events(store, tid, sid)
+    open_ = open_requests(evs)
+    if not open_: return []
+    newest = open_[-1]
+    g = group_of(newest['RequestId'])
+    if not g: return [_public_request(newest)]
+    ids = {e['RequestId'] for e in open_}
+    return [_public_request(e) for e in group_requests(evs, g) if e['RequestId'] in ids]
+
+
+# HELD: an ask a PreToolUse hook is holding open while the owner answers outside the terminal (hooks.ask). The hook
+# waits on the event; answers land in `answers` as they come, and the event is set when every question has one - or
+# when the owner lets the terminal have it (release), when the hook returns nothing and Claude draws its own form.
+HELD = {}
+_HELD_LOCK = threading.Lock()
+
+
+def hold(tid: int, sid: str, group: str, rids: list) -> dict:
+    with _HELD_LOCK:
+        h = HELD[group] = {'tid': tid, 'sid': str(sid), 'rids': list(rids), 'answers': {}, 'released': False, 'event': threading.Event()}
+    return h
+
+
+def wait_held(group: str, seconds: float) -> dict | None:
+    """Block until the owner answers every question of the group; None on release or timeout."""
+    h = HELD.get(group)
+    if not h: return None
+    h['event'].wait(seconds)
+    with _HELD_LOCK: HELD.pop(group, None)
+    return None if h['released'] or len(h['answers']) < len(h['rids']) else dict(h['answers'])
+
+
+def held_for(tid: int) -> list:
+    return [g for g, h in list(HELD.items()) if h['tid'] == tid]
+
+
+def release(tid: int) -> bool:
+    """The owner answers in the terminal instead: every ask held for this task lets go, and Claude shows its form."""
+    got = False
+    with _HELD_LOCK:
+        for h in HELD.values():
+            if h['tid'] == tid: h['released'] = True; h['event'].set(); got = True
+    return got
+
+
+def _answer_held(store, tid, h, answers: dict, actor) -> dict:
+    """Answers for a held ask: kept until every question has one, then the hook is let go with all of them."""
+    with _HELD_LOCK:
+        for rid, text in answers.items():
+            if rid in h['rids']: h['answers'][rid] = text
+        done = len(h['answers']) >= len(h['rids'])
+    for rid, text in answers.items():
+        if rid in h['rids']: record(store, tid, h['sid'], 'answered', request_id=rid, text=text, source='owner')
+    if done:
+        h['event'].set()
+        store.add_comment(tid, actor, 'human', 'Answered the agent: ' + '; '.join(h['answers'][r] for r in h['rids']) + ' - delivered with its question.')
+        store.audit('task', tid, 'worker_answer', actor, detail={'request_ids': h['rids'], 'sid': h['sid'], 'path': 'hook'})
+    return {'delivered': True, 'state': 'delivered' if done else 'noted', 'sid': h['sid'], 'path': 'hook',
+            'left': 0 if done else len(h['rids']) - len(h['answers'])}
+
+
+def answer_group(store, tid: int, answers: dict, actor: str = 'owner') -> dict:
+    """ALL the answers to one ask, together (request_id -> words). Held by a hook: handed to it. A general agent: one
+    message naming each question. A pane standing on Claude's form: its keys, as measured (terminal.answer_form).
+    Anything else: each answer on its own road."""
+    answers = {str(k): ' '.join(str(v or '').split()) for k, v in (answers or {}).items() if str(v or '').strip()}
+    if not answers: raise ValueError('say something')
+    groups = {group_of(r) for r in answers}
+    for g in groups:
+        h = HELD.get(g) if g else None
+        if h and h['tid'] == tid: return _answer_held(store, tid, h, answers, actor)
+    sess = _live(tid)
+    evs = events(store, tid)
+    open_ids = {e['RequestId'] for e in open_requests(evs)}
+    reqs = [_public_request(e) for e in evs if e['Kind'] in REQUESTS and e['RequestId'] in answers and e['RequestId'] in open_ids]
+    reqs = list({r['request_id']: r for r in reqs}.values())
+    if not reqs: return {'delivered': False, 'state': 'resolved', 'why': 'those questions are no longer outstanding'}
+    if not sess: return {'delivered': False, 'state': 'disconnected', 'why': 'no live worker on this task'}
+    if any(str(sess.sid) != str(r['sid']) for r in reqs):
+        return {'delivered': False, 'state': 'stale', 'why': 'the run that asked is no longer the one on the task'}
+    if len(reqs) == 1: return answer(store, tid, reqs[0]['request_id'], answers[reqs[0]['request_id']], actor)
+    reqs.sort(key=lambda r: int(_QID.match(r['request_id']).group(2)) if _QID.match(r['request_id']) else 0)
+    from . import terminal as term
+    try:
+        if hasattr(sess, 'send_prompt'):
+            sess.send_prompt('\n'.join(f"{i}. {r['text']} - {answers[r['request_id']]}" for i, r in enumerate(reqs, 1)))
+        elif all(r.get('choices') for r in reqs) and all(r.get('source') == 'hook' for r in reqs):
+            term.answer_form(sess, [(r.get('choices') or [], answers[r['request_id']]) for r in reqs])
+        else:
+            return {'delivered': all(answer(store, tid, r['request_id'], answers[r['request_id']], actor).get('delivered') for r in reqs),
+                    'state': 'delivered', 'sid': sess.sid}
+    except Exception as e:
+        store.add_comment(tid, actor, 'human', f'Answers could not be delivered to the agent: {str(e)[:200]}')
+        return {'delivered': False, 'state': 'failed', 'why': str(e)[:200]}
+    for r in reqs: record(store, tid, sess.sid, 'answered', request_id=r['request_id'], text=answers[r['request_id']], source='owner')
+    store.add_comment(tid, actor, 'human', 'Answered the agent: ' + '; '.join(f"{r['text'][:80]} - {answers[r['request_id']][:200]}" for r in reqs)
+                      + f' - delivered (run {sess.sid}).')
+    store.audit('task', tid, 'worker_answer', actor, detail={'request_ids': [r['request_id'] for r in reqs], 'sid': sess.sid})
+    return {'delivered': True, 'state': 'delivered', 'sid': sess.sid}
+
+
+_NUMBERED = re.compile(r'(?:^|[\n,;])\s*(\d{1,2})\s*[:.)\-]?\s+([^\n,;]+)')
+
+
+def split_answers(text: str, qs: list) -> dict:
+    """The owner's one line for several questions (a chat's answer): "1 main, 2 raise the cap" goes to each by its
+    number - the numbers are the ones WE put on the questions. Anything unnumbered is the whole line, for each."""
+    words = ' '.join(str(text or '').split())
+    got = {}
+    for n, said in _NUMBERED.findall(str(text or '')):
+        i = int(n) - 1
+        if 0 <= i < len(qs): got[qs[i]['request_id']] = said.strip()
+    return {q['request_id']: got.get(q['request_id'], words) for q in qs}
+
+
 def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') -> dict:
     """Deliver the owner's answer to ONE outstanding request of the run that asked it (PW-139/141): once,
     to that run, and say what happened - delivered, resolved already, stale (the run changed),
@@ -190,6 +333,8 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
     asked = next((_public_request(e) for e in reversed(evs) if e['Kind'] in REQUESTS and e['RequestId'] == request_id), None)
     if not asked or request_id in answered: return {'delivered': False, 'state': 'resolved', 'why': 'that request is no longer outstanding'}
     req = asked
+    h = HELD.get(group_of(request_id) or '')
+    if h and h['tid'] == tid: return _answer_held(store, tid, h, {request_id: text}, actor)
     sess = _live(tid)
     if not sess:
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered: no live worker on this task. Open the workspace to continue.')
@@ -233,6 +378,9 @@ def answer_open(store, tid: int, text: str, actor: str = 'owner') -> dict:
     sess = _live(tid)
     req = asking_of(store, sess) if sess else None
     if not req: return {'delivered': False, 'state': 'no_request', 'why': 'no open request from a live run'}
+    qs = question_group(store, sess)
+    if len(qs) > 1 and req.get('kind') != 'approval_needed':
+        return {**answer_group(store, tid, split_answers(text, qs), actor), 'path': delivery_path(sess), 'request_id': qs[0]['request_id']}
     return {**answer(store, tid, req['request_id'], text, actor), 'path': delivery_path(sess), 'request_id': req['request_id']}
 
 

@@ -509,6 +509,7 @@ class Term:
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': getattr(self, 'cli', '') or cli_of(self.argv), 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'state': word.get('state'), 'line': word.get('line'),
+                'questions': word.get('questions') or [], 'held': bool(word.get('held')),
                 'accepted': getattr(self, 'accepted', None),
                 'promptPending': prompt_pending(self),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
@@ -559,7 +560,12 @@ def worker_fields(store, t) -> dict:
     try: ask = bool(w) and not req and bool(screen_asking(t))
     except Exception: ask = False
     sub = ws.sub_state(bool(w), ask, req)
-    return {'waiting': bool(w), 'request': req, 'state': sub,
+    # ...and EVERY question of the ask, in order - one card answers them together (2026-09-28); `held` while a hook
+    # holds the ask open (hooks.ask), so the card can offer to let the terminal have it instead
+    try: qs = ws.question_group(store, t) if (w and req and store is not None) else []
+    except Exception: qs = []
+    return {'waiting': bool(w), 'request': req, 'state': sub, 'questions': qs if len(qs) > 1 else [],
+            'held': bool(ws.held_for(getattr(t, 'task_id', None))) if req else False,
             'line': ws.says(sub, getattr(t, 'agent', None) or getattr(t, 'label', None), (req or {}).get('text')) if sub else None}
 
 
@@ -610,7 +616,7 @@ def prompt_pending(t) -> bool:
 
 
 _LIGHT_INFO = {'sid', 'label', 'cwd', 'taskId', 'agent', 'cli', 'mode', 'alive', 'busy',
-               'started', 'idle', 'phase', 'waiting', 'request', 'state', 'line', 'accepted', 'promptPending', 'cmd', 'provider', 'pick',
+               'started', 'idle', 'phase', 'waiting', 'request', 'state', 'line', 'questions', 'held', 'accepted', 'promptPending', 'cmd', 'provider', 'pick',
                'connector_id', 'model', 'tail'}
 
 def _info(t, tail=0, details=True) -> dict:
@@ -2102,6 +2108,34 @@ def type_into(t, text: str):
             t.write(key)
             time.sleep(SEED_ENTER)
             if t.n > was: return
+    threading.Thread(target=go, daemon=True).start()
+
+
+FORM_KEY_GAP = 0.8                  # between keys on Claude's question form - a digit re-draws the next tab
+
+
+def answer_form(t, picks) -> None:
+    """Answer Claude's AskUserQuestion form in the pane, every question at once (MEASURED 2026-09-28 on Claude Code
+    2.1.283 - the owner's "never tested that but i don't believe it would work"; before, the words of one answer were
+    typed into whichever question the form stood on).
+
+    The form is a tab row, one tab per question, then Submit. Left from the first tab stops there, so len+1 of them
+    returns to question 1 whatever tab it was on. On a question a DIGIT picks that option AND moves on; your own
+    words are the "Type something." row (the digit after the last option), then the words, then Enter. The last tab
+    is a review whose "1" submits every answer together. `picks` = [(choices, answer)], in order. Own thread."""
+    picks = [(list(c or []), ' '.join(str(a or '').split())) for c, a in picks]
+    def go():
+        for _ in range(len(picks) + 1):
+            t.write('\x1b[D'); time.sleep(.15)
+        time.sleep(FORM_KEY_GAP)
+        for choices, said in picks:
+            n = next((i + 1 for i, c in enumerate(choices) if str(c).strip().lower() == said.lower()), None)
+            if n: t.write(str(n))
+            else:
+                t.write(str(len(choices) + 1)); time.sleep(FORM_KEY_GAP)
+                t.write(clean_typed(said)); time.sleep(.4); t.write('\r')
+            time.sleep(FORM_KEY_GAP)
+        t.write('1')                     # "1. Submit answers" on the review
     threading.Thread(target=go, daemon=True).start()
 
 

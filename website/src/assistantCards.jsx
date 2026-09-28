@@ -677,7 +677,11 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   const answer = async () => {
     if (!text.trim()) return;
     setBusy(true); setErr("");
-    try { await api.post(`/api/tasks/${card.tid}/waitroom`, { text }); onDone?.(`Told ${card.agent || "the agent"}: “${text.trim().slice(0, 80)}”`); }
+    try {
+      if (card.held && card.request_id) await api.post(`/api/tasks/${card.tid}/worker/answer`, { request_id: card.request_id, text });
+      else await api.post(`/api/tasks/${card.tid}/waitroom`, { text });
+      onDone?.(`Told ${card.agent || "the agent"}: “${text.trim().slice(0, 80)}”`);
+    }
     catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
@@ -686,6 +690,29 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   // terminal and typing a digit into it (the owner, 2026-09-17). A pick goes to the exact request
   // that asked - never to the waiting room, which is a letterbox for a pane that is not asking
   // anything - and the agent's own screen is right above, still the way to say something else.
+  // SEVERAL QUESTIONS, ANSWERED TOGETHER (the owner, 2026-09-28): every question of the ask, each with its answers and
+  // room for your own words; one button sends them all, the way the agent's form takes them (workerstate.answer_group)
+  const qs = card.questions || [];
+  const multi = qs.length > 1;
+  const [answers, setAnswers] = useState({});
+  const [own, setOwn] = useState({});
+  const give = (rid, text) => setAnswers((a) => ({ ...a, [rid]: text }));
+  const ready = multi && qs.every((q) => String(answers[q.request_id] || "").trim());
+  const sendAll = async () => {
+    setBusy(true); setErr("");
+    try {
+      await api.post(`/api/tasks/${card.tid}/worker/answers`, { answers });
+      onDone?.(`Answered ${qs.length} questions for the agent.`);
+    } catch (e) { setErr(errText(e)); }
+    setBusy(false);
+  };
+  // HELD (hooks.ask): the agent waits on these answers and its terminal shows no form - or the owner lets it have them
+  const release = async () => {
+    setBusy(true); setErr("");
+    try { await api.post(`/api/tasks/${card.tid}/worker/release`); onDone?.("The agent's own form is up in its terminal - answer it there."); }
+    catch (e) { setErr(errText(e)); }
+    setBusy(false);
+  };
   const pick = async (c) => {
     setBusy(true); setErr("");
     try {
@@ -750,14 +777,35 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   return (
     <CardShell card={card} kicker={working ? "agent working" : card.paused ? "agent stopped" : `the ${who} ${KICK[subState(card)]}`}
       lead={card.tid ? <Story card={card} agent state={agentState} name={name} extra={lastWords} tail={!working}
+          by={card.who && [card.agent, card.working].includes(card.who) ? null : undefined}
           words={card.paused ? <div className="tq-step-words"><CombinedTaskText card={card} list={false} /></div> : null} />
         : <Lead text={state} who={name} />}
       sub={card.tid ? null : card.title} err={err}>
       {working ? <>{toggle}{screen}</> : (
-        <YourMove title={card.paused ? "pick it up again" : asked ? "answer the agent" : live ? "answer it on its screen" : "tell the agent what's next"}
-          go={go} then={then}>
+        <YourMove title={card.paused ? "pick it up again" : multi ? `${qs.length} questions from the agent` : asked ? "answer the agent" : live ? "answer it on its screen" : "tell the agent what's next"}
+          go={multi ? <Button size="small" variant="contained" disableElevation disabled={busy || !ready} onClick={sendAll} sx={moveSx}>
+              {busy ? "Sending…" : `Send ${qs.length} answers`}</Button> : go}
+          then={multi ? (ready ? `all ${qs.length} go back to the agent together.` : `${qs.filter((q) => !String(answers[q.request_id] || "").trim()).length} left to answer - they go back together.`) : then}>
+          {multi && qs.map((q, i) => (
+            <div key={q.request_id} className="tq-move-q">
+              <div className="tq-move-qn">{i + 1} of {qs.length}</div>
+              <div className="tq-move-qt">{q.text}</div>
+              <div className="tq-card-picks" style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                {(q.choices || []).map((c) => (
+                  <Button key={c} size="small" variant={answers[q.request_id] === c ? "contained" : "outlined"} disableElevation disabled={busy}
+                    onClick={() => { give(q.request_id, c); setOwn((o) => ({ ...o, [q.request_id]: false })); }}
+                    sx={{ borderRadius: 999, textTransform: "none", ...(answers[q.request_id] === c ? { background: "#a0643a", "&:hover": { background: "#8d5631" } } : {}) }}>{c}</Button>
+                ))}
+                <Button size="small" variant={own[q.request_id] ? "contained" : "outlined"} disableElevation disabled={busy}
+                  onClick={() => { setOwn((o) => ({ ...o, [q.request_id]: true })); give(q.request_id, ""); }}
+                  sx={{ borderRadius: 999, textTransform: "none", borderStyle: "dashed" }}>Other…</Button>
+              </div>
+              {own[q.request_id] && <TextField fullWidth size="small" autoFocus value={answers[q.request_id] || ""} onChange={(e) => give(q.request_id, e.target.value)}
+                placeholder="Your own answer" sx={{ mt: 0.75, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& input": { fontSize: 13 } }} />}
+            </div>
+          ))}
           {/* what it asked, and the answers it named - the question first, the answers under it */}
-          {asked && (
+          {asked && !multi && (
             <div className="tq-move-q">
               {!!card.why && <div className="tq-move-qt">{card.why}</div>}
               <div className="tq-card-picks">
@@ -772,7 +820,9 @@ export function AgentCard({ card, onDone, onOpenTask }) {
           {screen}
           {/* ONE place to answer (the owner, 2026-09-23: "why do we need both?"): with the screen open you type into the
               agent itself, so the box is only for the folded card - the waiting room types it in when it is parked */}
-          {!card.paused && !live && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
+          {card.held && <div className="tq-card-note">The agent is waiting on {multi ? "these answers" : "this answer"} - its terminal shows no form while it does.{" "}
+            <button type="button" className="tq-card-more" style={{ display: "inline" }} disabled={busy} onClick={release}>Answer in the terminal instead</button></div>}
+          {!card.paused && !live && !multi && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
             placeholder={asked ? "Or answer in your own words - it goes straight in" : card.asking ? "Answer here - it goes straight in, it is waiting for it" : "Leave a note"}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); answer(); } }}
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13 } }} />}

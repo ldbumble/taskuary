@@ -251,6 +251,29 @@ class RankBeforeTriageTests(unittest.TestCase):
         self.assertEqual(judged, list(reversed(mids))[:rank.head_size(self.s)], 'the most valuable first')
         self.assertEqual(len(self.s.pending_triage()), 10 - rank.head_size(self.s), 'the rest wait, ranked')
 
+    def test_judged_arrivals_hold_the_head_until_the_owner_deals_with_one(self):
+        """The owner, 2026-09-28: eight pull requests were brought in ranked, and all eight were triaged - four,
+        then the rest as each sync re-queued the channel - where four were meant to wait. A judged arrival whose
+        task still waits on the owner holds its place; reading one (Next, Done) lets exactly one more in."""
+        rank_mode(self.s)
+        mids = [pending(self.s, f'h{i}') for i in range(8)]
+        for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
+        judged = []
+        def into_a_task(s, m, **k):        # a real judgement opens a task the owner has not seen yet
+            judged.append(m['_mid'])
+            tid = s.create_task({'Title': f"task {m['_mid']}", 'Kind': 'coding', 'Status': 'open'}, 'triage')
+            s.place_message(m['_mid'], tid, 'routed')
+        with mock.patch.object(ingest, 'ingest_message', side_effect=into_a_task):
+            ingest.drain(self.s)
+            ingest.drain(self.s)                                  # the next sync: nothing is free
+            self.assertEqual(len(judged), rank.head_size(self.s), 'the head, and not a row more')
+            self.assertEqual(len(self.s.pending_triage()), 8 - rank.head_size(self.s))
+            first = self.s.get_message(judged[0])['TaskId']
+            self.s.cx.execute("INSERT INTO processing_read_receipt (EntityKind,LocalId,Fingerprint,Version,ReadAt,Origin) "
+                              "VALUES ('task',?,'x','1','2026-09-28 10:00:00','explicit_done')", (str(first),)); self.s.cx.commit()
+            ingest.drain(self.s)
+        self.assertEqual(len(judged), rank.head_size(self.s) + 1, 'one read opens one place')
+
     def test_a_slot_opening_judges_exactly_one_more(self):
         rank_mode(self.s)
         mids = [pending(self.s, f'd{i}') for i in range(10)]

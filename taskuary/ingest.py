@@ -373,7 +373,8 @@ def _rank_first(store, rows: list) -> list:
     for mid in fresh:
         if mid not in keep: continue
         ch = str(fresh[mid].get('Channel') or '')
-        if ch not in heads: heads[ch] = rank.head_size(store, ch)
+        # the head is what is still FREE of it: judged arrivals the owner has not dealt with hold their places
+        if ch not in heads: heads[ch] = max(0, rank.head_size(store, ch) - store.ranked_held(ch))
         if heads[ch] <= 0: continue
         heads[ch] -= 1
         in_order.append(fresh[mid])

@@ -165,6 +165,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // "live" on arrival: what is still on somebody's plate is what you came here for. "done"
   // opens on a list whose top is whatever finished most recently.
   const [filter, setFilter] = useState("live");
+  // A ROW'S STATE CHIP IS THE FILTER (the owner, 2026-09-28: "filter by waiting to start / on you / agent waiting on you
+  // ... as minimal as possible", on this page): click it and In progress shows only that state; its pill clears it
+  const [only, setOnly] = useState(null);
   const [query, setQuery] = useState("");
   // what the loaded rows are FOR. The box is debounced because every change is now a round trip.
   const [sent, setSent] = useState("");
@@ -544,7 +547,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
   // is what makes a completed PR/task discoverable instead of merely searching the visible rows -
   // and the rows ARE the matches now, so there is nothing left here to filter them by.
-  const bucket = (tasks || []).filter((x) => sent || (!filter || inBucket(x, filter)));
+  const bucket = (tasks || []).filter((x) => sent || ((!filter || inBucket(x, filter)) && (!only || filter !== "live" || stateOf(x).label === only)));
   // ONE RULE, FOR THE ROWS AND FOR THE COUNTS. The cut used to be decided per pill, which gave
   // `in progress` a wider window than `all` - live work of any age against today only - so two
   // live rows from last night counted for one pill and not the other and "all 5" sat over
@@ -952,7 +955,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}
               sx={{ flexShrink: 0, minWidth: "auto", px: 1 }}>New</Button>
           </Box>
-          <Box sx={{ px: 1, py: 0.75, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
+          <Box sx={{ px: 1, py: 0.75, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0,
+            display: "flex", alignItems: "center", gap: 0.75 }}>
+            {/* beside the search, not the pills: squeezed in there it cut "upcoming" down to "up" */}
+            {only && filter === "live" && !search && (
+              <Chip size="small" label={`${only} ✕`} onClick={() => setOnly(null)} title="Show everything in progress again"
+                className="tq-tasks-only" sx={{ flexShrink: 0, height: 24, fontSize: 11, fontWeight: 600 }} />
+            )}
             <TextField fullWidth size="small" placeholder="Search system, name, summary, PR…" value={query}
               onChange={(e) => setQuery(e.target.value)}
               inputProps={{ "aria-label": "Search all tasks" }}
@@ -1010,7 +1019,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg,
                     color: PILL_COLORS.red.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
                   {/* the state says it once - "agent stopped" had its own chip beside it (T1) */}
-                  <StateChip task={task} />
+                  <Box component="span" role="button" tabIndex={0} sx={{ cursor: "pointer", display: "inline-flex" }}
+                    title={only ? "Show everything in progress again" : `Show only “${st.label}”`}
+                    onClick={(e) => { e.stopPropagation(); setFilter("live"); setOnly(only ? null : st.label); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setFilter("live"); setOnly(only ? null : st.label); } }}>
+                    <StateChip task={task} />
+                  </Box>
                 </Box>
                 {/* the third line, and ONLY when it has something to say - a queued task with no list
                     stays two lines, so the rail does not pay for this everywhere */}

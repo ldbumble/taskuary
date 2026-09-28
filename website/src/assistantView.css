@@ -36,10 +36,6 @@
 .tq-pile-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
-.tq-pile-only { font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; background: #eef1f4;
-  border: 1px solid #cbd4dc; border-radius: 99px; padding: 1px 7px; cursor: pointer; }
-.tq-pile-row .tq-pile-word, .tq-pile-row .tq-pile-tag.loud { cursor: pointer; }
-.tq-pile-row .tq-pile-word:hover { text-decoration: underline; }
 .tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #a09889; font-variant-numeric: tabular-nums; }
 /* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
 /* A BUTTON IS ONE LINE. Every pill-shaped button in the rail and on a card - none of them said so,

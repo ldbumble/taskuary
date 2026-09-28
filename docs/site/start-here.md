@@ -55,6 +55,19 @@ so the terminal, the desktop shell and the agent presets are best exercised ther
 Linux may still have rough edges.
 :::
 
+## Command-line options
+
+The everyday options for the Python install are:
+
+| Option | What it does |
+|---|---|
+| `--port PORT` | Overrides the configured server port for this run |
+| `--host HOST` | Overrides the configured server host; use `0.0.0.0` to listen on all interfaces |
+| `--no-browser` | Starts the server without opening a browser tab |
+| `--debug` | Enables verbose console logging for requests, report runs and errors |
+
+Run `taskuary --help` for the complete command reference.
+
 ## Docker
 
 Runs Taskuary without putting Python on the host:

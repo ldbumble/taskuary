@@ -19,7 +19,9 @@ More than one Taskuary can run against the same database, and their command line
 listening port is the only reliable way to tell which one is serving you — a second instance on
 another port will happily keep polling and triaging with older code.
 
-**The port is taken.** Set `TASKUARY_PORT` to something else, or stop whatever holds it.
+**The port is taken.** If another Taskuary owns the port, the CLI opens that instance. If a
+different process owns it, the CLI automatically selects a free port and prints the new address.
+Use `taskuary --port PORT` or set `TASKUARY_PORT` when you need a specific port instead.
 
 **It started and immediately closed.** Read `~/.taskuary/taskuary.log`; the last lines before the
 exit are the reason. A corrupt `config.toml` is the common one — rename it and Taskuary writes a

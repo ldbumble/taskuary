@@ -180,6 +180,19 @@ class CoreTests(unittest.TestCase):
         self.assertIn('fixed at dawn yesterday', gather(s, 1))                  # 24h back from 07:26 would have missed it
         self.assertEqual(run_digest({'store': s, 'days': 1})[0], 'yesterday and today so far, distilled')
 
+    def test_a_bad_days_value_falls_back_and_never_goes_below_one(self):
+        from taskuary import digest, toil
+        from taskuary.reports import run_automate, run_digest
+        s = MemoryStore()
+        with mock.patch.object(digest, 'gather', return_value='') as dg, mock.patch.object(toil, 'gather', return_value='') as tg:
+            self.assertEqual(run_digest({'store': s, 'days': 'week'})[0], 'yesterday and today so far, distilled')
+            self.assertEqual(run_digest({'store': s, 'days': -3})[0], 'yesterday and today so far, distilled')
+            self.assertEqual(run_digest({'store': s, 'days': '7'})[0], 'the last 7 days, distilled')
+            self.assertEqual([c.args[1] for c in dg.call_args_list], [1, 1, 7])
+            self.assertEqual(run_automate({'store': s, 'days': 'week'})[0], 'the last 30 days of repeated toil')
+            self.assertEqual(run_automate({'store': s, 'days': -3})[0], 'the last 1 days of repeated toil')
+            self.assertEqual([c.args[1] for c in tg.call_args_list], [30, 1])
+
     def test_no_auto_dispatch_when_disabled(self):
         """Dispatching is ON by default now, so this asserts the SWITCH works - turned off,
         a real task is filed and waits for the owner to start it."""

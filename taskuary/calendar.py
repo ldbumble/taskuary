@@ -289,6 +289,8 @@ def run_calendar(cfg: dict):
     cards can reach. Read-only."""
     st = cfg.get('store')
     if st is None: raise RuntimeError('the calendar tool reads the connector cards - it needs the store')
-    ag = agenda(st, int(cfg.get('days') or DAYS))
-    head = f"{len(ag['events'])} event(s) in the next {int(cfg.get('days') or DAYS)} days" + (f" · {len(ag['errors'])} calendar(s) unreadable" if ag['errors'] else '')
+    from .reports import days_of
+    days = days_of(cfg, DAYS)
+    ag = agenda(st, days)
+    head = f"{len(ag['events'])} event(s) in the next {days} days" + (f" · {len(ag['errors'])} calendar(s) unreadable" if ag['errors'] else '')
     return head, (render(ag) or 'no calendar is connected - the Outlook card reads calendars once Calendars.Read is granted')

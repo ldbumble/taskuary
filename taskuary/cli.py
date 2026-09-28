@@ -7,11 +7,14 @@ from . import __version__, config
 def public_url(host, port) -> str:
     """0.0.0.0 / :: are bind addresses, not a place a browser can go."""
     shown = '127.0.0.1' if host in ('0.0.0.0', '::') else host
+    if ':' in shown and not shown.startswith('['): shown = f'[{shown}]'
     return f'http://{shown}:{port}'
 
 def _busy(host, port):
     probe = '127.0.0.1' if host in ('0.0.0.0', '::') else host
-    with socket.socket() as s: return s.connect_ex((probe, port)) == 0
+    try:
+        with socket.create_connection((probe.strip('[]'), port), timeout=0.2): return True
+    except OSError: return False
 
 def _is_taskuary(url):
     try:

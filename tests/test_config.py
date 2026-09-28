@@ -1,7 +1,7 @@
 """Config writer tests - the UI persists agents/settings, so save() must round-trip
 exactly through stdlib tomllib.
 """
-import os, unittest
+import os, socket, unittest
 from unittest import mock
 try: import tomllib
 except ImportError: import tomli as tomllib
@@ -91,6 +91,16 @@ class TomlTests(unittest.TestCase):
         self.assertEqual(cli.public_url('::', 7787), 'http://127.0.0.1:7787')
         self.assertEqual(cli.public_url('127.0.0.1', 7787), 'http://127.0.0.1:7787')
         self.assertEqual(cli.public_url('10.0.0.5', 9000), 'http://10.0.0.5:9000')
+        self.assertEqual(cli.public_url('::1', 7787), 'http://[::1]:7787')
+        try:
+            with socket.socket(socket.AF_INET6) as s:
+                s.bind(('::1', 0))
+                port = s.getsockname()[1]
+                self.assertFalse(cli._busy('::1', port))
+                s.listen(1)
+                self.assertTrue(cli._busy('::1', port))
+        except OSError:
+            pass
 
 
 if __name__ == '__main__':

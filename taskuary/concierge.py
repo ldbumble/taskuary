@@ -947,7 +947,7 @@ def _when(ts: str) -> str:
     d = funnel._dt(ts)
     if not d: return str(ts)[:16]
     h = d.hour % 12 or 12                                   # Windows has no %-I, and %p shouts
-    return f"{d.strftime('%a %d %b').lstrip('0')}, {h}:{d.strftime('%M')}{'am' if d.hour < 12 else 'pm'}"
+    return f"{d:%a} {d.day} {d:%b}, {h}:{d:%M}{'am' if d.hour < 12 else 'pm'}"
 
 
 def _span_minutes(start: str, end: str) -> int:

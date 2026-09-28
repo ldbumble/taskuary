@@ -889,6 +889,13 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(c.get('/api/concierge').json()['messages'], [])
 
 
+class WhenTests(unittest.TestCase):
+    def test_the_day_has_no_leading_zero(self):
+        self.assertEqual(concierge._when('2026-09-04 09:05:00'), 'Fri 4 Sep, 9:05am')
+        self.assertEqual(concierge._when('2026-09-14 13:30:00'), 'Mon 14 Sep, 1:30pm')
+        self.assertEqual(concierge._when('2026-09-06 00:00:00'), 'Sun 6 Sep, 12:00am')
+
+
 if __name__ == '__main__':
     unittest.main()
 

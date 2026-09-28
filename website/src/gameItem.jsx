@@ -107,7 +107,7 @@ function FinalReport({ tid }) {
   return text == null ? null : <><Label>ITS FINAL REPORT</Label><Reading text={text} /></>;
 }
 
-// the draft behind "reply ready": edit it, send it, or tell the assistant how to rewrite it
+// the draft behind "ready to close out": edit it, send it, or tell the assistant how to rewrite it
 function Draft({ item, busy, play }) {
   const [rv, setRv] = useState(null);
   const [text, setText] = useState(null);

@@ -628,7 +628,7 @@ class LanesTests(unittest.TestCase):
         self.assertEqual([i['kind'] for i in funnel.more_urgent(p['items'], fyi['key'])], ['review'])
         self.assertEqual(funnel.more_urgent(p['items'], f'review:{s.list_reviews("pending")[0]["ReviewId"]}'), [])
         line = concierge._urgent_line(p['items'], fyi)
-        self.assertIn('MORE URGENT WAITING', line); self.assertIn('Craig Palmer - RE: T&E Portal (reply ready)', line)
+        self.assertIn('MORE URGENT WAITING', line); self.assertIn('Craig Palmer - RE: T&E Portal (ready to close out)', line)
         funnel.settle(s, f'review:{s.list_reviews("pending")[0]["ReviewId"]}', 'surfaced')
         self.assertEqual(funnel.alerts(s), [])                            # once shown, it is no longer news
 
@@ -1198,8 +1198,8 @@ class MemoryTests(unittest.TestCase):
     def test_summary_names_the_lanes_and_what_comes_next(self):
         s = self._two()
         text = funnel.summary(funnel.build(s)['items'])
-        self.assertIn('LEFT IN THE PIPE: 2 - 2 reply ready', text)
-        self.assertIn('Coming next: Dana - one (reply ready)', text)
+        self.assertIn('LEFT IN THE PIPE: 2 - 2 ready to close out', text)
+        self.assertIn('Coming next: Dana - one (ready to close out)', text)
         self.assertEqual(funnel.summary([]), 'THE PIPE IS EMPTY - nothing else needs the owner right now.')
 
     def test_the_pile_is_cached_briefly_and_carries_a_revision(self):

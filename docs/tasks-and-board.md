@@ -14,7 +14,7 @@ flowchart LR
   C -->|you edited it last| D["✅ done"]
   C -->|its agent closed it| F["✅ agent finished"]
   C -->|no| R{"A reply drafted?"}
-  R -->|yes| A["✉️ reply ready"]
+  R -->|yes| A["✉️ ready to close out"]
   R -->|no| Q{"Handed to an agent?"}
   Q -->|nothing started yet| Z["⏳ waiting to start"]
   Q -->|you ended its session| S["💾 session saved"]
@@ -27,8 +27,8 @@ flowchart LR
 | # | Decision | Built |
 |---|---|---|
 | T1 | The list's chip is the rail's word and mark - never "on you" for an agent's task | `taskstate.state` → `stateOf` |
-| T2, T3 | Board columns are the agent states: waiting to start · working · waiting on you · saved or stopped · finished today (with its reply ready) | `BoardView` |
-| T4 | One word for one thing: "reply ready", "done", the agent's own sentence for what it asks | lanes.json |
+| T2, T3 | Board columns are the agent states: waiting to start · working · waiting on you · saved or stopped · finished today (with its reply or close-out waiting) | `BoardView` |
+| T4 | One word for one thing: "ready to close out" (a reply and a close-out alike, 2026-09-27), "done", the agent's own sentence for what it asks | lanes.json |
 | T5 | No agent line on a task nobody handed to an agent | `agentPhase({handed})` |
 | T6 | "agent finished" when the agent closed it; the heading says asked, needs approval or stuck | `agentPhase({finished})` |
 | T7 | Remind me holds a card off the Board until its day - unless its agent asks you | `BoardView` |

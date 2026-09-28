@@ -52,9 +52,9 @@ system, the card has the same three buttons - only the line under them says what
 
 | The task's work is | The rail says | What **Close out** does there |
 |---|---|---|
-| A pull request the agent opened, or the one the task came from | **close out?** | Squash-merges it (a draft is marked ready first), then posts your reply as its comment - on GitHub the reply goes with the merge even with GitHub replies turned off. Refused while its checks are red; **Close out anyway** is there for a red that fails on the default branch too |
-| An issue the task came from | **close out?** | Posts your reply as the closing comment and closes the issue |
-| Mail, chat, anything else | ✉️ **reply ready** | Sends your reply |
+| A pull request the agent opened, or the one the task came from | ✉️ **ready to close out** | Squash-merges it (a draft is marked ready first), then posts your reply as its comment - on GitHub the reply goes with the merge even with GitHub replies turned off. Refused while its checks are red; **Close out anyway** is there for a red that fails on the default branch too |
+| An issue the task came from | ✉️ **ready to close out** | Posts your reply as the closing comment and closes the issue |
+| Mail, chat, anything else | ✉️ **ready to close out** | Sends your reply |
 
 If the act is refused, nothing is sent. Merging or closing the pull request on GitHub yourself counts as answering
 it: the task closes by itself. The buttons are yours, so **Agents may push / deploy** does not have to be on - that
@@ -116,7 +116,7 @@ Timeline, the task page, the Board, the assistant's cards and the phone all use 
 
 | It ended because | What you see | What brings it back |
 |---|---|---|
-| The agent said it was done | its **Close out** card if its work lives on GitHub, then ✅ **agent finished** - its reply ready for your yes if one is owed | a new message on it |
+| The agent said it was done | its **Close out** card if its work lives on GitHub, then ✅ **agent finished** - ready to close out if a reply is owed | a new message on it |
 | You pressed **Save and end session** | 💾 **session saved** - the report is written, the task stays open | **Continue session** |
 | You pressed **Mark done** | the task is closed and the agent stopped | they write again |
 | The session crashed or was closed, or Taskuary closed | ⏹ **agent stopped** - a reply it had held is back for your yes | **Continue session**, or **Run another agent** |
@@ -225,7 +225,7 @@ Both pages show the same state for a task, in the work rail's words — the serv
 | its agent is running | ⚙️ agent working | agent working |
 | its agent asked, needs approval, or is stuck | 👋 agent waiting on you | agent waiting on you |
 | you ended its session / it ended by itself | 💾 session saved / ⏹ agent stopped | saved or stopped — with **Continue session** |
-| a reply is drafted for your yes | ✉️ reply ready | agent finished, when an agent drafted it |
+| a reply or a close-out waits for your yes | ✉️ ready to close out | agent finished, when an agent drafted it |
 | its agent closed it | ✅ agent finished | agent finished (today) |
 | you closed it | ✅ done | — |
 | waiting on somebody else | 📤 waiting on them | — |
@@ -245,7 +245,7 @@ The rail beside the Assistant holds what still wants something from you - nothin
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
-| **Your task** | A person's ask, a reply ready for your yes, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished | Passed work after 3 hours |
+| **Your task** | A person's ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished | Passed work after 3 hours |
 | **Passed** | Your work you pressed **Next** on - still yours, not offered again by the walk | - |
 | **Reports** | A report run that landed | - |
 | **FYI** | People told you things; rows whose triage failed | - |

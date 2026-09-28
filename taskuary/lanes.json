@@ -25,7 +25,7 @@
     },
     {
       "key": "approve",
-      "word": "reply ready",
+      "word": "ready to close out",
       "role": "you",
       "mark": "✉️",
       "hint": "a reply, an action or a task's close-out (merge its pull request, close its issue) waits for your yes",

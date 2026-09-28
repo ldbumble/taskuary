@@ -1082,7 +1082,7 @@ const LC = {
 const lifecycleColor = (kind, phase) => {
   const value = String(phase || "");
   if (value === AGENT.waiting) return LC.needsYou;        // an agent blocked on you, and only that
-  if (value === "reply ready" || value === "approval needed" || value === "ready") return LC.you;
+  if (value === "ready to close out" || value === "approval needed" || value === "ready") return LC.you;
   if (value === AGENT.working || value === "in progress") return LC.working;
   if (value === "done" || value === "sent" || value === AGENT.saved || value === AGENT.finished) return LC.done;
   if (kind === "reply") return LC.reply;

@@ -37,7 +37,7 @@ export const whoOf = (i) => {
 
 // the one line under a row's "who": the lane's word, except a drafted reply, which is the thing to approve
 export const stateOf = (i, laneWord) => i?.lane === "approve"
-  ? (i.closeout ? "close out?" : i.kind === "action" ? "wants a yes" : "reply ready") : laneWord;
+  ? (i.kind === "action" && !i.closeout ? "wants a yes" : laneWord) : laneWord;   // a reply and a close-out: the lane's one word
 
 export function summarize(items) {
   // a meeting is on the day's strip right above - listed again under People want it read as someone's ask

@@ -103,7 +103,7 @@ const inspect = (page) => page.evaluate(() => {
     // the state word sits at the right end of every row card; the row itself is to its left
     // the word rides with its mark in one span ("👋agent waving"), so allow the emoji child
     const word = [...document.querySelectorAll("span,div,p")].find((d) => d.childElementCount <= 1 && d.offsetParent !== null
-      && /(agent waving|reply ready|on your list|agent working)$/.test(d.textContent.trim()) && d.textContent.trim().length < 24
+      && /(agent waving|ready to close out|on your list|agent working)$/.test(d.textContent.trim()) && d.textContent.trim().length < 24
       && d.getBoundingClientRect().top > 120);
     if (!word) return null;
     const r = word.getBoundingClientRect();

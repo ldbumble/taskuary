@@ -47,7 +47,7 @@ flowchart LR
   X -->|the agent says done| CO{"Its pull request open,<br/>or from an issue?"}
   CO -->|yes| D0["merge? / close issue? -<br/>the close-out waits for your yes"]
   D0 -->|you approve it| D1
-  CO -->|no| D1["✅ agent finished -<br/>its reply ready, if one is owed"]
+  CO -->|no| D1["✅ agent finished -<br/>ready to close out, if a reply is owed"]
   X -->|you: Save and end session| D2["💾 session saved -<br/>report written, the task open"]
   X -->|you: Mark done| D3["The task closed,<br/>the agent stopped"]
   X -->|the session crashed or closed,<br/>Taskuary closed| D4["⏹ agent stopped -<br/>a held reply is back"]

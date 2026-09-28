@@ -103,7 +103,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
     const row = (settingResponse.data.data || []).find((setting) => setting.Name === "auto_sessions");
     setCap((current) => current == null ? Math.max(1, Math.min(8, parseInt(row?.Value, 10) || 4)) : current);
   }, []);
-  // the rest of the office: the assistant's pile (people, fyi's, ghosts), the Hub's cabinets, and the drafts behind "reply ready"
+  // the rest of the office: the assistant's pile (people, fyi's, ghosts), the Hub's cabinets, and the drafts behind "ready to close out"
   const loadWorld = useCallback(async () => {
     const [p, h] = await Promise.all([
       api.get("/api/funnel/pile").catch(() => null),

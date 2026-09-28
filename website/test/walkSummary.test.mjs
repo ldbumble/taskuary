@@ -43,8 +43,10 @@ test("the lead counts what is ready to approve first, and working rows are not w
 });
 
 test("a drafted reply says it is ready, everything else says its lane's word", () => {
-  assert.equal(stateOf(it("approve", "review"), "reply ready"), "reply ready");
-  assert.equal(stateOf(it("approve", "action"), "reply ready"), "wants a yes");
+  assert.equal(stateOf(it("approve", "review"), "ready to close out"), "ready to close out");
+  assert.equal(stateOf(it("approve", "action"), "ready to close out"), "wants a yes");
+  // a close-out is the same one word as a reply
+  assert.equal(stateOf({ ...it("approve", "action"), closeout: "merges the pull request on GitHub" }, "ready to close out"), "ready to close out");
   assert.equal(stateOf(it("asked"), "asked you"), "asked you");
 });
 

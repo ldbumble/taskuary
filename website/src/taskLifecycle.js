@@ -1,3 +1,4 @@
+import { closeoutOf } from "./reviewProposal.js";
 // Task, agent and reply are deliberately separate state machines. Keep these labels pure so
 // Tasks, Timeline and tests cannot quietly invent different meanings for the same record.
 export const STAY_OPEN_TAG = "stay:open";
@@ -69,10 +70,14 @@ export const pendingProposals = (reviews = []) =>
 export const NO_ONE_BEHIND = ["", "own", "report", "assistant"];
 export const hasCorrespondent = (m) => !!m && !NO_ONE_BEHIND.includes(String(m?.Channel || "").toLowerCase());
 
+// lanes.json's word for the approve lane - ONE word for a reply and a close-out alike (the owner, 2026-09-27: "it should
+// the same everywhere"), because both are the step that closes the task
+export const READY = "ready to close out";
+
 export const replyPhase = (reviews = []) => {
   const replyReviews = reviews.filter((review) => review.Kind !== "action");
   const latest = replyReviews[0];
-  if (pendingReplyReview(replyReviews)) return "reply ready";
+  if (pendingReplyReview(replyReviews) || reviews.some((r) => r.Status === "pending" && closeoutOf(r))) return READY;
   if (sentReplyReview(replyReviews)) return "sent";
   if (latest?.Status === "no_reply") return "not needed";
   return "not drafted";
@@ -89,7 +94,7 @@ export const replyPhase = (reviews = []) => {
 // (the owner, 2026-09-14: "it should be the task (number 1 pane) ... why is the agent expanded?").
 // A live session never reaches here at all; TasksView pins the agent stage while a pty is alive.
 export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub } = {}) => {
-  if (reply === "reply ready") return "reply";
+  if (reply === READY) return "reply";
   // ONE EVENT SEEN TWICE. An agent parked because it PROPOSED something is not two things wanting
   // the page: approving the proposal is what releases it. Opening the agent stage there would show
   // a terminal at a prompt with the thing that unblocks it folded away one card below. Parked on

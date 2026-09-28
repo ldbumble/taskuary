@@ -18,7 +18,7 @@ flowchart LR
   U -->|read, nothing open| X4["Not on the rail"]
   U -->|yes| B{"Which heading?"}
   B -->|a meeting starting, an ask<br/>triage called urgent| B1["Urgent"]
-  B -->|an ask, a reply ready, an agent waiting,<br/>not started or stopped, a check that failed,<br/>an agent that finished| B2["Your task"]
+  B -->|an ask, a task ready to close out, an agent waiting,<br/>not started or stopped, a check that failed,<br/>an agent that finished| B2["Your task"]
   B -->|you pressed Next on it| B5["Passed"]
   B -->|a report run| B3["Reports"]
   B -->|fyi, triage failed| B4["FYI"]

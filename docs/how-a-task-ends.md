@@ -25,7 +25,7 @@ always does all five of these:
 flowchart LR
   T["A task ends"] --> W{"Who?"}
   W -->|"you: Mark done, or 'done' / 'close' in chat"| F["Mark done"]
-  W -->|"you: Send the reply"| S{"Agent working, or a new message came in?"}
+  W -->|"you: Close out a reply"| S{"Agent working, or a new message came in?"}
   S -->|no| F
   S -->|yes| S1["Sent · stays open, says why"]
   W -->|"you: tick the last checklist box"| K{"Agent working it?"}
@@ -53,7 +53,7 @@ flowchart LR
 | You do | What happens | Code |
 |---|---|---|
 | **Mark done**: the task page, the Assistant's button or card, "done" or "close" typed or said in chat, the phone | Mark done | `concierge.close_task`; `server` operations `task.complete` and `item.settle`; the task `PATCH` |
-| **Send the reply** | Sends, then Mark done. It stays open (with a comment saying why) while an agent is actively working it, or if a new message arrived on the task after the one you answered. | `verdicts._settle_task_after_sent_reply` |
+| **Close out** with a reply | Sends, then Mark done. It stays open (with a comment saying why) while an agent is actively working it, or if a new message arrived on the task after the one you answered. | `verdicts._settle_task_after_sent_reply` |
 | **Tick the last checklist box** | Mark done, unless an agent is actively working it | `server.tick_checklist` |
 | **Hand to a person** | Forwards, then Mark done | `server` hand-off endpoint |
 | **Not ours / Not a task** | Deleted when nothing was done on it; otherwise Mark done | `server._file_task` |
@@ -70,24 +70,28 @@ What finishes a task depends on where it lives. Mail is finished by the reply. A
 is finished by merging it, and an issue by closing it. So the finish raises that last act as a card waiting for
 your yes, and the task is not done until you answer it (decided with the owner on 2026-09-27).
 
-| The task's work is | The card | Its text | Your yes does | Code |
-|---|---|---|---|---|
-| A pull request the agent opened, still open | **Merge** | the agent's summary - the squash message | marks the draft ready, squash-merges it (refused while its checks are red, or if the branch moved after the card was raised), then Mark done | `proposals` `merge_pr` → `github.merge_pr` |
-| A pull request the task came from (a contributor's PR the agent reviewed), still open | **Merge** | empty - GitHub writes the merge message | the same | the same |
-| An issue the task came from | **Close issue** | the closing comment (empty when a reply carries it) | comments, closes the issue, then Mark done | `proposals` `close_issue` |
+**One set of words for every system** (the owner, 2026-09-27: "if we have button to close out per system it will
+be endless"): **Close out** / **Decline** / **Not yet** - on the task page, the Assistant's card, its chat button,
+the phone's poll and the Game. A system adds a sentence saying what Close out does there (`proposals.CLOSEOUT`,
+`reviewProposal.js` `CLOSEOUT`), never a new word. **Decline** appears only where the system has "close without
+doing it" (a PR today) and only on cards - it is not a chat or poll word; in the walk **Not yet** is **Next**.
 
-- **Close PR** (beside Merge) closes the pull request on GitHub without merging it, then Mark done - the work was
-  not wanted. **Not yet** keeps the task open and on you. Merging or closing the pull request on GitHub yourself answers it
-  the same way: the card is retired and the task closes (`ci.pr_ended`).
-- With a reply owed as well, the task page shows them as ONE card under **3 Close out**: **Merge & send** (or
-  **Close PR & send**) runs the act first and sends the reply only when it succeeded (`verdicts.decide` `reply_text`).
-  A reply to a GitHub PR or issue is posted by the close-out itself, as the comment on that PR or issue - it does
-  not need the GitHub card's replies switch, which gates separate sends.
-- A merge refused for red checks says which, and offers **Merge anyway** (for a red that fails on the default
-  branch too). A check the repository requires is still GitHub's to enforce.
-  The Assistant's card, its chat button and the phone say the same ONE button - "Merge & send", "Close issue &
-  send", or "Merge" with no reply - never "Send the reply" (`concierge.closeout_label`). Sending the reply alone does not close the task while its
-  close-out waits.
+| The task's work is | Close out does | Its text | Code |
+|---|---|---|---|
+| A pull request the agent opened, still open | marks the draft ready and squash-merges it (refused while its checks are red, or if the branch moved after the card was raised) | the agent's summary - the squash message | `proposals` `merge_pr` → `github.merge_pr` |
+| A pull request the task came from (a contributor's PR the agent reviewed), still open | the same | empty - GitHub writes the merge message | the same |
+| An issue the task came from | comments and closes the issue | the closing comment (empty when a reply carries it) | `proposals` `close_issue` |
+
+- **Decline** closes the pull request on GitHub without merging it, then Mark done. **Not yet** keeps the task
+  open and on you. Merging or closing the pull request on GitHub yourself answers it the same way: the card is
+  retired and the task closes (`ci.pr_ended`).
+- With a reply owed as well, they are ONE card and ONE press: the act runs first and the reply goes only when it
+  succeeded (`verdicts.decide` `reply_text`). A reply to a GitHub PR or issue is posted by the close-out itself,
+  as its comment - it does not need the GitHub card's replies switch, which gates separate sends. The chat's
+  and the phone's yes do the same (`server` `review.approve`).
+- A merge refused for red checks says which, and offers **Close out anyway** (for a red that fails on the default
+  branch too). A check the repository requires is still GitHub's to enforce. Sending the reply alone does not
+  close the task while its close-out waits.
 - The words are drafted like any reply; the act is plain code on your click. No agent has to still be running.
 - **Mark done** is still the one close. Pressing it yourself skips the close-out, and the pull request stays
   open on GitHub.

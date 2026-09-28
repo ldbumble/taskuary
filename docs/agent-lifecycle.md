@@ -74,4 +74,4 @@ flowchart LR
 | A20 | Save and end session only where a live session exists | built |
 | A21 | A merged or closed pull request owes nobody a reply | built |
 | A22 | Every start clears the interrupted mark, the saved mark and the queued start | built |
-| A24 | A finished task whose work is an open pull request waits for **Merge**, one from an issue for **Close issue** - it is not done until you answer (docs/how-a-task-ends.md, The close-out) | built |
+| A24 | A finished task whose work is an open pull request or came from an issue waits for **Close out** / **Decline** / **Not yet** - it is not done until you answer (docs/how-a-task-ends.md, The close-out) | built |

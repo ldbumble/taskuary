@@ -1079,8 +1079,8 @@ def then_line(out: dict, store=None) -> str:
     c = primary(out)
     if store is None or not c or agent_answers(out.get('item')) or out.get('proposal'): return ''
     it = out.get('item') or {}
-    said = ((f"{'merges it' if it['closeout'] == 'Merge' else 'closes it'} on GitHub"
-             + (', then posts the reply above as its comment.' if it.get('rides') else '.')) if c['verb'] == 'approve' and it.get('closeout')
+    said = ((it['closeout'] + (', then posts the reply above as its comment.' if it.get('rides') else '.'))
+            if c['verb'] == 'approve' and it.get('closeout')
             else THEN_KIND.get((c['verb'], it.get('kind'))) or THEN.get(c['verb']))
     return f"{c.get('label')}: {said}" if said else ''
 

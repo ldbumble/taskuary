@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
-import { proposalPresentation, reviewText } from "./reviewProposal.js";
+import { CLOSE_OUT, proposalPresentation, reviewText } from "./reviewProposal.js";
 import { PANEL2, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { CcRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
@@ -71,6 +71,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // a reply to a GitHub PR/issue IS a comment on it, so the close-out carries it whatever the replies switch says
   const carried = !!co && String(r.Channel || "").toLowerCase() === "github";
   const sendable = r.CanSend !== false || carried;
+  const onTask = !proposal && !!r.TaskId && r.Kind !== "clarification";
+  const thenLine = co ? `${CLOSE_OUT} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}.`
+    : onTask && !r.Stale && r.CanSend !== false ? `${CLOSE_OUT} sends this to ${replyContext(r)} and closes the task.` : "";
   const [coFail, setCoFail] = useState(null);       // the close-out itself refused: nothing was sent ({red} = checks)
 
   const decideBoth = async (verb) => {
@@ -229,11 +232,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
              carry leaves just the close-out. */
           <>
             <Button size="small" variant="contained" disableElevation disabled={busy || (sendable && !value.trim())}
-              onClick={() => decideBoth("approve")} title={`${co.approveLabel}, then send this reply to ${replyContext(r)}`}>
-              {busy ? co.busyLabel : sendable ? `${co.approveLabel} & send` : co.approveLabel}</Button>
+              onClick={() => decideBoth("approve")} title={thenLine}>
+              {busy ? co.busyLabel : co.approveLabel}</Button>
             {co.alt && <Button size="small" variant="outlined" disabled={busy || (sendable && !value.trim())}
-              onClick={() => decideBoth(co.alt.verb)} title={`${co.alt.label} - ${co.alt.then}${sendable ? ', then send this reply' : ''}`}>
-              {sendable ? `${co.alt.label} & send` : co.alt.label}</Button>}
+              onClick={() => decideBoth(co.alt.verb)} title={`${co.alt.label} ${co.alt.then}${sendable ? ", then sends your reply" : ""}.`}>
+              {co.alt.label}</Button>}
           </>
         ) : proposal ? (
           <Button size="small" variant="contained" disableElevation disabled={busy}
@@ -266,9 +269,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             disabled={busy || !value.trim()}
             onClick={() => decide("approve")}
             title={`Sends this response to ${replyContext(r)}`}>
+            {/* on a task the one word is Close out, as everywhere; a draft with no task behind it is just sent */}
             {busy ? "sending…"
-              : ccNow.length ? `Approve & send, copying ${ccNow.length}`
-              : "Approve & send"}
+              : `${onTask ? CLOSE_OUT : "Approve & send"}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
           </Button>
         )}
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
@@ -282,12 +285,14 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           {busy ? <CircularProgress size={12} /> : r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI"}
         </Button>}
       </Box>
+      {/* what the one word does HERE - the buttons never change, this line does */}
+      {thenLine && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>{thenLine}</Typography>}
       {coFail && (
         <Alert severity="warning" sx={{ mt: 1 }} onClose={() => setCoFail(null)}
           action={coFail.red && (
             <Button size="small" color="inherit" disabled={busy} onClick={() => decideBoth("merge_anyway")}
               title="Merges although these checks are red - use it when they fail on the default branch too. A check the repository requires is still GitHub's to enforce.">
-              {sendable ? "Merge anyway & send" : "Merge anyway"}</Button>
+              {`${CLOSE_OUT} anyway`}</Button>
           )}>
           <b>Not done - nothing was merged or sent.</b> {coFail.text.replace(/ - nothing was merged or sent$/, "")}
         </Alert>

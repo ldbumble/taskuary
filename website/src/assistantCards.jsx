@@ -33,7 +33,7 @@ import { RepoPicker } from "./RepoPicker.jsx";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
 import { summarize, stateOf, whoOf } from "./walkSummary.js";
-import { closeoutOf, reviewText } from "./reviewProposal.js";
+import { CLOSE_OUT, closeoutOf, reviewText } from "./reviewProposal.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -450,7 +450,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   };
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
   const verb = action
-    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? (mate ? `${co.label} & send` : co.label) : "Run it"}</Button>
+    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? co.label : "Run it"}</Button>
     : rv?.CanSend === false ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
          hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
@@ -466,15 +466,15 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         {busy === "redraft" ? "Refreshing…" : "Refresh the draft"}</Button>
     ) : (
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim()} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
-        {busy === "approve" ? "Sending…" : "Send reply"}</Button>
+        {busy === "approve" ? "Sending…" : card.tid ? CLOSE_OUT : "Send reply"}</Button>
     );
-  const then = co ? <><b>{mate ? `${co.label} & send` : co.label}</b> {co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>
+  const then = co ? <><b>{co.label}</b> {co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>
     : action ? <><b>Run it</b> does what the agent proposed - nothing runs until you press it.</>
     : rv && !value.trim() && !stale ? <><b>Draft with AI</b> writes one for you to approve here - nothing is sent.</>
     : stale ? <><b>Refresh the draft</b> rewrites it from the newest message; you still approve it.</>
-    : rv ? <><b>Send reply</b> {sendsBy(rv.Channel, who)}.</> : null;
+    : rv ? <><b>{card.tid ? CLOSE_OUT : "Send reply"}</b> {sendsBy(rv.Channel, who)}{card.tid ? " and closes the task" : ""}.</> : null;
   return (
-    <CardShell card={card} kicker={co ? `agent finished · ${co.label.toLowerCase()}${mate ? " & reply" : ""}?` : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
+    <CardShell card={card} kicker={co ? "agent finished · close out?" : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
       lead={action ? <Lead text={rv?.Subject || card.title} /> : <TaskLead card={card} fallback={rv?.Subject} />} err={err}>
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
@@ -491,7 +491,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
           under More actions */}
       <Foot verb={verb} then={then} covers={["approve", "redraft"]}
-        extra={[...(co?.alt ? [{ verb: co.alt.verb, label: busy === co.alt.verb ? co.alt.busy : mate ? `${co.alt.label} & send` : co.alt.label, title: `${co.alt.label} ${co.alt.then}.`,
+        extra={[...(co?.alt ? [{ verb: co.alt.verb, label: busy === co.alt.verb ? co.alt.busy : co.alt.label, title: `${co.alt.label} ${co.alt.then}.`,
           disabled: !!busy || !rv, onClick: () => decide(co.alt.verb) }] : []),
         ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
           title: "Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.",

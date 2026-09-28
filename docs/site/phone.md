@@ -68,7 +68,7 @@ Typed words are answered by the **Assistant's** brain - the same one, and the sa
 
 ### Approving things
 
-A drafted reply comes to the chat with its **Send the reply** choice - the same button as on the desktop, as a
+A drafted reply comes to the chat with its **Close out** choice - the same button as on the desktop, as a
 number or a poll tap. Nothing goes out without that pick: approving on your phone is the same deliberate act as
 approving on the page. Alerts sent to a notify chat are read-only.
 

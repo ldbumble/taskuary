@@ -10,11 +10,14 @@ export const proposalFrom = (review) => {
 
 // THE CLOSE-OUT (the owner, 2026-09-27): what finishes a task where it lives - merge the PR the agent opened, close
 // the issue it came from. Its text is the summary a merge is squashed with, or the comment the issue closes with.
+// ONE SET OF WORDS FOR EVERY SYSTEM (the owner, 2026-09-27: "if we have button to close out per system it will be
+// endless"): Close out / Decline / Not yet. Only `then` - what it does THERE - differs; a new connector adds a line.
+export const CLOSE_OUT = "Close out";
 export const CLOSEOUT = {
-  merge_pr: { label: "Merge", busy: "merging…", then: "merges the pull request and closes the task", reject: "Not yet",
-    // the other answer: the work is not wanted - the PR closes unmerged and the task ends with it
-    alt: { verb: "close_pr", label: "Close PR", busy: "closing…", then: "closes the pull request without merging, and the task" } },
-  close_issue: { label: "Close issue", busy: "closing…", then: "closes the issue on GitHub and the task", reject: "Not yet" },
+  merge_pr: { label: CLOSE_OUT, busy: "closing out…", then: "merges the pull request on GitHub", reject: "Not yet",
+    // the other answer, where the system has one: the work is not wanted - the PR closes unmerged
+    alt: { verb: "close_pr", label: "Decline", busy: "declining…", then: "closes the pull request without merging it" } },
+  close_issue: { label: CLOSE_OUT, busy: "closing out…", then: "closes the issue on GitHub", reject: "Not yet" },
 };
 export const closeoutOf = (review) => CLOSEOUT[proposalFrom(review)?.action] || null;
 
@@ -38,6 +41,7 @@ export const proposalPresentation = (review) => {
       destinationLabel: pr ? "MERGE" : "CLOSE",
       destination: pr ? `${proposal.repo || ""}#${proposal.number || ""}` : "the GitHub issue this task came from",
       approveLabel: co.label,
+      then: co.then,
       busyLabel: co.busy,
       rejectLabel: co.reject,
       alt: co.alt || null,

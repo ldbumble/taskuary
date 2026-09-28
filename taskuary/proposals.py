@@ -165,7 +165,10 @@ def queue(store, task_id: int, p: dict, actor='coder') -> dict | None:
 # request the agent opened by merging it, an issue by closing it with a comment. So a finished agent's task is not
 # done until that last act is approved - the same yes-gated review as any proposal, raised by coder.finish. The
 # words (the summary, the closing comment) are the card's text; the act is plain code on the owner's click.
-CLOSEOUT = {'merge_pr': 'Merge', 'close_issue': 'Close issue'}
+# ONE button word for every system (the owner, 2026-09-27: "if we have button to close out per system it will be endless")
+# - "Close out" - and per action only the sentence saying what it does there. A new connector adds a line here, never a word.
+CLOSE_WORD = 'Close out'
+CLOSEOUT = {'merge_pr': 'merges the pull request on GitHub', 'close_issue': 'closes the issue on GitHub'}
 _ISSUE = re.compile(r'github\.com/([^/]+/[^/]+)/issues/(\d+)')
 _PULL = re.compile(r'github\.com/([^/]+/[^/]+)/pull/(\d+)')
 

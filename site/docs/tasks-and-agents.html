@@ -120,7 +120,7 @@ each stage owns exactly one state badge.</p>
 <tr>
 <td><strong>Close out</strong></td>
 <td>The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue)</td>
-<td>write, generate, edit, approve and send; <strong>Merge &amp; send</strong>, <strong>Close PR &amp; send</strong>, <strong>Not yet</strong></td>
+<td>write, generate, edit; <strong>Close out</strong>, <strong>Decline</strong>, <strong>Not yet</strong></td>
 <td>Sending it marks the task done — unless an agent is still working, a new message came in, or its merge still waits</td>
 </tr>
 </tbody></table>
@@ -146,7 +146,7 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <td>never</td>
 </tr>
 <tr>
-<td><strong>Send the reply</strong></td>
+<td><strong>Close out</strong> with a reply</td>
 <td>Sends it, then Mark done</td>
 <td>an agent is still working on it, or a new message came in while you were answering — it says why</td>
 </tr>
@@ -176,9 +176,9 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <td>its close-out or a reply waits on you, or you opened the session yourself</td>
 </tr>
 <tr>
-<td><strong>Approve its close-out</strong> — <strong>Merge</strong>, <strong>Close issue</strong></td>
-<td>Merges the pull request, or closes the issue, then Mark done</td>
-<td>a reply still waits on you</td>
+<td><strong>Close out</strong> on GitHub, or <strong>Decline</strong></td>
+<td>Merges or closes the pull request, or closes the issue, posts your reply, then Mark done</td>
+<td>never</td>
 </tr>
 <tr>
 <td><strong>The pull request or issue it came from is merged or closed</strong></td>
@@ -188,50 +188,55 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 </tbody></table>
 <p>A task an agent or a merged pull request closed stays on your work rail until you have read it.</p>
 <h3 id="the-close-out-what-finishes-it-where-it-lives">The close-out: what finishes it where it lives<a class="anchor" href="#the-close-out-what-finishes-it-where-it-lives" aria-label="Link to this section">#</a></h3>
-<p>Mail is finished by the reply. A pull request the agent opened is finished by merging it, and an issue by closing
-it. When an agent finishes, that last act waits on your work rail and in the Assistant as a card with its own
-button. The task is not done until you answer it.</p>
+<p>Mail is finished by the reply. A pull request is finished by merging it, and an issue by closing it. Whatever the
+system, the card has the same three buttons - only the line under them says what they do there:</p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Close out</strong></td>
+<td>Finishes the task the normal way for its system, sends your reply with it, then Mark done</td>
+</tr>
+<tr>
+<td><strong>Decline</strong></td>
+<td>Closes it without doing it, where the system has that difference - a pull request closed unmerged</td>
+</tr>
+<tr>
+<td><strong>Not yet</strong></td>
+<td>Nothing happens; the task stays open and on you (in the Assistant&#39;s walk this is <strong>Next</strong>)</td>
+</tr>
+</tbody></table>
 <table>
 <thead>
 <tr>
 <th>The task&#39;s work is</th>
 <th>The rail says</th>
-<th>The button</th>
-<th>What it does</th>
+<th>What <strong>Close out</strong> does there</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>A pull request the agent opened, or the one the task came from (a contributor&#39;s PR it reviewed)</td>
-<td><strong>merge?</strong></td>
-<td><strong>Merge</strong></td>
-<td>Marks a draft ready and squash-merges it - with the agent&#39;s summary (you can edit it) when the agent opened it - then Mark done. Refused while its checks are red.</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><strong>Close PR</strong></td>
-<td>Closes the pull request on GitHub without merging it, then Mark done</td>
+<td>A pull request the agent opened, or the one the task came from</td>
+<td><strong>close out?</strong></td>
+<td>Squash-merges it (a draft is marked ready first), then posts your reply as its comment - on GitHub the reply goes with the merge even with GitHub replies turned off. Refused while its checks are red; <strong>Close out anyway</strong> is there for a red that fails on the default branch too</td>
 </tr>
 <tr>
 <td>An issue the task came from</td>
-<td><strong>close issue?</strong></td>
-<td><strong>Close issue</strong></td>
-<td>Posts the closing comment, closes the issue, then Mark done</td>
+<td><strong>close out?</strong></td>
+<td>Posts your reply as the closing comment and closes the issue</td>
 </tr>
 <tr>
 <td>Mail, chat, anything else</td>
 <td>✉️ <strong>reply ready</strong></td>
-<td><strong>Send reply</strong></td>
-<td>As always</td>
+<td>Sends your reply</td>
 </tr>
 </tbody></table>
-<p><strong>Not yet</strong> keeps the task open and on you. Merging or closing the pull request on GitHub yourself counts as
-answering it: the task closes by itself. When a reply is owed as well, the two are one card: <strong>Merge &amp; send</strong> merges
-first and sends your reply only if the merge worked. On GitHub the reply is posted as the comment on the pull
-request, even with GitHub replies turned off. If its checks are red the merge is refused and nothing is sent;
-<strong>Merge anyway</strong> is there for a red that fails on the default branch too. The button is
-yours, so <strong>Agents may push / deploy</strong> does not have to be on - that switch is about what an agent may do. A task an
-agent finished before this existed gets its card on the next sync.
+<p>If the act is refused, nothing is sent. Merging or closing the pull request on GitHub yourself counts as answering
+it: the task closes by itself. The buttons are yours, so <strong>Agents may push / deploy</strong> does not have to be on - that
+switch is about what an agent may do. A task an agent finished before this existed gets its card on the next sync.
 A session you started yourself is yours to complete: the agent is told so, and if it says it is
 finished anyway its sentence is filed on the task and the task stays open until you mark it done.</p>
 <p>These never end a task:</p>
@@ -366,7 +371,7 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 </thead>
 <tbody><tr>
 <td>The agent said it was done</td>
-<td>its close-out (<strong>Merge</strong>, <strong>Close issue</strong>) if its work lives on GitHub, then ✅ <strong>agent finished</strong> - its reply ready for your yes if one is owed</td>
+<td>its <strong>Close out</strong> card if its work lives on GitHub, then ✅ <strong>agent finished</strong> - its reply ready for your yes if one is owed</td>
 <td>a new message on it</td>
 </tr>
 <tr>

@@ -224,13 +224,14 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
                         why='A proposed action is waiting for your approval' if review.get('Kind') == 'action' else 'A reply is waiting for your approval')
-            # the task's close-out (merge the PR, close the issue) wears its own verb, so the rail and the walk say what the yes does
+            # the task's close-out (merge the PR, close the issue): ONE word, Close out - the card's sentence says what it does there
             closeout = proposals.CLOSEOUT.get(proposals._action(review)) if review.get('Kind') == 'action' else None
             if closeout:
                 ev = finish_evidence(store, tid)
-                # a reply waiting beside it rides WITH it (verdicts reply_text): one button, "Merge & send"
+                # a reply waiting beside it rides WITH it (verdicts reply_text) - the same one button
                 rides = bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (tid,)))
-                card.update(closeout=closeout, rides=rides, why=f"{(ev or {}).get('who') or 'The agent'} finished it - {closeout.lower()} to close the task"
+                card.update(closeout=closeout, rides=rides, why=f"{(ev or {}).get('who') or 'The agent'} finished it - Close out {closeout}"
+                                                   + (' and posts your reply' if rides else '')
                                                    + (f": {ev['summary']}" if (ev or {}).get('summary') else ''))
     # ONE "AGENT FINISHED" (A17, 2026-09-25): a finish that drafted a reply left the task waiting on it, and the owner saw
     # only "reply ready" - never that the agent had finished. The reply is the move, so the card stays the reply to

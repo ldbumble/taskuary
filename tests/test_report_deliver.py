@@ -28,7 +28,7 @@ def _src(s, title='Monthly invoices'):
 # ── delivery answers on its own line of the card ────────────────────────────────────────
 def test_a_quiet_report_still_mails_the_people_waiting_for_it():
     """Timeline never + send every run: "do not bother me, but send it out every month"."""
-    cfg = {'route': {'timeline': {'how': 'never'}, 'work': {'how': 'never'}}, 'deliver': {'to': 'ops@example.com'}}
+    cfg = {'route': {'timeline': {'how': 'never'}}, 'deliver': {'to': 'ops@example.com'}}
     d = reports.decide(cfg, reports.read_result('0 rows', 'Nothing outstanding.'))
     assert (d['timeline'], d['send']) == (False, True)
 
@@ -48,23 +48,24 @@ def test_a_failure_is_never_sent_to_the_people_a_report_is_addressed_to():
 
 
 # ── the whole run: the two rules decide different things about the same result ──────────
-def test_a_run_too_quiet_for_the_timeline_still_leaves_the_building():
+def test_a_run_the_timeline_puts_down_still_leaves_the_building():
     """The regression 06447455 introduced: the quiet return sat above the delivery block."""
     s = MemoryStore()
     src = _src(s)
-    cfg = {'title': 'Monthly invoices', 'route': {'timeline': {'how': 'never'}, 'work': {'how': 'never'}}, 'deliver': {'to': 'ops@example.com', 'gate': 'auto'}}
+    cfg = {'title': 'Monthly invoices', 'route': {'timeline': {'how': 'never'}}, 'deliver': {'to': 'ops@example.com', 'gate': 'auto'}}
     s.save_source({**src, 'ConfigJson': json.dumps(cfg)}, 't')
     with mock.patch.object(reports, 'render_report', return_value=('0 rows', 'Nothing outstanding.')), \
          mock.patch.object(reports, 'deliver_report') as sent:
         out = reports.run_report_source(s, s.get_source(src['SourceId']), None)
-    assert out['quiet'] is True and out['message_id'] is None      # nothing on the Timeline
+    # filed and put down at once - a task or nothing (2026-09-28)...
+    assert s.funnel_states()[f"report:{out['message_id']}"]['Status'] == 'done'
     sent.assert_called_once()                                      # ...and it still went out
 
 
 def test_a_quiet_run_that_could_not_send_is_work_even_though_the_run_was_clean():
     s = MemoryStore()
     src = _src(s)
-    cfg = {'title': 'Monthly invoices', 'route': {'timeline': {'how': 'never'}, 'work': {'how': 'never'}}, 'deliver': {'to': 'ops@example.com', 'gate': 'auto'}}
+    cfg = {'title': 'Monthly invoices', 'route': {'timeline': {'how': 'never'}}, 'deliver': {'to': 'ops@example.com', 'gate': 'auto'}}
     s.save_source({**src, 'ConfigJson': json.dumps(cfg)}, 't')
     with mock.patch.object(reports, 'render_report', return_value=('0 rows', 'Nothing outstanding.')), \
          mock.patch.object(reports, 'deliver_report', side_effect=RuntimeError('SMTP 535 auth failed')):

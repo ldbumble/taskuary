@@ -1502,9 +1502,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             r = appfacts.find_report(store, str(params.pop('title', '') or ''), params.pop('source_id', None) or params.get('target'))
             if not r: return _miss('No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20]) + '.')
             params['target'], named = r['source_id'], r['title']
-            if kind == 'report.route' and (str(params.get('line') or '').lower() not in ('timeline', 'work', 'alert', 'send')
+            if kind == 'report.route' and (str(params.get('line') or '').lower() not in ('timeline', 'alert', 'send')
                                            or str(params.get('how') or '').lower() not in ('always', 'ai', 'rule', 'never')):
-                return _miss('Say which line (timeline, work, alert or send) and how it goes: every run (always), '
+                return _miss('Say which line (timeline, alert or send) and how it goes: every run (always), '
                              'the AI decides (ai, with what to look for), a rule, or never.')
         elif tk == 'connector' and kind != 'connection.create':
             c = appfacts.find_connection(store, str(params.pop('name', '') or ''), params.pop('connector_id', None) or params.get('target'))

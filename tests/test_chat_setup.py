@@ -54,7 +54,7 @@ class ReportSetupTests(unittest.TestCase):
         out = say(s, 'set up a report of open tasks by kind every Monday at 8', composer())
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['label'], p['params']['title'], p['params']['runs'], p['params']['reaches_you']),
-                         ('report.create', 'Create the report', 'Open tasks by kind', 'cron 0 8 * * 1', 'Timeline: every run; work rail: every run; alert: never'))
+                         ('report.create', 'Create the report', 'Open tasks by kind', 'cron 0 8 * * 1', 'Timeline: every run; alert: never'))
         self.assertEqual(p['params']['config'], REPORT)
         self.assertIn('Nothing is saved', out['say']); self.assertIn('Counts open tasks by kind', out['say'])
         # the builder's order, not a config dump: the prompt first, then the settings, one labelled line each
@@ -69,7 +69,7 @@ class ReportSetupTests(unittest.TestCase):
         self.assertEqual(r['status'], 'done')
         src = s.get_source(r['outcome']['sourceId'])
         cfg = json.loads(src['ConfigJson'])
-        self.assertEqual(cfg.pop('route')['work'], {'how': 'always'})                                     # saved as the card, at its defaults
+        self.assertEqual(cfg.pop('route'), {'timeline': {'how': 'always'}, 'alert': {'how': 'never'}, 'send': {'how': 'always'}})   # saved as the card, at its defaults
         self.assertEqual((src['Channel'], src['Address'], bool(src['Active']), cfg), ('report', 'Open tasks by kind', True, REPORT))
         self.assertEqual(r['outcome']['link'], f"#report={src['SourceId']}")                                # the real resource and its screen
         self.assertEqual(run(s, p).json()['duplicate'], True)                                               # a second click creates nothing

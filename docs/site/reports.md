@@ -10,12 +10,12 @@ One report is one saved configuration on the **Reports** tab, built in four step
 |---|---|
 | **Pipeline** | The title, the sources it reads, and the one prompt that reads all of them |
 | **Test & preview** | Test calls a single source; Preview runs the whole pipeline, AI pass included, filing nothing |
-| **Where each run goes** | The route card: Timeline, work rail, alert and send, each every run, ask the AI, when a rule trips, or never |
+| **Where each run goes** | What makes it a task, then the route card: Timeline, alert and send, each every run, ask the AI, when a rule trips, or never |
 | **Schedule & save** | How often it runs |
 
 Sources at the top, one prompt at the bottom. Every source runs on its own connection and query,
 the results are stacked under labelled headers, and the prompt sees all of them at once. One
-source failing is named in the run and gets a FAILED row of its own; the others are filed and sent as usual.
+source failing is named in the bell; the others are filed and sent as usual.
 
 :::rule Connections owns the credential, Reports owns the question
 You do not configure a connection here. A source names the connector card its credentials live
@@ -96,12 +96,11 @@ sentence the judge answers yes or no to), **when a rule trips** (a number or wor
 
 ![When a report runs: app start, its own clock, Run due now, or run by hand - one run at a time, and a switched-off connection fails the run](img/report-runs.svg "A manual run is extra: it never uses up the schedule.")
 
-![Where a run goes: a failure stays in the app; otherwise each line of the card answers every run, the AI, a rule, or never](img/report-goes.svg "No answer from the judge counts as yes.")
+![Where a run goes: a failure goes to the bell; otherwise triage reads it, and each line of the card answers every run, the AI, a rule, or never](img/report-goes.svg "No answer from the judge counts as yes.")
 
 | Line | every run | ask the AI | when a rule trips | never |
 |---|---|---|---|---|
-| **Timeline** | A row to read | A row when the judge says your sentence holds | A row when the rule trips | No row. With work on, only a task |
-| **Work** | Triage reads it; a task if `TRIAGE.md` says so | Triage, when the judge says so | Triage, when the rule trips | Never a task |
+| **Timeline** | A row under Reports | A row when the judge says your sentence holds | A row when the rule trips | No row: a task, or nothing |
 | **Alert** | Reaches you right away on your channel, no Review | When the judge says so | When the rule trips | Never |
 | **Send** | Out to its people, through Review unless set to send without asking | When the judge says so | When the rule trips | Never |
 
@@ -115,8 +114,11 @@ sentence the judge answers yes or no to), **when a rule trips** (a number or wor
 - **Send it somewhere** — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits on
   the task for approval by default. "Send it without asking" is the one place in Taskuary where
   that gate can be switched off, and it is deliberate.
-- **A failed run** reaches you once, in the app: one row, never a task, never an alert, never sent
-  to anyone. The same error again stays in the History.
+- **Triage reads every run that worked**, against `TRIAGE.md` and the report's own **Make it a task
+  when…** sentence. A task if it needs doing - a bug found, a job that did not run - and otherwise a
+  row under Reports, as the Timeline line says.
+- **A failed run** is in the bell, top right, and nowhere else: no row, never a task, never an alert,
+  never sent to anyone. It clears itself when a run works again.
 - **A mute** covers the alert and the morning brief as well as the rail.
 - **Who judges** is one setting for every report, under Settings › Triage & agents › Where runs
   go; blank means the brain that writes the report. **try it on the last 5 runs** shows what the
@@ -128,7 +130,7 @@ failed.
 ## Schedules
 
 Pick one or more: every N minutes, daily at `HH:MM`, a five-field cron, or on app start. No
-clock at all means the report runs only when you ask. A slot missed while the app was closed
+clock at all means the report runs only when you press Run now, and its row wears a red border that says so. A slot missed while the app was closed
 fires once on reopen. Reports have their own clock: turning the mail poll or the startup
 catch-up off does not stop them.
 

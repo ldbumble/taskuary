@@ -936,9 +936,11 @@ class CoreTests(unittest.TestCase):
         s = MemoryStore()
         REGISTRY['_t'] = lambda cfg: ('3 rows', 'a\nb\nc')
         try:
-            out = run_report_source(s, {'SourceId': 1, 'Address': 'Census', 'ConfigJson': '{"type": "_t", "route": {"work": {"how": "never"}}}'})
+            # every run is triaged (2026-09-28): one triage calls informational is filed, never a task
+            fyi = lambda sys_, usr, **kw: '{"intent": "fyi", "why": "a census count"}'
+            out = run_report_source(s, {'SourceId': 1, 'Address': 'Census', 'ConfigJson': '{"type": "_t"}'}, fyi)
             m = s.get_message(out['message_id'])
-            self.assertEqual((m['Channel'], m['Status'], m['TaskId']), ('report', 'feed', None))
+            self.assertEqual((m['Channel'], m['Status'], m['TaskId']), ('report', 'filed', None))
         finally:
             REGISTRY.pop('_t')
 

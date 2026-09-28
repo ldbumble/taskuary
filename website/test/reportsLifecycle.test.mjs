@@ -80,7 +80,8 @@ test("see the prompt shows the prompt, word for word as the server builds it", (
   // A paraphrase of the real prompt would be worse than showing nothing. These strings are
   // reports.LINE_SAYS and the line reports.judge_prompt writes.
   assert.match(source, /timeline: "post it on the owner's timeline as news to read"/);
-  assert.match(source, /work: "put it on the owner's work rail, as something they have to do"/);
+  // the work line is gone (the owner, 2026-09-28): whether a run is work is triage's call on every run
+  assert.ok(!source.includes("put it on the owner's work rail"));
   assert.match(source, /\$\{l\.toUpperCase\(\)\}: yes\|no .* but only if: \$\{lineOf\(c, l\)\.when\.trim\(\)\}/);
 });
 
@@ -100,7 +101,7 @@ test("every report is the card - the page draws it and never re-derives old rule
     assert.ok(!source.includes(gone), `${gone} is the old rule set and must not come back`);
   }
   assert.match(source, /export const fullRoute = \(c\) =>/);
-  assert.match(source, /const LINE_DEFAULT = \{ timeline: "always", send: "always", work: "always", alert: "never" \}/);
+  assert.match(source, /const LINE_DEFAULT = \{ timeline: "always", send: "always", alert: "never" \}/);
   // ...a rule is arithmetic a model is not trusted with, and it is a line's fourth answer
   assert.match(source, /<MenuItem value="rule"[^>]*>when a rule trips<\/MenuItem>/);
   // ...and what a saved report does is said in the server's words
@@ -132,9 +133,24 @@ test("on an existing report the routing step's Continue saves before it advances
   assert.match(step, /\{saveErr && /, "a refused save must say so on the step where the button is");
 });
 
-test("the Assistant with no rule of its own asks whether it matters, on the Timeline and the work rail alike", () => {
+test("the Assistant with no rule of its own asks whether it matters before it shows under Reports", () => {
   // 2026-09-20: "only show up when the assistant has an idea that matters, not always" - an unsaved
   // Assistant report shows the sentence the server asks (reports.ASSISTANT_WHEN, reports.default_route)
   assert.match(source, /export const ASSISTANT_WHEN = "it has an idea that matters: /);
-  assert.match(source, /c\?\.type === "assistant" && \(line === "timeline" \|\| line === "work"\) \? \{ how: "ai", when: ASSISTANT_WHEN \}/);
+  assert.match(source, /c\?\.type === "assistant" && line === "timeline" \? \{ how: "ai", when: ASSISTANT_WHEN \}/);
+});
+
+test("triage reads every run that worked, against the brief the card gives it", () => {
+  // the work line is gone (the owner, 2026-09-28) - its sentence is watch_for, the brief reports.work_brief reads
+  assert.match(source, /export const ROUTE_LINES = \["timeline", "alert", "send"\]/);
+  assert.match(source, /Make it a task when…/);
+  assert.match(source, /value=\{cfg\.watch_for \|\| ""\} onChange=\{\(e\) => setCfg\(\{ \.\.\.cfg, watch_for: e\.target\.value \}\)\}/);
+});
+
+test("a report with no schedule wears a red border and says it only runs by hand", () => {
+  // D2 (the owner, 2026-09-28): the row said "daily" and the page "blank = once a day" while it never ran on its own
+  assert.ok(!source.includes('.join(" + ") || "daily"'));
+  assert.match(source, /const unscheduled = !sched && !workflowOverview;/);
+  assert.match(source, /No schedule — it only runs when you press Run now\./);
+  assert.match(source, /Everything blank = it only runs when you press Run now\./);
 });

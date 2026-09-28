@@ -1,5 +1,6 @@
-"""A report may become work: with `triage` on, each run is an inbound message TRIAGE.md judges;
-off (the default) it stays informational. And the Board's Done lane is agent work only."""
+"""A report may become work: every run that worked is an inbound message TRIAGE.md judges (the owner,
+2026-09-28 - there is no switch any more); what triage calls informational stays a row under Reports.
+And the Board's Done lane is agent work only."""
 import json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from taskuary import reports, server
 from taskuary.store import MemoryStore
 
 TASK_LLM = lambda sys_, usr, **kw: '{"intent": "task", "kind": "coding", "why": "the research names a doc to build"}'
+FYI_LLM = lambda sys_, usr, **kw: '{"intent": "fyi", "why": "a weekly trend, nothing to do"}'
 
 
 class ReportTriageTests(unittest.TestCase):
@@ -14,14 +16,14 @@ class ReportTriageTests(unittest.TestCase):
         sid = s.save_source({'Channel': 'report', 'Address': cfg['title'], 'ConfigJson': json.dumps(cfg), 'Active': 1}, 't')
         return next(x for x in s.list_sources(active_only=False) if x['SourceId'] == sid)
 
-    def test_work_never_keeps_a_report_informational(self):
+    def test_a_run_triage_calls_informational_stays_a_row_under_reports(self):
         s = MemoryStore()
-        src = self._src(s, {'type': 'agent', 'title': 'Trends', 'route': {'work': {'how': 'never'}}})
-        with mock.patch.object(reports, 'render_report', return_value=('coder ran a prompt', '# Trends\nbuild a doc about X')):
-            reports.run_report_source(s, src, llm=TASK_LLM)
+        src = self._src(s, {'type': 'agent', 'title': 'Trends'})
+        with mock.patch.object(reports, 'render_report', return_value=('coder ran a prompt', '# Trends\nall steady this week')):
+            reports.run_report_source(s, src, llm=FYI_LLM)
         m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
-        self.assertEqual((m['Status'], m['TaskId']), ('feed', None))
-        self.assertIn('never a task', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertEqual((m['Status'], m['TaskId']), ('filed', None)); self.assertEqual(s.list_tasks(), [])
+        self.assertIn('triage: fyi', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
     def test_a_new_run_retires_the_one_before_it(self):
         """Seven "Process Error Check - 0 rows" stacked up in the reports band say nothing the
@@ -68,10 +70,10 @@ class ReportTriageTests(unittest.TestCase):
         self.assertNotIn(f'report:{first}', s.funnel_states())
         self.assertEqual(len(s._rows("SELECT * FROM message WHERE Channel='report'")), 2)
 
-    def test_with_triage_on_the_brain_decides_and_a_task_can_open(self):
+    def test_the_brain_decides_and_a_task_can_open(self):
         s = MemoryStore()
         s.save_connector({'ConnectorId': s.get_connector_by_type('anthropic')['ConnectorId'], 'Active': 1, 'Secret': 'k'}, 't')   # triage needs a brain card
-        src = self._src(s, {'type': 'agent', 'title': 'Trends', 'triage': True})
+        src = self._src(s, {'type': 'agent', 'title': 'Trends'})
         with mock.patch.object(reports, 'render_report', return_value=('coder ran a prompt', '# Trends\nbuild a doc about X')), \
              mock.patch('taskuary.ingest._spawn'):
             reports.run_report_source(s, src, llm=TASK_LLM)
@@ -84,12 +86,12 @@ class ReportTriageTests(unittest.TestCase):
     def test_a_failed_run_is_never_triaged(self):
         s = MemoryStore()
         s.save_connector({'ConnectorId': s.get_connector_by_type('anthropic')['ConnectorId'], 'Active': 1, 'Secret': 'k'}, 't')
-        src = self._src(s, {'type': 'agent', 'title': 'Trends', 'triage': True})
+        src = self._src(s, {'type': 'agent', 'title': 'Trends'})
         with mock.patch.object(reports, 'render_report', side_effect=RuntimeError('claude exit 1')):
-            reports.run_report_source(s, src, llm=TASK_LLM)
-        m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
-        self.assertEqual((m['Status'], m['TaskId']), ('feed', None)); self.assertIn('FAILED', m['Subject'])
-        self.assertIn('failed to run', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+            out = reports.run_report_source(s, src, llm=TASK_LLM)
+        # nothing is filed at all - no row, no task; the run history and the bell have it (2026-09-28)
+        self.assertIsNone(out['message_id']); self.assertEqual(s._rows("SELECT * FROM message WHERE Channel='report'"), [])
+        self.assertEqual(s.list_tasks(), []); self.assertIn('claude exit 1', s.report_runs(src['SourceId'], 1)[0]['error'])
 
 
 class BoardDoneTests(unittest.TestCase):

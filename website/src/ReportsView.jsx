@@ -21,7 +21,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
-import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
+import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS, ALERT, ALERT_INK } from "./theme.jsx";
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
@@ -170,7 +170,7 @@ const startupText = (c) => "on app startup" + (c.once_per_day ? " (at most once 
   : c.once_per_week ? " (at most once a week)" : "");
 const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && cronText(c.cron),
   c.every_minutes && `every ${c.every_minutes} minutes`, c.daily_at && `daily at ${c.daily_at}`]
-  .filter(Boolean).join(" + ") || "once a day while Taskuary is open";
+  .filter(Boolean).join(" + ") || "only when you press Run now";
 
 const TYPE_LABELS = {
   zoho_monthly_invoices: "Monthly Zoho invoices", taskuary: "Taskuary",
@@ -280,18 +280,17 @@ const RULES = [
 // Every report is saved as this card (reports.from_old_rules); the server says what it means in
 // words (RouteWords), so the page never re-derives the rules. What is left here is only what an
 // UNSAVED report shows before the server has seen it - reports.default_route, word for word.
-export const ROUTE_LINES = ["timeline", "work", "alert", "send"];
+export const ROUTE_LINES = ["timeline", "alert", "send"];
 const ROUTE_HOW = ["always", "ai", "rule", "never"];
-const LINE_DEFAULT = { timeline: "always", send: "always", work: "always", alert: "never" };
+const LINE_DEFAULT = { timeline: "always", send: "always", alert: "never" };
 export const ASSISTANT_WHEN = "it has an idea that matters: something I would act on or need to know today, not a status note or a restatement of what is already on my Timeline";
 const lineOf = (c, line) => c?.route?.[line]
-  || (c?.type === "assistant" && (line === "timeline" || line === "work") ? { how: "ai", when: ASSISTANT_WHEN } : { how: LINE_DEFAULT[line] });
+  || (c?.type === "assistant" && line === "timeline" ? { how: "ai", when: ASSISTANT_WHEN } : { how: LINE_DEFAULT[line] });
 export const fullRoute = (c) => Object.fromEntries(ROUTE_LINES.map((l) => [l, lineOf(c, l)]));
 // `alert` is not "the phone" - it goes to whichever live channel you picked, as often email as
 // WhatsApp (2026-09-17). What makes it an alert is that it skips Review, not the device.
 export const LINE_SAYS = {
-  timeline: ["post it on my Timeline", "news to read — it does not wait for me"],
-  work: ["put it on my Work rail", "something I have to deal with"],
+  timeline: ["show it under Reports", "a run to read — whether it is work is triage's call, every run"],
   alert: ["reach me right away", "the moment it lands, with no Review step"],
   send: ["send it out", "to the people it is addressed to"],
 };
@@ -299,7 +298,6 @@ export const LINE_SAYS = {
 // build it: a rule you cannot read is a rule you cannot trust.
 const PROMPT_SAYS = {
   timeline: "post it on the owner's timeline as news to read",
-  work: "put it on the owner's work rail, as something they have to do",
   alert: "reach the owner right away, on whichever channel they chose",
   send: "send the report out to the people it is addressed to",
 };
@@ -315,7 +313,7 @@ export const judgeQuestions = (c, lines = ROUTE_LINES) => aiLines(c, lines)
     + `  yes:   ${lineOf(c, l).when.trim()}\n  no:    ${JEV_FALSE}\n  answer: a probability 0–1; ≥ 0.50 is yes`)
   .join("\n\n");
 // the short name a replayed run wears, so reading down the strip the DIFFERENCE is what stands out
-const LINE_CHIP = { timeline: "Timeline", work: "Work rail", alert: "reached you", send: "sent out" };
+const LINE_CHIP = { timeline: "Reports", alert: "reached you", send: "sent out" };
 
 export default function ReportsView() {
   const [sources, setSources] = useState(null);
@@ -449,9 +447,13 @@ export default function ReportsView() {
         // both halves, not the first one: "on startup" alone hid the Monday cron behind it
         const sched = [c.on_startup && startupText(c), c.cron && cronText(c.cron),
           c.every_minutes && `every ${c.every_minutes}m`, c.daily_at && `daily ${c.daily_at}`]
-          .filter(Boolean).join(" + ") || "daily";
+          .filter(Boolean).join(" + ");
+        // NO CLOCK IS A REPORT THAT STOPPED (D2, the owner 2026-09-28): it said "daily" and ran only by hand, so
+        // it wears a red border and says so - a workflow is started by hand on purpose and is left alone
+        const unscheduled = !sched && !workflowOverview;
         return (
-          <Box key={s.SourceId} sx={{ borderBottom: `1px solid ${BORDER}` }}>
+          <Box key={s.SourceId} sx={{ borderBottom: `1px solid ${BORDER}`,
+            ...(unscheduled ? { border: `1px solid ${ALERT}`, borderRadius: 1, my: 0.5, px: 1 } : {}) }}>
           <Box onClick={() => { setQ(""); setBucket(s.SourceId); }}
             sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
               "&:hover": { bgcolor: "#faf8f4" } }}>
@@ -460,8 +462,10 @@ export default function ReportsView() {
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
-                {(c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
+                {(c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
               </Typography>
+              {unscheduled && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block" }}>
+                No schedule — it only runs when you press Run now. Give it one in step 3.</Typography>}
             </Box>
             {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
               bgcolor: "#eae4d8", border: "1px solid #d8cfbe" }}>
@@ -782,6 +786,15 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
         <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
         <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
       </Box>
+      {/* WHETHER A RUN IS WORK IS TRIAGE'S CALL, on every run that worked (the owner, 2026-09-28): the work
+          line is gone, and its sentence is the brief triage reads the run against (reports.work_brief) */}
+      <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>Make it a task when…</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>triage reads every run; blank = it judges on your triage rules alone</Typography>
+        <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
+          placeholder="any error at all, or a job that did not run when it should have"
+          value={cfg.watch_for || ""} onChange={(e) => setCfg({ ...cfg, watch_for: e.target.value })} />
+      </Box>
       {shown.map((line) => {
         const [how, when, r] = shownAs(line);
         const [label, hint] = LINE_SAYS[line];
@@ -803,8 +816,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
             </Box>
             {how === "ai" && (
               <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
-                placeholder={line === "work" ? "any error at all, or a job that did not run when it should have"
-                  : line === "alert" ? "a job has not run in over two hours"
+                placeholder={line === "alert" ? "a job has not run in over two hours"
                     : "anything happened that is worth my knowing about"}
                 value={when} onChange={(e) => set(line, { when: e.target.value })} />
             )}
@@ -1364,7 +1376,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               </Typography>
             </Box>
             {/* On a report that already exists, Continue SAVES. The routing card above lives in cfg
-                until Save on step three, and "put it on my Work rail" followed by Continue and a run
+                until Save on step three, and "show it under Reports" followed by Continue and a run
                 left the server on the old rules - nothing in the database ever carried a route block
                 (the owner, 2026-09-18: "i updated ... but it did not save? ... the continue button?").
                 A new report still has nowhere to save to until it has a title, so it only advances. */}
@@ -1434,7 +1446,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 title={cfg.title ? "" : `the ${workflow ? "workflow" : "report"} needs a title - step 1`}>Save {workflow ? "workflow" : "report"}</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-              Pick one. Everything blank = once a day, whenever the app is open.
+              Pick one. Everything blank = it only runs when you press Run now.
             </Typography>
             {!!cfg.watch_for && (
               <Box sx={{ mt: 1.25 }}>

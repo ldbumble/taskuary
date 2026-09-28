@@ -177,41 +177,28 @@ class RunTests(unittest.TestCase):
         self.assertIn(f"health:report:{A.AR['sid']}", keys)
         self.assertGreaterEqual(out.get('said', 0), 1)
 
-    def test_the_card_reads_the_lines_before_they_post_and_a_no_holds_them(self):
-        """2026-09-20: the routing card's Timeline line is asked BEFORE the post - a run held back
-        posts nothing, marks no idea said, and the next check raises the same lines again."""
+    def test_the_card_reads_the_lines_before_they_post_and_a_no_puts_them_down(self):
+        """2026-09-20: the routing card's Timeline line is asked BEFORE the post. It no longer holds the post back
+        (the owner, 2026-09-28): the post is made, every idea is triaged, and a no puts down each idea triage made
+        no task of - a task or nothing, as for any report."""
         s = A.store()
         for at in ('06:00', '07:00', '08:00'):
             s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
         seen = []
-        def judge(lines, n): seen.append((lines, n)); return {'timeline': False, 'work': False, 'why': ''}
+        def judge(lines, n): seen.append((lines, n)); return {'timeline': False, 'why': ''}
         out = assistant.run(s, llm=None, force=True, judge=judge)
-        self.assertEqual((out['said'], 'message_id' in out), (0, False))
-        self.assertGreaterEqual(out['held'], 1)
-        self.assertEqual(seen[0][1], out['held']); self.assertIn('why:', seen[0][0])
-        self.assertEqual(s.list_ideas(), [])
-        again = assistant.run(s, llm=None, force=True, judge=lambda lines, n: {'timeline': True, 'work': True})
-        self.assertGreaterEqual(again['said'], 1)
+        self.assertGreaterEqual(out['said'], 1); self.assertTrue(out.get('message_id')); self.assertNotIn('held', out)
+        self.assertEqual(seen[0][1], out['said']); self.assertIn('why:', seen[0][0])
+        self.assertTrue(s.list_ideas() and all(i['Status'] == 'done' for i in s.list_ideas()))
 
-    def test_timeline_never_work_yes_triages_the_ideas_and_puts_down_the_rest(self):
-        """D6 (2026-09-28): it used to hold the whole run back; now the ideas are triaged into tasks, and one that
-        became no task is put down at once - a task or nothing, as for any report."""
+    def test_timeline_yes_posts_the_news_and_leaves_the_ideas_standing(self):
+        # no idea carries a work flag of its own any more: whether it is work is triage's call (2026-09-28)
         s = A.store()
         for at in ('06:00', '07:00', '08:00'):
             s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
-        out = assistant.run(s, llm=None, force=True, judge=lambda lines, n: {'timeline': False, 'work': True, 'why': ''})
-        self.assertGreaterEqual(out['said'], 1)
-        self.assertTrue(all(i['Status'] == 'done' for i in s.list_ideas()))
-
-    def test_work_no_posts_the_news_and_raises_no_row_on_the_rail(self):
-        from taskuary import funnel
-        s = A.store()
-        for at in ('06:00', '07:00', '08:00'):
-            s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
-        out = assistant.run(s, llm=None, force=True, judge=lambda lines, n: {'timeline': True, 'work': False})
+        out = assistant.run(s, llm=None, force=True, judge=lambda lines, n: {'timeline': True})
         self.assertGreaterEqual(out['said'], 1); self.assertTrue(out.get('message_id'))
-        self.assertTrue(all(json.loads(i['ActionJson']).get('work') is False for i in s.list_ideas()))
-        self.assertEqual(funnel.from_forgotten(s, set(), set()), [])
+        self.assertTrue(all(i['Status'] != 'done' and 'work' not in json.loads(i['ActionJson']) for i in s.list_ideas()))
 
     def test_a_judge_that_fails_leaves_the_post_reaching_you(self):
         s = A.store()

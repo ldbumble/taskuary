@@ -75,19 +75,20 @@ def test_a_switched_off_connection_fails_the_run_and_says_what_to_do():
     s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 't')
     src = _report(s, {'type': 'mssql', 'query': 'select 1', 'connector_id': c['ConnectorId']})
     out = reports.run_report_source(s, src, None)
-    assert out['failed'] and 'connection is off' in s.get_message(out['message_id'])['BodyText']
+    assert out['failed'] and out['message_id'] is None and 'connection is off' in out['error']
+    assert 'connection is off' in s.report_runs(src['SourceId'], 1)[0]['error']
 
 
 # ── C2 and the mute: the alert answers for itself ──────────────────────────────────────
-def test_the_alert_fires_on_a_run_that_posted_nothing():
+def test_the_alert_fires_on_a_run_the_timeline_put_down():
     s = MemoryStore(); _rows(0)
     try:
         src = _report(s, {'type': '_r', 'alert': {'to': '+15550100'},
-                          'route': {'timeline': {'how': 'never'}, 'work': {'how': 'never'},
-                                    'alert': {'how': 'rule', 'rule': 'nothing_came_back'}}})
-        with mock.patch.object(reports, 'alert_or_file', return_value=None) as sent:
+                          'route': {'timeline': {'how': 'never'}, 'alert': {'how': 'rule', 'rule': 'nothing_came_back'}}})
+        with mock.patch.object(reports, 'alert_or_file', return_value=None) as sent, \
+             mock.patch('taskuary.funnel.settle') as settled:
             out = reports.run_report_source(s, src, None)
-        assert out['quiet'] is True and sent.called
+        assert sent.called and settled.called and not s.get_message(out['message_id'])['TaskId']
     finally: REGISTRY.pop('_r')
 
 
@@ -115,8 +116,9 @@ def test_a_muted_report_is_out_of_the_morning_brief():
     finally: REGISTRY.pop('_r')
 
 
-def test_one_source_of_two_failing_keeps_the_other_and_files_the_failure_apart():
+def test_one_source_of_two_failing_keeps_the_other_and_the_bell_names_the_missing_one():
     # D7 (2026-09-28): the whole run used to count as failed, and the good source's rows were dropped
+    from taskuary import problems
     s = MemoryStore()
     REGISTRY['_ok'] = lambda cfg: ('3 rows', '\n'.join('abc'))
     def boom(cfg): raise RuntimeError('login timeout')
@@ -128,20 +130,40 @@ def test_one_source_of_two_failing_keeps_the_other_and_files_the_failure_apart()
     finally: REGISTRY.pop('_ok'); REGISTRY.pop('_bad')
     assert not out.get('failed')
     subjects = [r['Subject'] for r in s.feed(limit=10, days=1, channel='report')]
-    assert 'Ledger check · the box — FAILED' in subjects
-    assert any('cash: 3 rows' in x for x in subjects)
+    # the failed source is no row of its own: the bell says which one the run went without
+    assert len(subjects) == 1 and 'cash: 3 rows' in subjects[0]
+    assert [p['title'] for p in problems.collect(s) if p['key'] == f"report:{src['SourceId']}"] == ['Ledger check ran without the box']
 
 
-# ── C6: a failure stays in the app ─────────────────────────────────────────────────────
-def test_a_failure_files_one_row_and_pings_nobody():
+# ── C6: a failure stays in the app - in the bell, and nowhere else ─────────────────────
+def test_a_failure_files_no_row_and_pings_nobody():
     s = MemoryStore()
     src = _report(s, {'type': '_r', 'alert': {'to': '+15550100'}, 'deliver': {'to': 'ops@example.com', 'gate': 'auto'},
-                      'route': {'timeline': {'how': 'never'}, 'alert': {'how': 'always'}, 'send': {'how': 'always'}}})
+                      'route': {'timeline': {'how': 'always'}, 'alert': {'how': 'always'}, 'send': {'how': 'always'}}})
     with mock.patch.object(reports, 'render_report', side_effect=RuntimeError('login timeout')), \
          mock.patch.object(reports, 'alert_or_file') as alerted, mock.patch.object(reports, 'deliver_report') as sent:
         out = reports.run_report_source(s, src, None)
-    assert out['failed'] and out['message_id'] and not alerted.called and not sent.called
-    assert s.get_message(out['message_id'])['TaskId'] is None
+    assert out['failed'] and out['message_id'] is None and not alerted.called and not sent.called
+    assert s.feed(limit=10, days=1, channel='report') == []
+    last = s.report_runs(src['SourceId'], 1)[0]
+    assert last['failed'] and 'login timeout' in last['error']
+
+
+def test_a_failed_run_rings_the_bell_until_a_run_works():
+    """The owner, 2026-09-28: a failure files no row, so the bell is where it is seen - and it clears
+    itself the moment the report runs again, rather than waiting to be dismissed."""
+    from taskuary import problems
+    s = MemoryStore(); _rows()
+    try:
+        src = _report(s, {'type': '_r'})
+        with mock.patch.object(reports, 'render_report', side_effect=RuntimeError('login timeout')):
+            reports.run_report_source(s, src, None)
+        rung = [p for p in problems.collect(s) if p['key'] == f"report:{src['SourceId']}"]
+        assert len(rung) == 1 and rung[0]['title'] == 'Report failed: Ledger check' and rung[0]['report'] == src['SourceId']
+        assert 'login timeout' in rung[0]['detail']
+        reports.run_report_source(s, src, None)
+        assert not [p for p in problems.collect(s) if p['key'] == f"report:{src['SourceId']}"]
+    finally: REGISTRY.pop('_r')
 
 
 def test_the_same_failure_again_stays_a_failure_in_the_history():
@@ -149,10 +171,8 @@ def test_the_same_failure_again_stays_a_failure_in_the_history():
     s = MemoryStore()
     src = _report(s, {'type': '_r'})
     with mock.patch.object(reports, 'render_report', side_effect=RuntimeError('login timeout')):
-        reports.run_report_source(s, src, None)
-        second = reports.run_report_source(s, src, None)
-        third = reports.run_report_source(s, src, None)
-    assert second['quiet'] and third['quiet']
+        runs = [reports.run_report_source(s, src, None) for _ in range(3)]
+    assert all(r['failed'] and r['message_id'] is None for r in runs)
     assert all(r['failed'] for r in s.report_runs(src['SourceId'], 3))
 
 
@@ -170,11 +190,11 @@ def test_one_test_for_failed():
 
 
 # ── W3: Timeline never means never ─────────────────────────────────────────────────────
-def test_work_only_is_a_task_or_nothing():
+def test_timeline_never_is_a_task_or_nothing():
     s = MemoryStore(); _rows()
     try:
         src = _report(s, {'type': '_r', 'deliver': {'to': 'x@example.com'},
-                          'route': {'timeline': {'how': 'never'}, 'work': {'how': 'always'}, 'send': {'how': 'never'}}})
+                          'route': {'timeline': {'how': 'never'}, 'send': {'how': 'never'}}})
         with mock.patch('taskuary.ingest.ingest_message', return_value={'message_id': None}), \
              mock.patch('taskuary.funnel.settle') as settled:
             out = reports.run_report_source(s, src, None)
@@ -194,7 +214,8 @@ def test_the_store_converts_a_report_written_the_old_way_when_it_opens(tmp_path)
     s = SQLiteStore(db)
     cfg = json.loads(next(x for x in s.list_sources(active_only=False) if x['Address'] == 'Old')['ConfigJson'])
     rule = {'how': 'rule', 'rule': 'more_than', 'count': 5}
-    assert cfg['route'] == {'timeline': rule, 'alert': rule, 'send': {'how': 'always'}, 'work': rule}
+    # the triage switch has no line to become: every run is triaged now (2026-09-28)
+    assert cfg['route'] == {'timeline': rule, 'alert': rule, 'send': {'how': 'always'}}
     assert cfg['alert'] == {'to': 'me@example.com'} and 'reach' not in cfg and 'triage' not in cfg
     s.cx.close()
 

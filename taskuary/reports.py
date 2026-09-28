@@ -1255,20 +1255,6 @@ def report_system(store, cfg: dict, charts: bool = False) -> str:
 NO_BRAIN = '(AI prompt set, but no active AI connector'
 
 
-_DIGITS = re.compile(r'\d+')
-
-
-def same_failure_as_last(store, source_id, error: str) -> bool:
-    """Did the run before this one fail with this same error? Numbers are not the error - a timestamp,
-    a run id, an attempt count - so they are read as one; the words are compared, whole."""
-    try: prev = (store.report_runs(int(source_id), 1) or [None])[0]
-    except Exception: return False
-    if not prev or not prev.get('failed'): return False
-    # the run history keeps the exception bare where the body says "Report error: ..." - one error either way
-    norm = lambda s: _DIGITS.sub('#', ' '.join(re.sub(r'^\s*report error:\s*', '', str(s or ''), flags=re.I).split()))[:300]
-    return bool(prev.get('error')) and norm(prev['error']) == norm(error)
-
-
 def headline_from(summary: str, fallback: str) -> str:
     """What the run CONCLUDED, for the headline - or the row count, when it concluded nothing.
 
@@ -1662,8 +1648,7 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         # ONE judgement per run. The post's own decision covers the alert and the send as well; a run
         # with nothing to say asked nobody, and an AI line over nothing is a no - rules still read it
         d = out.get('decided') or decide(cfg, read_result(title, lines, False, said), judge=lambda *_: None if said else {})
-        subject = (f"{title} - {out['held']} line(s) held back: nothing that matters" if out.get('held')
-                   else f'{title} - {said} line(s)')
+        subject = f'{title} - {said} line(s)'
         err = _after(store, src, cfg, d, title, subject, lines, out.get('message_id'))
         return {'message_id': out.get('message_id'), 'subject': subject, 'files': 0, **out, **err}
     try:
@@ -1678,37 +1663,29 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # artifacts reads it off `body`, and what gets filed is the summary without it
     from .artifacts import strip_directive
     failed, text = run_failed(subject), strip_directive(body)
-    if not failed and (gone := failed_sources(subject)): file_source_failure(store, src, cfg, title, gone)
+    # A FAILED RUN IS THE BELL'S (the owner, 2026-09-28): no row on the rail and never a task, a ping or a
+    # send - the run history keeps it and problems.collect reads it from there
+    if failed:
+        return {'message_id': None, 'subject': subject, 'files': 0, 'said': 0, 'failed': True, 'error': body, 'summary': text[:2000]}
     d = decide_for(store, cfg, read_result(head, text, failed), report_llm(store, cfg, llm))
-    # THE SAME FAILURE, AGAIN, IS NOT NEWS (the owner, 2026-09-23): it stays in the run history - as a
-    # failure, so the run after it still compares against it - and reaches nobody
-    if failed and same_failure_as_last(store, src['SourceId'], body): d = dict(d, timeline=False)
-    if not (d['timeline'] or d['work']):
-        # quiet for the owner is not quiet for the recipients or the alert: they have their own lines
-        out = {'message_id': None, 'subject': f'{title} - nothing to report', 'files': 0, 'said': 0,
-               'quiet': True, 'failed': failed, 'error': body if failed else None, 'summary': text[:2000]}
-        return {**out, **_after(store, src, cfg, d, title, subject, text, None)}
-    row = {'TaskId': None, 'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report', 'SourceName': title,
-           'Subject': subject, 'FromName': title, 'SentAt': stamp, 'BodyText': text, 'SourceLink': cfg.get('link'), 'Status': 'feed'}
-    if d['work']:
-        # the report is a MESSAGE like any other: triage reads it under TRIAGE.md, with the work line's
-        # sentence as its brief (classify_intent's `watch`), and a task is what TRIAGE.md says
-        from .ingest import ingest_message
-        out = ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
-                                         'subject': subject, 'body': text, 'from_name': title,
-                                         'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
-                                         'source_link': cfg.get('link'), 'source_name': title,
-                                         'watch_for': work_brief(cfg) or None}, llm=llm)
-        mid = out.get('message_id') or store.add_message({**row, 'ExternalId': f'report:{src["SourceId"]}:{stamp}:feed'})
-        # TIMELINE NEVER MEANS NEVER (the owner, 2026-09-27): a run triage did not make a task of is put
-        # down at once, so "work only" is a task or nothing
-        if not d['timeline'] and not (store.get_message(mid) or {}).get('TaskId'):
-            from . import funnel
-            funnel.settle(store, f'report:{mid}', 'done', 'report')
-    else:
-        mid = store.add_message({**row, 'ExternalId': f'report:{src["SourceId"]}:{stamp}'})
-        store.add_route(mid, None, 'feed', None, 'the report failed to run' if failed
-                        else 'scheduled report - informational, never a task', [], 'report')
+    # EVERY RUN THAT WORKED IS TRIAGED (the owner, 2026-09-28, D1): a MESSAGE like any other, read under
+    # TRIAGE.md with the report's brief (classify_intent's `watch`). A task if it needs doing, else a row
+    # under Reports - or, with the Timeline line at no, nothing: a task or nothing
+    from .ingest import ingest_message
+    out = ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
+                                     'subject': subject, 'body': text, 'from_name': title,
+                                     'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
+                                     'source_link': cfg.get('link'), 'source_name': title,
+                                     'watch_for': work_brief(cfg) or None}, llm=llm,
+                         # no brain to triage with is a plain row under Reports, never "triage failed" on every run
+                         file_only=llm is None)
+    mid = out.get('message_id') or store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}:feed',
+                                                      'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
+                                                      'SourceName': title, 'Subject': subject, 'FromName': title, 'SentAt': stamp,
+                                                      'BodyText': text, 'SourceLink': cfg.get('link'), 'Status': 'feed'})
+    if not d['timeline'] and not (store.get_message(mid) or {}).get('TaskId'):
+        from . import funnel
+        funnel.settle(store, f'report:{mid}', 'done', 'report')
     expire_previous_runs(store, src, cfg, mid)
     # the rows are the report: hand back the spreadsheet to open and the chart to look at
     try:
@@ -1762,12 +1739,11 @@ def report_muted(store, title: str, subject: str) -> bool:
 ALERT_WHEN = ('nothing_came_back', 'something_came_back', 'fewer_than', 'more_than', 'contains', 'missing')
 _LEADING_COUNT = re.compile(r'\s*(\d[\d,]*)\b')
 ROUTE = ('always', 'ai', 'rule', 'never')
-LINES = ('timeline', 'work', 'alert', 'send')
-# What a line nobody set means. A report you set up is work you wanted done, so it lands on the
-# Timeline AND on the work rail every run unless you say otherwise (the owner, 2026-09-17: "default
-# should be on timeline/work rail every run"). Delivery has always gone out every run. Only the
-# interruption stays off until it is asked for.
-LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'work': 'always', 'alert': 'never'}
+LINES = ('timeline', 'alert', 'send')
+# What a line nobody set means. A report you set up lands under Reports every run unless you say
+# otherwise; whether a run is WORK is triage's call on every run, not a line (the owner, 2026-09-28).
+# Delivery has always gone out every run. Only the interruption stays off until it is asked for.
+LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'alert': 'never'}
 # ...except the Assistant: a voice that checks in every half hour, and "every run" from a voice is
 # noise (the owner, 2026-09-20: "only show up when the assistant has an idea that matters, not always").
 ASSISTANT_WHEN = ('it has an idea that matters: something I would act on or need to know today, '
@@ -1775,7 +1751,6 @@ ASSISTANT_WHEN = ('it has an idea that matters: something I would act on or need
 # What each line is, in the words the judge is given. `alert` is whichever live channel the owner
 # picked, as often email as WhatsApp; what makes it an alert is that it skips Review.
 LINE_SAYS = {'timeline': "post it on the owner's timeline as news to read",
-             'work': "put it on the owner's work rail, as something they have to do",
              'alert': "reach the owner right away, on whichever channel they chose",
              'send': 'send the report out to the people it is addressed to'}
 JUDGE_TOKENS = 60                 # four bare yes/nos
@@ -1786,7 +1761,7 @@ def default_route(cfg: dict) -> dict:
     watching systems too: "every run" had it post "I checked and found nothing" every half hour (D5, the
     owner 2026-09-28: "default to not show up at all if nothing found")."""
     ask = cfg.get('type') == 'assistant'
-    return {l: ({'how': 'ai', 'when': ASSISTANT_WHEN} if ask and l in ('timeline', 'work') else {'how': LINE_DEFAULT[l]}) for l in LINES}
+    return {l: ({'how': 'ai', 'when': ASSISTANT_WHEN} if ask and l == 'timeline' else {'how': LINE_DEFAULT[l]}) for l in LINES}
 
 
 def route_of(cfg: dict, line: str) -> tuple:
@@ -1803,7 +1778,7 @@ def route_of(cfg: dict, line: str) -> tuple:
 
 
 def full_route(cfg: dict) -> dict:
-    """All four lines written down, for the page and for storage: the card shows what runs."""
+    """All three lines written down, for the page and for storage: the card shows what runs."""
     return {l: dict((cfg.get('route') or {}).get(l) or default_route(cfg)[l]) for l in LINES}
 
 
@@ -1815,7 +1790,7 @@ def rule_words(r: dict) -> str:
             'contains': f'it mentions "{text}"', 'missing': f'it never mentions "{text}"'}.get(str(r.get('rule') or '').lower(), '')
 
 
-LINE_NAMES = {'timeline': 'Timeline', 'work': 'work rail', 'alert': 'alert', 'send': 'sent out'}
+LINE_NAMES = {'timeline': 'Timeline', 'alert': 'alert', 'send': 'sent out'}
 
 
 def route_words(cfg: dict) -> str:
@@ -1841,9 +1816,9 @@ def asks_ai(cfg: dict) -> bool: return any(route_of(cfg, l)[0] == 'ai' for l in 
 
 def work_brief(cfg: dict) -> str:
     """The report's standing brief for triage - why it exists and what would count as off
-    (classify_intent's `watch`): the work line's own sentence, or `watch_for`."""
-    how, when = route_of(cfg, 'work')
-    return (when if how == 'ai' else '') or str(cfg.get('watch_for') or '').strip()
+    (classify_intent's `watch`): `watch_for`, or the sentence a card saved with the old work line carries."""
+    old = (cfg.get('route') or {}).get('work') or {}
+    return str(cfg.get('watch_for') or '').strip() or (str(old.get('when') or '').strip() if old.get('how') == 'ai' else '')
 
 
 def from_old_rules(cfg: dict) -> dict:
@@ -1854,8 +1829,10 @@ def from_old_rules(cfg: dict) -> dict:
     words; `triage` switched work on for a run that spoke. `wrong` read a VERDICT line the model was
     told to write - the judge reads the run itself now, against the same sentence.
     """
-    if (r := cfg.get('route')) and any(str((r.get(l) or {}).get('how') or '').strip().lower() in ROUTE for l in LINES):
-        return {**{k: v for k, v in cfg.items() if k not in ('reach', 'triage')}, 'route': full_route(cfg)}
+    if (r := cfg.get('route')) and any(str((r.get(l) or {}).get('how') or '').strip().lower() in ROUTE for l in (*LINES, 'work')):
+        # the old work line's sentence is the triage brief now, so it moves to watch_for rather than drop
+        brief = work_brief(cfg)
+        return {**{k: v for k, v in cfg.items() if k not in ('reach', 'triage')}, 'route': full_route(cfg), **({'watch_for': brief} if brief else {})}
     a, d = dict(cfg.get('alert') or {}), dict(cfg.get('deliver') or {})
     def line(how, cond):
         if how == 'always': return {'how': 'always'}
@@ -1873,9 +1850,8 @@ def from_old_rules(cfg: dict) -> dict:
     send = str(d.get('send') or '').strip().lower()
     route = {'timeline': line(reach, a), 'alert': line(reach, a) if a.get('to') else {'how': 'never'},
              'send': line(send if send in ('always', 'wrong', 'rule') else 'always', d)}
-    route['work'] = dict(route['timeline']) if cfg.get('triage') else {'how': 'never'}
-    # the Assistant's default route was a judge over its own voice, on the Timeline and the work rail
-    if old_default: route |= {k: v for k, v in default_route(cfg).items() if k in ('timeline', 'work')}
+    # the Assistant's default route was a judge over its own voice
+    if old_default: route['timeline'] = default_route(cfg)['timeline']
     out = {k: v for k, v in cfg.items() if k not in ('reach', 'triage')}
     if a: out['alert'] = {k: v for k, v in a.items() if k not in ('when', 'count', 'text')}
     if d: out['deliver'] = {k: v for k, v in d.items() if k not in ('send', 'when', 'count', 'text')}
@@ -1895,7 +1871,7 @@ def run_failed(subject: str) -> bool:
     """Did this run fail? The one test (reports, the rail and the run history all ask it). The
     headline after the title says FAILED, or EVERY one of several sources says `label: FAILED`. One
     source of three failing is a run that worked without it (D7, the owner 2026-09-28): the good
-    sources' results are kept and sent, and the failed one is named (failed_sources) and filed apart."""
+    sources' results are kept and sent, and the failed one is named (failed_sources) in the bell."""
     # the LAST dash: a title may carry one of its own ("AP — daily — FAILED" read as a success, R1)
     head = str(subject or '').rsplit('—', 1)[-1].strip()
     return head == 'FAILED' or all(p.strip().endswith(': FAILED') for p in head.split('·'))
@@ -1932,7 +1908,7 @@ def judge_prompt(cfg: dict) -> str:
                      for l in LINES for h, w in [route_of(cfg, l)] if h == 'ai')
 
 
-_FLAG = re.compile(r'^[ \t>*_\-]*(TIMELINE|WORK|ALERT|SEND)\s*:\s*(yes|no)\b[ \t:.\-—]*(.*)$', re.I | re.M)
+_FLAG = re.compile(r'^[ \t>*_\-]*(TIMELINE|ALERT|SEND)\s*:\s*(yes|no)\b[ \t:.\-—]*(.*)$', re.I | re.M)
 
 
 def judge_state(res: dict) -> str:
@@ -1971,10 +1947,10 @@ def decide(cfg: dict, res: dict, llm=None, judge=None) -> dict:
     that silently stops speaking is worse than one that speaks too often.
 
     A FAILED run reaches the owner in the app and nowhere else (the owner, 2026-09-27: "it's okay if
-    it errors out only in the app"): one row on the Timeline, never a task, never a ping, never a
-    "Report error" sent to the people a report is addressed to.
+    it errors out only in the app"), and only in the bell (2026-09-28): no row, never a task, never a
+    ping, never a "Report error" sent to the people a report is addressed to.
     """
-    if res['failed']: return {'timeline': True, 'work': False, 'alert': False, 'send': False, 'why': 'the report failed to run'}
+    if res['failed']: return {'timeline': False, 'alert': False, 'send': False, 'why': 'the report failed to run'}
     how = {l: route_of(cfg, l) for l in LINES}
     ask = [l for l in LINES if how[l][0] == 'ai']
     said = {}
@@ -2161,20 +2137,6 @@ def file_delivery_failure(store, src: dict, cfg: dict, title: str, err) -> int:
         'SourceLink': cfg.get('link'), 'Status': 'feed'})
     store.add_route(mid, None, 'feed', None, f'the report ran; sending it to {who} failed', [], 'report')
     store.audit('message', mid, 'report_delivery_failed', 'report', 'agent', {'to': to, 'error': str(err)[:200]})
-    return mid
-
-
-def file_source_failure(store, src: dict, cfg: dict, title: str, labels: list) -> int:
-    """One source of several failed: the run itself worked and went where its card says; this row, ending
-    in FAILED, is what tells the owner which source it went without (D7, 2026-09-28)."""
-    names, stamp = ', '.join(labels), datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    mid = store.add_message({
-        'TaskId': None, 'ExternalId': f'srcfail:{src["SourceId"]}:{stamp}', 'ConversationId': f'report:{src["SourceId"]}',
-        'Channel': 'report', 'SourceName': title, 'FromName': title, 'SentAt': stamp, 'Subject': f'{title} · {names} — FAILED',
-        'BodyText': f'The report ran without {names}: that source could not be read. The other sources were read and the '
-                    'run was filed and sent as usual. The cause is in the run history under Reports.',
-        'SourceLink': cfg.get('link'), 'Status': 'feed'})
-    store.add_route(mid, None, 'feed', None, f'the report ran; {names} failed', [], 'report')
     return mid
 
 

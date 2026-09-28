@@ -1,7 +1,7 @@
 """What is FAILING right now - the bell in the top bar. Each item says what broke, the error in its
 own words, and where it is fixed. The setup chip covers what is not yet set up; this covers what was
 working and is not: a connector whose poll errors (the WhatsApp bridge down, a token expired), the
-triage brain not answering, a report run that failed today. Quiet when nothing is - the bell is grey.
+triage brain not answering, a report whose latest run failed. Quiet when nothing is - the bell is grey.
 
 DISMISSING one is reading it, not fixing it, and the difference matters: a bell that can be emptied
 by clicking is a bell nobody believes. So a dismissal is against the exact failure you read - its
@@ -52,11 +52,19 @@ def collect(store, all_of_them: bool = False) -> list:
         pick = str(s.get('triage_ai') or '')
         out.append({'key': 'triage', 'title': 'The triage brain is not answering', 'detail': s['triage_last_error'][:400], 'since': '',
                     'where': 'Connections', 'connector': pick[10:] if pick.startswith('connector:') else None, 'fix': 'Check the AI card'})
-    for r in store.feed(limit=60, days=1, channel='report'):
-        if str(r.get('Subject') or '').endswith('FAILED'):
-            out.append({'key': f"report:{r.get('SourceName') or r.get('Subject')}", 'title': f"Report failed: {r.get('SourceName') or r.get('Subject')}",
-                        'detail': str(r.get('Preview') or '')[:400], 'since': r.get('SentAt') or '', 'where': 'Reports', 'connector': None,
-                        'fix': 'Open Reports'})
+    # A REPORT'S FAILURE LIVES HERE AND NOWHERE ELSE (the owner, 2026-09-28): a failed run files no row, so
+    # this reads each report's latest run - failed, or run without one of its sources - and clears itself
+    # the moment a run works again
+    from .reports import failed_sources
+    for src in store.list_sources():
+        if src.get('Channel') != 'report' or not src.get('Active'): continue
+        last = (store.report_runs(src['SourceId'], 1) or [None])[0]
+        if not last: continue
+        name, gone = last.get('title') or src.get('Address'), [] if last.get('failed') else failed_sources(last.get('subject'))
+        if not (last.get('failed') or gone): continue
+        out.append({'key': f"report:{src['SourceId']}", 'title': f"Report failed: {name}" if last.get('failed') else f"{name} ran without {', '.join(gone)}",
+                    'detail': str(last.get('error') or last.get('subject') or '')[:400], 'since': last.get('at') or '', 'where': 'Reports',
+                    'connector': None, 'report': src['SourceId'], 'fix': 'Open the report'})
     seen, uniq = set(), []
     for p in out:
         if p['key'] in seen: continue

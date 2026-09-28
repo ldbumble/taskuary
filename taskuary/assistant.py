@@ -1437,9 +1437,9 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
     editable prompt. Deleting or switching off that report is the off switch - a forced run still
     answers. Posts nothing when nothing is new.
 
-    `judge(lines, n) -> {'timeline': bool, 'work': bool, ...}` is the report's routing card, asked
-    BEFORE anything posts (reports.decide): timeline=no holds the whole post and its ideas stay
-    fresh for the next check; work=no posts it as news that raises no row on the work rail."""
+    `judge(lines, n) -> {'timeline': bool, ...}` is the report's routing card, asked BEFORE anything
+    posts (reports.decide). Every idea is triaged whatever it says (the owner, 2026-09-28: whether it is
+    work is triage's call); timeline=no puts down at once each idea triage made no task of."""
     src = source(store)
     if not force and not (src and src.get('Active')): return {'ran': False, 'said': 0}
     if instruction is None and src and report_id is None:
@@ -1584,15 +1584,9 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
                    + list(say))[:c['max']]
         except Exception as e: logger.warning(f'assistant: the health and connect checks were skipped - {e}')
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
-    # the report's routing card reads the lines BEFORE they post. Held back = nothing on the Timeline,
-    # no idea marked said, so the next check raises them again if they still stand; a judge that
-    # fails leaves the run unjudged, and an unjudged run reaches the owner (reports.decide's rule)
+    # the report's routing card reads the lines BEFORE they post; a judge that fails leaves the run
+    # unjudged, and an unjudged run reaches the owner (reports.decide's rule)
     d = _judged(judge, say) if say and judge else None
-    # held only when NEITHER line wants it: "Timeline never, Work every run" is the ideas triaged into tasks
-    # with nothing posted to read, as for any report (D6, 2026-09-28) - it used to hold the whole run
-    if d is not None and not (d.get('timeline') or d.get('work')):
-        logger.info(f'assistant: held back {len(say)} line(s) - the card says nothing here matters')
-        return {'ran': True, 'said': 0, 'held': len(say), 'reviewed': rv, 'inputs': read, 'decided': d}
     if not say:
         # Nothing to say is the normal outcome of a monitor and it posts NOTHING - unless the owner
         # chose "every run", in which case the check still says it ran, in one line, with what it
@@ -1608,10 +1602,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         store.set_brief(mid, json.dumps({'ideas': [], 'reviewed': rv, 'flight': [], 'stats': []}))
         return {'ran': True, 'said': 0, 'message_id': mid, 'reviewed': rv, 'inputs': read}
     # every line names the block behind it, looked up rather than asked for (source_of)
-    # work=no from the card: the post is news to read, and none of its lines raises a row on the
-    # work rail (funnel.from_forgotten reads the flag); the ideas still carry their state on the post
-    rail = {} if d is None or d.get('work') else {'work': False}
-    rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']} | rail
+    rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}
                                    | ({'source': src} if (src := source_of(s, mids, blocks)) else {})}, stamp) for s in say]
     # the source goes in the BODY, not only on the card: the Timeline's detail pane renders an
     # assistant post as its plain text, so a provenance that lived only in the React card was

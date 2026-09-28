@@ -465,7 +465,7 @@ Put a paused report or workflow back on its clock.
 
 Change where one line of a report's route card goes.
 
-- `line` - timeline | work | alert | send
+- `line` - timeline | alert | send
 - `how` - always | ai | rule | never
 - `title`
 - `when` - for ai: what to look for

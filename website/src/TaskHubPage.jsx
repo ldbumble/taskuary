@@ -78,7 +78,7 @@ function Bell({ onGo }) {
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { width: 440, p: 1.5, mt: 0.5 } } }}>
         <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
-        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Every connection polled clean, the triage brain answered, no report failed today. Anything you dismissed comes back if it happens again.</Typography>}
+        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Every connection polled clean, the triage brain answered, and every report's last run worked. Anything you dismissed comes back if it happens again.</Typography>}
         {items.map((p) => (
           <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -426,7 +426,11 @@ export default function TaskHubPage() {
             </IconButton>
           </Tooltip>
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
-          <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connections"); }} />
+          <Bell onGo={(p) => {
+            if (p.connector) window.location.hash = `connector=${p.connector}`;
+            else if (p.report) window.location.hash = `report=${p.report}`;
+            go(p.where || "Connections");
+          }} />
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>

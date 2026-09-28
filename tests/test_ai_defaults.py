@@ -156,7 +156,7 @@ class WhatTheJudgeIsAskedTests(unittest.TestCase):
         from taskuary import reports
         r = aidefaults.resolve(_store(), {}, 'judge_ai')
         self.assertEqual([d['line'] for d in r['decides']], list(reports.LINES))
-        self.assertIn(reports.LINE_SAYS['work'], next(d['says'] for d in r['decides'] if d['line'] == 'work'))
+        self.assertIn(reports.LINE_SAYS['alert'], next(d['says'] for d in r['decides'] if d['line'] == 'alert'))
         self.assertEqual(r['evidence'], reports.EVIDENCE_RULE)
 
     def test_a_decision_model_says_it_is_one_so_the_report_card_can_show_typed_questions(self):

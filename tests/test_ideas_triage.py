@@ -8,8 +8,8 @@ through the shared intake (so kind defaults and startup rules apply); one that n
 open or closed (TQ-0487) - records the verdict and creates nothing, and the follow-up on finished
 work is the owner's click; an informational one is fyi; a failure is an error
 the next run retries. The pile orders ideas by that verdict, not by a second assistant ranking, and
-the assistant never reads its own generated rows back in as new arrivals. Report triage stays the
-opt-in it was.
+the assistant never reads its own generated rows back in as new arrivals. Every report run that
+worked is triaged too (the owner, 2026-09-28); a workflow trigger never is.
 """
 import json, unittest
 from datetime import datetime, timedelta
@@ -236,15 +236,15 @@ class MatrixTests(unittest.TestCase):
         assistant.triage_ideas(s, [s.get_idea(row['IdeaId'])], brain(intent='fyi'))
         self.assertEqual(json.loads(s.get_idea(row['IdeaId'])['ActionJson'])['triage']['intent'], 'fyi')
 
-    def test_report_work_off_files_the_run_and_a_workflow_trigger_never_asks_triage_at_all(self):
-        s = MemoryStore()
-        off = report_src(s, {'type': 'agent', 'title': 'Weekly numbers', 'route': {'work': {'how': 'never'}}})   # the card's work line off
-        with mock.patch.object(reports, 'render_report', return_value=('12 rows', 'nothing looks off')), \
-             mock.patch('taskuary.ingest.judge') as judge:
-            reports.run_report_source(s, off, llm=brain())
-        judge.assert_not_called()
+    def test_every_report_run_asks_triage_and_a_workflow_trigger_never_does(self):
+        # there is no work line to switch triage off (the owner, 2026-09-28): triage reads every run that worked
+        s = MemoryStore(); calls = []
+        rep = report_src(s, {'type': 'agent', 'title': 'Weekly numbers'})
+        with mock.patch.object(reports, 'render_report', return_value=('12 rows', 'nothing looks off')):
+            reports.run_report_source(s, rep, llm=brain('fyi', calls=calls))
+        self.assertEqual(len(calls), 1)
         m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
-        self.assertEqual((m['Status'], m['TaskId']), ('feed', None))
+        self.assertEqual((m['Status'], m['TaskId']), ('filed', None))
         self.assertEqual(s.list_tasks(), []); self.assertEqual(s.list_ideas(), [])
         # a workflow is a triggered job, not a message: it reaches its worker whatever the switch says
         wf = report_src(s, {'type': 'agent', 'access': 'write', 'runs_on': 'general', 'title': 'File the invoices', 'triage': True})

@@ -112,7 +112,7 @@ share one builder, which is why they share one page here.</p>
 </tr>
 <tr>
 <td><strong>Where each run goes</strong></td>
-<td>The route card: Timeline, work rail, alert and send, each every run, ask the AI, when a rule trips, or never</td>
+<td>What makes it a task, then the route card: Timeline, alert and send, each every run, ask the AI, when a rule trips, or never</td>
 </tr>
 <tr>
 <td><strong>Schedule &amp; save</strong></td>
@@ -121,7 +121,7 @@ share one builder, which is why they share one page here.</p>
 </tbody></table>
 <p>Sources at the top, one prompt at the bottom. Every source runs on its own connection and query,
 the results are stacked under labelled headers, and the prompt sees all of them at once. One
-source failing is reported in place and never takes the whole report down.</p>
+source failing is named in the bell; the others are filed and sent as usual.</p>
 <div class="callout rule"><p class="eyebrow">Connections owns the credential, Reports owns the question</p><p>You do not configure a connection here. A source names the connector card its credentials live
 on. That separation is why the same database can answer five different reports without five
 copies of its password.</p>
@@ -202,7 +202,7 @@ run hands back a bar chart beside the text.</li>
 sentence the judge answers yes or no to), <strong>when a rule trips</strong> (a number or words - no AI), or
 <strong>never</strong>.</p>
 <p><figure><img src="img/report-runs.svg" alt="When a report runs: app start, its own clock, Run due now, or run by hand - one run at a time, and a switched-off connection fails the run" loading="lazy"><figcaption>A manual run is extra: it never uses up the schedule.</figcaption></figure></p>
-<p><figure><img src="img/report-goes.svg" alt="Where a run goes: a failure stays in the app; otherwise each line of the card answers every run, the AI, a rule, or never" loading="lazy"><figcaption>No answer from the judge counts as yes.</figcaption></figure></p>
+<p><figure><img src="img/report-goes.svg" alt="Where a run goes: a failure goes to the bell; otherwise triage reads it, and each line of the card answers every run, the AI, a rule, or never" loading="lazy"><figcaption>No answer from the judge counts as yes.</figcaption></figure></p>
 <table>
 <thead>
 <tr>
@@ -215,17 +215,10 @@ sentence the judge answers yes or no to), <strong>when a rule trips</strong> (a 
 </thead>
 <tbody><tr>
 <td><strong>Timeline</strong></td>
-<td>A row to read</td>
+<td>A row under Reports</td>
 <td>A row when the judge says your sentence holds</td>
 <td>A row when the rule trips</td>
-<td>No row. With work on, only a task</td>
-</tr>
-<tr>
-<td><strong>Work</strong></td>
-<td>Triage reads it; a task if <code>TRIAGE.md</code> says so</td>
-<td>Triage, when the judge says so</td>
-<td>Triage, when the rule trips</td>
-<td>Never a task</td>
+<td>No row: a task, or nothing</td>
 </tr>
 <tr>
 <td><strong>Alert</strong></td>
@@ -270,8 +263,11 @@ sentence the judge answers yes or no to), <strong>when a rule trips</strong> (a 
 <li><strong>Send it somewhere</strong> — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits on
 the task for approval by default. &quot;Send it without asking&quot; is the one place in Taskuary where
 that gate can be switched off, and it is deliberate.</li>
-<li><strong>A failed run</strong> reaches you once, in the app: one row, never a task, never an alert, never sent
-to anyone. The same error again stays in the History.</li>
+<li><strong>Triage reads every run that worked</strong>, against <code>TRIAGE.md</code> and the report&#39;s own <strong>Make it a task
+when…</strong> sentence. A task if it needs doing - a bug found, a job that did not run - and otherwise a
+row under Reports, as the Timeline line says.</li>
+<li><strong>A failed run</strong> is in the bell, top right, and nowhere else: no row, never a task, never an alert,
+never sent to anyone. It clears itself when a run works again.</li>
 <li><strong>A mute</strong> covers the alert and the morning brief as well as the rail.</li>
 <li><strong>Who judges</strong> is one setting for every report, under Settings › Triage &amp; agents › Where runs
 go; blank means the brain that writes the report. <strong>try it on the last 5 runs</strong> shows what the
@@ -281,7 +277,7 @@ card would have done, without posting anything.</li>
 failed.</p>
 <h2 id="schedules">Schedules<a class="anchor" href="#schedules" aria-label="Link to this section">#</a></h2>
 <p>Pick one or more: every N minutes, daily at <code>HH:MM</code>, a five-field cron, or on app start. No
-clock at all means the report runs only when you ask. A slot missed while the app was closed
+clock at all means the report runs only when you press Run now, and its row wears a red border that says so. A slot missed while the app was closed
 fires once on reopen. Reports have their own clock: turning the mail poll or the startup
 catch-up off does not stop them.</p>
 <table>
@@ -300,7 +296,7 @@ catch-up off does not stop them.</p>
 <td>That report, now. It does not use up &quot;once a day&quot; or move the next slot</td>
 </tr>
 </tbody></table>
-<p>A scheduled run that fails is tried again 15 minutes later. A report runs one at a time; a second
+<p>A scheduled run that fails is tried again at its next scheduled time, never in between. A report runs one at a time; a second
 Run now while it runs is told so.</p>
 <div class="callout note"><p class="eyebrow">Once a day means once a day</p><p>&quot;At most once a day&quot; caps the scheduled runs of the whole report. If the 08:00 slot has already
 produced today&#39;s run, opening the app at 09:00 does not produce a second one.</p>

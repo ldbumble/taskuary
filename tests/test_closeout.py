@@ -437,6 +437,11 @@ class ContributorPullRequestTests(unittest.TestCase):
         self.assertEqual(channels.heal_upstream_ended(s), [tid])
         self.assertEqual(s.get_task(tid)['Status'], 'done'); self.assertNotEqual(s.get_review(rid)['Status'], 'pending')
         self.assertEqual(s.get_task(other)['Status'], 'waiting')                    # a PR still open is left alone
+        # ...and the next launch leaves it be: done today is still on the Board's list, and it was re-closed - a fresh
+        # AI wrap-up and two comments - on every start (the owner, 2026-09-28: startup took over a minute)
+        n = len(s.list_comments(tid))
+        self.assertEqual(channels.heal_upstream_ended(s), [])
+        self.assertEqual(len(s.list_comments(tid)), n)
 
 
     def test_a_merged_pr_from_the_issues_list_says_merged(self):

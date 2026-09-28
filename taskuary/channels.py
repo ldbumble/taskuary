@@ -1123,6 +1123,9 @@ def heal_upstream_ended(store) -> list:
     on the task is the evidence; nothing is asked of GitHub. Returns the tasks it closed."""
     closed = []
     for t in store.list_tasks(active_only=True):
+        # the Board's list keeps TODAY's finished tasks too: re-closing them wrote a fresh AI report and two comments on
+        # every launch, and eight of them held the first page back a minute (the owner, 2026-09-28)
+        if t.get('Status') in ('done', 'dropped'): continue
         said = next((c['Body'] for c in reversed(store.list_comments(t['TaskId']))
                      if c.get('Actor') == 'router' and str(c.get('Body') or '').endswith(ENDED_SAID)), None)
         if not said: continue

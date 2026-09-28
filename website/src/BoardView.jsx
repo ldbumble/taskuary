@@ -373,12 +373,15 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
         </Typography>}
         {/* the same board, two ways to look at it - columns to move work, the floor to see how
             much of your capacity is actually busy */}
-        <Box sx={{ display: "flex", gap: 0.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2, p: "3px" }}>
+        <Box role="tablist" aria-label="Board view"
+          sx={{ display: "flex", gap: 0.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2, p: "3px" }}>
           {[{ k: "columns", label: "Columns", icon: <ViewKanbanIcon sx={{ fontSize: 14 }} /> },
             { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> },
             { k: "wall", label: "Wall", icon: <GridViewIcon sx={{ fontSize: 14 }} /> },
             { k: "notes", label: "Live handoffs", icon: <ForumIcon sx={{ fontSize: 14 }} /> }].map((o) => (
-              <Box key={o.k} onClick={() => setView(o.k)}
+              <Box key={o.k} role="tab" tabIndex={0} aria-selected={view === o.k}
+                onClick={() => setView(o.k)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(o.k); } }}
                 sx={{ display: "flex", alignItems: "center", gap: 0.6, height: 24, px: 1.1, borderRadius: 1.5,
                   fontSize: 12, fontWeight: view === o.k ? 700 : 500, cursor: "pointer",
                   color: view === o.k ? INK : DIM, bgcolor: view === o.k ? PANEL : "transparent",

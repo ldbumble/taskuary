@@ -207,14 +207,14 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                 <Box sx={{ borderBottom: `1px solid ${BORDER}`, bgcolor: wrapBusy ? ROLES.working.tint : waiting ? ROLES.you.tint : "#faf8f5", flexShrink: 0 }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.75, py: 0.35 }}>
                     <Box onPointerDown={(e) => startDrag(e, s.sid)}
-                      role="button" aria-label={`Drag ${t.ref || `TQ-${s.taskId}`} to reorder`} tabIndex={0}
+                      role="button" aria-label={`Drag ${t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`} to reorder`} tabIndex={0}
                       title="Drag to reorder this pane"
                       sx={{ width: 24, height: 26, display: "flex", alignItems: "center", justifyContent: "center",
                         flexShrink: 0, borderRadius: 1, cursor: "grab", touchAction: "none", userSelect: "none",
                         "&:hover": { bgcolor: "#e7eae2" }, "&:active": { cursor: "grabbing" } }}>
                       <DragIndicatorIcon sx={{ fontSize: 16, color: FAINT }} />
                     </Box>
-                    <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${s.taskId}`}</Typography>
+                    <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`}</Typography>
                     <Typography noWrap title={t.Title || s.cwd}
                       sx={{ fontSize: 12, fontWeight: 650, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
                     <Tooltip title="Open the full task page"><IconButton aria-label="Open full task" size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>

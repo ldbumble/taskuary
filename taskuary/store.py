@@ -1580,6 +1580,7 @@ class SQLiteStore:
                 OR tq_fold(t.Tags) LIKE ? ESCAPE '\\'
                 OR tq_fold(printf('TQ-%04d', t.TaskId)) LIKE ? ESCAPE '\\'
                 OR CAST(t.TaskId AS TEXT) LIKE ? ESCAPE '\\'
+                OR ('tq-' || t.TaskId) LIKE ? ESCAPE '\\'
                 OR EXISTS (
                     SELECT 1 FROM message m WHERE m.TaskId=t.TaskId AND (
                         tq_fold(m.Channel) LIKE ? ESCAPE '\\'
@@ -1592,7 +1593,9 @@ class SQLiteStore:
                     )
                 )
             )""")
-            p.extend([pat] * 18)
+            # "TQ-796" finds TQ-0796: the ref is matched with its padding zeros read as none
+            ref = re.sub(r'^tq-?0*(?=\d)', 'tq-', _fold(term))
+            p.extend([pat] * 11 + [self._like_pat(ref)] + [pat] * 7)
         return where, p
 
     def worked_today_task_ids(self) -> set:

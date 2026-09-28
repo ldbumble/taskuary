@@ -276,7 +276,7 @@ def task_link(tid: int) -> str:
     return f"http://{host}:{srv.get('port') or 7787}/#task={int(tid)}"
 
 
-_REF = re.compile(r'\bTQ-(\d{4})\b')
+_REF = re.compile(r'\bTQ-0*(\d+)\b')            # any width: TQ-10000 is five digits
 def _linked(text: str) -> str:
     """Every line naming a task ends with the door into it (the assistant's blocks carry refs
     without links; the brief promises one after every ref)."""

@@ -1024,7 +1024,7 @@ def _cloud_explicit(store, channel) -> bool:
     github's per-repo pickers get."""
     return any(json.loads(s.get('ConfigJson') or '{}').get('mode') in ('feed', 'tasks')
                for s in store.list_sources() if s['Channel'] == channel)
-TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
+TQ_ISSUE = re.compile(r'^\[TQ-\d+\]')        # issues the coder itself opened - never ingest those back; TQ-10000 has five digits
 
 
 def gh_modes(src: dict, file_only: bool) -> tuple:

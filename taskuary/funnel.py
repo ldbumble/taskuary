@@ -157,7 +157,7 @@ def lane_index(lane: str) -> int: return LANES.index(lane) if lane in LANES else
 
 def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None, tid=None, rid=None,
           channel='', category='', preview='', **extra) -> dict:
-    return {'key': key, 'kind': kind, 'lane': lane, 'title': _short(title, 140) or '(no subject)', 'who': _short(who, 60),
+    return {'key': key, 'kind': kind, 'lane': lane, 'title': _cut(title, 300) or '(no subject)', 'who': _short(who, 60),
             'when': _ts(when), 'since': _ts(since or when), 'sort_at': str(since or when or ''), 'why': _short(why, 220), 'mid': mid, 'tid': tid,
             'ref': task_ref(tid) if tid else None, 'rid': rid, 'channel': channel, 'category': category,
             'preview': _gist(preview, 240), **extra}

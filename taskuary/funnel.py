@@ -802,6 +802,42 @@ def _band(item):
                           result=lane == 'report')
 
 
+# THE RAIL'S SECTIONS, said once for the server (website/src/funnelPile.js levelOf is the page's copy, and
+# tests/fixtures/rail_levels.json holds both to the same answers). The canvas redesign (2026-09-29) walks a section
+# by its heading, and the phone doorway offers the same sections as picks - so the walk and the rail must agree on
+# which row is in which: For later is work walked past with Next or put away with Remind me; Advisor ideas is an
+# idea still only an idea (made a task, it is work like any other).
+SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'agents': 'Agents working', 'later': 'For later',
+                 'reports': 'Reports', 'ideas': 'Advisor ideas', 'fyi': 'FYI'}
+_LEVEL_OF_BAND = {1: 'urgent', 2: 'task', 3: 'reports', 4: 'fyi', 5: 'agents'}
+# the page's fallback for a row that carries no band (funnelPile.attentionBand) - kept identical, never _band's
+_BAND_FALLBACK = {'blocked': 2, 'time': 1, 'approve': 2, 'broken': 2, 'asked': 2, 'yours': 2, 'queued': 2, 'stopped': 2,
+                  'saved': 2, 'forgotten': 4, 'report': 3, 'fyi': 4, 'working': 5}
+
+
+def level_of(item: dict) -> str:
+    band = item.get('order_band')
+    if not (isinstance(band, int) and 1 <= band <= 5):
+        if item.get('kind') == 'meeting' and (item.get('calendar_ready') is False or (item.get('mins') or 0) > 15): band = 2
+        elif item.get('kind') == 'agentdone': band = 2
+        else: band = _BAND_FALLBACK.get(item.get('lane'), 2)
+    if band == 2 and (item.get('surfaced') or item.get('deferred')): return 'later'
+    if band == 4 and item.get('kind') == 'idea': return 'ideas'
+    return _LEVEL_OF_BAND.get(band, 'fyi')
+
+
+def section_next(items: list, section: str, seen=()) -> dict | None:
+    """The next row of one section, in the rail's own order: what clicking its heading, then Next, walks. A row
+    still being triaged is not ready; a row already walked in this pass is not offered twice."""
+    seen = set(seen or ())
+    return next((i for i in items or [] if level_of(i) == section and not i.get('settling')
+                 and i.get('key') not in seen and not seen.intersection(i.get('aliases') or [])), None)
+
+
+def section_done(section: str) -> str:
+    return f"{SECTION_WORDS.get(section, section)} done."
+
+
 def _activity_time(value):
     """Stored-local compatibility, retaining subseconds and explicit offsets."""
     try:

@@ -121,3 +121,9 @@ test("reports, ideas and fyi divide what is left; the rest are never capped", as
   const { CAPPED } = await import("../src/funnelPile.js");
   assert.deepEqual(CAPPED, ["reports", "ideas", "fyi"]);
 });
+
+// ONE RULE, TWO COPIES: the server's funnel.level_of reads the same fixture (tests/test_canvas_sections.py)
+test("the page puts every fixture row where the server does", () => {
+  const rows = JSON.parse(readFileSync(fileURLToPath(new URL("../../tests/fixtures/rail_levels.json", import.meta.url)), "utf8"));
+  for (const [item, level] of rows) assert.equal(levelOf(item), level, JSON.stringify(item));
+});

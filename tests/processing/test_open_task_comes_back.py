@@ -111,8 +111,11 @@ def test_later_still_holds_it_past_the_hour(db):
     a_task(db, 'Call Maya about PAM review')
     key = only_key(db)
     funnel.settle(db, key, 'later', hours=6)
-    assert key not in work(db, after(minutes=61)), 'the hourly nudge overrode Later'
-    assert key in work(db, after(hours=7)), 'and then Later never expired'
+    # put away is still on the rail since the canvas redesign (2026-09-29) - in For later, never offered
+    held = work(db, after(minutes=61)).get(key)
+    assert held is None or (funnel.level_of(held) == 'later' and not held['actionable']), 'the hourly nudge overrode Later'
+    back = work(db, after(hours=7)).get(key)
+    assert back and not back.get('deferred'), 'and then Later never expired'
 
 
 def test_a_closed_task_never_comes_back(db):

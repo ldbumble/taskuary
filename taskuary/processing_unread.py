@@ -431,6 +431,13 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     if passed:
         unread = True
         card.update(unread=True, surfaced=True, surfaced_at=(shown or {}).get('At') or read.get('read_at'))
+    # FOR LATER SAYS WHEN IT COMES BACK (the canvas redesign, 2026-09-29): the rail's gutter counts down to it. A row
+    # walked past returns when its read is task_return_minutes old (`back`, above); one merely shown, when its mark ages
+    # out; one put away with Remind me, on its date.
+    if card.get('deferred'): card['back_at'] = card.get('defer_until')
+    elif card.get('surfaced'):
+        base = read_at if passed else processing_all._stamp(card.get('surfaced_at'))
+        if base: card['back_at'] = (base + timedelta(minutes=quiet)).strftime('%Y-%m-%d %H:%M:%S')
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
                      if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')
@@ -467,7 +474,10 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     states = store.funnel_states()
     quiet, walk_at = return_minutes(store), walk_started_at(store)
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet, walk_at) for row in rows]
-    cards = [card for card in cards if (include_read or card['unread']) and not card.get('ranked_wait')]
+    # ...and a task put away with Remind me stays on the rail, in For later, saying its day - it is still open work, and
+    # the rail is where open work lives (2026-09-29). It is never actionable, so the walk does not offer it early.
+    kept = lambda card: card['unread'] or (card.get('deferred') and card.get('tid') and not card.get('closed'))
+    cards = [card for card in cards if (include_read or kept(card)) and not card.get('ranked_wait')]
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)
     if processing_all._matches('calendar', '', query):

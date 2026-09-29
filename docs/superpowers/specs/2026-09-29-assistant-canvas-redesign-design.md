@@ -27,7 +27,7 @@ ideas) — it does not replace it.
   appear, click one and the rest go (Back returns), its details open. The AI can always talk about, or set up, the
   card that is open.
 - Timeline is a switch (Work | Timeline) that sits **with the rail**, under the buttons — it changes the task rows,
-  not Reports or Connections. There is no New button in the sidebar. Board and its agent wall stay a full-screen view reached from the top.
+  not Reports or Connections. **+ New** (a new task) stays in the rail header beside the filter, as today. Board and its agent wall stay a full-screen view reached from the top.
 - The phone matches: the WhatsApp/Telegram doorway and the web app at phone width.
 - The terminal must not redraw garbage, and the rail must not rebuild on every click.
 
@@ -39,7 +39,7 @@ ideas) — it does not replace it.
 │  Connections                 ││  earlier items, folded to one line              │
 │  Hub                         ││                                                  │
 │  Settings                    ││  ┌ TQ-0801 Export drops rows ─────── Next [⤢]┐  │
-│ (work|timeline) All items ▾  ││  │ (1) Task       — the Tasks tab's card      │  │
+│ (work|timeline)|All items ▾ +New│  │ (1) Task       — the Tasks tab's card      │  │
 │ 2 in today · synced · Sync   ││  │ (2) Agent work — session, near full height │  │
 │      ( ON YOU )──────── 2    ││  │ (3) Close out                              │  │
 │ <30m ●│[✉ Export drops… on you]│  └────────────────────────────────────────────┘  │
@@ -57,9 +57,8 @@ ideas) — it does not replace it.
   category pills with their rule and count, bordered rows with icon, title, ref and state chip, "on the table" on
   the current row. Collapsible.
 - **Buttons on top:** Reports · Connections · Hub · Settings — one line each. Each posts its browse card (below).
-  No New button in the sidebar (New stays reachable from the canvas header and by asking).
-- **Under the buttons, the rail's own header, as today:** the `work | timeline` switch and the filter, then the
-  counts / synced / Sync now line. The switch belongs to the rail because it changes the task rows only.
+- **Under the buttons, the rail's own header, exactly as today:** the `work | timeline` switch, the filter, **+ New**
+  (a new task), then the counts / checked / Sync now line. The switch belongs to the rail because it changes the task rows only.
 - **Sections**, sticky headings, in this order. `funnelPile.LEVEL_ORDER` becomes
   `urgent, task, agents, passed→later, reports, ideas, fyi`:
   - **On you** — urgent + your task (as today).

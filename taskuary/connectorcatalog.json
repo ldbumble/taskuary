@@ -131,7 +131,7 @@
       "title": "Microsoft SQL Server",
       "group": "Databases",
       "planned": false,
-      "desc": "",
+      "desc": "Run read-only queries against SQL Server over ODBC, with Windows auth by default.",
       "match": [
         "microsoft sql server",
         "microsoft",
@@ -203,7 +203,7 @@
       "title": "Remote Windows (WinRM)",
       "group": "Cloud & infrastructure",
       "planned": false,
-      "desc": "",
+      "desc": "Run a PowerShell script on a remote Windows machine (WinRM) and report its output.",
       "match": [
         "remote windows (winrm)",
         "remote",
@@ -216,7 +216,7 @@
       "title": "Any database (connection string)",
       "group": "Databases",
       "planned": false,
-      "desc": "",
+      "desc": "Query any database with a connection string - Postgres, MySQL, Snowflake, Oracle - through SQLAlchemy or ODBC.",
       "match": [
         "any database (connection string)",
         "any",
@@ -230,7 +230,7 @@
       "title": "Robinhood (agentic trading)",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Portfolio, positions, balances and orders through Robinhood's agentic-trading MCP; a trade is placed only on your approval.",
       "match": [
         "robinhood (agentic trading)",
         "robinhood",
@@ -243,7 +243,7 @@
       "title": "Amazon Web Services",
       "group": "Cloud & infrastructure",
       "planned": false,
-      "desc": "",
+      "desc": "S3 objects, CloudWatch logs or any AWS service call as reports and agent tools, with your IAM keys.",
       "match": [
         "amazon web services",
         "amazon",
@@ -257,7 +257,7 @@
       "title": "Microsoft Azure",
       "group": "Cloud & infrastructure",
       "planned": false,
-      "desc": "",
+      "desc": "Blob storage, Log Analytics (KQL) or any resource via ARM as reports and agent tools, through an app registration.",
       "match": [
         "microsoft azure",
         "microsoft",
@@ -269,7 +269,7 @@
       "title": "SharePoint",
       "group": "Files & sheets",
       "planned": false,
-      "desc": "",
+      "desc": "SharePoint list items and csv/xlsx files in document libraries as rows, over Graph.",
       "match": [
         "sharepoint"
       ]
@@ -279,7 +279,7 @@
       "title": "Google Sheets",
       "group": "Files & sheets",
       "planned": false,
-      "desc": "",
+      "desc": "A Google Sheet's cells as rows, with the first row as the column names.",
       "match": [
         "google sheets",
         "google"
@@ -290,7 +290,7 @@
       "title": "Network file share",
       "group": "Files & sheets",
       "planned": false,
-      "desc": "",
+      "desc": "Read, save and move documents on a Windows or SMB file share.",
       "match": [
         "network file share",
         "smb file",
@@ -304,7 +304,7 @@
       "title": "SFTP",
       "group": "Files & sheets",
       "planned": false,
-      "desc": "",
+      "desc": "List, fetch, upload and rename files on a vendor's or bank's SFTP server.",
       "match": [
         "sftp"
       ]
@@ -314,7 +314,7 @@
       "title": "Knowledge base",
       "group": "Files & sheets",
       "planned": false,
-      "desc": "",
+      "desc": "Search your own documents, indexed on this machine - for reports, agents and reply drafts.",
       "match": [
         "knowledge base",
         "knowledge",
@@ -326,7 +326,7 @@
       "title": "Company Hub",
       "group": "Files & sheets",
       "planned": false,
-      "desc": "",
+      "desc": "Discoveries and ideas written by people and agents, searchable, discussed and voted on.",
       "match": [
         "company hub",
         "company",
@@ -472,7 +472,7 @@
       "title": "Prometheus",
       "group": "Observability",
       "planned": false,
-      "desc": "",
+      "desc": "PromQL instant queries as reports and agent tools, one row per series.",
       "match": [
         "prometheus"
       ]
@@ -482,7 +482,7 @@
       "title": "Datadog",
       "group": "Observability",
       "planned": false,
-      "desc": "",
+      "desc": "Your Datadog monitors and their states as reports and agent tools, trouble first.",
       "match": [
         "datadog"
       ]
@@ -492,7 +492,7 @@
       "title": "Sage Intacct",
       "group": "Corporate systems",
       "planned": false,
-      "desc": "",
+      "desc": "General ledger, AP bills, vendors and budgets from Sage Intacct; writes only once you approve them.",
       "match": [
         "sage intacct",
         "sage",
@@ -504,7 +504,7 @@
       "title": "QuickBooks Online",
       "group": "Corporate systems",
       "planned": false,
-      "desc": "",
+      "desc": "Bills, purchases, vendors and the chart of accounts from QuickBooks; posts a bill or expense only on your approval.",
       "match": [
         "quickbooks online",
         "quickbooks",
@@ -516,7 +516,7 @@
       "title": "Bank & card feed (Teller)",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Bank and card accounts, transactions and balances through Teller - read-only.",
       "match": [
         "bank & card feed (teller)",
         "bank",
@@ -530,7 +530,7 @@
       "title": "Bank & card feed (SimpleFIN)",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Bank and card accounts, transactions and balances through a SimpleFIN token - read-only.",
       "match": [
         "bank & card feed (simplefin)",
         "bank",
@@ -544,7 +544,7 @@
       "title": "Crypto prices (CoinGecko)",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Spot price and 24-hour change for any coin CoinGecko lists.",
       "match": [
         "crypto prices (coingecko)",
         "crypto",
@@ -557,7 +557,7 @@
       "title": "FX rates",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "European Central Bank reference exchange rates, no key needed.",
       "match": [
         "fx rates",
         "rates",
@@ -569,7 +569,7 @@
       "title": "Yahoo Finance (best-effort)",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Quotes and price history from Yahoo's unofficial chart endpoint - best-effort, may break.",
       "match": [
         "yahoo finance (best-effort)",
         "yahoo",
@@ -583,7 +583,7 @@
       "title": "SEC filings (EDGAR)",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "US public-company filings and their XBRL facts from SEC EDGAR, no key needed.",
       "match": [
         "sec filings (edgar)",
         "sec",
@@ -597,7 +597,7 @@
       "title": "Twelve Data",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Quotes and technical indicators for stocks, FX and crypto.",
       "match": [
         "twelve data",
         "twelve",
@@ -610,7 +610,7 @@
       "title": "Alpha Vantage",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Stock quotes from Alpha Vantage's free API (25 calls a day).",
       "match": [
         "alpha vantage",
         "alpha",
@@ -623,7 +623,7 @@
       "title": "FRED (keyless)",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "US macroeconomic series - rates, inflation, employment - with no account or key.",
       "match": [
         "fred (keyless)",
         "fred",
@@ -635,7 +635,7 @@
       "title": "Finnhub",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Quotes, company news, earnings dates and insider transactions.",
       "match": [
         "finnhub"
       ]
@@ -645,7 +645,7 @@
       "title": "Polygon.io",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Price bars and full-market snapshots with deep history.",
       "match": [
         "polygon.io",
         "polygon"
@@ -656,7 +656,7 @@
       "title": "Tiingo",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Adjusted end-of-day price history and a curated news feed.",
       "match": [
         "tiingo"
       ]
@@ -666,7 +666,7 @@
       "title": "Financial Modeling Prep",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Company fundamentals and financial ratios.",
       "match": [
         "financial modeling prep",
         "financial",
@@ -680,7 +680,7 @@
       "title": "Alpaca (market data)",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Quotes and bars from Alpaca's market-data feed - read-only, no orders.",
       "match": [
         "alpaca (market data)",
         "alpaca",
@@ -693,7 +693,7 @@
       "title": "Strategy screen",
       "group": "Markets & finance",
       "planned": false,
-      "desc": "",
+      "desc": "Filters another market card's rows down to the ones that match a condition; holds no credentials itself.",
       "match": [
         "strategy screen",
         "strategy",
@@ -705,7 +705,7 @@
       "title": "Zoho Invoice",
       "group": "Corporate systems",
       "planned": false,
-      "desc": "",
+      "desc": "Monthly billing in Zoho Invoice: draft invoices from last month's, then approve each email.",
       "match": [
         "zoho invoice",
         "zoho",
@@ -717,7 +717,7 @@
       "title": "Exa search",
       "group": "Agentic web",
       "planned": false,
-      "desc": "",
+      "desc": "Web search with the page text already extracted, for reports and agents.",
       "match": [
         "exa search",
         "exa",
@@ -729,7 +729,7 @@
       "title": "Tavily search",
       "group": "Agentic web",
       "planned": false,
-      "desc": "",
+      "desc": "Web search built for agents, with an optional written answer and its sources.",
       "match": [
         "tavily search",
         "tavily",
@@ -741,7 +741,7 @@
       "title": "Firecrawl",
       "group": "Agentic web",
       "planned": false,
-      "desc": "",
+      "desc": "Read one web page as clean markdown, without nav, banners and footer.",
       "match": [
         "firecrawl"
       ]
@@ -751,7 +751,7 @@
       "title": "Jina Reader",
       "group": "Agentic web",
       "planned": false,
-      "desc": "",
+      "desc": "Read any public web page as markdown, with no account (Jina Reader).",
       "match": [
         "jina reader",
         "jina",

@@ -224,6 +224,15 @@ class NewWalkRaisesWavingAgentsTests(unittest.TestCase):
         self.assertNotIn('processing:pi_1', s.funnel_states())
         self.assertEqual(s.funnel_states()['processing:pi_2']['Status'], 'surfaced', 'read stays read')
 
+    def test_a_new_walk_raises_a_yes_still_owed_too(self):
+        """2026-09-29: Close out refused, the app restarted, and the new chat walked straight past the pull request still
+        waiting on the owner. Shown in the old chat is not answered."""
+        s = store()
+        s.set_funnel_state('processing:pi_3', 'surfaced', 'assistant')
+        with mock.patch.object(processing_unread, 'build', return_value={'items': [{'key': 'processing:pi_3', 'lane': 'approve'}]}):
+            funnel.reset_walk(s)
+        self.assertNotIn('processing:pi_3', s.funnel_states())
+
 
 if __name__ == '__main__': unittest.main()
 

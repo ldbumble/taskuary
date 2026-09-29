@@ -116,7 +116,8 @@ class SendBlockedTests(unittest.TestCase):
         self.assertFalse(row['CanSend']); self.assertIn('replies are off for teams', row['SendBlock'])
         self.s.set_setting('reply_channels', 'email,teams', 't')
         rv = next(r for r in self.c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['ReviewId'] == self.rv['ReviewId'])
-        self.assertTrue(rv['CanSend']); self.assertEqual(rv['SendBlock'], '')
+        # switched on, Teams still has no road out: an app cannot post into a chat (every send on record was a 403)
+        self.assertFalse(rv['CanSend']); self.assertIn('answer it in Teams', rv['SendBlock'])
 
     def test_the_server_still_refuses_to_send_on_a_blocked_channel(self):
         sent = []

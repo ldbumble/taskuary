@@ -243,6 +243,15 @@ def set_current(store, tid: int, key: str | None, actor: str = 'assistant'):
     if current_key(store, tid) != (key or ''): store.set_setting(f'{CURRENT_KEY}:{tid}', key or '', actor)
 
 
+def resume(store, actor: str = 'owner') -> dict:
+    """"Walk me through my tasks" and a hand-off's hello: the item ON THE TABLE when there still is one - an act on it
+    failed, its question is unanswered - and only then the next thing. Both used to surface afresh, and the walk skips a
+    row it has shown for a few hours: a Close out refused by GitHub was passed over for the next pull request, and the
+    one still waiting on the owner went quiet (2026-09-29). restore_current is the test of "still there"."""
+    held = restore_current(store, general.dock_task(store, actor)[0]['TaskId'])
+    return surface(store, held['key'], actor=actor) if held and held.get('key') else surface(store, actor=actor)
+
+
 def restore_current(store, tid: int) -> dict | None:
     """The persisted Current, validated against the pile as it stands (PW-162): the item as it is now when it
     is still unread and still there; otherwise the key is cleared and nothing is chosen in its place."""
@@ -259,7 +268,10 @@ def restore_current(store, tid: int) -> dict | None:
     # ...except an agent's finished result, whose task is done by definition: the closed task IS what is being
     # shown, and wiping it emptied the table and the rail the moment it went up (the owner, 2026-09-24)
     over = item and item.get('tid') and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
-    if not item or item.get('settling') or (over and item.get('lane') != 'approve' and item.get('kind') != 'agentdone'):
+    # a new line on its thread is being triaged: not on the table THIS moment, but still the one the owner is on - clearing
+    # the key emptied the table for good the instant a reply arrived (2026-09-29 audit); it is back when triage lands
+    if item and item.get('settling'): return None
+    if not item or (over and item.get('lane') != 'approve' and item.get('kind') != 'agentdone'):
         set_current(store, tid, None)
         return None
     card = card_for(item) | {'presentation_revision': item.get('presentation_revision')}
@@ -2187,7 +2199,12 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     # would have rewritten the undo of the first. The next act closes the old undo (it no longer applies).
     if prev and (prev.get('params') or {}).get('_undo'):
         operations.cancel(store, prev['id'], actor); store.set_setting(LAST_UNDO, '', actor); prev = None
-    if prev and prev['kind'] == kind and int(prev['target']) == int(target): op = operations.revise(store, prev['id'], params, actor)
+    same = bool(prev and prev['kind'] == kind and int(prev['target']) == int(target))
+    # THE SAME ASK AGAIN is not a change: a "yes" read as the decision once more re-proposed it as "Changed to: <the same
+    # thing>", a new version that changed nothing (2026-09-22 audit). It stays the one proposal and says it still waits.
+    unchanged = same and {k: v for k, v in (prev.get('params') or {}).items() if k != 'processing_context'} == params
+    if unchanged: op = prev
+    elif same: op = operations.revise(store, prev['id'], params, actor)
     else:
         if prev: operations.cancel(store, prev['id'], actor)
         op = operations.propose(store, kind, target, params, actor)
@@ -2200,7 +2217,8 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     # the card's line is a title and may be cut; the sentence is all a phone gets, so it carries the whole ask -
     # "...then tell me what setting or…" was the phone's only account of what the agent would do (2026-09-24 audit)
     said = summary if it else _title_cut(params.get('text') or params.get('note') or where, 400).rstrip('.')
-    head = f"Changed to: {label} - {said}" if op['version'] > 1 else f"{label}: {said}"
+    head = (f"Still waiting for your yes: {label} - {said}" if unchanged else f"Changed to: {label} - {said}" if same
+            else f"{label}: {said}")
     say_ = lead + f"{head}.{note} Nothing has been started - confirm below, or tell me what to change."
     # OVER THE CARD, only what the card does not say: its heading IS "<label>" and its line IS the summary, so the
     # sentence above it said them first (the owner, 2026-09-24: "the assistant saying words above the box and then

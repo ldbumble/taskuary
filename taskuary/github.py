@@ -33,7 +33,7 @@ def needs_of(r) -> str:
 
 def _ok(r, what: str):
     """The response when GitHub said yes; otherwise Refused, saying what the owner can do about it."""
-    if r.ok: return r
+    if getattr(r, 'ok', True) and int(getattr(r, 'status_code', 200) or 200) < 400: return r
     try: why = str(r.json().get('message') or '')
     except ValueError: why = r.text[:200]
     needs = needs_of(r) if r.status_code == 403 else ''

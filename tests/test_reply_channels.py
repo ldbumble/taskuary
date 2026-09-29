@@ -22,8 +22,12 @@ def task_with(s, channel, status='routed'):
 class CanReplyTests(unittest.TestCase):
     def test_defaults(self):
         s = MemoryStore()
-        for ch in ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'discord'):
+        for ch in ('email', 'telegram', 'whatsapp', 'discord'):
             self.assertTrue(outbound.can_reply(s, ch), ch)
+        # read here, answered there: no sender behind it, so no Send in front of it - and the reason says where to answer.
+        # Teams too: Graph gives an app no permission to post into a chat (every Teams send on record was a 403).
+        self.assertFalse(outbound.can_reply(s, 'slack')); self.assertIn('answer it in Slack', outbound.send_block(s, 'slack'))
+        self.assertFalse(outbound.can_reply(s, 'teams')); self.assertIn('answer it in Teams', outbound.send_block(s, 'teams'))
         # read-only by design: nothing is written back to a tracker or an alert feed
         for ch in ('jira', 'linear', 'sentry', 'pagerduty', 'report', 'aws', 'azure', ''):
             self.assertFalse(outbound.can_reply(s, ch), ch)
@@ -86,7 +90,7 @@ class FinishTests(unittest.TestCase):
 
     def test_a_channel_switched_off_drafts_but_hides_send(self):
         s = MemoryStore(); s.set_setting('reply_channels', 'email', 't')
-        tid, _ = task_with(s, 'slack')
+        tid, _ = task_with(s, 'discord')
         with mock.patch('taskuary.responder.write_draft', return_value='hi') as wd:
             out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
         wd.assert_called_once()

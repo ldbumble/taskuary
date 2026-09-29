@@ -117,6 +117,40 @@ class AYesAnswersTheTableTests(unittest.TestCase):
         self.assertEqual(s.get_task(first['task_id'])['Status'], 'open')
 
 
+    def test_the_same_ask_again_is_the_same_proposal_still_waiting_not_a_change(self):
+        s = store(); out = arrive(s); item = pile(s)[0]
+        first = say(s, 'not ours', key=item['key'], model='Filing it.\nCALL: {"kind": "not_ours", "params": {}}')['proposal']
+        again = say(s, 'yes file it', key=item['key'], model='Filing it.\nCALL: {"kind": "not_ours", "params": {}}')['proposal']
+        self.assertEqual((again['id'], again['version']), (first['id'], first['version']))
+        self.assertTrue(again['say'].startswith('Still waiting for your yes'), again['say'])
+        self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
+
+
+class TheWalkResumesTheTableTests(unittest.TestCase):
+    """The incident: Close out failed on one pull request, the owner picked "Walk me through my tasks", and the walk
+    started afresh - skipping the item it had just shown, still waiting on them - and put up the next one."""
+    def test_walk_me_through_brings_back_the_item_whose_act_failed(self):
+        from taskuary import concierge, remote_assistant as ra, server, terminal
+        s = store(); tid, rid, item, p = drafted(s)
+        arrive(s, subject='Is the payroll file in?', body='Payroll closes Thursday.', hours=3)
+        for pt in (mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]),
+                   mock.patch.object(concierge, 'brain', return_value=None)):
+            pt.start(); self.addCleanup(pt.stop)
+        concierge.surface(s, key=item['key'])                                        # shown: the walk would skip it for hours
+        with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('SMTP 550 mailbox unavailable')):
+            run(s, p)
+        card = ra.walk(s).split('\n\n', 2)[-1]                                       # past the opener's who-wants-what
+        self.assertIn(f'TQ-{tid:04d}', card); self.assertIn('Can you send it?', card); self.assertNotIn('Payroll closes', card)
+
+    def test_with_nothing_left_on_the_table_the_walk_takes_the_next_thing(self):
+        from taskuary import concierge, general, terminal
+        s = store(); arrive(s, subject='Is the payroll file in?', body='Payroll closes Thursday.')
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(concierge, 'brain', return_value=None):
+            concierge.set_current(s, general.dock_task(s)[0]['TaskId'], None)
+            out = concierge.resume(s)
+        self.assertIn('payroll', (out.get('item') or {}).get('title', '').lower())
+
+
 class PlainFailureWordsTests(unittest.TestCase):
     def test_a_status_prefix_and_a_local_path_never_reach_the_chat(self):
         from fastapi import HTTPException

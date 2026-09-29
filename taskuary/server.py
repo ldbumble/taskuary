@@ -3531,6 +3531,7 @@ def concierge_chat(tid: int):
 def concierge_next(body: SurfaceBody = None):
     """Pull the next thing out of the pipe - or the one named, or the next piece of mail - and say it."""
     from . import concierge
+    _hands_off()                        # the walk is in a chat: a second tab, the office game - none of them move it here
     body = body or SurfaceBody()
     reservation = _navigation_reservation(body)
     if reservation:
@@ -3565,6 +3566,7 @@ def _with_pile(out: dict, body) -> dict:
 def concierge_open():
     """The first line of a new chat: the day in a breath, and the buttons that start the walk."""
     from . import concierge
+    _hands_off()
     return concierge.open_day(store, actor=ACTOR)
 
 class ConciergeStreamBody(BaseModel):
@@ -3761,6 +3763,7 @@ class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = N
 def concierge_propose(body: ConciergeProposeBody):
     """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
     from . import concierge
+    _hands_off()
     try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact)
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -3828,6 +3831,7 @@ def _walk_cannot(task_id: int, why: str):
 @app.post('/api/concierge/act')
 def concierge_act(body: ConciergeActBody):
     from . import concierge
+    _hands_off()
     try: return concierge.act(store, body.key, body.verb, ACTOR, _llm(), body.hours)
     except ValueError as e: raise HTTPException(422, str(e))
 

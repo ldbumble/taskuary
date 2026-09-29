@@ -23,14 +23,41 @@ const bare = (j) => String(j || "").replace(/:\d+(?=@)/, "");      // "123:4@s.w
 
 // Only the NEWEST poll in a chat answers: a vote on one three turns back names choices that are gone,
 // and the numbered list it was sent with has been replaced (a stale pick must never fire).
-export function createPolls(max = 200) {
+export function createPolls(max = 200, keep = 8) {
   const byChat = new Map();                                   // jid -> { id, secret, values }, the newest only
+  // ...and the few before it in each chat - never to ANSWER (a stale pick must never fire), only to know that a tap on
+  // one was a real pick on a list that is gone, so the owner is told so instead of hearing nothing (2026-09-29)
+  const older = new Map();                                    // jid -> [{ id, secret, values }], newest first
+  const open = (p, enc, creators, voters) => {
+    const cs = [...new Set(creators.flatMap((j) => [j, bare(j)]).filter(Boolean))];
+    const vs = [...new Set(voters.flatMap((j) => [j, bare(j)]).filter(Boolean))];
+    for (const c of cs) for (const v of vs) {
+      let got;
+      try { got = decryptPollVote(enc, { pollCreatorJid: c, pollMsgId: p.id, pollEncKey: p.secret, voterJid: v }); }
+      catch { continue; }
+      const picked = (got?.selectedOptions || []).map((b) => Buffer.from(b).toString("hex"));
+      return p.values.find((x) => picked.includes(sha(x))) || "";
+    }
+    return "";
+  };
   return {
     remember(jid, id, secret, values) {
+      const was = byChat.get(jid);
+      if (was) older.set(jid, [was, ...(older.get(jid) || [])].slice(0, keep));
       byChat.delete(jid); byChat.set(jid, { id, secret, values });
-      while (byChat.size > max) byChat.delete(byChat.keys().next().value);
+      while (byChat.size > max) { const k = byChat.keys().next().value; byChat.delete(k); older.delete(k); }
     },
     latest: (jid) => byChat.get(jid) || null,
+    // the chat of an OLDER poll of ours this update really picked an option on (a taken-back vote is no tap), or ""
+    stale(update, { creators = [], voters = [] } = {}) {
+      const key = update?.pollCreationMessageKey, enc = update?.vote;
+      if (!key || !enc?.encPayload) return "";
+      for (const [jid, list] of older) {
+        const p = list.find((x) => x.id === key.id);
+        if (p) return open(p, enc, creators, voters) ? jid : "";
+      }
+      return "";
+    },
     // the chosen option's words, or "" (not our poll, not the newest, a vote taken back, or unreadable).
     // Found by the poll's id, not the chat: a vote can name the chat by its LID while we sent to the number.
     // Which jid signed the vote depends on the account (a phone number or a LID, with or without the
@@ -39,16 +66,7 @@ export function createPolls(max = 200) {
       const key = update?.pollCreationMessageKey, enc = update?.vote;
       const p = key && [...byChat.values()].find((x) => x.id === key.id);
       if (!p || !enc?.encPayload) return "";
-      const cs = [...new Set(creators.flatMap((j) => [j, bare(j)]).filter(Boolean))];
-      const vs = [...new Set(voters.flatMap((j) => [j, bare(j)]).filter(Boolean))];
-      for (const c of cs) for (const v of vs) {
-        let got;
-        try { got = decryptPollVote(enc, { pollCreatorJid: c, pollMsgId: p.id, pollEncKey: p.secret, voterJid: v }); }
-        catch { continue; }
-        const picked = (got?.selectedOptions || []).map((b) => Buffer.from(b).toString("hex"));
-        return p.values.find((x) => picked.includes(sha(x))) || "";
-      }
-      return "";
+      return open(p, enc, creators, voters);
     },
   };
 }

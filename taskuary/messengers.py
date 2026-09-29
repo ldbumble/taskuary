@@ -358,6 +358,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # This id was sent through the bridge's localhost /send endpoint. It is Taskuary's
         # output, never an owner verdict or question; discard it before either interceptor.
         if m.get('taskuary'): continue
+        # A TAP ON AN OLDER LIST of the Assistant's (poll.mjs stale): nothing runs - its choices are gone - but it is answered
+        if m.get('stalePoll'):
+            if jid == assistant_chat: remote_assistant.stale_tap(store, 'whatsapp', jid, c['ConnectorId'])
+            took.append(m.get('id')); continue
         text = (m.get('text') or '').strip()
         # A VOICE NOTE IN A CONTROL CHAT is the owner talking to Taskuary, so it is heard BEFORE the interceptors,
         # which only ever read text. It used to fall past both - no text - and then past the source filter, since

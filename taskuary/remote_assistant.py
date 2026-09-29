@@ -258,7 +258,7 @@ def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
     # the hello goes first: a bridge that is not running or a bot that will not send must never leave
     # the tab locked behind a walk that never arrived anywhere
     with concierge.delivering(concierge.PHONE):
-        out = concierge.surface(store, actor=actor)
+        out = concierge.resume(store, actor)                  # the item on the table first, when there still is one
         text = carry_out(store, out, None, actor, lead=OPENED)
     send(store, channel, chat, text, cid)
     store.set_setting(HANDOFF_KEY, json.dumps(live), actor)
@@ -286,6 +286,21 @@ def end_handoff(store, actor: str = 'owner', note: str = CLOSED) -> dict:
 
 ALERT_EVERY = 20.0                     # seconds between looks; the walk is on the phone, not on a screen
 _looked = [0.0]
+# A PUSH WAITS FOR A GAP IN THE CONVERSATION (2026-09-29): two "By the way"s and the day's opener landed in the middle
+# of a walk, between a card and the owner's answer to it - the opener's numbered list replaced the card's, so the next
+# number answered the push. Nothing unprompted is sent while a turn is being answered for that chat, or within QUIET
+# seconds of the last word either way; the next look tries again.
+QUIET = 90.0
+_talked: dict = {}                     # (store, channel, chat) -> monotonic time of the last word, either way
+
+
+def talked(store, channel: str, chat: str): _talked[(id(store), channel, str(chat))] = time.monotonic()
+
+
+def quiet(store, channel: str, chat: str) -> bool:
+    """True when nothing is being said in this chat just now - a push may go."""
+    with _locks_guard: busy = any(k[0] == id(store) and k[1] == channel and k[3] == chat for k in _turns)
+    return not busy and time.monotonic() - _talked.get((id(store), channel, str(chat)), 0.0) >= QUIET
 
 
 def push_alerts(store, force: bool = False) -> int:
@@ -304,6 +319,7 @@ def push_alerts(store, force: bool = False) -> int:
     _looked[0] = time.monotonic()
     h = handoff(store)
     if not h: return 0
+    if not force and not quiet(store, h['channel'], h['chat']): return 0          # mid-conversation: the next look tries again
     from . import concierge, funnel, general
     try: p = funnel.pile(store)
     except Exception as e:
@@ -312,20 +328,31 @@ def push_alerts(store, force: bool = False) -> int:
     on_the_table = concierge.current_key(store, task['TaskId'])
     told = list(h.get('told') or [])
     refs = {i['key']: i.get('ref') or '' for i in p.get('items') or []}
+    # ONLY WHAT OUTRANKS THE TABLE (funnel.more_urgent's rule): a reply "waiting for your yes" is what the walk itself
+    # leads with - pushed as a By the way it arrived seconds before the walk showed that very card (2026-09-29). A
+    # meeting about to start still interrupts: the walk would not reach it in time.
+    items = p.get('items') or []
+    cur = next((i for i in items if i['key'] == on_the_table), None)
+    band = funnel._band(cur) if cur else 99
     fresh = [a for a in (p.get('alerts') or [])
-             if a.get('key') not in told and a.get('item') != on_the_table][:3]
+             if a.get('key') not in told and a.get('item') != on_the_table
+             and (a.get('kind') == 'meeting' or a.get('order_band', 3) < band)][:3]
     if not fresh: return 0
     named = [' '.join(x for x in (funnel.mark_for(a), f"{a['text']}"
                                   f"{' (' + refs[a['item']] + ')' if refs.get(a['item']) and refs[a['item']] not in a['text'] else ''}") if x)
              for a in fresh]
     lead = 'By the way — '            # the same words the desktop strip uses, in the place he is reading
-    say = lead + named[0] + '.' if len(named) == 1 else lead.rstrip() + '\n' + '\n'.join('· ' + n for n in named)
+    say = lead + named[0].rstrip('.') + '.' if len(named) == 1 else lead.rstrip() + '\n' + '\n'.join('· ' + n for n in named)
     handle = next((refs[a['item']] for a in fresh if refs.get(a['item'])), '')
     tail = (f'Say {handle} to take it now, or keep going.' if handle
             else 'Name it and I will take you to it, or keep going.')
     send(store, h['channel'], h['chat'], f'{say}\n\n{tail}', h.get('connector_id'))
     concierge.record(store, task['TaskId'], 'assistant', say)
-    store.set_setting(HANDOFF_KEY, json.dumps({**h, 'told': told + [a['key'] for a in fresh]}), 'owner')
+    # ...onto the hand-off as it is NOW: a Take it back that landed while this was sending must stay taken back - writing
+    # the record read a moment ago put the walk back in the chat and locked the desk again
+    now = handoff(store)
+    if now and now.get('at') == h.get('at'):
+        store.set_setting(HANDOFF_KEY, json.dumps({**now, 'told': list(now.get('told') or []) + [a['key'] for a in fresh]}), 'owner')
     return len(fresh)
 
 
@@ -385,6 +412,7 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
         try: messengers.react(store, channel, chat, message_id, connector_id=connector_id)
         except Exception as e: logger.debug(f'no receipt in {channel}: {e}')
     key = (id(store), channel, connector_id, chat)
+    talked(store, channel, chat)
     with _locks_guard: lock = _locks.setdefault(key, threading.Lock())
     # A PICK DOES NOT QUEUE BEHIND THE MODEL (2026-09-25: a poll tap got its thumb and then waited a minute - the
     # typed turn before it was still waiting on the model). A tap or a typed number is a button: it stops the turn
@@ -490,6 +518,26 @@ SCRIPT_LINES = [('Walk me through my tasks', {'t': 'walk'}), ('Set up Taskuary',
                 ('Set up a report', {'t': 'script', 'script': 'set up a report'})]
 
 
+def greeting(now=None) -> str:
+    from datetime import datetime as _dt
+    h = (now or _dt.now()).hour
+    return 'Good morning.' if h < 12 else 'Good afternoon.' if h < 18 else 'Good evening.'
+
+
+def day_opener(store, items: list, now=None) -> str:
+    """THE DAY IN A BREATH - the greeting, today's meetings, then who wants what. ONE text for the morning line and for
+    "Walk me through my tasks" (the owner, 2026-09-29: "when you hit walk me through on whatsapp that should trigger the
+    morning summary"): the walk opened with who-wants-what alone, without the meetings the morning line carried."""
+    return '\n\n'.join(x for x in (greeting(now), meetings_line(store), who_wants_what(items) if items else 'The pipe is clear.') if x)
+
+
+def spend_morning(store, now=None):
+    """The day's opener is spent - it went out, or the owner is already talking to the chat (a walk, a question): a second
+    greeting mid-conversation replaced the card's numbered list with its own (2026-09-29)."""
+    from datetime import datetime as _dt
+    store.set_setting(MORNING_AT, (now or _dt.now()).strftime('%Y-%m-%d'), 'assistant')
+
+
 def morning_line(store, now=None, force: bool = False) -> int:
     """Once a day, to the assistant's own chat: what is waiting in a breath, and the scripts as numbered
     options, so one reply starts the walk there. The chat used to speak first only for a hand-off, a
@@ -512,15 +560,24 @@ def morning_line(store, now=None, force: bool = False) -> int:
     items = p.get('items') or []
     if not items and not force: return 0
     # the desktop's opener: the day's meetings, then who wants what (2026-09-23)
-    head = '\n\n'.join(x for x in ('Good morning.', meetings_line(store),
-                                     who_wants_what(items) if items else 'The pipe is clear.') if x)
+    head = day_opener(store, items, now)
     text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, (w, _) in enumerate(SCRIPT_LINES, 1))
+    # ...never into a conversation: a walk handed to a chat is its own opener, and a door with a turn in flight or a word in
+    # the last minutes is left for the next pass (this runs after every report pass)
+    if handoff(store) and not force:
+        spend_morning(store, now); return 0
+    doors = [d for d in doors if force or quiet(store, d['channel'], d['chat'])]
+    if not doors: return 0
     sent = 0
     for d in doors:
         _offer(SCRIPT_LINES)                    # per send: remember_offered spends what was offered
         try: send(store, d['channel'], d['chat'], text, d['connectorId']); sent += 1
         except Exception as e: logger.warning(f'the morning line did not reach {d["channel"]}: {e}')
-    if sent: store.set_setting(MORNING_AT, today, 'assistant')
+    if sent:
+        store.set_setting(MORNING_AT, today, 'assistant')
+        # ...and it is IN the conversation: the desk and the model never knew it had been said
+        from . import concierge, general
+        concierge.record(store, general.dock_task(store, 'assistant')[0]['TaskId'], 'assistant', head)
     return sent
 
 
@@ -531,10 +588,11 @@ def walk(store, actor: str = 'owner') -> str:
     go to the model like any other."""
     from . import concierge, funnel
     with concierge.delivering(concierge.PHONE):
-        try: opener = who_wants_what(funnel.pile(store).get('items') or [])
+        try: opener = day_opener(store, funnel.pile(store).get('items') or [])
         except Exception as e:
             logger.debug(f'the phone walk opened without its summary: {e}'); opener = ''
-        out = concierge.surface(store, actor=actor)
+        spend_morning(store)                                  # the summary IS the day's opener - it is not said twice
+        out = concierge.resume(store, actor)                  # the item on the table first, when there still is one
         return carry_out(store, out, None, actor=actor, lead=opener)
 
 
@@ -546,6 +604,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
     try:
         task, _ = general.dock_task(store, f'owner-{channel}')
         tid = task['TaskId']
+        spend_morning(store)                  # already talking: the day's opener would land mid-conversation
         store.audit('task', tid, 'assistant_chat_question', f'owner-{channel}',
                     detail={'channel': channel, 'chat': chat, 'chars': len(question)})
         with concierge.delivering(concierge.PHONE):
@@ -692,7 +751,8 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
             return '\n\n'.join(said + [turn_text(nxt, store=store)])
         said.append('I could not write that draft here - it is waiting on the task page.')
     if walk_on:
-        nxt = concierge.surface(store, actor=actor)
+        here = (item or {}).get('key') if verb == 'next' else None       # Next leaves the table as the desktop's does
+        nxt = concierge.surface(store, actor=actor, leaving=here, exclude=here)
         return '\n\n'.join(said + [turn_text(nxt, store=store)])
     return '\n\n'.join(x for x in said if x)
 
@@ -738,6 +798,15 @@ def _item_for(store, key: str, item: dict | None) -> dict | None:
     from . import funnel
     if item and item.get('key') == key: return item
     return funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+
+
+def stale_tap(store, channel: str, chat: str, connector_id=None):
+    """A tap on a poll that is no longer the newest: its choices went with the card it was under, so nothing runs (a stale
+    pick must never fire) - but a tap that got no answer read as the assistant freezing (2026-09-29). The current choices
+    are the ones under the last message; say so, once, in words."""
+    try: send(store, channel, chat, 'That was an older list, so nothing ran - the choices under my last message are the current ones.',
+              connector_id)
+    except Exception as e: logger.warning(f'{channel}: could not answer a tap on an older list - {e}')
 
 
 def recovery_rows(store, chips: list, actor: str = 'owner') -> list:
@@ -797,7 +866,11 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     from . import concierge, operations
     t = act.get('t')
     try:
-        if t == 'next': return carry_out(store, concierge.surface(store, actor=actor), None, actor)
+        if t == 'next':
+            # the desktop's Next: what is on the table is put down on the way out (read - Passed when it is yours) and not
+            # the next pick; the phone surfaced afresh, so a failed item could be handed straight back or left unread
+            here = (item or {}).get('key')
+            return carry_out(store, concierge.surface(store, actor=actor, leaving=here, exclude=here), None, actor)
         if t == 'open':                 # one item by name - one the walk already showed and would not repeat yet
             nxt = concierge.surface(store, act.get('key'), actor=actor)
             return carry_out(store, nxt, nxt.get('item'), actor)
@@ -1599,6 +1672,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
     heading that already says what it is read as machinery rather than somebody talking."""
     from . import chatformat, messengers
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
+    talked(store, channel, chat)
     # every road to this chat passes here, so this is where what we offered is written down -
     # off the text AS WRITTEN, before any of it is respelled for the channel
     try: offered = remember_offered(store, channel, chat, text)

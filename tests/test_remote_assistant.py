@@ -413,6 +413,30 @@ class InterruptionsReachThePhoneTests(unittest.TestCase):
             self.assertEqual(remote_assistant.push_alerts(store, force=True), 0)
         send.assert_not_called()
 
+    def test_a_reply_waiting_for_a_yes_is_not_pushed_over_a_card_as_urgent(self):
+        """2026-09-29: "By the way - a reply is waiting for your yes", then the walk showed that very card seconds later.
+        Only what OUTRANKS the table interrupts; a meeting about to start always does."""
+        store, _c = self.handed_over()
+        concierge.set_current(store, general.dock_task(store)[0]['TaskId'], 'review:1')
+        pile = {'items': [{'key': 'review:1', 'lane': 'approve', 'kind': 'review'}, {'key': 'review:2', 'lane': 'approve', 'kind': 'review'},
+                          {'key': 'meeting:3', 'lane': 'time', 'kind': 'meeting', 'mins': 5}],
+                'alerts': [{'key': 'alert:review:2', 'item': 'review:2', 'kind': 'review', 'text': "a reply is waiting for your yes",
+                            'order_band': funnel._band({'lane': 'approve', 'kind': 'review'})},
+                           {'key': 'alert:meeting:3', 'item': 'meeting:3', 'kind': 'meeting', 'text': 'Budget review starts in 5 min', 'order_band': 1}]}
+        with mock.patch.object(funnel, 'pile', return_value=pile), mock.patch.object(messengers, 'wa_send') as send:
+            self.assertEqual(remote_assistant.push_alerts(store, force=True), 1)
+        self.assertIn('Budget review', send.call_args.args[2]); self.assertNotIn('waiting for your yes', send.call_args.args[2])
+
+    def test_nothing_is_pushed_while_the_chat_is_talking(self):
+        store, _c = self.handed_over()                          # the hello itself was a word, a moment ago
+        remote_assistant._looked[0] = 0.0
+        with mock.patch.object(funnel, 'pile', return_value=self.pile()), mock.patch.object(messengers, 'wa_send') as send:
+            self.assertEqual(remote_assistant.push_alerts(store), 0)
+            with mock.patch.object(remote_assistant, 'QUIET', 0.0):
+                remote_assistant._looked[0] = 0.0
+                self.assertEqual(remote_assistant.push_alerts(store), 1)
+        self.assertEqual(send.call_count, 1)
+
     def test_taking_it_back_forgets_what_was_told(self):
         store, _c = self.handed_over()
         with mock.patch.object(messengers, 'wa_send'):

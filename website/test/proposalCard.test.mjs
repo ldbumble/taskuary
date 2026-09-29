@@ -134,3 +134,18 @@ test("a proposed report reads like the report builder: its name, the prompt as a
   assert.ok(!d.params.some(([k]) => ["config", "source", "inputs", "summary instructions"].includes(k)));
   assert.equal(d.preview, true);
 });
+
+test("a failed act's way on runs from the chat: Try again, GitHub's own buttons, a repository, an item by name", () => {
+  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+  assert.match(view, /if \(c\.verb === "retry" && c\.op\) \{/);                 // the same confirmation once more
+  assert.match(view, /if \(c\.verb === "closeout" && c\.rid\) \{/);             // Update branch / Re-run checks
+  assert.match(view, /if \(c\.verb === "repo" && c\.op\) \{/);                  // the checkout a stopped hand-off waits for
+  assert.match(view, /if \(c\.verb === "open" && c\.key\) \{ surface\(c\.key\); return; \}/);
+  assert.match(view, /\{m\.status && m\.status !== "done" \? "✗" : "✓"\}/);   // a failure never wears a tick
+});
+
+test("a locked card says where the walk is, and the tab follows a hand-off started elsewhere", () => {
+  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+  assert.match(view, /The walk is in \{actions\.handedTo\}/);
+  assert.match(view, /\{ \.\.\.s, handoff: st\.handoff \|\| null \}/);
+});

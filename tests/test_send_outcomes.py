@@ -163,6 +163,15 @@ class SendProbeTests(unittest.TestCase):
         self.assertEqual(outbound.send_probe(s, 'email'), '')
         self.assertIn('SMTP', outbound.send_probe(s, 'email', mailbox='broken@northwind.example'))
 
+    def test_a_new_mail_is_judged_on_the_card_that_will_send_it(self):
+        """send_out sends through Outlook whenever it is active: an IMAP card that could send did not make it sendable
+        when the Outlook sign-in never granted Mail.Send (2026-09-29 audit) - its send was a 403."""
+        s, *_ = thread()
+        self._card(s, 'imap', {'address': 'box@northwind.example', 'imap_host': 'imap.northwind.example', 'smtp_host': 'smtp.northwind.example'})
+        self._card(s, 'outlook', {'account': 'me@northwind.example', 'granted_scope': 'User.Read Mail.Read offline_access'})
+        self.assertIn('Mail.Send', outbound.send_probe(s, 'email'))
+        self.assertEqual(outbound.send_probe(s, 'email', mailbox='box@northwind.example'), '')   # a reply from THAT box goes by SMTP
+
     def test_the_review_payload_hides_send_with_the_reason_on_it(self):
         s, tid, mid, rid = thread()
         self._card(s, 'imap', {'address': 'me@northwind.example'})

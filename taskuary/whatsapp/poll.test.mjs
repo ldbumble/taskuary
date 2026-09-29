@@ -48,3 +48,15 @@ test("options are distinct, cut to WhatsApp's length and capped at twelve", () =
   assert.equal(pollValues(["x".repeat(300)])[0].length, 100);
   assert.equal(pollValues(Array.from({ length: 20 }, (_, i) => `o${i}`)).length, MAX_OPTIONS);
 });
+
+test("a real tap on an older poll is recognised - never answered - and a taken-back vote is not a tap", () => {
+  const polls = createPolls(), s1 = crypto.randomBytes(32);
+  polls.remember(CHAT, "P1", s1, ["Close out", "Next"]);
+  polls.remember(CHAT, "P2", crypto.randomBytes(32), ["Close out", "Next"]);
+  const tap = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret: s1, option: "Close out" });
+  assert.equal(polls.vote({ pollCreationMessageKey: { id: "P1" }, vote: tap }, { creators: [CHAT], voters: [CHAT] }), "", "never fires");
+  assert.equal(polls.stale({ pollCreationMessageKey: { id: "P1" }, vote: tap }, { creators: [CHAT], voters: [CHAT] }), CHAT);
+  const back = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret: s1, option: "" });
+  assert.equal(polls.stale({ pollCreationMessageKey: { id: "P1" }, vote: back }, { creators: [CHAT], voters: [CHAT] }), "");
+  assert.equal(polls.stale({ pollCreationMessageKey: { id: "P9" }, vote: tap }, { creators: [CHAT], voters: [CHAT] }), "", "not ours");
+});

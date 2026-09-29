@@ -80,13 +80,20 @@ class WhichDestinationsTests(unittest.TestCase):
         self.assertIn('you', wa['to'][1]['name'])
 
     def test_the_channel_prefix_is_stripped_so_the_id_is_the_one_the_sender_wants(self):
-        """The message row holds 'teams:19:x@thread.v2'; send_teams wants '19:x@thread.v2'."""
+        """The message row holds 'telegram:-100123'; tg_send wants '-100123'."""
+        s = MemoryStore()
+        _conn(s, 'telegram')
+        _chat(s, 'telegram', 'telegram:-100123', 'Ops standup')
+        (tg,) = outbound.send_targets(s)
+        self.assertEqual([t['to'] for t in tg['to']], ['-100123'])
+        self.assertEqual(tg['to'][0]['name'], 'Ops standup')
+
+    def test_teams_is_not_a_destination_because_an_app_cannot_post_into_a_chat(self):
+        """Every Teams send on record came back 403 (2026-09-29): Graph gives an app no permission to post in a chat."""
         s = MemoryStore()
         _conn(s, 'teams')
         _chat(s, 'teams', 'teams:19:abc@thread.v2', 'Ops standup')
-        (teams,) = outbound.send_targets(s)
-        self.assertEqual([t['to'] for t in teams['to']], ['19:abc@thread.v2'])
-        self.assertEqual(teams['to'][0]['name'], 'Ops standup')
+        self.assertEqual(outbound.send_targets(s), [])
 
     def test_a_chat_on_a_channel_that_cannot_send_is_not_offered_anywhere(self):
         s = MemoryStore()
@@ -125,12 +132,12 @@ class WhichDestinationsTests(unittest.TestCase):
 
     def test_destinations_are_ordered_by_most_recent_use(self):
         s = MemoryStore()
-        _conn(s, 'teams')
-        _chat(s, 'teams', 'teams:older', 'Older room', '2026-08-20 09:00:00')
-        _chat(s, 'teams', 'teams:newest', 'Newest room', '2026-09-02 15:00:00')
-        _chat(s, 'teams', 'teams:middle', 'Middle room', '2026-09-01 12:00:00')
-        (teams,) = outbound.send_targets(s)
-        self.assertEqual([t['to'] for t in teams['to']], ['newest', 'middle', 'older'])
+        _conn(s, 'telegram')
+        _chat(s, 'telegram', 'telegram:older', 'Older room', '2026-08-20 09:00:00')
+        _chat(s, 'telegram', 'telegram:newest', 'Newest room', '2026-09-02 15:00:00')
+        _chat(s, 'telegram', 'telegram:middle', 'Middle room', '2026-09-01 12:00:00')
+        (tg,) = outbound.send_targets(s)
+        self.assertEqual([t['to'] for t in tg['to']], ['newest', 'middle', 'older'])
 
     def test_email_offers_the_address_book_and_your_own_mailbox(self):
         s = MemoryStore()
@@ -159,12 +166,12 @@ class WhichDestinationsTests(unittest.TestCase):
 
     def test_every_known_chat_is_searchable_even_past_the_old_global_cap(self):
         s = MemoryStore()
-        _conn(s, 'teams')
+        _conn(s, 'telegram')
         for i in range(225):
-            _chat(s, 'teams', f'teams:chat-{i}', f'Room {i}', f'2026-08-{(i % 28) + 1:02d} 09:00:{i % 60:02d}')
-        (teams,) = outbound.send_targets(s)
-        self.assertEqual(len(teams['to']), 225)
-        self.assertIn('chat-0', [t['to'] for t in teams['to']])
+            _chat(s, 'telegram', f'telegram:chat-{i}', f'Room {i}', f'2026-08-{(i % 28) + 1:02d} 09:00:{i % 60:02d}')
+        (tg,) = outbound.send_targets(s)
+        self.assertEqual(len(tg['to']), 225)
+        self.assertIn('chat-0', [t['to'] for t in tg['to']])
 
     def test_whatsapp_compose_includes_the_paired_accounts_reachable_roster(self):
         s = MemoryStore()

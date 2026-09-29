@@ -52,5 +52,51 @@ class MorningLineTests(unittest.TestCase):
         self.assertEqual([t for t, _ in ra.SCRIPT_LINES], ['Walk me through my tasks', 'Set up Taskuary', 'Set up a report'])
 
 
+class NeverIntoAConversationTests(unittest.TestCase):
+    setUp, tearDown, _pile = MorningLineTests.setUp, MorningLineTests.tearDown, MorningLineTests._pile
+    """2026-09-29: the day's opener landed a minute after a failed Close out, mid-walk, and replaced the card's numbered
+    list with its own - the owner's next pick restarted the walk. It waits for a gap, never follows a conversation that
+    already happened today, and is recorded where the desk and the model can see it."""
+    CHAT = '1555@s.whatsapp.net'
+
+    def test_a_word_in_the_last_minutes_holds_it_until_the_next_pass(self):
+        ra.talked(self.s, 'whatsapp', self.CHAT)
+        with self._pile(3):
+            self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
+            with mock.patch.object(ra, 'QUIET', 0.0):
+                self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 5)), 1)
+
+    def test_the_owner_already_talking_today_spends_it(self):
+        ra.spend_morning(self.s, datetime(2026, 9, 18, 7, 12))            # what a question to the chat does (respond)
+        with self._pile(3), mock.patch.object(ra, 'QUIET', 0.0):
+            self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
+        self.assertEqual(self.sent, [])
+
+    def test_a_walk_handed_to_the_chat_is_its_own_opener(self):
+        with self._pile(3), mock.patch.object(ra, 'QUIET', 0.0), mock.patch.object(ra, 'handoff', return_value={'channel': 'whatsapp'}):
+            self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
+        self.assertEqual(self.sent, [])
+
+    def test_what_went_out_is_in_the_conversation(self):
+        from taskuary import concierge, general
+        with self._pile(3), mock.patch.object(ra, 'QUIET', 0.0):
+            ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0))
+        said = [h['text'] for h in concierge.history(self.s, general.dock_task(self.s)[0]['TaskId'])]
+        self.assertTrue(any(t.startswith('Good morning.') and 'PEOPLE WANT' in t for t in said), said)
+
+
+class TheWalkOpensWithTheDayTests(unittest.TestCase):
+    """The owner, 2026-09-29: "when you hit walk me through on whatsapp that should trigger the morning summary"."""
+    def test_walk_me_through_opens_with_the_same_breath_as_the_morning_line_meetings_included(self):
+        s = A.store()
+        items = [{'lane': 'approve'}, {'lane': 'fyi'}]
+        with mock.patch('taskuary.funnel.pile', return_value={'items': items}), \
+             mock.patch.object(ra, 'meetings_line', return_value="TODAY'S MEETINGS · 1\n· 10:00-10:30 Budget review"), \
+             mock.patch('taskuary.concierge.resume', return_value={'say': 'Nothing is on the table.', 'item': None}):
+            text = ra.walk(s)
+        self.assertIn("TODAY'S MEETINGS · 1", text); self.assertIn('PEOPLE WANT · 1', text)
+        self.assertEqual(str(s.get_settings().get(ra.MORNING_AT) or ''), datetime.now().strftime('%Y-%m-%d'))   # not said twice today
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1021,16 +1021,16 @@ class ApiTests(unittest.TestCase):
         review comes back pending wearing the error, and approving again retries the send."""
         push = c.post('/api/ingest/push', json={'external_id': 'sendfail1', 'subject': 'security app help',
                                                 'body': 'can you check her accounts?', 'from_email': 'hr@work.example',
-                                                'channel': 'teams'}).json()
+                                                'channel': 'whatsapp'}).json()
         mid = push['message_id']
         tid = c.post(f'/api/messages/{mid}/reply').json()['taskId']
         rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
                    if r['MessageId'] == mid)
         with mock.patch.object(server.outbound, 'reply_to_message',
-                               side_effect=RuntimeError('Teams: 403 - the app has no ChatMessage.Send permission')):
+                               side_effect=RuntimeError('WhatsApp: the bridge is not paired')):
             out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'All provisioned.'}).json()
         self.assertEqual(out['status'], 'pending')
-        self.assertIn('no ChatMessage.Send', out['send_error'])
+        self.assertIn('not paired', out['send_error'])
         rv = server.store.get_review(rid)
         self.assertEqual(rv['Status'], 'pending')                        # back in the queue...
         self.assertIn('sending FAILED', rv['Reason'])                    # ...wearing the error
@@ -1317,8 +1317,8 @@ class ApiTests(unittest.TestCase):
         """Answering chatter is a REPLY, not a project - promoting the filed message to a task
         just to hold the review put a TQ badge on 'it was just his demo'. The review rides
         task-less, still lands in the pending queue, and approving still sends."""
-        mid = server.store.add_message({'ExternalId': 'graph:FILED1', 'Channel': 'teams',
-                                        'FromName': 'J. D. Ortiz', 'ConversationId': 'teams:19:x',
+        mid = server.store.add_message({'ExternalId': 'tg:FILED1', 'Channel': 'telegram',
+                                        'FromName': 'J. D. Ortiz', 'ConversationId': 'telegram:-100123',
                                         'BodyText': 'It was just his demo. Ready to move over.', 'Status': 'filed'})
         tasks_before = len(server.store.list_tasks())
         with mock.patch('taskuary.responder.draft_for_message', return_value='Got it - send it over.'):
@@ -1328,7 +1328,7 @@ class ApiTests(unittest.TestCase):
         pend = [r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
                 if r['ReviewId'] == out['reviewId']]
         self.assertEqual(len(pend), 1)                                          # still visible in the queue
-        with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'teams', 'to': []}):
+        with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'telegram', 'to': []}):
             r = c.post(f"/api/reviews/{out['reviewId']}/decide", json={'verb': 'approve', 'final_text': 'Got it.'}).json()
         self.assertTrue(r['sent'])
         self.assertEqual(len(server.store.list_tasks()), tasks_before)          # approving made none either

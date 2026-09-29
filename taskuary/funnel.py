@@ -1486,7 +1486,9 @@ def reset_walk(store):
         states = store.funnel_states()
         from . import processing_unread          # the rail itself, not pile(): the pile runs the notice watcher
         for i in processing_unread.build(store).get('items') or []:
-            if i.get('lane') != 'blocked': continue
+            # ...and a yes still owed (ready to close out): shown in the old chat is not answered - a restart opened a new chat
+            # that skipped the Close out GitHub had just refused, for the next pull request (2026-09-29)
+            if i.get('lane') not in ('blocked', 'approve'): continue
             for k in [i.get('key'), *(i.get('aliases') or [])]:
                 if k and (states.get(k) or {}).get('Status') == 'surfaced': store.clear_funnel_state(k)
     except Exception as e: logger.debug(f'a new walk could not raise the waiting agents again: {e}')
@@ -1505,7 +1507,9 @@ def alerts(store, items: list = None) -> list:
             when = 'is starting now' if i['mins'] <= 0 else f"starts in {i['mins']} min"
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'meeting', 'lane': i['lane'],
                         'text': f"{i['title']} {when}" + (f" with {i['who']}" if i.get('who') else '')})
-        elif i['kind'] == 'agent':
+        # ...an agent WAITING ON YOU. One merely working was pushed too - "is working on it, nothing for you there now", twice
+        # a minute apart in two wordings (2026-09-29 audit) - an interruption to say there is nothing to do
+        elif i['kind'] == 'agent' and i['lane'] == 'blocked':
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'agent', 'lane': i['lane'],
                         'text': f"{i.get('why') or agent_says('parked', i.get('agent'))} ({i.get('ref') or i['title']})"})
         elif i['lane'] == 'asked' and i['kind'] in ('asked', 'todo') and i.get('who'):

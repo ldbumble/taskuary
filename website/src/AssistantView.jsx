@@ -546,6 +546,11 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
             </div>
           )}
           {card && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
+          {/* WHY ITS BUTTONS ARE DEAD, on the card itself: the walk is in a chat, and the one explanation was a banner
+              at the foot of the page (2026-09-29: "Next" greyed out on the card with nothing saying why) */}
+          {last && card && actions.handedTo && (
+            <div className="tq-card-excerpt">The walk is in {actions.handedTo} - answer it there, or press Take it back below to use these buttons here.</div>
+          )}
           {/* The action words, in the assistant's own line - one place to look, chosen by the server from
               the item's kind and already filtered to what this one can carry (concierge.chips_for). A
               strip over the composer and a second row under the bubble said the same things twice and
@@ -725,6 +730,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     const { data: st } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current || resettingRef.current) return false;
     setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
+    // WHERE THE WALK IS, from the same answer: a hand-off started or ended somewhere else (a second tab, the phone's own
+    // "take it back") left this tab unlocked or locked until a reload (2026-09-29 audit)
+    setState((s) => (s && (s.handoff?.at || null) !== (st.handoff?.at || null) ? { ...s, handoff: st.handoff || null } : s));
     // ...AND WHAT IS ON THE TABLE, from the same answer. The walk can be driven from somewhere
     // else - a phone chat holding the handoff, another tab - and this one followed the WORDS while
     // its rail went on ringing whatever the desk itself last put up: the chat showed four fyis and
@@ -1464,6 +1472,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, items,
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
+    handedTo: handoff ? ((state?.doorways || []).find((d) => d.channel === handoff.channel)?.label || handoff.channel) : "",
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);

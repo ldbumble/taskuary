@@ -201,8 +201,8 @@ def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
             why = ('someone outside your tenant is in this chat, and Graph does not let an app post into '
                    'a federated chat at all - no permission changes that. Reply by email instead.')
         else:
-            why = ('app-only posting needs the ChatMessage.Send APPLICATION permission on your app '
-                   'registration, with admin consent - reading chats does not include it.')
+            why = ('Microsoft Graph does not let an app post into a chat - there is no application permission for it '
+                   '(ChatMessage.Send belongs to a personal sign-in, not to an app). Answer it in Teams.')
         raise RuntimeError(f'Teams refused the post ({r.status_code}): {why}'
                            + (f' Graph said: "{said[:200]}"' if said else ''))
     if r.status_code >= 300:
@@ -230,6 +230,14 @@ SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'disc
 # it on the task addressed to no one at all.
 NEVER = {'report', 'own', 'assistant', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab',
          'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
+# READ HERE, ANSWERED THERE: a channel Taskuary reads but has no sender for. Slack sat in SENDABLE and the default reply
+# switch, so its Send was offered, approved - and every one ended "slack messages are read-only here" (2026-09-29 audit).
+# The draft is still written (the words are worth having); the button says where to send them.
+# ...and Teams, read with the app registration (Chat.Read.All): Graph lets an APP read chats but never post into one -
+# its only application permission for that is Teamwork.Migrate.All, an import. Every Teams reply on record came back 403
+# (nine of nine), and the error sent the owner to grant an application permission that does not exist.
+NO_SENDER = {'slack': 'Slack replies are not wired up yet - copy the draft and answer it in Slack',
+             'teams': 'Teams does not let an app post into a chat - copy the draft and answer it in Teams'}
 
 
 def reply_channels(store) -> set:
@@ -257,6 +265,9 @@ def send_probe(store, channel, mailbox: str = None) -> str:
     if mailbox:
         mine = [c for c in cards if str(_cfg(c).get('address') or _cfg(c).get('account') or '').lower() == str(mailbox).lower()]
         cards = mine or cards
+    # ...and with no mailbox named (a new outbound mail), the card send_out WILL use: Outlook whenever one is active. Any
+    # sending card passed the probe, so a sign-in without Mail.Send beside an IMAP card showed Send - and 403'd (2026-09-29)
+    elif any(kind(c) == 'outlook' for c in cards): cards = [c for c in cards if kind(c) == 'outlook']
     why = []
     for c in cards:
         cfg = _cfg(c); who = cfg.get('address') or cfg.get('account') or c.get('Name') or kind(c)
@@ -278,7 +289,7 @@ def can_reply(store, channel) -> bool:
     connector) stays replyable, because silently refusing to answer an unrecognised channel
     is the worse failure. Only NEVER is absolute."""
     ch = (channel or '').lower()
-    if not ch or ch in NEVER: return False
+    if not ch or ch in NEVER or ch in NO_SENDER: return False
     if ch in SENDABLE and ch not in reply_channels(store): return False
     if ch == 'github': return store.github_replies_ok()
     if ch == 'email' and send_probe(store, ch): return False
@@ -294,6 +305,7 @@ def send_block(store, channel) -> str:
     if ch in NEVER: return f'{ch} items cannot be replied to from here'
     if ch == 'github': return '' if store.github_replies_ok() else 'GitHub replies are off (GitHub card)'
     if ch in SENDABLE and ch not in reply_channels(store): return f'replies are off for {ch} (Settings → Replies)'
+    if ch in NO_SENDER: return NO_SENDER[ch]                 # switched on, and still no road out of here
     if ch == 'email': return send_probe(store, ch)
     return ''
 
@@ -324,7 +336,8 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) 
     ch, cc = (channel or 'email').lower(), addrs(cc)
     if cc and ch != 'email':
         raise RuntimeError(f'{ch} has no cc - only mail can copy somebody in')
-    if not can_reply(store, ch):
+    # a channel with no sender at all falls through to the line below that names what DOES work - not "switched off"
+    if ch not in NO_SENDER and not can_reply(store, ch):
         raise RuntimeError(f'sending on {ch} is off - Settings → Replies decides which channels '
                            'Taskuary may write to, and it governs outbound reports too')
     if ch == 'email':

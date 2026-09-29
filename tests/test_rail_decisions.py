@@ -277,6 +277,21 @@ class AnOpenTaskIsAlwaysOnTheRailTests(unittest.TestCase):
             s.update_task(tids[2], {'Status': 'done'}, 'owner'); settle()
             self.assertEqual(on(), set(tids[:2]), 'closing is what takes it off')
 
+    def test_a_task_deleted_takes_the_idea_it_was_made_from_with_it(self):
+        """2026-09-29: Not a task deleted a task an Advisor idea had become, and the idea - still open, triaged as a task -
+        came back on the rail alone as "asked you", pointing at a task that no longer existed."""
+        from taskuary import assistant
+        s, settle = settled()
+        mid = mail(s, 'Cloud notice: VM series retiring', who='Ray Colton', email='ray@vendor.example', hours=1)
+        a = {'mid': mid, 'triage': {'intent': 'task'}}
+        i = s.upsert_idea({'key': 'idea:vm-series', 'kind': 'idea', 'text': 'Check which VM series we run.', 'sig': 'x', 'action': a}, ago(0))
+        tid = assistant._make_task(s, s.get_idea(i['IdeaId']), a, False, 'owner')['taskId']
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        self.assertEqual([c.get('tid') for c in rail(s)], [tid])
+        s.delete_task(tid); settle()
+        self.assertEqual([c['lane'] for c in rail(s) if f"idea:{i['IdeaId']}" in c['member_ids']], [], 'the idea stayed behind as work')
+        self.assertNotEqual(s.get_idea(i['IdeaId'])['Status'], 'open')
+
 
 if __name__ == '__main__': unittest.main()
 

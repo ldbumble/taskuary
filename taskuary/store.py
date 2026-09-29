@@ -1672,6 +1672,11 @@ class SQLiteStore:
             query += ' WHERE ' + ' AND '.join(where)
         return self._rows(query + ' ORDER BY t.TaskId DESC', p)
     def delete_task(self, task_id):
+        # the Advisor idea this task was made from goes with it: left open, it came back on the rail alone as "asked you",
+        # pointing at a task that no longer existed (2026-09-29)
+        self._exec("UPDATE idea SET Status='dismissed', DecidedBy='owner', DecidedAt=? WHERE Status IN ('open','snoozed') AND "
+                   "(json_extract(ActionJson,'$.tid')=? OR IdeaId IN (SELECT CAST(substr(SourceRef,16) AS INTEGER) FROM task "
+                   "WHERE TaskId=? AND SourceRef LIKE 'assistant:idea:%'))", (_now(), task_id, task_id))
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',
                   'DELETE FROM run WHERE TaskId=?', 'DELETE FROM task_artifact WHERE TaskId=?',

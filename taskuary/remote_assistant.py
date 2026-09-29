@@ -13,7 +13,7 @@ Take it back on the desktop and the chat is told the walk is over.
 Only messages the owner themself sent in that named, private chat are accepted. Other people, other
 chats and groups continue through the normal funnel.
 """
-import json, re, threading, time
+import collections, json, re, threading, time
 
 from loguru import logger
 
@@ -641,7 +641,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             key = next((k for k, line in member_lines(item) if picked and line == question), None)
             if key:
                 nxt = concierge.surface(store, key, actor='owner')
-                send(store, channel, chat, carry_out(store, nxt, nxt.get('item')), connector_id)
+                send(store, channel, chat, turn_text(nxt, store=store, full=True), connector_id)
                 return
             # MORE, picked: the rest of what the card folds, then the same choices again without it
             if picked and question == MORE:
@@ -1029,9 +1029,14 @@ def member_lines(item: dict | None) -> list:
     into any of them (the owner, 2026-09-20: "how do you dig into one specific one?")."""
     from . import funnel
     if not item or item.get('kind') != 'fyis': return []
-    return [(m.get('key'), ' '.join(x for x in (funnel.CHANNEL_MARKS.get(str(m.get('channel') or ''), ''),
+    rows = [(m.get('key'), ' '.join(x for x in (funnel.CHANNEL_MARKS.get(str(m.get('channel') or ''), ''),
                                                  f"{' '.join(str(m.get('who') or 'someone').split())} - {m.get('title') or ''}") if x))
             for m in item.get('items') or []]
+    # the same notification twice is two lines that read alike - a line is what a number or a tap answers, so a repeat
+    # wears its count or the second one could never be opened (and a WhatsApp poll dropped it: 2026-09-29, 3 of 4)
+    seen = collections.Counter()
+    def _nth(line): seen[line] += 1; return line if seen[line] == 1 else f'{line} ({seen[line]})'
+    return [(k, _nth(line)) for k, line in rows]
 
 
 def source_line(item: dict | None) -> str:
@@ -1185,6 +1190,32 @@ def decision_block(store, item: dict | None) -> str:
         if len(opening) > EXCERPT: opening = _cut(opening, EXCERPT)
         parts.append('\n'.join(x for x in (kin, 'THEY WROTE', _quote(opening)) if x))
     return '\n\n'.join(parts)
+
+
+FULL = 6000                                    # an opened message in full - past this it is a document, not a message
+EARLIER = 4                                    # a chat line reads with the few said before it
+
+
+def full_body(store, item: dict | None) -> str:
+    """The message itself, whole - what "read that message in full" promises (the owner, 2026-09-29: "for email, the
+    full email, chat full chat and last few, if github issue/comment on pr let me see it not just a few words"). A chat
+    line brings the few lines before it: one line of a conversation is rarely the whole of what was said."""
+    from .ingest import CHAT_CHANNELS
+    msg, body, is_report = _body(store, item)
+    if not body or is_report: return ''
+    parts = [thread_line(store, msg)]
+    if str(msg.get('Channel') or '').lower() in CHAT_CHANNELS:
+        try: kin = store.thread_messages(msg.get('ConversationId'), msg.get('Subject'))
+        except Exception as e:
+            logger.debug(f'the phone could not read the chat around it: {e}'); kin = []
+        before = [m for m in kin if m.get('MessageId') != msg.get('MessageId') and str(m.get('Status') or '') != 'context'
+                  and str(m.get('SentAt') or '') <= str(msg.get('SentAt') or '')][-EARLIER:]
+        if before: parts.append('EARLIER\n' + '\n'.join(
+            f"{' '.join(str(m.get('FromName') or m.get('FromEmail') or 'someone').split())}: {_cut(_plain(m.get('BodyText')), 300)}" for m in before))
+    text = re.sub(r'\n{3,}', '\n\n', _plain(body)).strip()
+    if len(text) > FULL: text = text[:FULL].rstrip() + '\n…(the rest is on the task page)'
+    parts.append('THEY WROTE\n' + _quote(text))
+    return '\n\n'.join(x for x in parts if x)
 
 
 def more_text(store, item: dict | None) -> str:
@@ -1382,8 +1413,9 @@ def summary_rest(store, item: dict | None) -> str:
     return ' '.join(re.split(r'(?<=[.!?])\s+', summary)[1:]).strip()
 
 
-def story_block(store, item: dict | None, draft: str = '', say: str = '') -> str:
-    """The quiet part: a header (state · ref), who asked and what they want, then the agent and its evidence."""
+def story_block(store, item: dict | None, draft: str = '', say: str = '', full: bool = False) -> str:
+    """The quiet part: a header (state · ref), who asked and what they want, then the agent and its evidence.
+    `full`: the owner opened this one to READ it - the whole message, not its opening (full_body)."""
     from . import concierge, funnel
     it = item or {}
     kind, ch = it.get('kind'), str(it.get('channel') or '')
@@ -1415,7 +1447,9 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '') -> str
     if rest: lines.append(_cut(rest, 280))
     if not it.get('tid') and say and kind != 'agentdone' and (not said or said.lower() not in say.lower()): lines.append(say)
     # their own words, when nothing of yours answers them yet (a draft puts them behind More)
-    if not draft and kind in ('message', 'asked', 'todo', 'fyi') and not is_own(it):
+    whole = full_body(store, it) if full else ''
+    if whole: lines += ['', whole]
+    elif not draft and kind in ('message', 'asked', 'todo', 'fyi') and not is_own(it):
         msg, body, is_report = _body(store, it)
         if body and not is_report:
             opening = _plain(body)
@@ -1487,7 +1521,7 @@ def script_words(store, script: str) -> str:
     return '\n'.join(lines)
 
 
-def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
+def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: bool = False) -> str:
     """One turn as one message: where it came from, what was said, then what can be said back.
 
     The options used to ride one line joined by dots, which read as a single run-on sentence on a
@@ -1517,7 +1551,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
         head = '\n'.join(x for x in (task, say, why) if x)
     story = bool(item) and item.get('kind') in STORY_KINDS
     draft = _draft_text(store, item) if story and store is not None else ''
-    if story: head = story_block(store, item, draft, _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip())
+    if story: head = story_block(store, item, draft, _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip(), full=full)
     if item.get('kind') == 'fyis':
         # THE ITEMS, one per line, and nothing else: the say line restated them as one run-on sentence and
         # the status line added "fyi - people told you things" under it, and on a phone that read as
@@ -1556,7 +1590,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
         rest = [w for w in words if w not in nxt]
         lead_word = (primary(out) or {}).get('label')
         first_ = [w for w in rest if w == lead_word][:1] or rest[:1]
-        more = [MORE] if store is not None and more_text(store, item) else []
+        more = [MORE] if store is not None and not (full and story) and more_text(store, item) else []
         words = first_ + nxt + more + [w for w in rest if w not in first_]
     if item.get('kind') == 'fyis':
         # THE WAY ON, which only this channel has to say. The desktop card carries its own "All read,
@@ -1627,6 +1661,21 @@ def acts_for(store, channel: str, chat: str) -> dict:
     except ValueError: return {}
 
 
+POLL_LABEL = 100                               # WhatsApp's option length, in UTF-16 units (whatsapp/poll.mjs)
+
+
+def _poll_cut(w: str) -> str:
+    return str(w or '').strip().encode('utf-16-le')[:POLL_LABEL * 2].decode('utf-16-le', 'ignore').strip()
+
+
+def poll_labels(words: list) -> list:
+    """The options as the poll carries them: cut where the bridge cuts (JavaScript counts an emoji as TWO, so a long
+    line with its channel mark came back one short and never matched - 2026-09-29), and distinct, since a poll drops
+    a repeat - two lines alike in their first 100 wear their number."""
+    cut = [_poll_cut(w) for w in words]
+    return [_poll_cut(f'{i} · {w}') if cut.count(c) > 1 else c for i, (w, c) in enumerate(zip(words, cut), 1)]
+
+
 def resolve_index(store, channel: str, chat: str, text: str, poll: bool = False) -> tuple[str, bool]:
     """"2" as an answer - because WE numbered the options a moment ago. Returns (words, picked).
 
@@ -1646,8 +1695,9 @@ def resolve_index(store, channel: str, chat: str, text: str, poll: bool = False)
     # Only a vote the bridge marked as one - the same words TYPED are words, and go to the model (the owner,
     # 2026-09-25: "Only if you type 1 or hit poll that's clicking a pill")
     said = str(text or '').strip()
-    hit = next((w for w in words if said and (said == w or (len(said) >= 100 and w.startswith(said)))), None) if poll else None
-    if hit: return hit, True
+    labels = poll_labels(words) if poll and said else []
+    if said in labels: return words[labels.index(said)], True
+    if poll and said in words: return said, True
     t = said.lstrip('#').rstrip('.').strip()
     if not t.isdigit(): return text, False
     i = int(t)
@@ -1696,7 +1746,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
         # the LAST bubble carries the choices as a poll: WhatsApp's one tappable thing (the owner, 2026-09-25)
         last = i == len(msgs) - 1 and offered
         # ...and on Telegram, its own buttons under the same last bubble (messengers.tg_send)
-        kw = {'poll': offered} if last and channel == 'whatsapp' else {'buttons': offered} if last and channel == 'telegram' else {}
+        kw = {'poll': poll_labels(offered)} if last and channel == 'whatsapp' else {'buttons': offered} if last and channel == 'telegram' else {}
         out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id, **kw)
     # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one
     # that never did (2026-09-24)

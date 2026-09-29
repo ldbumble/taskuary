@@ -206,6 +206,52 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         self.assertEqual(opened.call_args.args[1], 'msg:8')
         self.assertIn('Erin: back Tuesday.', send.call_args.args[2])
 
+    def test_every_member_is_a_poll_option_and_each_tap_opens_its_own(self):
+        """2026-09-29: two identical notifications and two long lines - the poll showed 3 of 4 (a poll drops a repeat),
+        and a tap on a long line went to the model: the bridge cuts at 100 UTF-16 units, where the mark counts twice."""
+        store, connector = armed_store()
+        long = 'Re: [northwind/ledger] docs: fill in the empty descriptions of 36 working connector cards (PR #121)'
+        batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [
+            {'key': 'msg:1', 'who': 'ops@vendor.example', 'title': 'Success File Notification', 'channel': 'email'},
+            {'key': 'msg:2', 'who': 'ops@vendor.example', 'title': 'Success File Notification', 'channel': 'email'},
+            {'key': 'msg:3', 'who': 'Ray Colton', 'title': long, 'channel': 'email'}]}
+        text = remote_assistant.turn_text({'say': 'x', 'chips': [{'verb': 'next', 'label': 'All read, next'}], 'item': batch})
+        with mock.patch.object(messengers, 'wa_send') as sent:
+            remote_assistant.send(store, 'whatsapp', JID, text, connector['ConnectorId'])
+        poll = sent.call_args.kwargs['poll']
+        self.assertEqual(len(poll), 4, poll)
+        self.assertEqual(len(set(poll)), 4, 'a poll drops a repeated option')
+        self.assertTrue(all(len(o.encode('utf-16-le')) // 2 <= 100 for o in poll))
+        for vote, key in ((poll[1], 'msg:2'), (poll[2], 'msg:3')):
+            remote_assistant.remember_offered(store, 'whatsapp', JID, text)
+            with mock.patch.object(concierge, 'restore_current', return_value=batch), \
+                 mock.patch.object(concierge, 'surface', return_value={'say': 'opened', 'item': {'kind': 'fyi'}}) as opened, \
+                 mock.patch.object(concierge, 'say') as model, mock.patch.object(messengers, 'wa_send'):
+                remote_assistant.respond(store, 'whatsapp', JID, vote, connector['ConnectorId'], poll=True)
+            model.assert_not_called()
+            self.assertEqual(opened.call_args.args[1], key)
+
+    def test_an_opened_member_is_the_whole_message_and_a_chat_line_brings_the_lines_before_it(self):
+        """The owner, 2026-09-29: "for email, the full email, chat full chat and last few" - not its first 400 characters."""
+        store, connector = armed_store()
+        words = ' '.join(f'Paragraph {i} of the quarterly note.' for i in range(40))
+        m = store.add_message({'ExternalId': 'e:1', 'ConversationId': 'c:e', 'Channel': 'email', 'Subject': 'Quarterly note',
+                               'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'SentAt': '2026-09-29 09:00:00',
+                               'BodyText': words, 'Status': 'routed'})
+        opened = {'say': 'Gail sent the quarterly note.', 'item': {'kind': 'fyi', 'lane': 'fyi', 'mid': m, 'channel': 'email', 'who': 'Gail Moreno'}}
+        full = remote_assistant.turn_text(opened, store=store, full=True)
+        self.assertIn('Paragraph 39 of the quarterly note.', full)
+        self.assertNotIn(f'· {remote_assistant.MORE}\n', full + '\n', 'nothing is folded, so nothing is behind More')
+        self.assertNotIn('Paragraph 39', remote_assistant.turn_text(opened, store=store), 'the walk itself still shows the opening')
+        for i, (who, said) in enumerate((('Erin Blake', 'is the export back?'), ('Omar Keller', 'not yet'), ('Erin Blake', 'ping me when it is'))):
+            last = store.add_message({'ExternalId': f't:{i}', 'ConversationId': 'c:t', 'Channel': 'teams', 'Subject': 'Export',
+                                      'FromName': who, 'FromEmail': f'{i}@northwind.example', 'SentAt': f'2026-09-29 10:0{i}:00',
+                                      'BodyText': said, 'Status': 'routed'})
+        chat = remote_assistant.turn_text({'say': 'x', 'item': {'kind': 'fyi', 'lane': 'fyi', 'mid': last, 'channel': 'teams'}},
+                                          store=store, full=True)
+        self.assertIn('EARLIER\nErin Blake: is the export back?\nOmar Keller: not yet', chat)
+        self.assertIn('> ping me when it is', chat)
+
     def test_an_unknown_source_gets_no_invented_mark(self):
         said = {'say': 'Something landed.', 'item': {'lane': 'fyi', 'kind': 'fyi', 'who': 'Someone', 'channel': 'carrier_pigeon'}}
         self.assertEqual(remote_assistant.turn_text(said), '👀 fyi\n🔵 **Someone** wrote · Carrier Pigeon\nSomething landed.')

@@ -119,6 +119,8 @@
 .tq-pile-word { flex: 0 0 auto; font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; white-space: nowrap; }
 /* the lane's own mark, at the size it is READ at rather than the size the loud pill shouts at */
 .tq-pile-word i { font-style: normal; font-size: 11px; line-height: 1; margin-right: 4px; filter: saturate(.9); }
+.tq-chip-mark { display: inline-grid; place-items: center; width: 17px; height: 17px; margin: 0 5px 0 -5px; border-radius: 50%;
+  background: #4c6450; font-style: normal; font-size: 11px; line-height: 1; vertical-align: -3px; }
 .tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
 /* the waving agent and the draft waiting for a yes: the two lanes where work has STOPPED until the
    owner answers, and the only rows left carrying colour of their own */

@@ -14,59 +14,64 @@ ideas) — it does not replace it.
 
 ## What the owner asked for (the brief)
 
-- Sidebar like Claude's: thinner, a few buttons on top, the work rail below it mostly as it is.
+- Sidebar: today's work rail, **kept as it looks now** (the spine with its dots, the age gutter, the category pills,
+  the bordered rows), only narrower, with a few buttons on top. Not a copy of another product's sidebar.
 - Rail sections: **On you** · **Agents working** · **For later** (replaces "passed") · **Reports** · **Advisor ideas**
   · **FYI**. Clicking a section heading walks that section.
-- **For later** says when each item comes back.
+- **For later** says when each item comes back, in the age gutter's own short form.
 - Clicking a row shows that part of the app **inside the assistant canvas**, as the Tasks tab shows it today, a
-  little narrower. The walk's own chat cards go: walking shows the task view, item after item.
+  little narrower. Every card keeps the look of the tab it comes from. The walk's own chat cards go: walking shows the task view, item after item.
 - Coding and general agents open **near full size inside the chat** — a chat within the chat — and the assistant can
   relay both ways with the agent on screen.
 - Connections, Settings, Reports and Hub are browsed **deterministically in the chat**: pick a section, its cards
   appear, click one and the rest go (Back returns), its details open. The AI can always talk about, or set up, the
   card that is open.
-- Timeline is a top switch (Work | Timeline). Board and its agent wall stay a full-screen view reached from the top.
+- Timeline is a switch (Work | Timeline) that sits **with the rail**, under the buttons — it changes the task rows,
+  not Reports or Connections. There is no New button in the sidebar. Board and its agent wall stay a full-screen view reached from the top.
 - The phone matches: the WhatsApp/Telegram doorway and the web app at phone width.
 - The terminal must not redraw garbage, and the rail must not rebuild on every click.
 
 ## Layout
 
 ```
-┌ sidebar ~260px ───────┐┌ canvas ─────────────────────────────────────────┐
-│ [Work | Timeline]  ◧ ▦││  earlier conversation, folded cards (one line)  │
-│ + New                 ││                                                  │
-│   Reports             ││  ┌ the item on the table ─────────────────[⤢]┐  │
-│   Connections         ││  │ 1 Task        (the Tasks tab's card)      │  │
-│   Hub                 ││  │ 2 Agent work  (session, near full height) │  │
-│   Settings            ││  │ 3 Close out                               │  │
-│ filter · sync         ││  └───────────────────────────────────────────┘  │
-│ ON YOU            3   ││                                                  │
-│  <30m • Title…        ││  [ Ask about this one…                    🎤 ]  │
-│ AGENTS WORKING    2   │└──────────────────────────────────────────────────┘
-│ FOR LATER         4   │   ◧ collapse sidebar · ▦ Board (full screen)
-│  back 3pm • Title…    │
-│ REPORTS · IDEAS · FYI │
-└───────────────────────┘
+┌ sidebar ~320px ──────────────┐┌ canvas ─────────────────────────────────────────┐
+│  Reports                     ││ ✦ Taskuary · 2 in the pipe          Board · 2   │
+│  Connections                 ││  earlier items, folded to one line              │
+│  Hub                         ││                                                  │
+│  Settings                    ││  ┌ TQ-0801 Export drops rows ─────── Next [⤢]┐  │
+│ (work|timeline) All items ▾  ││  │ (1) Task       — the Tasks tab's card      │  │
+│ 2 in today · synced · Sync   ││  │ (2) Agent work — session, near full height │  │
+│      ( ON YOU )──────── 2    ││  │ (3) Close out                              │  │
+│ <30m ●│[✉ Export drops… on you]│  └────────────────────────────────────────────┘  │
+│  2h  ●│[✉ Approve invoice…]  ││                                                  │
+│      ( AGENTS WORKING )─ 1   ││  [ Ask about this one…                  🎤 ↑ ]  │
+│      ( FOR LATER )────── 3   │└──────────────────────────────────────────────────┘
+│  3h  ●│[✉ Lease renewal…]    │   gutter in For later = time until it comes back
+│      ( REPORTS )(IDEAS)(FYI) │
+└──────────────────────────────┘
 ```
 
 ### Sidebar (`AssistantView` rail, narrowed)
 
-- Width ~260px (today ~470). Collapsible to a strip of section dots.
-- **Top row:** `Work | Timeline` segmented switch (replaces the rail header's switch); collapse; **Board**.
-- **Buttons:** New · Reports · Connections · Hub · Settings — one line each. Each posts its browse card (below).
-- **Filter + Sync** move to one small row above the rail.
+- **Today's rail, narrowed** to ~320px (today ~470): the spine with a source dot per row, the age gutter, the
+  category pills with their rule and count, bordered rows with icon, title, ref and state chip, "on the table" on
+  the current row. Collapsible.
+- **Buttons on top:** Reports · Connections · Hub · Settings — one line each. Each posts its browse card (below).
+  No New button in the sidebar (New stays reachable from the canvas header and by asking).
+- **Under the buttons, the rail's own header, as today:** the `work | timeline` switch and the filter, then the
+  counts / synced / Sync now line. The switch belongs to the rail because it changes the task rows only.
 - **Sections**, sticky headings, in this order. `funnelPile.LEVEL_ORDER` becomes
   `urgent, task, agents, passed→later, reports, ideas, fyi`:
   - **On you** — urgent + your task (as today).
   - **Agents working** — moves from last to second.
   - **For later** — what Next walked past (today's `passed`) **and** tasks put away with Remind me. The gutter shows
-    when it comes back (`back 3pm`, `back Mon`) instead of its age; sorted soonest first; a day sub-heading
-    (Today / Tomorrow / Mon 5 Oct) once it spans more than one day. Walked-past rows come back after
+    how long until it comes back, in the age gutter's own short form (`< 30m`, `3h`, `2d` — `funnelPile.railAge`
+    applied to the return time); sorted soonest first; no sub-headings. Walked-past rows come back after
     `task_return_minutes`; Remind-me rows at `RemindAt`.
   - **Reports**
   - **Advisor ideas** — new level; ideas leave FYI (`levelOf`: `kind === "idea"`).
   - **FYI**
-- Rows keep the one-line grammar (age/return · source dot · title), truncated with the full title on hover.
+- Rows keep today's grammar and look; the title truncates earlier at the narrower width, the full title on hover.
 - The fill rule (`fillCaps`) is unchanged: reports, ideas and fyi divide what is left; your work is never capped.
 
 ### Walking a section
@@ -81,6 +86,10 @@ ideas) — it does not replace it.
 ## The canvas
 
 ### The item on the table is the task view
+
+Every card keeps the look it has in its tab today — the numbered stage headings with their colours, the bar
+buttons, the lifecycle chips, the agent pane's harness/model row and Full screen; the connector card of the
+Connections tab; the settings groups; the report editor. Only the width changes.
 
 The walk no longer draws its own cards (report card, item card, Next/More actions). Every item is shown by
 **`TaskPage`** — the Tasks tab's task view, extracted — at canvas width minus margins:

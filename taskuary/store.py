@@ -1198,6 +1198,7 @@ class SQLiteStore:
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT
             from .assistant import OLD_PROMPT_HEADS, OLD_PROMPT_SHA, PROMPT as ASSISTANT_PROMPT
             from .toil import PROMPT as AUTOMATE_PROMPT
+            from .evening import OLD_PROMPTS as EVENING_OLD, PROMPT as EVENING_NOW
             for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
                 try: c = json.loads(cj or '{}')
                 except ValueError: continue
@@ -1217,6 +1218,10 @@ class SQLiteStore:
                         self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
                 # only a digest still on an OLD stock prompt: one already healed is the owner's to reschedule,
                 # and healing it on every launch put back an 08:00 they had taken off (2026-09-27)
+                # the stock evening checkup, unedited, takes the current instruction (an owner-edited one is kept)
+                if c.get('type') == 'evening_inbox' and c.get('ai_prompt') in EVENING_OLD:
+                    c['ai_prompt'] = EVENING_NOW
+                    self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
                 if c.get('type') == 'digest' and c.get('ai_prompt') in OLD_PROMPTS:
                     c['ai_prompt'] = DIGEST_PROMPT
                     # a stock digest on the old default clock (none, or the three-hourly one) becomes the

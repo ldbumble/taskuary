@@ -57,8 +57,29 @@ class WhatShipsTests(unittest.TestCase):
         cfg = _reports(MemoryStore())['End of day checkup']
         self.assertEqual((cfg['hours'], cfg['daily_at'], cfg['once_per_day']), (8, '18:00', True))
         self.assertTrue(cfg['first_run_at_schedule'])
-        self.assertIn('Top 3 things to focus on tomorrow', cfg['ai_prompt'])
+        self.assertIn('Focus for tomorrow', cfg['ai_prompt'])
         self.assertIn('Focused and Other', cfg['ai_prompt'])
+
+    def test_the_evening_checkup_promises_no_count_and_no_praise_the_data_does_not_bear_out(self):
+        """2026-09-29: a day with one open item and nothing completed read "Summary of top 3 priorities: 1) ..." and
+        "Good progress today" - the prompt named both, so the model filled them in whatever the data said."""
+        from taskuary.evening import PROMPT
+        self.assertNotIn('top 3', PROMPT.lower())
+        self.assertNotIn('3-5 bullets', PROMPT)
+        self.assertNotIn('motivational', PROMPT)
+
+    def test_an_unedited_evening_checkup_takes_the_new_prompt_and_an_edited_one_is_kept(self):
+        import os, tempfile
+        from taskuary.evening import OLD_PROMPTS, PROMPT
+        from taskuary.store import SQLiteStore
+        d = tempfile.mkdtemp()
+        for n, (mine, want) in enumerate(((OLD_PROMPTS[0], PROMPT), ('My own evening words.', 'My own evening words.'))):
+            fn = os.path.join(d, f't{n}.db')
+            s = SQLiteStore(fn)
+            sid, cfg = next((r['SourceId'], json.loads(r['ConfigJson'])) for r in s.list_sources() if r['Address'] == 'End of day checkup')
+            s.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(cfg | {'ai_prompt': mine}), sid)); s.cx.commit(); s.cx.close()
+            s = SQLiteStore(fn)
+            self.assertEqual(_reports(s)['End of day checkup']['ai_prompt'], want); s.cx.close()
 
     def test_automation_ideas_keeps_its_monday_clock(self):
         from tests.automate_fixture import add_automate

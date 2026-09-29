@@ -14,7 +14,32 @@ from .counsel import is_invite
 
 HOURS = 8
 
+# The brief says only what the data bears out. The old text named "top 3" in two headings and asked for a closing
+# line "acknowledging progress", so a quiet day with one open item read "top 3 priorities: 1) ..." and "Good
+# progress today" (2026-09-29). A count is the data's to give, and praise needs something completed.
 PROMPT = (
+    'Give me an executive and concise evening Inbox Brief for emails in my Inbox (Focused and Other) '
+    'and Sent from the last 8 hours only.\n\n'
+    'Start with exactly two one-sentence roll-ups:\n'
+    'Done today: the main themes completed today and the number of meeting invites handled.\n'
+    'Tomorrow: the most urgent and important open items, at most three.\n\n'
+    'Then use these groups in this order, omitting a group entirely when its data has no items:\n'
+    'What I accomplished today\n'
+    'Focus for tomorrow\n\n'
+    'One bullet per item the data supports - at most five for today and three for tomorrow, never padded. '
+    'Never state a number of items the data does not show. Use exactly this bullet shape: '
+    '[Sender] — Subject — one-line gist. Begin completed items with ✅, priorities with 🔍, and meeting '
+    'invites with 📅 (an invite may use 📅 with ✅ or 🔍). Rank tomorrow by urgency and importance.\n\n'
+    'Exclude every other folder or channel, bulk and marketing mail, system notifications, receipts, and '
+    'anything suppressed by a blocked sender or keyword rule. Include meeting invites and flagged messages '
+    'when the supplied data identifies them. Do not infer that an item was completed, flagged, deleted, '
+    'archived, or still open unless the data says so. Do not mention excluded items or missing groups. '
+    'End with one short, plain closing sentence that the data bears out: speak of progress only when something '
+    'was completed; on a quiet day, say what is left instead. No preamble, table, or extra sections.'
+)
+
+# shipped instructions an unedited report still runs - store.py moves it to PROMPT; an owner-edited one is never touched
+OLD_PROMPTS = (
     'Give me an executive and concise evening Inbox Brief for emails in my Inbox (Focused and Other) '
     'and Sent from the last 8 hours only.\n\n'
     'Start with exactly two one-sentence roll-ups:\n'
@@ -31,13 +56,14 @@ PROMPT = (
     'when the supplied data identifies them. Do not infer that an item was completed, flagged, deleted, '
     'archived, or still open unless the data says so. Do not mention excluded items or missing groups. '
     'End with one short motivational sentence acknowledging progress, such as “Great progress today—tomorrow’s '
-    'priorities are clear!” No preamble, table, or extra sections.'
+    'priorities are clear!” No preamble, table, or extra sections.',
 )
 
 
 CONTRACT = (
     '\n\nYOU ARE WRITING THE EVENING INBOX BRIEF. Follow the report instruction exactly. Plain text '
     'only: the two named roll-ups, then the named groups and bullets, then one short closing sentence. '
+    'Never claim more items, or more progress, than the rows show. '
     'The supplied rows are the complete eligible Taskuary email slice for the stated window unless a block '
     'explicitly says it was capped. Never promote an excluded row into the brief, never call an automatic '
     'filing a user accomplishment, and never invent mailbox flags or actions that are not present in the data.'

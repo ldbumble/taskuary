@@ -6716,13 +6716,17 @@ def open_terminal(body: TermBody):
                           f'Opened an interactive {t.label} session in {t.cwd}' + (f' - {why}.' if why else '.'))
     return t.info()
 
-class WrapBody(BaseModel): task_id: int | None = None; close: bool = True
+class WrapBody(BaseModel):
+    task_id: int | None = None; close: bool = True
+    # Mark done on a live session writes the report and then closes the task, and the close dismisses every draft -
+    # so a reply drafted here would be a model call thrown away, or worse, land after the close on a done task
+    no_reply: bool = False
 
-def _wrap_task(tid: int, close: bool, sid: str = None):
+def _wrap_task(tid: int, close: bool, sid: str = None, no_reply: bool = False):
     """The route's thin end of coder.wrap - which is also what a self-closing agent calls
     (selfclose.py), so "the agent decided it was done" and "you clicked Done" travel the
     same road and leave the same record."""
-    try: return coder_wrap(store, tid, close, ACTOR, sid)
+    try: return coder_wrap(store, tid, close, ACTOR, sid, no_reply=no_reply)
     except ValueError as e: raise HTTPException(422, str(e))
 
 
@@ -6762,7 +6766,7 @@ def wrap_task(task_id: int, body: WrapBody):
     the reply from that report and the task waits on you to send it. Typing a wrap-up prompt into
     the pty meant one more prompt to read, minutes of waiting, and a fresh chance for an agent you
     just stopped to go do more work."""
-    return _wrap_task(task_id, body.close)
+    return _wrap_task(task_id, body.close, no_reply=body.no_reply)
 
 @app.post('/api/tasks/{task_id}/pause')
 def pause_task(task_id: int, body: WrapBody):

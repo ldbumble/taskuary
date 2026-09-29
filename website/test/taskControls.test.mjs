@@ -176,3 +176,14 @@ test("a draft that cannot be sent says why on the card, not in a tooltip", () =>
   assert.match(decision, /No reply can be sent from here — \{r\.SendBlock/);
   assert.match(decision, /The draft stays for you to use/);
 });
+
+test("Mark done on a live session ends it the way Save and end session does", () => {
+  // the owner, 2026-09-29: the confirm killed the pty with no write-up, and the terminal stayed on screen for the whole
+  // close - Save and end session swaps it for the write-up's progress line at once, files the result, then this closes
+  assert.ok(tasks.includes("onConfirm={stopAndFinish}"), "the confirm takes the write-up road");
+  const at = tasks.indexOf("const stopAndFinish = async");
+  const body = tasks.slice(at, tasks.indexOf("\n  };", at));
+  assert.ok(body.indexOf('setWrapping("done")') < body.indexOf("/wrap"), "the terminal gives way before the request");
+  assert.ok(body.includes("no_reply: true"), "the close dismisses drafts, so none is written");
+  assert.ok(body.indexOf("/wrap") < body.indexOf('finish("done")'), "the result is filed before the task closes");
+});

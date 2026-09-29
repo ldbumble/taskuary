@@ -669,6 +669,22 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // are taking away precious agent space"). Live is live, whoever is working.
   const liveSession = !!term?.alive;
   const askFinish = () => (liveSession ? setConfirmDone(true) : finish("done"));
+  // MARK DONE ON A LIVE SESSION ends it the way Save and end session does (the owner, 2026-09-29: "make it the same like
+  // when you hit stop session"): the terminal goes at once for the write-up's progress line, the result is filed, and
+  // only then is the task closed. The close used to kill the pty with no write-up while the terminal stayed on screen
+  // for the whole request. No reply is drafted - the close dismisses drafts - and a write-up that fails still closes.
+  const stopAndFinish = async () => {
+    setConfirmDone(false);
+    const id = selected;
+    if (canWrap) {
+      setWrapping("done"); setErr("");
+      try { await api.post(`/api/tasks/${id}/wrap`, { close: false, no_reply: true }); } catch { /* the close still stops it */ }
+      if (stale(id)) return;
+      setTerm(null);
+    }
+    await finish("done");
+    if (!stale(id)) setWrapping(false);
+  };
   // what Mark done does HERE - it said "ends the live agent session" with no session in sight (T11), and a waiting
   // draft is kept on the task, never thrown away: it can be brought back and sent later
   const markDoneHint = ["Closes the task", liveSession ? "and ends the live agent session" : "",
@@ -1633,11 +1649,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <CircularProgress size={15} />
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
-                        {wrapping === "stop" ? "Stopping this session…" : "Writing up this session…"}
+                        {wrapping === "stop" ? "Stopping this session…" : wrapping === "done" ? "Writing up this session, then marking it done…" : "Writing up this session…"}
                       </Typography>
                     </Box>
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>
                       {wrapping === "stop" ? "The session is ending. The task and reply are not changed."
+                        : wrapping === "done" ? "Reading the transcript and saving what this session did. The task closes when that is filed."
                         : "Reading the transcript and writing up what this session did. The task and reply remain separate — this takes a few seconds."}
                     </Typography>
                     <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />
@@ -2080,9 +2097,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       </Dialog>
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
       <Confirm open={confirmDone} title="Stop the agent and mark done?"
-        text="An agent session is still open on this task. Mark done ends it - what it did so far is saved with the task."
+        text="An agent session is still open on this task. Mark done ends it - what it did so far is written up and saved with the task, then the task closes."
         confirmLabel="Stop it and mark done" onClose={() => setConfirmDone(false)}
-        onConfirm={() => { setConfirmDone(false); finish("done"); }} />
+        onConfirm={stopAndFinish} />
       <ConfirmDelete open={confirmNAT} what={t ? `"${(t.Title || "this task").slice(0, 60)}"` : "this task"}
         consequence={"It is deleted, and triage is taught that this topic is never a task. Its messages stay on the Timeline, "
           + "and the sender is not muted — that is \"Skip this sender\"."}

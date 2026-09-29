@@ -116,17 +116,28 @@ class FinishTests(unittest.TestCase):
 
 class WrapEndpointTests(unittest.TestCase):
     """The end-to-end shape of the bug: what the task page is TOLD after a wrap-up."""
-    def _wrap(self, channel):
+    def _wrap(self, channel, body=None, tid_out=None):
         from fastapi.testclient import TestClient
         from taskuary import server, terminal
         c = TestClient(server.app)
         tid, _ = task_with(server.store, channel)
+        if tid_out is not None: tid_out.append(tid)
         # the wrap-up itself lives in coder.wrap now, not in the route - the route is one line
         # over it, so that a stop hook and `taskuary --done` can end a task the same way
         with mock.patch.object(terminal, 'transcript_for', return_value=('did the work', 'claude', None)), \
              mock.patch.object(coder, 'report_from_transcript', return_value={'summary': 'fixed', 'determination': '', 'actions': ''}), \
              mock.patch('taskuary.responder.write_draft', return_value='hi'):
-            return c.post(f'/api/tasks/{tid}/wrap', json={'close': True}).json()
+            return c.post(f'/api/tasks/{tid}/wrap', json=body or {'close': True}).json()
+
+    def test_mark_done_on_a_live_session_files_the_report_and_drafts_nothing(self):
+        # 2026-09-29: Mark done ends a live session the way Save and end session does, then closes the task - and the
+        # close dismisses drafts, so the write-up it asks for must not write one
+        from taskuary import server
+        tid = []
+        out = self._wrap('email', {'close': False, 'no_reply': True}, tid)
+        self.assertFalse(out['drafting'])
+        self.assertEqual(server.store.pending_review(tid[0], live_only=False), None)
+        self.assertTrue(any(str(c.get('Body') or '').startswith('CODER REPORT') for c in server.store.list_comments(tid[0])))
 
     def test_github_wrap_by_the_owner_closes_instead_of_drafting_what_cannot_be_sent(self):
         # the owner said Done (2026-09-07): a draft nobody can send must not hold the task open

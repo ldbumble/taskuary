@@ -454,7 +454,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     states = store.funnel_states()
     quiet = return_minutes(store)
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet) for row in rows]
-    cards = [card for card in cards if include_read or card['unread']]
+    cards = [card for card in cards if (include_read or card['unread']) and not card.get('ranked_wait')]
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)
     if processing_all._matches('calendar', '', query):

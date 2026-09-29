@@ -306,13 +306,19 @@ def more_markers(store, rows: list) -> list:
     for w in waiting(store)['items']:
         ch = str(w.get('channel') or '')
         counts[ch] = counts.get(ch, 0) + 1
-    out, seen = [], set()
-    for r in reversed(rows):
-        ch = str((r or {}).get('channel') or '')
-        if ch not in chans or ch in seen: continue
-        seen.add(ch)
-        if counts.get(ch): out.append({'key': r.get('key'), 'channel': ch, 'count': counts[ch]})
-    return list(reversed(out))
+    # ...on the LAST ONE THAT MADE IT: the lowest-ranked of the head that was judged, wherever its row sits - the queue
+    # carries on after it (the owner, 2026-09-28: "on the fourth and final one that made it"). It had hung off whichever
+    # row of the input came last on the rail, which put it in Agents working under an unrelated task. With no head row
+    # on screen, the input's last row is where reading stopped.
+    out = []
+    for ch in sorted(chans):
+        if not counts.get(ch): continue
+        head = store.ranked_head(ch)
+        last = head[-1] if head else None
+        row = next((r for r in rows if last and ((r or {}).get('tid') == last['TaskId'] or (r or {}).get('mid') == last['MessageId'])), None)
+        row = row or next((r for r in reversed(rows) if str((r or {}).get('channel') or '') == ch), None)
+        if row: out.append({'key': row.get('key'), 'channel': ch, 'count': counts[ch]})
+    return out
 
 
 def top_up(store, n: int = 1) -> int:

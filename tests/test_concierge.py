@@ -868,7 +868,8 @@ class ApiTests(unittest.TestCase):
             said = c.post('/api/concierge/say', json={'text': 'what did she attach?', 'key': nxt['item']['key']}).json()
             self.assertEqual(said['say'], 'Dana wants the file - the draft is below.')                  # a question: the (patched) model answers
             self.assertEqual(c.post('/api/funnel/settle', json={'key': nxt['item']['key'], 'verb': 'later'}).json()['verb'], 'later')
-            self.assertEqual(c.get('/api/funnel/pile?force=1').json()['items'], [])
+            # put away, it waits in For later on the rail (the canvas redesign, 2026-09-29) - never offered before its time
+            self.assertEqual([(i['key'], i.get('deferred')) for i in c.get('/api/funnel/pile?force=1').json()['items']], [(nxt['item']['key'], True)])
             chats = c.get('/api/concierge/chats').json()['data']
             self.assertEqual(len(chats), 1); self.assertEqual(chats[0]['title'], 'what did she attach?'); self.assertTrue(chats[0]['open'])
             one = c.get(f"/api/concierge/chats/{chats[0]['taskId']}").json()

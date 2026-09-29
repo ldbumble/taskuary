@@ -4,7 +4,7 @@
 // socket pushes new rows in; the list is not on a timer.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Popover, Select, TextField, Typography, useMediaQuery,
+  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Popover, Select, TextField, Tooltip, Typography, useMediaQuery,
 } from "@mui/material";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, captureInterruptedReply, interruptedReplyTarget, restoreInterruptedReply } from "./approvalInterrupt.js";
@@ -35,6 +35,11 @@ import { onLive } from "./live.js";
 import { detailPhase, feedHeaders, feedOk, takeFeed, threadDetail } from "./feedLoad.js";
 import { ALERT, ALERT_BD, ALERT_INK, ASSISTANT, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, GRADIENT, card, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
+import BarChartIcon from "@mui/icons-material/BarChart";
+import PowerOutlinedIcon from "@mui/icons-material/PowerOutlined";
+import TravelExploreIcon from "@mui/icons-material/TravelExplore";
+import TuneIcon from "@mui/icons-material/Tune";
+import { SIDE_NAV } from "./sideNav.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
@@ -134,6 +139,9 @@ export const filterLabel = (cat, pick, cats = CATEGORIES, labels = CHANNEL_LABEL
   return [kind, src].filter(Boolean).join(" \u00b7 ") || "All items";
 };
 
+// the sidebar buttons' marks, one per SIDE_NAV key
+const NAV_ICONS = { new: AddIcon, reports: BarChartIcon, connections: PowerOutlinedIcon, hub: TravelExploreIcon, settings: TuneIcon };
+
 function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChange }) {
   const [el, setEl] = useState(null);
   const close = () => { setEl(null); setSrcQ(""); };
@@ -141,18 +149,17 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
   const q = srcQ.trim().toLowerCase();
   return (
     <>
-      <Button size="small" onClick={(e) => setEl(e.currentTarget)}
-        data-tq-filter="true" aria-label="What this rail is showing"
-        title="What this rail is showing"
-        startIcon={<FilterAltIcon sx={{ fontSize: 13, color: narrowed ? ACCENT : FAINT }} />}
-        endIcon={<ChevronRightIcon sx={{ fontSize: 13, transform: "rotate(90deg)", color: FAINT }} />}
-        sx={{ flexShrink: 0, minWidth: 0, height: 28, px: 1.25, borderRadius: 99,
-          border: `1px solid ${narrowed ? "#b9c3cb" : BORDER}`, bgcolor: PANEL,
-          fontSize: 11.5, fontWeight: 600, color: narrowed ? INK : DIM, textTransform: "none",
-          "& .MuiButton-startIcon": { mr: 0.6 }, "& .MuiButton-endIcon": { ml: 0.4 },
-          "&:hover": { borderColor: "#b9c3cb", bgcolor: PANEL } }}>
-        {filterLabel(cat, pick)}
-      </Button>
+      {/* A SMALL ICON BESIDE THE SELECTOR (the canvas redesign, 2026-09-29): the selector takes the row, and what the
+          rail is filtered to is the tooltip's to say - the icon fills in when it is narrowed */}
+      <Tooltip title={`Filter the rail - ${filterLabel(cat, pick)}`}>
+        <IconButton size="small" onClick={(e) => setEl(e.currentTarget)}
+          data-tq-filter="true" aria-label={`Filter the rail - ${filterLabel(cat, pick)}`}
+          sx={{ flexShrink: 0, width: 30, height: 30, borderRadius: "8px",
+            border: `1px solid ${narrowed ? "#b9c3cb" : BORDER}`, bgcolor: narrowed ? "#e4e9ee" : PANEL,
+            "&:hover": { borderColor: "#b9c3cb", bgcolor: narrowed ? "#e4e9ee" : PANEL } }}>
+          <FilterAltIcon sx={{ fontSize: 15, color: narrowed ? ACCENT : DIM }} />
+        </IconButton>
+      </Tooltip>
       <Popover open={!!el} anchorEl={el} onClose={close}
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
         transformOrigin={{ vertical: "top", horizontal: "left" }}
@@ -569,7 +576,7 @@ function NextIn({ atRef, render }) {
   return render(atRef.current ? Math.max(0, Math.round((atRef.current - Date.now()) / 1000)) : null);
 }
 
-export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null }) {
+export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null, onGo = null, navOn = "" }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
@@ -1440,7 +1447,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       // being readable before you open anything, which is the whole job of the row; above ~560px
       // an ultrawide would spend most of the rail on empty space beside short subjects.
       // Everything else goes to the stage, which holds a whole message, the agent's work and the draft.
-      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, clamp(380px, 25vw, 560px)) minmax(0, 1fr)" },
+      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, clamp(320px, 23.6vw, 380px)) minmax(0, 1fr)" },
       mt: { xs: -1.5, md: -2.25 }, pt: { xs: 1.5, md: 2 } }}>
       <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
         if (choice === "review") reviewInterrupted(interrupt);
@@ -1455,8 +1462,28 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
         {/* the header. Frozen by construction now rather than by position:sticky - it is a
             flex sibling of the scroller, so nothing can slide over it and nothing has to be
             measured to keep it out of the way. */}
+        {/* THE SIDEBAR'S BUTTONS (the canvas redesign, 2026-09-29): New, then the parts of the app you browse, one line
+            each. They stay put - only the rows under them scroll. */}
+        <Box data-tq-sidenav="" sx={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: "1px", px: 1, pt: 1, pb: 0.75,
+          borderBottom: `1px solid ${BORDER}` }}>
+          {SIDE_NAV.map((n) => {
+            const Icon = NAV_ICONS[n.key];
+            return (
+              <Tooltip key={n.key} title={n.hint} placement="right">
+                <Box component="button" type="button" data-tq-nav={n.key} aria-current={navOn === n.key ? "page" : undefined}
+                  onClick={() => (n.key === "new" ? setNewOpen(true) : onGo?.(n.go, n.key))}
+                  sx={{ display: "flex", alignItems: "center", gap: 1.25, width: "100%", height: 30, px: 1.25, border: 0,
+                    borderRadius: "8px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, textAlign: "left",
+                    color: navOn === n.key ? INK : "#4d4a43", bgcolor: navOn === n.key ? "#e4e9ee" : "transparent",
+                    "& svg": { fontSize: 16, color: "#6e685f" }, "&:hover": { bgcolor: navOn === n.key ? "#e4e9ee" : PANEL2 } }}>
+                  <Icon />{n.label}
+                </Box>
+              </Tooltip>
+            );
+          })}
+        </Box>
         <Box sx={{ flexShrink: 0, bgcolor: "transparent",
-          px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          px: 1.5, pt: 1.1, pb: 0.75, display: "flex", flexDirection: "column", gap: 0.75 }}>
           {Object.values(savedReplies).map((saved) => (
             <Box key={saved.reviewId} data-interrupted-reply={saved.reviewId} sx={{ fontSize: 11, color: DIM }}>
               <Box component="details">
@@ -1467,23 +1494,20 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             </Box>
           ))}
 
-          {/* ONE ROW, three kinds of thing, each shaped like what it is: a SWITCH between the two
-              rails (sunk track, raised thumb - the shape everything uses for "pick one of two"), a
-              hairline divider, one FILTER that says what it is filtering to, and New on the right
-              edge. It used to be four pills of identical shape doing two unrelated jobs. */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0, flexWrap: "wrap" }}>
-            <Box role="group" aria-label="Feed views" sx={{ display: "inline-flex", flexShrink: 0,
-              p: "2px", borderRadius: 99, bgcolor: PANEL2 }}>
+          {/* THE SELECTOR, full width, the filter a small icon beside it. Work | Timeline sits with the rail because it
+              changes the task rows only (the canvas redesign, 2026-09-29); New moved up to the sidebar's buttons. */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+            <Box role="group" aria-label="Feed views" sx={{ display: "flex", flex: 1, minWidth: 0,
+              p: "3px", borderRadius: "9px", bgcolor: PANEL2 }}>
               {views.map((v) => (
                 <Box key={v.key} component="button" type="button" onClick={() => setView(v.key)}
                   aria-pressed={view === v.key}
-                  sx={{ border: 0, cursor: "pointer", height: 24, px: 1.5, borderRadius: 99,
-                    fontFamily: "inherit", fontSize: 11.5, fontWeight: view === v.key ? 700 : 600,
+                  sx={{ flex: 1, border: 0, cursor: "pointer", height: 26, px: 1.5, borderRadius: "7px",
+                    fontFamily: "inherit", fontSize: 12, fontWeight: view === v.key ? 700 : 600, textTransform: "capitalize",
                     color: view === v.key ? INK : DIM, bgcolor: view === v.key ? PANEL : "transparent",
                     boxShadow: view === v.key ? "0 1px 2px rgba(30,50,38,.12)" : "none" }}>{v.label}</Box>
               ))}
             </Box>
-            <Box aria-hidden sx={{ width: "1px", height: 18, bgcolor: BORDER, mx: 0.4, flexShrink: 0 }} />
             <FilterButton cat={cat} pick={pickerChannels.length ? pick : ""} channels={pickerChannels}
               srcByChannel={srcByChannel} srcQ={srcQ} setSrcQ={setSrcQ}
               onChange={(nextCat, nextPick) => {
@@ -1491,10 +1515,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 if (nextCat !== cat) setCat(nextCat);
                 if (nextPick !== pick) setPick(nextPick);
               }} />
-            <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
-              startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-              sx={{ flexShrink: 0, height: 28, minWidth: 68, py: 0, px: 1.25, borderRadius: 99,
-                fontSize: 11.5, background: GRADIENT, ml: "auto" }}>New</Button>
           </Box>
 
           {/* ONE line, and it never wraps. It used to wrap whenever the clock ran long - "running the reports
@@ -1594,7 +1614,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             delete railRef.current?.dataset.tqHoverLocked;
           }}
           sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
-          position: "relative", px: 1, pt: 1, pb: 3,
+          position: "relative", px: 1, pt: view === "unread" ? 0 : 1, pb: 3,   // no top padding under the pipe: a sticky heading sticks at the padding edge, and rows showed through above it
           "&[data-tq-scrolling='true'] .tqRow [data-tq-keep]": {
             transition: "none !important",
           },

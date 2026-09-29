@@ -830,9 +830,11 @@ class MemoryTests(unittest.TestCase):
         self.assertTrue(funnel.next_item(s, one)['surfaced'])
         out = funnel.settle(s, two, 'later', hours=2)
         self.assertTrue(out['until'] > ago(0))
-        self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one])
+        # put away, it waits in For later (the canvas redesign, 2026-09-29) - on the rail, never next
+        self.assertEqual([(i['key'], bool(i.get('deferred'))) for i in funnel.build(s)['items']], [(one, False), (two, True)])
+        self.assertIsNone(funnel.next_item(s))
         funnel.settle(s, one, 'done')
-        self.assertEqual(funnel.build(s, keep_surfaced=True)['items'], [])
+        self.assertEqual([i['key'] for i in funnel.build(s, keep_surfaced=True)['items']], [two], 'done removes; later still waits')
         self.assertIsNone(funnel.next_item(s))
 
     def test_a_reply_shown_once_stays_and_a_rewritten_draft_is_new_again(self):

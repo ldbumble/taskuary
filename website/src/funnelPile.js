@@ -482,3 +482,13 @@ export const heldSince = (pile, now = Date.now()) => {
   const at = Number(pile?.generated_at);
   return Number.isFinite(at) && at > 0 ? Math.min(at, now) : now;
 };
+
+// ── walking one section (the canvas redesign, 2026-09-29) ──────────────────────────────────────
+// Clicking a section's heading puts its first row on the table, and Next stays inside that section until it is empty -
+// then it says so and the walk goes on as normal. The rows are the rail's own (bandsOf, so For later walks soonest
+// first); the server's funnel.section_next is the same rule for the phone doorway.
+export const SECTION_WORDS = { urgent: "Urgent", task: "On you", agents: "Agents working", later: "For later", reports: "Reports", ideas: "Advisor ideas", fyi: "FYI" };
+export const sectionNext = (items, section, seen = new Set()) =>
+  (bandsOf(items).find((b) => b.level === section)?.items || [])
+    .find((i) => !i.settling && !seen.has(i.key) && !(i.aliases || []).some((a) => seen.has(a))) || null;
+export const sectionDone = (section) => `${SECTION_WORDS[section] || section} done.`;

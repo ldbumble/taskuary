@@ -45,7 +45,7 @@ import { summarize } from "./walkSummary.js";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, placed, railBack } from "./funnelPile.js";
+import { MORE_PX, backAt, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -107,7 +107,7 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
-function Pile({ pile, current, onPull, error, onRetry }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection }) {
   const items = pile?.items || [];
   // A full account can return dozens of canonical rows together. Painting that entire stack in
   // one React commit leaves the rail blank until the browser has laid out every card. On the
@@ -322,18 +322,20 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                 A band that can be opened is also the way to shut it again: opening one had no way
                 back at all (the owner, 2026-09-16: "clicking on fyi or reports should close it
                 back up or a tiny arrow"). */}
-            <div className={`tq-pile-head${folds ? " folds" : ""}`} title={folds
-              ? (open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length}`)
-              : (LEVEL_META[level]?.hint || "")}
-              onClick={folds ? () => setOpened((cur) => {
-                const next = new Set(cur);
-                if (next.has(level)) next.delete(level); else next.add(level);
-                return next;
-              }) : undefined}>
+            {/* THE HEADING WALKS ITS SECTION (the canvas redesign, 2026-09-29): its first row goes on the table and Next
+                stays inside it until it is empty. Opening a capped band is the chevron's job alone now. */}
+            <div className={`tq-pile-head${folds ? " folds" : ""}`} data-tq-section-head={level} role="button"
+              title={`Walk ${levelLabel(level)} - ${LEVEL_META[level]?.hint || ""}`}
+              onClick={() => onSection(level)}>
               {/* each band its own SUBTLE tint (the owner, 2026-09-28: "now all the pills are the same. make them subtly
                   different") - light red for your task, never the loud one; urgent alone keeps its colour */}
               <span className={`lvl-${level}`}>{levelLabel(level)}</span>
-              {folds && <i className="fold">{open ? "▾" : "▸"}</i>}
+              {folds && <i className="fold" role="button" title={open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length}`}
+                onClick={(e) => { e.stopPropagation(); setOpened((cur) => {
+                  const next = new Set(cur);
+                  if (next.has(level)) next.delete(level); else next.add(level);
+                  return next;
+                }); }}>{open ? "▾" : "▸"}</i>}
               <hr /><em>{rows.length}</em>
             </div>
             <div className="tq-pile-stack" style={{ height: stackHeight }}>
@@ -382,7 +384,7 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                         {!!word && (
                           <span className="tq-pile-word"
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
-                            <i>{meta.mark}</i>{word}</span>
+                            <i>{meta.mark}</i><span className="w">{word}</span></span>
                         )}
                       </div>
                       {isCur && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
@@ -582,6 +584,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const [walk, setWalk] = useState(null);
   const [msgs, setMsgs] = useState([]);
   const [pile, setPile] = useState(null);
+  useEffect(() => { pileRef.current = pile; }, [pile]);   // the section walk reads the rail as drawn
   // the day's meetings are asked for NOW, not when the welcome first draws - the strip is ready with it
   useEffect(() => { refreshToday(); }, []);
   const [busy, setBusy] = useState(false);
@@ -638,6 +641,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const noticedRef = useRef(null);      // the context notice the stream already showed this turn
   const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
   const selectionRef = useRef(null);
+  const sectionRef = useRef(null);                                 // {level, seen}: a section walk, from its heading
+  const pileRef = useRef(null);
   const selectionContractSeen = useRef(false);
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
@@ -941,9 +946,23 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     return captured && sameSelectionScope(captured.scope, scope) ? captured : null;
   }, []);
 
+  // a line of the assistant's own that needs no turn - a section walk running out
+  const noteLine = useCallback((text) => setMsgs((m) => [...m, { id: `s${Date.now()}`, role: "assistant", text }]), []);
   // pull the next thing (or the one named; or the next piece of mail) out of the pipe and say it
   const surface = useCallback(async (key = null, asUser = null, leaving = null) => {
     if (busy || resetting || handoff || turnFlight.current) return;
+    // WALKING A SECTION: Next stays inside it - the next of its rows the walk has not shown - and once it is empty it
+    // says so and the walk goes on as normal (the canvas redesign, 2026-09-29)
+    if (!key && sectionRef.current) {
+      const sec = sectionRef.current;
+      if (currentRef.current?.key) sec.seen.add(currentRef.current.key);
+      const nxt = sectionNext(pileRef.current?.items, sec.level, sec.seen);
+      if (nxt) { sec.seen.add(nxt.key); key = nxt.key; }
+      else {
+        sectionRef.current = null;
+        noteLine(sectionDone(sec.level));
+      }
+    }
     turnFlight.current = true;
     setBusy(true); setErr("");
     const epoch = chatEpoch.current;
@@ -989,7 +1008,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     }
     turnFlight.current = false;
     setBusy(false);
-  }, [busy, ensureNextSelection, handoff, landed, loadPile, resetting, turn]);
+  }, [busy, ensureNextSelection, handoff, landed, loadPile, noteLine, resetting, turn]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
   const startFlight = useRef(false);
   const start = async (what) => {
@@ -1440,6 +1459,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   // stage was showing the "Pick anything on the left" placeholder instead, so a click on a pipe row
   // put a turn somewhere invisible and read as nothing happening at all (the owner, 2026-09-04: "I
   // clicked on task and it just made the morning digest disappear and nothing hovered and opened").
+  const walkSection = (level) => {
+    const seen = new Set();
+    const first = sectionNext(pile?.items, level, seen);
+    if (!first) return;
+    seen.add(first.key);
+    sectionRef.current = { level, seen };
+    pull(first.key, null);
+  };
   const pull = (key, asUser) => {
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); surface(key, asUser || null);
   };
@@ -1683,11 +1710,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   );
 
   return (
-    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active}
+    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab) => onNavigate?.(tab)}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={({ openByMid, openByItem }) => <Pile pile={pile} current={old ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
-        onPull={(key, asUser) => pullOrOpen(key, asUser, openByMid, openByItem)} />}
+        onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
+        onSection={walkSection} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r) => pull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} />

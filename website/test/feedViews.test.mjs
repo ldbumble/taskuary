@@ -54,13 +54,14 @@ test("the rail is a share of the window, not a number of pixels", () => {
   // two different shapes (the owner, 2026-09-22: "it should scale down... it's 20% of the screen
   // and should be the same on desktop"). The clamp is what a one-line row needs at either end.
   const source = feedSource();
-  assert.match(source, /md: "minmax\(0, clamp\(380px, 25vw, 560px\)\) minmax\(0, 1fr\)"/,
+  // ...narrowed for the canvas redesign (2026-09-29): the rail is the sidebar now and the canvas takes the rest - 340px
+  // at 1440, the mockup's width, never under what a one-line row needs
+  assert.match(source, /md: "minmax\(0, clamp\(320px, 23\.6vw, 380px\)\) minmax\(0, 1fr\)"/,
     "the rail's width lives in one place, and it is proportional");
   assert.doesNotMatch(source, /md: "minmax\(0, \d+px\) minmax/,
     "a fixed pixel rail is the thing this replaced");
-  // New belongs on the rail's right edge. It was moved beside the filter once and that was not
-  // asked for; the width was (the owner, 2026-09-22: "put the new button where it was").
-  const at = source.indexOf("onClick={() => setNewOpen(true)}");
-  assert.notEqual(at, -1, "the New button is still in the rail's header");
-  assert.match(source.slice(at, at + 400), /ml: "auto"/);
+  // New is the first of the sidebar's buttons now (the canvas redesign), not on the rail's header row
+  const at = source.indexOf('data-tq-nav="new"');
+  assert.equal(at, -1, "New is drawn by the sidebar stack, keyed by name");
+  assert.match(source, /SIDE_NAV/);
 });

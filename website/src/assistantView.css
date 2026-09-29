@@ -8,7 +8,7 @@
    dot, the card 8px in - so the pipe reads as the top of the same list, ranked instead of dated.
    What comes out next is the FIRST row; the walls and the taper are gone (the owner, 2026-09-03:
    "no more funnel... everything comes out from the top"). */
-.tq-pile { position: relative; padding: 4px 0 8px; }
+.tq-pile { position: relative; padding: 12px 0 8px; }
 /* how close the pipe is to empty - said once the count is small enough to be encouraging */
 .tq-pile-cheer { text-align: center; color: #6e685f; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 10px 0 2px; }
 .tq-pile-note { text-align: center; color: #8a847a; font: 500 10px 'IBM Plex Sans', system-ui, sans-serif; padding: 3px 0; }
@@ -111,7 +111,9 @@
    (FeedView), and the two rails are the same list read two ways, so they read at one size. And the
    palette's INK, not the darker-than-INK grey this had: #191814 was a shade invented for this one
    rule, and the whole point of theme.jsx is that nothing invents its own. */
-.tq-pile-row .t b { flex: 1 1 auto; min-width: 0; font-size: 11.5px; font-weight: 500; color: #262521; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the narrowed sidebar (2026-09-29): the TITLE keeps at least half the row and the lane word gives way first, down to its
+   mark - "did t..." beside a whole "ready to close out" had it backwards; the word is in the row's tooltip */
+.tq-pile-row .t b { flex: 1 1 auto; min-width: 50%; font-size: 11.5px; font-weight: 500; color: #262521; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* which task a row is. Sans, not mono - the rail carries no mono anywhere - and quiet enough that
    the subject still leads the line. */
 .tq-pile-ref { flex: 0 0 auto; font: 600 9.5px 'IBM Plex Sans', system-ui, sans-serif; color: #a09889; letter-spacing: .02em; }
@@ -422,3 +424,8 @@
   .tq-chat-body { padding: 12px 12px 6px; }
   .tq-compose, .tq-btw, .tq-handed { padding-left: 12px; padding-right: 12px; margin-left: 12px; margin-right: 12px; }
 }
+
+/* THE NARROWED SIDEBAR (the canvas redesign, 2026-09-29): a row under 300px wide says its lane by its MARK alone - the
+   word is in the row's tooltip - so the title keeps the room; a wider rail still spells it out */
+.tq-pile-row .card { container-type: inline-size; }
+@container (max-width: 300px) { .tq-pile-word .w { display: none; } .tq-pile-word i { margin-right: 0; } }

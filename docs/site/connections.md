@@ -5,6 +5,10 @@ database, a bank feed. Each card on the **Connections** page is one named connec
 Nothing is polled without an enabled role. A card with no role is a saved credential and nothing
 more.
 
+A card's settings - its roles, what each repository or source does, processing, the agent's prompts -
+wait for its **Save** bar, which lists every change before it is kept; **Discard** puts them back.
+Leaving the card with changes unsaved asks first. Test, sign-in and a new credential still act at once.
+
 ## What a connection is
 
 One card is one account, not one kind of system. Rename it for the account or environment it

@@ -28,6 +28,7 @@ import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { plannedFor } from "./connectorCatalog.js";
 import { pollSecondsField } from "./pollFields.js";
+import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -1960,7 +1961,11 @@ function MacPermissions({ conn, test, busy, runTest }) {
 }
 
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
-function ChannelDetail({ conn, sources, reload, onBack, onCreated, onNavigate }) {
+function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate }) {
+  // ONE SAVE FOR THE CARD (ConnectorDraft.jsx): every control below draws from the draft and stages into it
+  const draft = useCardDraft(savedConn, savedSources, reload);
+  const { conn, sources } = draft;
+  const onBack = () => { if (!draft.pending.length || window.confirm(`Leave without saving ${draft.pending.length} change(s)?`)) leave(); };
   const m = META[conn.Type] || { fields: [], howto: [] };
   const isAI = m.channel === "ai";
   const [tab, setTab] = useState("Setup");
@@ -2016,9 +2021,9 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated, onNavigate })
     try { await api.post("/api/ingest/poll"); setTimeout(() => { setSrcSync(false); reload(); }, 3000); }
     catch { setSrcSync(false); }
   };
-  const toggleSource = async (s) => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); reload(); };
+  const toggleSource = (s) => draft.ctx.stageSource({ SourceId: s.SourceId, Active: !s.Active });
   const [delSrc, setDelSrc] = useState(null);      // a source being removed for good - off was the only option before
-  const setActive = async (on) => { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Active: on }); reload(); };
+  const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });
 
   const steps = [
     { label: "Credentials", done: !!conn.HasSecret || !m.secretLabel, body: (
@@ -2148,6 +2153,7 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated, onNavigate })
   ];
 
   return (
+    <DraftProvider value={draft.ctx}>
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
@@ -2173,9 +2179,11 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated, onNavigate })
         </Stepper>
       )}
       {tab === "Guide" && <Steps steps={m.howto || []} />}
+      <SaveBar draft={draft} labels={DRAFT_LABELS} words={DRAFT_WORDS} />
       <CardPlaybooks type={conn.Type} />
-      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
+      <RemoveConnection conn={conn} reload={reload} onBack={leave} />
     </Box>
+    </DraftProvider>
   );
 }
 
@@ -2333,7 +2341,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
    pickers, and the same reason: one bucket is a report source, the next should put every
    new file on the Timeline - that is a per-OBJECT decision, not a per-connection one.
    'report' is the default and polls nothing: the object is simply available on the
-   Reports tab. Picking saves instantly. ── */
+   Reports tab. A pick waits for the card's Save bar. ── */
 const CLOUD_MODES = [
   ["report", "report only — selectable on the Reports tab, never polled"],
   ["feed", "feed — new items appear on the Timeline, never become work"],
@@ -2355,6 +2363,7 @@ const objName = (addr) => addr.slice(objType(addr).length) || addr;
 const PAGE_OBJ = 40;   // a 100-row wall is not a list; the rest is one click away
 
 function CloudObjects({ conn, meta, objects, reload }) {
+  const saveSrc = useSaveSource(reload);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("");     // "" = every type
@@ -2362,8 +2371,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
   const [limit, setLimit] = useState(PAGE_OBJ);
   const [bulk, setBulk] = useState("");
   const setOne = async (s, m) => {
-    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...parse(s.ConfigJson), mode: m }) });
-    reload();
+    await saveSrc({ SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...parse(s.ConfigJson), mode: m }) });
   };
   const rediscover = async () => {
     setBusy(true);
@@ -2382,9 +2390,9 @@ function CloudObjects({ conn, meta, objects, reload }) {
   const setAllShown = async (m) => {
     setBulk(m);
     for (const s of shown) {
-      await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...parse(s.ConfigJson), mode: m }) });
+      await saveSrc({ SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...parse(s.ConfigJson), mode: m }) });
     }
-    setBulk(""); reload();
+    setBulk("");
   };
   return (
     <Box sx={{ mt: 3, maxWidth: 760 }}>
@@ -2566,7 +2574,11 @@ function OAuthConnect({ conn, meta, reload }) {
   );
 }
 
-function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {} }) {
+function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload, onBack: leave, onCreated, byType = {} }) {
+  // the same one Save as a channel card: what each discovered object is used for is held until the bar saves it
+  const draft = useCardDraft(savedConn, savedSources, reload);
+  const { conn, sources } = draft;
+  const onBack = () => { if (!draft.pending.length || window.confirm(`Leave without saving ${draft.pending.length} change(s)?`)) leave(); };
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [secret, setSecret] = useState("");
@@ -2608,6 +2620,7 @@ function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {
   };
 
   return (
+    <DraftProvider value={draft.ctx}>
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
@@ -2661,9 +2674,11 @@ function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {
       {tab === "Connection" && meta.discovers && (
         <CloudObjects conn={conn} meta={meta} objects={objects} reload={reload} />
       )}
+      <SaveBar draft={draft} labels={DRAFT_LABELS} words={DRAFT_WORDS} />
       <CardPlaybooks type={conn.Type} />
-      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
+      <RemoveConnection conn={conn} reload={reload} onBack={leave} />
     </Box>
+    </DraftProvider>
   );
 }
 
@@ -2691,11 +2706,10 @@ const GITHUB_PERMS = [
 ];
 
 const GithubPerms = ({ conn, reload }) => {
+  const saveConn = useSaveConnector(reload);
   const cfg = JSON.parse(conn.ConfigJson || "{}");
   const toggle = async (key) => {
-    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId,
-      ConfigJson: JSON.stringify({ ...cfg, [key]: !cfg[key] }) });
-    reload();
+    await saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, [key]: !cfg[key] }) });
   };
   return (
     <Box sx={{ mt: 1, maxWidth: 620 }}>
@@ -2741,19 +2755,19 @@ const CLOSEOUT_SWITCHES = [
 ];
 
 const GithubCloseout = ({ conn, mine, reload }) => {
+  const saveConn = useSaveConnector(reload), saveSrc = useSaveSource(reload);
   const cfg = JSON.parse(conn.ConfigJson || "{}");
   const co = { ...CLOSEOUT_DEFAULTS, ...(cfg.closeout || {}) };
   const [check, setCheck] = useState(null);
   const [busy, setBusy] = useState(false);
   const save = async (patch) => {
-    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, closeout: { ...co, ...patch } }) });
-    reload();
+    await saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, closeout: { ...co, ...patch } }) });
   };
   const saveRepo = async (s, key, v) => {
     const gc = JSON.parse(s.ConfigJson || "{}");
     const own = { ...(gc.closeout || {}) };
     if (v === "") delete own[key]; else own[key] = key === "anyway" ? v === "on" : v;
-    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...gc, closeout: own }) });
+    await saveSrc({ SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...gc, closeout: own }) });
     reload();
   };
   const runCheck = async () => {
@@ -2831,6 +2845,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
 };
 
 const useRoles = (conn, reload) => {
+  const saveConn = useSaveConnector(reload);
   const roles = new Set(String(conn.Roles || "").split(",").filter(Boolean));
   const toggle = async (r) => {
     const next = new Set(roles);
@@ -2839,8 +2854,7 @@ const useRoles = (conn, reload) => {
     // contradiction the poller has to resolve
     if (r === "trigger" && next.has("trigger")) next.delete("feed");
     if (r === "feed" && next.has("feed")) next.delete("trigger");
-    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Roles: [...next].join(",") });
-    reload();
+    await saveConn({ ConnectorId: conn.ConnectorId, Roles: [...next].join(",") });
   };
   return [roles, toggle];
 };
@@ -2867,12 +2881,13 @@ const SCOPE_META = {
 const SCOPE_KEYS = ["read", "write", "admin"];
 
 const AuthorityRow = ({ conn, reload }) => {
+  const saveConn = useSaveConnector(reload);
   const fallback = String(conn.ScopeDefault || "read").toLowerCase();
   const current = String(conn.Scope || "").toLowerCase();
   const [busy, setBusy] = useState(false);
   const set = async (s) => {
     setBusy(true);
-    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Scope: s }); reload(); }
+    try { await saveConn({ ConnectorId: conn.ConnectorId, Scope: s }); }
     finally { setBusy(false); }
   };
   return (
@@ -2935,6 +2950,19 @@ const PROMPTABLE = new Set(["outlook", "teams", "slack", "telegram", "whatsapp",
   "jira", "asana", "monday"]);
 const promptsFor = (t) => (t === "github" ? GH_PROMPTS : PROMPTABLE.has(t) ? TASK_PROMPT : []);
 
+// what the card's Save bar calls each setting, in the words the card itself uses (ConnectorDraft.jsx SaveBar)
+const DRAFT_LABELS = {
+  ...Object.fromEntries(GITHUB_PERMS.map(([k, label]) => [k, label])),
+  ...Object.fromEntries([...GH_PROMPTS, ...TASK_PROMPT].map(([k]) => [k, k === "prompt_pr" ? "Prompt for pull requests" : k === "prompt_issue" ? "Prompt for issues" : "Prompt for tasks"])),
+  Active: "Connection", Roles: "Inbound", Scope: "Permission", bulk: "Processing", bulk_head: "Read at once",
+  closeout: "Close-out", assistant_chat: "Assistant chat", poll_seconds: "Check every (seconds)",
+  mode: "Use", folders: "Folders", issues: "issues", prs: "PRs", auto: "agent",
+};
+const DRAFT_WORDS = {
+  bulk: { rank: "Ranked together", clear: "One by one", "": "One by one" },
+  Roles: { "": "off", trigger: "creates work", feed: "timeline only" },
+};
+
 const ghInboundExplicit = (mine) => mine.some((s) => {
   const c = parse(s.ConfigJson);
   return ["tasks", "feed"].includes(c.issues) || ["tasks", "feed"].includes(c.prs);
@@ -2977,6 +3005,7 @@ const MODES = [
    into "Vendors" made that mail invisible here. The chooser lists the mailbox's folders (Graph) and
    keeps the picks on the source; the Inbox alone is the default. ── */
 const MailFolders = ({ conn, s, reload }) => {
+  const saveSrc = useSaveSource(reload);
   const cfg = parse(s.ConfigJson);
   const chosen = new Set((cfg.folders || []).length ? cfg.folders : ["inbox"]);
   const [open, setOpen] = useState(false);
@@ -2991,7 +3020,7 @@ const MailFolders = ({ conn, s, reload }) => {
   const toggle = async (id) => {
     const next = new Set(chosen); next.has(id) ? next.delete(id) : next.add(id);
     if (!next.size) return;                                       // a mailbox that reads nothing is a switched-off mailbox
-    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...cfg, folders: [...next] }) }); reload();
+    await saveSrc({ SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...cfg, folders: [...next] }) });
   };
   const label = chosen.size === 1 && chosen.has("inbox") ? "Inbox only" : `${chosen.size} folder${chosen.size === 1 ? "" : "s"}`;
   return (
@@ -3135,6 +3164,7 @@ const WaPair = ({ conn, reload }) => {
 /* ── WhatsApp: the paired account's reachable roster, offered as sources. The catch-all covers
    direct chats; a group only comes into Taskuary once its JID is explicitly added. ── */
 const WaChats = ({ conn, mine, reload, onNavigate }) => {
+  const saveConn = useSaveConnector(reload);
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
   const [guideBusy, setGuideBusy] = useState("");
@@ -3170,9 +3200,8 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
     setGuideBusy(jid || "clear"); setErr("");
     try {
       const current = parse(conn.ConfigJson);
-      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId,
+      await saveConn({ ConnectorId: conn.ConnectorId,
         ConfigJson: JSON.stringify({ ...current, assistant_chat: jid || "", poll_seconds: current.poll_seconds || 30 }) });
-      reload();
     } catch (e) { setErr(e?.response?.data?.detail || "could not set the assistant chat"); }
     setGuideBusy("");
   };
@@ -3354,13 +3383,14 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
 };
 
 const ProcessingStep = ({ conn, reload, n }) => {
+  const saveConn = useSaveConnector(reload);
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
   const [anchor, setAnchor] = useState(null);
   useEffect(() => { setCfg(parse(conn.ConfigJson)); }, [conn.ConfigJson]);
   const mode = cfg.bulk === "rank" ? "rank" : "clear";
   const set = async (v) => {
     const next = { ...cfg, bulk: v }; setCfg(next);
-    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) }); reload();
+    await saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) });
   };
   // HOW MANY of this input's ranked arrivals are read at once. It belongs to the connection, not to
   // Settings: a repo firehose and a mailbox are not the same appetite (the owner, 2026-09-18: "per
@@ -3370,7 +3400,7 @@ const ProcessingStep = ({ conn, reload, n }) => {
   const setHead = async (raw) => {
     const n = Math.max(1, Math.min(20, Number(raw) || 4));
     const next = { ...cfg, bulk_head: n }; setCfg(next);
-    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) }); reload();
+    await saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) });
   };
   return (
     <Box sx={{ mt: 2 }}>
@@ -3421,18 +3451,16 @@ const ProcessingStep = ({ conn, reload, n }) => {
 };
 
 const InboundStep = ({ conn, m, mine, reload }) => {
+  const saveConn = useSaveConnector(reload), saveSrc = useSaveSource(reload);
   const [roles, toggle] = useRoles(conn, reload);
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
-  const [saved, setSaved] = useState("");
   const [ask, setAsk] = useState(null);           // the public-repo question, asked in-app
   useEffect(() => { setCfg(parse(conn.ConfigJson)); }, [conn.ConfigJson]);
   const gh = conn.Type === "github";
   const on = roles.has("trigger") || roles.has("feed") || (gh && ghInboundExplicit(mine));
   const prompts = promptsFor(conn.Type);
-  const savePrompts = async () => {
-    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg) });
-    setSaved("saved ✓"); setTimeout(() => setSaved(""), 2500); reload();
-  };
+  // the prompts are settings like the rest of the card: each edit joins its draft, and the card's one Save keeps them
+  const setPrompt = (key, v) => { const next = { ...cfg, [key]: v }; setCfg(next); saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) }); };
   return (
     <Box sx={{ mt: 1, maxWidth: 640 }}>
       {/* 1 — the switch: does this connection create work at all */}
@@ -3455,7 +3483,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
             owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
             <b>anyone</b> = every author. Everyone else’s items still become tasks for you to promote.
-            A picker set here pulls that repo whatever the switches above say; picking saves instantly.
+            A picker set here pulls that repo whatever the switches above say; nothing changes until you press Save below.
           </Typography>
           {mine.filter((s) => s.Active).map((s) => {
             const gc = parse(s.ConfigJson);
@@ -3469,8 +3497,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
                     onChange={(e) => {
                       const v = e.target.value;
                       const apply = async () => {
-                        await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...gc, [kind]: v }) });
-                        reload();
+                        await saveSrc({ SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...gc, [kind]: v }) });
                       };
                       // a public repo: anyone on the internet can open a PR, and with this on each one
                       // may start an agent (the session cap still holds - Settings → Agents at once, 4 by default)
@@ -3506,13 +3533,9 @@ const InboundStep = ({ conn, m, mine, reload }) => {
           </Typography>
           {prompts.map(([key, label, hint]) => (
             <TextField key={key} fullWidth multiline minRows={2} label={label} helperText={hint}
-              value={cfg[key] || ""} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })}
+              value={cfg[key] || ""} onChange={(e) => setPrompt(key, e.target.value)}
               sx={{ bgcolor: "#fff", mt: 1.5 }} />
           ))}
-          <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.5 }}>
-            <Button size="small" variant="contained" disableElevation onClick={savePrompts}>Save prompts</Button>
-            {saved && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{saved}</Typography>}
-          </Box>
         </Box>
       )}
     </Box>

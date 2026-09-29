@@ -209,6 +209,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                        HasDraft=bool(review.get('DraftText')))
         cards = funnel.from_feed(store, [row], canonical=True)
         card = cards[0]
+        # the mark says where the work CAME FROM: the Advisor's task keeps its mark when a report run joins it and is the
+        # newest message (the owner, 2026-09-28). The row's reply target is untouched - only what the rail draws.
+        if str(task.get('Source') or '') == 'assistant': card['channel'] = 'assistant'
     else:
         target = compact['open_target']
         kind = target['kind']
@@ -451,7 +454,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     states = store.funnel_states()
     quiet = return_minutes(store)
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet) for row in rows]
-    cards = [card for card in cards if include_read or card['unread']]
+    cards = [card for card in cards if (include_read or card['unread']) and not card.get('ranked_wait')]
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)
     if processing_all._matches('calendar', '', query):

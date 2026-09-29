@@ -69,6 +69,12 @@ class ParseAndFile(unittest.TestCase):
         self.assertIn('- bill: Post a card transaction as an AP bill - when: a transaction', m)
         self.assertEqual(playbooks.menu([]), '')
 
+    def test_a_slug_never_ends_in_a_hyphen_after_the_cut(self):
+        self.assertEqual(playbooks.slugify('x' * 59 + ' onboarding'), 'x' * 59)
+        self.assertEqual(playbooks.slugify('  Post a card: transaction!  '), 'post-a-card-transaction')
+        self.assertEqual(playbooks.slugify('---'), 'playbook')
+        self.assertEqual(len(playbooks.slugify('word ' * 40)), 59)
+
     def test_the_template_is_a_valid_playbook(self):
         pb = playbooks.parse(playbooks.template())
         self.assertTrue(pb['title'] and pb['when'] and pb['done when'])

@@ -3531,6 +3531,12 @@ class SQLiteStore:
         read (Next, Done), not put away (Later, Remind me), not closed. They hold the head: a drain judges only
         head_size minus these, so a sync cannot empty the queue behind them in waves (the owner, 2026-09-28: all
         eight pull requests were triaged, four at a time, where four were meant to wait)."""
+        # ONE PLACE PER TASK: a pull request GitHub notified about twice had two ranked messages on one task - it held two
+        # places in the head (one fewer arrival judged) and the rail's circled number read ② with no ① anywhere (the owner,
+        # 2026-09-29: "i also only see number 2 why?"). The task's first ranked message stands for it.
+        seen = set()
+        return [r for r in self._ranked_rows(channel) if not (r['TaskId'] in seen or seen.add(r['TaskId']))]
+    def _ranked_rows(self, channel) -> list:
         return self._rows("""SELECT m.MessageId, m.TaskId, m.RankValue FROM message m JOIN task t ON t.TaskId=m.TaskId
             WHERE m.Channel=? AND m.RankValue IS NOT NULL AND m.Status!='triaging'
               AND t.Status IN ('open','waiting','in_progress')

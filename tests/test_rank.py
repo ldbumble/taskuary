@@ -422,6 +422,17 @@ class TheMoreMarkerTests(unittest.TestCase):
         self.assertEqual(rank.rank_numbers(self.s, rows), {f'k{tids[0]}': 1, f'k{tids[1]}': 2, f'k{tids[2]}': 3})
         self.assertEqual(rank.rank_numbers(MemoryStore(), rows), {}, 'nothing ranks, nothing is numbered')
 
+    def test_a_task_notified_about_twice_holds_one_place_and_wears_one_number(self):
+        """The owner, 2026-09-29: "i also only see number 2 why?" - one pull request's two notifications were ranked onto
+        one task, held two places in the head, and the second number overwrote the first on its row."""
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        tid = self.s.create_task({'Title': 'Review the docs PR', 'Kind': 'coding', 'Status': 'waiting'}, 'triage')
+        for v in (0.55, 0.33):
+            m = self._arrival(f'notified {v}'); self.s.set_message_rank(m, v, 'floor', 'rank'); self.s.place_message(m, tid, 'routed')
+        self.assertEqual(len(self.s.ranked_head('github')), 1)
+        self.assertEqual(rank.rank_numbers(self.s, [{'key': 'k', 'channel': 'github', 'tid': tid}]), {'k': 1})
+
     def test_a_ranked_source_with_nothing_waiting_shows_no_pill(self):
         c = self.s.get_connector_by_type('github')
         self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')

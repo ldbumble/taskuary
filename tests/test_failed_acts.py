@@ -103,6 +103,34 @@ class ThePhoneNumbersTheWayOnTests(unittest.TestCase):
         self.assertTrue(said.startswith('Done'), said); self.assertIn(s.get_review(rid)['Status'], ('approved', 'edited'))
 
 
+class TelegramTypesTheNumberTests(unittest.TestCase):
+    """Telegram has no polls - the owner types the number. The way on is the same list, and "1" runs Try again."""
+    def test_a_failed_send_on_telegram_offers_numbers_and_1_tries_again(self):
+        from taskuary import concierge, messengers, operations, remote_assistant as ra, server, terminal
+        s = store(); tid, rid, item, p = drafted(s)
+        for pt in (mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]),
+                   mock.patch.object(concierge, 'brain', return_value=None)):
+            pt.start(); self.addCleanup(pt.stop)
+        with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('SMTP 550 mailbox unavailable')):
+            text = ra._ran(s, p, concierge.run_proposal(s, operations.get(s, p['id'])), item, 'owner')
+        sent = []
+        with mock.patch.object(messengers, 'tg_send', side_effect=lambda st, chat, body, connector_id=None: sent.append(body)):
+            ra.send(s, 'telegram', '4242', text)
+        self.assertIn('1 · Try again', sent[0])
+        self.assertEqual(ra.resolve_index(s, 'telegram', '4242', '1'), ('Try again', True))
+        act = ra.acts_for(s, 'telegram', '4242')['Try again']
+        with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['craig@vendor.com'], 'cc': []}):
+            self.assertTrue(ra.run_act(s, act, item).startswith('Done'))
+        self.assertIn(s.get_review(rid)['Status'], ('approved', 'edited'))
+
+    def test_a_push_waits_on_a_telegram_chat_that_is_talking_whatever_store_handle_sent_it(self):
+        from taskuary import remote_assistant as ra
+        s = store()
+        class Proxy: _store = s                                     # a poll worker's writer proxy (channels._Writer)
+        ra.talked(Proxy(), 'telegram', 4242)
+        self.assertFalse(ra.quiet(s, 'telegram', '4242'))
+
+
 class AYesAnswersTheTableTests(unittest.TestCase):
     def test_a_yes_typed_after_walking_on_never_runs_the_proposal_left_behind(self):
         from taskuary import concierge, general, terminal

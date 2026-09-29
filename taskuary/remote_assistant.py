@@ -294,13 +294,16 @@ QUIET = 90.0
 _talked: dict = {}                     # (store, channel, chat) -> monotonic time of the last word, either way
 
 
-def talked(store, channel: str, chat: str): _talked[(id(store), channel, str(chat))] = time.monotonic()
+def _sid(store) -> int: return id(getattr(store, '_store', store))      # a poll worker's writer proxy is the same store
+
+
+def talked(store, channel: str, chat: str): _talked[(_sid(store), channel, str(chat))] = time.monotonic()
 
 
 def quiet(store, channel: str, chat: str) -> bool:
     """True when nothing is being said in this chat just now - a push may go."""
-    with _locks_guard: busy = any(k[0] == id(store) and k[1] == channel and k[3] == chat for k in _turns)
-    return not busy and time.monotonic() - _talked.get((id(store), channel, str(chat)), 0.0) >= QUIET
+    with _locks_guard: busy = any(k[0] == _sid(store) and k[1] == channel and str(k[3]) == str(chat) for k in _turns)
+    return not busy and time.monotonic() - _talked.get((_sid(store), channel, str(chat)), 0.0) >= QUIET
 
 
 def push_alerts(store, force: bool = False) -> int:

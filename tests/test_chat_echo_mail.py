@@ -36,10 +36,17 @@ class EchoTests(unittest.TestCase):
     def test_the_notification_mail_files_onto_the_chat_lines_task(self):
         s = MemoryStore()
         a = chat(s); b = notice(s)
-        self.assertEqual((b['status'], b['task_id']), ('filed', a['task_id']))
+        self.assertEqual((b['status'], b['task_id']), ('skipped', a['task_id']))
         self.assertEqual(len(s.list_tasks()), 1)
         self.assertIsNone(s.pending_review(a['task_id']))          # never a reply drafted to a no-reply address
         self.assertIn('one message, two ways', s.message_routes(b['message_id'])[-1]['Reason'])
+
+    def test_the_reply_answers_the_chat_line_not_its_newer_mail_copy(self):
+        """Close out mailed the copy's no-reply address, signed like an email, over a chat line (2026-09-29)."""
+        from taskuary import coder
+        s = MemoryStore()
+        a = chat(s); notice(s)
+        self.assertEqual(coder.reply_target(s, a['task_id']), a['message_id'])
 
     def test_the_chat_line_after_its_notification_joins_the_mails_task(self):
         s = MemoryStore()

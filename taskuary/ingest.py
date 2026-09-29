@@ -617,11 +617,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     verdict = msg.pop('_verdict', None)
     echo = echo_route(store, msg)
     if echo and not is_chat(msg):
-        # the mail is the copy: kept on the task for the chain, never judged, drafted to or put on the pile
-        mid = _land(store, msg, echo['task_id'], 'filed')
+        # the mail is the copy: kept on the task, never judged, drafted to or put on the pile. It lands SKIPPED, not
+        # filed: as the newest message a filed copy was what the reply answered, and Close out mailed the chat app's
+        # no-reply address with an email signature under a chat line (2026-09-29)
+        mid = _land(store, msg, echo['task_id'], 'skipped')
         store.add_route(mid, echo['task_id'], 'attach', 1.0, echo['reason'], [], 'triage')
-        logger.info(f"ingest: {msg.get('subject') or 'a mail'} echoes {task_ref(echo['task_id'])} - filed on it")
-        return {'status': 'filed', 'task_id': echo['task_id'], 'message_id': mid}
+        logger.info(f"ingest: {msg.get('subject') or 'a mail'} echoes {task_ref(echo['task_id'])} - kept on it as a copy")
+        return {'status': 'skipped', 'task_id': echo['task_id'], 'message_id': mid}
     if echo:
         # the chat line is the real one (its reply goes back where it was said): it joins as the newest line
         r = echo

@@ -101,8 +101,9 @@ def reply_source(transcript: str, final_message: str = '') -> str:
 
 def reply_target(store, task_id: int):
     """Which message a reply answers: the last one that came IN. Our own sent mail rides in
-    the chain as 'context', and answering that would mail ourselves."""
-    return next((m['MessageId'] for m in reversed(store.list_messages(task_id)) if m.get('Status') != 'context'), None)
+    the chain as 'context', and answering that would mail ourselves; a chat app's mail copy of a
+    chat line rides as 'skipped', and answering that mails its no-reply address."""
+    return next((m['MessageId'] for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped')), None)
 
 
 # ── the agent's own words ───────────────────────────────────────────────────────────────

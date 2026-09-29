@@ -45,7 +45,7 @@ import { summarize } from "./walkSummary.js";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, placed } from "./funnelPile.js";
+import { MORE_PX, backAt, placed, railBack } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -362,7 +362,9 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                     : meta.word !== BAND_SAYS[level] ? meta.word : "";
                 return (
                   <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
-                    <span className="when">{railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+                    {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
+                    <span className="when" title={level === "later" && backAt(i) ? `back ${agoText(backAt(i))}` : undefined}>
+                      {level === "later" ? railBack(backAt(i)) : railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
                     {/* the dot is WHERE IT CAME FROM. The logo says the same at reading size; the
                         dot says it at scanning size, down a column you can run an eye along. */}
                     <span className="rail"><i style={{ background: sourceColor(i) }} /></span>
@@ -424,7 +426,7 @@ function Pile({ pile, current, onPull, error, onRetry }) {
             {hidden > 0 && (
               <button type="button" className="tq-pile-more"
                 onClick={() => setOpened((cur) => new Set(cur).add(level))}>
-                {hidden} more {level === "reports" ? "reports" : "fyi"}
+                {hidden} more {level === "reports" ? "reports" : level === "ideas" ? "ideas" : "fyi"}
               </button>
             )}
           </div>

@@ -57,6 +57,7 @@ test("every task row says who works it, in the owner's words", () => {
   for (const label of ["your task", "agent · general", "agent · coding", "reply"]) {
     assert.ok(text.includes(label), `the kind vocabulary is missing ${label}`);
   }
-  // "your task" is the work rail's own heading for band 2: one thing, one name in both places
-  assert.ok(src("funnelPile.js").includes('word: "your task"'), "the rail no longer says 'your task'");
+  // the work rail's heading for band 2 is "on you" since the canvas redesign (2026-09-29) - the same words the
+  // lane itself says on a row (lanes.json `yours`), so the heading and the row cannot disagree
+  assert.ok(src("funnelPile.js").includes('word: "on you"'), "the rail's band-2 heading is not 'on you'");
 });

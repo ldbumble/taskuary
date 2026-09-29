@@ -19,7 +19,7 @@ export const groupOf = (i) => {
   if (!i) return "read";
   // what you walked past with Next sits in the rail's Passed band - here too, never back under "Agents waiting"
   // as if it were new (the owner, 2026-09-24: "now it's gone from work but in the good evening list")
-  if (levelOf(i) === "passed") return "passed";
+  if (levelOf(i) === "later") return "passed";
   if (i.kind === "action" || i.kind === "agent" || i.kind === "agentdone" || AGENT_LANES.has(i.lane)) return "agents";
   if (READ_LANES.has(i.lane) || ["fyis", "report", "idea", "wrapup"].includes(i.kind)) return "read";
   // what YOU made - a task born by hand or from the assistant. A person's ask triage filed as a to-do

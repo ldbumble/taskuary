@@ -8,7 +8,8 @@ import { LEVEL_META, LEVEL_ORDER, levelLabel, levelOf, levelsOf } from "../src/f
 // One level per thing triage decided: open work and landed results are not merged into a single name (the owner,
 // 2026-09-07: "why work and reports combined ... just make each one it's own thing").
 test("every level has its own word and its own hint", () => {
-  assert.deepEqual(LEVEL_ORDER, ["urgent", "task", "reports", "fyi", "passed", "agents"]);
+  // the canvas redesign (2026-09-29): On you, Agents working, For later, Reports, Advisor ideas, FYI
+  assert.deepEqual(LEVEL_ORDER, ["urgent", "task", "agents", "later", "reports", "ideas", "fyi"]);
   for (const level of LEVEL_ORDER) {
     assert.ok(levelLabel(level).length, `${level} needs a word`);
     assert.ok(LEVEL_META[level].hint.length, `${level} needs a hint`);
@@ -20,7 +21,9 @@ test("every level has its own word and its own hint", () => {
 
 test("no level name merges two things", () => {
   for (const level of LEVEL_ORDER) assert.ok(!/[&+]|and/.test(levelLabel(level)), `${levelLabel(level)} names two things`);
-  assert.equal(levelLabel("task"), "your task");
+  assert.equal(levelLabel("task"), "on you");
+  assert.equal(levelLabel("later"), "for later");
+  assert.equal(levelLabel("ideas"), "advisor ideas");
   assert.equal(levelLabel("reports"), "reports");
 });
 
@@ -42,7 +45,7 @@ test("the ends of the list are one level each", () => {
   assert.equal(levelOf({ lane: "working", order_band: 5 }), "agents");
   assert.equal(levelOf({}), "task", "a row with no band still lands in one, so the dock never reads empty");
   // work you pressed Next on waits at the bottom, beside the agents - still yours, not at the top
-  assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true }), "passed");
+  assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true }), "later");
   assert.equal(levelOf({ lane: "stopped", order_band: 2 }), "task");
   assert.equal(levelOf({ lane: "time", order_band: 1, surfaced: true }), "urgent", "a meeting about to start never moves down");
 });
@@ -83,4 +86,38 @@ test("an older rail answer never replaces a newer one", async () => {
   assert.equal(refreshPilePresentation(newer, older), newer);
   const newest = { generated_at: 3000, items: [] };
   assert.equal(refreshPilePresentation(newer, newest), newest);
+});
+
+// FOR LATER holds what Next walked past AND what Remind me put away; ADVISOR IDEAS leaves FYI while it is still an idea
+test("for later and advisor ideas are their own levels", () => {
+  assert.equal(levelOf({ lane: "yours", order_band: 2, deferred: true, defer_until: "2099-01-01 08:00" }), "later");
+  assert.equal(levelOf({ lane: "forgotten", kind: "idea", order_band: 4 }), "ideas");
+  assert.equal(levelOf({ lane: "yours", kind: "idea", order_band: 2, tid: 7 }), "task", "an idea made a task is a task");
+  assert.equal(levelOf({ lane: "working", kind: "idea", order_band: 5, tid: 7 }), "agents");
+});
+
+test("For later's gutter says how long until it comes back, soonest first", async () => {
+  const { railBack, backAt, bandsOf } = await import("../src/funnelPile.js");
+  const now = Date.parse("2026-09-29T12:00:00");
+  const at = (m) => new Date(now + m * 60000).toISOString();
+  assert.equal(railBack(at(10), now), "< 30m");
+  assert.equal(railBack(at(45), now), "< 1h");
+  assert.equal(railBack(at(185), now), "3h");
+  assert.equal(railBack(at(60 * 50), now), "2d");
+  assert.equal(railBack(at(-5), now), "", "a return time already past is no age at all");
+  assert.equal(railBack(null, now), "");
+  assert.equal(backAt({ back_at: "2026-09-29 15:00:00" }), "2026-09-29 15:00:00");
+  assert.equal(backAt({ defer_until: "2026-10-02 08:00" }), "2026-10-02 08:00");
+  assert.equal(backAt({}), null);
+  const rows = [
+    { key: "b", lane: "yours", order_band: 2, surfaced: true, back_at: at(300) },
+    { key: "a", lane: "yours", order_band: 2, deferred: true, defer_until: at(60) },
+    { key: "c", lane: "yours", order_band: 2, surfaced: true },
+  ];
+  assert.deepEqual(bandsOf(rows).find((b) => b.level === "later").items.map((i) => i.key), ["a", "b", "c"]);
+});
+
+test("reports, ideas and fyi divide what is left; the rest are never capped", async () => {
+  const { CAPPED } = await import("../src/funnelPile.js");
+  assert.deepEqual(CAPPED, ["reports", "ideas", "fyi"]);
 });

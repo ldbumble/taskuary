@@ -348,26 +348,47 @@ export const attentionBand = (item) => {
 // levels - processing_order.attention_band is the same list on the server.
 export const LEVEL_META = {
   urgent: { word: "urgent", hint: "a meeting inside fifteen minutes, an ask triage called urgent, or a sender on your escalate list" },
-  task: { word: "your task", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed, a task an agent finished" },
-  reports: { word: "reports", hint: "a report you set up landed - information, never a task" },
-  fyi: { word: "fyi", hint: "people told you things, and ideas nobody has turned into work - read them or don't" },
-  passed: { word: "passed", hint: "still yours - you pressed Next on these; they come back to Your task and the walk after a few hours (Remind me on the task puts one away until a date)" },
+  task: { word: "on you", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed, a task an agent finished" },
   agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },
+  later: { word: "for later", hint: "still yours - you pressed Next on these, or put them away with Remind me; each comes back when its time says" },
+  reports: { word: "reports", hint: "a report you set up landed - information, never a task" },
+  ideas: { word: "advisor ideas", hint: "something the Advisor noticed - make it a task, hand it to an agent, or let it go" },
+  fyi: { word: "fyi", hint: "people told you things - read them or don't" },
 };
-// PASSED: work you walked past with Next. Next settles nothing - the task is still yours - but leaving
-// it at the top of Your task read as if Next had done nothing (the owner, 2026-09-23: "once it's read or
-// next it should move ... maybe add section for deferred tasks that go on the bottom same place as agents
-// working"). A grouping of the rail only: the walk's own order is the server's and is not touched.
-export const LEVEL_ORDER = ["urgent", "task", "reports", "fyi", "passed", "agents"];
+// FOR LATER: work you walked past with Next, and work Remind me put away. Next settles nothing - the task is still
+// yours - but leaving it at the top of On you read as if Next had done nothing (the owner, 2026-09-23). The canvas
+// redesign (2026-09-29) moved Agents working up to second and gave ideas a level of their own: an idea leaves FYI
+// until it is made work (then it is On you / Agents working like any task) or dismissed (then it leaves the rail).
+// A grouping of the rail only: the walk's own order is the server's (funnel.level_of mirrors this for a section walk).
+export const LEVEL_ORDER = ["urgent", "task", "agents", "later", "reports", "ideas", "fyi"];
 const LEVEL_OF_BAND = { 1: "urgent", 2: "task", 3: "reports", 4: "fyi", 5: "agents" };
-// what puts a row in its section - the RAIL's to say, never the card on the table's older copy (AssistantView `drawn`)
 export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "unread", "kind", "working", "state"];
 export const placed = (row, card) => {
   const out = { ...row, ...card };
   for (const k of PLACEMENT) { if (k in row) out[k] = row[k]; else delete out[k]; }
   return out;
 };
-export const levelOf = (item) => (item?.surfaced && attentionBand(item) === 2 ? "passed" : LEVEL_OF_BAND[attentionBand(item)] || "fyi");
+export const levelOf = (item) => {
+  const band = attentionBand(item);
+  if (band === 2 && (item?.surfaced || item?.deferred)) return "later";
+  if (band === 4 && item?.kind === "idea") return "ideas";
+  return LEVEL_OF_BAND[band] || "fyi";
+};
+// when a For later row comes back: the server's own clock for it (surfaced_at + task_return_minutes), or its Remind me date
+export const backAt = (item) => item?.back_at || item?.defer_until || null;
+// ...said in the age gutter's own short form, counting DOWN: "< 30m", "< 1h", "3h", "2d". A time already past says
+// nothing - the row is on its way back to On you, and a negative age would be a lie about which way time runs.
+export const railBack = (iso, now = Date.now()) => {
+  if (!iso) return "";
+  const t = new Date(String(iso).replace(" ", "T")).getTime();
+  if (Number.isNaN(t)) return "";
+  const m = Math.round((t - now) / 60000);
+  if (m <= 0) return "";
+  if (m < 30) return "< 30m";
+  if (m < 60) return "< 1h";
+  if (m < 1440) return `${Math.floor(m / 60)}h`;
+  return `${Math.floor(m / 1440)}d`;
+};
 export const levelLabel = (level) => LEVEL_META[level]?.word || "";
 // the levels actually present, in the order the rail draws them - the jump menu's entries
 export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).some((i) => levelOf(i) === level));
@@ -376,7 +397,7 @@ export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).s
 // product (the owner, 2026-09-16: "we don't have importance besides for the 4 categories"), so the
 // heading is the only thing on the rail that carries a role colour - the dot beside a row is its
 // SOURCE, and a row's own word is gone. theme.jsx ROLES, named rather than copied.
-export const LEVEL_ROLE = { urgent: "you", task: "you", reports: "info", fyi: "muted", passed: "passed", agents: "working" };
+export const LEVEL_ROLE = { urgent: "you", task: "you", agents: "working", later: "passed", reports: "info", ideas: "info", fyi: "muted" };
 
 // ── how the rail divides the height it has ────────────────────────────────────────────────────
 // urgent, your task and agents working are NEVER capped: a task behind a "4 more" button is a task
@@ -389,10 +410,15 @@ export const LEVEL_ROLE = { urgent: "you", task: "you", reports: "info", fyi: "m
 // gap; a heading is 7 margin + 9/7 padding + its line + a 1px rule; a "more" button is 5 + 3/3 + its
 // line + 2. FOOT is what sits under the last band - the pile's own padding and the scroller's.
 export const ROW_PX = 33, HEAD_PX = 36, MORE_PX = 28, FOOT_PX = 64;
-export const CAPPED = ["reports", "fyi"];
+export const CAPPED = ["reports", "ideas", "fyi"];
 export const FLOOR = 2;
+// For later is sorted by when each comes back, soonest first (no time known sorts last); every other band keeps the server's order
+const soonest = (a, b) => (Date.parse(String(backAt(a) || "").replace(" ", "T")) || Infinity) - (Date.parse(String(backAt(b) || "").replace(" ", "T")) || Infinity);
 export const bandsOf = (items) => LEVEL_ORDER
-  .map((level) => ({ level, items: (items || []).filter((i) => levelOf(i) === level) }))
+  .map((level) => {
+    const rows = (items || []).filter((i) => levelOf(i) === level);
+    return { level, items: level === "later" ? [...rows].sort(soonest) : rows };
+  })
   .filter((b) => b.items.length);
 
 // avail: pixels the rail can paint without scrolling. Returns {level: rows to draw} for the capped

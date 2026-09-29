@@ -26,7 +26,7 @@ import { Md } from "./md.jsx";
 import { SessionPane } from "./TerminalView.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
-import { ModelSelect, TaskuaryMark } from "./ui.jsx";
+import { MicButton, ModelSelect, TaskuaryMark } from "./ui.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -529,6 +529,12 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
                 placeholder={working ? "Add something for it to pick up…"
                   : dock ? "Tell Taskuary what to do next…" : "Tell the assistant what to do next…"}
               />
+              {/* the one mic, dictating into the box - every other composer had it and this one did not (the owner,
+                  2026-09-29: "where is mic to ask it question?") */}
+              <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => {
+                const c = runtime.thread.composer, was = c.getState().text;
+                c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t);
+              }} />
               {/* stopping is an ACT: closing this page is not one. The button tells the server
                   to stop the run; abandoning the tab just detaches from it (server.py). */}
               <ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response"

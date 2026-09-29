@@ -48,7 +48,10 @@ test("the agent card's bar is the same bar as the task's and the reply's", () =>
   const bar = tasks.slice(at, tasks.indexOf("\n  );", at));
   assert.ok(bar.includes("sx={primaryBtn}"), "it opens with the same filled primary");
   assert.ok(bar.includes('<Divider orientation="vertical"'), "a rule divides this session from another one");
-  assert.ok(bar.includes("sx={canContinue ? barBtn : primaryBtn}"), "the named moves take barBtn");
+  assert.ok(bar.includes("sx={barContinue ? barBtn : primaryBtn}"), "the named moves take barBtn");
+  // a general agent's composer sits under this bar and continues the same conversation: no second door (2026-09-29)
+  assert.match(tasks, /const barContinue = canContinue && !isGeneral;/);
+  assert.ok(bar.includes("{barContinue && <Button"), "the bar's Continue session is the coding agent's only");
   // whichever state it is in, exactly one move is filled: continue it, file it, or run another
   assert.match(tasks, /const canContinue = !term\?\.alive && \(isGeneral \? generalStarted : !!detail\?\.resumable\);/);
   assert.match(tasks, /const canSave = !report && !wrapped;/);

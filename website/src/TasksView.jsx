@@ -813,6 +813,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // 2026-09-16: "this agent card is still weird and doesn't match ... it should match the other
   // ones"). Coding and general differ only in WHICH session is picked back up, so it is one bar.
   const canContinue = !term?.alive && (isGeneral ? generalStarted : !!detail?.resumable);
+  // ...but a general agent's open card already has its composer under the bar, and what you type there continues the same
+  // conversation (/assistant) - a second door to one room (the owner, 2026-09-29: "why do we need continue session if
+  // it's still open?"). A coding agent keeps it: that button reopens its own CLI session, which nothing else here does.
+  const barContinue = canContinue && !isGeneral;
   const canSave = !report && !wrapped;            // nothing filed yet, so this session is still worth writing up
   const agentBar = !term?.alive && !restartOpen && (isGeneral ? generalStarted : !!(report || detail?.transcript));
   // the list's row for this task carries the server's state (taskstate.py): the page reads the same verdict
@@ -902,16 +906,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // it calls are declared just above, and a component defined mid-render remounts on every keystroke.
   const agentBarRow = (
     <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-      {canContinue && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent} sx={primaryBtn}
+      {barContinue && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent} sx={primaryBtn}
         startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
         title={isGeneral
           ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
         onClick={(e) => setContinueAt(e.currentTarget)}>
         {startingAgent === "resume" ? "Continuing…" : "Continue session"}</Button>}
-      {canSave && <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
-        disabled={!!wrapping} sx={canContinue ? barBtn : primaryBtn}
-        startIcon={<DoneAllIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
+      {canSave && <Button size="small" variant={barContinue ? "outlined" : "contained"} disableElevation
+        disabled={!!wrapping} sx={barContinue ? barBtn : primaryBtn}
+        startIcon={<DoneAllIcon sx={{ fontSize: 16, color: barContinue ? "#6f8a6e" : undefined }} />}
         title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
         onClick={wrapUp}>Save result</Button>}{/* the session has ended: nothing is left to END (T15) */}
       {!isGeneral && <>

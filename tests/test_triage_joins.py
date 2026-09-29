@@ -47,6 +47,18 @@ class SameAsTests(unittest.TestCase):
         self.assertEqual(len(s.list_tasks()), 1)
         self.assertIn('the same as', s.message_routes(again['message_id'])[-1]['Reason'])
 
+    def test_one_pull_request_never_joins_another_ones_task(self):
+        """The owner, 2026-09-28: two docs PRs from one contributor read alike, and triage filed #121 into #120's task.
+        A pull request or an issue is its own job; a new push on the SAME one still joins its task."""
+        s = MemoryStore()
+        first = mail(s, 'pr120', brain('task'), conv='gh:northwind/portal#120', channel='github', subject='northwind/portal#120 docs: fix the example')
+        other = mail(s, 'pr121', brain('task', same_as=first['task_id']), conv='gh:northwind/portal#121', channel='github',
+                     subject='northwind/portal#121 docs: fill in the descriptions')
+        self.assertNotEqual(other['task_id'], first['task_id'])
+        again = mail(s, 'pr120-push', brain('task', same_as=first['task_id']), conv='gh:northwind/portal#120', channel='github',
+                     subject='northwind/portal#120 docs: fix the example')
+        self.assertEqual(again['task_id'], first['task_id'])
+
     def test_same_as_a_closed_task_reopens_it_and_an_fyi_leaves_it_closed(self):
         s = MemoryStore()
         first = mail(s, 'a', brain('task'), conv='c1'); tid = first['task_id']

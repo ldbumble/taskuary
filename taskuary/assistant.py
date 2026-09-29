@@ -1034,8 +1034,13 @@ def _uptime_block(store) -> str:
     """An EMPTY labelled section is worse than none: it reads as "nothing was running"."""
     from . import reports as _r
     up = _r.uptime_words(store)
+    # ...and a start is the owner opening it. An Advisor read a restart as an incident and raised "investigate the
+    # unexpected restart" - a task an agent then started on (the owner, 2026-09-28: "doing stupid stuff like checking
+    # why it restarted"). This block is context for judging reports, never a finding of its own.
     return (f"WHEN TASKUARY WAS RUNNING (it is a window on this machine: while it is shut nothing polls, no report "
-            f"fires and no mail arrives - so a gap here is not a fault):\n{up}\n") if up else ''
+            f"fires and no mail arrives - so a gap here is not a fault. A start or restart is the owner opening or "
+            f"reopening the app, or an update: never a problem, never worth an idea, never something to investigate. "
+            f"Use this only to judge whether a report could have run):\n{up}\n") if up else ''
 
 
 def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None, report_id=None) -> tuple:

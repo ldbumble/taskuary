@@ -160,7 +160,7 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
                 'item': {'lane': 'approve', 'kind': 'review', 'who': 'Craig Sherman', 'channel': 'email'}}
         # the story's header wears the item's mark; the asker's line the channel's (2026-09-28: the card as a story)
         text = remote_assistant.turn_text(said)
-        self.assertTrue(text.startswith('✉️ ready to close out\n🔵 **Craig Sherman** asked · Email'), text)
+        self.assertTrue(text.startswith('🏁 ready to close out\n🔵 **Craig Sherman** asked · Email'), text)
         self.assertTrue(text.endswith('Reply with one of:\n1 · Send it\n2 · Next'), text)
 
     def test_a_report_wears_the_report_mark_and_a_finished_agent_its_own(self):

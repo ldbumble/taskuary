@@ -26,16 +26,11 @@ import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
-import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ChannelIcon, MicButton, StarMark, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
 // taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
 // the avatars on its cards - the bright tile repeated on every line shouted over the card it introduced
-const AssistantMark = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-    <line x1="12" y1="3.5" x2="12" y2="20.5" /><line x1="4.6" y1="7.75" x2="19.4" y2="16.25" /><line x1="4.6" y1="16.25" x2="19.4" y2="7.75" />
-    <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
-  </svg>
-);
+const AssistantMark = () => <StarMark />;
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
@@ -73,6 +68,7 @@ const NOTE_KINDS = new Set(["setup_questions"]);
 // something besides for what lane it's in"). Compared on the WORD, not the lane, so a kind that
 // overrides its lane's word - agentdone, wrapup - is judged on the word it actually shows.
 const BAND_SAYS = { reports: "report", fyi: "fyi", agents: "agent working" };
+const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";   // a ranked row's place in its batch (HEAD_RANGE tops out at 20)
 const ROW_H = 33, CUR_H = 57;   // a Timeline row (30px + its 3px gap); the current one opens up to two lines
 const BATCH_TAIL = 13;          // the gap a bracket leaves under itself for its own label
 // what sits UNDER the bands and still has to fit: the pile's own padding, the cheer line and the
@@ -199,6 +195,9 @@ function Pile({ pile, current, onPull, error, onRetry }) {
   // every line below is dead.
   const markers = pile?.more_markers || [];
   const byKey = useMemo(() => Object.fromEntries(markers.map((m) => [m.key, m])), [markers]);
+  // BULK PROCESSING: a ranked row's place in its batch, circled (the owner, 2026-09-28: "we should write numbers on it
+  // like circle 1 rank") - in the order the batch let them in, which is rank order (rank.rank_numbers)
+  const rankNo = pile?.rank_numbers || {};
   const [openChannel, setOpenChannel] = useState("");
   const [waiting, setWaiting] = useState(null);
   useEffect(() => {
@@ -239,9 +238,6 @@ function Pile({ pile, current, onPull, error, onRetry }) {
     return () => ro.disconnect();
   }, [sig]);
   const [opened, setOpened] = useState(() => new Set());        // bands the owner opened by hand
-  // A ROW'S STATE WORD IS THE FILTER (the owner, 2026-09-28: "filter by waiting to start / on you / agent waiting on you
-  // ... as minimal as possible"): click "waiting to start" on a row and its band shows only those; the heading says so
-  const [only, setOnly] = useState(null);                       // {level, word} or null
   // WHAT THE ESTIMATE MISSED. fillCaps costs what it expects the browser to paint; this is the
   // overflow it actually painted, measured once per change and given back in rows. Bounded by the
   // guard below so a band that cannot shrink any further can never spin.
@@ -276,10 +272,7 @@ function Pile({ pile, current, onPull, error, onRetry }) {
       )
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
-      ) : bands.map(({ level, items: all }) => {
-        const picked = only?.level === level ? only.word : null;
-        const rows = picked ? all.filter((i) => rowMeta(i).word === picked || i.key === curKey) : all;
-        const pick = (e, w) => { e.stopPropagation(); setOnly(picked ? null : { level, word: w }); };
+      ) : bands.map(({ level, items: rows }) => {
         const open = opened.has(level);
         const cap = open ? rows.length : (caps[level] ?? rows.length);
         // only the two bands the rail is allowed to cap can be folded; urgent, your task and agents
@@ -336,10 +329,9 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                 if (next.has(level)) next.delete(level); else next.add(level);
                 return next;
               }) : undefined}>
-              <span style={{ color: ROLES[LEVEL_ROLE[level]]?.ink, background: ROLES[LEVEL_ROLE[level]]?.tint,
-                borderColor: ROLES[LEVEL_ROLE[level]]?.bd }}>{levelLabel(level)}</span>
-              {picked && <button type="button" className="tq-pile-only" title="Show all of them again"
-                onClick={(e) => pick(e)}>{picked} ✕</button>}
+              {/* each band its own SUBTLE tint (the owner, 2026-09-28: "now all the pills are the same. make them subtly
+                  different") - light red for your task, never the loud one; urgent alone keeps its colour */}
+              <span className={`lvl-${level}`}>{levelLabel(level)}</span>
               {folds && <i className="fold">{open ? "▾" : "▸"}</i>}
               <hr /><em>{rows.length}</em>
             </div>
@@ -355,8 +347,8 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                 const inBatch = batchKeys.has(i.key);
                 const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
-                // the one pill a row can still wear: work has STOPPED until you answer it.
-                const loud = i.lane === "blocked" || i.lane === "approve";
+                // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
+                // for every lane - "ready to close out" and "agent waiting on you" included
                 // ...and every other row says its lane - mark and word - unless that is the very
                 // thing the heading above it already said (BAND_SAYS).
                 // A MEETING says its clock time instead. "coming up" is what the urgent heading and
@@ -377,22 +369,15 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                       title={[i.who, meta.word, i.ref, i.promoted ? 'triage moved it up' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         <span className="logo"><SourceMark item={i} size={15} /></span>
+                        {!!rankNo[i.key] && <span className="tq-pile-rank" title={`#${rankNo[i.key]} of this batch, by importance`}>
+                          {CIRCLED[rankNo[i.key] - 1] || rankNo[i.key]}</span>}
                         <b>{i.title}</b>
                         {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
                             match a row to the Tasks tab, and it was only ever in the tooltip. */}
                         {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
                         {i.settling && <span className="tq-pile-tag">triaging…</span>}
-                        {loud && !i.settling && (
-                          <span className="tq-pile-tag loud" role="button" tabIndex={0}
-                            title={picked ? "Show all of them again" : `Show only “${meta.word}”`}
-                            onClick={(e) => pick(e, meta.word)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") pick(e, meta.word); }}
-                            style={{ color: ROLES.you.ink, background: ROLES.you.tint, borderColor: ROLES.you.bd }}>
-                            {meta.mark} {meta.word}</span>
-                        )}
-                        {!loud && !!word && (
-                          <span className="tq-pile-word" role="button" tabIndex={0}
-                            title={picked ? "Show all of them again" : `Show only “${meta.word}”`}
-                            onClick={(e) => pick(e, meta.word)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") pick(e, meta.word); }}
+                        {!!word && (
+                          <span className="tq-pile-word"
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
                             <i>{meta.mark}</i>{word}</span>
                         )}

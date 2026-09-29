@@ -3511,6 +3511,25 @@ class SQLiteStore:
         would let an unranked arrival jump the queue it was never measured against."""
         order = 'RankValue IS NULL, RankValue DESC, MessageId' if ranked else 'MessageId'
         return self._rows(f"SELECT * FROM message WHERE Status='triaging' ORDER BY {order} LIMIT ?", (limit,))
+    def ranked_held(self, channel) -> int: return len(self.ranked_head(channel))
+    def ranked_head(self, channel) -> list:
+        """How many of this input's RANKED arrivals were judged into a task that still waits on the owner - not
+        read (Next, Done), not put away (Later, Remind me), not closed. They hold the head: a drain judges only
+        head_size minus these, so a sync cannot empty the queue behind them in waves (the owner, 2026-09-28: all
+        eight pull requests were triaged, four at a time, where four were meant to wait)."""
+        return self._rows("""SELECT m.MessageId, m.TaskId, m.RankValue FROM message m JOIN task t ON t.TaskId=m.TaskId
+            WHERE m.Channel=? AND m.RankValue IS NOT NULL AND m.Status!='triaging'
+              AND t.Status IN ('open','waiting','in_progress')
+              -- ...a read or a put-away SINCE this task: a receipt from the message's earlier life (it was Next'd on an
+              -- older task) freed a place it never held, and a fifth pull request was judged (2026-09-28)
+              AND NOT EXISTS (SELECT 1 FROM processing_read_receipt r WHERE r.ReadAt >= t.CreatedAt
+                                AND ((r.EntityKind='message' AND r.LocalId=CAST(m.MessageId AS TEXT))
+                                     OR (r.EntityKind='task' AND r.LocalId=CAST(t.TaskId AS TEXT))))
+              AND NOT EXISTS (SELECT 1 FROM processing_read_defer d WHERE d.At >= t.CreatedAt
+                                AND d.TargetLocalId IN (CAST(m.MessageId AS TEXT), CAST(t.TaskId AS TEXT)))
+            -- IN THE ORDER THEY WERE LET IN: each ranking call scales its own pool from 1.0, so a later arrival's value
+            -- is not comparable with the head's - the order of admission is the batch's real order
+            ORDER BY t.CreatedAt, t.TaskId""", (channel,))
     def set_message_rank(self, mid, value: float, why: str, actor: str):
         """Where in the judging queue this arrival sits, and the words it got there by."""
         self._exec('UPDATE message SET RankValue=?, RankWhy=? WHERE MessageId=?', (float(value), str(why or ''), mid))

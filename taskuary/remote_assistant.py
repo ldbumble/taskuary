@@ -1215,7 +1215,9 @@ def move_title(item: dict | None, draft: str = '') -> str:
 def story_who(item: dict | None) -> str:
     it = item or {}
     if is_own(it): return 'You'
-    return re.sub(r'\s*<[^>]*>', '', ' '.join(str(it.get('who') or '').split())) or 'them'
+    from .triage import person_name        # "Doyle, Alex at Northwind" reads "Alex Doyle", as on the card
+    raw = re.sub(r'\s*<[^>]*>', '', ' '.join(str(it.get('who') or '').split()))
+    return person_name(raw) or raw or 'them'
 
 
 def subject_of(store, item: dict | None) -> str:

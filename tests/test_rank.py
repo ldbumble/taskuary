@@ -251,12 +251,56 @@ class RankBeforeTriageTests(unittest.TestCase):
         self.assertEqual(judged, list(reversed(mids))[:rank.head_size(self.s)], 'the most valuable first')
         self.assertEqual(len(self.s.pending_triage()), 10 - rank.head_size(self.s), 'the rest wait, ranked')
 
+    def test_judged_arrivals_hold_the_head_until_the_owner_deals_with_one(self):
+        """The owner, 2026-09-28: eight pull requests were brought in ranked, and all eight were triaged - four,
+        then the rest as each sync re-queued the channel - where four were meant to wait. A judged arrival whose
+        task still waits on the owner holds its place; reading one (Next, Done) lets exactly one more in."""
+        rank_mode(self.s)
+        mids = [pending(self.s, f'h{i}') for i in range(8)]
+        for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
+        judged = []
+        def into_a_task(s, m, **k):        # a real judgement opens a task the owner has not seen yet
+            judged.append(m['_mid'])
+            tid = s.create_task({'Title': f"task {m['_mid']}", 'Kind': 'coding', 'Status': 'open'}, 'triage')
+            s.place_message(m['_mid'], tid, 'routed')
+        with mock.patch.object(ingest, 'ingest_message', side_effect=into_a_task):
+            ingest.drain(self.s)
+            ingest.drain(self.s)                                  # the next sync: nothing is free
+            self.assertEqual(len(judged), rank.head_size(self.s), 'the head, and not a row more')
+            self.assertEqual(len(self.s.pending_triage()), 8 - rank.head_size(self.s))
+            first = self.s.get_message(judged[0])['TaskId']
+            self.s.cx.execute("INSERT INTO processing_read_receipt (EntityKind,LocalId,Fingerprint,Version,ReadAt,Origin) "
+                              "VALUES ('task',?,'x','1',datetime('now','localtime'),'explicit_done')", (str(first),)); self.s.cx.commit()
+            ingest.drain(self.s)
+        self.assertEqual(len(judged), rank.head_size(self.s) + 1, 'one read opens one place')
+
+    def test_a_read_from_before_the_task_does_not_free_its_place(self):
+        """A pull request brought back in carried a receipt from when it was Next'd on its OLD task; that freed a place
+        it never held and a fifth was judged (the owner, 2026-09-28). Only a read since the task counts."""
+        rank_mode(self.s)
+        m = pending(self.s, 'old-read')
+        self.s.set_message_rank(m, 0.9, 'floor', 'rank')
+        self.s.cx.execute("INSERT INTO processing_read_receipt (EntityKind,LocalId,Fingerprint,Version,ReadAt,Origin) "
+                          "VALUES ('message',?,'old','1','2000-01-01 00:00:00','surfaced')", (str(m),)); self.s.cx.commit()
+        tid = self.s.create_task({'Title': 'judged', 'Kind': 'coding', 'Status': 'open'}, 'triage')
+        self.s.place_message(m, tid, 'routed')
+        self.assertEqual(self.s.ranked_held('email'), 1, 'still waiting on the owner')
+
+    def test_a_slot_with_no_brain_to_judge_in_stays_open(self):
+        """top_up drained with no model and every arrival it let in read "triage failed" (the owner, 2026-09-28)."""
+        rank_mode(self.s)
+        m = pending(self.s, 'nobrain'); self.s.set_message_rank(m, 0.5, 'floor', 'rank')
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertEqual(rank.top_up(self.s, 1), 0)
+        self.assertEqual(self.s.get_message(m)['Status'], 'triaging', 'still waiting its turn, not failed')
+
     def test_a_slot_opening_judges_exactly_one_more(self):
         rank_mode(self.s)
         mids = [pending(self.s, f'd{i}') for i in range(10)]
         for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
         judged = []
-        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: '{}'), \
+             mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
             ingest.drain(self.s)
             before = len(judged)
             rank.top_up(self.s, 1)
@@ -271,7 +315,8 @@ class RankBeforeTriageTests(unittest.TestCase):
         mids = [pending(self.s, f'e{i}') for i in range(10)]
         for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
         judged = []
-        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: '{}'), \
+             mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
             ingest.drain(self.s)
             head = len(judged)
             for verb in ('done', 'later', 'skip'):
@@ -334,6 +379,48 @@ class TheMoreMarkerTests(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertEqual(got[0]['key'], 'k3', 'the LAST ranked row, not the last row and not the first')
         self.assertEqual(got[0]['count'], 9)
+
+    def test_a_ranked_arrival_waiting_its_turn_is_not_a_row_on_the_rail(self):
+        """They are ranked, not triaged - so the rail does not draw them as "triaging..." (the owner, 2026-09-28: "they
+        should be ranked and not triaged not just in ui but actually"); the pill counts them."""
+        from taskuary import funnel
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        waiting = self._arrival('pr waiting')
+        email = self._arrival('a mail', channel='email')
+        items = funnel.from_feed(self.s, [{'MessageId': waiting, 'MsgStatus': 'triaging', 'Channel': 'github', 'Subject': 'pr waiting'},
+                                          {'MessageId': email, 'MsgStatus': 'triaging', 'Channel': 'email', 'Subject': 'a mail'}])
+        self.assertEqual([(i['mid'], bool(i.get('ranked_wait'))) for i in items], [(waiting, True), (email, False)])
+        self.assertEqual(rank.waiting(self.s)['count'], 1)
+
+    def test_the_pill_hangs_off_the_last_one_that_made_it(self):
+        """The owner, 2026-09-28: the pill goes "on the fourth and final one that made it" - the lowest-ranked of the
+        judged head, wherever its row sits - not off whichever row of the input came last on the rail."""
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        judged = {}
+        for v in (0.9, 0.7, 0.5, 0.3):                       # the head of four, judged into open tasks
+            m = self._arrival(f'head {v}', status='triaging'); self.s.set_message_rank(m, v, 'floor', 'rank')
+            tid = self.s.create_task({'Title': f'task {v}', 'Kind': 'coding', 'Status': 'open'}, 'triage')
+            self.s.place_message(m, tid, 'routed'); judged[v] = tid
+        for i in range(3): self.s.set_message_rank(self._arrival(f'waits {i}'), 0.1, 'floor', 'rank')
+        rows = [{'key': f'k{v}', 'channel': 'github', 'tid': judged[v]} for v in (0.3, 0.9, 0.5, 0.7)]   # rail order is not rank order
+        got = rank.more_markers(self.s, rows)
+        self.assertEqual([(m['key'], m['count']) for m in got], [('k0.3', 3)])
+
+    def test_the_batch_is_numbered_in_the_order_it_was_let_in(self):
+        """The owner, 2026-09-28: "we should write numbers on it like circle 1 rank". Each ranking call scales its own
+        pool from 1.0, so a later arrival's value says nothing next to the head's - the batch's order is admission."""
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        tids = []
+        for v in (0.9, 0.6, 1.0):                       # the third came in later, from a re-rank that rescaled it to 1.0
+            m = self._arrival(f'in {v}'); self.s.set_message_rank(m, v, 'floor', 'rank')
+            tids.append(self.s.create_task({'Title': f'task {v}', 'Kind': 'coding', 'Status': 'open'}, 'triage'))
+            self.s.place_message(m, tids[-1], 'routed')
+        rows = [{'key': f'k{t}', 'channel': 'github', 'tid': t} for t in reversed(tids)]
+        self.assertEqual(rank.rank_numbers(self.s, rows), {f'k{tids[0]}': 1, f'k{tids[1]}': 2, f'k{tids[2]}': 3})
+        self.assertEqual(rank.rank_numbers(MemoryStore(), rows), {}, 'nothing ranks, nothing is numbered')
 
     def test_a_ranked_source_with_nothing_waiting_shows_no_pill(self):
         c = self.s.get_connector_by_type('github')

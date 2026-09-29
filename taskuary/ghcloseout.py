@@ -75,15 +75,25 @@ def assess(store, repo: str, number: int, pr: dict = None) -> dict:
     out = {'state': st, 'ok': False, 'reason': '', 'note': '', 'offers': [], 'method': method, 'pr': p}
     if p.get('merged'): return {**out, 'state': 'merged', 'reason': f"#{number} is already merged on GitHub"}
     if p.get('state') == 'closed': return {**out, 'state': 'closed', 'reason': f"#{number} was closed on GitHub without merging"}
+    # THE TOKEN'S OWN GRANTS, not the user's role (2026-09-29: the role read admin, the merge got a 403). A missing grant is
+    # the owner's to add on GitHub - never a conflict to send back to the agent, and never a button that can only fail.
+    g = github.grants(tok, repo)
+    need = [f"{github.PERMS[k]}: write" for k in ('contents', *(('pull_requests',) if p.get('draft') else ())) if g.get(k) is False]
+    if need:
+        return {**out, 'state': 'denied', 'kind': 'permission', 'needs': ', '.join(need),
+                'reason': f"the GitHub token may not merge here - it needs {' and '.join(need)} for {repo} ({github.WHERE})"}
+    unsaid = (f"your reply cannot be posted as the comment - the token needs Issues: write for {repo}"
+              if c['comment'] and g.get('issues') is False else '')
+    out['note'] = unsaid
     red = []
     if st in ('unstable', 'blocked'):
         try: red = [f['name'] or '?' for f in github.checks(tok, repo, p['sha'])['failed']]
         except Exception: red = []
-    rerun = ['rerun'] if c['rerun'] and red else []
+    rerun = ['rerun'] if c['rerun'] and red and g.get('actions') is not False else []
     if st == 'dirty':
         return {**out, 'reason': f"it has merge conflicts with {base} - send it back to the agent to resolve them, or ask its author"}
     if st == 'behind':
-        can = p.get('same_repo') or p.get('maintainer_can_modify')
+        can = (p.get('same_repo') or p.get('maintainer_can_modify')) and g.get('pull_requests') is not False
         return {**out, 'reason': f"it is behind {base}, and this repository requires it to be up to date"
                 + ('' if can or not c['update'] else " - its author has not allowed maintainers to update it"),
                 'offers': ['update'] if c['update'] and can else []}
@@ -93,7 +103,8 @@ def assess(store, repo: str, number: int, pr: dict = None) -> dict:
     if st == 'unstable' and red:
         if c['red'] == 'ask':
             return {**out, 'reason': f"checks this repository does not require are failing ({', '.join(red)})", 'offers': rerun + ['anyway']}
-        return {**out, 'ok': True, 'note': f"checks this repository does not require are failing ({', '.join(red)})", 'offers': rerun}
+        return {**out, 'ok': True, 'note': '; '.join(x for x in (f"checks this repository does not require are failing ({', '.join(red)})", unsaid) if x),
+                'offers': rerun}
     # clean, has_hooks, draft (marked ready first), unknown: GitHub decides at the merge and its refusal is shown
     return {**out, 'ok': True}
 
@@ -105,15 +116,18 @@ NEEDS = (
     ('rerun', 'Re-run failed checks', 'Actions: write', 'push'),
     ('issue', 'Close an issue', 'Issues: write', 'triage'),
     ('comment', 'Post your reply as the comment', 'Issues / Pull requests: write', 'triage'),
-    ('anyway', 'Close out anyway, past the repo\'s rules', 'Administration (repo admin)', 'admin'),
+    ('anyway', 'Close out anyway, past the repo\'s rules', 'Contents: write, and the admin role', 'admin'),
+    ('close', 'Close a pull request without merging', 'Pull requests: write', 'push'),
 )
+GRANT_OF = {'pr': 'contents', 'update': 'pull_requests', 'rerun': 'actions', 'issue': 'issues', 'comment': 'issues', 'anyway': 'contents',
+            'close': 'pull_requests'}
 _ROLE = ('pull', 'triage', 'push', 'maintain', 'admin')
 
 
 def check(store) -> list:
-    """Per followed repository: every close-out act the settings turn on, and whether the token's role there carries it.
-    A role is what GitHub reports for the token; a fine-grained token can still lack one permission inside a role
-    (Actions most often) - that shows on first use, in GitHub's own words."""
+    """Per followed repository: every close-out act the settings turn on, and whether the token may do it there - the
+    user's role AND the token's own grant (github.grants), read fresh: a fine-grained token with no grants still
+    reports its user's admin role."""
     from . import github
     from .ci import _conn
     tok = _conn(store)['Secret']
@@ -124,13 +138,15 @@ def check(store) -> list:
         try: info = github.repo_info(tok, repo)
         except Exception as e:
             rows.append({'repo': repo, 'error': str(e)[:200]}); continue
-        perms = info['permissions']
+        perms, g = info['permissions'], github.grants(tok, repo, fresh=True)
         have = max((i for i, r in enumerate(_ROLE) if perms.get(r)), default=-1)
         acts = []
         for key, what, needs, role in NEEDS:
-            on = (c[key] == 'merge') if key == 'pr' else bool(c[key])
+            on = (c[key] == 'merge') if key == 'pr' else True if key == 'close' else bool(c[key])
             if not on: continue
-            acts.append({'key': key, 'what': what, 'needs': needs, 'ok': have >= _ROLE.index(role)})
+            # the role says the USER may; the grant says THIS TOKEN may - both, or GitHub refuses at the act
+            acts.append({'key': key, 'what': what, 'needs': needs, 'ok': have >= _ROLE.index(role) and g.get(GRANT_OF[key]) is not False,
+                         'role_ok': have >= _ROLE.index(role), 'grant_ok': g.get(GRANT_OF[key]) is not False})
         rows.append({'repo': repo, 'role': _ROLE[have] if have >= 0 else 'none', 'methods': info['methods'],
                      'method': c['method'] if c['method'] in info['methods'] else (info['methods'] or ['squash'])[0], 'acts': acts})
     return rows

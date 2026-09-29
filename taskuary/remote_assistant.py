@@ -603,7 +603,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
         if cancel is not None and cancel.is_set():
             logger.info(f'{channel}: a turn gave way to a pick'); return
         logger.warning(f'the {channel} assistant could not answer: {e}')
-        try: send(store, channel, chat, f"I couldn't answer that: {e}", connector_id)
+        try: send(store, channel, chat, stuck(store, f"I couldn't answer that - {plain(e)}. Say it again, or go on to the next one."), connector_id)
         except Exception as send_error: logger.warning(f'the {channel} assistant could not send its error: {send_error}')
     finally: _ASKING.chat = None
 
@@ -673,11 +673,11 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         # the number WAS the yes: run it, and say what happened instead of asking again
         said[0] = turn_text({**out, 'proposal': None}, lead, store)
         done = concierge.run_proposal(store, prop, actor)
-        said.append(concierge.receipt(store, done, actor))
+        said.append(receipt_text(store, done, actor))
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
     elif prop and prop.get('auto') and prop.get('status') == 'proposed':
         done = concierge.run_proposal(store, prop, actor)
-        said.append(concierge.receipt(store, done, actor))
+        said.append(receipt_text(store, done, actor))
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
         # a SCRIPT started by name from the phone: the tasks walk is Next; set-up opens on the connections
         # (the spec: "or at least see my connectors"); the composer wants a sentence
@@ -740,9 +740,39 @@ def _item_for(store, key: str, item: dict | None) -> dict | None:
     return funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
 
 
+def recovery_rows(store, chips: list, actor: str = 'owner') -> list:
+    """A failed act's way on (concierge.recover) as numbered rows: each chip the button it stands for on the desktop."""
+    from . import concierge
+    table = None
+    for c in chips:
+        v = c.get('verb')
+        if v == 'next': yield c['label'], {'t': 'next'}
+        elif v == 'open' and c.get('key'): yield c['label'], {'t': 'open', 'key': c['key']}
+        elif v == 'retry': yield c['label'], {'t': 'retry', 'id': c['op'], 'settles': bool(c.get('settles'))}
+        elif v == 'closeout': yield c['label'], {'t': 'closeout', 'rid': c['rid'], 'act': c['act']}
+        elif v == 'repo': yield c['label'], {'t': 'repo', 'id': c['op'], 'repo': c['repo'], 'settles': bool(c.get('settles'))}
+        elif v:
+            if table is None:
+                from . import general
+                task, _ = general.dock_task(store, actor)          # the ONE dock the desk and the phone share
+                table = (concierge.restore_current(store, task['TaskId']) or {}).get('key') or ''
+            if table: yield c['label'], {'t': 'verb', 'verb': v, 'key': table}
+
+
+def receipt_text(store, done: dict, actor: str = 'owner') -> str:
+    """The receipt - and when the act did NOT happen, its way on, numbered (2026-09-29: a failed Close out on the phone
+    said "Not done - 403 ..." and offered nothing to pick, and the list it was picked from was already spent)."""
+    from . import concierge
+    if done.get('status') == 'done': return concierge.receipt(store, done, actor)
+    turn = concierge.receipt_turn(store, done, actor)
+    if not turn['chips']: return turn['say']
+    return turn_text({'say': turn['say'], 'item': None}, store=store, extra=list(recovery_rows(store, turn['chips'], actor)))
+
+
 def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
     """After the run: the receipt, an Undo when it offered one, and the next item when the table was settled."""
     from . import concierge
+    if done.get('status') != 'done': return receipt_text(store, done, actor)
     said = concierge.receipt(store, done, actor)
     undo = [('Undo', {'t': 'undo'})] if ' Undo: ' in said else []
     if done.get('status') == 'done' and _settled_the_table(prop, item):
@@ -754,6 +784,8 @@ def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
 def _settle(store, prop: dict, item: dict | None, actor: str) -> str:
     """A proposal a pick made: run it, unless its card asks something first - then ask that, numbered."""
     from . import concierge
+    if prop.get('failed'):              # refused at propose time: the reason, and what the item CAN do instead
+        return turn_text({'say': prop['say'], 'item': None}, store=store, extra=list(recovery_rows(store, prop.get('chips') or [], actor)))
     if asks(prop):
         said = f"{prop['label']}: {prop['summary']}." if prop.get('label') and prop.get('summary') else prop.get('say')
         return turn_text({'say': said, 'proposal': prop}, store=store)
@@ -766,15 +798,32 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     t = act.get('t')
     try:
         if t == 'next': return carry_out(store, concierge.surface(store, actor=actor), None, actor)
+        if t == 'open':                 # one item by name - one the walk already showed and would not repeat yet
+            nxt = concierge.surface(store, act.get('key'), actor=actor)
+            return carry_out(store, nxt, nxt.get('item'), actor)
         if t == 'stay': return 'Left it - nothing moved.'
         if t == 'walk': return walk(store, actor)
         if t == 'script': return script_words(store, act.get('script') or '')
         if t == 'undo': return concierge.undo_last(store, actor)
         if t == 'remind': return _remind(store, act, actor)
         if t == 'continue': return _continue(store, act.get('tid'), act.get('note') or '')
+        if t == 'retry':
+            # the same confirmation again, once more - an act that failed stays `error` and may run again (claim_operation)
+            op = operations.get(store, act.get('id') or '')
+            if not op or op.get('status') != 'error': return 'That one is not waiting to be tried again - nothing moved.'
+            # ...and a retry that lands settles the table the way the first press would have
+            prop = {**op, 'settles': bool(act.get('settles')), 'key': (item or {}).get('key')}
+            return _ran(store, prop, concierge.run_proposal(store, op, actor), item, actor)
+        if t == 'closeout':
+            from fastapi import HTTPException
+            from .server import closeout_act
+            try: return f"{closeout_act(int(act['rid']), str(act['act']))['said']}. Close out again once the checks pass."
+            except HTTPException as e: return f'Not done - {e.detail}.'
         if t in ('confirm', 'cancel', 'repo'):
             op = operations.get(store, act.get('id') or '')
-            if not op or op.get('status') != 'proposed': return 'That one is not waiting on you any more - nothing moved.'
+            # ...a hand-off that stopped for a repository is `error` and waits for exactly this pick (concierge.recover)
+            if not op or not (op.get('status') == 'proposed' or (t == 'repo' and op.get('status') == 'error')):
+                return 'That one is not waiting on you any more - nothing moved.'
             if t == 'cancel':
                 operations.cancel(store, op['id'], actor)
                 return 'Left it - nothing moved.'
@@ -809,7 +858,12 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             return turn_text(concierge.surface(store, f'review:{rid}', actor=actor), store=store)
         prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(item and item.get('key') == key))
         return _settle(store, prop, item, actor)
-    except ValueError as e: return f'Not done - {e}. Nothing moved.'
+    except ValueError as e: return stuck(store, f'Not done - {e}. Nothing moved.')
+    except Exception as e:
+        # anything else a pick can hit (a remind, a continue, the funnel under a surface) - said plainly, with the way on,
+        # never the raw exception (it went out as "I couldn't answer that: <traceback line>")
+        logger.warning(f'phone pick {t or act.get("verb")} failed: {e}')
+        return stuck(store, f'Not done - {plain(e)}. Nothing moved.')
 
 
 NOTE_KEY = 'remote_continue_note'         # a Continue pick waiting for its note: the next typed line is it
@@ -820,9 +874,21 @@ def _continue(store, tid, note: str) -> str:
     from .server import ContinueBody, continue_work
     from fastapi import HTTPException
     try: continue_work(int(tid), ContinueBody(note=note or None))
-    except HTTPException as e: return f'Could not continue it: {e.detail}'
+    except HTTPException as e: return stuck(store, f'Could not continue it - {e.detail}.')
     ref = f'TQ-{int(tid):04d}'
     return f'Continuing {ref}' + (' with your note' if note else '') + ' - it picks up where it left off, and comes back here when it stops or asks.'
+
+
+def plain(e) -> str:
+    from .operations import plain as _p
+    return _p(e)
+
+
+def stuck(store, text: str) -> str:
+    """A line that did not go as asked, with the way on numbered under it - never a bare sentence the owner has to answer
+    by guessing (2026-09-29 audit: four phone error paths sent text with nothing to pick)."""
+    from . import concierge
+    return turn_text({'say': text, 'item': None}, store=store, extra=[(concierge.CHIP_WORDS['next'], {'t': 'next'})])
 
 
 REMIND_DAYS = (('Tomorrow', 'tomorrow'), ('Next week', '1 week'), ('In 2 weeks', '2 weeks'), ('In a month', '1 month'))   # RemindMe.jsx's QUICK
@@ -1402,8 +1468,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None) -> str:
         words = [label for label, _ in rows]
         _offer(rows)
     else:
-        _offer([(c['label'], {'t': 'next'} if c.get('verb') == 'next' else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key')})
-                for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') and c.get('label') and item.get('key')])
+        _offer([(c['label'], {'t': 'next'} if c.get('verb') == 'next' else {'t': 'open', 'key': c['key']} if c.get('verb') == 'open'
+                 else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key')})
+                for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') and c.get('label')
+                and (item.get('key') or c.get('verb') in ('next', 'open'))])
     # THE CARD'S ORDER: the verb, then Next, then More, then the rest - the desktop's two buttons and its
     # Also line, as one numbered list (2026-09-23). A proposal's yes/no and an agent's own answers keep
     # theirs: those are the answer itself, not a choice of what to do.

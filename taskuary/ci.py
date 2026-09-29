@@ -153,8 +153,13 @@ def push_direct(store, task_id: int, actor='owner') -> dict:
     rc, out = _git_rc(cwd, 'push', 'origin', f'HEAD:{base}', timeout=120)
     # git says nothing useful on success; a non-zero exit IS the rejection we must not swallow
     if rc != 0 or re.search(r'rejected|error:|fatal:', out or '', re.I):
-        raise RuntimeError('git refused the push: ' + TOKEN_URL.sub('https://', out)[:300]
-                           + ' - pull and rebase, then push again (Taskuary never force-pushes)')
+        # the advice fits the refusal: "pull and rebase" was said to a token with no Contents: write, which no rebase fixes
+        why = out or ''
+        fix = (' - the token may not push here; it needs Contents: write for this repository' if re.search(
+                   r'Permission to .* denied|not granted|403|Authentication failed|could not read Username', why, re.I)
+               else ' - pull and rebase, then push again (Taskuary never force-pushes)' if re.search(r'non-fast-forward|fetch first', why, re.I)
+               else ' (Taskuary never force-pushes)')
+        raise RuntimeError('git refused the push: ' + TOKEN_URL.sub('https://', why)[:300] + fix)
     info = {'repo': repo, 'branch': base, 'from': branch, 'sha': sha, 'commits': int(ahead),
             'url': f'https://github.com/{repo}/commit/{sha}', 'state': 'pushed',
             'checks': None, 'checked_at': None}

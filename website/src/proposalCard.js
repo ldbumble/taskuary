@@ -59,12 +59,14 @@ export function afterExecute(p, res) {
   if (res?.status === "done" && res.duplicate) return { receipt: `Already done - ${label}.`, settle: false, status: "done" };
   // the server's own receipt when it wrote one (it names the task and what became of it); ours was a
   // shorter second "Done" drawn beside it (2026-09-23)
-  if (res?.status === "done") return { receipt: res.receipt || `Done - ${label}.`, settle: !!p.settles, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat) };
+  // ...a close-out whose merge landed but whose reply did not is done, and NOT settled: the reply still waits on you
+  if (res?.status === "done") return { receipt: res.receipt || `Done - ${label}.`, settle: !!p.settles && !res.outcome?.reply_error, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat) };
   if (res?.status === "error" && res.outcome?.dispatch === "needs_repo")
     return { receipt: `Not started - ${res.error || "it needs a repository first"}. Pick one on the card and confirm again.`, settle: false, status: "error",
              repo: { taskId: res.outcome.taskId, agent: res.outcome.agent } };
   if (res?.status === "stale") return { receipt: `Not done - ${res.error || "the proposal is out of date"}. Say it again if you still want it.`, settle: false, status: "stale" };
-  return { receipt: `Not done - ${res?.error || "it failed"}. Nothing moved.`, settle: false, status: res?.status || "error" };
+  // the server's sentence for a failure too: it says "Not sent" for a reply, and it is the one the phone got (2026-09-29)
+  return { receipt: res?.receipt || `Not done - ${res?.error || "it failed"}. Nothing moved.`, settle: false, status: res?.status || "error" };
 }
 
 // What the page does after a confirmed proposal: move the walk on, settle the item on the table first,

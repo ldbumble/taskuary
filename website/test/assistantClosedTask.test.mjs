@@ -22,8 +22,10 @@ test("a historical finished-task card is never restored as current funnel work",
 test("a set-up's pending questions are a line, not an item on the table", async () => {
   const { restorableCurrent } = await import("../src/funnelPile.js");
   assert.equal(restorableCurrent([{ card: { kind: "setup_questions", questions: ["Which repo?"] } }]), null);
+  // ...nor is a line that carries its own words (a failed act's way on, the already-seen opens)
+  assert.equal(restorableCurrent([{ card: { kind: "words", chips: [{ verb: "next", label: "Next" }] } }]), null);
   const view = (await import("node:fs")).readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(view, /const NOTE_KINDS = new Set\(\["setup_questions"\]\)/);
+  assert.match(view, /const NOTE_KINDS = new Set\(\["setup_questions", "words"\]\)/);
   assert.match(view, /NOTE_KINDS\.has\(c\?\.kind\) \? null/);
 });
 

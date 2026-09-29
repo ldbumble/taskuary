@@ -15,8 +15,11 @@ RED = {'state': 'failure', 'total': 1, 'pending': 0, 'failed': [{'name': 'ci / t
 # what GitHub says about the repository: the merge methods it allows and the token's role there
 REPO = {'methods': ['squash', 'merge', 'rebase'], 'permissions': {'push': True}, 'default_branch': 'main'}
 _repo = mock.patch.object(github, 'repo_info', return_value=REPO)
-def setUpModule(): _repo.start()
-def tearDownModule(): _repo.stop()
+# ...and what the TOKEN may do there (github.grants): every grant, unless a test takes one away
+GRANTS = {'contents': True, 'pull_requests': True, 'issues': True, 'actions': True}
+_grants = mock.patch.object(github, 'grants', return_value=GRANTS)
+def setUpModule(): _repo.start(); _grants.start()
+def tearDownModule(): _repo.stop(); _grants.stop()
 
 
 def armed(s, tracker=False):
@@ -484,6 +487,84 @@ class WordsTests(unittest.TestCase):
         line = remote_assistant.then_line({'chips': [{'verb': 'approve', 'label': 'Close out'}], 'item': {**item, 'rides': True}}, MemoryStore())
         self.assertEqual(line, 'Close out: merges the pull request on GitHub, then posts the reply above as its comment.')
         self.assertNotIn('Run it', labels); self.assertNotIn('Not ours', labels)
+
+
+class TokenGrantTests(unittest.TestCase):
+    """THE TOKEN'S GRANTS, NOT THE USER'S ROLE (2026-09-29): a fine-grained token with no write grants read "admin" on GET
+    /repos, the card offered Close out, and the merge came back "403 Client Error: Forbidden for url: ..."."""
+    def _seen(self, s, grants, **pr):
+        from taskuary import ghcloseout
+        with mock.patch.object(github, 'grants', return_value={**GRANTS, **grants}), \
+             mock.patch.object(github, 'pr', return_value={**OPEN, **pr}), mock.patch.object(github, 'checks', return_value=RED):
+            return ghcloseout.assess(s, 'northwind/ledger', 7)
+
+    def test_no_contents_grant_means_no_close_out_and_the_reason_names_the_grant(self):
+        seen = self._seen(armed(MemoryStore()), {'contents': False}, draft=False)
+        self.assertFalse(seen['ok']); self.assertEqual((seen['state'], seen['kind']), ('denied', 'permission'))
+        self.assertIn('Contents: write', seen['reason']); self.assertEqual(seen['offers'], [])
+
+    def test_a_draft_needs_pull_requests_too_because_it_is_marked_ready_before_the_merge(self):
+        seen = self._seen(armed(MemoryStore()), {'pull_requests': False}, draft=True)
+        self.assertFalse(seen['ok']); self.assertIn('Pull requests: write', seen['reason'])
+        self.assertTrue(self._seen(armed(MemoryStore()), {'pull_requests': False}, draft=False)['ok'])
+
+    def test_update_and_rerun_are_offered_only_with_their_grants(self):
+        s = armed(MemoryStore())
+        self.assertEqual(self._seen(s, {'pull_requests': False}, draft=False, mergeable_state='behind')['offers'], [])
+        self.assertEqual(self._seen(s, {'actions': False}, draft=False, mergeable_state='unstable')['offers'], [])
+
+    def test_a_reply_that_cannot_be_posted_is_said_before_the_press(self):
+        seen = self._seen(armed(MemoryStore()), {'issues': False}, draft=False)
+        self.assertTrue(seen['ok']); self.assertIn('Issues: write', seen['note'])
+
+    def test_the_card_does_not_offer_a_merge_when_github_cannot_be_read(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = armed(MemoryStore()); tid = with_pr(s)
+        rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'close out',
+                            'DraftText': json.dumps({'action': 'merge_pr', 'repo': 'northwind/ledger', 'number': 7, 'closeout': True})})
+        with mock.patch.object(server, 'store', s), mock.patch.object(github, 'pr', side_effect=github.Refused('GitHub is down', 503)):
+            got = TestClient(server.app).get(f'/api/reviews/{rid}/closeout').json()
+        self.assertFalse(got['ok']); self.assertIn('could not be read', got['reason'])
+
+
+class GithubRefusalWordsTests(unittest.TestCase):
+    """GitHub names the missing grant in a header; the owner reads that, not a URL."""
+    def setUp(self): _grants.stop()                                  # the real probe, with requests mocked
+    def tearDown(self): _grants.start()
+    def _r(self, status, message, accepted=''):
+        r = mock.Mock(ok=status < 400, status_code=status, text=json.dumps({'message': message}),
+                      headers={'x-accepted-github-permissions': accepted} if accepted else {})
+        r.json.return_value = {'message': message}
+        return r
+
+    def test_a_missing_grant_is_said_in_githubs_own_names(self):
+        with self.assertRaises(github.Refused) as e:
+            github._ok(self._r(403, 'Resource not accessible by personal access token', 'contents=write; contents=write,workflows=write'), 'merge #7')
+        self.assertIn('may not merge #7', str(e.exception)); self.assertIn('Contents: write', str(e.exception))
+        self.assertNotIn('api.github.com', str(e.exception)); self.assertEqual(e.exception.needs, 'Contents: write')
+
+    def test_a_revoked_token_and_a_missing_item_read_as_what_they_are(self):
+        with self.assertRaises(github.Refused) as e: github._ok(self._r(401, 'Bad credentials'), 'merge #7')
+        self.assertIn('expired or revoked', str(e.exception))
+        with self.assertRaises(github.Refused) as e: github._ok(self._r(404, 'Not Found'), 'merge #7')
+        self.assertIn('cannot see', str(e.exception))
+
+    def test_the_probe_reads_a_403_as_missing_and_anything_else_as_granted(self):
+        answers = {'/git/refs': self._r(403, 'Resource not accessible by personal access token', 'contents=write'),
+                   '/pulls': self._r(422, 'Validation Failed'), '/issues': self._r(422, 'Validation Failed'),
+                   '/actions/runs/0/rerun-failed-jobs': self._r(404, 'Not Found')}
+        def req(method, url, **kw): return next(v for k, v in answers.items() if url.endswith(k))
+        with mock.patch.object(github.requests, 'request', side_effect=req):
+            got = github.grants('tok-probe', 'northwind/ledger', fresh=True)
+        self.assertEqual(got, {'contents': False, 'pull_requests': True, 'issues': True, 'actions': True})
+
+    def test_a_refusal_at_the_act_is_remembered_for_the_next_card(self):
+        github._GRANTS.clear()
+        with mock.patch.object(github.requests, 'request', return_value=self._r(422, 'Validation Failed')):
+            self.assertTrue(github.grants('tok-learn', 'northwind/ledger')['contents'])
+        github.learn('tok-learn', 'northwind/ledger', github.Refused('no', 403, 'Contents: write'))
+        self.assertFalse(github.grants('tok-learn', 'northwind/ledger')['contents'])
 
 
 if __name__ == '__main__': unittest.main()

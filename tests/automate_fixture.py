@@ -1,8 +1,9 @@
 """The Automation ideas row an OLDER install carries.
 
 A fresh install no longer gets one (store.RETIRED_SEEDS, 2026-09-25: the Advisor reads the same month of
-counts once a week and raises what is worth automating itself), but every install seeded before that
-still has it and the report still runs - so its tests start from exactly the row the old seeder wrote.
+counts once a week and raises what is worth automating itself), and since 2026-09-29 an older install's copy is
+removed when the store opens. The report TYPE stays for anyone who makes one by hand, so its tests start from exactly
+the row the old seeder wrote, added after the store has opened.
 """
 import json
 

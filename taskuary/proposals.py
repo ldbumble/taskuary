@@ -339,8 +339,12 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
             if not seen['ok'] and not (skip_checks and 'anyway' in seen['offers']):
                 raise ChecksRed(seen['reason'] + ' - nothing was merged or sent', seen['offers'])
             # the PR's own title leads the squash (GitHub's default); the summary, when there is one, is its body
-            sha = github.merge_pr(c['Secret'], repo, num, p.get('sha') or cur['sha'], None, p.get('text') or None,
-                                  method=seen['method'], p=cur)
+            try:
+                sha = github.merge_pr(c['Secret'], repo, num, p.get('sha') or cur['sha'], None, p.get('text') or None,
+                                      method=seen['method'], p=cur)
+            except github.Refused as e:
+                github.learn(c['Secret'], repo, e)          # the next card reads the grant GitHub just named as missing
+                raise
             out = {'merged': f'{repo}#{num}', 'sha': sha[:7], 'url': cur.get('url'), 'method': seen['method'],
                    **({'note': seen['note']} if seen['note'] else {})}
         if ci.pr_of(store, tid): ci._save_pr(store, tid, {**ci.pr_of(store, tid), 'state': 'closed', 'merged': True}, actor)

@@ -114,6 +114,9 @@ def auto_code_enabled(src) -> bool:
     cfg = src if isinstance(src, dict) else src.get_settings()
     return str(cfg.get('coder_auto_enabled', DEFAULT_SETTINGS['coder_auto_enabled'])) == '1'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
+def _cfg_type(cj) -> str:
+    try: return str((json.loads(cj or '{}') or {}).get('type') or '')
+    except (TypeError, ValueError): return ''
 # the model's own thought (idea:<slug>, or report:<id>:idea:<slug> from a report) - not a candidate the hub found
 def is_model_idea(key) -> bool: return ':idea:' in f':{key}'
 
@@ -1141,6 +1144,16 @@ class SQLiteStore:
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('review_task_backfilled', '1', 'migration')")
             self._heal_seeded_report_owner()
+            # AUTOMATION IDEAS IS GONE, from older installs too (the owner, 2026-09-29: "delete it for everyone"). Keeping
+            # it made two voices raise the same month of toil - the Advisor and this. Once, after the heal above has put
+            # Owner='template' back on the seeded row: only that row goes, edited or not; one the owner made stays theirs.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='automate_report_removed'").fetchone():
+                gone = [r['SourceId'] for r in self.cx.execute(
+                    "SELECT SourceId, ConfigJson FROM source WHERE Channel='report' AND Owner='template'").fetchall()
+                    if _cfg_type(r['ConfigJson']) == 'automate']
+                for sid in gone: self.cx.execute('DELETE FROM source WHERE SourceId=?', (sid,))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('automate_report_removed', '1', 'migration')")
+                if gone: logger.info(f'sources: removed the retired Automation ideas report - SourceId {gone}')
             # THE ADVISOR, by its new name. The seeded review-and-ideas report was called 'Assistant',
             # which is also the tab that walks you through the day (2026-09-23). Renamed once, and only
             # while it still wears the seeded name - a title the owner chose is theirs. Found the way
@@ -1155,8 +1168,9 @@ class SQLiteStore:
                     self.cx.execute("UPDATE source SET Address='Advisor', ConfigJson=? WHERE SourceId=?", (json.dumps(c), r['SourceId']))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_renamed_advisor', '1', 'migration')")
             # The Morning digest and Automation ideas are no longer seeded (RETIRED_SEEDS): the walk opens the day
-            # with who wants what, and the Advisor reads the month of counts once a week. An install that has
-            # either keeps it until its owner deletes it; both report types still exist to make one by hand.
+            # with who wants what, and the Advisor reads the month of counts once a week. An install that has a Morning
+            # digest keeps it until its owner deletes it; its Automation ideas is removed (just above). Both report types
+            # still exist to make one by hand.
             # ...and the Assistant (assistant.py): its post on the Timeline is scheduled and worded HERE
             # too - every 30 minutes and on startup by default (a quiet check posts nothing), the
             # instruction editable, deleting the row is the off switch. These two are the working demo of

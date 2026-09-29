@@ -768,7 +768,9 @@ def _run_operation(op: dict, background: BackgroundTasks):
             from .channels import test_connector
             out = test_connector(store, tid)
             store.audit('connector', tid, 'test_ok' if out.get('ok') else 'test_failed', 'assistant', detail=out.get('detail'))
-            return {'name': name, 'ok': bool(out.get('ok')), 'detail': out.get('detail'), 'undo': None}
+            # `answered`, not `ok`: a test that heard nothing still RAN - ok=False made it a failed act, and the owner was
+            # told "the action did not complete" instead of what the connection said (2026-09-29 audit)
+            return {'name': name, 'answered': bool(out.get('ok')), 'detail': out.get('detail'), 'undo': None}
         on = kind == 'connection.resume'
         store.save_connector({'ConnectorId': tid, 'Active': int(on)}, ACTOR)
         store.audit('connector', tid, 'resume' if on else 'pause', 'assistant', detail={'name': name})
@@ -864,7 +866,17 @@ def _run_operation(op: dict, background: BackgroundTasks):
         rv = store.get_review(tid)
         closeout = rv.get('Kind') == 'action' and proposals._action(rv) in proposals.CLOSEOUT
         out = decide(tid, DecideBody(verb='approve', reply_text='' if closeout else None), background)
-        if not out.get('ok'): raise RuntimeError(out.get('send_error') or 'the reply was not sent')
+        # ...with what the failure knows about the way on - GitHub's own offers (Update branch, Re-run checks) and a grant the
+        # token lacks - which the chat and the phone draw as its choices (concierge.recover); a bare RuntimeError dropped both
+        if not out.get('ok'):
+            raise operations.Halt(out.get('send_error') or 'the reply was not sent',
+                                  {k: out[k] for k in ('offers', 'refused', 'needs') if out.get(k)} | {'rid': tid})
+        # A REPLY THAT DID NOT LEAVE IS NOT DONE (2026-09-29): the verdict comes back ok with the review still pending and the
+        # error in send_error - a send that threw, or one the provider never answered - and that was receipted "Done" and
+        # settled off the walk. A close-out whose merge landed but whose reply failed did happen; it says so beside it.
+        if out.get('status') == 'pending' and out.get('send_error'):
+            raise operations.Halt(out['send_error'], {'delivery': out.get('delivery') or 'failed', 'unsent': True})
+        if out.get('send_error'): out = {**out, 'reply_error': out['send_error']}
         return out
     if kind == 'agent.answer':
         # the exact outstanding request of the run that asked (PW-138/139); nothing asked = the waiting room (PW-140)
@@ -964,7 +976,10 @@ def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTa
     # the receipt is the fact of what happened, in the chat, after it happened (PW-125)
     from . import concierge
     # ...and the page shows THAT line, not a shorter one of its own beside it (two "Done"s per click)
-    try: out = {**out, 'receipt': concierge.receipt(store, out, ACTOR)}
+    # ...and when it did not happen, its way on (concierge.recover): the choices ride under that line
+    try:
+        turn = concierge.receipt_turn(store, out, ACTOR)
+        out = {**out, 'receipt': turn['say'], 'chips': turn['chips']}
     except Exception as e: logger.debug(f'no receipt recorded for {oid}: {e}')
     if out['status'] in ('stale', 'cancelled'): raise HTTPException(409, out.get('error') or out['status'])
     return out
@@ -2862,7 +2877,8 @@ def closeout_state(rid: int):
     p = json.loads(rv.get('DraftText') or '{}')
     if p.get('action') != 'merge_pr': return {'state': 'open', 'ok': True, 'reason': '', 'note': '', 'offers': []}
     try: seen = ghcloseout.assess(store, p['repo'], int(p['number']))
-    except Exception as e: return {'state': 'unknown', 'ok': True, 'reason': '', 'note': f'GitHub could not be read ({str(e)[:120]}) - it decides at the merge', 'offers': []}
+    # FAIL CLOSED: an unreadable GitHub was drawn as a live Close out, and a token that could not see the repo merged into a 404
+    except Exception as e: return {'state': 'unknown', 'ok': False, 'reason': f'GitHub could not be read just now ({str(e)[:160]}) - open the card again in a moment', 'note': '', 'offers': []}
     return {k: v for k, v in seen.items() if k != 'pr'}
 
 @app.post('/api/reviews/{rid}/closeout/{act}')
@@ -2879,7 +2895,9 @@ def closeout_act(rid: int, act: str):
     try:
         if act == 'update': said = f"Update branch: {github.update_branch(tok, p['repo'], int(p['number']), seen['pr'].get('sha'))}"
         else: said = f"Re-ran the failed checks on {github.rerun_failed(tok, p['repo'], seen['pr']['sha'])} workflow run(s)"
-    except RuntimeError as e: raise HTTPException(422, str(e))
+    except github.Refused as e:
+        github.learn(tok, p['repo'], e); raise HTTPException(422, str(e))
+    except (RuntimeError, requests.RequestException) as e: raise HTTPException(422, str(e))
     if rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f"{said} - {p['repo']}#{p['number']}. Close out again once the checks pass.")
     return {'ok': True, 'said': said}
 

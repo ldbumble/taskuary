@@ -8,6 +8,90 @@ GH = 'https://api.github.com'
 def _h(tok): return {'Authorization': f'Bearer {tok}', 'Accept': 'application/vnd.github+json',
                      'X-GitHub-Api-Version': '2022-11-28'}
 
+
+# ── GITHUB'S NO, IN WORDS ─────────────────────────────────────────────────────────────────
+# A refused merge reached the owner as "403 Client Error: Forbidden for url: https://api.github.com/..." (2026-09-29).
+# GitHub says exactly what was missing - `x-accepted-github-permissions: contents=write` - and nothing read it.
+PERMS = {'contents': 'Contents', 'pull_requests': 'Pull requests', 'issues': 'Issues', 'actions': 'Actions',
+         'workflows': 'Workflows', 'administration': 'Administration', 'checks': 'Checks'}
+WHERE = 'github.com - Settings - Developer settings - Personal access tokens'
+
+
+class Refused(RuntimeError):
+    """GitHub said no. `needs` names the token permission when that was the reason ("Contents: write") - a token's
+    grant, not a state of the pull request, so no agent can fix it and a retry repeats it."""
+    def __init__(self, msg: str, status: int = 0, needs: str = ''):
+        super().__init__(msg); self.status, self.needs = status, needs
+
+
+def needs_of(r) -> str:
+    """'contents=write; contents=write,workflows=write' -> 'Contents: write' (the first way GitHub accepts)."""
+    first = str(r.headers.get('x-accepted-github-permissions') or '').split(';')[0].strip()
+    return ', '.join(f"{PERMS.get(k, k.replace('_', ' ').capitalize())}: {v}" for k, _, v in
+                     (p.strip().partition('=') for p in first.split(',') if '=' in p))
+
+
+def _ok(r, what: str):
+    """The response when GitHub said yes; otherwise Refused, saying what the owner can do about it."""
+    if r.ok: return r
+    try: why = str(r.json().get('message') or '')
+    except ValueError: why = r.text[:200]
+    needs = needs_of(r) if r.status_code == 403 else ''
+    if r.status_code == 401: msg = f'GitHub refused the token (expired or revoked) - paste a new one on the GitHub connection'
+    elif needs and 'not accessible' in why.lower():
+        msg = f'the GitHub token may not {what} - it needs {needs} for this repository ({WHERE})'
+    elif r.status_code == 404: msg = f'GitHub cannot see that with this token - it may be private to the token, or gone'
+    else: msg = f'GitHub would not {what}: {why or r.status_code}'
+    raise Refused(msg, r.status_code, needs)
+
+
+# WHAT THIS TOKEN MAY DO HERE. The role GET /repos reports is the USER's - a fine-grained token with none of the grants
+# still reads "admin", and the card offered a Close out that could only 403. GitHub has no endpoint that lists a token's
+# grants, so each is asked with a request that CANNOT succeed: a branch at a commit that does not exist, a pull request
+# between branches that do not exist, an issue with no title, a re-run of run 0. Missing the grant is a 403 naming it;
+# having it is the validation error (422) or a 404 - nothing is ever created.
+GRANT_PROBES = (('contents', 'post', '/git/refs', {'ref': 'refs/heads/taskuary-permission-probe', 'sha': '0' * 40}),
+                ('pull_requests', 'post', '/pulls', {'head': 'taskuary-probe-none-0', 'base': 'taskuary-probe-none-1', 'title': ''}),
+                ('issues', 'post', '/issues', {}),
+                ('actions', 'post', '/actions/runs/0/rerun-failed-jobs', None))
+GRANT_TTL = 900
+_GRANTS: dict = {}               # (token hash, repo) -> (at, {perm: bool})
+
+
+def _gkey(tok, repo):
+    import hashlib
+    return hashlib.sha256(str(tok or '').encode()).hexdigest()[:16], str(repo or '').lower()
+
+
+def grants(tok, repo, fresh: bool = False) -> dict:
+    """{perm: True|False} for this token on this repo - False only where GitHub said so (a 403 naming it). Cached per
+    token and repo; a new token is a new key, so pasting one is re-read at once. A probe that errors is left True -
+    GitHub still decides at the act, and its refusal is then remembered (learn)."""
+    import time
+    k = _gkey(tok, repo)
+    at, got = _GRANTS.get(k, (0, None))
+    if got is not None and not fresh and time.time() - at < GRANT_TTL: return dict(got)
+    out = {}
+    for perm, method, path, body in GRANT_PROBES:
+        try:
+            r = requests.request(method, f'{GH}/repos/{repo}{path}', headers=_h(tok), json=body, timeout=15)
+            out[perm] = not (r.status_code == 403 and 'not accessible' in r.text.lower())
+        except requests.RequestException as e:
+            logger.debug(f'github: the {perm} probe on {repo} did not answer - {e}'); out[perm] = True
+    _GRANTS[k] = (time.time(), out)
+    return dict(out)
+
+
+def learn(tok, repo, err):
+    """A real act GitHub refused for a missing grant: remember it, so the next card does not offer it again."""
+    import time
+    if not isinstance(err, Refused) or not err.needs: return
+    perm = next((k for k, w in PERMS.items() if err.needs.startswith(w + ':')), None)
+    if not perm: return
+    k = _gkey(tok, repo)
+    at, got = _GRANTS.get(k, (time.time(), {}))
+    _GRANTS[k] = (at, {**(got or {}), perm: False})
+
 # Markdown and HTML both, because an issue template uses whichever the writer's editor produced:
 # ![shot](https://github.com/user-attachments/assets/<uuid>) or <img src="..." />. Only the hosts
 # GitHub itself serves attachments from - an issue body is a stranger's text on a public repo, and
@@ -49,22 +133,21 @@ def body_images(tok, body: str, cap: int = 4, max_bytes: int = 5_000_000) -> lis
 
 
 def create_issue(tok, repo, title, body):
-    r = requests.post(f'{GH}/repos/{repo}/issues', headers=_h(tok), json={'title': title, 'body': body}, timeout=20)
-    r.raise_for_status()
+    r = _ok(requests.post(f'{GH}/repos/{repo}/issues', headers=_h(tok), json={'title': title, 'body': body}, timeout=20), 'open an issue')
     j = r.json()
     return {'number': j['number'], 'url': j['html_url']}
 
 def comment_issue(tok, repo, number, body):
     """One comment on an issue or PR - how a Taskuary reply reaches a GitHub author."""
-    r = requests.post(f'{GH}/repos/{repo}/issues/{number}/comments', headers=_h(tok), json={'body': body}, timeout=20)
-    r.raise_for_status()
+    r = _ok(requests.post(f'{GH}/repos/{repo}/issues/{number}/comments', headers=_h(tok), json={'body': body}, timeout=20),
+            f'comment on #{number}')
     return r.json().get('html_url')
 
 
 def close_issue(tok, repo, number, comment=None):
-    if comment:
-        requests.post(f'{GH}/repos/{repo}/issues/{number}/comments', headers=_h(tok), json={'body': comment}, timeout=20).raise_for_status()
-    requests.patch(f'{GH}/repos/{repo}/issues/{number}', headers=_h(tok), json={'state': 'closed'}, timeout=20).raise_for_status()
+    # the close first: a comment that landed before a refused close was posted AGAIN by the retry
+    _ok(requests.patch(f'{GH}/repos/{repo}/issues/{number}', headers=_h(tok), json={'state': 'closed'}, timeout=20), f'close #{number}')
+    if comment: comment_issue(tok, repo, number, comment)
 
 def open_pr(tok, repo, head, base, title, body, draft=True):
     """A DRAFT pull request by default: a branch pushed for review is not a merge request
@@ -75,7 +158,7 @@ def open_pr(tok, repo, head, base, title, body, draft=True):
     if r.status_code == 422 and 'already exist' in r.text:
         ex = list_prs(tok, repo, head=head)
         if ex: return ex[0]
-    r.raise_for_status()
+    _ok(r, 'open a pull request')
     j = r.json()
     return {'number': j['number'], 'url': j['html_url'], 'head': head, 'base': base, 'state': j['state']}
 
@@ -91,8 +174,7 @@ def list_prs(tok, repo, head=None, state='open'):
 
 
 def pr(tok, repo, number):
-    r = requests.get(f'{GH}/repos/{repo}/pulls/{number}', headers=_h(tok), timeout=20)
-    r.raise_for_status()
+    r = _ok(requests.get(f'{GH}/repos/{repo}/pulls/{number}', headers=_h(tok), timeout=20), f'read #{number}')
     j = r.json()
     # mergeable_state is GitHub's verdict on THIS repo's rules for THIS pull request - clean, unstable (a check it does not
     # require is red), blocked (a required check, review or rule), behind (must be up to date), dirty (conflicts), draft,
@@ -108,8 +190,7 @@ def pr(tok, repo, number):
 def repo_info(tok, repo) -> dict:
     """What this repository allows and what the token may do in it: the merge methods its settings permit, and the
     token's own role (`permissions`: admin / maintain / push / triage / pull)."""
-    r = requests.get(f'{GH}/repos/{repo}', headers=_h(tok), timeout=20)
-    r.raise_for_status()
+    r = _ok(requests.get(f'{GH}/repos/{repo}', headers=_h(tok), timeout=20), f'read {repo}')
     j = r.json()
     return {'methods': [m for m, k in (('squash', 'allow_squash_merge'), ('merge', 'allow_merge_commit'), ('rebase', 'allow_rebase_merge'))
                         if j.get(k, True)],
@@ -120,25 +201,20 @@ def update_branch(tok, repo, number, expected_sha=None) -> str:
     """GitHub's own "Update branch": merges the base into the pull request, so its checks run fresh against today's base."""
     r = requests.put(f'{GH}/repos/{repo}/pulls/{number}/update-branch', headers=_h(tok), timeout=30,
                      json={'expected_head_sha': expected_sha} if expected_sha else {})
-    if r.status_code in (403, 422):
-        try: why = r.json().get('message')
-        except ValueError: why = ''
-        raise RuntimeError(f"GitHub would not update #{number}: {why or r.text[:200]}")
-    r.raise_for_status()
+    _ok(r, f'update #{number}')
     return (r.json() or {}).get('message') or 'Updating the branch'
 
 
 def rerun_failed(tok, repo, sha) -> int:
     """Re-run the failed jobs of every Actions run on this commit; the number of runs asked. Checks from other CI
     systems cannot be re-run from here."""
-    r = requests.get(f'{GH}/repos/{repo}/actions/runs', headers=_h(tok), params={'head_sha': sha, 'per_page': 50}, timeout=20)
-    r.raise_for_status()
+    r = _ok(requests.get(f'{GH}/repos/{repo}/actions/runs', headers=_h(tok), params={'head_sha': sha, 'per_page': 50}, timeout=20),
+            'read the checks')
     n = 0
     for run in r.json().get('workflow_runs') or []:
         if run.get('conclusion') not in ('failure', 'timed_out', 'cancelled'): continue
         x = requests.post(f"{GH}/repos/{repo}/actions/runs/{run['id']}/rerun-failed-jobs", headers=_h(tok), timeout=20)
-        if x.status_code == 403: raise RuntimeError("the token may not re-run checks - it needs Actions: write")
-        x.raise_for_status(); n += 1
+        _ok(x, 're-run checks'); n += 1
     return n
 
 
@@ -149,22 +225,21 @@ def merge_pr(tok, repo, number, sha, title=None, message=None, method='squash', 
     p = p or pr(tok, repo, number)
     if p.get('draft'):
         q = 'mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){pullRequest{isDraft}}}'
-        r = requests.post(f'{GH}/graphql', headers=_h(tok), json={'query': q, 'variables': {'id': p['node_id']}}, timeout=20)
-        r.raise_for_status()
+        r = _ok(requests.post(f'{GH}/graphql', headers=_h(tok), json={'query': q, 'variables': {'id': p['node_id']}}, timeout=20),
+                f'mark #{number} ready for review')
         if r.json().get('errors'): raise RuntimeError(f"GitHub would not mark #{number} ready: {r.json()['errors'][0].get('message')}")
     body = {'merge_method': method, 'sha': sha, **({'commit_title': title} if title else {}), **({'commit_message': message} if message else {})}
     r = requests.put(f'{GH}/repos/{repo}/pulls/{number}/merge', headers=_h(tok), json=body, timeout=30)
     if r.status_code in (405, 409, 422):
         try: why = r.json().get('message')
         except ValueError: why = ''
-        raise RuntimeError(f"GitHub refused to merge #{number}: {why or r.text[:200]}")
-    r.raise_for_status()
-    return r.json().get('sha') or ''
+        raise Refused(f"GitHub refused to merge #{number}: {why or r.text[:200]}", r.status_code)
+    return _ok(r, f'merge #{number}').json().get('sha') or ''
 
 
 def close_pr(tok, repo, number):
     """Close a pull request WITHOUT merging it - the close-out's other answer (proposals.close_pr)."""
-    requests.patch(f'{GH}/repos/{repo}/pulls/{number}', headers=_h(tok), json={'state': 'closed'}, timeout=20).raise_for_status()
+    _ok(requests.patch(f'{GH}/repos/{repo}/pulls/{number}', headers=_h(tok), json={'state': 'closed'}, timeout=20), f'close #{number}')
 
 
 def closed_by(tok, repo, number) -> str:

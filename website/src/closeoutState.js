@@ -16,7 +16,10 @@ export function useCloseoutState(rid) {
   const [gh, setGh] = useState(null);
   const load = useCallback(() => {
     if (!rid) { setGh(null); return; }
-    api.get(`/api/reviews/${rid}/closeout`).then(({ data }) => setGh(data)).catch(() => setGh(null));
+    // a reading that failed is NOT a clean pull request: null drew a live Close out over a GitHub nobody had read (2026-09-29).
+    // Only "no close-out here" (404) means there is nothing to read.
+    api.get(`/api/reviews/${rid}/closeout`).then(({ data }) => setGh(data)).catch((e) => setGh(e?.response?.status === 404 ? null
+      : { state: "unknown", ok: false, offers: [], note: "", reason: "Taskuary could not read GitHub just now - open the card again in a moment" }));
   }, [rid]);
   useEffect(() => { load(); }, [load]);
   // Update branch / Re-run checks: run on GitHub, then read the card again - neither closes anything

@@ -12,7 +12,7 @@ the owner's notes); it is not a memory note, not a rule and never a sender exclu
 their own confirmed handlers. Discussion about a source item is kept against the item and travels
 onto the task it later becomes, per item, never onto its batch siblings.
 """
-import contextlib, hashlib, json, threading, uuid
+import contextlib, hashlib, json, re, threading, uuid
 from datetime import datetime
 from loguru import logger
 
@@ -238,6 +238,22 @@ class Halt(Exception):
 def _stale(op, why): return {**_public(op), 'status': 'stale', 'error': why, 'duplicate': False}
 
 
+# A failure is said to the owner as it is stored: "422: I could not tell..." wore FastAPI's status prefix, and a refused
+# hand-off printed the full path of a checkout on this machine into the chat (2026-09-29 audit). The folder's own name
+# says which checkout; the rest of the path says nothing to the owner and does not belong in a chat.
+_PATH = re.compile(r'(?<![\w/:])(?:[A-Za-z]:[\\/]|/(?:Users|home|tmp|var|opt)/)[^\s\'",;)]+')
+
+
+def plain(e) -> str:
+    detail = getattr(e, 'detail', None)
+    s = str(detail if isinstance(detail, str) else e)
+    s = re.sub(r'^\d{3}:\s*', '', s)
+    def name(m):
+        path = m.group(0).rstrip('.')                        # a sentence's full stop is not part of the folder
+        return path.replace('\\', '/').rstrip('/').rsplit('/', 1)[-1] + m.group(0)[len(path):]
+    return _PATH.sub(name, s)
+
+
 def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
     """Confirm and carry out: once. `run` is the shared handler for this kind; the receipt is what it
     returned. The same confirmation again is the same receipt and no second effect."""
@@ -259,17 +275,17 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
     _running.op = op_id
     try: outcome = run()
     except Halt as e:
-        store.update_operation(op_id, {'Status': 'error', 'Error': str(e)[:500], 'OutcomeJson': json.dumps(e.outcome, default=str), 'Actor': actor})
+        store.update_operation(op_id, {'Status': 'error', 'Error': plain(e)[:500], 'OutcomeJson': json.dumps(e.outcome, default=str), 'Actor': actor})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     except Exception as e:
         logger.warning(f'operation {op_id} ({op["Kind"]}) failed: {e}')
-        store.update_operation(op_id, {'Status': 'error', 'Error': str(e)[:500], 'Actor': actor})
+        store.update_operation(op_id, {'Status': 'error', 'Error': plain(e)[:500], 'Actor': actor})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     finally: _running.op = None
     if _failed(outcome):
         # the handler came back, but its own word is that nothing happened: an error the owner can retry, and
         # never a lesson - a 'not a task' success was recorded off a start that never launched (PW-130)
-        store.update_operation(op_id, {'Status': 'error', 'Error': str(outcome.get('error') or 'the action did not complete')[:500],
+        store.update_operation(op_id, {'Status': 'error', 'Error': plain(outcome.get('error') or 'the action did not complete')[:500],
                                        'OutcomeJson': json.dumps(outcome, default=str), 'Evidence': 'none', 'Actor': actor})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     store.update_operation(op_id, {'Status': 'done', 'OutcomeJson': json.dumps(outcome, default=str) if outcome is not None else None,

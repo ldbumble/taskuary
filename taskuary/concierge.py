@@ -70,7 +70,7 @@ CHIP_WORDS = {'approve': 'Close out', 'redraft': 'Redraft it', 'reply': 'Reply',
               'archive': 'Archive it', 'close': 'Mark done',
               'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
               'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
-              'prep': 'Prep me', 'defer': 'Remind me', 'continue': 'Continue session'}
+              'prep': 'Prep me', 'defer': 'Remind me', 'continue': 'Continue session', 'test_connection': 'Test it'}
 # What the word will actually DO, on hover - written where the difference matters.
 CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
               'regular_agent': 'An agent takes it - triage picks a coding or a non-coding one, and you can change it on the card',
@@ -95,7 +95,9 @@ CHIPS = {'review': ('approve', 'close', 'defer', 'not_ours', 'next'), 'action': 
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
          'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else
-         'fyis': ()}
+         'fyis': (),
+         # a connection that stopped answering: ask it again, here - Next was its only word, a dead end (2026-09-23)
+         'connection': ('test_connection', 'next')}
 # THE CONTRACT: where the voice is and what it must not do. The line code reads - CALL, or OPTIONS - is
 # toolcatalog.block's, the one place it is taught (2026-09-25: one format; the decisions are tools like any other).
 # How to behave is COUNSEL's - the owner's document, not this file (PW-248/256).
@@ -688,8 +690,8 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         return f"{item['title']}" + (f" ({item.get('who')})" if item.get('who') else '') + f" - {item.get('why') or 'the assistant raised this'}. Draft the follow-up, make it a task, or let it go."
     if item['kind'] == 'meeting': return f"{item['title']} is {item.get('why')}. Prep me, or move on."
     if item['kind'] == 'report':
-        return f"{item['title']} landed {funnel_age(item)}" + (' and FAILED - the cause is in it.' if item.get('bad') else '.') + ' It is open below - run it again, or move on.'
-    if item['kind'] == 'agentdone': return f"{item.get('who') or 'The agent'} finished {item.get('ref') or item['title']}" + (f": {item['summary']}" if item.get('summary') else '.') + ' Want to see the final report?'
+        return f"{item['title']} landed {funnel_age(item)}" + (' and FAILED - the cause is in it.' if item.get('bad') else '.') + ' It is open below - make it a task, hand it to an agent, or move on.'
+    if item['kind'] == 'agentdone': return f"{item.get('who') or 'The agent'} finished {item.get('ref') or item['title']}" + (f": {item['summary']}" if item.get('summary') else '.') + ' Its full report is on the card.'
     lead = {'agent': f"{item.get('why') or ws.says('parked', item.get('agent') or 'An agent')} ({item.get('ref') or item['title']}).",
             'meeting': f"{item['title']} is {item.get('why')}.",
             'review': f"{item.get('who') or 'Someone'} is owed a reply on \"{item['title']}\"" + (' - the draft is below.' if item.get('draft') else ' - nothing is drafted yet.'),
@@ -1816,6 +1818,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     )
     guarded = (lambda: commit_guard()) if commit_guard is not None else (lambda: nullcontext())
     if not item:
+        opens = []
         left = [i for i in p['items'] if not i.get('settling')]
         waiting = [i for i in left if i.get('surfaced') and i['lane'] != 'working']
         if key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
@@ -1826,7 +1829,11 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
             n = len(waiting)
             say = (f"{n} thing{'s' if n != 1 else ''} you've already seen still wait{'s' if n == 1 else ''} in Work. "
-                   f"I'll bring {'it' if n == 1 else 'them'} round again in a while.")
+                   f"I'll bring {'it' if n == 1 else 'them'} round again in a while - or open {'it' if n == 1 else 'one'} now.")
+            # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
+            # What waits on the owner first - a close-out, an agent's question - then the rest.
+            opens = [{'verb': 'open', 'key': i['key'], 'label': f"Open {i.get('ref') or _title_cut(i.get('title') or 'it', 40)}"}
+                     for i in sorted(waiting, key=lambda i: not funnel.on_you(i))[:3]]
         elif only and left:
             # the filtered set is done; what remains is the rest of the pipe - offer it rather than call the day over
             say = f"That's all of those. {len(left)} other thing{'s' if len(left) != 1 else ''} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."
@@ -1840,8 +1847,8 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         with guarded():
             put_down()
             if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
-            record(store, tid, 'assistant', say)
-        return {'item': None, 'say': say, 'options': [], 'chips': walk_chips(len(left)), 'left': len(p['items']),
+            record(store, tid, 'assistant', say, {'kind': 'words', 'key': None, 'chips': opens} if opens else None)
+        return {'item': None, 'say': say, 'options': [], 'chips': opens or walk_chips(len(left)), 'left': len(p['items']),
                 'exhausted': only if (only and left) else None}
     # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
     # nothing for the owner to do until it stops, so say so, let it go, and take the next one. It comes
@@ -1970,13 +1977,15 @@ PROPOSALS = {
     # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
     'stop_agent': ('agent.stop', 'Save and end session', True), 'rerun': ('report.rerun', 'Run the report again', True),
     'continue': ('agent.continue', 'Continue session', False),
+    'test_connection': ('connection.test', 'Test the connection', False),
     'remember': ('memory.remember', 'Remember it', False), 'split': ('task.split', 'Split it in two', False),
     'clear': ('pipe.clear', 'Clear them from the pipe', False), 'setup': ('task.setup', 'Open the walk-through', False),
 }
 # ...and ending the agent's session, which the task page's own button does on the click: it writes the
 # session up and drafts the reply for your yes - nothing leaves (the owner, 2026-09-23: "it should be save
 # end session as well same as in task", having been asked to confirm a card that read "wrap: false")
-AUTO = ('done', 'skip', 'later', 'close', 'stop_agent', 'continue')     # settles what is on the table; nothing leaves, nothing is handed off
+AUTO = ('done', 'skip', 'later', 'close', 'stop_agent', 'continue',     # settles what is on the table; nothing leaves, nothing is handed off
+        'test_connection')                                              # ...and a connection test, which only asks and changes nothing
 # the operations that take the item off the table, so the walk moves on after them (the page reads
 # `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
 SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles)
@@ -2011,13 +2020,18 @@ def _resolve_named(store, phrase: str, item: dict | None) -> str | None:
 
 
 def open_proposal(store, dock_tid: int) -> dict | None:
-    """The proposal on the table - the newest proposal card in this chat whose row is still `proposed`."""
+    """The proposal on the table - the newest CARD in this chat, when it is a proposal whose row is still `proposed`.
+
+    ONLY while it is still the newest card (2026-09-29 audit): "Save and end session" proposed on one task, Next to the
+    following one, a "yes" typed about THAT one - and the older proposal, still `proposed` further up, was the one the yes
+    ran. A newer item on the table means the proposal was walked past; its own Confirm button still works where it is."""
     for c in reversed(general.chat_rows(store, dock_tid)):
         m = _MARK.search(c.get('Body') or '')
         if not m: continue
         try: card = json.loads(m.group(1))
         except ValueError: continue
-        if card.get('kind') != 'proposal': continue
+        if card.get('kind') in ('words', SETUP_QUESTIONS): continue          # a line's own words, not a card on the table
+        if card.get('kind') != 'proposal': return None
         op = operations.get(store, card.get('op')) if card.get('op') else None
         return op if op and op.get('status') == 'proposed' else None
     return None
@@ -2057,7 +2071,8 @@ def confirm_open(store, tid: int, item: dict | None, cancelled: bool, actor: str
         record_related(store, tid, item, 'assistant', say_)
         return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
     out = run_proposal(store, prop, actor)
-    return {'say': receipt(store, out, actor), 'options': [], 'chips': [], 'decision': {'verb': 'confirm'},
+    turn = receipt_turn(store, out, actor)              # a failure brings its way on; a success, nothing to add
+    return {'say': turn['say'], 'options': [], 'chips': turn['chips'], 'decision': {'verb': 'confirm'},
             'executed': {'id': prop['id'], 'kind': prop['kind'], 'status': out.get('status')},
             'settled': out.get('status') == 'done' and prop['kind'] in SETTLING_KINDS}
 
@@ -2156,6 +2171,9 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         if not wrap: note = ' There is no transcript to write a report from yet - this stops the agent and the task stays open.'
     elif verb == 'continue': target, params = it.get('tid'), {'note': d_text or ''}
     elif verb == 'rerun': target = it.get('source_id')
+    elif verb == 'test_connection':
+        k = str(it.get('key') or '')
+        target = int(k.split(':', 1)[1]) if k.startswith('conn:') and k.split(':', 1)[1].isdigit() else None
     elif verb == 'remember':
         if not d_text: raise ValueError('remember what? Say the fact and I will keep it')
         target, params = 0, {'note': d_text}
@@ -2210,7 +2228,14 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     why = cannot(item, verb, store)
     if why: raise ValueError(why)
     record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
-    prop = propose_for(store, tid, {'verb': verb, 'text': text or ''}, item, text or '', actor, table=item if table else None)
+    try: prop = propose_for(store, tid, {'verb': verb, 'text': text or ''}, item, text or '', actor, table=item if table else None)
+    except ValueError as e:
+        # THE PRESS IS ANSWERED: its line was already in the conversation, and a refusal went to an error banner only - the
+        # chat showed "Save and end session" with nothing under it until the owner typed Next (2026-09-25). The reason
+        # is said there, with what this item CAN do instead.
+        way = [c for c in chips_for(store, item) if c['verb'] != verb]
+        record_related(store, tid, item, 'assistant', f"{str(e)[:1].upper()}{str(e)[1:]}.", {'kind': 'words', 'key': None, 'chips': way})
+        return {'id': None, 'failed': True, 'say': f"{str(e)[:1].upper()}{str(e)[1:]}.", 'chips': way, 'key': key}
     prop['settles'] = bool(table and PROPOSALS[verb][2])
     if table and verb in AUTO: prop.update(auto=True, say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))
     record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
@@ -2473,6 +2498,9 @@ def describe_op(store, op: dict) -> tuple:
 def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     """What the handler reported, in the words the sweep, the split and the hand-off used to say for themselves."""
     o = o or {}
+    # the merge landed and the reply beside it did not: both halves are facts, and the second one is still yours
+    if kind == 'review.approve' and o.get('reply_error'):
+        return f" {str(o['reply_error']).replace('Done on GitHub, but the', 'But the', 1)} - it is kept as the draft."
     # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
     if kind == 'report.run': return f" {o.get('title') or 'It'} is running - it lands in the pipe when it is done."
     if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."
@@ -2487,7 +2515,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'review.reject': return ' The draft is rejected; the task stays open.'
     if kind == 'task.defer': return (f" Away until {o['when']} - it is under Upcoming in Tasks, and back on your rail that morning."
                                      if o.get('remindAt') else ' It is back on your rail now.')
-    if kind == 'connection.test': return f" {o.get('name') or 'It'} {'answered' if o.get('ok') else 'did not answer'}: {str(o.get('detail') or '')[:300]}"
+    if kind == 'connection.test': return f" {o.get('name') or 'It'} {'answered' if o.get('answered', o.get('ok')) else 'did not answer'}: {str(o.get('detail') or '')[:300]}"
     if kind in ('connection.pause', 'connection.resume'): return f" {o.get('name') or 'It'} is {'on' if o.get('active') else 'off'}."
     if kind == 'script.start': return f" Starting: {o.get('script')}."
     if kind == 'pipe.clear':
@@ -2525,18 +2553,94 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
 
 def receipt(store, op: dict, actor: str = 'owner') -> str:
     """After the click: the fact of what happened, in the chat - never before it ran (PW-125)."""
+    return receipt_turn(store, op, actor)['say']
+
+
+# the close-out's own other buttons, when GitHub's reading offered them with the refusal (ghcloseout.assess)
+OFFER_WORDS = {'update': 'Update branch', 'rerun': 'Re-run checks', 'anyway': 'Close out anyway'}
+_PICK = re.compile(r'\n?\s*PICK:\s*(\d+)\s*$', re.I)
+
+
+def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
+    """WHAT NOW, after an act that did not happen (the owner, 2026-09-29: "the assistant freezes instead of trying to
+    figure out solution"). A failed Close out said "Not done - 403 ..." and offered nothing - no retry, no Mark done, no
+    way on - and the model never heard it had failed.
+
+    {'say': the model's sentence or '', 'chips': [...]}. The CHOICES are code's: Try again (never when GitHub named a grant
+    the token lacks, or refused on the pull request's state - a retry only repeats those), GitHub's own offers, the item on
+    the table's own verbs minus the act that just failed, then Next. The model says why and picks ONE of those by number;
+    its pick leads and it can add nothing. `llm=False` skips the model (a phone number press, a test)."""
+    st, o = op.get('status'), op.get('outcome') or {}
+    if st not in ('error', 'stale'): return {'say': '', 'chips': []}
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    try: item = restore_current(store, tid)
+    except Exception as e:
+        logger.debug(f'recover: no item on the table - {e}'); item = None
+    chips = []
+    if st == 'error' and not o.get('needs') and not o.get('refused') and o.get('dispatch') != 'needs_repo':
+        chips.append({'verb': 'retry', 'label': 'Try again', 'op': op['id'], 'version': op['version'], 'kind': op.get('kind'),
+                      'settles': any(row[0] == op.get('kind') and row[2] for row in PROPOSALS.values())})
+    chips += [{'verb': 'closeout', 'act': a, 'rid': o['rid'], 'label': OFFER_WORDS[a]}
+              for a in o.get('offers') or [] if a in OFFER_WORDS and o.get('rid')]
+    if o.get('dispatch') == 'needs_repo':
+        # the checkout to open it in IS the way on - the desktop draws its picker; a chat had "needs a repository first"
+        # and nothing to pick. Each one is the same hand-off, revised with that repository and run.
+        from . import terminal as term
+        chips += [{'verb': 'repo', 'label': f'Use {r}', 'op': op['id'], 'repo': r, 'params': op.get('params') or {},
+                   'settles': any(row[0] == op.get('kind') and row[2] for row in PROPOSALS.values())} for r in term.known_repos(store)[:6]]
+    gone = {v for v, row in PROPOSALS.items() if row[0] == op.get('kind')}
+    chips += [c for c in chips_for(store, item) if c['verb'] not in gone]
+    if not any(c.get('verb') == 'next' for c in chips): chips.append({'verb': 'next', 'label': CHIP_WORDS['next']})
+    say = ''
+    b = _brain_for(store, tid, llm) if llm is not False and item else None
+    if b:
+        moves = '\n'.join(f"{i} · {c['label']}" for i, c in enumerate(chips, 1))
+        what = describe_op(store, op)[0]
+        instruction = (f'The owner just confirmed "{what}" on this item and it DID NOT happen. What came back: {op.get("error") or st}.\n'
+                       'In one or two short sentences, in plain words: what went wrong and what would fix it - if it is something '
+                       'only the owner can change (a permission, a setting), say where. Then recommend ONE of these moves:\n'
+                       f'{moves}\nNever promise anything those moves do not do. End with a line PICK: <number>.')
+        try:
+            # not _ask: its off-subject guard wants the item's own words in the sentence, and "their mail server bounced it"
+            # has none. What it guards against still holds here - another task named, the voice out of character.
+            said = str(b(_system(store, b), f"THE ITEM ON THE TABLE - speak only about this one:\n{facts(store, item)}\n\n{instruction}",
+                         max_tokens=MAX_TOKENS) or '').strip()
+            said = parse_decision(said)[0]
+            named = {int(n) for n in _REF.findall(said)}
+            if (named and item.get('tid') and int(item['tid']) not in named) or not in_character(said): said = ''
+            m = _PICK.search(said or '')
+            say = _PICK.sub('', said or '').strip()
+            k = int(m.group(1)) if m else 0
+            if 1 <= k <= len(chips): chips = [chips[k - 1]] + [c for i, c in enumerate(chips) if i != k - 1]
+        except Exception as e:
+            logger.info(f'recover: the model did not answer about the failure - {e}'); say = ''
+    return {'say': say, 'chips': chips}
+
+
+def receipt_turn(store, op: dict, actor: str = 'owner', llm=None) -> dict:
+    """The receipt AND, when it did not happen, its way on (recover): {'say': line, 'chips': [...]}. The chips ride on the
+    recorded line, so the desktop draws them under it and the phone numbers them."""
     label, ref = describe_op(store, op)
     st = op.get('status')
     if st == 'done':
         line = (f"{'Already done' if op.get('duplicate') else 'Done'} - {label}{' · ' + ref if ref else ''}."
                 + ('' if op.get('duplicate') else _outcome_line(op.get('kind'), op.get('params') or {}, op.get('outcome'))))
+    elif st == 'error' and (op.get('outcome') or {}).get('unsent'):
+        line = f"Not sent - {op.get('error') or 'the reply did not go out'}. The reply is kept; {ref or 'it'} is where it was."
     elif st == 'error': line = f"Not done - {op.get('error') or 'it failed'}. {ref or 'It'} is where it was."
     else: line = f"Not done - {op.get('error') or st}. {ref or 'It'} is where it was."
     # only what THIS chat proposed is its news. A close from the Tasks page or the wall used to be narrated
     # here too - and opened a fresh chat to say it in (the owner, 2026-09-07: "no one asked you to do that")
     raw = store.get_setting('assistant_dock_task_id')
     dock_tid = int(raw) if str(raw or '').isdigit() else None
-    if not dock_tid or not _chat_proposed(store, dock_tid, op.get('id')): return line
+    if not dock_tid or not _chat_proposed(store, dock_tid, op.get('id')): return {'say': line, 'chips': []}
+    if st != 'done':
+        way = recover(store, op, actor, llm)
+        line = f"{line} {way['say']}".strip()
+        # a NOTE kind (AssistantView NOTE_KINDS): the sentence shows and the chips sit under it - an item kind hid the words
+        record(store, dock_tid, 'assistant', line, {'kind': 'words', 'key': None, 'title': label, 'chips': way['chips'],
+                                                   'tid': None, 'ref': ref or None})
+        return {'say': line, 'chips': way['chips']}
     # THE UNDO RIDES THE RECEIPT (the tiers): an instant write says what it did AND how to put it back -
     # a one-click card on the desktop, an Undo pill on the phone (remote_assistant). The undo is a
     # proposal of its own, never auto, so the click is the only thing that reverts.
@@ -2549,10 +2653,10 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
             line += f" Undo: {undo.get('label') or 'put it back'}."
             record(store, dock_tid, 'assistant', line, {'kind': 'proposal', 'key': None, 'title': undo.get('label') or 'Undo', 'op': u['id'],
                                                        'tid': None, 'ref': None, 'undo': True})
-            return line
+            return {'say': line, 'chips': []}
         except Exception as e: logger.debug(f'no undo offered for {op.get("id")}: {e}')
     record(store, dock_tid, 'assistant', line)
-    return line
+    return {'say': line, 'chips': []}
 
 
 LAST_UNDO = 'assistant_last_undo'           # the newest undo proposal's id: what the phone's Undo pill runs

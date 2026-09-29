@@ -57,7 +57,8 @@ import "./assistantView.css";
 const WALK_KEY = "taskuary_walk_tid";
 const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 // markers the server writes on a line that are NOT cards (concierge.SETUP_QUESTIONS): the line is its words
-const NOTE_KINDS = new Set(["setup_questions"]);
+// ...and a line that carries its own words (concierge: a failed act's way on, the already-seen opens): never an item card
+const NOTE_KINDS = new Set(["setup_questions", "words"]);
 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
 // is still mail, and the walk that skipped it said "0 of them are mail" with five in the pipe
@@ -451,7 +452,7 @@ const StageMode = ({ mode, setMode, onGame }) => (
 function Line({ m, live, last, actions, fresh, tableChips = [] }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}</div></div>;
   if (m.role === "receipt") return (
-    <div className="tq-msg receipt"><span /><div className="body">✓ {m.text}
+    <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}
       {!!m.tid && <button type="button" className="tq-chip" style={{ marginLeft: 8 }} onClick={() => actions.openTask?.(m.tid)}>Open {m.ref || "the task"}</button>}
       {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
           than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons. */}
@@ -1099,9 +1100,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
       const out = afterExecute(p, res);
       const step = afterConfirm(p, out, current);
       // a sweep cleared what was on the table too: the receipt carries Next, and the walk waits for it
-      const chips = step === "offer" ? [{ verb: "next", label: "Next" }] : [];
+      // ...and an act that did NOT happen carries its way on (concierge.recover): Try again, GitHub's own offers, the
+      // item's other verbs, Next - it said "Not done" and offered nothing (2026-09-29)
+      // (the repositories stay on the proposal card's own picker here - the chat has them only where there is no card)
+      const chips = out.status !== "done" && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
+        : step === "offer" ? [{ verb: "next", label: "Next" }] : [];
       setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
-                       { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
+                       { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
       onChanged?.();
       // A SCRIPT, started by name (script.start): the deterministic road the words asked for opens here -
       // the walk's Next, the set-up tour, or the composer - and nothing on the table moves for it.
@@ -1126,6 +1131,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   // target is explicit. The card lands in the chat and runs from its own button, like any proposal.
   const proposeDirect = async (verb, key, table = false) => {
     const { data } = await api.post("/api/concierge/propose", { verb, key, table });
+    // refused before any proposal existed: the reason and this item's other words, as a line of its own (no card to confirm)
+    if (!data.id) {
+      setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], card: { kind: "words", chips: data.chips || [] } }]);
+      return data;
+    }
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], proposal: data,
                             card: { kind: "proposal", key: data.key, title: data.label, op: data.id, tid: data.tid, ref: data.ref } }]);
     say(data.say);
@@ -1149,6 +1159,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
     if (c.verb === "next") { surface(null, null, key); return; }
+    // one item by name - one the walk already showed and will not repeat yet ("N things you've already seen")
+    if (c.verb === "open" && c.key) { surface(c.key); return; }
     // REMIND ME asks for the day - the task page's own picker - and the walk moves on once it is put away
     // CONTINUE SESSION asks what to tell it (optional), then the agent picks up - the walk moves on (A19)
     if (c.verb === "continue") { if (item?.tid) setContinueOn({ task: { TaskId: item.tid }, anchor: anchor || null, ref: item.ref }); return; }
@@ -1156,6 +1168,31 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     if (c.verb === "defer" && item?.kind === "idea" && item?.idea) { setRemindOn({ task: { TaskId: `idea-${item.idea}` }, path: `/api/assistant/ideas/${item.idea}/snooze`, anchor: anchor || null, ref: item.ref }); return; }
     if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
+    // A FAILED ACT'S WAY ON (concierge.recover): the same confirmation once more, or the close-out's own GitHub button
+    if (c.verb === "retry" && c.op) {
+      await runProposal({ id: c.op, version: c.version, kind: c.kind, label: "Try again", key: item?.key, tid: item?.tid, ref: item?.ref,
+                          settles: !!c.settles });
+      return;
+    }
+    // ...a hand-off that stopped for a repository: that repository, then the same confirmation again
+    if (c.verb === "repo" && c.op) {
+      setBusy(true); setErr("");
+      let op = null;
+      try { op = (await api.patch(`/api/operations/${c.op}`, { params: { ...(c.params || {}), repo: c.repo } })).data; }
+      catch (e) { setErr(errText(e)); }
+      finally { setBusy(false); }
+      if (op) await runProposal({ ...op, label: c.label, key: item?.key, tid: item?.tid, ref: item?.ref, settles: !!c.settles });
+      return;
+    }
+    if (c.verb === "closeout" && c.rid) {
+      setBusy(true); setErr("");
+      try {
+        const { data } = await api.post(`/api/reviews/${c.rid}/closeout/${c.act}`);
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: item?.tid, ref: item?.ref,
+                                text: `${data?.said || c.label}. Close out again once the checks pass.` }]);
+      } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+      return;
+    }
     setBusy(true); setErr("");
     try {
       if (c.verb === "prep") await prep(item);

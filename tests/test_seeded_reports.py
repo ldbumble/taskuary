@@ -3,7 +3,8 @@
 Two reports ship: the end-of-day Inbox checkup and the Advisor (a voice on the Timeline). The Morning
 digest used to be a third; since 2026-09-23 the walk opens the day with who wants what. Automation ideas
 (the weekly 'what should you automate next' brief) was the fourth; since 2026-09-25 the Advisor reads
-the same month of counts once a week, so a fresh install has neither - older installs keep theirs.
+the same month of counts once a week, so a fresh install has neither - an older install keeps its digest and loses its Automation ideas
+(2026-09-29: two voices raised the same toil).
 Each is a real report - prompt on the Reports tab, deleting the row is the off switch, and a
 sentinel setting keeps a deletion deleted across restarts.
 
@@ -118,6 +119,22 @@ class HealingAnOlderInstallTests(unittest.TestCase):
     def test_an_owner_who_rewrote_the_prompt_is_left_alone(self):
         cfg = self._reopen({'type': 'automate', 'title': 'x', 'days': 30, 'cron': '0 8 * * 1', 'ai_prompt': 'my own words'})
         self.assertNotIn('on_startup', cfg)
+
+    def test_an_older_install_loses_the_shipped_automation_ideas_and_keeps_one_the_owner_made(self):
+        """Two voices raised the same month of toil (the owner, 2026-09-29: "delete it for everyone") - the seeded row
+        goes on the next open, edited or not; an Automation report the owner made himself is his."""
+        import tempfile
+        from pathlib import Path
+        from taskuary.store import SQLiteStore
+        from tests.automate_fixture import add_automate
+        path = str(Path(tempfile.mkdtemp()) / 'hub.db')
+        s = SQLiteStore(path); add_automate(s)
+        s.save_source({'Channel': 'report', 'Address': 'My toil', 'Active': 1,
+                       'ConfigJson': json.dumps({'type': 'automate', 'title': 'My toil', 'days': 30})}, 'owner')
+        s.cx.execute("DELETE FROM setting WHERE Name='automate_report_removed'"); s.cx.commit(); s.cx.close()
+        got = _reports(SQLiteStore(path))
+        self.assertNotIn('Automation ideas', got)
+        self.assertEqual(got['My toil']['type'], 'automate')
 
     def test_the_previous_stock_digest_prompt_learns_to_honor_memory(self):
         from taskuary.digest import PROMPT, _PROMPT_WITHOUT_STANDING_MEMORY

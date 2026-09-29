@@ -186,7 +186,10 @@ class TurnTests(unittest.TestCase):
         drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertIsNone(again['item']); self.assertEqual(again['say'], "1 thing you've already seen still waits in Work. I'll bring it round again in a while.")
+        self.assertIsNone(again['item']); self.assertEqual(again['say'], "1 thing you've already seen still waits in Work. I'll bring it round again in a while - or open it now.")
+        # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23)
+        self.assertEqual([c['verb'] for c in again['chips']], ['open'])
+        self.assertTrue(again['chips'][0]['label'].startswith('Open TQ-'))
         gone = concierge.surface(s, key='msg:999', llm=lambda *a, **k: 'never')
         self.assertIsNone(gone['item']); self.assertIn("can't find that one", gone['say'])
 

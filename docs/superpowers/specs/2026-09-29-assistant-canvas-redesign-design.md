@@ -75,6 +75,9 @@ ideas) — it does not replace it.
     dismissed, it leaves the rail.
   - **FYI**
 - Rows keep today's grammar and look; the title truncates earlier at the narrower width, the full title on hover.
+- **Only the rows scroll.** The buttons, the Work|Timeline selector and the counts / Sync now line stay fixed; the
+  sections scroll under them, and each section heading sticks at the top until the next one pushes it out (today's
+  sticky `.tq-pile-head`). The Sync now line never moves or wraps.
 - The fill rule (`fillCaps`) is unchanged: reports, ideas and fyi divide what is left; your work is never capped.
 
 ### Walking a section

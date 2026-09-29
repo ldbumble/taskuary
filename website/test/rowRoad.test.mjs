@@ -53,10 +53,11 @@ test("what is WAITING outranks what triage called the job", () => {
   // source, and the only word left on a row is the lane where work has STOPPED until the owner
   // answers. So the road word is not outranked any more - it is gone from the row entirely.
   const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.ok(view.includes('const loud = i.lane === "blocked" || i.lane === "approve";'));
+  // ...and since 2026-09-28 no row wears a pill ("nothing else has pill"): a waiting lane says its word the way every
+  // lane does - its mark and its word - never the road
+  assert.doesNotMatch(view, /tq-pile-tag loud/);
+  assert.match(view, /\{!!word && \(/);
   assert.doesNotMatch(view, /road \? road\.label : meta\.word/);
-  // loud is read by the tag, so it has to be computed before it
-  assert.ok(view.indexOf('const loud = i.lane === "blocked"') < view.indexOf("loud && !i.settling"));
 });
 
 // ...and the rows triage never reached a verdict on. Your own standing rule turns a sender away

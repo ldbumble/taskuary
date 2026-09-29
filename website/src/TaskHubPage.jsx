@@ -24,7 +24,7 @@ import { DEMO } from "./demoApi.js";
 import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
-import { TaskuaryMark } from "./ui.jsx";
+import { StarMark, TaskuaryMark } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
@@ -394,7 +394,7 @@ export default function TaskHubPage() {
                   background: tab === t ? GRADIENT : "#e4e9ee", border: `1px solid ${tab === t ? "transparent" : "#cbd4dc"}`,
                   boxShadow: tab === t ? "0 4px 14px rgba(69,79,70,.28)" : "none", transition: "all .15s",
                   "&:hover": { boxShadow: "0 4px 14px rgba(69,79,70,.22)" } }}>
-                <TaskuaryMark size={18} />{t}
+                <StarMark size={15} />{t}
               </Box>
             ) : (
               // the count rides INSIDE the pill. A MUI Badge hangs outside its child's box, and

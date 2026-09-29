@@ -159,7 +159,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // top of the work - over the browser pane's own Take over button in full screen
   assert.doesNotMatch(page, /<FloatingAssistant/);
   assert.match(page, /t === "Assistant" \? \(/);
-  assert.match(page, /<TaskuaryMark size=\{18\} \/>\{t\}/);
+  // ...wearing Taskuary's star, drawn in the pill's own ink (2026-09-28: the image tile "doesn't look right")
+  assert.match(page, /<StarMark size=\{15\} \/>\{t\}/);
   const view = read("AssistantView.jsx");
   assert.match(view, /\/api\/funnel\/pile/);
   assert.match(view, /\/api\/concierge\/next/);

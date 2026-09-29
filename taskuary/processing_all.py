@@ -391,6 +391,10 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
             title = message.get('Subject') or legacy.get('Title') or 'Message'
             actor, stamp = message.get('FromName') or message.get('FromEmail') or '', message.get('SentAt') or message.get('CreatedAt')
             channel, source, status = message.get('Channel') or '', message.get('SourceName') or '', message.get('Status') or ''
+            # THE MARK SAYS WHERE THE WORK CAME FROM (the owner, 2026-09-25). A report run that joined an Advisor's task
+            # is the newest message, and the row wore the report's icon over the Advisor's work (2026-09-28: "why are
+            # these 2 advisor and report same logo"). Only the mark: the reply still goes where the message came from.
+            if any(str(t.get('Source') or '') == 'assistant' for t in view.get('tasks', [])): channel = 'assistant'
             preview, category = legacy['Preview'], legacy['Category']
         else:
             generic = _generic_target(item, query, cutoff, vehicles_only=not shown,

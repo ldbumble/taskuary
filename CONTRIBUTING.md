@@ -46,17 +46,23 @@ somewhere else on your machine, edit the `executablePath` at the top of the scri
 
 ## The 15-line contribution: a report connector
 
-Every type in the "planned" list (`postgres`, `google_sheets`, `snowflake`, `prometheus`,
-`jira`, …) is one function away. In `taskuary/reports.py`:
+Every type still in `PLANNED` at the top of `taskuary/reports.py` (`graphql`, `netsuite`,
+`sap`, `workday`, `adp`, `epic`, `cerner`, `pointclickcare`, …) is one function away. For
+example, in `taskuary/reports.py`:
 
 ```python
-def run_postgres(cfg):
-    """{"dsn", "query"} - rows from a Postgres query."""
-    import psycopg
-    with psycopg.connect(cfg['dsn']) as cx:
-        rows = cx.execute(cfg['query']).fetchall()[:20]
-    body = '\n'.join(str(r) for r in rows)
-    return f'{len(rows)} rows', body[:4000]
+def run_graphql(cfg):
+    """{"url", "query", "headers", "path": "a.b"} - POST a GraphQL query, dot-path into the data."""
+    import requests
+    from . import webguard
+    webguard.check_url(cfg['url'])        # the URL can come from an agent - see run_rest
+    r = requests.post(cfg['url'], json={'query': cfg['query']}, headers=cfg.get('headers') or {},
+                      timeout=30, allow_redirects=False)
+    r.raise_for_status()
+    data = r.json().get('data') or {}
+    for k in (cfg.get('path') or '').split('.'):
+        if k: data = data[int(k)] if isinstance(data, list) else data.get(k)
+    return (f'{len(data)} items' if isinstance(data, list) else 'ok'), json.dumps(data, indent=1)[:BODY_CHARS]
 ```
 
 Then: add it to `REGISTRY`, remove it from `PLANNED`, add its fields to `FIELDS` in

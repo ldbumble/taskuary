@@ -27,7 +27,7 @@ ideas) — it does not replace it.
   appear, click one and the rest go (Back returns), its details open. The AI can always talk about, or set up, the
   card that is open.
 - Timeline is a switch (Work | Timeline) that sits **with the rail**, under the buttons — it changes the task rows,
-  not Reports or Connections. **+ New** (a new task) stays in the rail header beside the filter, as today. Board and its agent wall stay a full-screen view reached from the top.
+  not Reports or Connections. **New** (a new task) is the first of the sidebar's buttons. Board and its agent wall stay a full-screen view reached from the top.
 - The phone matches: the WhatsApp/Telegram doorway and the web app at phone width.
 - The terminal must not redraw garbage, and the rail must not rebuild on every click.
 
@@ -35,11 +35,11 @@ ideas) — it does not replace it.
 
 ```
 ┌ sidebar ~320px ──────────────┐┌ canvas ─────────────────────────────────────────┐
-│  Reports                     ││ ✦ Taskuary · 2 in the pipe          Board · 2   │
+│  New · Reports               ││ ✦ Taskuary · 2 in the pipe          Board · 2   │
 │  Connections                 ││  earlier items, folded to one line              │
 │  Hub                         ││                                                  │
 │  Settings                    ││  ┌ TQ-0801 Export drops rows ─────── Next [⤢]┐  │
-│ (work|timeline)|All items ▾ +New│  │ (1) Task       — the Tasks tab's card      │  │
+│ [  Work  |  Timeline  ] (⏷)  │  │ (1) Task       — the Tasks tab's card      │  │
 │ 2 in today · synced · Sync   ││  │ (2) Agent work — session, near full height │  │
 │      ( ON YOU )──────── 2    ││  │ (3) Close out                              │  │
 │ <30m ●│[✉ Export drops… on you]│  └────────────────────────────────────────────┘  │
@@ -56,9 +56,11 @@ ideas) — it does not replace it.
 - **Today's rail, narrowed** to ~320px (today ~470): the spine with a source dot per row, the age gutter, the
   category pills with their rule and count, bordered rows with icon, title, ref and state chip, "on the table" on
   the current row. Collapsible.
-- **Buttons on top:** Reports · Connections · Hub · Settings — one line each. Each posts its browse card (below).
-- **Under the buttons, the rail's own header, exactly as today:** the `work | timeline` switch, the filter, **+ New**
-  (a new task), then the counts / checked / Sync now line. The switch belongs to the rail because it changes the task rows only.
+- **Buttons on top:** New · Reports · Connections · Hub · Settings — one line each. New opens the new-task form;
+  the rest post their browse card (below).
+- **Under the buttons, the rail's header:** a full-width `Work | Timeline` selector (two equal halves) with the
+  filter as a small icon button beside it (it opens today's Kind / Source popover; its tooltip says what it filters
+  to), then the counts / checked / Sync now line. The switch belongs to the rail because it changes the task rows only.
 - **Sections**, sticky headings, in this order. `funnelPile.LEVEL_ORDER` becomes
   `urgent, task, agents, passed→later, reports, ideas, fyi`:
   - **On you** — urgent + your task (as today).
@@ -68,7 +70,9 @@ ideas) — it does not replace it.
     applied to the return time); sorted soonest first; no sub-headings. Walked-past rows come back after
     `task_return_minutes`; Remind-me rows at `RemindAt`.
   - **Reports**
-  - **Advisor ideas** — new level; ideas leave FYI (`levelOf`: `kind === "idea"`).
+  - **Advisor ideas** — new level; ideas leave FYI (`levelOf`: `kind === "idea"`). Only while it is still an
+    idea: made a task or handed to an agent, it is a task and moves to On you / Agents working like any other;
+    dismissed, it leaves the rail.
   - **FYI**
 - Rows keep today's grammar and look; the title truncates earlier at the narrower width, the full title on hover.
 - The fill rule (`fillCaps`) is unchanged: reports, ideas and fyi divide what is left; your work is never capped.

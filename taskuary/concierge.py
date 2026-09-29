@@ -1442,10 +1442,18 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # kind coding/general - and only the first chose the worker, the checkout and whether to start at once: the
     # same "research this" was a started researcher on one run and a bare confirm card on the next (the 2026-09-24
     # chat audit). This call takes the decision's road.
+    if kind == 'task.create_from_text':
+        # ...and the hand-off's own NAME is not a kind: "coder" fell through to a card labelled "Start a regular agent" that
+        # waited for a yes (the 2026-09-29 replay, 2 runs in 3). The two verb names are the kinds they name; anything
+        # else the model must fix itself, never a silent regular agent.
+        k = str(params.get('kind') or '').strip().lower()
+        params['kind'] = {'coder': 'coding', 'regular_agent': 'general'}.get(k, k)
+        if params['kind'] not in ('task', 'coding', 'general'):
+            raise CallMiss(f"task.create_from_text kind is task, coding or general - not {k or 'nothing'}. Nothing was started.")
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
         verb = 'coder' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
-               'as': str(params.get('profile') or params.get('repo') or params.get('agent') or '').strip()}
+               'as': str(params.get('profile') or params.get('repo') or params.get('agent') or params.get('as') or '').strip()}
         prop = _start_when_clear(propose_for(store, tid, dec, None, text, actor), verb)
         record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'],
                                                                     'op': prop['id'], 'tid': prop.get('tid'), 'ref': prop.get('ref')})
@@ -1500,6 +1508,12 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # below falls to first (a CALL on a mail's card put task.complete on the task with the MESSAGE's number).
         # A review tool acts on the draft waiting on that task. (2026-09-25: every task-page action is a tool.)
         ref = re.search(r'(\d+)', str(params.pop('ref', '') or ''))
+        # ...but an AGENT is never put on an old task by default: a new ask typed while something sits on the table
+        # became a run on that task (the owner, 2026-09-29: "if i ask for task it should not merge with old one or agent
+        # run unless i ask"). These two must NAME the task; a new job is task.create_from_text, which the miss says.
+        if kind in toolcatalog.ATTACH_AGENT and not ref:
+            raise CallMiss(f"{kind} puts an agent on a task that already exists - name it (its TQ ref, the one on the table "
+                           "included). A new job is task.create_from_text. Nothing was started.")
         t = int(ref.group(1)) if ref else it.get('tid')
         if not t or not store.get_task(t): raise CallMiss('Name the task (TQ-0123), or open it first - nothing was changed.')
         if tk == 'review':

@@ -354,6 +354,9 @@ READS = {
 # pile key, and an operation listed under a header that says "this is the whole surface" has to be
 # genuinely callable or the catalogue is lying.
 CONTEXT_FILLED = frozenset({'key'})
+# the tools that put an agent on a task that ALREADY exists: never the one on the table by default, so each names its task
+# (concierge.call_turn) - a new ask typed over a card became a run on that card's task (2026-09-29)
+ATTACH_AGENT = frozenset({'dispatch.prepare', 'agent.continue'})
 
 
 def is_read(kind: str) -> bool: return kind in READS
@@ -456,10 +459,11 @@ def _entry(k: str) -> list:
         if a in READS or a in PURPOSE or a in DECISIONS: continue
         if not args.get(a): args[a] = (said or aside).strip()
     if 'ref' in args:
-        if k not in READS: optional.add('ref')
+        if k not in READS and k not in ATTACH_AGENT: optional.add('ref')
         d = re.sub(r'^names ', '', args['ref'])
         args['ref'] = (f'the task that {d}' if d.startswith('is ') else f'the task (TQ-0123), {d}' if d.startswith('when')
                        else d or 'the task (TQ-0123), when it is not the one on the table')
+        if k in ATTACH_AGENT: args['ref'] = 'the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text'
     prose = ''.join(s + c for s, c in keep).strip(' -;')
     runs = ('Runs at once and changes nothing.' if k in READS else DECISION_RUNS.get(k, '').capitalize() + '.' if k in DECISION_RUNS
             else 'Runs at once, with an undo on the receipt.' if k in INSTANT else 'Waits for your yes on a card.')

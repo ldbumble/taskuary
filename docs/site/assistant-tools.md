@@ -305,7 +305,7 @@ Start an agent on an EXISTING task; a coding task asks which repository when it 
 
 - `kind` - coding | general
 - `instructions` (optional)
-- `ref` (optional) - the task (TQ-0123), when it is not the one on the table
+- `ref` - the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text
 
 <p class="runs">Waits for your yes on a card.</p>
 
@@ -313,7 +313,7 @@ Start an agent on an EXISTING task; a coding task asks which repository when it 
 
 Pick up the agent's own last session on a task where it left off, coding or not.
 
-- `ref` (optional) - the task (TQ-0123), when it is not the one on the table
+- `ref` - the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text
 - `note` - when the owner said what to tell it as it picks up
 
 <p class="runs">Waits for your yes on a card.</p>

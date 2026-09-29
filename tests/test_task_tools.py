@@ -51,6 +51,25 @@ class TargetTests(unittest.TestCase):
         self.assertIsNone(p); self.assertIn('Name the task', out['say'])
 
 
+    def test_an_agent_is_never_put_on_the_task_on_the_table_unless_the_call_names_it(self):
+        """The owner, 2026-09-29: "if i ask for task it should not merge with old one or agent run unless i ask". A new
+        job typed while a task sat on the table became dispatch.prepare with no ref - a run on THAT task."""
+        s, tid, mid, item = table()
+        for tool in ('dispatch.prepare', 'agent.continue'):
+            p, out = call(s, tool, key=item['key'], kind='coding', instructions='review the widgets repo')
+            self.assertIsNone(p, tool)
+        p, _ = call(s, 'dispatch.prepare', key=item['key'], kind='coding', ref=f'TQ-{tid:04d}')
+        self.assertEqual(p['target'], tid, 'named, the task on the table is still one call away')
+
+    def test_the_hand_offs_name_is_read_as_its_kind_and_never_falls_to_a_regular_agent(self):
+        """2026-09-29 replay: kind "coder" became a card labelled "Start a regular agent" that waited for a yes."""
+        s = T.store()
+        p, _ = call(s, 'task.create_from_text', kind='coder', text='review the widgets repo for the portal')
+        self.assertIn('coding agent', p['label'])
+        p, out = call(s, 'task.create_from_text', kind='robot', text='review the widgets repo')
+        self.assertIsNone(p, 'an unknown kind is the model\'s to fix, never a silent regular agent')
+
+
 class ToolTests(unittest.TestCase):
     def run_card(self, s, p):
         r = T.run(s, p)

@@ -373,7 +373,8 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                         {loud && !i.settling && (
                           <span className="tq-pile-tag loud"
                             style={{ color: ROLES.handled.ink, background: ROLES.handled.tint, borderColor: ROLES.handled.bd }}>
-                            {meta.mark} {meta.word}</span>
+                            {/* words only: the emoji could not be seen on the green (the owner, 2026-09-28) */}
+                            {meta.word}</span>
                         )}
                         {!loud && !!word && (
                           <span className="tq-pile-word"

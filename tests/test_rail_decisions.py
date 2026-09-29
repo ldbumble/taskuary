@@ -255,3 +255,18 @@ class AdvisorTaskWearsTheAdvisorMarkTests(unittest.TestCase):
         mail(s, 'lunch on friday', who='Gail Moreno', email='gail@northwind.example', hours=1)
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         self.assertEqual([i.get('channel') for i in rail(s) if i.get('tid') == tid], ['assistant'])
+
+    def test_a_chat_ask_keeps_the_chat_mark_when_its_mail_copy_is_newer(self):
+        """A chat message, then the platform's "you have a new message" mail about it filed on the same task: the envelope
+        drew over a chat ask (the owner, 2026-09-29: "it should be teams logo no email")."""
+        s, settle = settled()
+        tid = s.create_task({'Title': 'Paula wants her expense status', 'Kind': 'general', 'Status': 'open', 'Source': 'teams'}, 'router')
+        s.add_message({'TaskId': tid, 'ExternalId': 'teams:1', 'ConversationId': 'teams:19:chat-paula', 'Channel': 'teams',
+                       'SourceName': 'alex@northwind.example', 'Subject': 'Teams chat with Paula Vance', 'FromName': 'Paula Vance',
+                       'SentAt': ago(3), 'BodyText': 'What happened to my expense claim?', 'Status': 'routed'})
+        s.add_message({'TaskId': tid, 'ExternalId': 'mail:1', 'ConversationId': 'mail-notice-1', 'Channel': 'email',
+                       'SourceName': 'alex@northwind.example', 'Subject': 'Paula Vance sent a message', 'FromName': 'Paula Vance in Teams',
+                       'SentAt': ago(2), 'BodyText': 'What happened to my expense claim?', 'Status': 'filed'})
+        mail(s, 'lunch on friday', who='Gail Moreno', email='gail@northwind.example', hours=1)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        self.assertEqual([i.get('channel') for i in rail(s) if i.get('tid') == tid], ['teams'])

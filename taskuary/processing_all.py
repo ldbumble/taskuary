@@ -42,6 +42,14 @@ def _preview(body, n: int) -> str:
     return (own_words(text[:n * 4]) or text)[:n]
 
 
+# THE MARK SAYS WHERE THE WORK CAME FROM (the owner, 2026-09-25), not which message is newest. A report run that joined
+# an Advisor's task wore the report's icon over the Advisor's work (2026-09-28), and a chat whose platform then mailed a
+# "you have a new message" copy wore the envelope over a chat ask (2026-09-29). Only the mark: the reply still goes
+# where the message came from. 'manual' names no channel, so a task typed in by hand keeps its message's mark.
+def task_mark(tasks) -> str | None:
+    return next((str(t['Source']) for t in tasks or [] if t.get('Source') not in (None, '', 'manual')), None)
+
+
 def idea_lane(idea: dict) -> str:
     """An idea's lane from its own triage - the same rule the unread pile applies (processing_unread.card_for)."""
     try: action = json.loads(idea.get('ActionJson') or '{}')
@@ -391,10 +399,7 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
             title = message.get('Subject') or legacy.get('Title') or 'Message'
             actor, stamp = message.get('FromName') or message.get('FromEmail') or '', message.get('SentAt') or message.get('CreatedAt')
             channel, source, status = message.get('Channel') or '', message.get('SourceName') or '', message.get('Status') or ''
-            # THE MARK SAYS WHERE THE WORK CAME FROM (the owner, 2026-09-25). A report run that joined an Advisor's task
-            # is the newest message, and the row wore the report's icon over the Advisor's work (2026-09-28: "why are
-            # these 2 advisor and report same logo"). Only the mark: the reply still goes where the message came from.
-            if any(str(t.get('Source') or '') == 'assistant' for t in view.get('tasks', [])): channel = 'assistant'
+            channel = task_mark(view.get('tasks', [])) or channel
             preview, category = legacy['Preview'], legacy['Category']
         else:
             generic = _generic_target(item, query, cutoff, vehicles_only=not shown,

@@ -209,9 +209,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                        HasDraft=bool(review.get('DraftText')))
         cards = funnel.from_feed(store, [row], canonical=True)
         card = cards[0]
-        # the mark says where the work CAME FROM: the Advisor's task keeps its mark when a report run joins it and is the
-        # newest message (the owner, 2026-09-28). The row's reply target is untouched - only what the rail draws.
-        if str(task.get('Source') or '') == 'assistant': card['channel'] = 'assistant'
+        card['channel'] = processing_all.task_mark([task]) or card.get('channel')
     else:
         target = compact['open_target']
         kind = target['kind']

@@ -1488,10 +1488,14 @@ def reset_walk(store):
         for i in processing_unread.build(store).get('items') or []:
             # ...and a yes still owed (ready to close out): shown in the old chat is not answered - a restart opened a new chat
             # that skipped the Close out GitHub had just refused, for the next pull request (2026-09-29)
-            if i.get('lane') not in ('blocked', 'approve'): continue
+            if i.get('lane') not in processing_unread.RAISED_BY_NEW_WALK: continue
             for k in [i.get('key'), *(i.get('aliases') or [])]:
                 if k and (states.get(k) or {}).get('Status') == 'surfaced': store.clear_funnel_state(k)
     except Exception as e: logger.debug(f'a new walk could not raise the waiting agents again: {e}')
+    # ...and their READ is from the old walk too. The mark alone left a row read and unmarked, which is no band at all -
+    # processing_unread counts a read before this stamp as not yet seen on these lanes
+    from .processing_unread import WALK_KEY
+    store.set_setting(WALK_KEY, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'system')
     invalidate()
 
 

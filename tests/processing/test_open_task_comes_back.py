@@ -8,6 +8,9 @@ back up in the work also if it's still open later").
 A task handed to an agent used to be the exception - forced unread whatever its receipts said, so it
 never left the work tab at all. That was the same question answered two different ways in the same
 column ("why is that one showing up but not 575"). Both now clear, and both come back.
+
+...and cleared is not GONE (the owner, 2026-09-29: "everything should be one driver from work rail to tasks board"):
+an open task stays on the rail in Passed - not offered - until the quiet hours make it Your task again.
 """
 from datetime import datetime, timedelta
 from unittest import mock
@@ -64,22 +67,34 @@ def clear_it(db, key):
     funnel.settle(db, key, 'done')
 
 
+def passed(db, key, at=None):
+    """On the rail but put down: in Passed, not offered by Next."""
+    i = work(db, at).get(key)
+    return bool(i and i.get('surfaced') and not i['actionable'])
+
+
+def offered(db, key, at=None):
+    i = work(db, at).get(key)
+    return bool(i and i['actionable'] and not i.get('surfaced'))
+
+
 def only_key(db):
     return next(iter(work(db)))
 
 
-def test_a_cleared_task_is_gone_from_work(db):
+def test_a_cleared_open_task_waits_in_passed(db):
     a_task(db, 'Call Maya about PAM review')
-    clear_it(db, only_key(db))
-    assert work(db) == {}, 'Done must take it off the work tab now'
+    key = only_key(db)
+    clear_it(db, key)
+    assert passed(db, key), 'an open task left the rail while the task list still showed it'
 
 
 def test_it_comes_back_once_the_hour_is_up(db):
     a_task(db, 'Call Maya about PAM review')
     key = only_key(db)
     clear_it(db, key)
-    assert key not in work(db, after(minutes=59)), 'it came back before the hour was up'
-    assert key in work(db, after(minutes=61)), 'an open task never came back to the work tab'
+    assert passed(db, key, after(minutes=59)), 'it came back before the hour was up'
+    assert offered(db, key, after(minutes=61)), 'an open task never came back to the work tab'
 
 
 def test_a_task_handed_to_an_agent_clears_like_any_other(db):
@@ -87,8 +102,8 @@ def test_a_task_handed_to_an_agent_clears_like_any_other(db):
     a_task(db, 'Investigate repeated CI failures', assignee='agent:codex')
     key = only_key(db)
     clear_it(db, key)
-    assert work(db) == {}, 'a queued task ignored Done and stayed in the work tab'
-    assert key in work(db, after(minutes=61)), 'and then it never came back'
+    assert passed(db, key), 'a queued task ignored Done and stayed offered'
+    assert offered(db, key, after(minutes=61)), 'and then it never came back'
 
 
 def test_later_still_holds_it_past_the_hour(db):

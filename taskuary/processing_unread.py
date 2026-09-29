@@ -60,6 +60,13 @@ def _arrived_after_close(task, view) -> bool:
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
 OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time')
+# what a new walk raises again whatever the old one did with it: work that blocks on the owner (funnel.reset_walk)
+RAISED_BY_NEW_WALK = ('blocked', 'approve')
+WALK_KEY = 'walk_started_at'
+
+
+def walk_started_at(store):
+    return processing_all._stamp(store.get_setting(WALK_KEY))
 
 
 def _decided(view, allowed) -> bool:
@@ -157,7 +164,7 @@ def _agent_spoke_at(store, tid):
     return processing_all._stamp(evs[-1].get('CreatedAt')) if evs else None
 
 
-def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES):
+def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES, walk_at=None):
     from . import funnel
     from .processing_reads import state
 
@@ -314,6 +321,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     back = bool(tid and active and not read.get('deferred') and read_at
                 and read_at <= now - timedelta(minutes=quiet))
     if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
+    # ...and a yes still owed, or an agent waiting on you, read before this walk began is back in Your task: shown in the
+    # old chat is not answered (funnel.reset_walk). Clearing the shown mark alone left it read and unmarked - off the rail
+    # for the quiet hours while the task list still showed it (2026-09-29).
+    if tid and active and not read.get('deferred') and read_at and walk_at and read_at <= walk_at and card['lane'] in RAISED_BY_NEW_WALK:
+        back = True
     # PASSED IS STILL YOURS (the owner, 2026-09-23: "i thought if you hit next it goes to passed section?"):
     # Next reads the row, and a read row used to leave the rail altogether until the hour brought it back -
     # an open task, a draft waiting for a yes, simply gone. Work that is still the owner's stays on the rail
@@ -412,10 +424,13 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         if since and shown_at and shown_at < since: shown = None                  # passed before the agent stopped
         elif shown_at is None or shown_at > now - timedelta(minutes=quiet):
             card.update(surfaced=True, surfaced_at=shown.get('At'))
-    passed = passed and shown is not None
+    # AN OPEN TASK IS ALWAYS ON THE RAIL (the owner, 2026-09-29: "everything should be one driver from work rail to tasks
+    # board"). Passed used to need the shown mark as well as the read, so any door that read a task without marking it - a
+    # new walk clearing the marks, Done on a task it did not close - took open work off the rail for the quiet hours. The
+    # task being open is what puts it here; the read only picks the band. Closing it or Remind me takes it off.
     if passed:
         unread = True
-        card.update(unread=True, surfaced=True, surfaced_at=shown.get('At') or read.get('read_at'))
+        card.update(unread=True, surfaced=True, surfaced_at=(shown or {}).get('At') or read.get('read_at'))
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
                      if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')
@@ -450,8 +465,8 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
             if attempt == 2 or e.detail.get('code') != 'processing_coverage_pending': raise
     by_id = {item['item_id']: item for item in snapshot['items']}
     states = store.funnel_states()
-    quiet = return_minutes(store)
-    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet) for row in rows]
+    quiet, walk_at = return_minutes(store), walk_started_at(store)
+    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet, walk_at) for row in rows]
     cards = [card for card in cards if (include_read or card['unread']) and not card.get('ranked_wait')]
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)

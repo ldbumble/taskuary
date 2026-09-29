@@ -233,6 +233,50 @@ class NewWalkRaisesWavingAgentsTests(unittest.TestCase):
             funnel.reset_walk(s)
         self.assertNotIn('processing:pi_3', s.funnel_states())
 
+    def test_a_yes_still_owed_is_back_in_your_task_after_a_new_walk_not_gone(self):
+        """2026-09-29: the new walk cleared the shown mark but the read stood, so the pull request was neither unread nor
+        Passed - off the rail for three hours while the task list still showed it."""
+        from taskuary import concierge
+        s, settle = settled()
+        t = s.create_task({'Title': 'Merge the export fix', 'Kind': 'coding', 'Status': 'waiting', 'Assignee': 'agent:coder'}, 'o')
+        mid = mail(s, 'export fix', who='Omar Keller', email='omar@northwind.example', hours=1, tid=t)
+        s.add_review({'MessageId': mid, 'TaskId': t, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Merged, thanks.'})
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            first = concierge.surface(s, llm=lambda *a, **k: 'never')
+            self.assertEqual((first['item']['tid'], first['item']['lane']), (t, 'approve'))
+            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t], [(True, False)], 'Passed')
+            funnel.reset_walk(s)
+            self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t], [(False, True)],
+                             'a new walk puts it back in Your task')
+
+
+class AnOpenTaskIsAlwaysOnTheRailTests(unittest.TestCase):
+    def test_every_open_task_is_on_the_rail_however_it_was_read(self):
+        """The task list and the rail are one list of open work: read state picks the band (Your task or Passed), it never
+        takes an open task off the rail. Only closing it or Remind me does."""
+        from taskuary import concierge
+        s, settle = settled()
+        tids = []
+        for n, who in enumerate(('Erin Blake', 'Gail Moreno', 'Paula Vance')):
+            t = s.create_task({'Title': f'Ask {n}', 'Kind': 'task', 'Status': 'open'}, 'triage')
+            mid = mail(s, f'ask {n}', who=who, email=f'{who.split()[0].lower()}@northwind.example', hours=1 + n, tid=t)
+            s.add_route(mid, t, 'route', 1.0, 'triage: task', [], 'triage')
+            tids.append(t)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            on = lambda: {i.get('tid') for i in rail(s)} & set(tids)
+            first = concierge.surface(s, llm=lambda *a, **k: 'never')
+            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])      # Next
+            k = next(i['key'] for i in rail(s) if i.get('tid') == tids[1])
+            funnel.settle(s, k, 'done', 'owner'); funnel.invalidate()                             # read, never closed
+            for k in list(s.funnel_states()): s.clear_funnel_state(k)                              # every mark gone
+            funnel.invalidate()
+            self.assertEqual(on(), set(tids))
+            s.update_task(tids[2], {'Status': 'done'}, 'owner'); settle()
+            self.assertEqual(on(), set(tids[:2]), 'closing is what takes it off')
+
 
 if __name__ == '__main__': unittest.main()
 

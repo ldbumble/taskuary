@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { studioAgentName, studioPose, studioSeats, studioTaskState } from "../src/studioModel.js";
+import { studioAgentName, studioElapsed, studioPose, studioSeats, studioTaskState } from "../src/studioModel.js";
 
 test("the studio seats live work first and keeps waiting work visible", () => {
   const tasks = [
@@ -28,4 +28,27 @@ test("an owner wait raises the agent's hand", () => {
   assert.deepEqual(studioTaskState(task, null), {
     agent: "atlas", label: "waiting on you", tone: "waiting", pose: "hand",
   });
+});
+
+test("studioElapsed shows seconds under 90s, minutes under 90m, then hours", () => {
+  const now = new Date("2026-09-28T12:00:00").getTime();
+  const started = (sec) => ({ RunStartedAt: new Date(now - sec * 1000).toISOString() });
+  assert.equal(studioElapsed(started(0), null, now), "0s");
+  assert.equal(studioElapsed(started(89), null, now), "89s");
+  assert.equal(studioElapsed(started(90), null, now), "2m");
+  assert.equal(studioElapsed(started(5399), null, now), "90m");
+  assert.equal(studioElapsed(started(5400), null, now), "1.5h");
+  assert.equal(studioElapsed(started(-60), null, now), "0s");
+  assert.equal(studioElapsed({}, null, now), "");
+  assert.equal(studioElapsed(null, null, now), "");
+});
+
+test("studioElapsed takes the live row's start first, then the session's, then the run's", () => {
+  const now = new Date("2026-09-28T12:00:00").getTime();
+  const at = (sec) => new Date(now - sec * 1000).toISOString();
+  const task = { Session: { started: at(20) }, RunStartedAt: at(30) };
+  assert.equal(studioElapsed(task, { StartedAt: at(10) }, now), "10s");
+  assert.equal(studioElapsed(task, {}, now), "20s");
+  assert.equal(studioElapsed({ RunStartedAt: at(30) }, null, now), "30s");
+  assert.equal(studioElapsed(task, { StartedAt: "2026-09-28 11:59:55" }, now), "5s");
 });

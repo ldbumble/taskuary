@@ -7,6 +7,7 @@ the Reports tab, delete the source to turn it off.
 """
 from datetime import datetime, timedelta
 from .store import auto_code_enabled
+from .policy import BODYLESS, matches
 
 PROMPT = (
     'You are looking at one operator\'s inbound-work statistics. Propose AT MOST five '
@@ -41,18 +42,24 @@ def gather(store, days: int = 30) -> str:
         if str(r.get('DecidedAt') or '') < since: continue
         who = (r.get('FromEmail') or '?').lower()
         approved[who] = approved.get(who, 0) + 1
+    # A sender a rule already drops is not toil, and the model cannot be trusted to cross it off: it saw the first 25
+    # rules of 32 and proposed a skip rule for a sender a skip rule had already dropped 6,055 times in the month, counted
+    # as "ignored" by hand (2026-09-29). So the code leaves those senders out rather than asking the model to.
+    pols = store.list_policies(active_only=True)
+    def handled(who): return any(p['Kind'] in BODYLESS and p['Action'] in ('skip', 'ignore') and matches(p, {'from_email': who}) for p in pols)
+    covered = {who for who in by if handled(who)}
     out = [f'INBOUND BY SENDER (last {days} days; senders with 3+ messages):']
     for who, d in sorted(by.items(), key=lambda x: -x[1]['n']):
-        if d['n'] < 3: continue
+        if d['n'] < 3 or who in covered: continue
         out.append(f"  {who}: {d['n']} msgs - {d['tasks']} became tasks, {d['ignored']} ignored, "
                    f"{d['filed']} filed" + (f", {approved[who]} drafts approved UNTOUCHED" if approved.get(who) else '')
                    + (f" · e.g. {' | '.join(d['subjects'])}" if d['subjects'] else ''))
     if len(out) == 1: out.append('  (nothing repeated 3+ times)')
     hot = [f'  {who}: {n} drafts sent unchanged' for who, n in sorted(approved.items(), key=lambda x: -x[1]) if n >= 3]
     if hot: out += ['DRAFTS YOU ALWAYS APPROVE UNTOUCHED (auto_answer candidates):'] + hot
-    pols = store.list_policies(active_only=True)
+    if covered: out.append(f'  ({len(covered)} more senders left out: your rules already skip or ignore them)')
     out.append('EXISTING POLICIES (already automated - never propose these again):')
-    out += [f"  [{p['Action']}] {p['Kind']}: {str(p.get('Pattern') or '')[:60]}" for p in pols[:25]] or ['  (none)']
+    out += [f"  [{p['Action']}] {p['Kind']}: {str(p.get('Pattern') or '')[:60]}" for p in pols] or ['  (none)']
     settings = store.get_settings()
     out.append(f"CURRENT SWITCHES: auto-dispatch={'on' if auto_code_enabled(settings) else 'off'}")
     return '\n'.join(out)

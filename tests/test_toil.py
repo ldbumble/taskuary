@@ -23,6 +23,23 @@ class AutomateReportTests(unittest.TestCase):
         head, body = REGISTRY['automate'](resolve_cfg(s, {'type': 'automate', 'days': 30}))
         self.assertIn('30 days', head); self.assertIn('noise@vendor.com', body)
 
+    def test_a_sender_a_rule_already_drops_is_never_offered_again(self):
+        """The report proposed a skip rule for a sender a skip rule had dropped thousands of times that month - the rule
+        was the 29th of 32 and the evidence listed 25 (2026-09-29). Case differs, as it does between a rule and a header."""
+        from taskuary.toil import gather
+        s = MemoryStore()
+        for i in range(24): s.save_policy({'Name': f'r{i}', 'Kind': 'sender', 'Pattern': f'other{i}@vendor.example', 'Action': 'ignore'}, 'owner')
+        s.save_policy({'Name': 'skip flood', 'Kind': 'sender', 'Pattern': 'Alerts@Payworth.example', 'Action': 'skip'}, 'owner')
+        s.save_policy({'Name': 'quiet', 'Kind': 'sender', 'Pattern': 'cards@spendly.example', 'Action': 'ignore'}, 'owner')
+        for i in range(5):
+            for who, st in (('alerts@payworth.example', 'skipped'), ('cards@spendly.example', 'ignored'), ('digest@trainly.example', 'ignored')):
+                s.add_message({'ExternalId': f'{who}{i}', 'Channel': 'email', 'FromEmail': who, 'Subject': 'n', 'SentAt': ago(2), 'Status': st})
+        txt = gather(s, days=30)
+        inbound = txt.split('EXISTING POLICIES')[0]
+        self.assertNotIn('payworth', inbound); self.assertNotIn('spendly', inbound)
+        self.assertIn('digest@trainly.example: 5 msgs', inbound); self.assertIn('2 more senders left out', inbound)
+        self.assertIn('cards@spendly.example', txt.split('EXISTING POLICIES')[1])     # every rule listed, none cut at 25
+
     def test_gather_pushes_date_and_status_filters_into_scan(self):
         from taskuary.toil import gather
         s = MemoryStore()

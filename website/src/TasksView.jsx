@@ -994,9 +994,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
               // its chip - not in the brand slate, which read as a fourth state nobody could name. The
               // left rule wears it always, so the column can be scanned without reading a single word.
               <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)} data-tq-task-row=""
-                sx={{ px: 1.25, py: 0.9, mb: 0.75, cursor: "pointer", bgcolor: "#fff", borderRadius: 1.75,
-                  border: `1px solid ${sel ? st.solid : BORDER}`, borderLeft: `3px solid ${st.solid}`,
-                  boxShadow: sel ? "0 1px 8px rgba(47,107,79,.14)" : "none",
+                // the one shown is unmistakable: 2px ring + a wash of its colour (2026-09-28: "barely tell which task is shown")
+                sx={{ px: 1.25, py: 0.9, mb: 0.75, cursor: "pointer", borderRadius: 1.75,
+                  bgcolor: sel ? `color-mix(in srgb, ${st.solid} 9%, #fff)` : "#fff",
+                  border: sel ? `2px solid ${st.solid}` : `1px solid ${BORDER}`, borderLeft: `${sel ? 5 : 3}px solid ${st.solid}`,
+                  boxShadow: sel ? `0 2px 12px color-mix(in srgb, ${st.solid} 28%, transparent)` : "none",
                   transition: "border-color .12s, box-shadow .12s",
                   "&:hover": { borderColor: sel ? st.solid : "#d8cfbe", borderLeftColor: st.solid } }}>
                 {/* THE TITLE FIRST. It used to come third, under as many as five chips - ref, kind,

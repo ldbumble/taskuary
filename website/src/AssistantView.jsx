@@ -347,8 +347,8 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                 const inBatch = batchKeys.has(i.key);
                 const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
-                // the one pill a row can still wear: work has STOPPED until you answer it.
-                const loud = i.lane === "blocked" || i.lane === "approve";
+                // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
+                // for every lane - "ready to close out" and "agent waiting on you" included
                 // ...and every other row says its lane - mark and word - unless that is the very
                 // thing the heading above it already said (BAND_SAYS).
                 // A MEETING says its clock time instead. "coming up" is what the urgent heading and
@@ -376,13 +376,7 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                             match a row to the Tasks tab, and it was only ever in the tooltip. */}
                         {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
                         {i.settling && <span className="tq-pile-tag">triaging…</span>}
-                        {loud && !i.settling && (
-                          <span className="tq-pile-tag loud"
-                            style={{ color: ROLES.handled.ink, background: ROLES.handled.tint, borderColor: ROLES.handled.bd }}>
-                            {/* the emoji on a small white disc: on the green alone it could not be seen (the owner, 2026-09-28) */}
-                            <i className="tq-chip-mark">{meta.mark}</i>{meta.word}</span>
-                        )}
-                        {!loud && !!word && (
+                        {!!word && (
                           <span className="tq-pile-word"
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
                             <i>{meta.mark}</i>{word}</span>

@@ -109,7 +109,7 @@ test("the rail says a task's state once, and puts its title first", () => {
   // The row used to carry LifecycleChip ("task · in progress") beside StateChip ("agent working"),
   // the same duplication the detail header had, with the title read last under both.
   const from = tasks.indexOf("shown.map((task) => {"), to = tasks.indexOf("</Empty> : shown.map", from + 1);
-  const row = tasks.slice(from, to === -1 ? from + 4200 : to);
+  const row = tasks.slice(from, to === -1 ? from + 6000 : to);     // the row's code, with room to grow (it sat at 3,996 of 4,200)
   assert.ok(row.includes("<StateChip task={task} />"), "the row keeps one state chip");
   assert.ok(!row.includes("<LifecycleChip"), "and must not say the same state a second way");
   assert.ok(row.indexOf("{task.Title}") < row.indexOf("data-tq-task-ref"), "the title comes before the ref");

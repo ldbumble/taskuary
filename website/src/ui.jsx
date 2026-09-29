@@ -44,6 +44,15 @@ import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, AL
 
 // Taskuary actions wear Taskuary's actual product mark. The generic robot glyph suggested a
 // third-party bot and, on a quiet text button, did not make the dispatch action read as a button.
+// TASKUARY'S STAR, drawn in the ink around it (the owner, 2026-09-28: "don't like the taskuary logo in the assistant ...
+// doesn't look right") - the bright image tile read as a foreign badge on the Assistant's own surfaces
+export const StarMark = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+    <line x1="12" y1="3.5" x2="12" y2="20.5" /><line x1="4.6" y1="7.75" x2="19.4" y2="16.25" /><line x1="4.6" y1="16.25" x2="19.4" y2="7.75" />
+    <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const TaskuaryMark = ({ size = 18, sx }) => (
   <Box component="img" src={`${import.meta.env.BASE_URL}favicon.png`} alt="" aria-hidden
     sx={{ width: size, height: size, display: "block", flexShrink: 0, borderRadius: "27%", ...sx }} />

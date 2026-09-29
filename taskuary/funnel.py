@@ -280,7 +280,12 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                     priority=r.get('Priority'), route=r.get('RouteReason') or '', task_kind=r.get('TaskKind') or '')
         subj = says(r)
         if r.get('MsgStatus') == 'triaging':
-            out.append(_item(f"msg:{r['MessageId']}", 'triaging', 'fyi', subj, why='just arrived - triage is deciding', settling=True, **base))
+            # A RANKED ARRIVAL WAITING ITS TURN IS NOT BEING TRIAGED (the owner, 2026-09-28: "they should be ranked
+            # and not triaged"): it is off the rail, counted by the "N more" pill on its input's last row
+            from .rank import mode_for
+            waits = mode_for(store, {'Channel': r.get('Channel'), 'SourceName': r.get('SourceName')}) == 'rank'
+            out.append(_item(f"msg:{r['MessageId']}", 'triaging', 'fyi', subj, why='just arrived - triage is deciding', settling=True,
+                             ranked_wait=waits, **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
         if r.get('ReviewStatus') == 'pending' and r.get('ReviewId'):
@@ -993,7 +998,7 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     seen = set(); items = [i for i in items if not (i['key'] in seen or seen.add(i['key']))]
     hours, cap = knobs(store)
     items = [i for i in items if not _aged_out(i, now, hours)]
-    items = _apply_states(items, states, now, keep_surfaced)
+    items = [i for i in _apply_states(items, states, now, keep_surfaced) if not i.get('ranked_wait')]
     # The wrap-up is merged HERE, once the pile is what the owner has left: a task whose message they
     # have already read (or that triage filed as fyi - "Thank you!") is a task nobody closed, and the
     # wrap-up is the one thing still on them. Merged before the read, the row they had just cleared
@@ -1099,9 +1104,10 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         try:
             from . import rank
             p['more_markers'] = rank.more_markers(store, p['items'])
+            p['rank_numbers'] = rank.rank_numbers(store, p['items'])
         except Exception as e:
             logger.debug(f'the ranked count did not reach the rail: {e}')
-            p['more_markers'] = []
+            p['more_markers'], p['rank_numbers'] = [], {}
         p['events'] = events
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)

@@ -373,7 +373,8 @@ def _rank_first(store, rows: list) -> list:
     for mid in fresh:
         if mid not in keep: continue
         ch = str(fresh[mid].get('Channel') or '')
-        if ch not in heads: heads[ch] = rank.head_size(store, ch)
+        # the head is what is still FREE of it: judged arrivals the owner has not dealt with hold their places
+        if ch not in heads: heads[ch] = max(0, rank.head_size(store, ch) - store.ranked_held(ch))
         if heads[ch] <= 0: continue
         heads[ch] -= 1
         in_order.append(fresh[mid])
@@ -803,6 +804,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # ...but an Advisor idea never reopens finished work: it is the Advisor's own thought about the task, not the
         # sender writing again, and it brought a task closed yesterday back as waiting (I7, 2026-09-27)
         if same and re.fullmatch(r'idea:\d+', str(msg.get('external_id') or '')) and (store.get_task(same) or {}).get('Status') in ('done', 'dropped'):
+            same = None
+        # ...and one pull request or issue is never ANOTHER one's task. Two docs PRs from the same contributor read alike,
+        # and the model filed #121 into #120's task - a second PR's review folded into the first (the owner, 2026-09-28)
+        own = str(msg.get('conversation_id') or '')
+        if same and own.startswith('gh:') and any(str(m.get('ConversationId') or '').startswith('gh:') and m.get('ConversationId') != own
+                                                    for m in store.list_messages(same)):
             same = None
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)

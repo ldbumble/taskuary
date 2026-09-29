@@ -165,6 +165,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // "live" on arrival: what is still on somebody's plate is what you came here for. "done"
   // opens on a list whose top is whatever finished most recently.
   const [filter, setFilter] = useState("live");
+  // A ROW'S STATE CHIP IS THE FILTER (the owner, 2026-09-28: "filter by waiting to start / on you / agent waiting on you
+  // ... as minimal as possible", on this page): click it and In progress shows only that state; its pill clears it
+  const [only, setOnly] = useState(null);
   const [query, setQuery] = useState("");
   // what the loaded rows are FOR. The box is debounced because every change is now a round trip.
   const [sent, setSent] = useState("");
@@ -544,7 +547,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
   // is what makes a completed PR/task discoverable instead of merely searching the visible rows -
   // and the rows ARE the matches now, so there is nothing left here to filter them by.
-  const bucket = (tasks || []).filter((x) => sent || (!filter || inBucket(x, filter)));
+  const bucket = (tasks || []).filter((x) => sent || ((!filter || inBucket(x, filter)) && (!only || filter !== "live" || stateOf(x).label === only)));
   // ONE RULE, FOR THE ROWS AND FOR THE COUNTS. The cut used to be decided per pill, which gave
   // `in progress` a wider window than `all` - live work of any age against today only - so two
   // live rows from last night counted for one pill and not the other and "all 5" sat over
@@ -559,6 +562,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says
   // the list is broken, not cut. Each pill counts what clicking it would SHOW, by the same rule.
   const countIn = (key) => (tasks || []).filter((x) => (!key || inBucket(x, key)) && keep(x)).length;
+  const liveStates = Object.values((tasks || []).filter((x) => inBucket(x, "live") && keep(x)).reduce((acc, x) => {
+    const st = stateOf(x);
+    acc[st.label] = { key: st.label, label: st.label, c: st.c, n: (acc[st.label]?.n || 0) + 1 };
+    return acc;
+  }, {})).sort((a, b) => b.n - a.n);
   // A task may finish while its detail stays open (especially an assistant conversation). Move
   // the selected bucket with it so Done never sits under an In progress filter. Search is a
   // deliberate cross-status view, so it is not changed.
@@ -952,6 +960,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}
               sx={{ flexShrink: 0, minWidth: "auto", px: 1 }}>New</Button>
           </Box>
+          {/* THE STATES OF WHAT IS IN PROGRESS, ON TOP (the owner, 2026-09-28: "don't see the filter on top of tasks") -
+              the same pills as the row above, a count each, only when there is more than one state to tell apart */}
+          {filter === "live" && !search && liveStates.length > 1 && (
+            <Box className="tq-tasks-states" sx={{ px: 1, pt: 0.75, bgcolor: PANEL2, flexShrink: 0 }}>
+              <FilterPills value={only || ""} onChange={(k) => setOnly(k || null)}
+                options={[{ key: "", label: "all", n: liveStates.reduce((a, x) => a + x.n, 0) }, ...liveStates]} />
+            </Box>
+          )}
           <Box sx={{ px: 1, py: 0.75, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
             <TextField fullWidth size="small" placeholder="Search system, name, summary, PR…" value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -1010,7 +1026,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg,
                     color: PILL_COLORS.red.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
                   {/* the state says it once - "agent stopped" had its own chip beside it (T1) */}
-                  <StateChip task={task} />
+                  <Box component="span" role="button" tabIndex={0} sx={{ cursor: "pointer", display: "inline-flex" }}
+                    title={only ? "Show everything in progress again" : `Show only “${st.label}”`}
+                    onClick={(e) => { e.stopPropagation(); setFilter("live"); setOnly(only ? null : st.label); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setFilter("live"); setOnly(only ? null : st.label); } }}>
+                    <StateChip task={task} />
+                  </Box>
                 </Box>
                 {/* the third line, and ONLY when it has something to say - a queued task with no list
                     stays two lines, so the rail does not pay for this everywhere */}
@@ -1690,7 +1711,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 
                 {!sessionView && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0,
-                  borderLeft: "4px solid #9a7444" }}>
+                  borderLeft: "4px solid #8a3646" }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"
@@ -1702,7 +1723,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         ? "What goes back to the sender. Sending it closes the task."
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
                     chip={<LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
-                    tone="#9a7444" {...stageProps("reply")}
+                    tone="#8a3646" {...stageProps("reply")}
                     action={stage !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
@@ -1711,7 +1732,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
                             {openingReply ? "Drafting…" : replyPrimary}</Button>
                           <Tooltip title="Ask sender — a question waits on the task for your approval">
-                            <IconButton size="small" sx={{ color: "#9a7444" }} onClick={() => setAskSenderOpen(true)}>
+                            <IconButton size="small" sx={{ color: "#8a3646" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
                           </Tooltip>
                         </Box>
@@ -1736,7 +1757,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                               onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
                           )}
                           <Button size="small" variant="outlined" sx={barBtn}
-                            startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#9a7444" }} />}
+                            startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
                             title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
                             onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
                           <Box sx={{ flex: 1, minWidth: 12 }} />

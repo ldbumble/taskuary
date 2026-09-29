@@ -145,7 +145,15 @@ const CHANNEL_WORD = { email: "Email", github: "GitHub", whatsapp: "WhatsApp", t
 export const channelWord = (ch) => CHANNEL_WORD[String(ch || "").toLowerCase()] || (ch ? String(ch)[0].toUpperCase() + String(ch).slice(1) : "");
 // work the owner started has nobody behind it: its "sender" is the owner ("owner" from CreatedBy, "You" from ownwork)
 export const isOwn = (card) => card?.channel === "own" || ["owner", "you", "me"].includes(String(card?.who || "").trim().toLowerCase());
-const initials = (name) => String(name || "?").replace(/<[^>]*>/g, "").trim().split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+// a display name as a person is called (triage.person_name): Outlook's "Doyle, Alex M. at Northwind" reads "Alex M. Doyle"
+export const personName = (name) => {
+  let n = String(name || "").replace(/\s*<[^>]*>/g, "").replace(/"/g, " ").replace(/\s+/g, " ").trim();
+  if (!n || n.includes("@")) return n;
+  n = n.replace(/\s+at\s+[^,<>@]+$/i, "").trim();
+  const parts = n.split(",");
+  if (parts.length === 2 && parts[0].trim() && parts[1].trim() && parts[0].trim().split(" ").length <= 2) n = `${parts[1].trim()} ${parts[0].trim()}`;
+  return n;
+};
 const capital = (s) => { const t = String(s || "").trim(); return t ? t[0].toUpperCase() + t.slice(1) : ""; };
 // WHAT AN AGENT IS, never the profile's bare name (the owner, 2026-09-28: "not sure why it says coder"): a terminal
 // agent codes, a chat one does general work; the profile shows beside it only when it says more than that
@@ -177,7 +185,6 @@ export function subjectLine(msg) {
 }
 const restOf = (summary) => String(summary || "").trim().split(/(?<=[.!?])\s+/).slice(1).join(" ");
 export const reportOf = (doc) => (doc?.comments || []).slice().reverse().find((c) => /^(CODER REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
-const STAR_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round"><line x1="12" y1="3.5" x2="12" y2="20.5" /><line x1="4.6" y1="7.75" x2="19.4" y2="16.25" /><line x1="4.6" y1="16.25" x2="19.4" y2="7.75" /></svg>;
 const TASK_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3" /><polyline points="8.5 12 11 14.5 15.5 9.5" /></svg>;
 const CODE_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 7 3 12 8 17" /><polyline points="16 7 21 12 16 17" /></svg>;
 
@@ -197,7 +204,7 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
   const subject = subjectLine(src);
   const showSubject = subject && !said.toLowerCase().includes(subject.replace(/^(PR |Issue )?#\d+(\s·)?\s*/, "").toLowerCase());
   const rest = restOf(doc?.task?.Summary);
-  const who = advisor ? "Advisor" : own ? "You" : by === null ? "The task" : String(by || card?.who || "Someone").replace(/\s*<[^>]*>/g, "").trim();
+  const who = advisor ? "Advisor" : own ? "You" : by === null ? "The task" : personName(by || card?.who || "Someone") || "Someone";
   const from = [advisor ? "an idea" : own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : "your task") : channelWord(card?.channel),
     card?.when ? agoText(card.when) : ""].filter(Boolean).join(" · ");
   const rep = reportOf(doc), r = rep ? readReport(rep.Body) : null;
@@ -210,7 +217,7 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
     <div className="tq-story">
       {asker && said && (
         <div className="tq-thr">{(drawAgent || tail) && <span className={`tq-thr-rail${drawAgent ? "" : " tail"}`} />}
-          <span className={`tq-av ${own ? "tq-av-you" : "tq-av-asker"}${lit("asker")}`}>{advisor ? STAR_GLYPH : own ? "You" : by === null ? TASK_GLYPH : initials(who)}</span>
+          <span className={`tq-av ${own ? "tq-av-you" : "tq-av-asker"}${lit("asker")}`}>{TASK_GLYPH}</span>
           <div className="tq-thr-body"><div className="tq-thr-h"><b>{who}</b>{advisor ? " raised · " : own || by === null ? " · " : ["fyi", "report"].includes(card?.lane) || card?.kind === "fyi" ? " wrote · " : " asked · "}{from}</div><div className="tq-thr-say">{said}</div>
             {showSubject && <div className="tq-thr-subject">{subject}</div>}
             {rest && <div className="tq-thr-rest">{rest}</div>}{words}</div>
@@ -231,7 +238,9 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
                 {shortVerdict(r) && <>{r.actions ? " " : ""}<b>Verdict:</b> {shortVerdict(r)}</>}
               </div>
             )}
-            {extra}
+            {/* ...what it last said only when it filed no report - the report already says it, and the card has to fit
+                one screen (the owner, 2026-09-28: "it's too big to see in one screen") */}
+            {!r?.summary && extra}
             {r?.text && <button type="button" className="tq-card-more" onClick={() => setOpen((o) => !o)}>{open ? "Hide its report" : "Its full report"}</button>}
             {open && r?.text && <div className="tq-card-full">{looksMd(r.text) ? <Md text={r.text} /> : r.text}</div>}
           </div>
@@ -250,10 +259,11 @@ export function YourMove({ title, tone, go, then, children }) {
   return (
     <div className={`tq-thr tq-move${tone === "alert" ? " alert" : ""}`}>
       <span className="tq-av tq-av-you on">You</span>
-      <div className="tq-thr-body">
-        <div className="tq-thr-h"><b>You</b>{title ? ` · ${title}` : ""}</div>
+      {/* NO WORDS BESIDE THE CIRCLE (the owner, 2026-09-28: "don't need these words. the you circle says it. just the
+          button move it up"): what there is to read first, then the button - on the circle's line when there is nothing */}
+      <div className="tq-thr-body" title={title ? `You - ${title}` : undefined}>
         {children}
-        {(go || then) && <div className="tq-move-go">{go}{then && <span className="tq-move-then">{then}</span>}</div>}
+        {(go || then) && <div className={`tq-move-go${React.Children.toArray(children).some(Boolean) ? "" : " first"}`}>{go}{then && <span className="tq-move-then">{then}</span>}</div>}
       </div>
     </div>
   );
@@ -410,7 +420,7 @@ function FullText({ mid, revision }) {
     <div className="tq-card-full">
       {morning ? <DigestText text={text} /> : jsonRows(text) ? <RowsTable rows={jsonRows(text)} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
-      {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email"} dense />}
+      {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense />}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
       {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "#55697a" }}>open the original</a></div>}
     </div>
@@ -425,6 +435,9 @@ function FullText({ mid, revision }) {
 // A PASTED PICTURE IS DRAWN, ITS REFERENCE IS NOT (the owner, 2026-09-28: "images inline of the email are not coming
 // through"): the body only carries "[image: ...]" / cid: stand-ins that render as nothing - the picture itself comes
 // from the message's attachments (Attachments, under the message), so the stand-ins are what goes
+// "look for attachments on this mail" only where the body points at a picture that is not here yet - on every message it
+// was a line of noise under mail that never had one
+const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
 export const noImages = (text) => String(text || "")
   .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
   .replace(/<img\b[^>]*>/gi, "")
@@ -496,7 +509,7 @@ function CombinedTaskText({ card, list = true }) {
               {m.Direction === "out" ? "You" : (m.FromName || m.FromEmail || "Someone")}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
             </div>
             {looksMd(body) ? <Md text={body} /> : (body || "(empty)")}
-            {m.MessageId && <Attachments messageId={m.MessageId} canFetch={String(m.Channel || "") === "email"} dense />}
+            {m.MessageId && <Attachments messageId={m.MessageId} canFetch={String(m.Channel || "") === "email" && mentionsPicture(m.BodyText)} dense />}
           </div>
         );
       })}
@@ -811,8 +824,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   ) : chat && !!card.tail?.length && <div className="tq-card-tail">{card.tail.join("\n")}</div>;
   const toggle = (chat || card.sid) && !card.paused && (
     <div className="tq-card-note" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-      <span>{!live ? (chat ? "Conversation folded." : "Its screen is not here - show the whole thing, or open the workspace.")
-        : chat ? "This is the conversation - answer it here." : "This is the agent's own screen - click in and type to answer it there."}</span>
+      <span>{!live ? "" : chat ? "This is the conversation - answer it here." : "This is the agent's own screen - click in and type to answer it there."}</span>
       <span className="sp" />
       {chat && live && <Button size="small" onClick={() => setBig((b) => !b)} sx={faint}>{big ? "Smaller" : "Bigger"}</Button>}
       <Button size="small" onClick={() => setLive((l) => !l)} sx={faint}>
@@ -868,7 +880,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
               </div>
             </div>
           )}
-          {!asked && !card.paused && !live && !!card.why && <div className="tq-move-say">{card.why}</div>}
+          {/* (the agent's state sentence is not repeated here: the step's header already says it) */}
           {toggle}
           {screen}
           {/* ONE place to answer (the owner, 2026-09-23: "why do we need both?"): with the screen open you type into the
@@ -1139,21 +1151,15 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
 // opener in place of the Morning digest (2026-09-23). Rows come from the LIVE pile, so a row settled
 // since the chat opened is gone from here too; a row's click brings that one card up.
 const ROWS_PER_GROUP = 5;
-// the group's name in the rail band's own pill (the owner, 2026-09-23: "should be circle pills with
-// colors"): who is waiting on you wears the rail's "your task" colour, an agent the working blue, your
-// own list the report beige, and what needs no decision the muted one
-// every group walkSummary.GROUPS draws needs a role here - "passed" had none, and ROLES[undefined].ink took the
-// whole page down the first time a passed row reached the opener (2026-09-24). Unknown keys fall back to muted.
-const GROUP_ROLE = { people: "you", you: "info", agents: "working", read: "muted", passed: "muted" };
-const groupRole = (key) => ROLES[GROUP_ROLE[key]] || ROLES.muted;
+// the group's name in a pill of its own tint - assistantView.css `.tq-sum-head span.lvl-<group>`, the rail bands' own
+// family (the owner, 2026-09-28: "make them subtly different"); every group of walkSummary.GROUPS has one
 // the groups themselves - also drawn on the empty chat's welcome, which is what the walk starts from
 // `quiet` groups show their pill and count only - on the day's opener, what needs no decision is on the
 // rail already, and its rows were what pushed the way in off the screen (2026-09-23: "one screen")
 export function WhoWantsWhat({ groups, onRow, max = ROWS_PER_GROUP, quiet = [] }) {
   return (groups || []).map((g) => ({ g, n: quiet.includes(g.key) ? 0 : max })).map(({ g, n }) => (
     <div key={g.key} className="tq-sum-group">
-      <div className="tq-sum-head"><span style={{ color: groupRole(g.key).ink, background: groupRole(g.key).tint,
-        borderColor: groupRole(g.key).bd }}>{g.word}</span><em>{g.rows.length}</em></div>
+      <div className="tq-sum-head"><span className={`lvl-${g.key}`}>{g.word}</span><em>{g.rows.length}</em></div>
       {g.rows.slice(0, n).map((i) => (
         <button key={i.key} type="button" className="tq-sum-row" onClick={() => onRow?.(i.key)} title="Bring this one up now">
           <span className="dot" style={{ background: sourceColor(i) }} />

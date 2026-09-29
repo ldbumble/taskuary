@@ -34,12 +34,16 @@
 .tq-pile-head.folds:hover span { border-color: #b9c3cb; }
 .tq-pile-head .fold { font-style: normal; font-size: 9px; color: #a09889; margin-left: -4px; }
 .tq-pile-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
-  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid; }
+  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
+/* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance, and only urgent is loud */
+.tq-pile-head span.lvl-urgent { color: #7a2f3c; background: #f4e3e6; border-color: #e3c1c7; }
+.tq-pile-head span.lvl-task, .tq-sum-head span.lvl-people, .tq-sum-head span.lvl-you, .tq-sum-head span.lvl-agents { color: #86505b; background: #f8eff0; border-color: #ecdade; }
+.tq-pile-head span.lvl-reports { color: #6b5f45; background: #f3eee2; border-color: #e3d9c3; }
+.tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-read { color: #6e685f; background: #f3efe8; border-color: #e2dbcf; }
+.tq-pile-head span.lvl-passed, .tq-sum-head span.lvl-passed { color: #8a847a; background: #faf8f4; border: 1px dashed #d8d0c3; }
+.tq-pile-head span.lvl-agents { color: #41525f; background: #edf1f4; border-color: #d3dbe2; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
-.tq-pile-only { font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; background: #eef1f4;
-  border: 1px solid #cbd4dc; border-radius: 99px; padding: 1px 7px; cursor: pointer; }
-.tq-pile-row .tq-pile-word, .tq-pile-row .tq-pile-tag.loud { cursor: pointer; }
-.tq-pile-row .tq-pile-word:hover { text-decoration: underline; }
+.tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
 .tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #a09889; font-variant-numeric: tabular-nums; }
 /* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
 /* A BUTTON IS ONE LINE. Every pill-shaped button in the rail and on a card - none of them said so,
@@ -77,7 +81,10 @@
 /* NEXT wears a ring in the working colour; CURRENT (on the table in the chat) the deeper one */
 .tq-pile-row.next .card { border-color: #7d9a7c; box-shadow: inset 0 0 0 1px #7d9a7c, 0 2px 10px rgba(47,107,79,.14); }
 .tq-pile-row.current { height: 54px; }
-.tq-pile-row.current .card { border-color: #55697a; background: #f5f8f9; box-shadow: inset 0 0 0 1px #55697a, 0 2px 10px rgba(69,79,70,.14); cursor: default; }
+/* ON THE TABLE in Taskuary's sage (the owner, 2026-09-28: "on the table circle color should be the more green color") */
+.tq-pile-row.current .card { border-color: #6f8a6e; background: #f3f6f1; box-shadow: inset 0 0 0 1px #6f8a6e, 0 2px 10px rgba(69,79,70,.14); cursor: default; }
+.tq-pile-row.current .rail i { background: #6f8a6e !important; }
+.tq-pile-row.current .tq-pile-now { color: #4c6450; border-color: #b9c9b6; }
 /* ONE BRACKET for a batch on the table. It is drawn behind its rows and spans them where they
    already sit: no row moves, no height changes, and ten fyi read as the one thing the assistant is
    holding rather than as ten separate rings or as a single condensed line. */
@@ -113,6 +120,8 @@
 .tq-pile-word { flex: 0 0 auto; font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; white-space: nowrap; }
 /* the lane's own mark, at the size it is READ at rather than the size the loud pill shouts at */
 .tq-pile-word i { font-style: normal; font-size: 11px; line-height: 1; margin-right: 4px; filter: saturate(.9); }
+.tq-chip-mark { display: inline-grid; place-items: center; width: 17px; height: 17px; margin: 0 5px 0 -5px; border-radius: 50%;
+  background: #4c6450; font-style: normal; font-size: 11px; line-height: 1; vertical-align: -3px; }
 .tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
 /* the waving agent and the draft waiting for a yes: the two lanes where work has STOPPED until the
    owner answers, and the only rows left carrying colour of their own */
@@ -207,7 +216,7 @@
 /* the group's name as the rail band's pill (.tq-pile-head span), its count beside it */
 .tq-sum-head { display: flex; align-items: center; gap: 7px; margin: 0 0 4px 4px; }
 .tq-sum-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
-  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid; }
+  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 .tq-sum-head em { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #8a847a; }
 .tq-sum-row { display: grid; grid-template-columns: 8px minmax(0, 150px) minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%;
   min-height: 32px; padding: 0 6px; border: 0; border-top: 1px solid #efeae2; background: none; font: inherit; font-size: 12.5px; color: #262521; text-align: left; cursor: pointer; border-radius: 6px; }
@@ -282,19 +291,20 @@
 .tq-thr + .tq-thr .tq-thr-rail { top: 36px; }
 /* ONE STYLE, THE TASK PAGE'S THREE COLOURS (the owner, 2026-09-28: "the colors of the logos on the card in assistant
    should match the task card"): its step badges - 1 the task in slate, 2 the agent in sage, 3 close out in tan - so the
-   card's asker, agent and you wear the same three. Outlined until it is their turn, filled with a ring while it is. */
-.tq-av { --c: #55697a; border: 1.5px solid var(--c); background: #fffdf9; color: var(--c); box-sizing: border-box;
+   card's asker, agent and you wear the same three (you: oxblood, on both) - SOLID, as those badges are (outlines read as grey at 26px). The
+   one whose turn it is wears a ring; the others step back. */
+.tq-av { --c: #55697a; background: var(--c); color: #fff; box-sizing: border-box;
   width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font: 700 9.5px/1 'IBM Plex Sans', sans-serif; letter-spacing: .02em; position: relative; z-index: 1; }
+  font: 700 9.5px/1 'IBM Plex Sans', sans-serif; text-align: center; position: relative; z-index: 1; }
 .tq-thr-h { font-size: 11.5px; color: #8a847a; padding-top: 1px; }
 .tq-thr-h b { color: #4d4a43; font-weight: 600; }
 .tq-thr-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
 .tq-thr-subject { margin-top: 3px; font-size: 13px; line-height: 1.4; color: #3d3b36; overflow-wrap: anywhere; }
 .tq-thr-rest { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.tq-thr-did { margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: #4d4a43; overflow-wrap: anywhere; }
+.tq-thr-did { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: #4d4a43; overflow-wrap: anywhere; }
 .tq-thr-did.muted { color: #8a847a; font-style: italic; }
-.tq-thr-more { margin-top: 4px; font-size: 12px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere; }
+.tq-thr-more { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px; font-size: 12px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere; }
 .tq-thr-more b { color: #4d4a43; font-weight: 600; }
 .tq-thr-words { margin-top: 6px; }
 /* ...YOUR MOVE IS LOUD (assistantCards YourMove): the one framed block, full contrast, its main button inside */
@@ -304,10 +314,12 @@
 .tq-move .tq-av { margin-top: 9px; }
 .tq-av-asker { --c: #55697a; }
 .tq-av-agent { --c: #6f8a6e; }
-.tq-av-agent.none { --c: #b3ab9e; }
-.tq-av-you { --c: #9a7444; font-size: 8.5px; }
+.tq-av-agent.none { --c: #6f8a6e; }
+/* you: the oxblood that means "on you" everywhere - the rail's Your task, the card's own header dot, the task page's step 3 */
+.tq-av-you { --c: #8a3646; font-size: 9px; letter-spacing: 0; }
 /* WHOSE TURN (Story `turn`): filled, with a ring of its own colour - the rest stay outlined */
-.tq-av.on { background: var(--c); color: #fff; box-shadow: 0 0 0 2px #fffdf9, 0 0 0 3.5px var(--c); }
+.tq-av.on { outline: 1.5px solid var(--c); outline-offset: 2px; }
+/* ...never faded: the task page never dims its badges, and a faded slate read as grey (2026-09-28) */
 .tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: #1d1c19; }
 .tq-move.alert .tq-move-say:first-of-type { font-weight: 600; color: #6b2b22; }
 .tq-move-to { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }
@@ -316,6 +328,8 @@
 .tq-move-q + .tq-move-q { margin-top: 12px; padding-top: 11px; border-top: 1px dashed #e0d6c8; }
 .tq-move-qn { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #a0643a; margin-bottom: 3px; }
 .tq-move-go { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.tq-move-go.first { margin-top: -1px; }
+.tq-move .tq-thr-body > :first-child { margin-top: 3px; }
 .tq-move-then { font-size: 11.5px; color: #6e685f; }
 /* ...a rule under the move: Next / More are the CARD's, not a second row of the move's buttons */
 .tq-card .tq-move ~ .tq-card-actions { border-top: 1px solid #ebe6de; margin-top: 12px; padding-top: 10px; }

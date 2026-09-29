@@ -805,6 +805,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # sender writing again, and it brought a task closed yesterday back as waiting (I7, 2026-09-27)
         if same and re.fullmatch(r'idea:\d+', str(msg.get('external_id') or '')) and (store.get_task(same) or {}).get('Status') in ('done', 'dropped'):
             same = None
+        # ...and one pull request or issue is never ANOTHER one's task. Two docs PRs from the same contributor read alike,
+        # and the model filed #121 into #120's task - a second PR's review folded into the first (the owner, 2026-09-28)
+        own = str(msg.get('conversation_id') or '')
+        if same and own.startswith('gh:') and any(str(m.get('ConversationId') or '').startswith('gh:') and m.get('ConversationId') != own
+                                                    for m in store.list_messages(same)):
+            same = None
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
             elif intent.get('urgent'): _mark_urgent(store, same, intent, actor)

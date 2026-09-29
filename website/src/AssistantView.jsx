@@ -68,6 +68,7 @@ const NOTE_KINDS = new Set(["setup_questions"]);
 // something besides for what lane it's in"). Compared on the WORD, not the lane, so a kind that
 // overrides its lane's word - agentdone, wrapup - is judged on the word it actually shows.
 const BAND_SAYS = { reports: "report", fyi: "fyi", agents: "agent working" };
+const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";   // a ranked row's place in its batch (HEAD_RANGE tops out at 20)
 const ROW_H = 33, CUR_H = 57;   // a Timeline row (30px + its 3px gap); the current one opens up to two lines
 const BATCH_TAIL = 13;          // the gap a bracket leaves under itself for its own label
 // what sits UNDER the bands and still has to fit: the pile's own padding, the cheer line and the
@@ -194,6 +195,9 @@ function Pile({ pile, current, onPull, error, onRetry }) {
   // every line below is dead.
   const markers = pile?.more_markers || [];
   const byKey = useMemo(() => Object.fromEntries(markers.map((m) => [m.key, m])), [markers]);
+  // BULK PROCESSING: a ranked row's place in its batch, circled (the owner, 2026-09-28: "we should write numbers on it
+  // like circle 1 rank") - in the order the batch let them in, which is rank order (rank.rank_numbers)
+  const rankNo = pile?.rank_numbers || {};
   const [openChannel, setOpenChannel] = useState("");
   const [waiting, setWaiting] = useState(null);
   useEffect(() => {
@@ -365,6 +369,8 @@ function Pile({ pile, current, onPull, error, onRetry }) {
                       title={[i.who, meta.word, i.ref, i.promoted ? 'triage moved it up' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         <span className="logo"><SourceMark item={i} size={15} /></span>
+                        {!!rankNo[i.key] && <span className="tq-pile-rank" title={`#${rankNo[i.key]} of this batch, by importance`}>
+                          {CIRCLED[rankNo[i.key] - 1] || rankNo[i.key]}</span>}
                         <b>{i.title}</b>
                         {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
                             match a row to the Tasks tab, and it was only ever in the tooltip. */}

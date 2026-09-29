@@ -286,12 +286,21 @@ class RankBeforeTriageTests(unittest.TestCase):
         self.s.place_message(m, tid, 'routed')
         self.assertEqual(self.s.ranked_held('email'), 1, 'still waiting on the owner')
 
+    def test_a_slot_with_no_brain_to_judge_in_stays_open(self):
+        """top_up drained with no model and every arrival it let in read "triage failed" (the owner, 2026-09-28)."""
+        rank_mode(self.s)
+        m = pending(self.s, 'nobrain'); self.s.set_message_rank(m, 0.5, 'floor', 'rank')
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertEqual(rank.top_up(self.s, 1), 0)
+        self.assertEqual(self.s.get_message(m)['Status'], 'triaging', 'still waiting its turn, not failed')
+
     def test_a_slot_opening_judges_exactly_one_more(self):
         rank_mode(self.s)
         mids = [pending(self.s, f'd{i}') for i in range(10)]
         for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
         judged = []
-        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: '{}'), \
+             mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
             ingest.drain(self.s)
             before = len(judged)
             rank.top_up(self.s, 1)
@@ -306,7 +315,8 @@ class RankBeforeTriageTests(unittest.TestCase):
         mids = [pending(self.s, f'e{i}') for i in range(10)]
         for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
         judged = []
-        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: '{}'), \
+             mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
             ingest.drain(self.s)
             head = len(judged)
             for verb in ('done', 'later', 'skip'):
@@ -397,6 +407,20 @@ class TheMoreMarkerTests(unittest.TestCase):
         rows = [{'key': f'k{v}', 'channel': 'github', 'tid': judged[v]} for v in (0.3, 0.9, 0.5, 0.7)]   # rail order is not rank order
         got = rank.more_markers(self.s, rows)
         self.assertEqual([(m['key'], m['count']) for m in got], [('k0.3', 3)])
+
+    def test_the_batch_is_numbered_in_the_order_it_was_let_in(self):
+        """The owner, 2026-09-28: "we should write numbers on it like circle 1 rank". Each ranking call scales its own
+        pool from 1.0, so a later arrival's value says nothing next to the head's - the batch's order is admission."""
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        tids = []
+        for v in (0.9, 0.6, 1.0):                       # the third came in later, from a re-rank that rescaled it to 1.0
+            m = self._arrival(f'in {v}'); self.s.set_message_rank(m, v, 'floor', 'rank')
+            tids.append(self.s.create_task({'Title': f'task {v}', 'Kind': 'coding', 'Status': 'open'}, 'triage'))
+            self.s.place_message(m, tids[-1], 'routed')
+        rows = [{'key': f'k{t}', 'channel': 'github', 'tid': t} for t in reversed(tids)]
+        self.assertEqual(rank.rank_numbers(self.s, rows), {f'k{tids[0]}': 1, f'k{tids[1]}': 2, f'k{tids[2]}': 3})
+        self.assertEqual(rank.rank_numbers(MemoryStore(), rows), {}, 'nothing ranks, nothing is numbered')
 
     def test_a_ranked_source_with_nothing_waiting_shows_no_pill(self):
         c = self.s.get_connector_by_type('github')

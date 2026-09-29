@@ -3527,7 +3527,9 @@ class SQLiteStore:
                                      OR (r.EntityKind='task' AND r.LocalId=CAST(t.TaskId AS TEXT))))
               AND NOT EXISTS (SELECT 1 FROM processing_read_defer d WHERE d.At >= t.CreatedAt
                                 AND d.TargetLocalId IN (CAST(m.MessageId AS TEXT), CAST(t.TaskId AS TEXT)))
-            ORDER BY m.RankValue DESC, m.MessageId""", (channel,))
+            -- IN THE ORDER THEY WERE LET IN: each ranking call scales its own pool from 1.0, so a later arrival's value
+            -- is not comparable with the head's - the order of admission is the batch's real order
+            ORDER BY t.CreatedAt, t.TaskId""", (channel,))
     def set_message_rank(self, mid, value: float, why: str, actor: str):
         """Where in the judging queue this arrival sits, and the words it got there by."""
         self._exec('UPDATE message SET RankValue=?, RankWhy=? WHERE MessageId=?', (float(value), str(why or ''), mid))

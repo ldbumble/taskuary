@@ -23,3 +23,10 @@ test("the states are pills on top of In progress, with counts and an 'all' that 
 test("the rail has no state filter - it lives on the Tasks page only", () => {
   assert.ok(!src("AssistantView.jsx").includes("setOnly"));
 });
+
+test("a ranked row wears its place in the batch, circled", () => {
+  const s = src("AssistantView.jsx");
+  assert.match(s, /const CIRCLED = "①②③④/);
+  assert.match(s, /const rankNo = pile\?\.rank_numbers \|\| \{\};/);
+  assert.match(s, /\{!!rankNo\[i\.key\] && <span className="tq-pile-rank"/);
+});

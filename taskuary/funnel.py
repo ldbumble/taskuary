@@ -1104,9 +1104,10 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         try:
             from . import rank
             p['more_markers'] = rank.more_markers(store, p['items'])
+            p['rank_numbers'] = rank.rank_numbers(store, p['items'])
         except Exception as e:
             logger.debug(f'the ranked count did not reach the rail: {e}')
-            p['more_markers'] = []
+            p['more_markers'], p['rank_numbers'] = [], {}
         p['events'] = events
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)

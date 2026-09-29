@@ -43,6 +43,7 @@
 .tq-pile-head span.lvl-passed, .tq-sum-head span.lvl-passed { color: #8a847a; background: #faf8f4; border: 1px dashed #d8d0c3; }
 .tq-pile-head span.lvl-agents { color: #41525f; background: #edf1f4; border-color: #d3dbe2; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
+.tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
 .tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #a09889; font-variant-numeric: tabular-nums; }
 /* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
 /* A BUTTON IS ONE LINE. Every pill-shaped button in the rail and on a card - none of them said so,

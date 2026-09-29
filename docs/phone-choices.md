@@ -1,8 +1,9 @@
 # The phone's choices
 
 The owner, 2026-09-25: the phone Assistant matches the desktop Assistant exactly; the only differences are
-formatting that reads well in WhatsApp, and buttons to tap. A chat has no buttons, so every choice is a
-numbered line, and on WhatsApp the same lines also arrive as a poll under the message.
+formatting that reads well in WhatsApp, and buttons to tap. On WhatsApp the choices arrive as a poll under
+the message; on Telegram as the bot's own buttons under it (2026-09-29 - no poll needed there). A typed number
+still answers on both, and only the newest message's choices run: a tap on an older one is answered, never run.
 
 ## What a pick does
 

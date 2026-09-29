@@ -104,7 +104,7 @@ class ThePhoneNumbersTheWayOnTests(unittest.TestCase):
 
 
 class TelegramTypesTheNumberTests(unittest.TestCase):
-    """Telegram has no polls - the owner types the number. The way on is the same list, and "1" runs Try again."""
+    """Telegram: the way on is the same list - buttons under the message, and a typed "1" runs Try again too."""
     def test_a_failed_send_on_telegram_offers_numbers_and_1_tries_again(self):
         from taskuary import concierge, messengers, operations, remote_assistant as ra, server, terminal
         s = store(); tid, rid, item, p = drafted(s)
@@ -114,9 +114,9 @@ class TelegramTypesTheNumberTests(unittest.TestCase):
         with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('SMTP 550 mailbox unavailable')):
             text = ra._ran(s, p, concierge.run_proposal(s, operations.get(s, p['id'])), item, 'owner')
         sent = []
-        with mock.patch.object(messengers, 'tg_send', side_effect=lambda st, chat, body, connector_id=None: sent.append(body)):
+        with mock.patch.object(messengers, 'tg_send', side_effect=lambda st, chat, body, connector_id=None, buttons=None: sent.append(buttons)):
             ra.send(s, 'telegram', '4242', text)
-        self.assertIn('1 · Try again', sent[0])
+        self.assertEqual(sent[-1][0], 'Try again')                       # the bot's own buttons; the number still answers
         self.assertEqual(ra.resolve_index(s, 'telegram', '4242', '1'), ('Try again', True))
         act = ra.acts_for(s, 'telegram', '4242')['Try again']
         with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['craig@vendor.com'], 'cc': []}):

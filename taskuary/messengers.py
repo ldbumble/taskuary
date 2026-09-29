@@ -96,9 +96,13 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
              if s.get('Channel') == 'telegram' and s.get('Address')}
     want = {a for a, s in known.items() if a != '*' and s.get('Active')}
     ups = tg(tok, 'getUpdates', offset=int(cfg.get('tg_offset') or 0), limit=TG_LIMIT,
-             allowed_updates=['message'])
+             allowed_updates=['message', 'callback_query'])
     n = 0
     for u in ups:
+        if u.get('callback_query'):                     # a button under one of the Assistant's messages
+            try: tg_tap(store, c, u['callback_query'])
+            except Exception as e: logger.warning(f'telegram: a tapped button was not handled - {e}')
+            continue
         m = u.get('message') or {}
         chat, frm = m.get('chat') or {}, m.get('from') or {}
         cid = str(chat.get('id') or '')
@@ -154,13 +158,51 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     return n
 
 
-def tg_send(store, chat_id: str, body: str, connector_id=None) -> dict:
+TG_BUTTONS = 'tg_buttons'              # tg_buttons:<chat> -> {"msg": id, "labels": [...]} - the one message whose buttons answer
+
+
+def tg_send(store, chat_id: str, body: str, connector_id=None, buttons: list = None) -> dict:
+    """`buttons`: the choices numbered in `body`, as tappable buttons under it - Telegram's own, so no poll is needed (the
+    owner, 2026-09-29: "if buttons work in telegram no need for polls"). A tap comes back as a callback_query
+    (poll_telegram) carrying the button's index. Only the NEWEST message's buttons answer; the ones before are taken off,
+    so a list that is gone cannot be tapped - and one tapped anyway is told so, never run."""
     c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
         store.get_connector_by_type('telegram', with_secret=True)
     if c and c.get('Type') != 'telegram': c = None
     if not (c and c.get('Secret')): raise RuntimeError('the Telegram connection is not set up')
-    tg(c['Secret'], 'sendMessage', chat_id=int(chat_id), text=body[:4000])
+    labels = [str(b) for b in (buttons or []) if str(b).strip()][:12]      # whole: a tap is matched by its words
+    markup = {'reply_markup': {'inline_keyboard': [[{'text': t, 'callback_data': f'p{i}'}] for i, t in enumerate(labels)]}} if labels else {}
+    sent = tg(c['Secret'], 'sendMessage', chat_id=int(chat_id), text=body[:4000], **markup)
+    if labels:
+        key = f'{TG_BUTTONS}:{chat_id}'
+        try: before = json.loads(store.get_setting(key) or '{}') or {}
+        except ValueError: before = {}
+        if before.get('msg'):
+            try: tg(c['Secret'], 'editMessageReplyMarkup', chat_id=int(chat_id), message_id=int(before['msg']),
+                    reply_markup={'inline_keyboard': []})
+            except Exception as e: logger.debug(f'telegram: the older buttons stay drawn - {e}')
+        store.set_setting(key, json.dumps({'msg': (sent or {}).get('message_id'), 'labels': labels}), 'assistant')
     return {'channel': 'telegram', 'chat': chat_id}
+
+
+def tg_tap(store, c, q: dict) -> bool:
+    """One button tapped in the Assistant chat: the chosen label goes on as that choice's own words - a pick, exactly as a
+    typed number or a WhatsApp poll vote. A tap on an older message's buttons runs nothing and is answered."""
+    from . import remote_assistant
+    tok = c.get('Secret')
+    try: tg(tok, 'answerCallbackQuery', callback_query_id=q.get('id'))      # the button stops spinning at once
+    except Exception as e: logger.debug(f'telegram: tap not acknowledged - {e}')
+    msg, frm = q.get('message') or {}, q.get('from') or {}
+    cid = str((msg.get('chat') or {}).get('id') or '')
+    if not cid or frm.get('is_bot') or ((msg.get('chat') or {}).get('type') or 'private') != 'private': return False
+    if not remote_assistant.enabled(store, 'telegram', cid, c): return False
+    try: shown = json.loads(store.get_setting(f'{TG_BUTTONS}:{cid}') or '{}') or {}
+    except ValueError: shown = {}
+    data, labels = str(q.get('data') or ''), shown.get('labels') or []
+    i = int(data[1:]) if data[:1] == 'p' and data[1:].isdigit() else -1
+    if shown.get('msg') != msg.get('message_id') or not 0 <= i < len(labels):
+        remote_assistant.stale_tap(store, 'telegram', cid, c.get('ConnectorId')); return True
+    return remote_assistant.intercept(store, 'telegram', cid, labels[i], from_me=True, connector=c, poll=True)
 
 
 # ── WhatsApp (via the Baileys bridge) ────────────────────────────────────────────────────

@@ -1683,7 +1683,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
         logger.debug(f'could not keep the offered options for {channel}: {e}'); offered = []
     # ONE CHOICE IS STILL A POLL (the owner, 2026-09-25: "even if only next we should have poll to go next no?") - a card
     # that offered only Next printed "Reply with one of: 1 · Next" and nothing to tap
-    if channel == 'whatsapp' and offered:
+    if channel in ('whatsapp', 'telegram') and offered:
         # the POLL is the choices (the owner, 2026-09-25: "don't need this choices if you have pick"). A number typed
         # still answers - the list is remembered above - it is only not printed twice. Numbered lines that are the
         # CONTENT (an fyi batch's members, above the lead-in) stay.
@@ -1694,8 +1694,9 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
         if shown.strip(): msgs.extend(chatformat.split(shown, chatformat.HARD))
     for i, msg in enumerate(msgs):
         # the LAST bubble carries the choices as a poll: WhatsApp's one tappable thing (the owner, 2026-09-25)
-        poll = offered if channel == 'whatsapp' and i == len(msgs) - 1 and offered else None
-        kw = {'poll': poll} if poll else {}
+        last = i == len(msgs) - 1 and offered
+        # ...and on Telegram, its own buttons under the same last bubble (messengers.tg_send)
+        kw = {'poll': offered} if last and channel == 'whatsapp' else {'buttons': offered} if last and channel == 'telegram' else {}
         out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id, **kw)
     # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one
     # that never did (2026-09-24)

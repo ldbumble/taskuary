@@ -57,7 +57,7 @@ test("a report's sender is its own title, so the row says Report instead of sayi
 });
 
 test("every group the opener draws has a colour role - a missing one crashed the page (2026-09-24)", () => {
-  const src = readFileSync(new URL("../src/assistantCards.jsx", import.meta.url), "utf8");
-  const roles = src.match(/const GROUP_ROLE = \{([^}]*)\}/)[1];
-  for (const g of GROUPS) assert.ok(roles.includes(` ${g.key}: `), `GROUP_ROLE has no ${g.key}`);
+  // ...a tint of its own in the stylesheet now (2026-09-28), one rule per group
+  const css = readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
+  for (const g of GROUPS) assert.ok(css.includes(`.tq-sum-head span.lvl-${g.key}`), `no pill colour for ${g.key}`);
 });

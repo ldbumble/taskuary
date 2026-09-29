@@ -239,3 +239,19 @@ class AdvisorTaskWearsTheAdvisorMarkTests(unittest.TestCase):
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         by = {i.get('tid'): i.get('channel') for i in rail(s)}
         self.assertEqual((by.get(adv), by.get(mine)), ('assistant', 'own'))
+
+    def test_a_report_run_that_joins_the_advisors_task_does_not_take_its_mark(self):
+        """A later report run about the same failure joined an Advisor's task, and as the newest message it made the
+        row a report (the owner, 2026-09-28: "why are these 2 advisor and report same logo on rail?")."""
+        s, settle = settled()
+        tid = s.create_task({'Title': 'Investigate the export failures', 'Kind': 'coding', 'Status': 'open',
+                             'Source': 'assistant', 'SourceRef': 'assistant:idea:9'}, 'assistant')
+        s.add_message({'TaskId': tid, 'ExternalId': 'assistant:9', 'ConversationId': 'report:140:idea:x', 'Channel': 'assistant',
+                       'SourceName': 'Backend monitor', 'Subject': 'Advisor idea: investigate the export', 'FromName': 'Backend monitor',
+                       'SentAt': ago(3), 'BodyText': '.', 'Status': 'routed'})
+        s.add_message({'TaskId': tid, 'ExternalId': 'report:4:x', 'ConversationId': 'report:4', 'Channel': 'report',
+                       'SourceName': 'Process Error Check', 'Subject': 'Process Error Check - errors found', 'FromName': 'Process Error Check',
+                       'SentAt': ago(1), 'BodyText': '.', 'Status': 'filed'})
+        mail(s, 'lunch on friday', who='Gail Moreno', email='gail@northwind.example', hours=1)
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        self.assertEqual([i.get('channel') for i in rail(s) if i.get('tid') == tid], ['assistant'])

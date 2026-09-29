@@ -25,3 +25,14 @@ def test_the_coders_own_pull_request_is_skipped_at_any_width():
 def test_the_brief_links_a_five_digit_ref():
     assert 'task=10000' in digest._linked('- TQ-10000 waits on you')
     assert 'task=796' in digest._linked('- TQ-0796 waits on you')
+
+
+def test_a_rail_title_keeps_a_whole_thought_and_never_stops_mid_word():
+    # the owner, 2026-09-28: an Advisor idea read "...I'd review together a" - cut at 140 characters, mid-word
+    from taskuary import funnel
+    idea = ("PR#112 and PR#124 both fix slugify's trailing-hyphen-at-60-chars bug - "
+            "I'd review them together and close one as a duplicate, since both describe the same fix to the same line.")
+    assert funnel._item('idea:1', 'idea', 'fyi', idea)['title'] == idea
+    long = 'word ' * 100
+    cut = funnel._item('idea:2', 'idea', 'fyi', long)['title']
+    assert cut.endswith('…') and len(cut) <= 301 and cut[:-1].endswith('word')

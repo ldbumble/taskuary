@@ -21,7 +21,7 @@ const PTO_ROW = { MessageId: 6955, TaskId: 526, FromName: "Gitty Weichbrod", Msg
 test("a drafted reply waiting for a yes says so, and never says coding", () => {
   assert.equal(rowLane(PTO_ROW), "approve");
   assert.equal(laneMeta(rowLane(PTO_ROW)).word, "ready to close out");
-  assert.equal(laneMeta(rowLane(PTO_ROW)).mark, "✉️");
+  assert.equal(laneMeta(rowLane(PTO_ROW)).mark, "🏁");
 });
 
 test("an agent that stopped is waving, and one still going says it is working", () => {

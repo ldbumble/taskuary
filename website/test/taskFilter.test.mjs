@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { completionTransition, cutAway, filterForSelectedState, nextTaskId } from "../src/taskFilter.js";
+import {
+  completionTransition,
+  cutAway,
+  filterForSelectedState,
+  localStamp,
+  nextTaskId,
+  remindDay,
+  remindWaiting,
+} from "../src/taskFilter.js";
 
 // in progress / upcoming / done - one pill per task, no "all" (the owner, 2026-09-25)
 test("a selected task that finishes moves the rail from in progress to done", () => {
@@ -120,4 +128,31 @@ test("all is a superset of its own buckets", () => {
   assert.equal(live, 3);
   assert.equal(done, 1);
   assert.equal(all, live + done);
+});
+
+// Remind me compares local 'YYYY-MM-DD HH:MM:SS' strings, the shape the server writes RemindAt in.
+test("localStamp writes local time in the server's RemindAt shape, zero-padded", () => {
+  assert.equal(localStamp(new Date(2026, 0, 2, 3, 4, 5)), "2026-01-02 03:04:05");
+  assert.equal(localStamp(new Date(2026, 11, 31, 23, 59, 59)), "2026-12-31 23:59:59");
+});
+
+test("remindWaiting is true only for an open task whose RemindAt is still ahead", () => {
+  const now = "2026-09-28 12:00:00";
+  const at = "2026-09-29 07:00:00";
+  assert.equal(remindWaiting({ Status: "open", RemindAt: at }, now), true);
+  assert.equal(remindWaiting({ Status: "working", RemindAt: at }, now), true);
+  assert.equal(remindWaiting({ Status: "done", RemindAt: at }, now), false);
+  assert.equal(remindWaiting({ Status: "dropped", RemindAt: at }, now), false);
+  assert.equal(remindWaiting({ Status: "open" }, now), false);
+  assert.equal(remindWaiting({ Status: "open", RemindAt: "" }, now), false);
+  assert.equal(remindWaiting({ Status: "open", RemindAt: now }, now), false);
+  assert.equal(remindWaiting({ Status: "open", RemindAt: "2026-09-28 07:00:00" }, now), false);
+  assert.equal(remindWaiting(null, now), false);
+});
+
+test("remindDay is empty without a day and names the day it has", () => {
+  assert.equal(remindDay(""), "");
+  assert.equal(remindDay(null), "");
+  const expected = new Date(2026, 9, 9).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  assert.equal(remindDay("2026-10-09 07:00:00"), expected);
 });

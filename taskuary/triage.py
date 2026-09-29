@@ -85,10 +85,26 @@ FIELDS = {
 # under it, 5,998 characters of it (the owner, 2026-09-14). Answering for a reply as well costs a
 # title and two sentences on a call already being made, and it is the same question the model has
 # just answered for itself in `why`. The checklist stays the task's: what a reply owes is the reply.
+_AT_ORG = re.compile(r'\s+at\s+[^,<>@]+$', re.I)
+
+
+def person_name(name) -> str:
+    """A display name as a person is called: "Doyle, Alex M. at Northwind" -> "Alex M. Doyle". Outlook's directory writes
+    "Last, First" and appends " at <organisation>" to people outside it; a name with an @ is an address, not a name."""
+    n = ' '.join(str(name or '').replace('"', ' ').split())
+    if not n or '@' in n: return ''
+    n = _AT_ORG.sub('', n).strip()
+    if n.count(',') == 1:
+        last, first = (x.strip() for x in n.split(','))
+        if last and first and len(last.split()) <= 2: n = f'{first} {last}'
+    return n
+
+
 TASK_FIELDS = (
     'WHATEVER the verdict, also answer "title" (what this IS, 12 words max, in your own words - never the '
     'subject line handed back) and "summary" (two sentences: the first says who wants what from the owner, the '
-    'asker first - "Erin Blake wants the Q3 numbers before Friday" - or on an fyi who says what; the second adds '
+    'asker first - "Erin Blake wants the Q3 numbers before Friday" - named by from_name when it is given, never a name '
+    'made out of the email address; or on an fyi who says what; the second adds '
     'the one detail that matters. Never the signature, the confidentiality footer or quoted earlier mail). '
     'Every row the owner reads is drawn from those two, and an fyi or a report needs a readable line exactly as much as a task does: '
     '"RE: RE: FW: 0 rows returned for period ending 09/15" is a mail header, not a sentence. '
@@ -707,7 +723,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # budget's cut taken out of the chain (sender_body). `own_text` is Graph's uniqueBody where
             # the mailbox carried one: the mailbox saying where the ask ends beats guessing at it.
             body_text, body_cut = sender_body(str(msg.get('body') or ''), msg.get('own_text'), known=seen)
-            user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
+            # ...and WHO, by name: only the address went in, so the model made a name out of it - "hamos@" became "Hamos"
+            # in the summary every surface leads with (the owner, 2026-09-28: "it should pull the correct name")
+            user = json.dumps({'from': msg.get('from_email'), **({'from_name': person_name(msg.get('from_name'))} if person_name(msg.get('from_name')) else {}),
+                               'subject': msg.get('subject'),
                                **({'addressed_to_you': how,
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
                                **(thread or {}),

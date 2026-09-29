@@ -306,20 +306,45 @@ def more_markers(store, rows: list) -> list:
     for w in waiting(store)['items']:
         ch = str(w.get('channel') or '')
         counts[ch] = counts.get(ch, 0) + 1
-    out, seen = [], set()
-    for r in reversed(rows):
-        ch = str((r or {}).get('channel') or '')
-        if ch not in chans or ch in seen: continue
-        seen.add(ch)
-        if counts.get(ch): out.append({'key': r.get('key'), 'channel': ch, 'count': counts[ch]})
-    return list(reversed(out))
+    # ...on the LAST ONE THAT MADE IT: the lowest-ranked of the head that was judged, wherever its row sits - the queue
+    # carries on after it (the owner, 2026-09-28: "on the fourth and final one that made it"). It had hung off whichever
+    # row of the input came last on the rail, which put it in Agents working under an unrelated task. With no head row
+    # on screen, the input's last row is where reading stopped.
+    out = []
+    for ch in sorted(chans):
+        if not counts.get(ch): continue
+        head = store.ranked_head(ch)
+        last = head[-1] if head else None
+        row = next((r for r in rows if last and ((r or {}).get('tid') == last['TaskId'] or (r or {}).get('mid') == last['MessageId'])), None)
+        row = row or next((r for r in reversed(rows) if str((r or {}).get('channel') or '') == ch), None)
+        if row: out.append({'key': row.get('key'), 'channel': ch, 'count': counts[ch]})
+    return out
+
+
+def rank_numbers(store, rows: list) -> dict:
+    """{row key: its place in its input's batch} - the circled 1, 2, 3, 4 a ranked row wears on the rail, in the order
+    the batch let them in (the owner, 2026-09-28: "if they are processed in bulk we should write numbers on it like
+    circle 1 rank"). Empty on an install that ranks nothing."""
+    out = {}
+    for ch in rank_channels(store):
+        for n, h in enumerate(store.ranked_head(ch), 1):
+            row = next((r for r in rows if (r or {}).get('tid') == h['TaskId'] or (r or {}).get('mid') == h['MessageId']), None)
+            if row: out[row['key']] = n
+    return out
 
 
 def top_up(store, n: int = 1) -> int:
     """A slot opened - judge the next most valuable arrivals. Every settling verb opens one, `later`
     included: it holds the ITEM, it does not hold the queue behind it (the owner, 2026-09-18)."""
     from . import ingest
-    return ingest.drain(store, limit=max(0, int(n)), wait=False)
+    from .llm import build_llm
+    # ...WITH the brain. This drained with none, and triage without a model can only say "awaiting AI triage": each
+    # arrival a settle let in was marked failed, freed its place again, and the next one followed it down (the owner,
+    # 2026-09-28: four waiting pull requests all read "triage failed"). No brain, the place stays open for the next one.
+    try: llm = build_llm(store)
+    except Exception: llm = None
+    if llm is None: return 0
+    return ingest.drain(store, llm=llm, limit=max(0, int(n)), wait=False)
 
 
 def enqueue(store, tid: int, agent: str) -> dict:

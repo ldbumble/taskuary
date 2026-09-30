@@ -12,8 +12,9 @@ cached, a rotated refresh token is handed to on_rotate so it survives a restart.
 sign-in itself: a browser redirect to a loopback listener on 127.0.0.1 (the only redirect OpenAI
 takes for desktop apps), with PKCE, state and nonce fresh per attempt.
 
-Limits the card states: text only (no images out, no file search, no code interpreter), streamed and
-never stored on OpenAI's side, and a cap reached stops the brain until the owner raises it in ChatGPT.
+Limits the card states (developers.openai.com/siwc/.../preview-limitations): images, files, function tools and web
+search where the model accepts them; no image generation, file search, code interpreter, computer use or hosted
+connectors. Streamed and never stored on OpenAI's side; a cap reached stops the brain until the owner raises it.
 """
 import base64, hashlib, json, secrets, threading, time, uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -62,9 +63,16 @@ class _Callback(BaseHTTPRequestHandler):
     def log_message(self, *a): pass       # the request line would carry the code into the log
 
 
+class _Server(HTTPServer):
+    # HTTPServer sets SO_REUSEADDR, and on Windows that lets a SECOND socket bind a port another one is listening on -
+    # a Codex login or an earlier sign-in holding 1455 would then share it, and the browser could come back to the
+    # wrong listener. Refused instead, so the next line moves to a free port.
+    allow_reuse_address = False
+
+
 def _listen() -> HTTPServer:
     for port in (PORT, 0):
-        try: return HTTPServer(('127.0.0.1', port), _Callback)
+        try: return _Server(('127.0.0.1', port), _Callback)
         except OSError: continue          # a Codex login holding 1455 is not a reason to fail
     raise RuntimeError('could not open a local port for the sign-in to return to')
 
@@ -186,22 +194,30 @@ def models(token: str) -> list:
 _CALL_ERRORS = {
     'subscription_sharing_usage_limit_exceeded': 'the weekly cap for Taskuary on your ChatGPT plan is used up - raise it in ChatGPT → Settings, or wait for it to reset',
     'subscription_sharing_user_not_eligible': 'this ChatGPT account is not eligible to share its plan with apps',
-    'subscription_sharing_unsupported_capability': 'the plan does not serve this kind of request (text only - no images, files or tools)',
+    'subscription_sharing_unsupported_capability': 'the plan does not serve part of this request (an image or a tool this model does not take)',
     'subscription_sharing_invalid_user': 'the ChatGPT sign-in is no longer valid - sign in again on the ChatGPT card',
 }
 
 
-def complete(token: str, model: str, system: str, user: str, max_tokens: int, want: dict = None, timeout: int = 120) -> str:
+class Unsupported(RuntimeError):
+    """The plan cannot serve something in this request (an image, a tool) - worth asking again without it."""
+
+
+def complete(token: str, model: str, system: str, user: str, max_tokens: int, want: dict = None, timeout: int = 120,
+             images=None, web: bool = False) -> str:
     """One answer, streamed (the plan serves nothing else) and never stored. Only `response.completed` is success:
     a stream that stops early is a failure, not a short answer."""
+    content = [{'type': 'input_image', 'image_url': f'data:{ct};base64,{b64}'} for ct, b64 in (images or [])]
     body = {'model': model, 'instructions': system, 'store': False, 'stream': True, 'max_output_tokens': max_tokens,
-            'input': [{'role': 'user', 'content': [{'type': 'input_text', 'text': user}]}]}
+            'input': [{'role': 'user', 'content': content + [{'type': 'input_text', 'text': user}]}]}
+    if web: body['tools'] = [{'type': 'web_search'}]
     if want: body['text'] = {'format': {'type': 'json_schema', 'name': want.get('name') or 'answer',
                                         'schema': want.get('schema') or want, 'strict': True}}
     with requests.post(f'{API}/responses', json=body, stream=True, timeout=timeout,
                        headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}) as r:
         if r.status_code != 200:
             code = _code(r)
+            if code == 'subscription_sharing_unsupported_capability': raise Unsupported(_CALL_ERRORS[code])
             raise RuntimeError(_CALL_ERRORS.get(code) or f'ChatGPT plan call failed ({r.status_code}): {_err(r)}')
         out, done = [], False
         for line in r.iter_lines(decode_unicode=True):

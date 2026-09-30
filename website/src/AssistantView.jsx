@@ -1069,6 +1069,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     }
     const optimisticId = asUser ? `u${Date.now()}` : null;
     if (optimisticId) setMsgs((m) => [...m, { id: optimisticId, role: "user", text: asUser }]);
+    // NEXT PUTS THE TABLE DOWN AT ONCE, the way "All read, next" does (the owner, 2026-09-30: "when you hit next on a task it
+    // does not close the current task instantly ... the close of past one should be instant"): the task folds to its title
+    // line now and the "…" shows while the next one loads; a Next that fails opens it again
+    const putDown = !key && currentRef.current?.key ? currentRef.current.key : null;
+    if (putDown) { setExpanded(false); setFoldedKey(putDown); }
     try {
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
@@ -1084,6 +1089,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         setPile((p) => replaceSelectionToken(p, guard));
         loadPile(true);                       // refresh the rows, never retry the navigation
       }
+      if (putDown) setFoldedKey((k) => (k === putDown ? null : k));
       setErr(errText(e));
     }
     turnFlight.current = false;

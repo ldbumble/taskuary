@@ -144,15 +144,22 @@ def gh_hold_why(store, msg: dict) -> str:
 
 
 def _from_row(r: dict, store=None) -> dict:
-    """A pending row back into a message, for a drain in a later process (no images then)."""
+    """A pending row back into a message, for a drain in a later process - WITH its pictures, read back off disk. Without
+    them a photo that arrived with no words was judged on the chat around it: a personal photo in a thread about the app
+    became "a screenshot reporting app behavior", a coding task and an agent (the owner, 2026-09-30)."""
     rec = json.loads(r.get('RecipientsJson') or 'null') or {}
+    images = []
+    if store is not None and r.get('MessageId'):
+        from .llm import readable_images          # the vision switch and the size caps are its own
+        try: images = readable_images(store, [r['MessageId']])
+        except Exception as e: logger.debug(f'ingest: images for a held message not read - {e}')
     try: meta = json.loads(r.get('MailMetaJson') or 'null') or {}
     except (TypeError, ValueError): meta = {}
     return {**({'invite': True} if meta.get('invite') else {}),       # judged later, it is still an invite (V5)
             'external_id': r.get('ExternalId'), 'channel': r.get('Channel'), 'conversation_id': r.get('ConversationId'),
             'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
             'body': r.get('BodyText'), 'own_text': r.get('OwnText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
-            'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r)}
+            'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r), **({'images': images} if images else {})}
 
 
 def _playbook_menu() -> str:

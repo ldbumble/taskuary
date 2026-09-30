@@ -2735,7 +2735,7 @@ def _chat_proposed(store, dock_tid: int, oid: str) -> bool:
 
 
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
-        open_card: str | None = None) -> dict:
+        open_card: str | None = None, images: list | None = None) -> dict:
     """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
     them (PW-121): a question is answered, a subject named is pulled in, and a decision becomes a PROPOSAL the
     owner confirms (PW-123/124) - except Next, which moves the walk and marks nothing, and a reply request, which
@@ -2779,10 +2779,13 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' means that card; its own operations set it up\n\n" if open_card and not item else '')
-                      + f"The owner says: {text}\nAnswer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
+                      + f"The owner says: {text}\n"
+                      # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
+                      + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
+                      + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
                       + ('If this is a decision about the item on the table, CALL it (bucket table).' if item else
                          'If they ask for something to be done, CALL it now - the card is their confirmation.'),
-                      max_tokens=MAX_TOKENS) or '').strip()
+                      max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
         # nobody. The model then answers with what it read - one round only, so a question can never

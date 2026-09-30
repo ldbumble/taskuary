@@ -35,6 +35,7 @@ import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import ContinueBox from "./ContinueBox.jsx";
+import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
@@ -460,7 +461,9 @@ export const StageMode = ({ mode, onMode, game = false, onGame }) => {
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
 function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null }) {
-  if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}</div></div>;
+  if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
+    {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
+      <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />))}</div>}</div></div>;
   // BROWSING (the canvas redesign, 2026-09-29): Connections, Settings, Reports or Hub, walked by clicks on this line
   if (m.role === "browse") return (
     <div className={`tq-browse-line${canvas?.browsing === m.id ? " tq-canvas-live" : ""}`} data-tq-browse-line={m.area}>
@@ -651,6 +654,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [aiEl, setAiEl] = useState(null);
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
   const [continueOn, setContinueOn] = useState(null);  // the walk's Continue session: { task, anchor, ref }
+  const pics = usePromptImages();                        // pictures sent with the chat line
+  // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
+  useEffect(() => {
+    const on = (e) => setContinueOn({ task: e.detail.task, ref: e.detail.ref });
+    window.addEventListener("tq-continue", on);
+    return () => window.removeEventListener("tq-continue", on);
+  }, []);
+  // ...and it belongs to ITS task: Next, or anything else put on the table, takes it away (the owner, 2026-09-30: "you left the
+  // input box there after hitting next?? it has to be connected to the task")
+  const continueKey = useRef(undefined);
+  useEffect(() => {
+    if (continueOn && continueKey.current !== undefined && continueKey.current !== current) setContinueOn(null);
+    continueKey.current = continueOn ? (continueKey.current ?? current) : undefined;
+  }, [current, continueOn]);
   const [emojiEl, setEmojiEl] = useState(null);
   const [speakOnState, setSpeak] = useState(speakOn);
   const [modeIn, setModeIn] = useState("chat"), stageMode = mode ?? modeIn, setStageMode = onMode ?? setModeIn;   // what a click on a row does: chat (default) or task view
@@ -704,7 +721,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
       return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only, include_surfaced: body.include_surfaced, exclude: body.exclude,
         selection_revision: body.selection_revision, expected_next_key: body.expected_next_key, expected_next_members: body.expected_next_members }
-        : body.mode === "say" ? { text: body.text, key: body.key, context_mid: body.context_mid } : {})).data;
+        : body.mode === "say" ? { text: body.text, key: body.key, context_mid: body.context_mid, images: body.images || [] } : {})).data;
     };
     // The public demo is intentionally a local script. Do not even attempt the streaming AI
     // endpoint: its invented threads should never look like a model is working behind the page.
@@ -1102,14 +1119,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // door now: what is waiting, in facts, and the walk starts on a button.
 
   const send = async (line) => {
-    const t = String(line ?? text).trim();
-    if (!t || busy || resetting || handoff || turnFlight.current) return;
+    // a picture alone is a line too: "what is this?" is what it means
+    const images = line == null ? pics.paths : [];
+    const t = String(line ?? text).trim() || (images.length ? "What is this?" : "");
+    if (!t || busy || resetting || handoff || turnFlight.current || pics.busy) return;
     turnFlight.current = true;
     setText(""); setBusy(true); setErr("");
-    setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t }]);
+    const shots = line == null ? pics.imgs : [];
+    if (images.length) pics.clear();
+    setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t, shots }]);
     try {
       // a card browsed open is what "this" means - not the item folded above it (the final review)
-      const ask = () => turn({ mode: "say", text: t, key: openCardRef.current ? null : current, context_mid: currentItem?.mid && !openCardRef.current ? currentItem.mid : null, open_card: openCardRef.current });
+      const ask = () => turn({ mode: "say", text: t, key: openCardRef.current ? null : current, context_mid: currentItem?.mid && !openCardRef.current ? currentItem.mid : null, open_card: openCardRef.current, images });
       const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
       if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
         setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: data.context_update }]);
@@ -1644,12 +1665,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>
-      {continueOn && <ContinueBox task={continueOn.task} anchor={continueOn.anchor || document.body} onClose={() => setContinueOn(null)}
-        onDone={(_out, note) => {
-          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: continueOn.task.TaskId, ref: continueOn.ref,
-            text: `Continuing${note ? " with your note" : ""} - it picks up where it left off, and comes back here when it stops or asks.` }]);
-          advance();
-        }} />}
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} onClose={() => setRemindOn(null)}
         onDone={(out) => {
           setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: remindOn.path ? null : remindOn.task.TaskId, ref: remindOn.ref,
@@ -1739,6 +1754,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           )}
           {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
+          {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
+          {!old && continueOn && (
+            <div className="tq-browse-line" ref={(el) => { if (el && !el.dataset.seen) { el.dataset.seen = "1"; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } }}>
+              <ContinueBox inline task={continueOn.task} taskRef={continueOn.ref} onClose={() => setContinueOn(null)}
+                onDone={(_out, note) => {
+                  setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: continueOn.task.TaskId, ref: continueOn.ref,
+                    text: `Continuing${note ? " with your note" : ""} - it picks up where it left off, and comes back here when it stops or asks.` }]);
+                  advance();
+                }} />
+            </div>
+          )}
           {(busy || phoneBusy || nextComing) && (
             <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
@@ -1766,9 +1792,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         </div>
       )}
       {!old && !handoff && !walk && (
-        <div className="tq-compose">
+        <div className="tq-compose" {...pics.drop}>
           <ActionRow />
+          <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
           <div className="tq-compose-box">
+            <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
               <IconButton size="small" aria-label="Choose an emoji response" disabled={busy || resetting}
@@ -1781,7 +1809,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting} placeholder={phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
               : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || !text.trim()} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
           </div>
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}

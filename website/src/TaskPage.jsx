@@ -740,7 +740,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   };
   // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and
   // what you type is the first thing it hears. The page had two older roads with no note (continue-session, resume).
-  const [continueAt, setContinueAt] = useState(null);
+  const [continueAt, setContinueAtRaw] = useState(null);
+  // on the canvas Continue is a card IN the conversation (AssistantView listens), not a popover over the view
+  const setContinueAt = (a) => {
+    if (a && canvas && t) { window.dispatchEvent(new CustomEvent("tq-continue", { detail: { task: t, ref: t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}` } })); return; }
+    setContinueAtRaw(a);
+  };
   const continued = () => {
     const id = selected;
     if (!stale(id)) setGeneralRevision((n) => n + 1);

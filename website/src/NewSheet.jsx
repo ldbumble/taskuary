@@ -21,6 +21,7 @@ import { ChannelIcon, AgentPicker, MicButton, useAgents, TaskuaryMark } from "./
 import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, planTask } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
+import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
@@ -77,7 +78,7 @@ const EmailRecipients = ({ value, onChange, options, placeholder }) => (
 // discovery, menus, forks, and a MUI dialog; owning this value at the sheet level rebuilt all of
 // that on every keystroke and made an ordinary sentence feel like terminal input over a slow
 // connection. The parent only hears when empty/non-empty changes and reads the value on submit.
-const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus }, ref) {
+const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus, pics }, ref) {
   const [value, setValue] = useState("");
   const ready = useRef(false);
   const timer = useRef(0);
@@ -91,18 +92,27 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
     // the repository picker hears the words on a pause in typing, never per key (only it re-renders, not the card)
     if (bus?.current) { clearTimeout(timer.current); timer.current = setTimeout(() => bus.current?.(next), 200); }
   };
+  // ...and a picture pasted or dropped into it goes with the words (a note to self keeps words only)
+  const withPics = pics && kind !== "note";
   return (
+    <>
     <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={value} autoFocus
-      onChange={changed}
+      onChange={changed} {...(withPics ? pics.drop : {})}
       placeholder={kind === "send" ? "the census numbers he asked for, plus why Ashgrove moved"
         : kind === "agent" ? (how === "chat" ? "why did Riverbend's census move four points in July?"
           : "work out why the nightly export drops the last facility")
         : "chase the Ashgrove AP replacement"}
       // SAID, NOT TYPED (the owner, 2026-09-30: "can't ... use voice notes to write this prompt?"): the composer's own mic,
       // its words appended where the typing would go
-      InputProps={{ endAdornment: <MicButton size={18} sx={{ alignSelf: "flex-start", width: 30, height: 30, p: 0, color: "#6e685f" }}
-        onText={(t) => changed({ target: { value: value ? `${value} ${t}` : t } })} /> }}
-      sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+      InputProps={{ endAdornment: (
+        <Box sx={{ display: "flex", alignSelf: "flex-start", gap: 0.25 }}>
+          {withPics && <AttachImage pics={pics} sx={{ width: 30, height: 30 }} />}
+          <MicButton size={18} sx={{ width: 30, height: 30, p: 0, color: "#6e685f" }}
+            onText={(t) => changed({ target: { value: value ? `${value} ${t}` : t } })} />
+        </Box>) }}
+      sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7", alignItems: "flex-start" } }} />
+    {withPics && <ImageTray pics={pics} sx={{ mt: 0.75 }} />}
+    </>
   );
 }));
 
@@ -125,6 +135,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [hasAbout, setHasAbout] = useState(false);
   const aboutRef = useRef(null);
   const [mode, setMode] = useState("draft");
+  const pics = usePromptImages();
   // agent
   const { agents, models, kinds, brainList, brainModels } = useAgents();
   const [agent, setAgent] = useState("coder");
@@ -162,12 +173,12 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       if (kind === "send") {
         const { data } = await api.post("/api/outbox", {
           channel, to: channel === "email" ? emailTo : to.trim(),
-          cc: channel === "email" ? cc : [], about, mode,
+          cc: channel === "email" ? cc : [], about: withImages(about, pics.paths), mode,
         });
         setOk(mode === "task"
           ? `${data.ref} — an agent is finding out first; the message is drafted when it is done.`
           : `${data.ref} — drafted. It is on the Timeline waiting for you to send it.`);
-        aboutRef.current?.clear(); setHasAbout(false); onDone?.(); onOpenTask?.(data.taskId);
+        aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "agent") {
         // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
         // never disagree about what "no repository" means
@@ -176,7 +187,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // the choice is the task's `repo:` tag, the override that always wins
         const pickd = chat ? null : repoPick.current?.(about) || null;
         const plan = planTask(chat ? NO_REPO : pickd?.repo || null, chat ? "live" : "terminal", false, !chat);
-        const { data } = await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: about,
+        const { data } = await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: withImages(about, pics.paths),
           Kind: plan.kind, Tags: plan.tags });
         // a folder typed for a repository the agent had none for is saved on the agent first - the session refuses to open without one
         if (pickd?.repo && pickd.path) await api.put(`/api/tasks/${data.taskId}/repo`, { repo: pickd.repo, path: pickd.path, agent });
@@ -193,7 +204,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             { agent, brain: brain || null, model: model || null });
           setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         }
-        aboutRef.current?.clear(); setHasAbout(false); onDone?.(); onOpenTask?.(data.taskId);
+        aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else {
         const { data } = await api.post("/api/notes", { title: about.slice(0, 300), body: "", when: when || null });
         setOk(`Noted — it sits on ${String(data.at).slice(0, 16)} and nothing will touch it.`);
@@ -201,7 +212,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, when, onDone, onOpenTask]);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, when, onDone, onOpenTask, pics]);
 
   const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
@@ -334,7 +345,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           <Label>{kind === "send" ? "What's this about"
             : kind === "agent" ? (how === "chat" ? "What do you want to work out" : "What should it do")
             : "What do you want to remember"}</Label>
-          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} />
+          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} />
           {kind === "send" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Shorthand is fine — this is what you are telling the drafter, not what they read.

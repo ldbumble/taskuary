@@ -1499,6 +1499,7 @@ def continue_session(task_id: int, body: CodeBody = None):
 
 class ContinueBody(BaseModel):
     note: str | None = None          # what to tell it as it picks up - optional
+    images: list[str] = []           # pictures to go with it (/api/prompt-image)
 
 
 @app.post('/api/tasks/{task_id}/continue-work')
@@ -1512,15 +1513,17 @@ def continue_work(task_id: int, body: ContinueBody = None):
     if not task: raise HTTPException(404, 'task not found')
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
     note = ' '.join(str((body.note if body else '') or '').split())[:4000]
+    imgs = prompt_images(body.images if body else [])
     if general.handles(task):
         if not general.provider_options(store): raise HTTPException(422, 'Connect an AI provider in Connections to continue this work.')
         if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
         def go():
-            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(note or continuity.RESUME_PROMPT, as_owner=bool(note), echo=bool(note))
+            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(note or continuity.RESUME_PROMPT, imgs or None, as_owner=bool(note or imgs), echo=bool(note))
             except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
         threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': bool(note)})
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
+    note = with_images(note, imgs).strip()
     row, _why = _resumable(task_id)
     if row: out = continue_session(task_id, CodeBody(instruction=note or None))
     else: out = continue_task(task_id, CodeBody(instruction=(f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT))   # their words lead
@@ -3386,7 +3389,7 @@ class SurfaceBody(BaseModel):
     expected_next_key: str | None = None
     leaving: str | None = None          # the item Next is walking away from: read on the way out (concierge.move_on)
     expected_next_members: list[str] | None = None
-class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None
+class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
 def _pile_payload(force: bool = False, current: str = None, only: str = None,
@@ -3588,6 +3591,7 @@ def concierge_open():
 class ConciergeStreamBody(BaseModel):
     mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None; context_mid: int | None = None
     open_card: str | None = None                  # the card browsed open in the canvas, said in words
+    images: list[str] = []                        # pictures sent with the line (/api/prompt-image)
     include_surfaced: bool = False; exclude: str | None = None; leaving: str | None = None
     selection_revision: str | None = None
     expected_next_key: str | None = None
@@ -3679,7 +3683,7 @@ async def concierge_stream(body: ConciergeStreamBody):
                                             include_surfaced=body.include_surfaced, exclude=body.exclude,
                                             leaving=body.leaving)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'),
-                                      open_card=body.open_card)
+                                      open_card=body.open_card, images=prompt_images(body.images))
             if notice: out['context_update'] = notice
             if body.mode == 'next': out = _with_pile(out, body)       # the rail rides along (design B)
             put({'type': 'done', **out})
@@ -3762,7 +3766,7 @@ def concierge_say(body: ConciergeSayBody):
         # Nothing is lost. The act boundary guards itself: operations.propose pins ContextRevision and
         # execute refuses a moved one (409), and verdicts.decide re-checks before a reply can leave.
         _hands_off()
-        return concierge.say(store, body.text, body.key, actor=ACTOR, open_card=body.open_card)
+        return concierge.say(store, body.text, body.key, actor=ACTOR, open_card=body.open_card, images=prompt_images(body.images))
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.get('/api/concierge/chips')
@@ -3885,20 +3889,45 @@ async def waitroom_image(tid: int, request: Request):
     return await _save_prompt_image(tid, request)
 
 
-async def _save_prompt_image(tid: int, request: Request):
-    """Store an image that will be named in a CLI prompt, from either prompt surface."""
-    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+@app.post('/api/prompt-image')
+async def prompt_image(request: Request):
+    """An image for a prompt that has no task yet - the New box, the chat line, Continue (the owner, 2026-09-30: "can't attach
+    images ... to write this prompt?"). Same bytes-as-body contract as the waitroom; the prompt names the path it returns."""
+    return await _save_prompt_image(None, request)
+
+
+def prompt_images(paths) -> list[str]:
+    """The paths a prompt may name: only files this server saved under attachments/ - a path from the page is never a read of
+    anything else on the disk."""
+    root, out = (config.home() / 'attachments').resolve(), []
+    for raw in (paths or [])[:8]:
+        try:
+            p = Path(str(raw)).resolve()
+            if p.is_file() and p.is_relative_to(root): out.append(str(p))
+        except (OSError, ValueError): continue
+    return out
+
+
+def with_images(text: str, paths) -> str:
+    """The words, then the files - how a CLI agent is shown a picture: it reads the path (general.py says it the same way)."""
+    ps = prompt_images(paths)
+    return (text or '') + ('\n\nATTACHED IMAGES (read these files)\n' + '\n'.join(ps) if ps else '')
+
+
+async def _save_prompt_image(tid: int | None, request: Request):
+    """Store an image that will be named in a CLI prompt, from any prompt surface."""
+    if tid is not None and not store.get_task(tid): raise HTTPException(404, 'task not found')
     mime = (request.headers.get('content-type') or '').split(';')[0].strip().lower()
     ext = _IMG_EXT.get(mime)
     if not ext: raise HTTPException(415, 'paste a PNG, JPEG, GIF or WebP image')
     data = await request.body()
     if not data: raise HTTPException(422, 'no image in the request')
     if len(data) > IMG_MAX: raise HTTPException(413, 'image over 12 MB - crop it')
-    d = config.home() / 'attachments' / 'waitroom' / str(tid)
+    d = config.home() / 'attachments' / ('waitroom' if tid is not None else 'prompt') / (str(tid) if tid is not None else time.strftime('%Y%m'))
     d.mkdir(parents=True, exist_ok=True)
     p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}.{ext}'
     p.write_bytes(data)
-    store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
+    if tid is not None: store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
     return {'path': str(p), 'size': len(data)}
 
 

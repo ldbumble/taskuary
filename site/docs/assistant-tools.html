@@ -153,7 +153,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>text</code> - the gist, in the owner&#39;s words</li>
 </ul>
 <p class="runs">At once - a draft, nothing sent.</p><h3 id="approve"><code>approve</code><a class="anchor" href="#approve" aria-label="Link to this section">#</a></h3>
-<p>Send the drafted reply as it stands.</p>
+<p>The owner&#39;s yes to what is drafted on the item: sends the reply as it stands - on a task&#39;s close-out (Close out) it merges the pull request or closes the issue FIRST, then sends the reply; on an agent&#39;s proposal it runs that action. It never continues an agent&#39;s session - that is agent.continue.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="redraft"><code>redraft</code><a class="anchor" href="#redraft" aria-label="Link to this section">#</a></h3>
 <p>Write the draft again.</p>
 <ul>
@@ -291,7 +291,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="review-approve"><code>review.approve</code><a class="anchor" href="#review-approve" aria-label="Link to this section">#</a></h3>
-<p>Send the drafted reply as it stands.</p>
+<p>The owner&#39;s yes to what is drafted: sends the reply as it stands - and on a task&#39;s close-out merges the pull request (or closes the issue) FIRST, sending the reply only if that worked.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="review-reject"><code>review.reject</code><a class="anchor" href="#review-reject" aria-label="Link to this section">#</a></h3>
 <p>Reject the draft reply waiting on a task - nothing is sent, the task stays open.</p>
 <ul>
@@ -309,7 +309,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p class="runs">Waits for your yes on a card.</p><h3 id="agent-continue"><code>agent.continue</code><a class="anchor" href="#agent-continue" aria-label="Link to this section">#</a></h3>
 <p>Pick up the agent&#39;s own last session on a task where it left off, coding or not.</p>
 <ul>
-<li><code>ref</code> - the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text</li>
+<li><code>ref</code> - the task (TQ-0123) - the one on the table when it has a saved session to reopen</li>
 <li><code>note</code> - when the owner said what to tell it as it picks up</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="agent-answer"><code>agent.answer</code><a class="anchor" href="#agent-answer" aria-label="Link to this section">#</a></h3>

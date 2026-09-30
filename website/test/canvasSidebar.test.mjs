@@ -42,3 +42,16 @@ test("Next inside a section stays in it, then says the section is done and goes 
   const view = src("AssistantView.jsx");
   assert.match(view, /sectionDone\(/);
 });
+
+// the owner, 2026-09-29: "make the full time fit ... hide the 8 in today while refreshing ... when it's not refreshing it
+// should not have a ..." - swept at 1280-1920 and 390 against every sync string the server writes
+test("the sync line fits: one count and the whole time at rest, no counts and what it is reading while it syncs", async () => {
+  const feed = src("FeedView.jsx");
+  assert.match(feed, /\{rows && !\(syncing \|\| bgSync\) && stats\.slice\(0, 1\)\.map\(\(s2\) => \(/);
+  assert.match(feed, /title=\{stats\.map\(\(x\) => `\$\{x\.n\} \$\{x\.label\}`\)\.join\(" · "\)\}/);
+  assert.match(feed, /terse: !\(syncing \|\| bgSync\)/);
+  const { syncFace } = await import("../src/syncTiming.js");
+  const at = new Date(2026, 8, 29, 22, 26);
+  assert.equal(syncFace({ checked: true, started: true, lastAt: at, terse: true }), "started 10:26 PM");
+  assert.equal(syncFace({ checked: true, lastAt: at, terse: true }), "checked 10:26 PM");
+});

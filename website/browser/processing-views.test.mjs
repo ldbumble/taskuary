@@ -104,8 +104,9 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   assert.ok(await page.$(".tqRow [data-tq-open='true']"), "clicking an All row must pin its detail");
   assert.equal(assistantWrites().length, afterWalk, "opening an All row must remain read-only assistant state");
 
-  await clickNav(page, "Tasks");
-  await page.waitForSelector('[aria-label="Search all tasks"]', { timeout: 5000 });
+  // the Board is the one other view since the canvas redesign (0.3.7.0) - the Tasks tab is gone
+  await clickNav(page, "Board");
+  await page.waitForFunction(() => document.body.innerText.includes("Agent board"), { timeout: 5000 });
   await clickNav(page, "Assistant");
   await page.waitForSelector(".tqRow [data-tq-open]", { timeout: 5000 });
   assert.equal(await page.$(".tq-compose"), null, "returning from another tab must retain All");

@@ -1,6 +1,26 @@
-The Assistant walks you through what is waiting: one card at a time, with a few buttons under it.
+The Assistant walks you through what is waiting: one item at a time, with a few buttons under it.
 There are eight buttons in all. Anything without a button still works when you ask for it in your own
 words, in the app or on your phone.
+
+## One screen: the sidebar and the canvas
+
+Taskuary is one screen. The **sidebar** on the left is your work rail; the **canvas** on the right is the conversation,
+and whatever part of the app is in use opens inside it.
+
+| Where | What is there |
+|---|---|
+| Top of the sidebar | **New** (a task, a report or a workflow), then **Reports**, **Connections**, **Hub** and **Settings** |
+| Under the buttons | **Work \| Timeline** - which rows the rail shows - and the filter, then the day's count and **Sync now** |
+| The rail | **On you**, **Agents working**, **For later**, **Reports**, **Advisor ideas**, **FYI** - click a heading to walk that section |
+| The canvas | The item on the table: a task opens as its full task view - Task, Agent work, Close out - with **Next** under it |
+| The top bar | **Board** - every agent and its session, full screen - and back to the Assistant |
+
+**Reports, Connections, Hub and Settings are browsed in the canvas**, by clicks: a button shows that part's sections, a
+section shows its cards, and a card opens with its own controls - **Back** returns to the list. Ask the Assistant about
+the card that is open ("why is this failing?", "turn this on") and it knows which one you mean.
+
+An agent's session opens inside the task view, nearly the full height of the canvas; **Expand** gives it all of it. On a
+phone the task view is the screen, and **Expand** takes the session full screen with a back arrow to the chat.
 
 ## The buttons on each card
 
@@ -18,7 +38,7 @@ words, in the app or on your phone.
 | **Not ours** | a draft reply, a proposal (not a close-out), an ask, an fyi | Files it. The card asks how far | you confirm |
 | **Send back to the agent** | a draft reply on a task (under More actions); a close-out GitHub refuses for merge conflicts (the main button) | Picks the task's own agent back up with your note - or, on a conflict, GitHub's reason - as the first thing it hears. The card comes back when it stops | at once |
 | **Save and end session** | an agent waiting on you | Writes up what the session did and stops the agent. The task stays open | at once |
-| **Remind me** | any card with an open task behind it | Asks for a day, then puts the task away until that morning: Upcoming in Tasks, off your rail. On the phone the days come as choices | you pick the day |
+| **Remind me** | any card with an open task behind it | Asks for a day, then puts the task away until that morning: under For later on your rail, with its day. On the phone the days come as choices | you pick the day |
 
 A handful of fyi comes as one card with its own **All read, next** button. A close-out card for a pull request also
 shows **Decline** (close it without merging) - on the card only, never as a chat word or a phone choice - and no
@@ -41,8 +61,8 @@ Send to agent starts on the agent triage would pick; the other is one click away
 ## Remind me
 
 Every open task has **Remind me** on its page: tomorrow, next week, in 2 weeks, in a month, or any day
-from the calendar. Until that day the task is under **Upcoming** in Tasks and off your work rail. That
-morning a note goes on the task and it is back on your rail, however long ago it arrived. Ask the
+from the calendar. Until that day the task waits under **For later** on your rail, saying when it comes back. That
+morning a note goes on the task and it is back under **On you**, however long ago it arrived. Ask the
 Assistant the same thing — "bring TQ-0123 back in two weeks" — and it does it at once, with an undo.
 
 ## Everything the task page can do

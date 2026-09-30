@@ -15,8 +15,8 @@ pick the chat and whether it may listen.
 3. Pick that chat in Settings. Taskuary adds the notification role, names the chat, and switches
    on the assistant for it.
 
-The Assistant tab then offers **Walk me through them in WhatsApp** (or Telegram) for each chat set up
-this way. **Which chat the Assistant tab offers** in the same section picks one — WhatsApp, Telegram,
+The Assistant then offers **Walk me through them in WhatsApp** (or Telegram) for each chat set up
+this way. **Which chat the Assistant offers** in the same section picks one — WhatsApp, Telegram,
 or both.
 
 :::rule Only chats you are alone in
@@ -66,7 +66,7 @@ and no model reads it. Only words you type go to the model.
 | an old number, after you have already replied | nothing — a list answers one reply, then its numbers are gone |
 | anything typed - "next", "undo" and "set up" too | the model reads it, with the same tools as the desktop. No typed word is a shortcut; only a number or a poll tap is a pill |
 
-Typed words are answered by the **Assistant's** brain - the same one, and the same model, as the Assistant tab
+Typed words are answered by the **Assistant's** brain - the same one, and the same model, as the Assistant in the app
 (Settings → Triage & agents → Assistant). A Claude Assistant runs at **low effort** unless its model names one
 (`claude-sonnet-5@medium`): a turn is a short answer, and Sonnet's own default is high.
 
@@ -107,3 +107,11 @@ The WhatsApp connector runs a local bridge against an unofficial protocol. It wo
 is not a supported WhatsApp product: use a number you can afford to lose. Telegram uses a proper
 bot API and has no such caveat.
 :::
+
+## Sections, For later and browsing, on the phone
+
+The morning line and the walk offer the rail's sections as choices - **Walk On you**, **Walk For later**, **Walk FYI** -
+and **Next** stays inside the one you picked until it is empty. Rows under For later say when they come back
+("back in 3h"). **Connections** and **Settings** are choices too: pick one, then a section, then a card - its state
+and what it does come back as text, with **Back** as a choice. Say "set it up" or name the change you want, and it is
+proposed for your yes, as in the app.

@@ -742,7 +742,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     const epoch = chatEpoch.current;
     const { data } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current) return null;
-    setState(data); setMsgs(data.messages || []);
+    // ...keeping what the canvas opened locally meanwhile - a browse card or a task opened before the conversation came
+    // back was wiped by it (a sidebar button pressed while the page loads)
+    setState(data); setMsgs((cur) => [...(data.messages || []), ...cur.filter((m) => m.role === "browse" || /^t\d/.test(String(m.id)))]);
     // Current is the server's persisted, validated word (PW-162) - never inferred from the last card in the
     // transcript: a handled item stays readable history and is not revived as live work, and an invalid
     // Current comes back null with nothing chosen in its place.
@@ -1526,7 +1528,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const browse = (area, state = {}) => {
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false);
     const id = `b${Date.now()}`;
-    setMsgs((m) => [...m, { id, role: "browse", area, state }]);
+    // THE SAME AREA MOVES ITS CARD: a link or a button for the area already open re-places that card, never posts a second
+    // one - a second unmounted the first mid-dialog (a #playbook link opening New playbook), and old links posted two
+    setMsgs((m) => {
+      const live = [...m].reverse().find((x) => x.role === "browse" || (x.card && !x.card.background_event));
+      if (live?.role === "browse" && live.area === area) return m.map((x) => (x.id === live.id ? { ...x, state } : x));
+      return [...m, { id, role: "browse", area, state }];
+    });
     setTimeout(() => bodyRef.current?.querySelector(`[data-tq-browse-line="${area}"]:last-of-type`)?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
   };
   // A TASK OPENED BY NAME - a link, a notification, the Board, a card's "Open TQ-0005" - is shown the same way the walk

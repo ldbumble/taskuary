@@ -75,7 +75,8 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   assert.equal(await page.$(".tq-pile-next"), null, "the NEXT/current pills are gone from the row");
   const expectedNext = await page.$eval(".tq-pile-row.next .card b", (node) => node.textContent.trim());
   // Next sits in the card's own foot since the one-card walk (904916c2), not in the verb line under it
-  await page.evaluate(() => [...document.querySelectorAll(".tq-msg button")]
+  // ...and on a task, under the task view the canvas shows (0.3.7.0: [data-tq-next])
+  await page.evaluate(() => [...document.querySelectorAll(".tq-msg button, [data-tq-next]")]
     .filter((button) => button.innerText.trim() === "Next").pop()?.click());
   await page.waitForFunction((title) => document.querySelector(".tq-pile-row.current .card b")?.textContent.trim() === title,
     { timeout: 15000 }, expectedNext);
@@ -95,15 +96,20 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   await input.click({ clickCount: 3 });
   await page.keyboard.press("Backspace");
 
+  // the canvas redesign (0.3.7.0): Tasks and Reports are no longer tabs - a task opens as its view in the canvas (a
+  // link does it), Reports is the sidebar's browse card, and the Board is the top bar's switch
   const surfaces = [
-    ["Tasks", "selector", '[aria-label="Search all tasks"]', "Reconcile the August GL export"],
     ["Board", "text", "Agent board", "census sync fails when a site has no manager"],
-    ["Reports", "text", "Reports & workflows", "Headcount by site, nightly"],
+    ["Reports", "text", "reports read and summarise", "Headcount by site, nightly"],
   ];
   const timings = { firstVisibleMs, inputMs };
   for (const [label, waitKind, readyMarker, fixtureText] of surfaces) {
     const before = performance.now();
     await clickNav(page, label);
+    if (label === "Reports") {
+      await page.waitForSelector('[data-tq-browse-chip="reports"]', { timeout: limits.navigationMs });
+      await page.click('[data-tq-browse-chip="reports"]');
+    }
     if (waitKind === "selector") await page.waitForSelector(readyMarker, { timeout: limits.navigationMs });
     else await waitForBody(page, readyMarker, limits.navigationMs);
     const elapsed = Math.round(performance.now() - before);
@@ -125,8 +131,12 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.firstVisibleMs });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), advancedCurrent,
     "durable replay must restore Current");
-  assert.equal(await page.$$eval(".tq-chat-inner > .tq-msg", (rows, title) => rows.filter((row) => row.textContent.includes(title)).length,
-    advancedCurrent), 1, "durable replay must not duplicate the Current assistant turn");
+  // the Current turn is a chat line, or - on a task - the task view the canvas shows (0.3.7.0), which fills in its title
+  // once the task loads
+  const currentTurns = (title) => [...document.querySelectorAll(".tq-chat-inner > .tq-msg, .tq-chat-inner > .tq-canvas-live")]
+    .filter((row) => row.textContent.includes(title)).length;
+  await page.waitForFunction(currentTurns, { timeout: limits.firstVisibleMs }, advancedCurrent);
+  assert.equal(await page.evaluate(currentTurns, advancedCurrent), 1, "durable replay must not duplicate the Current assistant turn");
   assert.equal(turnRequests, 2, "tab navigation and reload must not initiate another assistant turn");
 
   assert.deepEqual(page.fixtureEscapes, [], `browser attempted non-fixture requests: ${page.fixtureEscapes.join(", ")}`);

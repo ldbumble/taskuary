@@ -32,7 +32,9 @@ test("Back and a section chip change only the line's own state - no fetch", () =
 test("the sidebar posts a browse card; only the newest is live, so one detail is mounted", () => {
   const view = src("AssistantView.jsx");
   assert.match(view, /onGo=\{\(tab, key\) => browse\(key\)\}/);
-  assert.match(view, /setMsgs\(\(m\) => \[\.\.\.m, \{ id, role: "browse", area, state \}\]\)/);
+  assert.match(view, /return \[\.\.\.m, \{ id, role: "browse", area, state \}\];/);
+  // ...and the area already open moves its own card rather than posting a second
+  assert.match(view, /if \(live\?\.role === "browse" && live\.area === area\) return m\.map\(\(x\) => \(x\.id === live\.id \? \{ \.\.\.x, state \} : x\)\);/);
   assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.id;/);
   assert.match(src("CanvasBrowse.jsx"), /if \(!live\) return frame\(\{ title: AREA_TITLES\[area\] \}\);/);
   // ...and the item on the table folds to its line while a browse card is open below it
@@ -77,5 +79,5 @@ test("Docs in the canvas lists every document the tab's rail did, and opens the 
   const b = s.slice(s.indexOf("if (browse) {"), s.indexOf("return browse({", s.indexOf("if (browse) {")));
   assert.match(b, /docsTree\(docCat\)/, "the same tree the rail drew: documents, profiles, playbooks, How it works");
   assert.match(s, /setDocSel\(e\.sel\.action \? \{ \.\.\.e\.sel, n: Date\.now\(\) \} : e\.sel\)/);
-  assert.match(s, /<DocsView onCatalog=\{onCatalog\} \/>/, "the profiles and playbooks are listed before any document is opened");
+  assert.match(s, /<DocsView onCatalog=\{onCatalog\} catalogOnly \/>/, "the profiles and playbooks are listed before any document is opened");
 });

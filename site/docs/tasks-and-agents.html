@@ -52,12 +52,12 @@
 <div class="entry on">
       <a class="page" href="./tasks-and-agents" aria-current="page">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Tasks and agents's sections"></button>
-      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-a-coding-agent" data-sec="sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="#the-general-agent" data-sec="the-general-agent">The general agent</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-tasks-list-and-the-board" data-sec="the-tasks-list-and-the-board">The Tasks list and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-a-coding-agent" data-sec="sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="#the-general-agent" data-sec="the-general-agent">The general agent</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-task-view-and-the-board" data-sec="the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Assistant buttons's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./assistant#the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="./assistant#the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="./assistant#remind-me">Remind me</a><a class="sec" href="./assistant#everything-the-task-page-can-do">Everything the task page can do</a><a class="sec" href="./assistant#words-that-work-typed">Words that work typed</a></div>
+      <div class="secs" hidden><a class="sec" href="./assistant#one-screen-the-sidebar-and-the-canvas">One screen: the sidebar and the canvas</a><a class="sec" href="./assistant#the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="./assistant#the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="./assistant#remind-me">Remind me</a><a class="sec" href="./assistant#everything-the-task-page-can-do">Everything the task page can do</a><a class="sec" href="./assistant#words-that-work-typed">Words that work typed</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant-tools">What the Assistant sees</a>
@@ -72,7 +72,7 @@
 <div class="entry">
       <a class="page" href="./phone">On your phone</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show On your phone's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./phone#the-doorways">The doorways</a><a class="sec" href="./phone#what-it-can-do">What it can do</a><a class="sec" href="./phone#the-morning-line">The morning line</a><a class="sec" href="./phone#handing-over">Handing over</a><a class="sec" href="./phone#what-it-will-not-do">What it will not do</a></div>
+      <div class="secs" hidden><a class="sec" href="./phone#the-doorways">The doorways</a><a class="sec" href="./phone#what-it-can-do">What it can do</a><a class="sec" href="./phone#the-morning-line">The morning line</a><a class="sec" href="./phone#handing-over">Handing over</a><a class="sec" href="./phone#what-it-will-not-do">What it will not do</a><a class="sec" href="./phone#sections-for-later-and-browsing-on-the-phone">Sections, For later and browsing, on the phone</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
@@ -460,15 +460,17 @@ first time an agent does it: on close, Taskuary asks whether that will recur and
 playbook onto the task. Approve it, and the next message like it is matched to that playbook by
 triage, and the agent is seeded from it instead of from <code>CODER.md</code>&#39;s repository rules.</p>
 <p>Each connector card lists the playbooks that name it, and the words themselves are edited on the
-<strong>Docs</strong> tab.</p>
-<h2 id="the-tasks-list-and-the-board">The Tasks list and the Board<a class="anchor" href="#the-tasks-list-and-the-board" aria-label="Link to this section">#</a></h2>
-<p>Both pages show the same state for a task, in the work rail&#39;s words — the server decides it once and both draw it.</p>
+<strong>Settings → Docs</strong>.</p>
+<h2 id="the-task-view-and-the-board">The task view and the Board<a class="anchor" href="#the-task-view-and-the-board" aria-label="Link to this section">#</a></h2>
+<p>A task opens in the Assistant&#39;s canvas as its task view - from the rail, from a link, from a notification or from the
+Board. The Board, full screen from the top bar, shows every agent&#39;s task in its state&#39;s column. Both say the same
+state for a task, in the work rail&#39;s words — the server decides it once and both draw it.</p>
 <p><figure><img src="img/task-state.svg" alt="Which state a task is in: a live session first, then who closed it, a drafted reply, an agent's session, or you" loading="lazy"><figcaption>The Board's columns are the agent's states.</figcaption></figure></p>
 <table>
 <thead>
 <tr>
 <th>The task</th>
-<th>Tasks list</th>
+<th>Task view and rail</th>
 <th>Board column</th>
 </tr>
 </thead>
@@ -518,13 +520,15 @@ triage, and the agent is seeded from it instead of from <code>CODER.md</code>&#3
 <td>—</td>
 </tr>
 </tbody></table>
-<p>A task put away with <strong>Remind me</strong> is under <strong>upcoming</strong> and off the Board until its day — unless its agent asks you
-something. Status has no box of its own: <strong>Start</strong>, <strong>Mark done</strong>, <strong>Remind me</strong> and <strong>Reopen</strong> set it, and Reopen clears
+<p>A task put away with <strong>Remind me</strong> waits under <strong>For later</strong> on the rail and off the Board until its day — unless its
+agent asks you something. Status has no box of its own: <strong>Start</strong>, <strong>Mark done</strong>, <strong>Remind me</strong> and <strong>Reopen</strong> set it, and Reopen clears
 an old reminder. <strong>Mark done</strong> keeps a draft that was waiting; <strong>Bring it back to send</strong> sends it after all. Done is
 listed by task number, highest first.</p>
 <h2 id="the-work-rail">The work rail<a class="anchor" href="#the-work-rail" aria-label="Link to this section">#</a></h2>
 <p>The rail beside the Assistant holds what still wants something from you - nothing finished, and never a history.</p>
-<p><figure><img src="img/rail-on.svg" alt="What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours - then Urgent, Your task, Passed, Reports, FYI or Agents working" loading="lazy"><figcaption>What is on the rail, and under which heading.</figcaption></figure></p>
+<p><figure><img src="img/rail-on.svg" alt="What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours" loading="lazy"><figcaption>What is on the rail, and under which heading.</figcaption></figure></p>
+<p>The headings, top to bottom. Click one to walk that section: its first row goes on the table, and <strong>Next</strong> stays inside
+it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on as usual.</p>
 <table>
 <thead>
 <tr>
@@ -539,13 +543,18 @@ listed by task number, highest first.</p>
 <td>-</td>
 </tr>
 <tr>
-<td><strong>Your task</strong></td>
+<td><strong>On you</strong></td>
 <td>A person&#39;s ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished</td>
-<td>Passed work after 3 hours</td>
+<td>For later work when its time comes</td>
 </tr>
 <tr>
-<td><strong>Passed</strong></td>
-<td>Your work you pressed <strong>Next</strong> on - still yours, not offered again by the walk</td>
+<td><strong>Agents working</strong></td>
+<td>An agent busy on a task - nothing for you until it stops or asks</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>For later</strong></td>
+<td>Your work you pressed <strong>Next</strong> on, and tasks put away with <strong>Remind me</strong> - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first</td>
 <td>-</td>
 </tr>
 <tr>
@@ -554,13 +563,13 @@ listed by task number, highest first.</p>
 <td>-</td>
 </tr>
 <tr>
-<td><strong>FYI</strong></td>
-<td>People told you things; rows whose triage failed</td>
+<td><strong>Advisor ideas</strong></td>
+<td>Something the Advisor noticed, while it is still only an idea - made a task it moves to On you or Agents working; dismissed it leaves</td>
 <td>-</td>
 </tr>
 <tr>
-<td><strong>Agents working</strong></td>
-<td>An agent busy on a task - nothing for you until it stops or asks</td>
+<td><strong>FYI</strong></td>
+<td>People told you things; rows whose triage failed</td>
 <td>-</td>
 </tr>
 </tbody></table>
@@ -575,7 +584,7 @@ listed by task number, highest first.</p>
 </thead>
 <tbody><tr>
 <td><strong>Next</strong> on your open work</td>
-<td>Passed</td>
+<td>For later</td>
 <td>after 3 hours (Settings → Passed work comes back after), or a new message</td>
 </tr>
 <tr>
@@ -590,7 +599,7 @@ listed by task number, highest first.</p>
 </tr>
 <tr>
 <td><strong>Remind me</strong></td>
-<td>Upcoming in Tasks</td>
+<td>For later, with its day</td>
 <td>07:00 on that day, saying &quot;you asked to be reminded about this today&quot;</td>
 </tr>
 <tr>
@@ -620,7 +629,7 @@ listed by task number, highest first.</p>
 </tr>
 <tr>
 <td>Older than 14 days</td>
-<td>off - search Tasks for it</td>
+<td>off - ask the Assistant for it by name or TQ number</td>
 <td>a new message; a Remind me date</td>
 </tr>
 </tbody></table>

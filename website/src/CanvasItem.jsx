@@ -6,7 +6,7 @@
 // after it has output corrupts the pane (ConPTY keeps a grown viewport top-anchored - see terminal.remember_geometry),
 // so the terminal inside is sized once, for the whole canvas, and nothing here can grow it afterwards.
 import React, { useEffect, useRef, useState } from "react";
-import { Box } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
 
 // the height the view takes: the chat body's own, less its padding - the same in both states (see above). Said in CSS,
@@ -43,16 +43,28 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
     <Box ref={box} data-tq-canvas-item={card.key} data-tq-pinned={pin ? "" : undefined}
-      sx={{ height: h, display: "flex", minWidth: 0, scrollMarginTop: "8px",
+      sx={{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: "8px",
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
+      <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
       <TaskPage taskId={card.tid} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
         openAct={act} onActOpened={() => setAct(null)}
-        onNext={onNext} nextBusy={busy} expanded={expanded} onExpand={onExpand}
+        expanded={expanded} onExpand={onExpand}
         onClose={onFold} onListChanged={onListChanged} onChanged={onChanged} onGoReports={onGoReports}
         // closed, put away or deleted here, the walk moves on - the same as Done on a walk card
         onSelect={(id) => { if (!id) onAfter(); }}
         onFinish={async (status, close) => { await close(); onAfter(); }}
         onReminded={(out) => { if (out?.remindAt) onAfter(); }} backArrow={phone} />
+      </Box>
+      {/* NEXT, UNDER THE VIEW, where the walk has always put it (the owner, 2026-09-29: "the next goes on top right corner
+          and not on the bottom like it used to be ... it's not very easy to see"). It is the walk's ONE button on a task:
+          everything else - done, remind, hand off, reply - is the task view's own, right above it. */}
+      <Box sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 1.5, pt: 1, pb: 0.25, px: 0.5 }}>
+        <Button variant="contained" disableElevation data-tq-next="" disabled={busy} onClick={onNext}
+          sx={{ height: 38, px: 3, borderRadius: 99, fontSize: 13.5, fontWeight: 700, bgcolor: "#55697a", "&:hover": { bgcolor: "#41525f" } }}>
+          Next
+        </Button>
+        <Typography sx={{ fontSize: 12, color: "#8a847a" }} noWrap>puts this one down, still yours, and brings the next</Typography>
+      </Box>
     </Box>
     </>
   );

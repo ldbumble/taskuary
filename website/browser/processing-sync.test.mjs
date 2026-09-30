@@ -71,7 +71,8 @@ test('sync phases leave rows usable and completion is discovered without live ev
   const before = polls.length;
   await phase('idle');
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(n => n.textContent.trim() === 'Sync now' && !n.disabled), { timeout: 10000 });
-  await page.waitForFunction(() => document.body.innerText.includes('next in'), { timeout: 10000 });
+  // at rest the narrowed sidebar says the whole time, not the countdown (the owner, 2026-09-29: "make the full time fit")
+  await page.waitForFunction(() => /(checked|started|synced) \d{1,2}:\d{2}/.test(document.body.innerText), { timeout: 10000 });
   assert.ok(await page.evaluate(() => document.body.innerText.includes('in today')), 'item count labels remain visible');
   assert.ok(polls.length > before, 'a periodic status read must observe completion');
   assert.equal(await page.evaluate(() => Number.isInteger(window.__droppedSyncEvents)), true,

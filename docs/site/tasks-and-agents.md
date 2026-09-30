@@ -211,15 +211,17 @@ playbook onto the task. Approve it, and the next message like it is matched to t
 triage, and the agent is seeded from it instead of from `CODER.md`'s repository rules.
 
 Each connector card lists the playbooks that name it, and the words themselves are edited on the
-**Docs** tab.
+**Settings → Docs**.
 
-## The Tasks list and the Board
+## The task view and the Board
 
-Both pages show the same state for a task, in the work rail's words — the server decides it once and both draw it.
+A task opens in the Assistant's canvas as its task view - from the rail, from a link, from a notification or from the
+Board. The Board, full screen from the top bar, shows every agent's task in its state's column. Both say the same
+state for a task, in the work rail's words — the server decides it once and both draw it.
 
 ![Which state a task is in: a live session first, then who closed it, a drafted reply, an agent's session, or you](img/task-state.svg "The Board's columns are the agent's states.")
 
-| The task | Tasks list | Board column |
+| The task | Task view and rail | Board column |
 |---|---|---|
 | handed to an agent, nothing started | ⏳ waiting to start | waiting to start — with what it waits for, or why it could not start, and **Start now** / **Cancel** |
 | its agent is running | ⚙️ agent working | agent working |
@@ -231,8 +233,8 @@ Both pages show the same state for a task, in the work rail's words — the serv
 | waiting on somebody else | 📤 waiting on them | — |
 | nobody was handed it | 📋 on you | — |
 
-A task put away with **Remind me** is under **upcoming** and off the Board until its day — unless its agent asks you
-something. Status has no box of its own: **Start**, **Mark done**, **Remind me** and **Reopen** set it, and Reopen clears
+A task put away with **Remind me** waits under **For later** on the rail and off the Board until its day — unless its
+agent asks you something. Status has no box of its own: **Start**, **Mark done**, **Remind me** and **Reopen** set it, and Reopen clears
 an old reminder. **Mark done** keeps a draft that was waiting; **Bring it back to send** sends it after all. Done is
 listed by task number, highest first.
 
@@ -240,31 +242,35 @@ listed by task number, highest first.
 
 The rail beside the Assistant holds what still wants something from you - nothing finished, and never a history.
 
-![What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours - then Urgent, Your task, Passed, Reports, FYI or Agents working](img/rail-on.svg "What is on the rail, and under which heading.")
+![What puts something on the rail and under which heading: inside 14 days, not decided or noise, unread or still yours](img/rail-on.svg "What is on the rail, and under which heading.")
+
+The headings, top to bottom. Click one to walk that section: its first row goes on the table, and **Next** stays inside
+it until it is empty, then says so ("FYI done.") and the walk goes on as usual.
 
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
-| **Your task** | A person's ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished | Passed work after 3 hours |
-| **Passed** | Your work you pressed **Next** on - still yours, not offered again by the walk | - |
-| **Reports** | A report run that landed | - |
-| **FYI** | People told you things; rows whose triage failed | - |
+| **On you** | A person's ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished | For later work when its time comes |
 | **Agents working** | An agent busy on a task - nothing for you until it stops or asks | - |
+| **For later** | Your work you pressed **Next** on, and tasks put away with **Remind me** - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first | - |
+| **Reports** | A report run that landed | - |
+| **Advisor ideas** | Something the Advisor noticed, while it is still only an idea - made a task it moves to On you or Agents working; dismissed it leaves | - |
+| **FYI** | People told you things; rows whose triage failed | - |
 
 ![Every way off the rail and what brings it back](img/rail-off.svg "Nothing leaves for good while it is still yours.")
 
 | You or it does | It goes | Back when |
 |---|---|---|
-| **Next** on your open work | Passed | after 3 hours (Settings → Passed work comes back after), or a new message |
+| **Next** on your open work | For later | after 3 hours (Settings → Passed work comes back after), or a new message |
 | **Next** on anything else | off | a new message, note or edit on it |
 | **Mark done** | off | THEY write after the close - your own reply does not count |
-| **Remind me** | Upcoming in Tasks | 07:00 on that day, saying "you asked to be reminded about this today" |
+| **Remind me** | For later, with its day | 07:00 on that day, saying "you asked to be reminded about this today" |
 | Its agent closes the task | "Agent finished" until you read it | a new message on it |
 | A draft decided anywhere, an idea dismissed | off | they write again |
 | An auto-reply, a withdrawn message, a thread where yours is the last word | never shown (Settings → Hide auto-replies and answered threads) | - |
 | A meeting starts | off 5 minutes in (Settings) | - |
 | **Next** on a failed connection | off | a different error |
-| Older than 14 days | off - search Tasks for it | a new message; a Remind me date |
+| Older than 14 days | off - ask the Assistant for it by name or TQ number | a new message; a Remind me date |
 
 ## How work is ordered
 

@@ -6552,7 +6552,7 @@ def catch_up_on_startup():
         # startup and six reports were the other 165 s, all of it behind one 'catching up on
         # the 27 hour(s)' banner (measured on the owner's box, 2026-09-19). So the catch-up
         # ENDS when the mail is in and judged...
-        _poll_reports(hours, what=f'catching up on the {hours:.0f} hour(s) it was closed' if hours else 'syncing')
+        _poll_reports(hours, what=f'catching up on {hours:.0f}h closed' if hours else 'syncing')   # fits the sidebar's one sync line
         # ...and the reports that were due take their own pass, on their own lock
         report_pass(startup=True)
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by

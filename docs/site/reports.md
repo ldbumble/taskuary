@@ -4,7 +4,7 @@ share one builder, which is why they share one page here.
 
 ## A report is a pipeline
 
-One report is one saved configuration on the **Reports** tab, built in four steps.
+One report is one saved configuration under **Reports** - the sidebar's button, browsed in the canvas - built in four steps.
 
 | Step | What it decides |
 |---|---|
@@ -50,7 +50,7 @@ describe what you want instead, in three places:
 
 | Where | What it writes |
 |---|---|
-| **Describe the report you want**, top of the Reports tab | A whole report — type, query, prompt and schedule — dropped into the builder |
+| **Describe the report you want**, top of Reports | A whole report — type, query, prompt and schedule — dropped into the builder |
 | **let AI fill this in**, on any source card | That one card, in the type it is already set to |
 | **Describe what the Advisor should keep an eye on** | Every source the ask needs, plus the instruction to judge them by |
 

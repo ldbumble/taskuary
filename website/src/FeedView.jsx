@@ -1524,8 +1524,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               times"). The counts keep their size, the clock takes what is left and ellipses, and the button
               has one width whatever its label says, flush right under + New. */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "nowrap", minHeight: 20 }}>
-            {rows && stats.map((s2) => (
+            {/* THE NARROWED SIDEBAR (the owner, 2026-09-29: "make the full time fit ... might have to hide the 8 in today while
+                refreshing ... when it's not refreshing it should not have a ..."): at rest, the day's one count and the whole
+                time - the other counts ride its tooltip; while a sync runs, no counts, and the line says what it is reading */}
+            {rows && !(syncing || bgSync) && stats.slice(0, 1).map((s2) => (
               <Box key={s2.label} onClick={() => s2.f && setView(s2.f)}
+                title={stats.map((x) => `${x.n} ${x.label}`).join(" · ")}
                 sx={{ display: "flex", alignItems: "baseline", gap: 0.4, flexShrink: 0, cursor: s2.f ? "pointer" : "default",
                   ...(s2.f ? { "&:hover .thubStatLbl": { color: ALERT_INK } } : {}) }}>
                 <Typography sx={{ fontWeight: 700, fontSize: 11.5,
@@ -1536,7 +1540,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>Loading item counts…</Typography>}
             <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, flex: 1, minWidth: 0, textAlign: "right" }}>
               {syncUnknown ? "Sync status unavailable — rechecking"
-                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted })} />}
+                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted,
+                    terse: !(syncing || bgSync) })} />}
             </Typography>
             <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}

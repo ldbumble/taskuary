@@ -843,13 +843,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Box>
                   )}
                   <LifecycleChip kind="task" phase={taskState} compact sx={{ flexShrink: 0, display: { xs: "none", sm: "inline-flex" } }} />
-                  {/* ON THE ASSISTANT CANVAS (the canvas redesign, 2026-09-29) the walk's Next lives on this bar, as the
-                      mockup draws it, and Expand gives the view the whole canvas - the pane keeps its size either way */}
-                  {onNext && (
-                    <Button size="small" variant="outlined" data-tq-next="" disabled={nextBusy} onClick={onNext}
-                      title="Put this down and bring me the next one - nothing about it changes"
-                      sx={{ fontSize: 11, minHeight: 24, py: 0, px: 1.25, flexShrink: 0, color: INK, borderColor: BORDER }}>Next</Button>
-                  )}
+                  {/* ON THE ASSISTANT CANVAS Expand gives the view the whole canvas - the pane keeps its size either way.
+                      Next is NOT up here: it sits under the view, where the walk has always put it (CanvasItem) */}
                   {onExpand && (
                     <Tooltip title={expanded ? "Back to the conversation" : "Give this the whole canvas"}>
                       <IconButton size="small" data-tq-expand="" aria-label={expanded ? (backArrow ? "Back to the chat" : "Collapse to the conversation") : "Expand to the whole canvas"}

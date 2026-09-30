@@ -176,7 +176,10 @@ export async function startHarness() {
       executablePath: executable(),
       headless: true,
       userDataDir: browserProfile,
-      env: isolated,
+      // Chrome on Windows will not start with APPDATA/USERPROFILE pointed at a scratch dir (it exits, and puppeteer
+      // reports "The browser is already running"). TASKUARY_BROWSER_PLAIN_ENV=1 hands the BROWSER alone the real
+      // environment for a local run; the app server stays isolated either way, and CI never sets it.
+      env: process.env.TASKUARY_BROWSER_PLAIN_ENV ? process.env : isolated,
       args: [
         "--disable-background-networking",
         "--disable-component-update",
@@ -257,6 +260,26 @@ export async function bodyText(page) {
 }
 
 export async function clickNav(page, label) {
+  // THE TABS ARE GONE (the canvas redesign, 0.3.7.0): Reports, Connections, Hub and Settings are the sidebar's buttons and
+  // open as browse cards in the Assistant's canvas; the Board is the top bar's one switch, and so is the way back.
+  const sidebar = { Reports: "reports", Connections: "connections", Hub: "hub", Settings: "settings" }[label];
+  if (sidebar || label === "Board" || label === "Assistant" || label === "Timeline") {
+    const done = await page.evaluate((key, want) => {
+      const visible = (el) => el && el.getBoundingClientRect().width > 0;
+      const sw = document.querySelector("[data-tq-view-switch]");
+      const onBoard = sw?.getAttribute("data-tq-view-switch") === "assistant";
+      if (want === "Board") { if (!onBoard) sw?.click(); return !!sw; }
+      if (onBoard) sw.click();                               // back to the Assistant first
+      if (!key) return true;
+      const nav = document.querySelector(`[data-tq-nav="${key}"]`);
+      if (!visible(nav)) document.querySelector('[aria-label="The Timeline"]')?.click();   // a phone keeps it in the drawer
+      const again = document.querySelector(`[data-tq-nav="${key}"]`);
+      again?.click();
+      return !!again;
+    }, sidebar || null, label);
+    if (!done) throw new Error(`navigation item not found: ${label}`);
+    return;
+  }
   const clicked = await page.evaluate((wanted) => {
     // The count badge rides INSIDE the pill (a MUI Badge hung outside it was clipped by the
     // strip's own scroller), so the tab that has one reads "Tasks3" here, not "Tasks". Strip a
@@ -275,6 +298,25 @@ export async function clickNav(page, label) {
 // A settings RAIL entry - a page, a section, or one of Docs' documents. These are divs, not
 // buttons, so the button-based helpers in the tests cannot reach them.
 export async function clickRail(page, label) {
+  // THE CANVAS (0.3.7.0) has no Settings rail: the same entries are the cards of a Settings browse card's list - a
+  // document open over its list goes Back first, then the card with that title is opened
+  if (!(await page.$("#tqSettingsRail"))) {
+    // a rail GROUP heading is the list's grouping in the canvas: "clicking" it is being on the list
+    if (["Operator documents", "Profiles", "Playbooks"].includes(label)) {
+      await page.evaluate(() => document.querySelector("[data-tq-browse-back]")?.click());
+      await page.waitForSelector("[data-tq-browse-card]");
+      return;
+    }
+    const card = (wanted) => [...document.querySelectorAll("[data-tq-browse-card]")].find((c) =>
+      (c.querySelector("p")?.textContent || "").trim() === wanted && c.getBoundingClientRect().width > 0);
+    await page.waitForFunction((src, wanted) => {
+      if (new Function("return " + src)()(wanted)) return true;
+      document.querySelector("[data-tq-browse-back]")?.click();
+      return false;
+    }, { polling: 300, timeout: 20000 }, card.toString(), label);
+    await page.evaluate((src, wanted) => new Function("return " + src)()(wanted).click(), card.toString(), label);
+    return;
+  }
   const find = (wanted) => {
     const rail = document.getElementById("tqSettingsRail")?.parentElement;
     return [...(rail?.querySelectorAll("div") || [])].find((d) => d.textContent.trim() === wanted

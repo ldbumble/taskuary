@@ -1047,7 +1047,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       // what the assistant changed here, and the way to undo it - the tab drew it over Configuration
       tools: section === "config" && !open && !needle ? <Box sx={{ mt: 1.5 }}><AssistantChanges /></Box>
         // the shelf's profiles and playbooks come from DocsView's own reads - mounted unseen, as the tab's rail had it
-        : section === "docs" && !open ? <Box sx={{ display: "none" }}><DocsView onCatalog={onCatalog} /></Box> : null,
+        : section === "docs" && !open ? <Box sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box> : null,
       detail: open ? <SettingsPages only={{ page: section, group: section === "config" ? open : null }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),

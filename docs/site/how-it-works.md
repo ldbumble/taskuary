@@ -118,7 +118,7 @@ rewritten. An inferred rule that would *hide* work waits in Proposed rules until
 
 ## The documents that govern it
 
-Taskuary's behaviour is plain Markdown on the **Docs** tab. These are not configuration files
+Taskuary's behaviour is plain Markdown under **Settings → Docs**. These are not configuration files
 around the edges — they are what the models are actually told.
 
 | Document | Purpose | Read by |

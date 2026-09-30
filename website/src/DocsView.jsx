@@ -160,7 +160,9 @@ const OwnerCard = () => {
 // `sel` and `onSel` are how Settings' rail drives this: it owns which document is open, so the
 // page holds nothing but that document. Standalone (no onSel) it keeps its own tab strip and
 // shelf. `onCatalog` hands the rail the lists it has to draw - the profiles and playbooks on disk.
-export default function DocsView({ sel = null, onSel = null, onCatalog = null }) {
+// catalogOnly: mounted unseen only to report the shelf (the canvas's Docs list) - it must not act on a link, or it opens a
+// dialog the list's own card is about to unmount
+export default function DocsView({ sel = null, onSel = null, onCatalog = null, catalogOnly = false }) {
   const rail = !!onSel;
   const [manageProfiles, setManageProfiles] = useState(false);
   const [createProfile, setCreateProfile] = useState(false);
@@ -255,14 +257,14 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null })
 
   useEffect(() => {
     const fromHash = () => {
-      if (window.location.hash !== "#profiles") return;
+      if (catalogOnly || window.location.hash !== "#profiles") return;
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       setManageProfiles(false);
       openProf(profs[0]?.name || "coder");
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
-  }, [openProf, profs]);
+  }, [openProf, profs, catalogOnly]);
 
   // open a playbook: its text is fetched on first open, not with the shelf (the shelf is titles)
   const openPb = useCallback(async (slug, seedUses = "") => {
@@ -307,7 +309,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null })
   useEffect(() => {
     const fromHash = () => {
       const m = /playbook=([\w:.-]+)/.exec(window.location.hash || "");
-      if (!m) return;
+      if (!m || catalogOnly) return;
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       const [what, type] = m[1].split(":");
       if (what === "new") { setSection("playbooks"); setNewPlaybook({ connectorType: type || "" }); return; }
@@ -315,7 +317,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null })
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
-  }, [openPb]);
+  }, [openPb, catalogOnly]);
 
   const save = async () => {
     if (isPb(docName)) {

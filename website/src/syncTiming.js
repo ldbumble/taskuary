@@ -19,7 +19,8 @@ export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, n
   if (!every) return terse ? "sync off" : "background sync off";
   const at = lastAt ? lastAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—";
   const verb = started ? 'check started' : checked ? 'checked' : 'synced';
-  if (terse) return `${verb} ${at}`;
+  // terse is the narrowed sidebar's one line (2026-09-29): the whole time must fit, so a started check says just that
+  if (terse) return `${started ? 'started' : verb} ${at}`;
   const nxt = nextIn == null ? "" : nextIn <= 0 ? " · next sync due now" : ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`;
   const bad = failed.length ? ` · ${failed.join(", ")} failed` : "";   // a source that could not be read is never covered by "checked"
   return `${verb} ${at}${nxt}${bad}`;

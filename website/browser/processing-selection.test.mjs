@@ -156,10 +156,19 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     const currentAfterRetry = await title(page, "current");
     assert.equal(currentAfterRetry, shownNext, "Current advanced to the item that was taken");
     assert.notEqual(currentAfterRetry, heldCurrent);
-    const activeCard = () => page.$eval('.tq-msg .tq-card', node => ({
-      title: node.querySelector('.tq-card-title')?.textContent.trim(),
-      buttons: [...node.querySelectorAll('button')].map(button => button.textContent.trim()),
-    }));
+    // the live card: on a task it is the task view the canvas shows (0.3.7.0) - its item and the walk's Next under it;
+    // otherwise the walk's own card
+    const activeCard = async () => {
+      await page.waitForSelector('.tq-canvas-live [data-tq-canvas-item], .tq-msg .tq-card', { timeout: 15000 });
+      return page.evaluate(() => {
+        const view = document.querySelector('.tq-canvas-live [data-tq-canvas-item]');
+        if (view) return { title: view.getAttribute('data-tq-canvas-item'),
+          buttons: [...view.querySelectorAll('[data-tq-next]')].map(button => button.textContent.trim()) };
+        const node = document.querySelector('.tq-msg .tq-card');
+        return { title: node.querySelector('.tq-card-title')?.textContent.trim(),
+          buttons: [...node.querySelectorAll('button')].map(button => button.textContent.trim()) };
+      });
+    };
     const originalControls = await activeCard();
     assert.ok(originalControls.buttons.length, 'selected agent must have live controls');
     const passive = pile.items.find(i => i.kind === "agent" && i.tid && i.title !== currentAfterRetry);

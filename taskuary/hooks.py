@@ -428,10 +428,21 @@ def decode_spool(raw: bytes) -> list:
     """The payload lines in a spool, however cmd encoded them. Under Codex, cmd's redirect wrote UTF-16
     with a byte-order mark (measured 2026-09-20); a plain shell writes UTF-8. Segments are split on the
     mark and each decoded in its own encoding, then split into lines."""
+    # ...but the mark is written ONCE, at the file's start, and the tailer reads from where it left off - so every chunk after
+    # the first arrived WITHOUT it, was decoded as UTF-8 with the NULs stripped, and a payload carrying one curly quote, dash
+    # or bullet broke as JSON and was dropped. Codex's Stop was one: TQ-0887 sat at "agent working" over a pane that had
+    # finished and asked (the owner, 2026-09-30). A segment is UTF-16 when its bytes SAY so - NULs in every other place.
+    def utf16(seg: bytes) -> bytes | None:
+        if len(seg) < 4: return None
+        for s in (seg, seg[1:]):                      # a chunk can start one byte off the character grid
+            odd = s[1::2]
+            if odd and odd.count(0) > len(odd) * 0.3 and s[0::2].count(0) < len(odd) * 0.1: return s
+        return None
     out = []
     for i, seg in enumerate(raw.split(BOM16)):
         if not seg: continue
-        text = seg.decode('utf-16-le', 'replace') if i > 0 else seg.decode('utf-8', 'replace')
+        wide = seg if i > 0 else utf16(seg)
+        text = wide[:len(wide) // 2 * 2].decode('utf-16-le', 'replace') if wide is not None else seg.decode('utf-8', 'replace')
         out += [l.strip() for l in text.replace('\x00', '').splitlines() if l.strip()]
     return out
 

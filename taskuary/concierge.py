@@ -1927,7 +1927,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
     # nothing for the owner to do until it stops, so say so, let it go, and take the next one. It comes
     # back by itself - as the agent's question, its draft, or its finished job.
-    if item['lane'] == 'working' or (item.get('working') and item['kind'] not in ('agent', 'review', 'action')):
+    # ...only on Next. A row the owner PICKED is one they want to see - the agent at work, its pane - not a line saying there is
+    # nothing for them (the owner, 2026-09-30: "task should pull up if you want?"); a named key goes on the table like any other
+    if not key and (item['lane'] == 'working' or (item.get('working') and item['kind'] not in ('agent', 'review', 'action'))):
         # it stays in the pipe, at the top, in hand - and comes to the front by itself when the agent stops
         who = item.get('working') or next((t.get('agent') or t.get('label') for t in _live(store) if t.get('taskId') == item['tid']), None) or 'the agent'
         say = f"{item.get('ref') or item['title']} is with {who} right now - nothing for you until it stops or asks. I'll bring it down then."

@@ -292,3 +292,22 @@ class InstallTests(unittest.TestCase):
              mock.patch.object(hooks, 'install_user') as inst:
             self.assertEqual(cliinstall.install('claude')['phase'], 'done')
         self.assertEqual(inst.call_args.args[0], 'claude')
+
+
+class SpoolWithoutItsMarkTests(__import__('unittest').TestCase):
+    """cmd writes the UTF-16 mark ONCE, at the spool's start; the tailer reads on from where it stopped, so every later chunk
+    comes without it. Decoded as UTF-8, a payload with one curly quote or bullet broke and was dropped - codex's Stop among
+    them, and TQ-0887 sat at "agent working" over a finished pane (2026-09-30)."""
+    def test_a_utf16_chunk_without_its_mark_is_read(self):
+        from taskuary.hooks import decode_spool
+        import json
+        line = '{"hook_event_name":"Stop","last_assistant_message":"it’s done • [[TASKUARY-ASK]] which account?"}\n'
+        wide = line.encode('utf-16-le')
+        for chunk in (wide, b'\x00' + wide):          # on the character grid, and one byte off it
+            got = [json.loads(l) for l in decode_spool(chunk)]
+            self.assertEqual(got[0]['hook_event_name'], 'Stop')
+            self.assertIn('’', got[0]['last_assistant_message'])
+
+    def test_utf8_is_left_as_it_was(self):
+        from taskuary.hooks import decode_spool
+        self.assertEqual(decode_spool('{"a":"café —"}\n'.encode('utf-8')), ['{"a":"café —"}'])

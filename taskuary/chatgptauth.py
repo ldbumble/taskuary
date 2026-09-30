@@ -16,7 +16,7 @@ Limits the card states (developers.openai.com/siwc/.../preview-limitations): ima
 search where the model accepts them; no image generation, file search, code interpreter, computer use or hosted
 connectors. Streamed and never stored on OpenAI's side; a cap reached stops the brain until the owner raises it.
 """
-import base64, hashlib, json, secrets, threading, time, uuid
+import base64, hashlib, json, re, secrets, threading, time, uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
 import requests
@@ -208,22 +208,35 @@ class Unsupported(RuntimeError):
     """The plan cannot serve something in this request (an image, a tool) - worth asking again without it."""
 
 
+_OPTIONAL = ('text', 'max_output_tokens', 'instructions')
+
+
 def complete(token: str, model: str, system: str, user: str, max_tokens: int, want: dict = None, timeout: int = 120,
              images=None, web: bool = False) -> str:
     """One answer, streamed (the plan serves nothing else) and never stored. Only `response.completed` is success:
     a stream that stops early is a failure, not a short answer."""
     content = [{'type': 'input_image', 'image_url': f'data:{ct};base64,{b64}'} for ct, b64 in (images or [])]
-    body = {'model': model, 'instructions': system, 'store': False, 'stream': True, 'max_output_tokens': max_tokens,
+    # no max_output_tokens: the plan's endpoint refuses it ("Unsupported parameter", measured 2026-09-30)
+    body = {'model': model, 'instructions': system, 'store': False, 'stream': True,
             'input': [{'role': 'user', 'content': content + [{'type': 'input_text', 'text': user}]}]}
     if web: body['tools'] = [{'type': 'web_search'}]
     if want: body['text'] = {'format': {'type': 'json_schema', 'name': want.get('name') or 'answer',
                                         'schema': want.get('schema') or want, 'strict': True}}
-    with requests.post(f'{API}/responses', json=body, stream=True, timeout=timeout,
-                       headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}) as r:
-        if r.status_code != 200:
-            code = _code(r)
-            if code == 'subscription_sharing_unsupported_capability': raise Unsupported(_CALL_ERRORS[code])
-            raise RuntimeError(_CALL_ERRORS.get(code) or f'ChatGPT plan call failed ({r.status_code}): {_err(r)}')
+    # An OPTIONAL field the plan names as unsupported is taken out and the question asked again - the schema then
+    # lives in the prompt, as it does for every brain that cannot carry one. `tools` is the caller's to drop.
+    for _ in range(3):
+        r = requests.post(f'{API}/responses', json=body, stream=True, timeout=timeout,
+                          headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'})
+        if r.status_code == 200: break
+        field = (re.search(r'Unsupported parameter: ([\w]+)', _err(r)) or [None, None])[1]
+        r.close()
+        if field == 'tools': raise Unsupported(f'the plan does not take tools on this model: {_err(r)}')
+        if field in _OPTIONAL and field in body: body.pop(field); continue
+        code = _code(r)
+        if code == 'subscription_sharing_unsupported_capability': raise Unsupported(_CALL_ERRORS[code])
+        raise RuntimeError(_CALL_ERRORS.get(code) or f'ChatGPT plan call failed ({r.status_code}): {_err(r)}')
+    with r:
+        if r.status_code != 200: raise RuntimeError(f'ChatGPT plan call failed ({r.status_code}): {_err(r)}')
         out, done = [], False
         for line in r.iter_lines(decode_unicode=True):
             if not line or not line.startswith('data:'): continue
@@ -251,5 +264,5 @@ def _code(r) -> str:
 def _err(r) -> str:
     try:
         j = r.json(); e = j.get('error')
-        return (e.get('message') if isinstance(e, dict) else j.get('error_description') or e) or r.text[:300]
+        return (e.get('message') if isinstance(e, dict) else j.get('error_description') or e or j.get('detail')) or r.text[:300]
     except ValueError: return r.text[:300]

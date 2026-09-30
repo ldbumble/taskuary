@@ -19,6 +19,7 @@ class _Resp:
         self.status_code, self._body, self._lines, self.text = status, body or {}, lines, json.dumps(body or {})
     def json(self): return self._body
     def iter_lines(self, decode_unicode=True): return iter(self._lines)
+    def close(self): pass
     def __enter__(self): return self
     def __exit__(self, *a): return False
 
@@ -142,3 +143,13 @@ class ModelListTests(unittest.TestCase):
                 self.assertEqual(ca.models('tok'), [('gpt-plan-a', 'A')])
         with mock.patch.object(ca.requests, 'get', return_value=_Resp(200, {'object': 'list'})):
             with self.assertRaisesRegex(RuntimeError, "carried: \['object'\]"): ca.models('tok')
+
+class PlanParameterTests(unittest.TestCase):
+    def test_a_field_the_plan_refuses_is_taken_out_and_the_question_asked_again(self):
+        ok = _Resp(200, lines=_sse({'type': 'response.output_text.delta', 'delta': 'hi'}, {'type': 'response.completed'}))
+        with mock.patch.object(ca.requests, 'post', side_effect=[_Resp(400, {'detail': 'Unsupported parameter: text'}), ok]) as post:
+            self.assertEqual(ca.complete('t', 'm', 's', 'u', 10, want={'name': 'x', 'schema': {}}), 'hi')
+        self.assertNotIn('max_output_tokens', post.call_args_list[0].kwargs['json'])   # refused by the plan outright
+        self.assertNotIn('text', post.call_args_list[1].kwargs['json'])
+        with mock.patch.object(ca.requests, 'post', return_value=_Resp(400, {'detail': 'Unsupported parameter: tools'})):
+            with self.assertRaises(ca.Unsupported): ca.complete('t', 'm', 's', 'u', 10, web=True)

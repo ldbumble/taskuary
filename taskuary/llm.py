@@ -39,7 +39,8 @@ OPENAI_COMPATIBLE = {
     'deepseek':   ('https://api.deepseek.com/v1', 'deepseek-chat'),
     'perplexity': ('https://api.perplexity.ai', 'sonar'),
 }
-AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta') + tuple(OPENAI_COMPATIBLE)
+# `chatgpt` is the owner's ChatGPT plan through Sign in with ChatGPT (chatgptauth.py): no key, a signed-in account
+AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta', 'chatgpt') + tuple(OPENAI_COMPATIBLE)
 
 # What a vision model will look at. "See below." is half the mail this app reads, and below was
 # a screenshot - a text-only funnel filed the sentence and threw the actual ask away.
@@ -265,7 +266,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
             selected = not want or (c['ConnectorId'] == want_id if want_id is not None else c['Type'] == want)
             if c['Type'] in AI_TYPES and ready and selected:
                 full = store.get_connector(c['ConnectorId'], with_secret=True)
-                config = json.loads(full.get('ConfigJson') or '{}')
+                config = {**json.loads(full.get('ConfigJson') or '{}'), '_cid': full['ConnectorId']}   # a rotated sign-in token is saved back to its card
                 if chosen_model: config = {**config, 'model': chosen_model}
                 return make_llm(full['Type'], config, full.get('Secret'))
         return None
@@ -381,10 +382,32 @@ def tried(r) -> str:
     return f' after {RETRY_TRIES} tries' if r.status_code in RETRY_STATUS else ''
 
 
+def _chatgpt_llm(cfg: dict, refresh_token: str):
+    """The owner's ChatGPT plan as a brain. `key` is the sign-in's refresh token, not an API key; the model is the card's,
+    else the first one the plan lists. Text in, text out - an attached image is said to be absent, never sent."""
+    from . import chatgptauth as ca
+    if not refresh_token: raise RuntimeError('not signed in - click "Sign in with ChatGPT" on the ChatGPT card')
+    picked = {}
+    def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
+        tok = ca.access_token(cfg, refresh_token)
+        if 'model' not in picked:
+            listed = [s for s, _ in ca.models(tok)] if not cfg.get('model') else []
+            picked['model'] = cfg.get('model') or (listed[0] if listed else '')
+            if not picked['model']: raise RuntimeError('the ChatGPT plan lists no models this account can use')
+        # the plan preview serves text only; a screenshot is said to be missing rather than silently dropped
+        if images: user = f'[{len(images)} attached image(s) not shown - this brain reads text only]\n\n{user}'
+        return ca.complete(tok, picked['model'], system, user, max_tokens, want)
+    llm.takes_want = True
+    return llm
+
+
 def list_models(t, cfg: dict, key: str) -> list:
     """The model ids this key can actually call, from the provider's own list endpoint - so the picker never offers a name the
     account does not have. Azure names what you DEPLOYED (that is what a request carries), so it is its deployments, or the resource's base models when the
     deployments list is closed to this key. RAISES on a provider that answers with an error: an empty list would read as "none exist"."""
+    if t == 'chatgpt':
+        from . import chatgptauth as ca
+        return [s for s, _ in ca.models(ca.access_token(cfg, key))] if key else []
     if t == 'anthropic': url, h, k = 'https://api.anthropic.com/v1/models?limit=100', {'x-api-key': key, 'anthropic-version': '2023-06-01'}, 'data'
     elif t == 'azure_openai':
         ep, ids = (cfg.get('endpoint') or '').rstrip('/'), []
@@ -409,6 +432,7 @@ def list_models(t, cfg: dict, key: str) -> list:
 
 
 def make_llm(t, cfg: dict, key: str):
+    if t == 'chatgpt': return _chatgpt_llm(cfg, key)
     if not key and t != 'ollama': raise RuntimeError('no API key saved - paste one under Credentials')
     if t == 'anthropic':
         import anthropic

@@ -158,6 +158,8 @@ async def _lifespan(_app):
     waitroom.watch(store)          # notes queued for a working agent land when it stops
     from . import msauth
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
+    from . import chatgptauth
+    chatgptauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'chatgptauth')   # ...and a ChatGPT one
     try:
         async with processing_all.membership_lifecycle(store):
             yield
@@ -4566,6 +4568,49 @@ def connector_ai_setup(cid: int, body: AiSetupBody):
 def connector_ai_setup_live(cid: int):
     """Reattach: the card reloads, the agent is still there."""
     return {'session': aisetup.live_for(store, cid)}
+
+# ── Sign in with ChatGPT (taskuary/chatgptauth.py): the owner's ChatGPT plan as a brain, no API key ──
+def _chatgpt_card(cid):
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'chatgpt': raise HTTPException(404, 'Sign in with ChatGPT lives on the ChatGPT card')
+    return c, json.loads(c.get('ConfigJson') or '{}')
+
+@app.post('/api/connectors/{cid}/chatgpt/signin')
+def chatgpt_signin(cid: int):
+    """Start the browser sign-in: the URL the page opens, and a flow id to poll with. The browser comes back to a
+    listener on 127.0.0.1 that lives only for this attempt."""
+    from . import chatgptauth
+    _c, cfg = _chatgpt_card(cid)
+    try: return chatgptauth.start(cfg)
+    except RuntimeError as e: raise HTTPException(409, str(e))
+
+@app.post('/api/connectors/{cid}/chatgpt/poll')
+def chatgpt_poll(cid: int, body: dict):
+    """pending until the browser comes back; then the card is signed in as them - the refresh token is its secret, the
+    issued client id and this install's host id its config."""
+    from . import chatgptauth
+    _c, cfg = _chatgpt_card(cid)
+    try: t = chatgptauth.poll((body or {}).get('flow') or '')
+    except RuntimeError as e: return {'status': 'error', 'detail': str(e)}
+    except requests.RequestException as e: return {'status': 'error', 'detail': f'could not reach auth.openai.com: {str(e)[:160]}'}
+    if t.get('pending'): return {'status': 'pending'}
+    cfg = {**cfg, 'auth': 'user', 'client_id': t['client_id'], 'host_id': t['host_id'], 'account': t['email'], 'name': t['name'],
+           'sub': t['sub'], 'granted_scope': t['scope']}
+    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
+    store.audit('connector', cid, 'chatgpt_signin', ACTOR, detail={'account': t['email']})
+    return {'status': 'ok', 'account': t['email'], 'name': t['name']}
+
+@app.post('/api/connectors/{cid}/chatgpt/signout')
+def chatgpt_signout(cid: int):
+    """End the session at OpenAI and forget it here. The host id stays: this install is the same host next time."""
+    from . import chatgptauth
+    _c, cfg = _chatgpt_card(cid)
+    full = store.get_connector(cid, with_secret=True)
+    if full.get('Secret'): chatgptauth.revoke(cfg, full['Secret'])
+    keep = {k: v for k, v in cfg.items() if k in ('host_id', 'model')}
+    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(keep), 'Secret': '', 'Active': 0}, ACTOR)
+    store.audit('connector', cid, 'chatgpt_signout', ACTOR)
+    return {'ok': True}
 
 # ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, no Azure portal ──
 _MSFLOWS = {}   # flow id -> the device code being polled; one browser tab, minutes, then gone

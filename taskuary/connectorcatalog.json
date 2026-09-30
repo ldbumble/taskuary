@@ -113,6 +113,20 @@
       ]
     },
     {
+      "type": "chatgpt",
+      "title": "ChatGPT (your plan)",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "Sign in with ChatGPT and run triage, the Assistant and reports on your ChatGPT plan - no API key, under a weekly cap you set in ChatGPT.",
+      "match": [
+        "chatgpt (your plan)",
+        "chatgpt",
+        "sign in with chatgpt",
+        "plan",
+        "openai"
+      ]
+    },
+    {
       "type": "typesafe",
       "title": "TypeSafe Jev (decisions only)",
       "group": "AI — agents & models",

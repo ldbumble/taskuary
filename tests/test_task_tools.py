@@ -61,6 +61,18 @@ class TargetTests(unittest.TestCase):
         p, _ = call(s, 'dispatch.prepare', key=item['key'], kind='coding', ref=f'TQ-{tid:04d}')
         self.assertEqual(p['target'], tid, 'named, the task on the table is still one call away')
 
+    def test_continue_session_on_the_table_reopens_its_own_saved_session_without_a_ref(self):
+        """2026-09-30: "continue the session and tell the coding agent to merge it in" on a close-out card was refused for want
+        of a ref, and the retry settled on the close-out - a merge the owner had asked the AGENT to make. Continuing reopens the
+        task's own saved session, so the table's task is what is meant; a task with no session to reopen still must be named."""
+        s, tid, mid, item = table()
+        p, out = call(s, 'agent.continue', key=item['key'], note='merge it in')
+        self.assertIsNone(p, 'nothing saved on the task: still a miss, never an agent on it')
+        s.add_transcript(tid, 'pane-1', 'reviewed it', agent='coder', cwd='.', ext_id='thread-1')
+        item = T.pile(s)[0]
+        p, out = call(s, 'agent.continue', key=item['key'], note='merge it in')
+        self.assertEqual((p['kind'], p['target'], p['params']['note']), ('agent.continue', tid, 'merge it in'))
+
     def test_the_hand_offs_name_is_read_as_its_kind_and_never_falls_to_a_regular_agent(self):
         """2026-09-29 replay: kind "coder" became a card labelled "Start a regular agent" that waited for a yes."""
         s = T.store()

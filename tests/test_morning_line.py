@@ -78,12 +78,15 @@ class NeverIntoAConversationTests(unittest.TestCase):
             self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
         self.assertEqual(self.sent, [])
 
-    def test_what_went_out_is_in_the_conversation(self):
+    def test_what_went_out_is_in_the_conversation_but_not_on_the_desktop(self):
+        # the owner, 2026-09-30: the day's summary is for the phone - the desktop's own welcome already shows it
         from taskuary import concierge, general
         with self._pile(3), mock.patch.object(ra, 'QUIET', 0.0):
             ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0))
-        said = [h['text'] for h in concierge.history(self.s, general.dock_task(self.s)[0]['TaskId'])]
-        self.assertTrue(any(t.startswith('Good morning.') and 'PEOPLE WANT' in t for t in said), said)
+        tid = general.dock_task(self.s)[0]['TaskId']
+        said = lambda ts: any(t.startswith('Good morning.') and 'PEOPLE WANT' in t for t in ts)
+        self.assertFalse(said(h['text'] for h in concierge.history(self.s, tid)))             # what the desktop draws
+        self.assertTrue(said(c['Body'] for c in general.chat_rows(self.s, tid)))              # what the model and the desk read
 
 
 class TheWalkOpensWithTheDayTests(unittest.TestCase):

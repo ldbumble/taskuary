@@ -596,7 +596,7 @@ def morning_line(store, now=None, force: bool = False) -> int:
         store.set_setting(MORNING_AT, today, 'assistant')
         # ...and it is IN the conversation: the desk and the model never knew it had been said
         from . import concierge, general
-        concierge.record(store, general.dock_task(store, 'assistant')[0]['TaskId'], 'assistant', head)
+        concierge.record(store, general.dock_task(store, 'assistant')[0]['TaskId'], 'assistant', head, phone=True)
     return sent
 
 

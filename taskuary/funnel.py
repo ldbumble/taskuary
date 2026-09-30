@@ -856,7 +856,10 @@ def _order(items: list) -> list:
         activity = _activity_time(item.get('sort_at') or item.get('since') or item.get('when'))
         # ...and today's brief leads its band, whatever the clock says: it is written this morning, so
         # oldest-first would otherwise put every older piece of work in front of the day's own summary
-        return (_band(item), not todays_brief(item), activity is None, activity or datetime.max, str(item.get('key') or ''))
+        band = _band(item)
+        # ...and an Advisor idea leads the quiet band it shares with fyi: the rail draws Advisor ideas above FYI, and oldest-first
+        # put a fresh idea behind every older mail, so Next reached the FYI batch first and walked past it (the owner, 2026-09-30)
+        return (band, not todays_brief(item), not (band == 4 and item.get('kind') == 'idea'), activity is None, activity or datetime.max, str(item.get('key') or ''))
     return sorted(items, key=key)
 
 
@@ -1412,6 +1415,11 @@ def batch_item(store, key: str) -> dict | None:
                                      items=[dict(i) for i in got], members=[i['key'] for i in got]))
 
 
+def batchable(item: dict) -> bool:
+    """Does this row read in an FYI batch? An idea has things to do - make it a task, hand it on, let it go - so it is walked alone."""
+    return item.get('lane') == 'fyi' and item.get('kind') != 'idea'
+
+
 def fyi_batch(store, first: dict, items: list | None = None) -> list:
     """The next few fyi's, the first included - what comes out together when the mouth reaches the fyi lane.
 
@@ -1422,7 +1430,7 @@ def fyi_batch(store, first: dict, items: list | None = None) -> list:
     cached pile answers, which is the same picture `first` was chosen from and never a staler one.
     """
     pool = items if items is not None else pile(store)['items']
-    ready = [i for i in pool if not i.get('settling') and not i.get('surfaced') and i['lane'] == 'fyi']
+    ready = [i for i in pool if not i.get('settling') and not i.get('surfaced') and batchable(i)]
     return ([first] + [i for i in ready if i['key'] != first['key']])[:fyi_batch_size(store)]
 
 

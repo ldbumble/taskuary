@@ -34,7 +34,7 @@ Write a reply to the sender. Nothing is sent.
 
 ### `approve`
 
-Send the drafted reply as it stands.
+The owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out (Close out) it merges the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never continues an agent's session - that is agent.continue.
 
 <p class="runs">Waits for your yes on a card.</p>
 
@@ -283,7 +283,7 @@ Prepare a question for the task's sender; it waits for the owner's yes, never se
 
 ### `review.approve`
 
-Send the drafted reply as it stands.
+The owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull request (or closes the issue) FIRST, sending the reply only if that worked.
 
 <p class="runs">Waits for your yes on a card.</p>
 
@@ -313,7 +313,7 @@ Start an agent on an EXISTING task; a coding task asks which repository when it 
 
 Pick up the agent's own last session on a task where it left off, coding or not.
 
-- `ref` - the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text
+- `ref` - the task (TQ-0123) - the one on the table when it has a saved session to reopen
 - `note` - when the owner said what to tell it as it picks up
 
 <p class="runs">Waits for your yes on a card.</p>

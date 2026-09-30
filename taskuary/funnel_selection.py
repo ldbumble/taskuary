@@ -108,8 +108,9 @@ def _selection_facts(item: dict) -> dict:
 
 
 def _batch(first: dict, ready: list[dict], size: int) -> tuple[dict, tuple[str, ...]]:
+    from . import funnel
     members = ([first] + [item for item in ready
-                          if item.get("lane") == "fyi" and item.get("key") != first.get("key")])[:size]
+                          if funnel.batchable(item) and item.get("key") != first.get("key")])[:size]
     keys = tuple(item["key"] for item in members)
     card = {
         "key": "fyis:" + ",".join(keys),
@@ -185,7 +186,7 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     # the reason a pending reply is not buried under an inbox of unread fyi.
     first = next((item for item in ready if funnel.on_you(item) or not item.get("surfaced")),
                  ready[0] if ready else None)
-    if first is not None and first.get("lane") == "fyi":
+    if first is not None and funnel.batchable(first):
         selected, member_keys = _batch(first, ready, funnel.fyi_batch_size(store))
     else:
         selected = copy.deepcopy(first) if first is not None else None

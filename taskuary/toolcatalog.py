@@ -34,7 +34,8 @@ PURPOSE = {
     'task.defer':               ('Remind me: put an open task away until a day and bring it back that morning - `until`: a date '
                                  '(2026-10-09), "2 weeks", "3 days", "monday", or "none" to bring it back now; `ref` names '
                                  'the task (TQ-0123) when it is not the one on the table'),
-    'review.approve':           'send the drafted reply as it stands',
+    'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull "
+                                 "request (or closes the issue) FIRST, sending the reply only if that worked"),
     'agent.answer':             'answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table',
     'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which",
     'report.rerun':             'run that report again',
@@ -195,7 +196,9 @@ def block(store=None) -> str:
 # the decision road the card's buttons take. Each takes `on` for an item other than the one on the table.
 DECISIONS = {
     'reply':           "write a reply to the sender - `text`: the gist, in the owner's words. Nothing is sent",
-    'approve':         'send the drafted reply as it stands',
+    'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out (Close out) it merges "
+                        "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never "
+                        "continues an agent's session - that is agent.continue"),
     'redraft':         'write the draft again - `text`: the change',
     'mine':            "make it a task on the owner's own list - no agent",
     'regular_agent':   'send it to a non-coding agent - `text`: the job; `as`: a profile from agents.list, only when one fits',
@@ -463,7 +466,9 @@ def _entry(k: str) -> list:
         d = re.sub(r'^names ', '', args['ref'])
         args['ref'] = (f'the task that {d}' if d.startswith('is ') else f'the task (TQ-0123), {d}' if d.startswith('when')
                        else d or 'the task (TQ-0123), when it is not the one on the table')
-        if k in ATTACH_AGENT: args['ref'] = 'the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text'
+        if k in ATTACH_AGENT:
+            args['ref'] = ('the task (TQ-0123) - the one on the table when it has a saved session to reopen' if k == 'agent.continue' else
+                           'the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text')
     prose = ''.join(s + c for s, c in keep).strip(' -;')
     runs = ('Runs at once and changes nothing.' if k in READS else DECISION_RUNS.get(k, '').capitalize() + '.' if k in DECISION_RUNS
             else 'Runs at once, with an undo on the receipt.' if k in INSTANT else 'Waits for your yes on a card.')

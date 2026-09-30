@@ -701,9 +701,9 @@ class LanesTests(unittest.TestCase):
         s.add_review({'TaskId': t2, 'MessageId': m2, 'Kind': 'reply', 'DraftText': 'ok', 'Status': 'pending'})   # newest, but promoted
         # The five levels are triage's verdict, and inside one the oldest leads - so the ask from two
         # hours ago comes out before the draft from one (the owner, 2026-09-07: "no reason why open
-        # task is before a reply drafted"), the landed report is a result below both, and the fyi and
-        # the unjudged idea share the last level oldest-first.
-        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['todo', 'review', 'report', 'fyi', 'idea'])
+        # task is before a reply drafted"), the landed report is a result below both, and the unjudged
+        # idea leads the last level - its own section above FYI since the canvas redesign (2026-09-29).
+        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['todo', 'review', 'report', 'idea', 'fyi'])
 
     def test_marketing_mail_is_still_unread_until_the_owner_handles_it(self):
         s = store()

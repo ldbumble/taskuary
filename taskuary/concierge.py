@@ -76,7 +76,11 @@ CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from 
               'regular_agent': 'An agent takes it - triage picks a coding or a non-coding one, and you can change it on the card',
               'mine': "A task on your own list - no agent starts", 'next': 'Read it and move on',
          'defer': 'Put the task away until a day - it is Upcoming in Tasks and back on your rail that morning',
-         'continue': 'Pick the agent up where it left off - say what to tell it, or continue as is'}
+         'continue': 'Pick the agent up where it left off - say what to tell it, or continue as is',
+         # the words that said nothing on hover: each line is what the handler does (TaskPage's own titles are the same sentences)
+         'stop_agent': "Writes up what the session did, ends it, and drafts the reply to whoever asked (with nothing to write up it just stops it) - the task stays open",
+         'close': 'Closes the task - it stops coming back to Work',
+         'rerun': 'Runs the report again in the background - it comes back here when it is done'}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
 # THE SHORT LIST (the owner, 2026-09-25, word by word): eight buttons. Tomorrow and Later are gone - Next on
@@ -848,7 +852,12 @@ def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: 
     return say, options, (decision or {}).get('verb') or ''
 
 
-def record(store, tid: int, role: str, text: str, card: dict = None):
+# A line said to the PHONE only (the day's opener): kept in the conversation so the model and the desk know it was said,
+# but never drawn by the desktop chat, whose own welcome already shows the day (the owner, 2026-09-30: "that's only for the phone")
+PHONE_ACTOR = 'assistant-phone'
+
+
+def record(store, tid: int, role: str, text: str, card: dict = None, phone: bool = False):
     # A presentation revision is transport freshness, not conversation meaning.  Persisting it
     # made the same adjacent card into a second durable turn when surfacing changed only its read
     # state.  Keep every semantic field, including nested FYI cards, and let the current HTTP
@@ -863,7 +872,7 @@ def record(store, tid: int, role: str, text: str, card: dict = None):
         return out
     saved_card = durable(card) if card else None
     body = redact(text).strip() + (f"\n\n{MARK}{json.dumps(saved_card, default=str)} -->" if saved_card else '')
-    actor = 'owner' if role == 'user' else 'assistant'
+    actor = 'owner' if role == 'user' else PHONE_ACTOR if phone else 'assistant'
     actor_type = general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE
     # A double click must not duplicate the owner's words: those two calls may reach the backend
     # before React disables the button. The same guard also makes empty-pipe auto-advance
@@ -911,6 +920,7 @@ def record_related(store, dock_tid: int, item: dict | None, role: str, text: str
 def history(store, tid: int) -> list:
     out = []
     for c in general.chat_rows(store, tid):
+        if c.get('Actor') == PHONE_ACTOR: continue      # said to the phone; the model still reads it through chat_rows
         body = c.get('Body') or ''
         m = _MARK.search(body)
         card = None
@@ -1518,7 +1528,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # ...but an AGENT is never put on an old task by default: a new ask typed while something sits on the table
         # became a run on that task (the owner, 2026-09-29: "if i ask for task it should not merge with old one or agent
         # run unless i ask"). These two must NAME the task; a new job is task.create_from_text, which the miss says.
-        if kind in toolcatalog.ATTACH_AGENT and not ref:
+        # ...but CONTINUING is not attaching: it reopens the task's OWN saved session (the owner, 2026-09-30: "continue session
+        # and tell the coding agent to merge it in" on a close-out card was refused for want of a ref, and the retry
+        # fell to the close-out itself). On the table, with a session to reopen, the table's task is what they mean.
+        resumes = kind == 'agent.continue' and not ref and it.get('tid') and store.resumable_session(it['tid'])
+        if kind in toolcatalog.ATTACH_AGENT and not ref and not resumes:
             raise CallMiss(f"{kind} puts an agent on a task that already exists - name it (its TQ ref, the one on the table "
                            "included). A new job is task.create_from_text. Nothing was started.")
         t = int(ref.group(1)) if ref else it.get('tid')
@@ -1896,7 +1910,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         return surface(store, None, llm, actor, only, trace, cancel, include_surfaced, exclude) if not key else {'item': None, 'say': say, 'options': [], 'chips': walk_chips(len(p['items'])), 'left': len(p['items'])}
     # FYIs have no action to take, so the normal walk brings four together. A row explicitly
     # clicked on the Timeline still opens by itself (`key` is set); only Next/Walk batches them.
-    if not key and item['lane'] == 'fyi':
+    if not key and funnel.batchable(item):
         # a batch already assembled (funnel_selection._batch, which next_item returns on a processing store)
         # IS the batch: passed to fyi_batch as `first` it became its own member, "someone - 4 fyi" (2026-09-18)
         batch = item.get('items') if item.get('kind') == 'fyis' else funnel.fyi_batch(store, item)

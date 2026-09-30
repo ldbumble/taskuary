@@ -363,3 +363,18 @@ def test_a_batch_key_is_answered_by_batch_item_and_never_by_the_full_history_bui
         got = funnel.next_item(ReadsActive(), key, items=values)
     assert got["key"] == key and [c["key"] for c in got["items"]] == [v["key"] for v in values]
     assert not any(c.kwargs.get("full_history") for c in built.call_args_list), built.call_args_list
+
+
+def test_an_advisor_idea_is_walked_before_the_fyi_and_never_inside_their_batch():
+    # the rail draws Advisor ideas above FYI; oldest-first had the fresh idea behind every older mail, so Next opened the FYI
+    # batch and walked past it - and an idea that did lead would have been read as one more fyi in the card
+    old = [item(f"mail:{n}", "fyi", kind="fyi", order_band=4, when=stamp(-600 - n)) for n in range(5)]
+    idea = item("idea:1", "fyi", kind="idea", order_band=4, when=stamp(-2))
+    rows = funnel._order(old + [idea])
+    assert rows[0]["key"] == "idea:1"
+    got = captured(rows)
+    assert got.selected["key"] == "idea:1" and got.member_keys == ("idea:1",)
+    rest = captured([r for r in rows if r["kind"] != "idea"] + [idea], exclude="idea:1")
+    assert rest.selected["kind"] == "fyis" and "idea:1" not in rest.member_keys
+    assert "idea:1" not in funnel.fyi_batch(store(), old[0], rows and rows)   # the batch the walk builds never takes it
+

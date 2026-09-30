@@ -1761,7 +1761,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
                 onDone={(_out, note) => {
                   setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: continueOn.task.TaskId, ref: continueOn.ref,
                     text: `Continuing${note ? " with your note" : ""} - it picks up where it left off, and comes back here when it stops or asks.` }]);
-                  advance();
+                  // ...and the table STAYS on it: you continued it to watch it work, not to be walked past it (the owner,
+                  // 2026-09-30: "the session started but then closed and moved on without hitting next"); the view shows the
+                  // session when it opens (TaskPage hears task-changed)
                 }} />
             </div>
           )}

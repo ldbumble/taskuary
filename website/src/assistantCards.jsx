@@ -31,7 +31,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 import { agentCardView } from "./agentCardView.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { RepoPicker } from "./RepoPicker.jsx";
-import { Attachments } from "./Attachments.jsx";
+import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
 import { refOf, summarize, stateOf, whoOf } from "./walkSummary.js";
@@ -455,7 +455,6 @@ function FullText({ mid, revision }) {
 // from the message's attachments (Attachments, under the message), so the stand-ins are what goes
 // "look for attachments on this mail" only where the body points at a picture that is not here yet - on every message it
 // was a line of noise under mail that never had one
-const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
 export const noImages = (text) => String(text || "")
   .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
   .replace(/<img\b[^>]*>/gi, "")

@@ -36,7 +36,7 @@ import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hovera
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
-import { Attachments } from "./Attachments.jsx";
+import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
@@ -1025,6 +1025,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             {taskAsk}
                           </Typography>
                         )}
+                        {/* ...and what they SENT with it - the photo or screenshot is often the whole ask, and it was only ever inside
+                            the folded history (the owner, 2026-09-30: "don't see the image on the task incoming message") */}
+                        {inbound[0]?.MessageId && <Box sx={{ mt: 0.6, maxWidth: 900 }}>
+                          <Attachments messageId={inbound[0].MessageId} canFetch={inbound[0].Channel === "email" && mentionsPicture(inbound[0].BodyText)} dense /></Box>}
                         {/* the checklist triage drew from the ask (PW-075): boxes are progress on the list,
                             never task completion - closing the task stays the owner's separate decision.
                             The WHOLE LINE is the target, not the 16px box: on a manual task ticking these
@@ -1062,6 +1066,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                               {cleanText(m.ReadText ?? m.BodyText)}
                             </Typography>
+                            <Attachments messageId={m.MessageId} canFetch={m.Channel === "email" && mentionsPicture(m.BodyText)} dense />
                           </Box>
                         ))}
                         {/* WHERE THIS CAME FROM - the header's old "from email · created 10h ago by

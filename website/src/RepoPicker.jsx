@@ -174,7 +174,7 @@ export const RepoSelect = ({ taskId, agent = "coder", instruction = "", value, o
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.75 }}>
       <AccountTreeIcon sx={{ fontSize: 15, color: DIM }} />
       <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>repository</Typography>
-      <select className="tq-start-repo" value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
+      <select className="tq-start-repo" aria-label="repository" value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
         style={{ fontSize: 12.5, padding: "4px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fff", color: INK, minWidth: 220 }}>
         {!value && <option value="">choose a repository…</option>}
         {rows.map((r) => <option key={r.repo} value={r.repo}>{r.repo}{r.has_path ? "" : " (no local folder)"}</option>)}

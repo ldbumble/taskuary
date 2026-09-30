@@ -34,7 +34,7 @@ import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
-import { summarize, stateOf, whoOf } from "./walkSummary.js";
+import { refOf, summarize, stateOf, whoOf } from "./walkSummary.js";
 import { CLOSE_OUT, closeoutOf, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { READY } from "./taskLifecycle.js";
@@ -1181,8 +1181,9 @@ export function WhoWantsWhat({ groups, onRow, max = ROWS_PER_GROUP, quiet = [] }
       {g.rows.slice(0, n).map((i) => (
         <button key={i.key} type="button" className="tq-sum-row" onClick={() => onRow?.(i.key)} title="Bring this one up now">
           <span className="dot" style={{ background: sourceColor(i) }} />
+          <span className="ref">{refOf(i)}</span>
           <b>{whoOf(i)}</b>
-          <span className="what">{i.title}</span>
+          <span className="what">{i.title}{i.count > 1 && <em className="n"> ×{i.count}</em>}</span>
           <span className="st">{stateOf(i, laneMeta(i.lane).word)}</span>
         </button>
       ))}

@@ -222,15 +222,18 @@
 .tq-sum-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 .tq-sum-head em { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #8a847a; }
-.tq-sum-row { display: grid; grid-template-columns: 8px minmax(0, 150px) minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%;
+.tq-sum-row { display: grid; grid-template-columns: 8px 58px minmax(0, 140px) minmax(0, 1fr) 132px; align-items: center; gap: 9px; width: 100%;
   min-height: 32px; padding: 0 6px; border: 0; border-top: 1px solid #efeae2; background: none; font: inherit; font-size: 12.5px; color: #262521; text-align: left; cursor: pointer; border-radius: 6px; }
 .tq-sum-row:hover { background: #f4f1ec; }
 .tq-sum-row .dot { width: 7px; height: 7px; border-radius: 50%; }
 .tq-sum-row b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-sum-row .what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #4d4a43; }
-.tq-sum-row .st { font-size: 11px; color: #6e685f; white-space: nowrap; }
+.tq-sum-row .st { font-size: 11px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+/* the task number: a fixed column, so every row's name and title start at the same x */
+.tq-sum-row .ref { font: 500 10.5px 'IBM Plex Mono', ui-monospace, monospace; color: #8a847a; white-space: nowrap; }
+.tq-sum-row .what .n { font-style: normal; color: #8a847a; font-size: 11px; }
 .tq-sum-more { font-size: 11px; color: #8a847a; padding: 4px 6px 0 23px; }
-@media (max-width: 520px) { .tq-sum-row { grid-template-columns: 8px minmax(0, 90px) minmax(0, 1fr); } .tq-sum-row .st { display: none; } }
+@media (max-width: 520px) { .tq-sum-row { grid-template-columns: 8px minmax(0, 90px) minmax(0, 1fr); } .tq-sum-row .st, .tq-sum-row .ref { display: none; } }
 .tq-card-kicker { display: flex; align-items: center; gap: 7px; font: 750 9px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #6e685f; }
 .tq-card-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: #d3ccc1; }
 .tq-card-kicker .src { display: inline-flex; align-items: center; margin-right: 2px; }

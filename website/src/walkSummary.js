@@ -29,11 +29,18 @@ export const groupOf = (i) => {
 };
 
 // who asks: the person or the agent - and for a report, whose sender IS its title, the word "Report"
+// An agent's row names the AGENT - the task's "who" was the owner who started it, and "You" under Agents waiting
+// said nothing (the owner, 2026-09-30). An address shows its name part: "securityapp", not "noreply-securityapp@...".
+const isAgentRow = (i) => !!i?.agent && (AGENT_LANES.has(i.lane) || ["agent", "agentdone", "action"].includes(i.kind));
+const person = (w) => w.includes("@") ? w.split("@")[0].replace(/^no-?reply[-._]?/i, "") || w.split("@")[0] : w;
 export const whoOf = (i) => {
-  const who = String(i?.who || i?.agent || "").trim(), title = String(i?.title || "");
+  const who = person(String((isAgentRow(i) ? i.agent : i?.who || i?.agent) || "").trim()), title = String(i?.title || "");
   if (who && !title.toLowerCase().startsWith(who.toLowerCase().slice(0, 16))) return who;
   return i?.kind === "report" || i?.lane === "report" ? "Report" : who || "someone";
 };
+
+// the task number a row belongs to, "" for one with no task yet
+export const refOf = (i) => i?.ref || (i?.tid ? `TQ-${String(i.tid).padStart(4, "0")}` : "");
 
 // the one line under a row's "who": the lane's word, except a drafted reply, which is the thing to approve
 export const stateOf = (i, laneWord) => i?.lane === "approve"
@@ -43,7 +50,13 @@ export function summarize(items) {
   // a meeting is on the day's strip right above - listed again under People want it read as someone's ask
   // (the owner, 2026-09-23: "the calendar invite in people want section is wrong if it's in top section")
   const live = (items || []).filter((i) => i && i.lane !== "working" && i.kind !== "meeting");
-  const groups = GROUPS.map((g) => ({ ...g, rows: live.filter((i) => groupOf(i) === g.key) })).filter((g) => g.rows.length);
+  // the same sender saying the same thing twice is one row with a count - two identical lines read as a glitch
+  const fold = (rows) => rows.reduce((out, i) => {
+    const twin = !refOf(i) && out.find((o) => !refOf(o) && whoOf(o) === whoOf(i) && o.title === i.title);
+    if (twin) twin.count = (twin.count || 1) + 1; else out.push({ ...i });
+    return out;
+  }, []);
+  const groups = GROUPS.map((g) => ({ ...g, rows: fold(live.filter((i) => groupOf(i) === g.key)) })).filter((g) => g.rows.length);
   const ready = live.filter((i) => i.lane === "approve").length;
   const skip = live.filter((i) => groupOf(i) === "read").length;
   const passed = live.filter((i) => groupOf(i) === "passed").length;

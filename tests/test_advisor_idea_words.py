@@ -63,8 +63,8 @@ class RunTests(unittest.TestCase):
         s = A.store()
         for at in ('06:00', '07:00', '08:00'):
             s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'x'})
-        cid = s.save_connector({'Type': 'teams', 'Name': 'Teams live', 'Active': 1, 'ConfigJson': '{}', 'Secret': 'x'}, 't')
-        s._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', ('token expired', cid))
+        # a second health line - a workflow that never ran (an erroring connection is the rail's row, not an idea)
+        s.save_source({'Channel': 'report', 'Address': 'wf9', 'Active': 1, 'ConfigJson': json.dumps({'title': 'Nightly sync', 'type': 'agent', 'access': 'write', 'cron': '0 1 * * *'})}, 't')
         self.assertGreaterEqual(len(assistant.health_ideas(s)), 2)
         s.set_setting('assistant_max_lines', '1', 't')
         self.assertEqual(assistant.run(s, llm=None, force=True)['said'], 1)

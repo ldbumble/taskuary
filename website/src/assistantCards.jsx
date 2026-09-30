@@ -5,6 +5,7 @@
 // happens IN the card (the full text unfolds under it) and every card links to where the whole of
 // it lives - the task, or the row on the Timeline - because everything is the chat.
 import React, { useEffect, useRef, useState } from "react";
+import { movesOf, useVerbs } from "./actionRow.js";
 import { Button, TextField } from "@mui/material";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
@@ -256,6 +257,10 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
 // out that much ... the logo for your move should stand out"): your avatar on the same line, lit because the turn is
 // yours, the header like every step's ("You · start it"), then what to decide and the button
 export function YourMove({ title, tone, go, then, children }) {
+  // THE MOVE RIDES IN THE ROW above the chat line (2026-09-30: "everything should be on the bottom"): the same button, read once into
+  // a row verb; the block keeps what there is to read and the sentence saying what the move does
+  const nav = React.useContext(CardNav), rowed = !!nav.row;
+  useVerbs("move", rowed ? movesOf(go) : null, rowed, nav.ref);
   return (
     <div className={`tq-thr tq-move${tone === "alert" ? " alert" : ""}`}>
       <span className="tq-av tq-av-you on">You</span>
@@ -263,7 +268,7 @@ export function YourMove({ title, tone, go, then, children }) {
           button move it up"): what there is to read first, then the button - on the circle's line when there is nothing */}
       <div className="tq-thr-body" title={title ? `You - ${title}` : undefined}>
         {children}
-        {(go || then) && <div className={`tq-move-go${React.Children.toArray(children).some(Boolean) ? "" : " first"}`}>{go}{then && <span className="tq-move-then">{then}</span>}</div>}
+        {((go && !rowed) || then) && <div className={`tq-move-go${React.Children.toArray(children).some(Boolean) ? "" : " first"}`}>{!rowed && go}{then && <span className="tq-move-then">{then}</span>}</div>}
       </div>
     </div>
   );
@@ -337,26 +342,39 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
          title: unsent ? "Mark done - the drafted reply is not sent; it stays on the task" : "Mark done - it stops coming back to Work",
          onClick: shut.run, disabled: shut.busy }] : []),
     ...((close?.tid || taskId) && openTask ? TASK_ACTS.map(([act, label, title]) => ({ verb: `task:${act}`, label, title, onClick: () => openTask(close?.tid || taskId, { act }) })) : [])];
+  // THE ROW ABOVE THE CHAT LINE (layout B, 2026-09-30): Next and the card's other words ride there, in the one place every item
+  // keeps them; the card keeps its own move. The same handlers - a word's click still gets the element it was pressed on.
+  const rowed = !!nav.row;
+  // The first three of the card's own words stand in the row (a report's "Make a task", "Send to agent"); the rest - and Mark done and
+  // the task page's acts - sit behind More. The card's own move (its Foot `verb`) stays in the card.
+  const asVerb = (a, group) => ({ id: `w:${a.verb || a.label}`, group, tone: "s", label: a.label, title: a.title, disabled: a.disabled,
+    run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
+  useVerbs("foot", rowed ? [
+    ...(nav.onNext ? [{ id: "next", group: "next", label: "Next", disabled: nav.busy, run: () => nav.onNext(), title: "Puts this one down, still yours, and brings the next" }] : []),
+    ...movesOf(verb, "decide", "v"),
+    ...(lifted ? [{ ...asVerb(lifted, "decide"), tone: "p" }] : []),
+    ...words.map((a, i) => asVerb(a, i < 3 ? "decide" : "more")),
+  ] : null, rowed, nav.ref);
   return (
     <>
       {then && <div className="tq-card-then">{then}</div>}
       <div className="tq-card-actions">
-        {verb || (lifted && <Button size="small" variant="contained" disableElevation disabled={lifted.disabled} onClick={lifted.onClick} title={lifted.title} sx={primary}>{lifted.label}</Button>)}
-        {nav.onNext && <Button size="small" variant="outlined" disabled={nav.busy} onClick={nav.onNext} sx={quiet}>Next</Button>}
+        {!rowed && (verb || (lifted && <Button size="small" variant="contained" disableElevation disabled={lifted.disabled} onClick={lifted.onClick} title={lifted.title} sx={primary}>{lifted.label}</Button>))}
+        {nav.onNext && !rowed && <Button size="small" variant="outlined" disabled={nav.busy} onClick={nav.onNext} sx={quiet}>Next</Button>}
         {more}
-        {!inline && !!words.length && (
+        {!inline && !rowed && !!words.length && (
           <Button size="small" onClick={() => setOpen((o) => !o)} sx={faint} aria-expanded={open}>
             {open ? "Fewer actions ▴" : "More actions ▾"}</Button>
         )}
         <span className="sp" />
         {where}
       </div>
-      {inline && !!words.length && (
+      {inline && !rowed && !!words.length && (
         <div className="tq-card-also">{words.map((a) => (
           <button key={a.verb || a.label} type="button" title={a.title || undefined} disabled={a.disabled} onClick={a.onClick}>{a.label}</button>
         ))}</div>
       )}
-      {!inline && open && (
+      {!inline && !rowed && open && (
         <div className="tq-card-actions tq-card-more-actions">{words.map((a) => (
           <Button key={a.verb || a.label} size="small" variant="outlined" title={a.title || undefined} disabled={a.disabled} onClick={a.onClick} sx={quiet}>{a.label}</Button>
         ))}</div>
@@ -1290,10 +1308,10 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
               take (PW-151) - never on the handful, never marking its siblings */}
           {open === i.key && (
             <div className="tq-card-actions tq-fyi-acts">
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} sx={quiet}>Reply</Button>}
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} sx={quiet}>Make task</Button>}
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coder", i)} sx={quiet}>Coding agent</Button>}
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} sx={quiet}>Regular agent</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title="Writes a reply here - nothing is sent until you approve it" sx={quiet}>Reply</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title="Proposes a task on your own list - nothing is made until you confirm" sx={quiet}>Make task</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coder", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Proposes sending it to a regular agent - nothing starts until you confirm" sx={quiet}>Regular agent</Button>}
               <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
             </div>
           )}
@@ -1401,6 +1419,7 @@ function TabWindow({ stop, go }) {
 }
 
 export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestart, onFinish, onSaved }) {
+  const outer = React.useContext(CardNav);   // the walk's own foot rides in the row too, whatever its words are
   const { openSetup, opening, pane, note } = useCliSetup();
   const [cli, setCli] = useState(null);
   useEffect(() => {
@@ -1492,7 +1511,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
           reset the server always had (the owner, 2026-09-18: "we also need a button to start over").
           The walk is scripted and reaches no model - but a question typed during it is an ordinary
           turn, answered beside the walk while the walk keeps its place (walk.py's own design). */}
-      <CardNav.Provider value={{ onNext: last ? null : onNext, also: [
+      <CardNav.Provider value={{ busy: outer.busy, row: outer.row, ref: outer.ref, onNext: last ? null : onNext, also: [
         ...(!first ? [{ verb: "back", label: "‹ Back", onClick: onBack }] : []),
         ...(!first ? [{ verb: "restart", label: "Start over", title: "back to the first stop", onClick: onRestart }] : []),
         { verb: "finish", label: "Finish", onClick: onFinish }] }}>

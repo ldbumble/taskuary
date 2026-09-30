@@ -50,7 +50,7 @@ test("opening a general task reads state without starting an agent", () => {
 
 test("every live agent ends the same way, and never without being written up", () => {
   const tasks = taskSource();
-  const start = tasks.indexOf("{term?.alive && (", tasks.indexOf("Agent running"));
+  const start = tasks.indexOf("{term?.alive && !inRow && (", tasks.indexOf("Agent running"));
   const controls = tasks.slice(start, tasks.indexOf("{report &&", start));
   assert.ok(start >= 0);
   // Three controls all ended the session and differed only in what they wrote down - a result, a
@@ -63,6 +63,8 @@ test("every live agent ends the same way, and never without being written up", (
   // the parity this has always guarded: the ending is not gated on a coding session, so a general
   // agent ends exactly as a coding one does
   assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>Save and end session/);
+  // ...and the action row (layout B) registers the same ending for the canvas, gated on the live session alone
+  assert.match(tasks, /\.\.\.\(liveSession \? \[[\s\S]*?\{ id: "save-end", group: "agent", label: "Save and end session"/);
 });
 
 test("task references use readable sans-serif digits", () => {

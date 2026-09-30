@@ -6,8 +6,10 @@
 // after it has output corrupts the pane (ConPTY keeps a grown viewport top-anchored - see terminal.remember_geometry),
 // so the terminal inside is sized once, for the whole canvas, and nothing here can grow it afterwards.
 import React, { useEffect, useRef, useState } from "react";
-import { Box, Button, Typography } from "@mui/material";
+import { Box } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
+import ActionRow from "./ActionRow.jsx";
+import { useHost, useVerbs } from "./actionRow.js";
 
 // the height the view takes: the chat body's own, less its padding - the same in both states (see above). Said in CSS,
 // against the chat body as a SIZE container (assistantView.css .tq-chat-body): a height measured in script was stale
@@ -39,6 +41,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
     if (r) setPin({ left: r.left, width: r.width });   // exact: a rounded width re-wrapped the strip and moved the pane by 2px
   }, [phone, expanded]);
   const h = phone ? phoneH : height;
+  // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
+  useHost(phone);
+  useVerbs("next", [{ id: "next", group: "next", label: "Next", disabled: !!busy, run: () => onNext(), title: "Puts this one down, still yours, and brings the next" }]);
   return (
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
@@ -55,16 +60,10 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         onFinish={async (status, close) => { await close(); onAfter(); }}
         onReminded={(out) => { if (out?.remindAt) onAfter(); }} backArrow={phone} />
       </Box>
-      {/* NEXT, UNDER THE VIEW, where the walk has always put it (the owner, 2026-09-29: "the next goes on top right corner
-          and not on the bottom like it used to be ... it's not very easy to see"). It is the walk's ONE button on a task:
-          everything else - done, remind, hand off, reply - is the task view's own, right above it. */}
-      <Box sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 1.5, pt: 1, pb: 0.25, px: 0.5 }}>
-        <Button variant="contained" disableElevation data-tq-next="" disabled={busy} onClick={onNext}
-          sx={{ height: 38, px: 3, borderRadius: 99, fontSize: 13.5, fontWeight: 700, bgcolor: "#55697a", "&:hover": { bgcolor: "#41525f" } }}>
-          Next
-        </Button>
-        <Typography sx={{ fontSize: 12, color: "#8a847a" }} noWrap>puts this one down, still yours, and brings the next</Typography>
-      </Box>
+      {/* THE BUTTONS ARE NOT HERE (layout B, 2026-09-30): the view registers its verbs and Next, and the ONE row above the chat line
+          draws them. On a phone the same row rides at the view's foot instead, in both states - the pinned full-screen view covers
+          the dock, and the box is sized once, so Expand must not add or take away a row. */}
+      {phone && <ActionRow inline />}
     </Box>
     </>
   );

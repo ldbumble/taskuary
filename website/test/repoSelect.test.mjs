@@ -4,10 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-// namedRepo lives in RepoPicker.jsx; pull the pure function out of the source so the test needs no JSX loader
-const src = readFileSync(fileURLToPath(new URL("../src/RepoPicker.jsx", import.meta.url)), "utf8");
-const body = src.slice(src.indexOf("export const namedRepo"), src.indexOf("export const RepoSelect"));
-const namedRepo = new Function(`${body.replace("export const namedRepo", "const namedRepo")}; return namedRepo;`)();
+import { namedRepo } from "../src/repoNames.js";
 const rows = [{ repo: "northwind/ledger" }, { repo: "northwind/portal" }, { repo: "org/app" }];
 
 test("the Start panel's repository follows the one the instruction names, as a whole word", () => {

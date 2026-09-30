@@ -1176,6 +1176,18 @@ class RepoRoutingTests(unittest.TestCase):
         self.assertTrue(by['northwind/Census']['has_path'])
         self.assertIn('reimbursement', by['northwind/portal']['what'])
 
+    def test_the_new_card_lists_repos_before_any_task_exists(self):
+        # the New card picks the checkout BEFORE the task is made: the same rows as the task-bound list, no task needed
+        out = c.get('/api/repos').json()['data']
+        by = {r['repo']: r for r in out}
+        self.assertFalse(by['northwind/portal']['has_path'])
+        self.assertTrue(by['northwind/Census']['has_path'])
+        self.assertEqual([r['repo'] for r in out], sorted(by, key=str.lower))
+        # ...and a task made with that pick carries the tag the session reads, so the checkout is the one chosen
+        tid = c.post('/api/tasks', json={'Title': 'x', 'Kind': 'coding', 'Tags': 'repo:northwind/portal,stay:open'}).json()['taskId']
+        prof = json.loads(server.store.get_agent('coder')['Config'])
+        self.assertEqual(terminal.guess_repo(server.store, tid, prof), ('northwind/portal', 'tagged on the task'))
+
     def test_pinning_a_repo_overrides_the_guess_and_takes_the_path_with_it(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')
         here = os.getcwd()

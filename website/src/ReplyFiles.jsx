@@ -14,8 +14,9 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import api from "./api.js";
 import { ALERT_INK, DIM } from "./theme.jsx";
 import { promisesFiles, sizeText } from "./replyFiles.js";
+import { useVerbs } from "./actionRow.js";
 
-export default function ReplyFiles({ reviewId, files = [], text = "", channel = "email", onChanged }) {
+export default function ReplyFiles({ reviewId, files = [], text = "", channel = "email", onChanged, toRow = false }) {
   const pick = useRef(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -44,6 +45,9 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
   };
 
   const missing = !files.length && promisesFiles(text);
+  // in the row above the chat line the button is one of its More verbs: the same hidden file input opens
+  useVerbs(`attach:${reviewId}`, [{ id: "attach", group: "more", tone: "s", label: files.length ? "Attach another" : "Attach a file", disabled: busy === "adding",
+    run: () => pick.current?.click(), title: "Adds a file to the reply; nothing is sent until you approve it" }], toRow && mail);
   return (
     <Box sx={{ mb: 0.75 }}>
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75 }}>
@@ -52,7 +56,7 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
             label={`${f.name} · ${sizeText(f.size)}`} disabled={busy === f.name}
             onDelete={() => drop(f.name)} sx={{ maxWidth: 320 }} />
         ))}
-        {mail ? (
+        {mail && toRow ? null : mail ? (
           <Button size="small" onClick={() => pick.current?.click()} disabled={busy === "adding"}
             startIcon={busy === "adding" ? <CircularProgress size={11} /> : <AttachFileIcon sx={{ fontSize: 14 }} />}
             sx={{ color: DIM, textTransform: "none", fontSize: 11.5 }}>

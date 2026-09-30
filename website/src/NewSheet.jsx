@@ -20,6 +20,7 @@ import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLE
 import { ChannelIcon, AgentPicker, useAgents, TaskuaryMark } from "./ui.jsx";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, planTask } from "./newTask.js";
+import NewRepo from "./NewRepo.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
@@ -76,15 +77,19 @@ const EmailRecipients = ({ value, onChange, options, placeholder }) => (
 // discovery, menus, forks, and a MUI dialog; owning this value at the sheet level rebuilt all of
 // that on every keystroke and made an ordinary sentence feel like terminal input over a slow
 // connection. The parent only hears when empty/non-empty changes and reads the value on submit.
-const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady }, ref) {
+const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus }, ref) {
   const [value, setValue] = useState("");
   const ready = useRef(false);
-  useImperativeHandle(ref, () => ({ value, clear: () => { ready.current = false; setValue(""); } }), [value]);
+  const timer = useRef(0);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  useImperativeHandle(ref, () => ({ value, clear: () => { ready.current = false; setValue(""); bus?.current?.(""); } }), [value, bus]);
   const changed = (e) => {
     const next = e.target.value;
     setValue(next);
     const hasText = !!next.trim();
     if (hasText !== ready.current) { ready.current = hasText; onReady(hasText); }
+    // the repository picker hears the words on a pause in typing, never per key (only it re-renders, not the card)
+    if (bus?.current) { clearTimeout(timer.current); timer.current = setTimeout(() => bus.current?.(next), 200); }
   };
   return (
     <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={value} autoFocus
@@ -97,8 +102,12 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
   );
 }));
 
-export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
+// `inline`: the card the sidebar's New button posts into the conversation (the canvas redesign) - the same tabs and fields,
+// drawn in the conversation's own width instead of a dialog over the page. Without it the dialog stays for any other door.
+export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false }) {
   const [kind, setKind] = useState("send");
+  const said = useRef(null);      // the words, for the repository picker (see NewRepo)
+  const repoPick = useRef(null);  // what the picker says to use, read on submit
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
@@ -159,9 +168,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
         // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
         // never disagree about what "no repository" means
         const chat = how === "chat";
-        const plan = planTask(chat ? NO_REPO : null, chat ? "live" : "terminal", false, !chat);
+        // a session opens where the picker says (auto = the repository the words name, else the server guesses as ever);
+        // the choice is the task's `repo:` tag, the override that always wins
+        const pickd = chat ? null : repoPick.current?.(about) || null;
+        const plan = planTask(chat ? NO_REPO : pickd?.repo || null, chat ? "live" : "terminal", false, !chat);
         const { data } = await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: about,
           Kind: plan.kind, Tags: plan.tags });
+        // a folder typed for a repository the agent had none for is saved on the agent first - the session refuses to open without one
+        if (pickd?.repo && pickd.path) await api.put(`/api/tasks/${data.taskId}/repo`, { repo: pickd.repo, path: pickd.path, agent });
         if (plan.chat) {
           // nothing to dispatch: the chat opens its own session and asks the question off the tag
           // planTask put on the task (GeneralWorkspace), which is why the words are not passed as a prop
@@ -189,8 +203,15 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
   const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
     : kind === "agent" ? (how === "chat" ? "Ask the assistant" : "Start the session") : "Note it";
 
+  // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
+  const Shell = inline ? Box : Dialog;
+  const shell = inline
+    ? { "data-tq-new": "", onKeyDown: (e) => { if (e.key === "Escape") close(); },
+        sx: { border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden", scrollMarginTop: "8px" } }
+    : { open: !!open, onClose: close, fullWidth: true, maxWidth: "sm", "data-tq-keep": true };
+  if (inline && !open) return null;
   return (
-    <Dialog open={!!open} onClose={close} fullWidth maxWidth="sm" data-tq-keep>
+    <Shell {...shell}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
         <Box sx={{ flex: 1 }}>What are we starting?</Box>
         <IconButton aria-label="Close new task" size="small" onClick={close}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
@@ -198,11 +219,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
 
       {/* the kinds are tabs, not a select: three doors that all exist is the point of the sheet,
           and a closed dropdown hides two of them behind a click */}
-      <Box sx={{ display: "flex", gap: 0.25, px: 3, borderBottom: `1px solid ${BORDER}` }}>
+      <Box sx={{ display: "flex", gap: 0.25, px: { xs: 1, sm: 3 }, borderBottom: `1px solid ${BORDER}`, overflowX: "auto", scrollbarWidth: "none" }}>
         {KINDS.map((k) => (
           <Box key={k.key} onClick={() => { setKind(k.key); setErr(""); setOk(""); }} role="tab"
             aria-selected={kind === k.key} title={k.hint}
-            sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 1.5, py: 1, cursor: "pointer",
+            sx={{ display: "flex", alignItems: "center", gap: 0.75, px: { xs: 1, sm: 1.5 }, py: 1, cursor: "pointer", flexShrink: 0,
               fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", mb: "-1px",
               color: kind === k.key ? INK : FAINT,
               borderBottom: `2px solid ${kind === k.key ? ACCENT : "transparent"}`,
@@ -294,13 +315,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
                     brains={brainList} brainModels={brainModels} brain={brain}
                     onBrain={(b) => { setBrain(b); setModel(""); }}
                     onAgent={(a) => { setAgent(a); setModel(""); }} onModel={setModel} size={30} />
-                  {/* no repository picker here on purpose: guess_repo ranks the checkouts against
-                      what you just typed (SOUL.md's repo map), and a session that opens in the wrong
-                      tree refuses to start rather than guessing. Name the system in the ask. */}
-                  <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 180 }}>
-                    It picks the checkout from what you write — name the system if there is any doubt.
-                  </Typography>
                 </Box>
+                {/* the checkout: AUTO by default (what guess_repo always did), or chosen here - the owner, 2026-09-30:
+                    "can't choose repo to create coding session in" */}
+                <Box sx={{ mt: 1.25 }}><NewRepo agent={agent} bus={said} out={repoPick} first={aboutRef.current?.value || ""} /></Box>
                 {/* A session you start is yours to end: the server marks the task the moment you open
                     one (selfclose.claim), whichever door you came through - no checkbox to forget. */}
               </Box>
@@ -312,7 +330,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
           <Label>{kind === "send" ? "What's this about"
             : kind === "agent" ? (how === "chat" ? "What do you want to work out" : "What should it do")
             : "What do you want to remember"}</Label>
-          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} />
+          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} />
           {kind === "send" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Shorthand is fine — this is what you are telling the drafter, not what they read.
@@ -356,6 +374,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
           startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
           sx={{ background: GRADIENT }}>{busy ? "Working…" : verb}</Button>
       </Box>
-    </Dialog>
+    </Shell>
   );
 }

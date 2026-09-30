@@ -1472,7 +1472,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             return (
               <Tooltip key={n.key} title={n.hint} placement="right">
                 <Box component="button" type="button" data-tq-nav={n.key} aria-current={navOn === n.key ? "page" : undefined}
-                  onClick={() => (n.key === "new" ? setNewOpen(true) : onGo?.(n.go, n.key))}
+                  onClick={() => (n.key === "new" && !onGo ? setNewOpen(true) : onGo?.(n.go, n.key))}
                   sx={{ display: "flex", alignItems: "center", gap: 1.25, width: "100%", height: 30, px: 1.25, border: 0,
                     borderRadius: "8px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, textAlign: "left",
                     color: navOn === n.key ? INK : "#4d4a43", bgcolor: navOn === n.key ? "#e4e9ee" : "transparent",

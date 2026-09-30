@@ -1,22 +1,23 @@
 .tq-aui-thread { width: 100%; max-width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: #fbfaf7; color: #292824; }
 .tq-aui-viewport { width: 100%; max-width: 100%; flex: 1 1 auto; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; padding: 18px; box-sizing: border-box; scrollbar-width: thin; }
-.tq-aui-welcome { margin: auto auto 18px; max-width: 560px; display: flex; align-items: flex-start; gap: 10px; color: #667164; }
+.tq-aui-welcome { margin: auto 0 18px; max-width: none; display: flex; align-items: flex-start; gap: 10px; color: #667164; }
 .tq-aui-welcome-title { color: #343832; font-weight: 700; font-size: 15px; }
 .tq-aui-welcome-copy { color: #77766f; font-size: 12.5px; margin-top: 3px; line-height: 1.45; }
-.tq-aui-message { width: min(760px, 92%); max-width: 100%; min-width: 0; margin: 0 auto 18px; display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 10px; align-items: start; box-sizing: border-box; }
+.tq-aui-message { width: 100%; max-width: 100%; min-width: 0; margin: 0 auto 18px; display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 10px; align-items: start; box-sizing: border-box; }
 .tq-aui-role { padding-top: 8px; color: #8b877e; font: 600 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
 .tq-aui-user-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid #dfdbd3; background: #f1eee8; border-radius: 13px; padding: 9px 13px; font-size: 13px; line-height: 1.48; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-user-bubble p { margin: 0; white-space: pre-wrap !important; overflow-wrap: anywhere; }
 .tq-aui-agent-body { min-width: 0; max-width: 100%; padding: 5px 3px; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body * { max-width: 100%; min-width: 0; box-sizing: border-box; }
+.tq-aui-agent-body p, .tq-aui-agent-body li { max-width: 110ch; }
 .tq-aui-agent-body pre, .tq-aui-agent-body code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body table { width: 100%; table-layout: fixed; }
 .tq-aui-agent-body th, .tq-aui-agent-body td, .tq-aui-agent-body a { overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-report-action { width: min(760px, 92%); margin: 2px auto 14px; padding: 10px 12px; border: 1px dashed #d8d1c5; border-radius: 11px; background: #f8f5ee; display: flex; align-items: center; gap: 12px; }
+.tq-aui-report-action { width: 100%; margin: 2px auto 14px; padding: 10px 12px; border: 1px dashed #d8d1c5; border-radius: 11px; background: #f8f5ee; display: flex; align-items: center; gap: 12px; }
 .tq-aui-report-action > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tq-aui-report-action b { color: #4d514b; font-size: 12px; }
 .tq-aui-report-action span { color: #858078; font-size: 10.5px; }
-.tq-aui-asking { width: min(760px, 92%); margin: 2px auto 10px; padding: 10px 12px; border: 1px solid #d8c9a8; border-left: 3px solid #b08b4f; border-radius: 11px; background: #fbf7ee; display: flex; align-items: center; gap: 12px; }
+.tq-aui-asking { width: 100%; margin: 2px auto 10px; padding: 10px 12px; border: 1px solid #d8c9a8; border-left: 3px solid #b08b4f; border-radius: 11px; background: #fbf7ee; display: flex; align-items: center; gap: 12px; }
 .tq-aui-asking > div:first-of-type { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tq-aui-asking b { color: #4d514b; font-size: 12px; }
 .tq-aui-asking span { color: #6b665e; font-size: 11px; }
@@ -37,7 +38,7 @@
 /* AN AGENT AT WORK. One band above the trail: who, what it is doing right now, how far in, how
    long - and the sources it is already holding. The dock never renders this; it is the assistant
    that helps you run Taskuary, not an agent on a job. */
-.tq-aui-band { width: min(760px, 92%); margin: 0 auto 14px; padding: 9px 12px; background: #fff;
+.tq-aui-band { width: 100%; margin: 0 auto 14px; padding: 9px 12px; background: #fff;
   border: 1px solid #d8d2c6; border-left: 3px solid #6f8a6e; border-radius: 0 9px 9px 0; }
 .tq-aui-band-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .tq-aui-band-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #6f8a6e;
@@ -77,7 +78,7 @@
 @keyframes tqAuiThinking { 0%, 100% { opacity: .35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
 @keyframes tqAuiPulse { 50% { opacity: .3; } }
 .tq-aui-footer { flex: 0 0 auto; padding: 10px 18px 8px; background: #fbfaf7; border-top: 1px solid #e4e0d9; }
-.tq-aui-composer { width: min(820px, 100%); margin: 0 auto; min-height: 48px; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
+.tq-aui-composer { width: 100%; margin: 0 auto; min-height: 48px; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
 .tq-aui-input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: 150px; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tq-aui-input::placeholder { color: #8f8b84; }
 .tq-aui-send, .tq-aui-cancel { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
@@ -85,16 +86,16 @@
 .tq-aui-cancel { background: #9a6d65; }
 .tq-aui-cancel:disabled { display: none; }
 .tq-aui-hint { margin: 5px auto 0; text-align: center; color: #a09b92; font: 9px/1.2 'Cascadia Mono', Consolas, monospace; }
-.tq-aui-attachments { width: min(820px, 100%); margin: 0 auto 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+.tq-aui-attachments { width: 100%; margin: 0 auto 6px; display: flex; flex-wrap: wrap; gap: 5px; }
 .tq-aui-dock .tq-aui-viewport { padding: 14px 13px 8px; }
 .tq-aui-dock .tq-aui-message { width: 100%; grid-template-columns: 54px minmax(0, 1fr); gap: 7px; margin-bottom: 14px; }
 .tq-aui-dock .tq-aui-user-bubble { max-width: 100%; }
 .tq-aui-dock .tq-aui-footer { padding: 8px 10px 7px; }
 .tq-aui-dock .tq-aui-hint { display: none; }
-.tq-aui-dock-expanded .tq-aui-message { width: min(760px, 96%); grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
+.tq-aui-dock-expanded .tq-aui-message { width: 100%; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
 .tq-aui-dock-expanded .tq-aui-viewport { padding: 22px 24px 12px; }
 .tq-dock-actions { width: 100%; margin: 2px auto 12px; padding: 10px; border: 1px solid #d6cec1; border-left: 4px solid #98743e; border-radius: 12px; background: #fffdf9; box-shadow: 0 5px 18px rgba(51, 45, 35, .07); box-sizing: border-box; }
-.tq-dock-actions-expanded { width: min(760px, 96%); padding: 13px 14px; }
+.tq-dock-actions-expanded { width: 100%; padding: 13px 14px; }
 .tq-dock-action-kicker { min-height: 22px; display: flex; align-items: center; gap: 7px; color: #8d6b38; font: 750 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
 .tq-dock-action-kicker em { color: #989188; font-style: normal; letter-spacing: .04em; text-transform: none; }
 .tq-dock-action-nav { margin-left: auto; display: flex; }

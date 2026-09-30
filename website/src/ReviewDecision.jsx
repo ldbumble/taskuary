@@ -12,6 +12,7 @@ import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { CcRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
+import { useVerbs } from "./actionRow.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 
@@ -55,7 +56,8 @@ export const InvoiceLine = ({ meta }) => (
 // `onOpenTask` is optional: on the task page you are already there.
 // `closeout` is the task's pending close-out (merge the PR, close the issue): given beside its reply, the two are
 // ONE decision on this card, and the close-out runs first (verdicts.decide's reply_text).
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask }) {
+// `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, toRow = false }) {
   const [text, setText] = useState(null);           // the owner's edit; null means "the draft as filed"
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
   const [busy, setBusy] = useState(false);
@@ -86,7 +88,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
-        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable ? value : null, cc: sendable ? ccNow : null });
+        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && value.trim() ? value : null, cc: sendable ? ccNow : null });
       // refused before anything happened is not "approved, but it did not send"
       if (!data.ok && data.send_error) setCoFail({ text: data.send_error, offers: data.offers || [] });
       else if (data.send_error) setSendErr(data.send_error);
@@ -129,6 +131,41 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     catch (e) { setErr(e?.response?.data?.detail || "Redraft failed"); }
     setBusy(false);
   };
+
+  // THE DECISION'S VERBS, one list for the card's buttons and the action row: what presses, what it says, when it is off
+  const no = (id) => `${r.ReviewId}:${id}`;
+  const rejectTitle = proposal ? "Dismisses it - nothing runs and nothing is sent" : "Throws this draft away - nothing is sent and the task stays open. Taskuary learns from the rejection.";
+  // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
+  const altSends = sendable && !!value.trim();
+  const altTitle = co?.alt ? `${co.alt.label} ${co.alt.then}${altSends ? ", then sends the text above exactly as you have it - edit it first if it reads as an accept" : ". The box is empty, so nothing is sent"}.` : "";
+  const moves = r.Status !== "pending" ? [] : [
+    ...(co && !r.Stale ? [
+      { id: no("approve"), label: busy ? co.busyLabel : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: busy || blocked || (sendable && !value.trim()), run: () => decideBoth("approve"),
+        why: blocked ? gh.reason.split(" - ")[0] : sendable && !value.trim() ? "write the reply first" : "" },
+      ...(co.alt ? [{ id: no("alt"), label: altSends ? `${co.alt.label} & send your text` : co.alt.label, tone: "s", title: altTitle, disabled: busy, run: () => decideBoth(co.alt.verb) }] : []),
+    ] : proposal ? [
+      { id: no("approve"), label: busy ? proposal.busyLabel : proposal.approveLabel, tone: "p", disabled: busy || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
+        why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : "",
+        title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
+          : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
+    ] : r.CanSend === false ? [
+      { id: no("approve"), label: busy ? "closing…" : "Mark done", tone: "p", disabled: busy, run: () => decide("close_unsent"),
+        title: `No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).` },
+    ] : r.Stale ? [
+      { id: no("approve"), label: busy ? "refreshing…" : "Refresh the draft", tone: "p", disabled: busy, run: redraft, title: "Rewrites the draft from the newest message, then you approve it" },
+    ] : [
+      { id: no("approve"), label: busy ? "sending…" : `${onTask ? CLOSE_OUT : "Approve & send"}${ccNow.length ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
+        run: () => decide("approve"), title: `Sends this response to ${replyContext(r)}` },
+    ]),
+    ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
+    ...(co ? [{ id: no("reject"), label: co.rejectLabel, tone: "q", disabled: busy, run: () => decideBoth("reject"), title: "Leaves the pull request as it is; the task stays open and on you, the reply unsent" }]
+      : [{ id: no("reject"), label: proposal?.rejectLabel || "Reject", tone: "q", disabled: busy, run: () => decide("reject"), title: rejectTitle }]),
+  ].map((v) => ({ ...v, group: "decide" }));
+  // Redraft / Refresh / Draft with AI rides in the row too, behind More: the same handler the in-card button had
+  const canRedraft = !proposal && meta.kind !== "zoho_invoice";
+  const redraftWord = r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI";
+  useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length ? [{ id: no("redraft"), group: "more", tone: "s", label: redraftWord, disabled: busy, run: redraft,
+    title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])], toRow && moves.length > 0);
 
   if (r.Status === "held") {
     return (
@@ -200,7 +237,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         </Box>
       )}
       {!proposal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(r)}
-        text={value} channel={r.Channel} onChanged={onChanged} />}
+        text={value} channel={r.Channel} onChanged={onChanged} toRow={toRow} />}
       {!proposal && <CcRow cc={ccNow} setCc={setCc} channel={r.Channel} />}
       {/* WHY THERE IS NO SEND BUTTON, on the surface rather than under a hover. The server writes
           this one sentence for exactly this (outbound.send_block, PW-044) and every other surface
@@ -234,6 +271,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             asked you to declare something the text already shows. */}
         {/* a channel that cannot carry the reply must SAY so: github with replies
             off gets 'No response required' as THE action, not a send that bounces */}
+        {!toRow && <>
         {co && !r.Stale ? (
           /* ONE PRESS FOR THE LAST TWO ACTS (the owner, 2026-09-27: "shouldn't we combine this?"): the merge or
              close runs first, and the reply above goes out only once it succeeded. A reply this channel cannot
@@ -242,9 +280,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             <Button size="small" variant="contained" disableElevation disabled={busy || blocked || (sendable && !value.trim())}
               onClick={() => decideBoth("approve")} title={blocked ? gh.reason : thenLine}>
               {busy ? co.busyLabel : co.approveLabel}</Button>
-            {co.alt && <Button size="small" variant="outlined" disabled={busy || (sendable && !value.trim())}
-              onClick={() => decideBoth(co.alt.verb)} title={`${co.alt.label} ${co.alt.then}${sendable ? ", then sends your reply" : ""}.`}>
-              {co.alt.label}</Button>}
+            {co.alt && <Button size="small" variant="outlined" disabled={busy}
+              onClick={() => decideBoth(co.alt.verb)} title={altTitle}>
+              {altSends ? `${co.alt.label} & send your text` : co.alt.label}</Button>}
           </>
         ) : proposal ? (
           <Button size="small" variant="contained" disableElevation disabled={busy || (proposal.kind === "closeout" && blocked)}
@@ -289,10 +327,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           title="Leaves the pull request as it is; the task stays open and on you, the reply unsent">{co.rejectLabel}</Button>}
         {/* a close-out card is Close out / Decline / Not yet and nothing else (the owner, 2026-09-28: "what does reject
             reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart */}
-        {!co && <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")}>{proposal?.rejectLabel || "Reject"}</Button>}
+        {!co && <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")} title={rejectTitle}>{proposal?.rejectLabel || "Reject"}</Button>}
+        </>}
         <Box sx={{ flex: 1 }} />
-        {!proposal && meta.kind !== "zoho_invoice" && <Button size="small" disabled={busy} onClick={redraft}>
-          {busy ? <CircularProgress size={12} /> : r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI"}
+        {!toRow && canRedraft && <Button size="small" disabled={busy} onClick={redraft}>
+          {busy ? <CircularProgress size={12} /> : redraftWord}
         </Button>}
       </Box>
       {/* what the one word does HERE - the buttons never change, this line does */}

@@ -8,6 +8,7 @@ import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import CheckIcon from "@mui/icons-material/Check";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import api from "./api";
+import { namedRepo } from "./repoNames.js";
 import { ACCENT, PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 // Not every task is about a codebase. "None" is a real answer here, not a blank one: unpinning
@@ -147,13 +148,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
 // coding agent then the repo picker showed up, but it should be there always"). This is that choice as a
 // dropdown beside the brain: the repository the instruction NAMES ("check this in ledger") first, else the one
 // pinned on the task, else Taskuary's own pick - and the parent pins the choice before it starts the session.
-export const namedRepo = (rows, text) => {
-  // whole words only: "ledger" names northwind/ledger, "ledgers" and "my-ledger-notes" do not
-  const words = new Set(String(text || "").toLowerCase().split(/[^a-z0-9_./-]+/).map((w) => w.replace(/[./-]+$/, "")));
-  const hits = new Set((rows || []).filter((r) => [r.repo, r.repo.split("/").pop()]
-    .some((n) => n.length >= 4 && words.has(n.toLowerCase()))).map((r) => r.repo));
-  return hits.size === 1 ? [...hits][0] : "";
-};
+export { namedRepo };   // now in repoNames.js, so the New card's picker and a test can import it without JSX
 
 export const RepoSelect = ({ taskId, agent = "coder", instruction = "", value, onChange }) => {
   const [data, setData] = useState(null);

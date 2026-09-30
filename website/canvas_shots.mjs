@@ -63,6 +63,7 @@ const SCENES = [
   ["agent-expand", async (p) => click(p, "[data-tq-expand]"), "client"],
   ["agent-collapse", async (p) => click(p, "[data-tq-expand]"), "client"],
   ["nav-new", async (p) => click(p, '[data-tq-nav="new"]')],
+  ["new-agent", async (p) => { await clickText(p, "Give an agent a job", "[data-tq-new] [role=tab]"); await wait(700); return visible(p, "[data-tq-new-repo]"); }, "client"],
   ["nav-reports", async (p) => { await p.keyboard.press("Escape"); return first(() => click(p, '[data-tq-nav="reports"]'), () => tab(p, "Reports")); }],
   ["reports-list", async (p) => click(p, '[data-tq-browse-chip="reports"]'), "client"],
   ["reports-one", async (p) => click(p, "[data-tq-browse-card] > div > div"), "client"],

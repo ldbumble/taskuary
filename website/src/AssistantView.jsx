@@ -48,6 +48,7 @@ import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
+import ActionRow from "./ActionRow.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -465,7 +466,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
     <div className={`tq-browse-line${canvas?.browsing === m.id ? " tq-canvas-live" : ""}`} data-tq-browse-line={m.area}>
       <CanvasBrowse area={m.area} state={m.state || {}} live={canvas?.browsing === m.id}
         onState={(state) => actions.browseState(m.id, state)} onOpenCard={actions.openCard} onReopen={() => actions.browse(m.area, m.state)}
-        onNavigate={actions.navigate} onOpenTask={actions.openTask} />
+        onNavigate={actions.navigate} onOpenTask={actions.openTask} onClose={() => actions.browseClose(m.id)} />
     </div>
   );
   if (m.role === "receipt") return (
@@ -545,7 +546,8 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
   const verbs = inCard ? chips.filter((c) => c.verb) : [];
   const strip = inCard ? chips.filter((c) => !c.verb) : chips;
   const nextChip = verbs.find((c) => c.verb === "next");
-  const nav = { busy: actions.busy, items: actions.items, surface: actions.surface,
+  const nav = { busy: actions.busy, items: actions.items, surface: actions.surface, row: live && last && !!canvas && !actions.handedTo, ref: c?.ref || "",   // Next and the words ride in the row above the chat line
+
     onNext: nextChip ? () => actions.chip(nextChip) : null,
     also: verbs.filter((c) => c.verb !== "next").map((c) => ({ verb: c.verb, label: c.label, title: c.hint, disabled: actions.busy, onClick: (e) => actions.chip(c, e?.currentTarget) })) };
   return (
@@ -678,7 +680,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // the card browsed open, in words - what "this" means to the next turn (concierge.say open_card)
   const openCardRef = useRef(null);
   const browseRef = useRef(null), openTaskRef = useRef(null);
-  const [newNonce, setNewNonce] = useState(0);         // the New sheet, asked for by a link (#new-task)
   const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
   // the table changed: the next item opens un-expanded and unfolded
   const tableKey = currentItem?.key || null;
@@ -1587,6 +1588,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     reopen: (key, onTable) => { if (onTable) setFoldedKey(null); else pull(key); },
     browseState: (id, state) => { holdBottom.current = true; setMsgs((m) => m.map((x) => (x.id === id ? { ...x, state } : x))); },
     browse: (area, state) => browse(area, state),
+    browseClose: (id) => setMsgs((m) => m.filter((x) => x.id !== id)),    // the New card, closed: its line goes
     openCard,
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
     handedTo: handoff ? ((state?.doorways || []).find((d) => d.channel === handoff.channel)?.label || handoff.channel) : "",
@@ -1613,7 +1615,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     doneReq.current = request.n;
     if (request.kind === "browse") browseRef.current?.(request.area, request.state || {});
     else if (request.kind === "task") openTaskRef.current?.(request);
-    else if (request.kind === "new") setNewNonce((x) => x + 1);
+    else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
   }, [request, state]);
   const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey, browsing, phone]);
@@ -1761,6 +1763,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       )}
       {!old && !handoff && !walk && (
         <div className="tq-compose">
+          <ActionRow />
           <div className="tq-compose-box">
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
@@ -1812,7 +1815,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   );
 
   return (
-    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn} openNew={newNonce}
+    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={({ openByMid, openByItem }) => <Pile pile={pile} current={old ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}

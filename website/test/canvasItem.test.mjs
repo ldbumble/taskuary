@@ -75,7 +75,10 @@ test("a card open in the canvas is the turn's subject, not the item folded above
 test("the item on the table spans the canvas, not the chat's reading column", () => {
   const css = src("assistantView.css");
   assert.match(css, /\.tq-chat-inner > \.tq-canvas-live, \.tq-chat-inner > \.tq-browse-line, \.tq-chat-inner > \.tq-live-card \{/);
-  assert.match(css, /width: calc\(100cqw - 40px\); margin-left: calc\(\(100% - \(100cqw - 40px\)\) \/ 2\)/);
+  // the conversation column is the canvas's width now (.tq-chat-inner), so the item takes all of it: the same edges as the composer
+  assert.match(css, /width: 100%; margin-left: 0; max-width: none; \}/);
+  assert.match(css, /\.tq-chat-inner \{ width: 100%; \}/);
+  assert.match(css, /\.tq-compose-box \{ width: 100%; \}/);
   assert.match(view, /live && card \? "tq-msg tq-live-card" : "tq-msg"/);
 });
 
@@ -85,7 +88,11 @@ test("expanding never changes the chat body's padding", () => {
 });
 
 // the owner, 2026-09-29: Next "on the bottom like it used to be" - under the task view, never in its header's corner
-test("a task's Next is one clear button under the view, not in its header", () => {
-  assert.match(item, /data-tq-next="" disabled=\{busy\} onClick=\{onNext\}/);
+// (2026-09-30, layout B): Next moved again - into the ONE row above the chat line, with the task's other verbs; the view registers it
+test("a task's Next is the row's button: registered by the view, drawn above the chat line, in neither its header nor its foot", () => {
+  assert.match(item, /useVerbs\("next", \[\{ id: "next", group: "next", label: "Next", disabled: !!busy, run: \(\) => onNext\(\)/);
+  assert.doesNotMatch(item, /data-tq-next/);
+  assert.match(src("ActionRow.jsx"), /data-tq-next=""/);
+  assert.match(view, /<ActionRow \/>/);
   assert.doesNotMatch(src("TaskPage.jsx"), /data-tq-next/);
 });

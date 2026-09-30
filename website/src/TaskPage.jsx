@@ -13,7 +13,8 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
-import RemindMe from "./RemindMe.jsx";
+import RemindMe, { RemindPicker } from "./RemindMe.jsx";
+import { useVerbs } from "./actionRow.js";
 import BlockIcon from "@mui/icons-material/Block";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
@@ -779,6 +780,50 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       </>}
     </Box>
   );
+  // ON THE ASSISTANT CANVAS THE BUTTONS LEAVE THE CARD (layout B, 2026-09-30): the item registers its verbs and the ONE row above the chat
+  // line draws them (ActionRow) - the decision first, the session's verbs next, the rest behind More, Next at the end. They are
+  // THESE handlers, unchanged: the row calls the latest closure, so a press costs what the old button cost. The Tasks tab
+  // (canvas=false) keeps its bars.
+  const inRow = !!canvas;
+  const [remindAt, setRemindAt] = useState(null);
+  const notDone = !!t && !["done", "dropped"].includes(t.Status);
+  const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
+  const startHere = !liveSession && notDone && !continueHere && (stage !== "agent" || (agentBar && !isGeneral));
+  const ranBefore = !!(report || detail?.transcript);
+  const rowVerbs = !t ? [] : !notDone
+    ? [{ id: "reopen", group: "decide", tone: "s", label: "Reopen task", run: reopen, title: "Reopens the task only. No agent starts until you choose one." }]
+    : [
+      ...(replyMessage && !liveSession && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "decide", tone: "p", label: openingReply ? "Drafting…" : replyPrimary,
+        disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)),
+        title: pendingReview ? "Opens the drafted reply and its close-out" : "Drafts the reply here, from this task's own context. Nothing is sent until you approve it." }] : []),
+      ...(liveSession ? [
+        ...(liveCodingSession ? [{ id: "diff", group: "agent", label: "Review changes", run: () => setDiffOpen(true), title: "A viewer of the agent's diff. Nothing is approved or committed here." }] : []),
+        { id: "save-end", group: "agent", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
+          title: "Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it." },
+      ] : continueHere ? [{ id: "continue", group: "agent", lead: true, label: startingAgent === "resume" ? "Continuing…" : "Continue session", disabled: !!startingAgent,
+        run: (e, a) => setContinueAt(a || e?.currentTarget),
+        title: isGeneral ? "Reopens the saved provider conversation and continues from its existing context."
+          : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.` }]
+      : startHere ? [{ id: "start-agent", group: "agent", lead: true, label: ranBefore ? "Run another agent" : "Start an agent",
+        run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")),
+        // it OPENS the step where the harness, model and prompt are chosen - nothing starts until that step's own Start button
+        title: ranBefore ? "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
+          : "Opens the agent step so you can choose a harness, a model and a prompt. Nothing starts until you press Start there." }] : []),
+      ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: "Ask sender", run: () => setAskSenderOpen(true),
+        title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
+      { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession },   // a live session has no primary
+      { id: "nat", group: "more", label: "Not a task", run: () => setConfirmNAT(true), title: "Delete it and teach triage why — the sender keeps writing to you." },
+      { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "Remind me", run: (e, a) => setRemindAt(a || e?.currentTarget),
+        title: "Put it away until a day; it is back on your work rail that morning" },
+      { id: "hand", group: "more", label: "Hand it to a person", run: () => setHandoff(true), title: "Not ours to do — the AI writes the forward, you send it." },
+      { id: "reshape", group: "more", label: "Split or merge", run: () => setReshape(true), title: "Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats." },
+      ...(!liveSession && canSave && agentBar ? [{ id: "save-result", group: "more", label: "Save result", disabled: !!wrapping, run: wrapUp,
+        title: "Writes up what this session did and files it as the task's result. The task stays open until you press Mark done." }] : []),
+      ...(!liveSession && continueHere && !isGeneral && agentBar ? [{ id: "run-another", group: "more", label: "Run another agent", run: () => setRestartOpen(true),
+        title: "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation." }] : []),
+      ...(!liveSession && report ? [{ id: "send-result", group: "more", label: "Send this result to someone", run: () => setHandoff(true), title: "Forwards the saved result to a person. The AI writes it, you send it." }] : []),
+    ];
+  useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
   return (
     <>
       {/* ── detail ────────────────────────────────────────────────────── */}
@@ -821,7 +866,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       the space (2026-09-16: "if agent in progress we want it small to give the most
                       space to the agent canvas"). The four controls ride up here instead: the same
                       four, in the same order, labels dropped to icons after the first. */}
-                  {sessionView && !["done", "dropped"].includes(t.Status) && (
+                  {sessionView && !inRow && !["done", "dropped"].includes(t.Status) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
                       <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={11} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 13 }} />}
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
@@ -888,7 +933,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         sx={{ display: "flex", alignItems: "center", gap: 0.85, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" } }}>
                         <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 750, letterSpacing: 1.35, flexShrink: 0 }}>TASK</Typography>
                         <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
-                        {!["done", "dropped"].includes(t.Status) && (
+                        {!inRow && !["done", "dropped"].includes(t.Status) && (
                           <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
                             <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={12} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 14 }} />}
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
@@ -917,7 +962,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {/* 1 - WHAT YOU CAN DO. The two endings first, grouped, then a rule, then the two
                         reroutes. Nothing behind a menu: "no one knows where the other buttons were
                         unless you click the 3 options" (the owner, 2026-09-16). */}
-                    {!["done", "dropped"].includes(t.Status) ? (
+                    {inRow ? null : !["done", "dropped"].includes(t.Status) ? (
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
                         <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
                           sx={primaryBtn}
@@ -943,7 +988,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         title="Reopens the task only. No agent starts until you choose one."
                         onClick={reopen}>Reopen task</Button>
                     )}
-                    <Divider sx={{ my: 1.4, borderColor: BORDER }} />
+                    {!inRow && <Divider sx={{ my: 1.4, borderColor: BORDER }} />}
                     {/* 2 - WHAT THERE IS TO DO. The title is in the header now; repeating it here was
                         the same words twice, an inch apart. */}
                     <Box sx={{ minWidth: 0 }}>
@@ -1149,7 +1194,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
-                    action={stage === "agent" && agentBar ? agentBarRow :
+                    action={inRow ? null : stage === "agent" && agentBar ? agentBarRow :
                       stage !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           {/* a regular agent's conversation is continued too - "Start an agent" read as starting over (T15) */}
@@ -1175,7 +1220,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : null} />
                   </Box>
                   {stage === "agent" && <>
-                  {term?.alive && (
+                  {term?.alive && !inRow && (
                     // on a phone the two buttons take their own row: sharing one with the heading, they
                     // stacked over the "agent · needs you" chip (2026-09-20)
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
@@ -1448,7 +1493,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
                     chip={<LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
                     tone="#8a3646" {...stageProps("reply")}
-                    action={stage !== "reply" && replyMessage
+                    action={!inRow && stage !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
@@ -1473,17 +1518,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               to make it go" - the owner, 2026-09-22), and the twin beside it did the thing
                               the first one was named for. The box is still editable, and Redraft below
                               writes it again. */}
-                          {!pendingReview && (
+                          {!pendingReview && !inRow && (
                             <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                               sx={primaryBtn}
                               startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
                               title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
                               onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
                           )}
-                          <Button size="small" variant="outlined" sx={barBtn}
+                          {!inRow && <Button size="small" variant="outlined" sx={barBtn}
                             startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
                             title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
-                            onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
+                            onClick={() => setAskSenderOpen(true)}>Ask sender</Button>}
                           <Box sx={{ flex: 1, minWidth: 12 }} />
                           <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
                             {/* no More button: with these on the surface there is nothing left to hide */}
@@ -1498,7 +1543,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
-                        <ReviewDecision review={pendingReview} closeout={closeoutRv}
+                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>
@@ -1571,7 +1616,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             {proposals.length === 1 ? "Also waiting on you" : `Also waiting on you · ${proposals.length}`}
                           </Typography>
                           {proposals.map((p) => (
-                            <ReviewDecision key={p.ReviewId} review={p}
+                            <ReviewDecision key={p.ReviewId} review={p} toRow={inRow && !pendingReview && proposals.length === 1}
                               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                           ))}
                         </Box>
@@ -1757,6 +1802,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         </DialogActions>
       </Dialog>
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
+      {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} />}
       <Confirm open={confirmDone} title="Stop the agent and mark done?"
         text="An agent session is still open on this task. Mark done ends it - what it did so far is written up and saved with the task, then the task closes."
         confirmLabel="Stop it and mark done" onClose={() => setConfirmDone(false)}

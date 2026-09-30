@@ -13,6 +13,7 @@ import { BORDER, DIM, FAINT, INK, PANEL } from "./theme.jsx";
 import ConnectorsView from "./ConnectorsView.jsx";
 import ReportsView from "./ReportsView.jsx";
 import SettingsView from "./SettingsView.jsx";
+import NewSheet from "./NewSheet.jsx";
 const HubView = React.lazy(() => import("./HubView.jsx"));
 
 const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px solid ${on ? "#55697a" : BORDER}`, cursor: "pointer",
@@ -107,12 +108,20 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
   );
 }
 
+// a card with no open detail says so: an earlier card's subject must not stay "this" in the conversation's words
+const NoSubject = ({ onOpenCard }) => { useEffect(() => { onOpenCard?.(null); }, [onOpenCard]); return null; };
+
 // One browse card on the chat line: which area, and its state ({section, open}) - the view keeps the rest.
 // `live` is false once a newer browse card is posted, so only one detail is ever mounted.
-export default function CanvasBrowse({ area, state, onState, live, onOpenCard, onNavigate, onOpenTask, onReopen }) {
+export default function CanvasBrowse({ area, state, onState, live, onOpenCard, onNavigate, onOpenTask, onReopen, onClose }) {
   const frame = (props) => <BrowseFrame {...props} live={live} onOpenCard={onOpenCard} onReopen={onReopen} />;
   const common = { browse: frame, browseState: state, onBrowseState: onState };
   if (!live) return frame({ title: AREA_TITLES[area] });
+  // NEW is the one area that starts something: the card is the sheet's own form, in the conversation, and closing it
+  // takes the line away (an earlier browse card folds to its title; this one has nothing left to read once it is closed)
+  if (area === "new") return (
+    <Box data-tq-browse="new"><NoSubject onOpenCard={onOpenCard} /><NewSheet inline open onClose={onClose} onOpenTask={onOpenTask} /></Box>
+  );
   return (
     <Box data-tq-browse={area}>
       {area === "connections" && <ConnectorsView onNavigate={onNavigate} {...common} />}
@@ -122,4 +131,4 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
     </Box>
   );
 }
-export const AREA_TITLES = { connections: "Connections", reports: "Reports", settings: "Settings", hub: "Hub" };
+export const AREA_TITLES = { new: "New", connections: "Connections", reports: "Reports", settings: "Settings", hub: "Hub" };

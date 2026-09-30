@@ -64,7 +64,7 @@ test("the agent heading is one short line, live or not", () => {
   // 2026-09-17: "can we also keep the agent header simple and short like it is when coder is
   // active"). The bar rides IN the heading, so both extra lines go.
   const head = tasks.slice(tasks.indexOf('<WorkflowHeading number="2"'), tasks.indexOf('<WorkflowHeading number="3"'));
-  assert.ok(head.includes("action={stage === \"agent\" && agentBar ? agentBarRow :"),
+  assert.ok(head.includes("action={inRow ? null : stage === \"agent\" && agentBar ? agentBarRow :"),
     "the expanded card's bar is the heading's action, not a row of its own");
   assert.ok(!head.includes("description="), "and nothing is said under the title");
   assert.ok(!/None of these completes the task/.test(tasks), "the sentence it used to carry is gone");
@@ -97,7 +97,7 @@ test("a live session still lets you act on the TASK", () => {
   // (2026-09-16) a live session had no way to complete, hand off, split or reject the task. The
   // header carries them for exactly that window - `sessionView`, which is the live session unless
   // the owner has stepped back to the task behind it (peek), where the card and its controls return.
-  const at = tasks.indexOf('{sessionView && !["done", "dropped"].includes(t.Status) && (');
+  const at = tasks.indexOf('{sessionView && !inRow && !["done", "dropped"].includes(t.Status) && (');
   assert.notEqual(at, -1, "the header must carry the task controls while a session fills the page");
   const bar = tasks.slice(at, at + 2200);
   // Mark done goes through askFinish, which asks first while an agent session is live (2026-09-25)
@@ -107,6 +107,8 @@ test("a live session still lets you act on the TASK", () => {
     assert.ok(bar.includes(hook), `${what} must be reachable during a live session`);
   }
   assert.ok(tasks.includes("{!sessionView && ("), "and the full card is what you get when nothing is running, or when you stepped back to the task");
+  // on the canvas the same four ride in the action row instead, registered whatever the session is doing
+  for (const id of ["done", "nat", "hand", "reshape"]) assert.ok(tasks.includes(`{ id: "${id}", group: "more"`), `the row carries ${id}`);
 });
 
 test("the rail says a task's state once, and puts its title first", () => {

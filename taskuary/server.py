@@ -1621,6 +1621,15 @@ def task_repos(task_id: int, agent: str = 'coder'):
     picked, why = hub_term.guess_repo(store, task_id, json.loads((store.get_agent(agent) or {}).get('Config') or '{}'))
     return {'data': _repo_rows(task_id, agent), 'picked': picked, 'why': why}
 
+@app.get('/api/repos')
+def list_repos(agent: str = 'coder'):
+    """Every repo Taskuary knows, for a task that does not exist yet (the New card's picker). Alphabetical - there is no
+    ask to rank against - and the flag the task-bound list carries: a repo with no local folder is listed, not hidden."""
+    prof = json.loads((store.get_agent(agent) or {}).get('Config') or '{}')
+    paths, desc = (prof.get('cwd_map') or {}), hub_term.repo_map(store)
+    return {'data': [{'repo': r, 'what': desc.get(r, ''), 'path': paths.get(r), 'has_path': bool(paths.get(r))}
+                     for r in sorted(dict.fromkeys(list(desc) + list(paths)), key=str.lower)]}
+
 @app.put('/api/tasks/{task_id}/repo')
 def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = None):
     """Put this task in the right checkout. The `repo:` tag is the override that always wins over

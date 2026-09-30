@@ -156,14 +156,14 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     const currentAfterRetry = await title(page, "current");
     assert.equal(currentAfterRetry, shownNext, "Current advanced to the item that was taken");
     assert.notEqual(currentAfterRetry, heldCurrent);
-    // the live card: on a task it is the task view the canvas shows (0.3.7.0) - its item and the walk's Next under it;
-    // otherwise the walk's own card
+    // the live card: on a task it is the task view the canvas shows (0.3.7.0) - its item, and the walk's Next in the ONE row above
+    // the chat line (layout B, 2026-09-30); otherwise the walk's own card
     const activeCard = async () => {
       await page.waitForSelector('.tq-canvas-live [data-tq-canvas-item], .tq-msg .tq-card', { timeout: 15000 });
       return page.evaluate(() => {
         const view = document.querySelector('.tq-canvas-live [data-tq-canvas-item]');
         if (view) return { title: view.getAttribute('data-tq-canvas-item'),
-          buttons: [...view.querySelectorAll('[data-tq-next]')].map(button => button.textContent.trim()) };
+          buttons: [...document.querySelectorAll('[data-tq-row] [data-tq-next]')].map(button => button.textContent.trim()) };
         const node = document.querySelector('.tq-msg .tq-card');
         return { title: node.querySelector('.tq-card-title')?.textContent.trim(),
           buttons: [...node.querySelectorAll('button')].map(button => button.textContent.trim()) };

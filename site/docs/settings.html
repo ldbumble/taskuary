@@ -186,15 +186,6 @@ is what you see if those cards cannot load.</li>
 <p>&quot;Tuesday at 1 works for me&quot; is only drafted if Tuesday at 1 is free. Reads the Outlook card&#39;s calendars (needs the Calendars.Read application permission) and a Google calendar if its OAuth fields are on the Gmail card.</p>
 <p>When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.</p>
 <p>Agents can read the same thing: POST /api/tools/run with type &quot;calendar&quot;.</p>
-<h3 id="acknowledge-chat-asks-at-once">Acknowledge chat asks at once<a class="anchor" href="#acknowledge-chat-asks-at-once" aria-label="Link to this section">#</a></h3>
-<p><code>chat_ack_enabled</code> · type: switch · default: on</p>
-<p>The moment an agent starts on something asked in Teams, WhatsApp, Telegram or Messages, one line goes back into the chat so they know somebody is on it.</p>
-<p>In chat, an ask is a task AND a question - and until the agent wraps up and its reply is approved, the person hears nothing. On: when a chat line becomes a task and an agent actually starts, the line below is sent into the same chat right away. It is fixed text, never a drafted answer, so it promises attention and nothing else.</p>
-<p>Not twice within half an hour on the same chat, and never when your own last line there is that recent - they have already heard from you. Off for a channel when its replies are off (above). Mail never gets one: an email thread can wait for the real answer.</p>
-<h3 id="the-acknowledgement">The acknowledgement<a class="anchor" href="#the-acknowledgement" aria-label="Link to this section">#</a></h3>
-<p><code>chat_ack_text</code> · type: text · default: <code>On it - I&#39;ll get back to you here.</code></p>
-<p>The one line that goes back. Keep it honest - it is sent before anything has been looked at.</p>
-<p>Written in your voice, since it arrives from your account. Something like &quot;On it - I&#39;ll get back to you here.&quot; A question mark invites an answer you are not there to read yet.</p>
 <h2 id="assistant">Assistant<a class="anchor" href="#assistant" aria-label="Link to this section">#</a></h2>
 <h3 id="the-pipe-reaches-back-hours">The pipe reaches back (hours)<a class="anchor" href="#the-pipe-reaches-back-hours" aria-label="Link to this section">#</a></h3>
 <p><code>funnel_hours</code> · type: number · default: <code>12</code></p>

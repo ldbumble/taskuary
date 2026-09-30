@@ -499,8 +499,6 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # a sound in the app and the browser's own desktop notification - each its own switch
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
-                    # in chat, an ask that starts an agent gets one line back at once (ingest._ack_chat)
-                    'chat_ack_enabled': '1', 'chat_ack_text': "On it - I'll get back to you here.",
                     # the assistant's POST on the Timeline (assistant.py): what it looks for, the silence and
                     # quiet that count as news, how much it says. Its clock and its instruction live on the
                     # Reports tab (the seeded 'Assistant' report).

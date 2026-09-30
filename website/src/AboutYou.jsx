@@ -65,23 +65,23 @@ export default function AboutYou() {
         <Box sx={{ flex: 1, minWidth: 280 }}>
           <TextField variant="standard" value={f.owner_name} placeholder="Your name" onChange={(e) => setP({ ...p, facts: { ...f, owner_name: e.target.value } })}
             onBlur={(e) => saveOwner(e.target.value.trim(), f.owner_email)} onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
-            inputProps={{ style: { fontSize: 24, fontWeight: 700, color: INK, letterSpacing: "-.01em" } }} fullWidth />
+            inputProps={{ "aria-label": "Your name", style: { fontSize: 24, fontWeight: 700, color: INK, letterSpacing: "-.01em" } }} fullWidth />
           <Box sx={{ display: "flex", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
             <TextField variant="standard" value={f.owner_title} placeholder="role or title" onChange={(e) => setP({ ...p, facts: { ...f, owner_title: e.target.value } })}
-              onBlur={(e) => save({ owner_title: e.target.value.trim() })} inputProps={{ style: { fontSize: 13, color: DIM } }} sx={{ width: 220 }} />
+              onBlur={(e) => save({ owner_title: e.target.value.trim() })} inputProps={{ "aria-label": "Role or title", style: { fontSize: 13, color: DIM } }} sx={{ width: 220 }} />
             <TextField variant="standard" value={f.owner_company} placeholder="company" onChange={(e) => setP({ ...p, facts: { ...f, owner_company: e.target.value } })}
-              onBlur={(e) => save({ owner_company: e.target.value.trim() })} inputProps={{ style: { fontSize: 13, color: DIM } }} sx={{ width: 220 }} />
+              onBlur={(e) => save({ owner_company: e.target.value.trim() })} inputProps={{ "aria-label": "Company", style: { fontSize: 13, color: DIM } }} sx={{ width: 220 }} />
           </Box>
           {/* the one owner fact worth editing here - your address, which the docs fill in as {{owner}}.
               Everything per-channel lives in its own card below, never as a loose field. */}
           <TextField variant="standard" value={f.owner_email} placeholder="you@yourdomain.com"
             onChange={(e) => setP({ ...p, facts: { ...f, owner_email: e.target.value } })}
             onBlur={(e) => saveOwner(f.owner_name, e.target.value.trim())} onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
-            inputProps={{ style: { fontSize: 13, color: DIM, ...mono } }} sx={{ width: 300, mt: 0.75 }} />
+            inputProps={{ "aria-label": "Email address", style: { fontSize: 13, color: DIM, ...mono } }} sx={{ width: 300, mt: 0.75 }} />
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}>your owner address — agents sign as this</Typography>
           <TextField variant="standard" fullWidth multiline value={f.owner_bio} placeholder="a line about you — what you own, how you like things done; the agents read this"
             onChange={(e) => setP({ ...p, facts: { ...f, owner_bio: e.target.value } })} onBlur={(e) => save({ owner_bio: e.target.value.trim() })}
-            inputProps={{ style: { fontSize: 13, color: INK, lineHeight: 1.5 } }} sx={{ mt: 1.5 }} />
+            inputProps={{ "aria-label": "About you", style: { fontSize: 13, color: INK, lineHeight: 1.5 } }} sx={{ mt: 1.5 }} />
         </Box>
       </Box>
 

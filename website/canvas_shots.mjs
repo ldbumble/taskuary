@@ -93,7 +93,7 @@ const SCENES = [
 (async () => {
   const browser = await launch();
   const facts = [];
-  for (const w of [1440, 390]) {
+  for (const w of (process.env.WIDTHS || "1440,390").split(",").map(Number)) {
     const page = await browser.newPage();
     await page.setViewport(VIEWS[w]);
     const pileHits = [];

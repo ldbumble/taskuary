@@ -42,7 +42,7 @@
     },
     "triage_backup_ai": {
       "group": "Triage & agents",
-      "label": "Backup brains",
+      "label": "Backup AI connections",
       "type": "brains",
       "desc": "Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.",
       "help": "Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.\n\nThis starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant."
@@ -171,7 +171,7 @@
     },
     "backup_brains": {
       "group": "Triage & agents",
-      "label": "Backup brains",
+      "label": "Backup agent CLIs",
       "type": "text",
       "desc": "Ordered alternates when the first brain is out of sessions, signed out, or cannot start. * = every other configured one, in roster order. This is the live successor to the old 'Backup coding CLIs', which named profiles and no longer does anything.",
       "help": "Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model."

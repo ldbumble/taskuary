@@ -26,6 +26,9 @@ flowchart LR
   W --> R
   C --> R
   A -->|Undo| U["The receipt's undo, run once"]
+  A -->|Walk a section| S["Its first row - Next AND every act stay in that section until it is empty, then it says so"]
+  A -->|Connections / Reports / Hub / Settings| B["A list - then a section or one entry - with Back; ten at a time with More when it would not fit a poll"]
+  R -.->|a section is being walked| S
   A -->|More| O["The rest of the message, then the same choices"]
   R -.->|the receipt offered an undo| U
 ```
@@ -43,3 +46,7 @@ flowchart LR
 | 7 | Phone approvals (typed "approve" / "reject" on a tagged ping) are gone; a draft is sent by its Close out pill (was "Send the reply") | a bare "yes" approved whichever review had pinged last, and the verdict words were a second vocabulary |
 | 8 | On WhatsApp the choices also come as a poll on the last bubble (2 to 12 of them, each cut to 100 characters); only the newest poll in a chat counts | a poll is the one tappable thing WhatsApp lets an account send |
 | 9 | A poll vote (the bridge marks it) is the choice it names; the same words typed are words | a poll vote arrives as the choice's own words, but only a tap is a pill |
+| 10 | Walking a section, an act moves on inside it exactly as Next does; the section's end is said, then the walk goes on (2026-09-30) | Make a task on the first report put TQ-0001 up in the middle of Walk Reports |
+| 11 | No list offers more than twelve choices: ten, then **More (N left)** / **From the top**, then Back (`doorway_browse.paged`) | the bridge cuts a poll at twelve without a word - five Connections sections and Back could not be tapped |
+| 12 | Reports and Hub are browsed like Connections and Settings; the phone's morning menu holds the sidebar's four | the phone had no way to see a report's clock or read the Hub |
+| 13 | The rail is read to the model by its SECTIONS (`pipe.list`), each row with its lane | grouped by lane, For later - a section, not a lane - was answered "nothing is parked in Later" |

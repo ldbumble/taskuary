@@ -188,6 +188,22 @@ def split(text: str, limit: int = HARD) -> list:
     return out
 
 
+def json_rows(text: str) -> str:
+    """Rows that arrived as one JSON object per line - a report whose summary never came, the demo's - as a markdown table,
+    so the door lays them out like any other table ({"site": "Lakeview", "headcount": 112} went to the phone as that, braces
+    and quotes, 2026-09-30 phone test). Anything that is not ALL flat objects is left exactly as it was."""
+    import json
+    lines = [l.strip() for l in str(text or '').splitlines() if l.strip()]
+    if len(lines) < 2: return text
+    try: rows = [json.loads(l) for l in lines]
+    except ValueError: return text
+    if not all(isinstance(r, dict) and r and all(not isinstance(v, (dict, list)) for v in r.values()) for r in rows): return text
+    cols = list(dict.fromkeys(k for r in rows for k in r))
+    cell = lambda v: '' if v is None else str(v).replace('|', '/')
+    return '\n'.join(['| ' + ' | '.join(cols) + ' |', '|' + '---|' * len(cols)]
+                     + ['| ' + ' | '.join(cell(r.get(c)) for c in cols) + ' |' for r in rows])
+
+
 def blocks(body, limit: int = HARD) -> list:
     """A report as the messages a chat should receive: one per section, in order.
 
@@ -200,7 +216,7 @@ def blocks(body, limit: int = HARD) -> list:
     out = []
     for title, text in sections(strip_raw(body)):
         head = f'## {title}' if title else ''
-        text = text.strip()
+        text = json_rows(text.strip()).strip()
         if not text: continue
         for piece in split(text, max(200, limit - len(head) - 2)):
             out.append(f'{head}\n{piece}'.strip() if head else piece)

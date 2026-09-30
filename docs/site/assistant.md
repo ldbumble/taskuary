@@ -58,6 +58,15 @@ separate Reject: the reply on it is edited or redrafted in place.
 
 Send to agent starts on the agent triage would pick; the other is one click away on the card.
 
+## Pictures, and your voice
+
+Paste a screenshot, drop an image, or use the paperclip - in the chat line, in **New**, and in **Continue session**. It
+goes with your words: the Assistant looks at the picture itself, and a coding agent is handed the file to open. PNG,
+JPEG, GIF and WebP, up to eight at a time. The microphone beside each box dictates into it.
+
+**Continue session** opens as a card under the item, not a popup: type or say what to tell the agent as it picks up,
+add a picture, or continue as is. Moving on with **Next** puts the card away with the item.
+
 ## Remind me
 
 Every open task has **Remind me** on its page: tomorrow, next week, in 2 weeks, in a month, or any day
@@ -106,5 +115,6 @@ These have no button. Say them, in the app or on your phone.
 | "set up a report that…" | A walk-through for a report, connection or workflow | you confirm |
 | "stop hiding auto-replies" | The setting is changed, with an undo | at once |
 | "what's waiting on me?" | Looked up and answered — tasks, reports, mail, calendar, settings | at once |
+| "what's in For later?" | The rail read by its own sections - On you, Agents working, For later (with when each comes back), Reports, FYI | at once |
 
 Later and Tomorrow are gone: **Next** is the "not now", and **Remind me** puts a task away until a day.

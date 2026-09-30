@@ -57,7 +57,7 @@
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Assistant buttons's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./assistant#one-screen-the-sidebar-and-the-canvas">One screen: the sidebar and the canvas</a><a class="sec" href="./assistant#the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="./assistant#the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="./assistant#remind-me">Remind me</a><a class="sec" href="./assistant#everything-the-task-page-can-do">Everything the task page can do</a><a class="sec" href="./assistant#words-that-work-typed">Words that work typed</a></div>
+      <div class="secs" hidden><a class="sec" href="./assistant#one-screen-the-sidebar-and-the-canvas">One screen: the sidebar and the canvas</a><a class="sec" href="./assistant#the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="./assistant#the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="./assistant#pictures-and-your-voice">Pictures, and your voice</a><a class="sec" href="./assistant#remind-me">Remind me</a><a class="sec" href="./assistant#everything-the-task-page-can-do">Everything the task page can do</a><a class="sec" href="./assistant#words-that-work-typed">Words that work typed</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant-tools">What the Assistant sees</a>
@@ -118,7 +118,7 @@ is what you see if those cards cannot load.</li>
 <p>TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.</p>
 <p>ONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its &#39;light model&#39; (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent&#39;s main model. No second API key, one bill.</p>
 <p>Left blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way.</p>
-<h3 id="backup-brains">Backup brains<a class="anchor" href="#backup-brains" aria-label="Link to this section">#</a></h3>
+<h3 id="backup-ai-connections">Backup AI connections<a class="anchor" href="#backup-ai-connections" aria-label="Link to this section">#</a></h3>
 <p><code>triage_backup_ai</code> · type: brains · default: blank</p>
 <p>Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.</p>
 <p>Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.</p>
@@ -149,7 +149,7 @@ is what you see if those cards cannot load.</li>
 <p>Which CLI actually executes a worker when its role names none. A ROLE picks the document a session is seeded with (coder, researcher, analyst); a BRAIN is the executable that runs it. Blank = each profile&#39;s own command.</p>
 <p>Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588&#39;s coding work was once routed to Copilot.</p>
 <p>A role and a brain are different questions and one name cannot answer both.</p>
-<h3 id="backup-brains">Backup brains<a class="anchor" href="#backup-brains" aria-label="Link to this section">#</a></h3>
+<h3 id="backup-agent-clis">Backup agent CLIs<a class="anchor" href="#backup-agent-clis" aria-label="Link to this section">#</a></h3>
 <p><code>backup_brains</code> · type: text · default: <code>*</code></p>
 <p>Ordered alternates when the first brain is out of sessions, signed out, or cannot start. * = every other configured one, in roster order. This is the live successor to the old &#39;Backup coding CLIs&#39;, which named profiles and no longer does anything.</p>
 <p>Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model.</p>

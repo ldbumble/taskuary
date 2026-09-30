@@ -99,7 +99,7 @@ walk's position belongs to the conversation rather than to the surface you start
 
 - It will not speak in a group chat, or in a chat you did not choose.
 - It will not send anything a human has not approved, on any channel.
-- It will not change a setting. Settings are changed in the app, deliberately.
+- It will not change a setting behind your back. A change you ask for comes back with an undo, or as a card for your yes.
 - It will not answer someone else in your chat — only the linked owner account is heard.
 
 :::warn WhatsApp is an unofficial bridge
@@ -110,8 +110,23 @@ bot API and has no such caveat.
 
 ## Sections, For later and browsing, on the phone
 
-The morning line and the walk offer the rail's sections as choices - **Walk On you**, **Walk For later**, **Walk FYI** -
-and **Next** stays inside the one you picked until it is empty. Rows under For later say when they come back
-("back in 3h"). **Connections** and **Settings** are choices too: pick one, then a section, then a card - its state
-and what it does come back as text, with **Back** as a choice. Say "set it up" or name the change you want, and it is
-proposed for your yes, as in the app.
+The morning line and the walk offer the rail's sections as choices - **Walk On you**, **Walk For later**, **Walk Reports**,
+**Walk FYI** - and you stay inside the one you picked until it is empty, whether you press **Next** or act on the item
+(Make a task, Send to agent, Remind me). When the section runs out it says so, and the walk carries on. Rows under For
+later say when they come back ("back in 3h").
+
+**Connections**, **Reports**, **Hub** and **Settings** are choices too - the desktop sidebar's four, as picks:
+
+| Pick | You get |
+|---|---|
+| **Connections** | its sections with a count each, then a section's cards with on / off, then one card: what it does, and "say *set it up*" |
+| **Reports** | every report and workflow with its clock and how its last run went, then one: when it runs, where it goes, what the last run said |
+| **Hub** | what the agents worked out, newest first, then one entry in full |
+| **Settings** | its sections, then each setting with its value, then one setting: what it does, and "say what it should be" |
+
+Each step has **Back** as a choice. A list longer than a poll can hold (twelve) comes ten at a time with
+**More (N left)** and **From the top**; a number you type still picks anything you can see. Changing anything is words -
+"run it now", "set it up", "make it hourly" - and comes back as a card for your yes, as in the app.
+
+A report's rows arrive as rows (`Lakeview · 112`), laid out like any other table on the phone. Telegram gets the same
+cards, with its own buttons instead of a poll and no bold.

@@ -462,6 +462,10 @@
   .tq-compose-box { width: 100%; }
 }
 @media (min-width: 1100px) {   /* narrower, the reading column already is the canvas's width */
+  /* ...but TALK is a reading column, centred (the owner, 2026-09-30: "if it's just text back and forth ... the chat should be
+     centered and just make it not as wide ... input text all the way right and output text all the way left"): a line of words
+     and your own bubble sit in 860px; the item on the table, a live card, a browse card (Settings, Reports, Hub) keep the width */
+  .tq-chat-inner > .tq-msg:not(.tq-live-card) { max-width: 860px; margin-left: auto; margin-right: auto; }
   .tq-chat-inner > .tq-canvas-live, .tq-chat-inner > .tq-browse-line, .tq-chat-inner > .tq-live-card {
     width: 100%; margin-left: 0; max-width: none; }   /* the column is the canvas's width now (.tq-chat-inner above): the same edges as the composer */
 }

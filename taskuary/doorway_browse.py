@@ -62,14 +62,31 @@ def _connected(store) -> dict:
     return out
 
 
-def browse(store, area: str, section: str = None, open_: str = None) -> tuple[str, list]:
+POLL_MAX, PAGE = 12, 10          # WhatsApp's poll holds twelve (whatsapp/poll.mjs cuts the rest SILENTLY); a page leaves room
+
+
+def paged(rows: list, up: list, act: dict, page: int = 0) -> list:
+    """The picks for one page: ten rows, More when there are more, then the way back - never past twelve. The Connections
+    menu offered seventeen and a list of cards twelve plus Back, so the last five sections and Back could not be tapped
+    (2026-09-30 phone test)."""
+    if len(rows) + len(up) <= POLL_MAX: return rows + up
+    page = max(0, int(page or 0))
+    here = rows[page * PAGE:(page + 1) * PAGE]
+    more = [(f'More ({len(rows) - (page + 1) * PAGE} left)', {**act, 'page': page + 1})] if (page + 1) * PAGE < len(rows) else \
+        [('From the top', {**act, 'page': 0})]
+    return here + more + up[:POLL_MAX - len(here) - 1]
+
+
+def browse(store, area: str, section: str = None, open_: str = None, page: int = 0) -> tuple[str, list]:
     """(what to say, the picks under it) for one browse step. Back is always a pick; so is the way up."""
-    if area == 'connections': return _connections(store, section, open_)
-    if area == 'settings': return _settings(store, section, open_)
+    if area == 'connections': return _connections(store, section, open_, page)
+    if area == 'settings': return _settings(store, section, open_, page)
+    if area == 'reports': return _reports(store, open_, page)
+    if area == 'hub': return _hub(store, open_, page)
     return f'I cannot browse {area} here yet - it is on the desktop.', []
 
 
-def _connections(store, section, open_):
+def _connections(store, section, open_, page=0):
     from . import connectorcatalog
     cards = [c for c in connectorcatalog.cards() if c.get('group')]
     state = _connected(store)
@@ -87,18 +104,62 @@ def _connections(store, section, open_):
         rows = [c for c in cards if c['group'] == section]
         lines = [f"· {c['title']} - {state.get(c['type']) or ('planned' if c.get('planned') else 'not connected')}" for c in rows]
         picks = [(c['title'], {'t': 'browse', 'area': 'connections', 'section': section, 'open': c['type']}) for c in rows if not c.get('planned')]
-        return f"CONNECTIONS · {section.upper()} · {len(rows)}\n" + '\n'.join(lines), picks[:12] + up
+        return (f"CONNECTIONS · {section.upper()} · {len(rows)}\n" + '\n'.join(lines),
+                paged(picks, up, {'t': 'browse', 'area': 'connections', 'section': section}, page))
     on = sum(1 for v in state.values() if v == 'connected')
     lines = [f"{g} · {sum(1 for c in cards if c['group'] == g)}" for g in groups]
     return (f'Connections - {on} connected. Pick a section:\n' + '\n'.join(f'· {x}' for x in lines),
-            [(g, {'t': 'browse', 'area': 'connections', 'section': g}) for g in groups])
+            paged([(g, {'t': 'browse', 'area': 'connections', 'section': g}) for g in groups], [], {'t': 'browse', 'area': 'connections'}, page))
+
+
+def _reports(store, open_, page=0):
+    """REPORTS, the desktop sidebar's list as picks (the owner, 2026-09-30): each one's clock and how its last run went, then
+    one opened - what it is, where it goes, what the last run said. Running or changing one is words: the model proposes it."""
+    from . import appfacts
+    rows = appfacts.reports(store)
+    up = [('Back to Reports', {'t': 'browse', 'area': 'reports'})]
+    def last(r): return 'never ran' if r['last_ok'] is None else 'last run FAILED' if r['last_ok'] is False else f"ran {r['last_at'][:16]}"
+    if open_:
+        r = next((x for x in rows if str(x['source_id']) == str(open_)), None)
+        if not r: return 'That report is not there any more.', up
+        said = str(r['last_said'] or '').strip()
+        text = (f"{'WORKFLOW' if r['workflow'] else 'REPORT'} · {r['title']}{'' if r['active'] else ' (off)'}\n"
+                f"When: {r['schedule'] or 'no clock - it runs when asked'}\nReaches you: {r['reach']}\nGoes: {r['goes']}\n{last(r).capitalize()}"
+                + (f"\n> {said}" if said else '')
+                + '\n\nSay "run it now", or what to change, and I propose it for your yes.')
+        return text, up
+    if not rows: return 'No reports or workflows are set up yet. Say "set up a report" and I walk you through one.', []
+    lines = [f"· {r['title']}{'' if r['active'] else ' (off)'} - {r['schedule'] or 'no clock'}; {last(r)}" for r in rows]
+    return (f'REPORTS · {len(rows)}\n' + '\n'.join(lines),
+            paged([(r['title'], {'t': 'browse', 'area': 'reports', 'open': r['source_id']}) for r in rows], [], {'t': 'browse', 'area': 'reports'}, page))
+
+
+def _hub(store, open_, page=0):
+    """THE HUB, newest first as the desktop lists it (the owner, 2026-09-30): what the agents worked out, each one openable."""
+    up = [('Back to the Hub', {'t': 'browse', 'area': 'hub'})]
+    if open_:
+        e = store.lore_get(int(open_))
+        if not e: return 'That entry is not on the Hub any more.', up
+        body = str(e.get('Body') or '').strip()
+        text = (f"HUB · {e.get('Topic') or 'general'}\n*{e.get('Title') or ''}*\n"
+                f"by {e.get('Author') or 'an agent'} · score {e.get('Score') or 0} · {len(store.lore_comments(int(open_)) or [])} comments\n\n"
+                + (body[:1500] + ('…' if len(body) > 1500 else '')))
+        return text, up
+    posts = store.lore_posts(None, None, 40, 'new', 'live', None)
+    if not posts: return 'Nothing on the Hub yet - agents post what they work out as they go.', []
+    lines = [f"· {p.get('Title') or ''} ({p.get('Topic') or 'general'}, {p.get('Score') or 0})" for p in posts[:20]]
+    n = store.lore_count()
+    n = n.get('posts', len(posts)) if isinstance(n, dict) else n
+    return (f"HUB · {n} entries, newest first\n" + '\n'.join(lines),
+            paged([((p.get('Title') or '')[:90], {'t': 'browse', 'area': 'hub', 'open': p['LoreId']}) for p in posts[:20]], [],
+                  {'t': 'browse', 'area': 'hub'}, page))
 
 
 def _schema() -> dict:
     return json.loads((Path(__file__).with_name('settings_schema.json')).read_text(encoding='utf-8'))
 
 
-def _settings(store, section, open_):
+def _settings(store, section, open_, page=0):
     schema, st = _schema(), store.get_settings()
     knobs = schema.get('knobs') or {}
     up = [('Back to Settings', {'t': 'browse', 'area': 'settings'})]
@@ -106,6 +167,7 @@ def _settings(store, section, open_):
         v = st.get(k)
         kind = (knobs.get(k) or {}).get('type')
         if kind == 'switch': return 'on' if str(v if v is not None else '1').strip() not in ('0', 'false', 'off', '') else 'off'
+        if str(v).strip() == '*': return 'every other one set up, in order'      # backup_brains' own wildcard, said in words
         return str(v) if v not in (None, '') else '(not set)'
     if open_:
         m = knobs.get(open_) or {'label': open_}
@@ -116,7 +178,8 @@ def _settings(store, section, open_):
         rows = [(k, m) for k, m in knobs.items() if m.get('group') == section]
         lines = [f"· {m.get('label') or k}: {value(k)}" for k, m in rows]
         return (f"SETTINGS · {section.upper()}\n" + ('\n'.join(lines) or 'Its controls are on the desktop.'),
-                [(m.get('label') or k, {'t': 'browse', 'area': 'settings', 'section': section, 'open': k}) for k, m in rows][:12] + up)
+                paged([(m.get('label') or k, {'t': 'browse', 'area': 'settings', 'section': section, 'open': k}) for k, m in rows], up,
+                      {'t': 'browse', 'area': 'settings', 'section': section}, page))
     groups = [g for g in schema.get('groups') or [] if any(m.get('group') == g for m in knobs.values())]
     return ('Settings - pick a section:\n' + '\n'.join(f'· {g}' for g in groups),
-            [(g, {'t': 'browse', 'area': 'settings', 'section': g}) for g in groups])
+            paged([(g, {'t': 'browse', 'area': 'settings', 'section': g}) for g in groups], [], {'t': 'browse', 'area': 'settings'}, page))

@@ -531,7 +531,8 @@ MORNING_KEY, MORNING_AT = 'phone_morning_line', 'phone_morning_line_at'
 SCRIPT_LINES = [('Walk me through my tasks', {'t': 'walk'}), ('Set up Taskuary', {'t': 'script', 'script': 'set up Taskuary'}),
                 ('Set up a report', {'t': 'script', 'script': 'set up a report'}),
                 # the sidebar's browse buttons, as picks (doorway_browse): sections, then the list, then one
-                ('Connections', {'t': 'browse', 'area': 'connections'}), ('Settings', {'t': 'browse', 'area': 'settings'})]
+                ('Connections', {'t': 'browse', 'area': 'connections'}), ('Reports', {'t': 'browse', 'area': 'reports'}),
+                ('Hub', {'t': 'browse', 'area': 'hub'}), ('Settings', {'t': 'browse', 'area': 'settings'})]
 
 
 def greeting(now=None) -> str:
@@ -771,8 +772,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         said.append('I could not write that draft here - it is waiting on the task page.')
     if walk_on:
         here = (item or {}).get('key') if verb == 'next' else None       # Next leaves the table as the desktop's does
-        nxt = concierge.surface(store, actor=actor, leaving=here, exclude=here)
-        return '\n\n'.join(said + [turn_text(nxt, store=store)])
+        return _on(store, actor, said, leaving=here, exclude=here, done_with=(item or {}).get('key'))
     return '\n\n'.join(x for x in said if x)
 
 
@@ -857,6 +857,29 @@ def receipt_text(store, done: dict, actor: str = 'owner') -> str:
     return turn_text({'say': turn['say'], 'item': None}, store=store, extra=list(recovery_rows(store, turn['chips'], actor)))
 
 
+def _move_on(store, actor: str, leaving: str = None, exclude: str = None, done_with: str = None) -> tuple[dict, str]:
+    """What comes after the table - (the next surface, a lead line). WHILE A SECTION IS BEING WALKED the next row of that
+    section, whatever put the last one down: Next did, but an act (Make a task, Send to agent, Remind me) fell back to the
+    whole walk and put TQ-0001 up in the middle of Walk Reports (2026-09-30 phone test). `done_with` is the key the act settled."""
+    from . import concierge, doorway_browse, funnel
+    walking = doorway_browse.held(store, asking())
+    if walking:
+        seen = [*walking.get('seen', []), *[k for k in (leaving, done_with) if k]]
+        nxt = doorway_browse.next_in(store, walking['section'], seen)
+        if nxt:
+            doorway_browse.hold(store, asking(), walking['section'], [*seen, nxt['key']])
+            return concierge.surface(store, nxt['key'], actor=actor, leaving=leaving), ''
+        doorway_browse.hold(store, asking(), None)          # the section ran out: say so, and the walk goes on as normal
+        return concierge.surface(store, actor=actor, leaving=leaving, exclude=exclude), funnel.section_done(walking['section'])
+    return concierge.surface(store, actor=actor, leaving=leaving, exclude=exclude), ''
+
+
+def _on(store, actor: str, said: list, extra=None, **kw) -> str:
+    """The receipt lines, then what comes next (_move_on) - with the section's own end said when it ran out."""
+    nxt, lead = _move_on(store, actor, **kw)
+    return '\n\n'.join([x for x in said if x] + [turn_text(nxt, lead=lead, store=store, extra=extra)])
+
+
 def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
     """After the run: the receipt, an Undo when it offered one, and the next item when the table was settled."""
     from . import concierge
@@ -864,7 +887,7 @@ def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
     said = concierge.receipt(store, done, actor)
     undo = [('Undo', {'t': 'undo'})] if ' Undo: ' in said else []
     if done.get('status') == 'done' and _settled_the_table(prop, item):
-        return '\n\n'.join([said, turn_text(concierge.surface(store, actor=actor), store=store, extra=undo)])
+        return _on(store, actor, [said], extra=undo, done_with=prop.get('key') or (item or {}).get('key'))
     if undo: return '\n\n'.join([said, turn_text({}, store=store, extra=undo)])
     return said
 
@@ -897,7 +920,7 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         # a new walk, or one item by name, is not the section being walked
         if t in ('walk', 'open'): doorway_browse.hold(store, asking(), None)
         if t == 'browse':
-            text, rows = doorway_browse.browse(store, act.get('area') or '', act.get('section'), act.get('open'))
+            text, rows = doorway_browse.browse(store, act.get('area') or '', act.get('section'), act.get('open'), act.get('page') or 0)
             return turn_text({'say': text, 'item': None}, store=store, extra=rows)
         if t == 'next' and doorway_browse.held(store, asking()):
             here, walking = (item or {}).get('key'), doorway_browse.held(store, asking())
@@ -1008,6 +1031,13 @@ def stuck(store, text: str) -> str:
     return turn_text({'say': text, 'item': None}, store=store, extra=[(concierge.CHIP_WORDS['next'], {'t': 'next'})])
 
 
+def asking_key(store) -> str:
+    """The key on the table for this chat's walk - what a Remind me just put away."""
+    from . import concierge, general
+    try: return (concierge.restore_current(store, general.dock_task(store, 'owner')[0]['TaskId']) or {}).get('key') or ''
+    except Exception: return ''
+
+
 REMIND_DAYS = (('Tomorrow', 'tomorrow'), ('Next week', '1 week'), ('In 2 weeks', '2 weeks'), ('In a month', '1 month'))   # RemindMe.jsx's QUICK
 
 
@@ -1017,13 +1047,13 @@ def _remind(store, act: dict, actor: str) -> str:
     if act.get('idea'):
         from . import assistant
         out = assistant.act(store, int(act['idea']), 'snooze', actor, until=act['until'])
-        return '\n\n'.join([f"Put away until {out['when']} - it comes back that morning.", turn_text(concierge.surface(store, actor=actor), store=store)])
+        return _on(store, actor, [f"Put away until {out['when']} - it comes back that morning."], done_with=(asking_key(store) or None))
     out = remind.set_reminder(store, int(act['tid']), act['until'], actor)
     operations.record_direct(store, 'task.defer', int(act['tid']), {'until': act['until']}, actor, out)
     if not out.get('remindAt'): return 'It is back on your rail now.'
     said = f"Away until {out['when']} - it is under Upcoming in Tasks, and back on your rail that morning."
     back = [('Bring it back now', {'t': 'remind', 'tid': act['tid'], 'until': 'none'})]
-    return '\n\n'.join([said, turn_text(concierge.surface(store, actor=actor), store=store, extra=back)])
+    return _on(store, actor, [said], extra=back, done_with=(asking_key(store) or None))
 
 
 def _draft(store, item: dict, verb: str, instruction: str):

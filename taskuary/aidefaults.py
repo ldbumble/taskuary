@@ -211,7 +211,7 @@ def _resolved(cat: dict, model: str) -> str:
 # say it rather than showing an empty field that looks unconfigured.
 _CONN_DEFAULT = {'anthropic': 'claude-opus-5', 'openai': 'gpt-4o-mini', 'openrouter': 'openrouter/auto',
                  'meta': 'muse-spark-1.2', 'ollama': '(required - name the model you pulled)',
-                 'azure_openai': '(the deployment name on the card)'}
+                 'azure_openai': '(the deployment name on the card)', 'chatgpt': '(the first model your plan lists)'}
 _CONN_MODELS = {'anthropic': ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
                 'openai': ['gpt-4o-mini', 'gpt-4o'],
                 'openrouter': ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct'],

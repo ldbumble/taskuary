@@ -931,6 +931,7 @@ class SQLiteStore:
                          ('perplexity', 'Perplexity'),
                          ('azure_openai', 'Azure OpenAI'), ('openrouter', 'OpenRouter'),
                          ('ollama', 'Local models (Ollama)'), ('meta', 'Meta Model API (Muse Spark)'),
+                         ('chatgpt', 'ChatGPT (your plan)'),
                          # answers typed questions and emits no text at all, so it is a card you can
                          # paste a key on but never a brain - see the comment on llm.AI_TYPES
                          ('typesafe', 'TypeSafe Jev (decisions only)'),

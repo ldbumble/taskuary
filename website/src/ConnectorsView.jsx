@@ -494,6 +494,15 @@ const META = {
   // A decision model, not a brain. It sits in this group because it is an AI card you paste a key
   // on, but it is offered in exactly ONE picker (Settings → Triage & agents → Where runs go): it
   // emits no text at all, so chosen as the Assistant's brain it would have nothing to say.
+  // The owner's ChatGPT plan through Sign in with ChatGPT (chatgptauth.py) - no key; the sign-in box at the top of
+  // the card IS the credential, and it is a brain like any other once signed in.
+  chatgpt: { group: "AI — agents & models", channel: "ai", srcLabel: null,
+    fields: [["model (blank = the first model your plan lists)", "model"]], secretLabel: null,
+    desc: "Your ChatGPT plan as Taskuary's brain - triage, the Assistant, reports - with no API key. Calls count against your ChatGPT allowance under a weekly cap you set in ChatGPT.",
+    howto: ["Sign in with ChatGPT above: your browser opens auth.openai.com, you sign in with your own ChatGPT account and allow plan usage, and the card finishes by itself.",
+      "Then pick it as a brain under Settings → Configuration → Triage & agents. It is text only: screenshots are not sent, and it has no tools.",
+      "Set or raise the weekly cap for Taskuary in ChatGPT's settings. When the cap is used up the brain stops and says so - it does not fall back to paid credits unless you allow that in ChatGPT.",
+      "Test runs a real round trip on your plan."] },
   typesafe: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [], secretLabel: "API key",
     desc: "TypeSafe's Jev — answers typed questions with calibrated probabilities instead of words. It can decide where a finished report goes; it cannot write one.",
@@ -1613,7 +1622,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → Triage & agents",
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }) },
-      ...channelCards(["anthropic", "openai", "azure_openai", "openrouter", "meta", "ollama", "typesafe",
+      ...channelCards(["anthropic", "openai", "chatgpt", "azure_openai", "openrouter", "meta", "ollama", "typesafe",
         // the nine that speak the OpenAI surface (llm.OPENAI_COMPATIBLE). Four of them -
         // groq, cerebras, gemini, mistral - need no payment method at all.
         "groq", "cerebras", "gemini", "deepseek", "mistral", "together", "xai", "cohere", "perplexity"]),
@@ -2196,6 +2205,7 @@ function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack:
       {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
           runs on a tenant app opens on Sources, and the one button most people need was folded away */}
       {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
+      {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={conn.Type === "whatsapp" ? ["Setup", "Guide"] : ["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
@@ -3312,6 +3322,64 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
 
 /* ── Sign in with Microsoft: Graph for a regular user, no Azure portal (taskuary/msauth.py).
    A code, microsoft.com/devicelogin, their own account; this box polls until they are done. ── */
+// Sign in with ChatGPT: the browser goes to auth.openai.com and comes back to a one-off listener on 127.0.0.1, so there
+// is no code to type - the page only waits. A popup blocker is the one thing that can stop it, so the link is shown too.
+const ChatGptSignIn = ({ conn, cfg, reload }) => {
+  const [flow, setFlow] = useState(null);      // {flow, url}
+  const [state, setState] = useState("");      // "" | ok | error
+  const [detail, setDetail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const signedIn = cfg.auth === "user" && conn.HasSecret;
+  useEffect(() => {
+    if (!flow) return undefined;
+    let alive = true;
+    const tick = async () => {
+      if (!alive) return;
+      try {
+        const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/poll`, { flow: flow.flow });
+        if (!alive) return;
+        if (data.status === "pending") { setTimeout(tick, 2000); return; }
+        setFlow(null);
+        if (data.status === "ok") { setState("ok"); setDetail(`Signed in as ${data.name || data.account}. Pick it as a brain under Settings → Triage & agents.`); reload(); }
+        else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); }
+      } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
+    };
+    const id = setTimeout(tick, 2000);
+    return () => { alive = false; clearTimeout(id); };
+  }, [flow, conn.ConnectorId, reload]);
+  const start = async () => {
+    setBusy(true); setState(""); setDetail("");
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signin`); setFlow(data); window.open(data.url, "_blank", "noopener"); }
+    catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
+    setBusy(false);
+  };
+  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signout`); setState(""); setDetail(""); reload(); };
+  return (
+    <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
+      <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Sign in with ChatGPT</Typography>
+      <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
+        Your own ChatGPT account and plan - no API key. Calls count against your ChatGPT allowance, under a weekly cap you set in ChatGPT.
+      </Typography>
+      {signedIn ? (
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
+          <Button size="small" variant="outlined" onClick={signout}>Sign out</Button>
+        </Box>
+      ) : flow ? (
+        <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+          <CircularProgress size={11} /> Finish in the browser tab that opened - this page completes by itself.
+          <a href={flow.url} target="_blank" rel="noreferrer">Open it again</a>
+        </Typography>
+      ) : (
+        <Box><Button variant="contained" disableElevation disabled={busy} onClick={start}>
+          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with ChatGPT"}</Button></Box>
+      )}
+      {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
+        {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
+    </Box>
+  );
+};
+
 const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
   const [flow, setFlow] = useState(null);      // {flow, user_code, verification_uri, interval}
   const [state, setState] = useState("");      // "" | ok | error

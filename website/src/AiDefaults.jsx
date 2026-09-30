@@ -16,10 +16,18 @@ import { ACCENT2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 // server says which. Shown as the placeholder so an empty field never reads as broken.
 const Model = ({ slot, onSave }) => {
   const [v, setV] = useState(slot.model || "");
+  // the provider's own list of what this key can call, on top of the static suggestions; a failed read leaves the typed box working
+  const [live, setLive] = useState([]);
+  useEffect(() => {
+    if (!slot.connector || !slot.ready) { setLive([]); return; }
+    let on = true;
+    api.get(`/api/ai/models/${slot.connector}`).then((r) => on && setLive(r.data?.models || [])).catch(() => {});
+    return () => { on = false; };
+  }, [slot.connector, slot.ready]);
   useEffect(() => { setV(slot.model || ""); }, [slot.model, slot.value]);
   const commit = (next) => { if ((next || "") !== (slot.model || "")) onSave({ model: next || "" }); };
   return (
-    <Autocomplete freeSolo size="small" options={slot.choices || []} value={v} disabled={!slot.ready}
+    <Autocomplete freeSolo size="small" options={[...new Set([...live, ...(slot.choices || [])])]} value={v} disabled={!slot.ready}
       onInputChange={(_e, next) => setV(next)}
       onChange={(_e, next) => { setV(next || ""); commit(next || ""); }}
       onBlur={() => commit(v)}

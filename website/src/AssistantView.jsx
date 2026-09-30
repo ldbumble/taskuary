@@ -1524,6 +1524,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (!first) return;
     seen.add(first.key);
     sectionRef.current = { level, seen };
+    // the assistant SAYS what is in the section, then walks it - the whole list once, before the first item (the owner, 2026-09-30)
+    const rows = (bandsOf(pile.items).find((b) => b.level === level)?.items || []).filter((i) => !i.settling);
+    const said = rows.slice(0, 8).map((i) => `${i.who ? i.who + " - " : ""}${i.title}`).join("; ") + (rows.length > 8 ? `; and ${rows.length - 8} more` : "");
+    if (rows.length) setMsgs((m) => [...m, { id: `s${Date.now()}`, role: "receipt", text: `${levelLabel(level)}: ${rows.length} to go through. ${said}. Starting with the first.` }]);
     pull(first.key, null);
   };
   // A SIDEBAR BUTTON POSTS ITS BROWSE CARD into the conversation - no AI, no tab: the newest one is the live one, and an

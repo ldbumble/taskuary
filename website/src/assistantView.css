@@ -32,7 +32,8 @@
 /* a band that can be opened is shut the same way - the heading is the control */
 .tq-pile-head.folds { cursor: pointer; }
 .tq-pile-head.folds:hover span { border-color: #b9c3cb; }
-.tq-pile-head .fold { font-style: normal; font-size: 9px; color: #a09889; margin-left: -4px; }
+.tq-pile-head .fold { font-style: normal; font-size: 13px; line-height: 1; color: #6e685f; margin-left: -4px; padding: 2px 4px; cursor: pointer; border-radius: 4px; }
+.tq-pile-head .fold:hover { background: #ece7e0; }
 .tq-pile-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 /* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance, and only urgent is loud */

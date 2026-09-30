@@ -186,8 +186,13 @@ def models(token: str) -> list:
     """[(slug, display name)] the plan offers - the ones OpenAI marks for listing."""
     r = requests.get(f'{API}/models', headers={'Authorization': f'Bearer {token}'}, timeout=20)
     if r.status_code != 200: raise RuntimeError(f'OpenAI would not list the plan models ({r.status_code}): {_err(r)}')
+    # the docs show `data`; the plan answers with `models` (slug / display_name / visibility), the shape Codex caches
+    # in ~/.codex/models_cache.json - read either, and say what came back rather than "no models" when neither is there
+    j = r.json()
+    rows = j.get('models') or j.get('data') or []
+    if not rows: raise RuntimeError(f'OpenAI listed no plan models (the answer carried: {sorted(j) or "nothing"})')
     return [(m.get('slug') or m.get('id'), m.get('display_name') or m.get('slug') or m.get('id'))
-            for m in r.json().get('data') or [] if m.get('visibility', 'list') == 'list' and (m.get('slug') or m.get('id'))]
+            for m in rows if m.get('visibility', 'list') == 'list' and (m.get('slug') or m.get('id'))]
 
 
 # what each refusal means, and whether trying again can help (errors-and-recovery)

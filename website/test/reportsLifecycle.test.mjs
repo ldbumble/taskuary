@@ -54,9 +54,11 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   assert.match(source, /if \(judge\?\.kind === "decision"\) return \[judge\.display/);
   assert.match(source, /return \["The brain that writes this report"/);
   // the hash it sets is one the page follows
+  // (the canvas opens it as a Settings card - canvasLinks.js, pinned in test/canvasLinks.test.mjs)
+  const links = await readFile(new URL("../src/canvasLinks.js", import.meta.url), "utf8");
+  assert.match(links, /#settings=/);
   const hub = await readFile(new URL("../src/TaskHubPage.jsx", import.meta.url), "utf8");
-  assert.match(hub, /if \(\/\^#settings=\/\.test\(hash\)\) return "Settings";/);
-  assert.match(hub, /if \(\/\^#settings=\/\.test\(window\.location\.hash \|\| ""\)\) go\("Settings"\);/);
+  assert.match(hub, /window\.addEventListener\("hashchange", fromHash\)/);
 });
 
 test("a line the AI is not asked about is not the AI's to answer", () => {

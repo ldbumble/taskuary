@@ -598,7 +598,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
 }
 
 // ── the page ─────────────────────────────────────────────────────────────────────────────────
-export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGame, active = true }) {
+export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGame, active = true, request = null }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
   // A set-up walk-through, running HERE. The conversation binds to that task's own session - which
@@ -673,6 +673,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const [foldedKey, setFoldedKey] = useState(null);
   // the card browsed open, in words - what "this" means to the next turn (concierge.say open_card)
   const openCardRef = useRef(null);
+  const browseRef = useRef(null), openTaskRef = useRef(null);
+  const [newNonce, setNewNonce] = useState(0);         // the New sheet, asked for by a link (#new-task)
   const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
   // the table changed: the next item opens un-expanded and unfolded
   const tableKey = currentItem?.key || null;
@@ -1523,6 +1525,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     setMsgs((m) => [...m, { id, role: "browse", area, state }]);
     setTimeout(() => bodyRef.current?.querySelector(`[data-tq-browse-line="${area}"]:last-of-type`)?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
   };
+  // A TASK OPENED BY NAME - a link, a notification, the Board, a card's "Open TQ-0005" - is shown the same way the walk
+  // shows one: its task view, as the newest line (the canvas redesign: the Tasks tab is gone)
+  const openTaskCard = (req) => {
+    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false); setFoldedKey(null);
+    const ref = `TQ-${String(req.tid).padStart(4, "0")}`;
+    setMsgs((m) => [...m, { id: `t${Date.now()}`, role: "assistant", text: "",
+      card: { kind: "task", key: `task:${req.tid}`, tid: req.tid, title: ref, ref, autostart: req.start || null, act: req.act || null } }]);
+  };
+  browseRef.current = browse; openTaskRef.current = openTaskCard;
   const pull = (key, asUser) => {
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); surface(key, asUser || null);
   };
@@ -1581,6 +1592,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   }, [shown]);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";
   useEffect(() => { holdBottom.current = !!browsing; }, [browsing]);
+  // WHAT THE PAGE ASKS THE CANVAS TO OPEN (TaskHubPage canvasReq): once each, and only once the chat has loaded - the
+  // first load replaces the conversation, and a card posted before it would be wiped
+  const doneReq = useRef(0);
+  useEffect(() => {
+    if (!request?.n || request.n === doneReq.current || !state) return;
+    doneReq.current = request.n;
+    if (request.kind === "browse") browseRef.current?.(request.area, request.state || {});
+    else if (request.kind === "task") openTaskRef.current?.(request);
+    else if (request.kind === "new") setNewNonce((x) => x + 1);
+  }, [request, state]);
   const canvasState = useMemo(() => ({ height: canvasItemHeight(bodyH), expanded, folded: foldedKey, browsing,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey, browsing]);
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
@@ -1785,7 +1806,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   );
 
   return (
-    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
+    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn} openNew={newNonce}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={({ openByMid, openByItem }) => <Pile pile={pile} current={old ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}

@@ -18,7 +18,7 @@ test("an item with a task behind it is shown by TaskPage; a proposal, a batch or
 // HARD REQUIREMENT 1: no terminal redraw corruption. The view's box is the chat body's height in BOTH states - Expand
 // hides the conversation around it and never resizes it, so the pty inside can never be grown after it has output.
 test("Expand never changes the view's height, so the pane is never grown", () => {
-  assert.match(item, /<Box data-tq-canvas-item=\{card\.key\} sx=\{\{ height, display: "flex", minWidth: 0 \}\}>/);
+  assert.match(item, /data-tq-canvas-item=\{card\.key\} sx=\{\{ height, display: "flex", minWidth: 0, scrollMarginTop: "8px" \}\}>/);
   assert.match(item, /export const canvasItemHeight = \(bodyHeight\) => Math\.max\(420, Math\.round\(\(bodyHeight \|\| 0\) - 26\)\)/);
   assert.match(view, /height: canvasItemHeight\(bodyH\), expanded,/);
   assert.doesNotMatch(view.slice(view.indexOf("const canvasState"), view.indexOf("const canvasState") + 400), /expanded \?/);

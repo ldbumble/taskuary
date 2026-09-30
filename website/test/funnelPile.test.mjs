@@ -141,26 +141,19 @@ test("the header line counts the pipe and what is on you", () => {
   assert.strictEqual(statusLine([{ lane: "fyi" }], true), "thinking…");
 });
 
-test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the mark, equal tabs each side, the bubble off it", () => {
+test("the Assistant page IS the app: the landing view, the Board the one other, the bubble off it", () => {
   const page = read("TaskHubPage.jsx");
-  const tabs = page.match(/const TABS = \[([^\]]+)\]/)[1].split(",").map((t) => t.trim().replace(/"/g, ""));
-  // DEAD CENTRE, whatever the count. The strip is absolutely centred on the window, so an odd
-  // number with the Assistant in the middle is the thing that has to hold - not "nine". Review
-  // left (its decisions live on the task) and Docs moved into Settings, so it is seven now.
-  assert.strictEqual(tabs.length % 2, 1, "an even strip has no middle for the Assistant to sit in");
-  assert.strictEqual(tabs.indexOf("Assistant"), (tabs.length - 1) / 2);
-  assert.ok(!tabs.includes("Review"), "decisions are made on the task, not on a tab of their own");
-  assert.ok(!tabs.includes("Docs"), "Docs is a section of Settings");
-  assert.ok(!tabs.includes("Timeline"));                    // the Timeline is the Assistant's rail now...
-  assert.match(page, /if \(t === "Timeline"\) t = "Assistant"/);   // ...and old links to it still land
+  // THE CANVAS REDESIGN (2026-09-29): no tab strip. The Assistant is the landing view and the Board, the agents and their
+  // wall, the one full-screen view beside it; every other page is a card in the Assistant's canvas.
+  assert.match(page, /const VIEWS = \["Assistant", "Board"\];/);
+  assert.doesNotMatch(page, /const TABS = /);
+  assert.match(page, /if \(t === "Timeline" \|\| t === "Tasks"\) t = "Assistant";/);   // old links and cards still land
+  assert.match(page, /if \(BROWSED\[t\]\) \{ ask\(\{ kind: "browse", area: BROWSED\[t\] \}\); t = "Assistant"; \}/);
   assert.doesNotMatch(page, /<FeedView/);                   // the rail is mounted by the Assistant, nowhere else
-  assert.match(page, /return "Assistant";/);              // still the default, after honoring a deep link first
-  // the floating mark is gone (2026-09-15): it was the Assistant tab in a bubble, and it sat on
-  // top of the work - over the browser pane's own Take over button in full screen
+  assert.match(page, /useState\("Assistant"\)/);           // the default, always
   assert.doesNotMatch(page, /<FloatingAssistant/);
-  assert.match(page, /t === "Assistant" \? \(/);
-  // ...wearing Taskuary's star, drawn in the pill's own ink (2026-09-28: the image tile "doesn't look right")
-  assert.match(page, /<StarMark size=\{15\} \/>\{t\}/);
+  // ...and the way back from the Board wears Taskuary's star, drawn in the pill's own ink
+  assert.match(page, /<StarMark size=\{14\} \/>Assistant/);
   const view = read("AssistantView.jsx");
   assert.match(view, /\/api\/funnel\/pile/);
   assert.match(view, /\/api\/concierge\/next/);

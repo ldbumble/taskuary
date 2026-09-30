@@ -576,7 +576,7 @@ function NextIn({ atRef, render }) {
   return render(atRef.current ? Math.max(0, Math.round((atRef.current - Date.now()) / 1000)) : null);
 }
 
-export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null, onGo = null, navOn = "" }) {
+export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null, onGo = null, navOn = "", openNew = 0 }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
@@ -705,6 +705,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   }, [unreadInventory, spy, view]);
   useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
+  useEffect(() => { if (openNew) setNewOpen(true); }, [openNew]);   // ...or a link asked for it (#new-task)
   const [rows, setRows] = useState(null);
   const rowsByView = useRef({ unread: null, all: null });
   // All consumes one compact row per canonical root. The opaque cursor belongs to one frozen

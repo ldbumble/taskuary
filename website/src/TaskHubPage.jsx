@@ -9,16 +9,13 @@ import { pollWhileVisible } from "./visible.js";
 import { holdLive, onLive } from "./live.js";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import GridViewIcon from "@mui/icons-material/GridViewOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import api from "./api";
 import { track } from "./demoTrack";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } from "./theme.jsx";
 import BoardView from "./BoardView.jsx";
-const HubView = React.lazy(() => import("./HubView.jsx"));
-import TasksView from "./TasksView.jsx";
-import ConnectorsView from "./ConnectorsView.jsx";
-import ReportsView from "./ReportsView.jsx";
-import SettingsView from "./SettingsView.jsx";
+import { canvasRequestFromHash } from "./canvasLinks.js";
 import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
 import { loadedAsset, staleWhat } from "./staleBuild.js";
@@ -48,7 +45,12 @@ const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 // and Taskuary's chat on the right (AssistantView.jsx, funnel.py). It wears the mark in the MIDDLE
 // of the strip - what is being worked to the left of it, what has been written down and the
 // plumbing to the right. "Timeline" as a destination still resolves to it (go()).
-const TABS = ["Board", "Tasks", "Reports", "Assistant", "Hub", "Connections", "Settings"];
+// THE CANVAS REDESIGN (docs/superpowers/specs/2026-09-29-assistant-canvas-redesign-design.md): the tab strip is gone. The
+// Assistant IS the app - its sidebar drives the work and its canvas shows a task, an agent, a connector, a setting or a
+// report inside the conversation - and the Board, the agents and their wall, is the one full-screen view, reached from the
+// top bar. Every old destination still lands: go("Connections") and #connector=... open that card in the canvas.
+const VIEWS = ["Assistant", "Board"];
+const BROWSED = { Reports: "reports", Connections: "connections", Settings: "settings", Hub: "hub" };
 const SUPPORT_URL = "https://github.com/ldbumble/taskuary/issues/new/choose";
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
@@ -182,15 +184,10 @@ export default function TaskHubPage() {
   // Honor a deep link on the first render. Starting every reload on Assistant meant its hidden
   // conversation, feed and funnel all fetched before #task=356 (or a report) was allowed to load.
   // On a busy live session that left the requested page looking completely blank for many seconds.
-  const [tab, setTab] = useState(() => {
-    const hash = window.location.hash || "";
-    if (/^#(?:task=\d+|new-task)/.test(hash)) return "Tasks";
-    if (/^#report=/.test(hash)) return "Reports";
-    if (/^#connector=/.test(hash)) return "Connections";
-    if (/^#(?:playbook=|profiles(?:$|=))/.test(hash)) return "Settings";
-    if (/^#settings=/.test(hash)) return "Settings";
-    return "Assistant";
-  });
+  const [tab, setTab] = useState("Assistant");
+  // what the canvas is asked to open - a task, or a browse card - numbered so the same one asked twice opens twice
+  const [canvasReq, setCanvasReq] = useState(() => canvasRequestFromHash(window.location.hash || "", 1));
+  const ask = useCallback((req) => setCanvasReq((cur) => ({ ...req, n: (cur?.n || 0) + 1 })), []);
   const demo = useDemo();          // the badge, and what the header hides to make room for it
   useEffect(() => holdLive(), []);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -251,8 +248,11 @@ export default function TaskHubPage() {
   // to its landing (Connectors out of a card, Settings to its first page) instead of doing nothing
   const [reset, setReset] = useState(0);
   const go = (t) => {
-    if (t === "Timeline") t = "Assistant";       // the Timeline lives on the Assistant tab now; old links and cards still say Timeline
-    if (t === tab) { scrollAt.current[t] = 0; window.scrollTo(0, 0); setReset((r) => r + 1); return; }
+    if (t === "Timeline" || t === "Tasks") t = "Assistant";       // the rail is the Timeline and the task list now
+    // a page that used to be a tab opens as its browse card in the canvas
+    if (BROWSED[t]) { ask({ kind: "browse", area: BROWSED[t] }); t = "Assistant"; }
+    if (!VIEWS.includes(t)) t = "Assistant";
+    if (t === tab) return;
     scrollAt.current[tab] = window.scrollY; setTab(t); tabRef.current = t;
     track("tab", t);
   };
@@ -268,7 +268,6 @@ export default function TaskHubPage() {
   // holding a live pty: unmounting it dropped the websocket, so every trip to the Board and
   // back rebuilt the pane and redrew the CLI's screen from the top of its scrollback. Hidden
   // is enough - fit() reads a display:none pane as NaN and skips, then refits on the way back.
-  const [everTasks, setEverTasks] = useState(tab === "Tasks");
   const [everBoard, setEverBoard] = useState(false);
   const [everAssistant, setEverAssistant] = useState(tab === "Assistant");
   // the Assistant as a chat or as the game - remembered per browser, like any view choice
@@ -277,7 +276,6 @@ export default function TaskHubPage() {
     try { const v = localStorage.getItem("taskuary.assistantMode"); return v ? v === "game" : DEMO; } catch { return DEMO; }
   });
   const pickAsstGame = (on) => { setAsstGame(on); try { localStorage.setItem("taskuary.assistantMode", on ? "game" : "chat"); } catch { /* private window */ } };
-  useEffect(() => { if (tab === "Tasks") setEverTasks(true); }, [tab]);
   // ...and the Board, which can hold a live session too: mounted once opened, hidden after. The
   // Assistant is the normal landing tab, but a deep link does not boot it until it is opened.
   useEffect(() => { if (tab === "Board") setEverBoard(true); }, [tab]);
@@ -295,29 +293,24 @@ export default function TaskHubPage() {
   // landed. Counting only on mount and on the refresh icon left "Tasks · 2" over three drafts.
   useEffect(() => onLive(["feed-changed", "task-changed"], refreshPending, { wait: 250, max: 1500 }), [refreshPending]);
 
-  // A terminal belongs to the task it is working - there is no dock and no terminal tab.
-  // Opening a task with start=true means "and put your CLI on it now".
-  const [autostart, setAutostart] = useState(null);
-  const [openAct, setOpenAct] = useState(null);         // a card's "Not a task…" etc: open the task with that dialog up
-  // #task=123 opens that task - the digest's links, a chat ping, a bookmark
+  // EVERY OLD LINK STILL LANDS - in the canvas (canvasLinks.js): #task=123 opens that task's view, #connector=,
+  // #settings=, #report=, #playbook= open their browse card, #new-task the New sheet, #msg= the rail's own row
   useEffect(() => {
     const fromHash = () => {
-      const m = /task=(\d+)/.exec(window.location.hash || ""); if (m) openTask(Number(m[1]));
-      // a card's "open on the Timeline": the rail on the Assistant tab reads the same hash and pins the row
-      if (/^#msg=\d+/.test(window.location.hash || "")) go("Assistant");
-      // a connector card's playbook link: the words live in Settings → Docs (DocsView reads the hash itself)
-      if (/^#(?:playbook=|profiles(?:$|=))/.test(window.location.hash || "")) go("Settings");
-      // a card's "change the judge" / a connector's phone-doorway link: SettingsView reads the page and group
-      if (/^#settings=/.test(window.location.hash || "")) go("Settings");
+      const req = canvasRequestFromHash(window.location.hash || "", 0);
+      if (req) { ask(req); setTab("Assistant"); tabRef.current = "Assistant"; }
+      else if (/^#msg=\d+/.test(window.location.hash || "")) go("Assistant");
     };
-    fromHash(); window.addEventListener("hashchange", fromHash);
+    window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // A terminal belongs to the task it is working. Opening a task with start=true means "and put your CLI on it now";
+  // `act` opens it with one of its dialogs up (a card's "Not a task…")
   const openTask = (taskId, opts) => {
-    selectTask(taskId); go("Tasks");
-    setAutostart(opts?.start ? { taskId, agent: opts.agent, model: opts.model } : null);
-    setOpenAct(opts?.act ? { taskId, act: opts.act } : null);
+    selectTask(taskId);
+    ask({ kind: "task", tid: taskId, start: opts?.start ? { agent: opts.agent, model: opts.model } : null, act: opts?.act || null });
+    if (tab !== "Assistant") { setTab("Assistant"); tabRef.current = "Assistant"; }
   };
 
   return (
@@ -357,63 +350,16 @@ export default function TaskHubPage() {
           <ServerVersion />
           <DemoBadge demo={demo} />
 
-          {/* Below 900px the full tab strip had no room: it began under the brand and its
-              off-screen pages had no visible affordance. One labelled selector keeps the
-              current page and every destination reachable without a mystery swipe. */}
-          <Select size="small" value={tab} onChange={(e) => go(e.target.value)}
-            inputProps={{ "aria-label": "Taskuary page" }}
-            sx={{ display: { xs: "flex", md: "none" }, height: 30, minWidth: 0,
-              width: { xs: 112, sm: 160 }, ml: 0.25, bgcolor: "#f4efe6", borderRadius: 99,
-              color: "#55697a", fontSize: 12, fontWeight: 700,
-              "& .MuiSelect-select": { py: 0.4, pl: 1.25, pr: "28px !important" },
-              "& .MuiOutlinedInput-notchedOutline": { borderColor: "#d8cfbe" } }}>
-            {TABS.map((t) => (
-              <MenuItem key={t} value={t} sx={{ fontSize: 12.5, fontWeight: t === "Assistant" ? 800 : 400 }}>
-                {t === "Assistant" ? "✦ Taskuary" : t}{t === "Tasks" && pending > 0 ? ` · ${pending > 99 ? "99+" : pending}` : ""}
-              </MenuItem>
-            ))}
-          </Select>
-
-          {/* Centred on the WINDOW, not in the space left over. Two flex spacers would centre it
-              between the brand and the counter, which lands well right of true centre because
-              those two blocks are nothing like the same width - so it is absolute, from md up.
-              It used to wait for xl (1536px) out of a fear of overlapping the tagline, which
-              meant that at every ordinary window size the tabs sat wherever the brand happened
-              to end. The tagline is the thing that yields now (it waits for xl); the tabs are
-              what people aim at all day and they stay put. pointerEvents on the wrapper so the
-              absolute strip cannot swallow clicks meant for the chrome behind it. */}
-          <Box sx={{ display: { xs: "none", md: "flex" }, gap: 0.5, minWidth: 0, overflowX: "auto",
-            position: "absolute", left: "50%", transform: "translateX(-50%)",
-            maxWidth: { md: "58%", xl: "62%" }, pointerEvents: "auto" }}>
-            {TABS.map((t) => t === "Assistant" ? (
-              // the Assistant sits in the MIDDLE of the strip wearing the mark: it is the main way through the
-              // day now, and the other tabs are where you go to see the whole of something
-              <Box key={t} onClick={() => go(t)} title="Taskuary — your assistant walks you through what needs you"
-                sx={{ display: "flex", alignItems: "center", gap: 0.7, px: 1.6, py: 0.35, mx: 0.5, borderRadius: 99, cursor: "pointer",
-                  fontSize: 13, fontWeight: 800, whiteSpace: "nowrap", color: tab === t ? "#fff" : "#41525f",
-                  background: tab === t ? GRADIENT : "#e4e9ee", border: `1px solid ${tab === t ? "transparent" : "#cbd4dc"}`,
-                  boxShadow: tab === t ? "0 4px 14px rgba(69,79,70,.28)" : "none", transition: "all .15s",
-                  "&:hover": { boxShadow: "0 4px 14px rgba(69,79,70,.22)" } }}>
-                <StarMark size={15} />{t}
-              </Box>
-            ) : (
-              // the count rides INSIDE the pill. A MUI Badge hangs outside its child's box, and
-              // this strip is overflowX:auto - so the number was being clipped by the scroller
-              // it sits in, which is how "Review 1" showed up as a half-eaten dot.
-              <Box key={t} onClick={() => go(t)}
-                sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 1.5, py: 0.5, borderRadius: 99,
-                  cursor: "pointer", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
-                  color: tab === t ? "#55697a" : DIM, bgcolor: tab === t ? "#eae4d8" : "transparent",
-                  border: `1px solid ${tab === t ? "#d8cfbe" : "transparent"}`,
-                  transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#eae4d8" : "#e9e3d8" } }}>
-                {t}
-                {t === "Tasks" && pending > 0 && (
-                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    minWidth: 16, height: 16, px: 0.45, borderRadius: 99, bgcolor: ALERT, color: "#fffdfb",
-                    fontSize: 9.5, fontWeight: 700 }}>{pending > 99 ? "99+" : pending}</Box>
-                )}
-              </Box>
-            ))}
+          {/* ONE SWITCH (the canvas redesign): the Board is the one full-screen view - agents and their wall - and the way
+              back from it is the same place. Everything else is in the Assistant's sidebar and canvas. */}
+          <Box component="button" type="button" data-tq-view-switch={tab === "Board" ? "assistant" : "board"}
+            onClick={() => go(tab === "Board" ? "Assistant" : "Board")}
+            title={tab === "Board" ? "Back to the Assistant" : "The Board - every agent and its session, full screen"}
+            sx={{ display: "flex", alignItems: "center", gap: 0.75, height: 30, px: 1.4, ml: { xs: 0.25, md: 1 }, borderRadius: 99, cursor: "pointer",
+              fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap",
+              color: tab === "Board" ? "#fff" : "#41525f", background: tab === "Board" ? GRADIENT : "#e4e9ee",
+              border: `1px solid ${tab === "Board" ? "transparent" : "#cbd4dc"}` }}>
+            {tab === "Board" ? <><StarMark size={14} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}
           </Box>
           <Box sx={{ flex: 1 }} />
           {/* on the RIGHT, with the other transient chrome. On the left it grew the brand cluster
@@ -429,8 +375,8 @@ export default function TaskHubPage() {
           </Tooltip>
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
           <Bell onGo={(p) => {
-            if (p.connector) window.location.hash = `connector=${p.connector}`;
-            else if (p.report) window.location.hash = `report=${p.report}`;
+            if (p.connector) { window.location.hash = `connector=${p.connector}`; return; }   // the hash opens its card in the canvas
+            if (p.report) { window.location.hash = `report=${p.report}`; return; }
             go(p.where || "Connections");
           }} />
           <Tooltip title="Refresh">
@@ -457,7 +403,7 @@ export default function TaskHubPage() {
               {/* Game is the same Assistant, walked: the chat stays mounted behind it so its conversation survives the switch */}
               <Box sx={{ display: asstGame ? "none" : "block" }}>
                 <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} onChanged={refreshPending}
-                  onGame={() => pickAsstGame(true)} active={tab === "Assistant" && !asstGame} />
+                  onGame={() => pickAsstGame(true)} active={tab === "Assistant" && !asstGame} request={canvasReq} />
               </Box>
               {asstGame && (
                 <React.Suspense fallback={<CircularProgress size={22} sx={{ m: 4 }} />}>
@@ -469,25 +415,9 @@ export default function TaskHubPage() {
           {(everBoard || tab === "Board") && (
             <Box sx={{ display: tab === "Board" ? "block" : "none" }}>
               <BoardView key={`b${tick}`} onOpenTask={openTask}
-              onOpenReports={(sid) => { window.location.hash = `report=${sid}`; go("Reports"); }} active={tab === "Board"} />
+              onOpenReports={(sid) => { ask({ kind: "browse", area: "reports", state: { section: "reports", open: sid } }); go("Assistant"); }} active={tab === "Board"} />
             </Box>
           )}
-          {everTasks && (
-            <Box sx={{ display: tab === "Tasks" ? "block" : "none" }}>
-              <TasksView key={`t${tick}`} selected={selectedTask} onSelect={selectTask} active={tab === "Tasks"}
-                onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
-                openAct={openAct} onActOpened={() => setOpenAct(null)}
-                onGoReports={(sid) => { window.location.hash = `report=${sid}`; go("Reports"); }} />
-            </Box>
-          )}
-          {tab === "Hub" && (
-            <React.Suspense fallback={<CircularProgress size={22} sx={{ m: 4 }} />}>
-              <HubView key={`hub${tick}`} onOpenTask={openTask} />
-            </React.Suspense>
-          )}
-          {tab === "Reports" && <ReportsView key={`rp${tick}-${reset}`} />}
-          {tab === "Connections" && <ConnectorsView key={`c${tick}-${reset}`} onNavigate={go} />}
-          {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} onNavigate={go} />}
         </Box>
         {/* The floating mark is gone (the owner, 2026-09-15: "we also don't need the taskuary image in
             bottom right corner anymore"). It was the same assistant the Assistant tab already is, and

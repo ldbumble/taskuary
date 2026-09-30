@@ -81,7 +81,12 @@ const SCENES = [
   ["hub-one", async (p) => click(p, "[data-tq-post-open]"), "client"],
   ["hub-back", async (p) => click(p, "[data-tq-browse-back]"), "client"],
   ["tasks-tab", async (p) => (await tab(p, "Tasks")) && (await wait(1500), first(() => click(p, "[data-tq-task-row]"), () => visible(p, "[data-tq-task-page]")))],
-  ["board", async (p) => tab(p, "Board")],
+  ["board", async (p) => click(p, '[data-tq-view-switch="board"]')],
+  ["board-back", async (p) => click(p, '[data-tq-view-switch="assistant"]')],
+  ["link-task", async (p) => p.evaluate(() => { location.hash = "task=6"; return true; }), "walk"],
+  ["link-settings", async (p) => p.evaluate(() => { location.hash = "settings=config&group=Replies"; return true; }), "walk"],
+  ["link-connector", async (p) => p.evaluate(() => { location.hash = "connector=gmail"; return true; }), "walk"],
+  ["link-report", async (p) => p.evaluate(() => { location.hash = "report=new"; return true; }), "walk"],
 ];
 
 (async () => {

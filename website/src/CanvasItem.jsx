@@ -5,7 +5,7 @@
 // ONE HEIGHT, ALWAYS. Expand hides the conversation around the view; it never changes the view's own box. A pty grown
 // after it has output corrupts the pane (ConPTY keeps a grown viewport top-anchored - see terminal.remember_geometry),
 // so the terminal inside is sized once, for the whole canvas, and nothing here can grow it afterwards.
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Box } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
 
@@ -16,9 +16,17 @@ export const canvasItemHeight = (bodyHeight) => Math.max(420, Math.round((bodyHe
 export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "walk", "brief", "fyis", "meeting"].includes(kind);
 
 export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onListChanged, onChanged, onGoReports }) {
+  // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
+  const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
+  const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
+  // a view put on the table is brought into view whole - the chat's own scroll pinned its bottom, which left a task opened
+  // by a link showing only its heading under a screenful of earlier lines
+  const box = useRef(null);
+  useEffect(() => { box.current?.scrollIntoView({ block: "start" }); }, [card.key]);
   return (
-    <Box data-tq-canvas-item={card.key} sx={{ height, display: "flex", minWidth: 0 }}>
-      <TaskPage taskId={card.tid} canvas active
+    <Box ref={box} data-tq-canvas-item={card.key} sx={{ height, display: "flex", minWidth: 0, scrollMarginTop: "8px" }}>
+      <TaskPage taskId={card.tid} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
+        openAct={act} onActOpened={() => setAct(null)}
         onNext={onNext} nextBusy={busy} expanded={expanded} onExpand={onExpand}
         onClose={onFold} onListChanged={onListChanged} onChanged={onChanged} onGoReports={onGoReports}
         // closed, put away or deleted here, the walk moves on - the same as Done on a walk card

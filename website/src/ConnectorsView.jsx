@@ -1715,7 +1715,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       note: q ? "" : groups.find((g) => g.title === browseState.section)?.note || "",
       cards: inSection.map((c) => ({ key: c.key, node: <ConnCard c={{ ...c, go: c.go && (() => { c.go(); onBrowseState?.({ ...browseState, open: c.key }); }) }} /> })),
       detail, onBack: back,
-      openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : "",
+      openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : conn ? `the ${conn.Name} connector card (Connections)` : "",
       search: (
         <Box component="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search connectors…"
           aria-label="Search connectors" data-tq-browse-search=""

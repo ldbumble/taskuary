@@ -96,7 +96,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
         alignItems: "baseline", flexWrap: "wrap" }}>
         <Typography variant="caption" sx={{ color: FAINT, fontWeight: 700 }}>RUNS</Typography>
         <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 700 }}>
-          {picked ? picked.label : "—"}{slot.ready && runs ? ` · ${runs}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
+          {picked ? picked.label : "—"}{slot.ready && runs ? ` · ${runs}` : ""}{slot.ready && slot.resolved ? ` → ${slot.resolved}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
         </Typography>
         {slot.owner && (
           <Typography variant="caption" sx={{ color: FAINT }}>

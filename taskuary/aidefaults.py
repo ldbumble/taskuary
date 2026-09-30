@@ -18,7 +18,7 @@ model for coding sessions and a LIGHT model for the one-message jobs - triage, d
 summaries, the digest (llm.make_cli_llm). Naming the same CLI as both the coder and the triage
 brain is normal and cheap; it is the light gear that keeps it cheap.
 """
-import json
+import json, re
 
 from . import climodels
 
@@ -106,7 +106,7 @@ def resolve(store, cfg, slot_key: str) -> dict:
         cli = _cli_of(cfg, store, name) if name else ''
         cat = climodels.catalog(cli)
         model, effort = climodels.split_pick(_gears(cfg, store, name).get('model') or '')
-        out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
+        out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model), resolved=_resolved(cat, model),
                    owner=f'the {cli} coding profile' if cli else '', owner_link='agents', cli=cli,
                    display=cli,
                    ready=bool(name))
@@ -159,7 +159,9 @@ def resolve(store, cfg, slot_key: str) -> dict:
             from .llm import ASSISTANT_EFFORT
             effort = ASSISTANT_EFFORT.get(cli, '')          # what concierge.brain runs when the pick names no effort
         said = (f"{dflt[7:]} effort" if dflt.startswith('effort:') else dflt) if dflt else f'the {cli} default'
-        out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
+        # a blank box runs the gear's default model, so its efforts and version are that model's
+        seen = model or ('' if dflt.startswith('effort:') else dflt)
+        out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, seen), resolved=_resolved(cat, seen),
                    default_hint=f"{said} - the {'Assistant' if slot_key == 'concierge_ai' else 'light'} default",
                    owner=owner, owner_link='' if slot_key == 'concierge_ai' else 'agents', cli=cli)
         if not light and not dflt: out['note'] = f'no light model set - this runs on the {cli} coding model, which is the expensive gear'
@@ -184,10 +186,25 @@ def resolve(store, cfg, slot_key: str) -> dict:
     return out
 
 
+def _entry(cat: dict, model: str) -> dict:
+    """The catalogue row a model names: the exact id, else an alias (`sonnet`) read as the NEWEST id of that family, which is
+    what the CLI itself runs - so an alias pick shows its efforts and the version it lands on."""
+    ms = cat.get('models') or []
+    if (hit := next((m for m in ms if m.get('id') == model), None)): return hit
+    fam = [m for m in ms if model and re.fullmatch(rf'claude-{re.escape(model)}-\d[\w-]*', str(m.get('id')))]
+    return max(fam, key=lambda m: [int(n) for n in re.findall(r'\d+', m['id'])], default={})
+
+
 def _efforts(cat: dict, model: str) -> list:
     """The reasoning levels THIS model offers, per the CLI's own catalogue. Empty for every CLI
     whose effort flag we cannot spell - climodels documents why muse is deliberately empty."""
-    return next((m.get('efforts') or [] for m in cat.get('models') or [] if m.get('id') == model), [])
+    return _entry(cat, model).get('efforts') or []
+
+
+def _resolved(cat: dict, model: str) -> str:
+    """The id an alias lands on ('' when the pick already is an id, or nothing is known)."""
+    i = _entry(cat, model).get('id') or ''
+    return i if i != model else ''
 
 
 # What a blank model box actually means per provider, copied from llm.make_llm so the UI can

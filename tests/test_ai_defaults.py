@@ -254,3 +254,19 @@ class DefaultBrainTests(unittest.TestCase):
         self.assertEqual(real(s), 'cli:coder')                              # the worker that runs it
         s.set_setting('default_brain', 'gemini', 'o')
         self.assertEqual(real(s), '')                                       # a brain nothing here runs names nobody
+
+
+class AliasTests(unittest.TestCase):
+    """`sonnet` is not an id in the CLI's catalogue, so an alias pick used to show no effort picker and no version."""
+    cat = {'models': [{'id': i, 'efforts': ['low', 'high']} for i in ('claude-sonnet-5', 'claude-sonnet-5-5', 'claude-opus-5-5')]}
+
+    def test_alias_lands_on_the_newest_of_its_family(self):
+        self.assertEqual(aidefaults._resolved(self.cat, 'sonnet'), 'claude-sonnet-5-5')
+        self.assertEqual(aidefaults._efforts(self.cat, 'sonnet'), ['low', 'high'])
+
+    def test_an_exact_id_resolves_to_nothing_extra(self):
+        self.assertEqual(aidefaults._resolved(self.cat, 'claude-sonnet-5'), '')
+        self.assertEqual(aidefaults._efforts(self.cat, 'claude-sonnet-5'), ['low', 'high'])
+
+    def test_unknown_or_blank_has_no_efforts(self):
+        self.assertEqual((aidefaults._efforts(self.cat, ''), aidefaults._efforts(self.cat, 'nope')), ([], []))

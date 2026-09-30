@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 // On the Tasks page a row's state chip is the filter inside In progress (the owner, 2026-09-28: "filter by waiting to
 // start / on you / agent waiting on you ... as minimal as possible" - "on the tasks page, not where else").
 import test from "node:test";
@@ -7,14 +8,14 @@ import { readFileSync } from "node:fs";
 const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
 test("clicking a row's state chip narrows In progress to that state, and its pill clears it", () => {
-  const s = src("TasksView.jsx");
+  const s = taskSource();
   assert.match(s, /const \[only, setOnly\] = useState\(null\);/);
   assert.match(s, /\(!only \|\| filter !== "live" \|\| stateOf\(x\)\.label === only\)/);
   assert.match(s, /setFilter\("live"\); setOnly\(only \? null : st\.label\);/);
 });
 
 test("the states are pills on top of In progress, with counts and an 'all' that clears", () => {
-  const s = src("TasksView.jsx");
+  const s = taskSource();
   assert.match(s, /filter === "live" && !search && liveStates\.length > 1 &&/);
   assert.match(s, /<FilterPills value=\{only \|\| ""\} onChange=\{\(k\) => setOnly\(k \|\| null\)\}/);
   assert.match(s, /\{ key: "", label: "all", n: liveStates\.reduce/);

@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -5,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const read = (f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), "utf8");
 const workspace = read("../src/GeneralWorkspace.jsx");
-const tasks = read("../src/TasksView.jsx");
+const tasks = taskSource();
 
 // A general agent is a chat, the way a coding agent is a terminal. The strip above it used to
 // switch the body between the conversation, a fake terminal of the same conversation (which

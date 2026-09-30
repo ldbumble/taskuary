@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 // Consistent worker startup across the surfaces that start one (PW-209..214).
 //
 // The All-detail row hid Send to agent for fyi/reply rows that chat cards happily dispatch; the
@@ -42,7 +43,7 @@ test("All detail offers Send to agent for fyi and reply rows too, like the chat 
 });
 
 test("the task page's non-coding start goes through the shared dispatch, whatever the task's kind was", () => {
-  const tasks = src("TasksView.jsx");
+  const tasks = taskSource();
   const fn = tasks.slice(tasks.indexOf("const startGeneralAgent = async"), tasks.indexOf("useEffect(() => { if (!liveCodingSession)"));
   // ...and it carries the three answers the hand-off row now asks for: which profile, which brain,
   // which model. Blank means "as configured", which is what one press used to be able to say.

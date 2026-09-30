@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -6,7 +7,7 @@ import path from "node:path";
 const src = (name) => fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
 
 test("an uncertain task repo opens the chooser and resumes the attempted launch", () => {
-  const tasks = src("TasksView.jsx");
+  const tasks = taskSource();
   assert.match(tasks, /could not tell which checkout/);
   assert.match(tasks, /setResumeAfterRepo\(body\)/);
   assert.match(tasks, /openTerm\(\{ \.\.\.launch, repo: data\.repo, cwd: null \}\)/);
@@ -26,7 +27,7 @@ test("a selected repository with no local checkout still offers path setup", () 
 });
 
 test("the task page's Start button asks which repo instead of printing the refusal", () => {
-  const tasks = src("TasksView.jsx");
+  const tasks = taskSource();
   // the Start button runs the operations road: a halt carries needs_repo, and the chooser resumes it
   assert.match(tasks, /e\?\.outcome\?\.dispatch === "needs_repo"/);
   assert.match(tasks, /setResumeAfterRepo\(\{ dispatch: true \}\)/);

@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -25,7 +26,7 @@ test("add shortcuts open the native new-task and new-report surfaces", () => {
   const shell = read("FloatingAssistant.jsx");
   assert.match(shell, /window\.location\.hash = "new-task"/);
   assert.match(shell, /window\.location\.hash = "report=new"/);
-  assert.match(read("TasksView.jsx"), /window\.location\.hash === "#new-task"/);
+  assert.match(taskSource(), /window\.location\.hash === "#new-task"/);
   assert.match(read("ReportsView.jsx"), /value === "new"/);
 });
 

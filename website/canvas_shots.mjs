@@ -67,7 +67,7 @@ const SCENES = [
   ["nav-settings", async (p) => first(() => click(p, '[data-tq-nav="settings"]'), () => tab(p, "Settings"))],
   ["settings-group", async (p) => click(p, "[data-tq-browse-chip]", 2), "client"],
   ["nav-hub", async (p) => first(() => click(p, '[data-tq-nav="hub"]'), () => tab(p, "Hub"))],
-  ["tasks-tab", async (p) => (await tab(p, "Tasks")) && (await wait(1500), click(p, "[data-tq-task-row]"))],
+  ["tasks-tab", async (p) => (await tab(p, "Tasks")) && (await wait(1500), first(() => click(p, "[data-tq-task-row]"), () => visible(p, "[data-tq-task-page]")))],
   ["board", async (p) => tab(p, "Board")],
 ];
 

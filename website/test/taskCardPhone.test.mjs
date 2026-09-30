@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 // A strip's buttons never lose a button and never cover the title. At 390px the agent bar sat ON
 // "Agent work" and its last button ran off the card (2026-09-18); below sm the bar takes the next
 // line of a wrapping heading instead.
@@ -6,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-const src = fs.readFileSync(path.join(process.cwd(), "src", "TasksView.jsx"), "utf8");
+const src = taskSource();
 
 test("a stage heading wraps below sm and its bar takes the whole next line", () => {
   const head = src.slice(src.indexOf("const WorkflowHeading = ("), src.indexOf("{chip}", src.indexOf("const WorkflowHeading = (")));

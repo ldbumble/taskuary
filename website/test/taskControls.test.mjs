@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 // Every task-view control says what it does to the task and to the agent, and runs the shared operations road
 // (PW-215..PW-221). The browser harness runs in demo mode, where mutating requests are denied, so behaviour is
 // proven by the backend TestClient tests (tests/test_task_controls_operations.py) and these source assertions.
@@ -7,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const src = (name) => fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
-const tasks = src("TasksView.jsx");
+const tasks = taskSource();
 
 test("each control carries the caption that names its effect on task versus agent", () => {
   for (const [label, title] of [

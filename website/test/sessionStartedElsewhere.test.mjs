@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 // A session can be started from anywhere - the Assistant's "send to the coding agent", the Board,
 // a second window - and the task page has to notice. TQ-0500 (2026-09-11): the Board showed a live
 // coder session while the task page said "agent - not started" and offered to start one, which
@@ -14,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { agentPhase } from "../src/taskLifecycle.js";
 
-const src = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+const src = taskSource();
 
 test("a live session anywhere means the agent stage is working, not 'not started'", () => {
   assert.equal(agentPhase({ session: { alive: true } }), "agent working");
@@ -25,9 +26,10 @@ test("a live session anywhere means the agent stage is working, not 'not started
 });
 
 test("the open task is reloaded on task-changed, not just the list", () => {
-  const sub = /onLive\("task-changed",([\s\S]*?)\);\n/.exec(src);
-  assert.ok(sub, "TasksView must subscribe to task-changed");
-  assert.match(sub[1], /loadDetail\(/,
+  // the list and the task view (TaskPage) each subscribe; the view's own subscription reloads the open task
+  const subs = [...src.matchAll(/onLive\("task-changed",([\s\S]*?)\);\n/g)];
+  assert.ok(subs.length, "the Tasks tab must subscribe to task-changed");
+  assert.ok(subs.some((sub) => /loadDetail\(/.test(sub[1])),
     "refreshing only the list is how the row said 'agent working' beside a panel saying 'not started'");
 });
 

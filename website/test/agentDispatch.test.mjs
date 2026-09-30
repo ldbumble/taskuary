@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -48,7 +49,7 @@ test("opening a general task reads state without starting an agent", () => {
 });
 
 test("every live agent ends the same way, and never without being written up", () => {
-  const tasks = src("TasksView.jsx");
+  const tasks = taskSource();
   const start = tasks.indexOf("{term?.alive && (", tasks.indexOf("Agent running"));
   const controls = tasks.slice(start, tasks.indexOf("{report &&", start));
   assert.ok(start >= 0);
@@ -65,7 +66,7 @@ test("every live agent ends the same way, and never without being written up", (
 });
 
 test("task references use readable sans-serif digits", () => {
-  const tasks = src("TasksView.jsx");
+  const tasks = taskSource();
   const ui = src("ui.jsx");
   assert.match(tasks, /fontVariantNumeric: "tabular-nums"/);
   assert.match(ui.slice(ui.indexOf("export const RefChip"), ui.indexOf("export const ActionChip")),
@@ -83,5 +84,5 @@ test("the New sheet reports what the dispatch answered, not what it hoped", () =
 
 test("the brain picked in the New sheet and on the task page travels with the role", () => {
   assert.match(src("NewSheet.jsx"), /brain: brain \|\| null/);
-  assert.match(src("TasksView.jsx"), /brain: run\.brain \|\| null/);
+  assert.match(taskSource(), /brain: run\.brain \|\| null/);
 });

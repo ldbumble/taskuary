@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 // The fyi handful and the single item, as the cards draw them (PW-151/152): a summary for each entry and
 // actions on ONE entry through the proposal road; the task card carries the whole grouped context, the
 // task summary and the checklist.
@@ -76,7 +77,7 @@ test("a paused assistant task exposes resume instead of pretending nobody has wo
   assert.match(agent, /"Continue session"/);
   // ...its task text inside the ask, where the story tells it (2026-09-28)
   assert.match(agent, /words=\{card\.paused \? <div className="tq-thr-words"><CombinedTaskText/);
-  const tasks = read("TasksView.jsx");
+  const tasks = taskSource();
   // one set of words for the one act, whichever agent held the conversation (2026-09-15) - and one box, the rail's,
   // with a note for the agent (T14, 2026-09-25)
   assert.match(tasks, /Continue session/);

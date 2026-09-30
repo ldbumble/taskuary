@@ -42,7 +42,7 @@ test("the new-task dialog asks the question it means, and passes the kinds", () 
   assert.doesNotMatch(board, /Agent and model — which CLI works it/);
   assert.match(board, /<AgentPicker agents=\{agents\} models=\{models\} kinds=\{kinds\} coding/);
   assert.match(board, /const \{ agents, models, cmds, kinds[^}]*\} = useAgents\(\)/);
-  for (const name of ["NewSheet.jsx", "TasksView.jsx"]) {
+  for (const name of ["NewSheet.jsx", "TaskPage.jsx"]) {   // the task view is TaskPage.jsx since the canvas redesign
     const src = read(name);
     assert.match(src, /<AgentPicker agents=\{agents\} models=\{models\} kinds=\{kinds\} coding/);
   }

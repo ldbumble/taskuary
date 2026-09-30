@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -48,19 +49,22 @@ test("mark done advances to the next in-progress task and never back to the clos
 
 test("the Tasks completion path pins the rail to in progress before patching", async () => {
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
-  const start = source.indexOf("const finish = async (status)");
-  const finish = source.slice(start, source.indexOf("const firstShownId", start));
+  const source = taskSource();
+  // the list pins (TasksView.finishWith) around the close the task view runs (TaskPage.finish -> the shared road, PW-215)
+  const start = source.indexOf("const finishWith = async (status, close)");
+  const finish = source.slice(start, source.indexOf("const reminded", start));
   assert.match(finish, /filter\(\(x\) => inBucket\(x, "live"\)\)/);
   assert.match(finish, /completionTransition\(liveIds, selected, status\)/);
-  // completion runs the shared operations road now (PW-215); the pin is the ordering around that call
-  assert.ok(finish.indexOf("setFilter(transition.filter)") < finish.indexOf('await runOperation(api, "task.complete"'));
-  assert.ok(finish.indexOf("onSelect(transition.next)") > finish.indexOf('await runOperation(api, "task.complete"'));
+  assert.ok(finish.indexOf("setFilter(transition.filter)") < finish.indexOf("await close()"));
+  assert.ok(finish.indexOf("onSelect(transition.next)") > finish.indexOf("await close()"));
+  const page = source.slice(source.indexOf("const finish = async (status)"));
+  assert.match(page.slice(0, 600), /const close = \(\) => runOperation\(api, "task\.complete", selected\)/);
+  assert.match(page.slice(0, 600), /onFinish \? onFinish\(status, close\) : close\(\)/);
 });
 
 test("a closed task opened directly cannot remain under the in-progress pill", async () => {
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  const source = taskSource();
   assert.doesNotMatch(source, /was\.id !== selected \|\| was\.key === key/);
   assert.match(source, /if \(was\.id === selected && was\.key === key\) return/);
   assert.match(source, /onChange=\{changeFilter\}/);
@@ -73,7 +77,7 @@ test("a closed task opened directly cannot remain under the in-progress pill", a
 // 2026-09-18: "when you hit x when coding to see task it just flickers and comes back").
 test("closing the detail shows the list rather than re-opening the first task", async () => {
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  const source = taskSource();
   assert.match(source, /const dismiss = \(\) => \{ dismissed\.current = true; onSelect\(null\); \}/);
   assert.match(source, /if \(active && !selected && firstShownId && !dismissed\.current\) onSelect\(firstShownId\)/);
   assert.match(source, /Close — back to the list \(the task stays\)"\}>/);
@@ -85,7 +89,7 @@ test("closing the detail shows the list rather than re-opening the first task", 
 // came from" (the owner, 2026-09-18). One X, two steps: session -> the task behind it -> the list.
 test("with a live session, X steps back to the task first and the session keeps running", async () => {
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  const source = taskSource();
   assert.match(source, /const sessionView = liveSession && !peek;/);
   // ...and it drops a hand-picked stage with it, so the reply the wrap-up just wrote is what the
   // page opens on rather than the pane that has finished (2026-09-22)

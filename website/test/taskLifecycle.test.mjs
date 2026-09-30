@@ -1,3 +1,4 @@
+import { taskSource } from "./taskSource.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -42,7 +43,7 @@ test("timeline exposes task state beside current agent or reply attention", () =
 });
 
 test("terminal output never triggers whole-task HTTP refreshes", () => {
-  const source = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  const source = taskSource();
   assert.match(source, /pollWhileActive\(active, \(\) => loadDetail\(selected\), 3000\)/);
   assert.doesNotMatch(source, /onLive\([^\n]*run-tail[^\n]*loadDetail/);
   for (const file of ["ui.jsx", "FeedView.jsx", "BoardView.jsx", "WallView.jsx", "StudioView.jsx"]) {
@@ -69,7 +70,7 @@ test("one stage is open: the last thing owed wins, and a closed task shows itsel
 });
 
 test("the task page opens exactly one stage and lets you open the others by hand", () => {
-  const source = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  const source = taskSource();
   // a session that fills the page IS the agent stage; stepping back from it (peek) opens the task
   // stage, the one that says what the task is and where it came from (2026-09-18)
   assert.match(source, /const stage = sessionView \? "agent" : \(openStage \|\| \(peek \? "task" : focusStage\(/);
@@ -94,7 +95,7 @@ test("a general chat that has answered is agent state, not \"not started\"", () 
 });
 
 test("closing the task never hides behind a fold, and a finished chat can be closed out", () => {
-  const source = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  const source = taskSource();
   // the completion control rides on the folded strip too, so it is there whether the card is open
   // or folded - the strip is the Task card's whole presence when the agent or reply has the focus
   const folded = source.slice(source.indexOf('stage !== "task" && ('), source.indexOf('{stage === "task" && <>'));
@@ -116,7 +117,7 @@ test("the agent heading says what the agent is doing, not that a session exists"
   // "② coder is working" sat beside its own chip reading "agent · needs you", because the title
   // asked only whether a pty was alive. The coder had been parked on a question for an hour
   // (the owner, 2026-09-11, TQ-0499: "is this the same bug?" - yes, the third surface of it).
-  const view = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  const view = taskSource();
   assert.doesNotMatch(view, /title=\{term\?\.alive \? `\$\{agentName\(t\)\} is working`/);
   // ...and WHICH wait: asked, needs approval, stuck (T6, 2026-09-25)
   assert.match(view, /agentState === AGENT\.waiting \? says\(subState\(term\), agentName\(t\)\)/);

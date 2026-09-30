@@ -41,7 +41,7 @@ Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by w
 **Urgent**, **On you**, **For later**, the Advisor's ideas, and **FYI**. Beside it, the Assistant
 says what came in and who is waiting, so you never open each system in turn.
 
-![The work rail sorting today's items into Urgent, On you, Advisor ideas, and FYI, beside the Assistant's morning summary of who is waiting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=chat)
+![The work rail sorting today's items into Urgent, On you, Advisor ideas, and FYI, beside the Assistant's morning summary of who is waiting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=95295dd)
 
 ### 2. Let the Assistant walk you through it
 
@@ -50,35 +50,35 @@ same task card you would open yourself, with the next actions under it: **Next**
 **Start an agent**. The buttons always do the same thing; the chat line is for everything else,
 and the Assistant already has the message, the thread, and your past decisions to answer from.
 
-![The Assistant bringing Ruth's request into the chat as task TQ-0018, with Next, Write reply, and Start an agent under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=chat)
+![The Assistant bringing Ruth's request into the chat as task TQ-0018, with Next, Write reply, and Start an agent under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=95295dd)
 
 ### 3. Every request becomes a task with its whole story
 
 Open any item to see how it got here: the message, what triage decided and why, which agent
 has it, and where the reply stands.
 
-![Ruth's request on its task: the message, the triage decision, the agent, and the reply still to write.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=chat)
+![Ruth's request on its task: the message, the triage decision, the agent, and the reply still to write.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=95295dd)
 
 ### 4. The agent works inside the chat
 
 **Start an agent** and it works in the same card. Here the analyst prepares the numbers, checks
 that the categories add up, names its source, and drafts the reply. Nothing is sent.
 
-![The analyst's finished vendor spend analysis inside the chat, with category totals, the change from July, and its source.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=chat)
+![The analyst's finished vendor spend analysis inside the chat, with category totals, the change from July, and its source.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=95295dd)
 
 ### 5. The last word is yours
 
 The prepared reply waits on the task, beside the request that started it. Read it, edit it,
 and choose **Approve & send** when it is ready.
 
-![The drafted reply to Ruth waiting on its task, with Approve & send, Reject, and Regenerate with AI.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=chat)
+![The drafted reply to Ruth waiting on its task, with Approve & send, Reject, and Regenerate with AI.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=95295dd)
 
 ### 6. Start your day before it gets busy
 
 Each morning the Assistant opens with today's meetings on a timeline and who needs a word from you.
 Ruth's request has a clear deadline: the 11:30 operations review.
 
-![An animated close-up of the morning: today's meetings on a timeline, then the people and agents waiting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=chat)
+![An animated close-up of the morning: today's meetings on a timeline, then the people and agents waiting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=95295dd)
 
 ## Key features
 

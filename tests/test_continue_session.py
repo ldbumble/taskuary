@@ -64,6 +64,25 @@ class OneRoadTests(unittest.TestCase):
         self.assertIn('fresh codex session', s.list_comments(tid)[-1]['Body'])
 
 
+class CodexResumeModelTests(unittest.TestCase):
+    """TQ-0887: codex's conversation was first opened with claude's model; `codex resume` reused it and every Continue died
+    on a 400. A codex resume names codex's own model (2026-09-30)."""
+    def test_a_codex_resume_names_codex_own_model(self):
+        from taskuary import climodels, terminal
+        with mock.patch.object(climodels, 'codex_current', return_value={'model': 'gpt-6'}):
+            out = terminal.codex_resume_model(['C:/bin/codex.EXE', '--x', 'resume', 'abc'])
+        self.assertEqual(out[-4:], ['resume', 'abc', '-m', 'gpt-6'])
+
+    def test_a_model_asked_for_wins_and_one_already_named_is_left(self):
+        from taskuary import terminal
+        self.assertEqual(terminal.codex_resume_model(['codex', 'resume', 'abc'], 'gpt-6-mini')[-2:], ['-m', 'gpt-6-mini'])
+        self.assertEqual(terminal.codex_resume_model(['codex', '-m', 'x', 'resume', 'abc']), ['codex', '-m', 'x', 'resume', 'abc'])
+
+    def test_other_clis_are_untouched(self):
+        from taskuary import terminal
+        self.assertEqual(terminal.codex_resume_model(['claude', '--resume', 'abc']), ['claude', '--resume', 'abc'])
+
+
 class PhoneTests(unittest.TestCase):
     def test_the_pick_asks_and_the_next_typed_line_is_the_note(self):
         s = MemoryStore()

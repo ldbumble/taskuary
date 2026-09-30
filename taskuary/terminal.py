@@ -757,6 +757,17 @@ def with_brain(profile: dict, cmd: dict) -> dict:
     return {**{k: v for k, v in profile.items() if k not in COMMAND_FIELDS}, **cmd}
 
 
+def codex_resume_model(argv: list, model: str = None) -> list:
+    """CODEX REOPENS WITH THE MODEL IT SAVED unless told one. A conversation first opened with claude's model (the stale
+    `-m claude-opus-5-5` that with_brain now drops) came back on every Continue as a 400 - "not supported when using Codex
+    with a ChatGPT account" (the owner, 2026-09-30, TQ-0887). So a codex resume names codex's OWN model: the one asked for,
+    else the one in its config.toml. Any other CLI, or a model already named, is left as it is."""
+    if not argv or 'codex' not in os.path.basename(str(argv[0])).lower() or '-m' in argv or '--model' in argv: return argv
+    from .climodels import codex_current
+    own = model or codex_current().get('model')
+    return [*argv, '-m', str(own)] if own else argv
+
+
 def agent_argv(profile: dict, model: str = None) -> list:
     """Interactive invocation of a configured CLI: its command, its own flags minus the pipe
     ones, and the model flag the headless runner uses (`model_arg`, e.g. codex wants -m).
@@ -947,7 +958,8 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
     # differ per CLI, and the typed road is the one verified against every TUI here.
     from .agents import assign_argv, resume_argv
-    if agent and resume: argv = list(argv) + resume_argv(profile, resume)
+    if agent and resume:
+        argv = codex_resume_model(list(argv) + resume_argv(profile, resume), model or profile.get('model'))
     # ...and for a NEW one, name it ourselves where the CLI allows (agents.ASSIGN_ARGS). Learning
     # an id afterwards leaves a window - a pane killed inside it was gone for good - and it has to
     # guess WHICH session a hook or a log belongs to. A name we chose has neither problem.

@@ -35,47 +35,50 @@ Taskuary is early—currently **v0.3.7.1**—so breaking changes are still possi
 One request, from arrival to your approval. Follow Ruth's request for the latest vendor spend
 numbers through the real app, using fictional demo data.
 
-### 1. Connect every system. Keep control.
+### 1. Everything lands in one place
 
-Mail, chats, issue trackers, alerts, and reports land on one Timeline. See what arrived,
-what became a task, and what needs you without opening every system in turn.
+Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by what they need:
+**Urgent**, **On you**, **For later**, the Advisor's ideas, and **FYI**. Beside it, the Assistant
+says what came in and who is waiting, so you never open each system in turn.
 
-![An annotated Timeline: each item shows its original time below its source—Email, Teams, WhatsApp, GitHub, SQL report, Assistant, Daily digest, or Calendar.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png)
+![The work rail sorting today's items into Urgent, On you, Advisor ideas, and FYI, beside the Assistant's morning summary of who is waiting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=chat)
 
-### 2. Turn incoming work into tasks
+### 2. Let the Assistant walk you through it
 
-Ruth asks for the August total, the change from July, and a breakdown by category.
-Taskuary creates a task with the original request and assigns it to an agent.
+Choose **Walk me through my tasks**. The Assistant puts one item on the table at a time, as the
+same task card you would open yourself, with the next actions under it: **Next**, **Write reply**,
+**Start an agent**. The buttons always do the same thing; the chat line is for everything else,
+and the Assistant already has the message, the thread, and your past decisions to answer from.
 
-![Ruth's request becomes TQ-0018, with its instructions, owner, and agent work together on the task page.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png)
+![The Assistant bringing Ruth's request into the chat as task TQ-0018, with Next, Write reply, and Start an agent under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=chat)
 
-### 3. Watch the agent work
+### 3. Every request becomes a task with its whole story
 
-Open the task to follow the analysis. Here, the general agent prepares the numbers,
-checks that the categories add up, and drafts a reply.
+Open any item to see how it got here: the message, what triage decided and why, which agent
+has it, and where the reply stands.
 
-![The general agent's completed vendor spend analysis, with category totals, comparison, and source.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png)
+![Ruth's request on its task: the message, the triage decision, the agent, and the reply still to write.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=chat)
 
-### 4. Approve the outcome
+### 4. The agent works inside the chat
 
-The reply waits in **Review**, beside the request that started it. Read it, edit it,
+**Start an agent** and it works in the same card. Here the analyst prepares the numbers, checks
+that the categories add up, names its source, and drafts the reply. Nothing is sent.
+
+![The analyst's finished vendor spend analysis inside the chat, with category totals, the change from July, and its source.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=chat)
+
+### 5. The last word is yours
+
+The prepared reply waits on the task, beside the request that started it. Read it, edit it,
 and choose **Approve & send** when it is ready.
 
-![Review shows Ruth's original request and the prepared reply, with Approve & send waiting for the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png)
+![The drafted reply to Ruth waiting on its task, with Approve & send, Reject, and Regenerate with AI.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=chat)
 
-### 5. Let the Assistant walk you through it
+### 6. Start your day before it gets busy
 
-Choose **Walk me through my tasks**. The Assistant brings one item into the conversation,
-explains what needs your attention, and puts the next action within reach.
+Each morning the Assistant opens with today's meetings on a timeline and who needs a word from you.
+Ruth's request has a clear deadline: the 11:30 operations review.
 
-![A close-up of the Assistant bringing Ruth's request into the conversation, with a link to its task.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png)
-
-### 6. Start your day with the daily digest
-
-Open your morning brief to see what people need, what is in flight, and what is on your calendar.
-The day's meetings sit above the digest, so Ruth's request has a clear deadline: the operations review.
-
-![An animated close-up of the morning digest and calendar, showing the operations review and vendor planning meeting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif)
+![An animated close-up of the morning: today's meetings on a timeline, then the people and agents waiting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=chat)
 
 ## Key features
 

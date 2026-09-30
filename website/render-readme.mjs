@@ -11,12 +11,13 @@ const scratch = path.join(root, '.codex-tmp/readme');
 const out = path.join(root, 'docs/readme');
 await mkdir(out, { recursive: true });
 const shots = [
-  ['01-timeline-sources-and-times','timeline','Everything lands in one Timeline.',[14,61,720,730],'01 / ARRIVE'],
-  ['02-task','task','A request becomes a task.',[410,70,776,523],'02 / ORGANIZE'],
-  ['03-agent','agent','The agent does the work.',[426,255,760,675],'03 / WORK'],
-  ['04-review','review','The last word is yours.',[200,125,800,525],'04 / APPROVE'],
-  ['05-assistant','assistant','One conversation. One next step.',[528,61,658,635],'05 / YOUR ASSISTANT'],
-  ['06-morning','digest','Your day, before it gets busy.',[528,61,658,638],'06 / MORNING BRIEF'],
+  // 01-06 walk Ruth's request through the Chat and Task views; the rail on the left is the Timeline
+  ['01-timeline-sources-and-times','home','Everything lands in one place.',[14,58,1160,570],'01 / ARRIVE'],
+  ['02-task','task','A request becomes a task.',[350,66,835,360],'02 / ORGANIZE'],
+  ['03-agent','agent','The agent works inside the chat.',[372,136,795,592],'03 / WORK'],
+  ['04-review','review','The last word is yours.',[350,340,835,408],'04 / APPROVE'],
+  ['05-assistant','assistant','One conversation. One next step.',[350,110,835,600],'05 / YOUR ASSISTANT'],
+  ['06-morning','home','Your day, before it gets busy.',[360,112,816,508],'06 / MORNING BRIEF'],
   ['07-coding-clis-chinese','cli','Your tools. Your choice.',[110,65,980,500],'KEY FEATURE / CODING CLIS'],
   ['08-hub','hub','Good discoveries stay useful.',[250,65,936,514],'KEY FEATURE / SHARED KNOWLEDGE'],
   ['09-handoffs','handoffs','Leave the next agent a head start.',[210,145,780,490],'KEY FEATURE / LIVE HANDOFFS'],
@@ -29,6 +30,7 @@ try {
   for (const [name,source,title,clip,kicker] of shots) {
     if (process.argv.includes('--cli-only') && source !== 'cli') continue;
     if (process.argv.includes('--timeline-only') && source !== 'timeline') continue;
+    if (process.argv.includes('--walk') && !/^0[1-6]-/.test(name)) continue;
     if (process.argv.includes('--memory-update') && !['timeline','learned'].includes(source)) continue;
     const data = (await readFile(path.join(scratch,source+'.png'))).toString('base64');
     const [x,y,w,h] = clip, scale = 1120/w, cropH = Math.round(h*scale);
@@ -44,10 +46,10 @@ try {
       .crop img{position:absolute;max-width:none;width:${1200*scale}px;height:auto;left:${-x*scale}px;top:${-y*scale}px}
       footer{display:flex;align-items:center;justify-content:space-between;height:57px;font-size:12px;color:#637b72;letter-spacing:.25px}
       footer b{font-size:13px;font-weight:600;color:#3c5a51} .dot{color:#6a886e;margin-right:6px}
-    </style><main><div class="eyebrow">${escape(kicker)}<span>TASKUARY</span></div><h1>${escape(title)}</h1><div class="crop"><img src="data:image/png;base64,${data}"></div><footer><b><span class="dot">●</span> ${source==='digest'?'A brief. A calendar. A clear next step.':'Connected work. Your approval.'}</b><span>Real app · fictional demo data</span></footer></main></html>`);
+    </style><main><div class="eyebrow">${escape(kicker)}<span>TASKUARY</span></div><h1>${escape(title)}</h1><div class="crop"><img src="data:image/png;base64,${data}"></div><footer><b><span class="dot">●</span> ${name==='06-morning'?'A brief. A calendar. A clear next step.':'Connected work. Your approval.'}</b><span>Real app · fictional demo data</span></footer></main></html>`);
     await page.evaluate(() => Promise.all([...document.images].map(i => i.decode())));
     await page.screenshot({path:path.join(out,name+'.png')});
-    if (source === 'digest') {
+    if (name === '06-morning') {
       // A complete first frame also serves as the thumbnail when animation is disabled.
       const frames = [`file '${path.join(out,name+'.png').replaceAll('\\','/')}'\nduration 1.2`];
       for (let i=0; i<25; i++) {

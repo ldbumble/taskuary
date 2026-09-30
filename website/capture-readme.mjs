@@ -109,6 +109,14 @@ const click = async (text, selector = 'button', includes = false) => {
   await delay(500);
 };
 const nav = text => click(text, '#tqTopNav div');
+const clickRow = async text => {
+  // the smallest box on the rail that holds the words - the row itself, not the lane around it
+  const find = t => { const hits = [...document.querySelectorAll('[data-tq-rail] *')].filter(e => e.textContent.includes(t) && e.getBoundingClientRect().height > 24);
+    return hits.sort((a, b) => a.getBoundingClientRect().height - b.getBoundingClientRect().height)[0]; };
+  await page.waitForFunction(`(${find})(${JSON.stringify(text)})`);
+  const r = await page.evaluate(`(() => { const e = (${find})(${JSON.stringify(text)}).getBoundingClientRect(); return { x: e.x + e.width / 2, y: e.y + e.height / 2 }; })()`);
+  await page.mouse.click(r.x, r.y); await delay(1500);
+};
 const shot = async name => {
   await page.mouse.move(1430, 990);
   await delay(400);
@@ -186,32 +194,12 @@ try {
   } else if (process.argv.includes('--memory-update')) {
     await captureTimeline(); await captureLearned();
   } else {
-  if (!process.argv.includes('--extras')) {
-  await captureTimeline();
-  await click('work', 'div');
-  await click('Walk me through my tasks');
-  await page.waitForFunction(() => document.body.innerText.includes('Open TQ-0018'));
-  await page.setViewport({ width: 1200, height: 720, deviceScaleFactor: 2 });
-  await shot('assistant');
-  await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
-  await nav('Tasks'); await click('TQ-0018', '[data-tq-task-row]', true);
-  await shot('task');
-  await click('Agent work', 'p,span,div'); await click('Send to agent');
-  await page.waitForFunction(() => document.body.innerText.includes('August vendor spend is ready for review'), { timeout: 30000 });
-  await shot('agent');
-  await nav('Review');
-  await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some(e => e.value.includes('August vendor spend was')));
-  await page.evaluate(() => { const t = [...document.querySelectorAll('textarea')].find(e => e.value.includes('August vendor spend was')); let box=t.parentElement; while(box && getComputedStyle(box).maxWidth !== '980px') box=box.parentElement; if(box) box.style.maxWidth='800px'; t.style.maxHeight = 'none'; t.style.height = t.scrollHeight + 'px'; });
-  await shot('review');
-  }
-  await nav('Assistant'); await click('Task', '.tq-stage-mode button');
-  await click('timeline', 'div');
-  await click('Morning digest', '.tqRow [data-tq-keep]', true);
-  await click('Message', '[data-tq-timeline-stage] [role="tab"]');
+  // The walkthrough (01-06): Ruth's request through the Chat and Task views. The rail on the left is the Timeline;
+  // the chat on the right is the assistant, and a task opens INSIDE it as a card.
+  await click('Chat', 'button'); await delay(1500);
   await page.waitForSelector('[data-tick]');
-  await shot('digest');
-  // Replay the actual meeting-strip entrance and clock pulse at deterministic times.
-  // Only browser animation clocks change; the UI and its calendar data stay intact.
+  await shot('home');
+  // Replay the meeting strip's entrance and clock pulse at fixed times for the morning GIF.
   await page.evaluate(() => {
     window.readmeAnimations = document.querySelector('[data-tick]').getAnimations({ subtree: true });
     window.readmeAnimations.forEach(a => a.pause());
@@ -220,10 +208,33 @@ try {
     await page.evaluate(t => window.readmeAnimations.forEach(a => { a.currentTime = t; }), i * 80);
     await page.screenshot({ path: path.join(scratch, `morning-${String(i).padStart(2,'0')}.png`) });
   }
-  await captureCli();
-  await nav('Hub'); await delay(800); await click('2 comments'); await shot('hub');
-  await nav('Board'); await click('Live handoffs', 'div'); await shot('handoffs');
-  await captureLearned();
+  await page.evaluate(() => window.readmeAnimations.forEach(a => a.play()));
+  await click('Task', 'button'); await clickRow('Latest vendor spend');
+  await page.waitForFunction(() => document.body.innerText.includes('talk it through with the assistant'));
+  await shot('task');
+  // a pinned task keeps the pane; the demo starts over on a reload, so the walk begins from the morning
+  await page.goto(origin + '/?workflow=numbers', { waitUntil: 'networkidle0', timeout: 120000 });
+  await click('Chat', 'button'); await delay(1500);
+  await click('Walk me through my tasks');
+  await page.waitForFunction(() => document.body.innerText.includes('Where this came from') && document.body.innerText.includes('TQ-0018'));
+  // a shorter window keeps the card and the action row under it in one frame
+  await page.setViewport({ width: 1200, height: 760, deviceScaleFactor: 2 }); await delay(800); await shot('assistant');
+  await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
+  await click('Start an agent'); await delay(1000); await click('Send to agent');
+  await page.waitForFunction(() => document.body.innerText.includes('August vendor spend is ready for review'), { timeout: 30000 });
+  await delay(1500); await shot('agent');
+  await click('Task', 'button'); await clickRow('Latest vendor spend');
+  await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some(e => e.value.includes('August vendor spend was')));
+  await page.setViewport({ width: 1200, height: 1300, deviceScaleFactor: 2 }); await delay(800);
+  await page.evaluate(() => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Approve & send')?.scrollIntoView({ block: 'center' }));
+  await shot('review');
+  await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
+  if (process.argv.includes('--extras')) {
+    await captureCli();
+    await nav('Hub'); await delay(800); await click('2 comments'); await shot('hub');
+    await nav('Board'); await click('Live handoffs', 'div'); await shot('handoffs');
+    await captureLearned();
+  }
   }
   assert.deepEqual(errors, []);
 } catch (error) {

@@ -40,47 +40,47 @@ Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Cod
 用一个简单流程来了解应用：Ruth 希望在运营会议前拿到最新的供应商支出数据。
 下面用同一项请求，从收到消息走到最终审核；所有业务数据均为虚构。
 
-### 1. 把各处的工作放到同一条时间线
+### 1. 所有工作汇集到一处
 
-邮件、聊天、工单、提醒和报表汇集到 **Timeline**。不用逐个打开系统，也能看到什么刚到、
-什么变成了任务，以及什么正在等你处理。图中的每一行都标注了来源，下面保留原来的时间。
+邮件、聊天、工单、提醒和报表都进入同一条工作栏，并按需要处理的方式分组：
+**Urgent**、**On you**、**For later**、Advisor 的建议，以及 **FYI**。旁边的助手会说明刚到了什么、谁在等你，
+不用逐个打开各个系统。
 
-![时间线中的邮件、Teams、WhatsApp、GitHub、SQL 报表、助手和日历，每行同时显示来源与时间。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png)
+![工作栏把今天的事项分为 Urgent、On you、Advisor ideas 和 FYI，旁边是助手的早间摘要，列出谁在等你。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=chat)
 
-### 2. 把请求变成任务
+### 2. 让助手带你逐项处理
 
-Ruth 想要八月份的总额、与七月份的对比，以及按类别划分的明细。
-Taskuary 创建任务，保留原始请求，并关联负责处理的智能体。
+选择 **Walk me through my tasks**。助手每次把一件事带到对话里，形式就是你自己打开时看到的同一张任务卡片，
+下面是接下来的操作：**Next**、**Write reply**、**Start an agent**。按钮每次都做同样的事；
+其他需求直接在对话框里说，助手已经掌握这条消息、整个线程以及你过去的决定。
 
-![任务 TQ-0018 展示原始请求、负责人、任务状态和智能体工作区域。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png)
+![助手把 Ruth 的请求作为任务 TQ-0018 带入对话，下面是 Next、Write reply 和 Start an agent。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=chat)
 
-### 3. 查看智能体的工作过程
+### 3. 每个请求都成为带有完整经过的任务
 
-打开任务的 **Agent work**，查看分析过程并回答它的问题。
-这里的通用智能体整理支出数据、核对分类合计，并准备回复草稿。
+打开任何事项，都能看到它的来龙去脉：原始消息、分诊的结论和原因、由哪个智能体处理，以及回复进行到哪一步。
 
-![通用智能体整理供应商支出，展示总额、分类明细、环比和数据来源。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png)
+![Ruth 的请求对应的任务：原始消息、分诊结论、智能体，以及尚未撰写的回复。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=chat)
 
-### 4. 审核结果后再发送
+### 4. 智能体在对话里工作
 
-回复进入 **Review**。核对原始请求、金额、收件人和措辞，必要时编辑，
-最后点击 **Approve & send**。你也可以要求重新起草、拒绝，或标记为无需回复。
+点击 **Start an agent**，智能体就在同一张卡片里工作。这里的分析智能体整理支出数据、核对分类合计、
+注明数据来源，并准备回复草稿。任何内容都不会自动发出。
 
-![审核页面对照原始请求与回复草稿，并提供批准发送、重写和拒绝操作。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png)
+![分析智能体在对话中完成的供应商支出分析，包括分类合计、与七月的变化和数据来源。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=chat)
 
-### 5. 让助手带你看下一步
+### 5. 最后由你决定
 
-在 **Assistant** 中选择 **Walk me through my tasks**。
-助手把当前需要关注的任务带入对话，并提供直接打开任务的入口。
+准备好的回复放在任务上，旁边就是最初的请求。阅读、修改，确认无误后点击 **Approve & send**。
 
-![助手围绕 Ruth 的请求展开对话，并链接到对应任务。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png)
+![给 Ruth 的回复草稿在任务上等待审核，并提供 Approve & send、Reject 和 Regenerate with AI。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=chat)
 
-### 6. 用每日摘要开始一天
+### 6. 在忙起来之前开始一天
 
-打开 **Morning digest**，查看别人需要什么、哪些事情正在推进，以及今天的会议。
-日历就在摘要上方：这项支出分析需要在运营会议前准备好。
+每天早上，助手先在时间轴上列出今天的会议，再告诉你谁需要你回复。
+Ruth 的请求有明确的期限：11:30 的运营会议。
 
-![带有日历动画的每日摘要，展示运营会议和供应商规划会议。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif)
+![早间画面的动画特写：时间轴上的今日会议，以及正在等你的人和智能体。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=chat)
 
 ## 核心功能
 

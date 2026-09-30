@@ -165,5 +165,49 @@ class HeldMessagesKeepTheirPicturesTests(unittest.TestCase):
         self.assertNotIn('images', ingest._from_row(s.get_message(mid), s))
 
 
+
+class TheAiFailedTests(unittest.TestCase):
+    """An AI that failed was logged and answered with the pipe's facts - it read as the Assistant ignoring the question or
+    stuck. It says what went wrong and what to do, with Try again and the way on (the owner, 2026-09-30)."""
+    def _say(self, err):
+        def llm(*a, **k): raise Exception(err)
+        return concierge.say(MemoryStore(), 'what is waiting on me?', llm=llm)
+
+    def test_a_rate_limit_says_wait_and_offers_try_again_with_the_same_words(self):
+        out = self._say('Error code: 429 - rate limit reached')
+        self.assertTrue(out.get('error'))
+        self.assertIn('wait a few minutes', out['say'])
+        self.assertEqual(out['chips'][0], {'label': 'Try again', 'ask': 'what is waiting on me?'})
+
+    def test_a_conversation_too_long_says_start_a_new_chat(self):
+        self.assertIn('Start a new chat', concierge.brain_trouble(Exception("This model's maximum context length is 128000 tokens")))
+
+    def test_a_refused_key_points_at_the_connection(self):
+        self.assertIn('Connections', concierge.brain_trouble(Exception('401 Unauthorized: invalid api key')))
+
+    def test_anything_else_still_says_what_to_do(self):
+        said = concierge.brain_trouble(Exception('something odd'))
+        self.assertIn('something odd', said); self.assertIn('new chat', said)
+
+    def test_on_the_phone_try_again_is_a_pick_that_sends_the_words_again(self):
+        ra._ASKING.chat = {'channel': 'whatsapp', 'chat': 'c1', 'connector_id': None}
+        try:
+            text = ra.turn_text({'say': 'My AI is out of room.', 'item': None,
+                                 'chips': [{'label': 'Try again', 'ask': 'what is waiting?'}, {'verb': 'next', 'label': 'Next'}]},
+                                store=MemoryStore())
+            rows = dict(ra._ACTS.rows or [])
+        finally: ra._ASKING.chat = None
+        self.assertIn('Try again', text)
+        self.assertEqual(rows.get('Try again'), {'t': 'ask', 'text': 'what is waiting?'})
+
+
+class NeverADeadEndTests(unittest.TestCase):
+    def test_the_newest_line_with_nothing_to_press_offers_next(self):
+        from pathlib import Path
+        src = Path(__file__).resolve().parents[1].joinpath('website', 'src', 'AssistantView.jsx').read_text(encoding='utf-8')
+        self.assertIn('NEVER A DEAD END', src)
+        self.assertIn('? said : [{ verb: "next", label: "Next" }]', src)
+
+
 if __name__ == '__main__':
     unittest.main()

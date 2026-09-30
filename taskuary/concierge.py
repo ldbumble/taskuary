@@ -599,6 +599,31 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     return ''
 
 
+def brain_trouble(error) -> str:
+    """What went wrong with the Assistant's AI, and what to do about it - in words. A failed turn used to be logged and
+    answered with the pipe's facts, which read as the Assistant ignoring the question or being stuck (the owner, 2026-09-30:
+    "if assistant brain runs into ran out of tokens or api errors it should say so and tell user to restart chat if broken or
+    wait until error clears")."""
+    import re as _re
+    text = ' '.join(str(error or '').split())
+    low = text.lower()
+    detail = _re.sub(r'\s*\{.*$', '', text)[:160].rstrip(' :.')
+    if _re.search(r'context (length|window)|maximum context|too many tokens|token limit|prompt is too long|max_tokens|too long', low):
+        return ("My AI could not take this conversation any more - it has grown longer than it can read. Start a new chat "
+                "(the pencil at the top right) and ask again; your work and the pipe are untouched.")
+    if _re.search(r'rate.?limit|429|quota|insufficient_quota|usage limit|out of (credits|sessions|tokens)|overloaded|529|capacity', low):
+        return (f"My AI is out of room for the moment ({detail}). It clears on its own - wait a few minutes and try again, "
+                "or go on with Next.")
+    if _re.search(r'401|403|unauthori[sz]ed|invalid.*(key|token)|signed out|not logged in|login|expired', low):
+        return (f"My AI turned the request away - its sign-in or key needs attention ({detail}). Settings → Triage & agents "
+                "names which AI I use; Connections is where it is signed in.")
+    if _re.search(r'timed out|timeout|connection|network|unreachable|502|503|504|500|server error', low):
+        return (f"My AI did not answer - the service had a problem ({detail}). Try again in a moment; if it keeps failing, "
+                "start a new chat (the pencil at the top right).")
+    return (f"My AI ran into an error and gave me no answer ({detail or 'no reason given'}). Try again - if it keeps "
+            "happening, start a new chat (the pencil at the top right).")
+
+
 def walk_chips(left) -> list:
     """With nothing on the table there is nothing to DECIDE about - only the walk. Offered on the opening
     line and on every "nothing here" answer while the pipe still holds something, so Next is always
@@ -2764,7 +2789,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         say_ = f"{fallback(item, False, p['items'])} {NO_BRAIN}".strip()
         rec('assistant', say_)
         return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None}
-    reply, options, decision, call, did_read = '', [], None, None, False
+    reply, options, decision, call, did_read, failed = '', [], None, None, False, None
     try:
         # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a
         # project, the model read internal notes on CLI flags and timeouts, and answered in that register (the
@@ -2816,7 +2841,8 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             logger.info('concierge: the voice broke character - answering with the facts instead')
             reply, options = '', []
         _remember_sid(store, tid, llm)
-    except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
+    except Exception as e:
+        logger.warning(f'concierge: the model pass failed - {e}'); failed = e
     if call:
         # A MISS IS THE MODEL'S TO FIX, not the owner's to read. "No setting by that name - settings.list <group> names
         # them" is written for the model, and it reached the owner word for word (the 2026-09-24 audit). The model gets
@@ -2933,6 +2959,12 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+    # THE AI FAILED: say so and what to do, with Try again (the owner's own words, sent again) and the way on
+    if not reply and failed is not None and not decision:
+        say_ = brain_trouble(failed)
+        chips = [{'label': 'Try again', 'ask': text}, *(chips_for(store, item) or walk_chips(len(p['items'])))]
+        rec('assistant', say_)
+        return {'say': say_, 'options': [], 'chips': chips, 'decision': None, 'error': True}
     # a brain that answered with nothing is not "no AI": say what happened, never the missing-connector line
     if not reply: reply = fallback(item, False, p['items'], brain=True)
     chips = chips_for(store, item) or walk_chips(len(p['items']))

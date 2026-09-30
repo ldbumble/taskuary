@@ -163,7 +163,8 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         self.assertEqual(_row(s, mid)['NeedsYou'], 0)
         dock, _ = general.dock_task(s)
         said = [m['text'] for m in concierge.history(s, dock['TaskId'])]
-        self.assertTrue(any('replied in WhatsApp' in x and 'reply was taken care of' in x for x in said))
+        # ...and the Assistant does NOT stop the walk to say so: you sent it, the task's notes record it (2026-09-30)
+        self.assertFalse(any('reply was taken care of' in x for x in said))
 
     def test_an_earlier_owner_line_does_not_retire_a_later_ask(self):
         from taskuary.channels import ingest_own_message

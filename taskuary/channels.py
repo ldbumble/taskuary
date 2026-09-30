@@ -769,10 +769,11 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
         where = f'TQ-{tid:04d}'
         state = ' The task is still open because it has other work in progress.' \
             if task.get('Status') not in ('done', 'dropped') else ' I marked the task done.'
-    from . import concierge, funnel, general
-    concierge.record(store, general.dock_task(store)[0]['TaskId'], 'assistant',
-                     f'You replied {place} on {where}{excerpt}. '
-                     f'I removed the unused draft; the reply was taken care of.{state}')
+    # ...and NOT a line in the Assistant's conversation. You sent it yourself, the task's own notes say so, and a line
+    # carrying no choice stopped the walk dead on news you already had (the owner, 2026-09-30: "the assistant shouldn't just
+    # stop and say that"). `where`, `excerpt` and `state` stay for the log.
+    logger.info(f'you replied {place} on {where}{excerpt[:60]} - the unused draft was retired.{state}')
+    from . import funnel
     funnel.invalidate()
     # The review transition already wakes the UI, but this final wake happens after the durable
     # Assistant line was written, avoiding a race where an open chat fetched one write too early.

@@ -140,5 +140,30 @@ class OpenSaysWhatItIsTests(unittest.TestCase):
         self.assertIn("f\"Open {i.get('ref') or ''}\".strip(), _title_cut(", src)
 
 
+
+class HeldMessagesKeepTheirPicturesTests(unittest.TestCase):
+    def test_a_message_triaged_later_is_judged_with_its_picture(self):
+        """A photo with no words, triaged after it landed, was rebuilt from its row WITHOUT the photo - and judged on the chat
+        around it: a personal picture became a coding task and an agent (the owner, 2026-09-30)."""
+        import base64, os, tempfile
+        from taskuary import ingest
+        s = MemoryStore()
+        mid = s.add_message({'ExternalId': 'wa:1', 'Channel': 'whatsapp', 'FromName': 'Gail Moreno', 'BodyText': '(no text - see the attachment)',
+                             'SentAt': '2026-09-30 17:43:52', 'Status': 'pending', 'ConversationId': 'whatsapp:g'})
+        f = os.path.join(tempfile.mkdtemp(), 'photo.jpg')
+        with open(f, 'wb') as h: h.write(b'\xff\xd8\xff' + b'0' * 64)
+        with mock.patch.object(s, 'list_attachments', return_value=[{'ContentType': 'image/jpeg', 'Path': f}]):
+            msg = ingest._from_row(s.get_message(mid), s)
+        self.assertEqual(len(msg['images']), 1)
+        self.assertEqual(msg['images'][0][0], 'image/jpeg')
+        self.assertEqual(base64.b64decode(msg['images'][0][1])[:3], b'\xff\xd8\xff')
+
+    def test_no_picture_adds_nothing(self):
+        from taskuary import ingest
+        s = MemoryStore()
+        mid = s.add_message({'ExternalId': 'e1', 'Channel': 'email', 'BodyText': 'hello', 'Status': 'pending'})
+        self.assertNotIn('images', ingest._from_row(s.get_message(mid), s))
+
+
 if __name__ == '__main__':
     unittest.main()

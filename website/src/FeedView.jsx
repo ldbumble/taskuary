@@ -3397,15 +3397,19 @@ const Bubble = ({ m, fallback, context }) => {
             {shown}
           </Typography>}
       {long && m?.Channel !== "report" && (
-        <Typography variant="caption" onClick={() => setFull(!full)}
-          sx={{ display: "block", mt: 0.5, color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+        <Typography variant="caption" component="button" type="button" aria-expanded={full}
+          onClick={() => setFull(!full)} sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0,
+            display: "block", mt: 0.5, color: "#55697a", font: "inherit", fontWeight: 600,
+            textAlign: "left", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
           {full ? "show less ↑" : `show the whole message — ${rows.length} lines ↓`}
         </Typography>
       )}
       {raw && (
         <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
-          <Typography variant="caption" onClick={() => setShowRaw(!showRaw)}
-            sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#55697a" } }}>
+          <Typography variant="caption" component="button" type="button" aria-expanded={showRaw}
+            onClick={() => setShowRaw(!showRaw)} sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0,
+              color: DIM, font: "inherit", fontWeight: 600, textAlign: "left", cursor: "pointer",
+              "&:hover": { color: "#55697a" } }}>
             {showRaw ? "hide" : "show"} raw data — {raw.length.toLocaleString()} chars {showRaw ? "↑" : "↓"}
           </Typography>
           {showRaw && (
@@ -3419,8 +3423,10 @@ const Bubble = ({ m, fallback, context }) => {
       {/* the thread quoted underneath: folded away by default, one click to read */}
       {latest && quoted && (
         <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
-          <Typography variant="caption" onClick={() => setShowQuoted(!showQuoted)}
-            sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#55697a" } }}>
+          <Typography variant="caption" component="button" type="button" aria-expanded={showQuoted}
+            onClick={() => setShowQuoted(!showQuoted)} sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0,
+              color: DIM, font: "inherit", fontWeight: 600, textAlign: "left", cursor: "pointer",
+              "&:hover": { color: "#55697a" } }}>
             {showQuoted ? "hide" : "show"} quoted thread below it — {quoted.length.toLocaleString()} chars {showQuoted ? "↑" : "↓"}
           </Typography>
           {showQuoted && (

@@ -285,7 +285,9 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                 context = fallback_user if candidate != primary and fallback_user is not None else user
                 # ...and a schema is dropped for the brain that cannot carry one - per brain, so a
                 # CLI backup does not take the schema away from the API brain behind it
-                kw = kwargs if getattr(brain, 'takes_want', False) else {k: v for k, v in kwargs.items() if k != 'want'}
+                kw = {k: v for k, v in kwargs.items()
+                      if not (k == 'want' and not getattr(brain, 'takes_want', False))
+                      and not (k == 'web' and not getattr(brain, 'takes_web', False))}
                 out = brain(system, context, **kw)
                 failover.last_pick = candidate
                 failover.session_id = getattr(brain, 'session_id', None)
@@ -298,6 +300,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         raise last
     failover.last_pick, failover.session_id = primary, resume
     failover.takes_want = True          # it forwards one to each brain that can carry it, and drops it for the rest
+    failover.takes_web = any(getattr(b, 'takes_web', False) for _, b in brains)
     return failover
 
 
@@ -384,20 +387,28 @@ def tried(r) -> str:
 
 def _chatgpt_llm(cfg: dict, refresh_token: str):
     """The owner's ChatGPT plan as a brain. `key` is the sign-in's refresh token, not an API key; the model is the card's,
-    else the first one the plan lists. Text in, text out - an attached image is said to be absent, never sent."""
+    else the first one the plan lists. Images and web search go along when the plan's model accepts them."""
     from . import chatgptauth as ca
     if not refresh_token: raise RuntimeError('not signed in - click "Sign in with ChatGPT" on the ChatGPT card')
     picked = {}
-    def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
+    def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
         tok = ca.access_token(cfg, refresh_token)
         if 'model' not in picked:
             listed = [s for s, _ in ca.models(tok)] if not cfg.get('model') else []
             picked['model'] = cfg.get('model') or (listed[0] if listed else '')
             if not picked['model']: raise RuntimeError('the ChatGPT plan lists no models this account can use')
-        # the plan preview serves text only; a screenshot is said to be missing rather than silently dropped
-        if images: user = f'[{len(images)} attached image(s) not shown - this brain reads text only]\n\n{user}'
-        return ca.complete(tok, picked['model'], system, user, max_tokens, want)
-    llm.takes_want = True
+        # images and web search are both in the plan preview "when the model accepts them" - asked for, and dropped
+        # one at a time only when the plan answers that it cannot serve them
+        try: return ca.complete(tok, picked['model'], system, user, max_tokens, want, images=images, web=web)
+        except ca.Unsupported:
+            if web:
+                try: return ca.complete(tok, picked['model'], system, user, max_tokens, want, images=images)
+                except ca.Unsupported:
+                    if not images: raise
+            if not images: raise
+            note = f'[{len(images)} attached image(s) not shown - this model reads text only]\n\n{user}'
+            return ca.complete(tok, picked['model'], system, note, max_tokens, want)
+    llm.takes_want = llm.takes_web = True
     return llm
 
 
@@ -438,10 +449,13 @@ def make_llm(t, cfg: dict, key: str):
         import anthropic
         cli = anthropic.Anthropic(api_key=key)
         model = cfg.get('model') or 'claude-opus-5'
-        def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
+        def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
             # images FIRST: every provider reads a picture better when the question follows it
             content = ([{'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}}
                         for ct, b64 in (images or [])] + [{'type': 'text', 'text': user}]) if images else user
+            if web and not want:
+                got = _anthropic_web(cli, model, system, content, max_tokens)
+                if got is not None: return got
             # `want` is a schema the answer MUST fit. Anthropic has no response_format; a tool the
             # model is forced to call is the same thing - the tool's input schema is the answer's,
             # and what comes back is the tool call's arguments rather than prose.
@@ -455,7 +469,7 @@ def make_llm(t, cfg: dict, key: str):
                 call = next((b for b in r.content if b.type == 'tool_use'), None)
                 if call is not None: return json.dumps(call.input)
             return next((b.text for b in r.content if b.type == 'text'), '')
-        llm.takes_want = True
+        llm.takes_want = llm.takes_web = True
         return llm
     if t == 'openai':
         urls = ['https://api.openai.com/v1/chat/completions']
@@ -503,7 +517,10 @@ def make_llm(t, cfg: dict, key: str):
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
 
-    def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
+    def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
+        if web and not want and t in ('openai', 'azure_openai'):
+            got = _responses_web(t, cfg, headers, model, system, user, images, max_tokens)
+            if got is not None: return got
         # three independent compat axes: newer models reject max_tokens ("use
         # max_completion_tokens"), older Azure api-versions reject max_completion_tokens,
         # older Azure resources 404 the v1 url - and not every model behind this one schema can
@@ -540,7 +557,54 @@ def make_llm(t, cfg: dict, key: str):
             if out is not None: return out
         raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
     llm.takes_want = True
+    llm.takes_web = t in ('openai', 'azure_openai')
     return llm
+
+
+# LOOKING THINGS UP ON AN API BRAIN. Every provider here can search the web itself inside the one call - Anthropic's
+# server tools, OpenAI's and Azure's Responses API web_search - and Taskuary used to ask none of them, so a general
+# agent on an API key answered "research this vendor" from memory while the same agent on a CLI searched (the owner,
+# 2026-09-30: "even plain api can look things up before answering"). Asked only where the job is research - the
+# general agent - never for triage, which reads one message and would pay for a search on every mail. A provider,
+# model or account that refuses the tool answers the same question without it: None here means "ask it plainly".
+ANTHROPIC_WEB = ([{'type': 'web_search_20260209', 'name': 'web_search', 'max_uses': 5},
+                  {'type': 'web_fetch_20260209', 'name': 'web_fetch', 'max_uses': 5}],
+                 [{'type': 'web_search_20250305', 'name': 'web_search', 'max_uses': 5},      # models before 4.6
+                  {'type': 'web_fetch_20250910', 'name': 'web_fetch', 'max_uses': 5}])
+
+
+def _anthropic_web(cli, model, system, content, max_tokens):
+    import anthropic
+    for tools in ANTHROPIC_WEB:
+        msgs = [{'role': 'user', 'content': content}]
+        try:
+            for _ in range(5):          # a long search pauses the turn; it is continued, not restarted
+                r = cli.messages.create(model=model, max_tokens=max_tokens, system=system, messages=msgs, tools=tools)
+                if r.stop_reason != 'pause_turn': break
+                msgs = msgs + [{'role': 'assistant', 'content': r.content}]
+        except anthropic.BadRequestError as e:
+            _log_web('anthropic', e); continue
+        if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
+        return '\n\n'.join(b.text for b in r.content if b.type == 'text').strip()
+    return None
+
+
+def _responses_web(t, cfg, headers, model, system, user, images, max_tokens):
+    url = f"{(cfg.get('endpoint') or '').rstrip('/')}/openai/v1/responses" if t == 'azure_openai' else 'https://api.openai.com/v1/responses'
+    content = [{'type': 'input_image', 'image_url': f'data:{ct};base64,{b64}'} for ct, b64 in (images or [])] + [{'type': 'input_text', 'text': user}]
+    body = {'model': model, 'instructions': system, 'input': [{'role': 'user', 'content': content}],
+            'tools': [{'type': 'web_search'}], 'max_output_tokens': max_tokens}
+    try: r = post_retrying(url, headers, body, 180)
+    except requests.RequestException as e: _log_web(t, e); return None
+    if r.status_code != 200: _log_web(t, f'{r.status_code} {r.text[:200]}'); return None
+    out = r.json()
+    return out.get('output_text') or '\n\n'.join(c.get('text', '') for o in out.get('output') or [] if o.get('type') == 'message'
+                                                  for c in o.get('content') or [] if c.get('type') == 'output_text').strip()
+
+
+def _log_web(t, why):
+    from loguru import logger
+    logger.info(f'{t}: web search not available on this brain, answering without it - {str(why)[:200]}')
 
 
 def test_ai(store, cid: int) -> str:

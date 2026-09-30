@@ -11,7 +11,7 @@ const [url, outdir, label = "shot", only = ""] = process.argv.slice(2);
 if (!url || !outdir) { console.error("usage: canvas_shots.mjs <url?token=> <outdir> <label> [scenes]"); process.exit(2); }
 fs.mkdirSync(outdir, { recursive: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const VIEWS = { 1440: { width: 1440, height: 900, deviceScaleFactor: 1 }, 390: { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } };
+const VIEWS = { 1830: { width: 1830, height: 823, deviceScaleFactor: 1 }, 1440: { width: 1440, height: 900, deviceScaleFactor: 1 }, 390: { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } };
 
 const hush = (page) => page.evaluate(() => document.querySelectorAll(".MuiSnackbar-root").forEach((e) => (e.style.display = "none")));
 const visible = (page, sel) => page.evaluate((s) => [...document.querySelectorAll(s)].some((e) => e.getBoundingClientRect().width > 0), sel);
@@ -78,6 +78,8 @@ const SCENES = [
   ["settings-one", async (p) => click(p, "[data-tq-browse-card]", 1), "client"],
   ["settings-back", async (p) => click(p, "[data-tq-browse-back]"), "client"],
   ["settings-about", async (p) => { await click(p, '[data-tq-browse-chip="about"]'); await wait(300); return click(p, "[data-tq-browse-card]"); }, "client"],
+  ["settings-docs", async (p) => { await click(p, '[data-tq-browse-chip="docs"]'); await wait(1500); return true; }, "client"],
+  ["settings-doc-two", async (p) => click(p, "[data-tq-browse-card]", 1), "client"],
   ["nav-hub", async (p) => first(() => click(p, '[data-tq-nav="hub"]'), () => tab(p, "Hub"))],
   ["hub-one", async (p) => click(p, "[data-tq-post-open]"), "client"],
   ["hub-back", async (p) => click(p, "[data-tq-browse-back]"), "client"],

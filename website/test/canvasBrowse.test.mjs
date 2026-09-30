@@ -69,3 +69,13 @@ test("a link to a report or a connection that is gone says so, and opens nothing
   assert.match(conns, /if \(!direct\) setErr\(`That connection \(\$\{t\}\) is not here any more/);
   assert.match(conns, /note: err \|\| \(q \?/);
 });
+
+// the owner, 2026-09-29: "I don't see the rest of the docs ... we need sub settings to see all the files soul.md/counsel"
+// - on the tab the rail listed every document; in the canvas Docs was one card showing only the first
+test("Docs in the canvas lists every document the tab's rail did, and opens the one picked", () => {
+  const s = src("SettingsView.jsx");
+  const b = s.slice(s.indexOf("if (browse) {"), s.indexOf("return browse({", s.indexOf("if (browse) {")));
+  assert.match(b, /docsTree\(docCat\)/, "the same tree the rail drew: documents, profiles, playbooks, How it works");
+  assert.match(s, /setDocSel\(e\.sel\.action \? \{ \.\.\.e\.sel, n: Date\.now\(\) \} : e\.sel\)/);
+  assert.match(s, /<DocsView onCatalog=\{onCatalog\} \/>/, "the profiles and playbooks are listed before any document is opened");
+});

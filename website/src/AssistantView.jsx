@@ -47,7 +47,7 @@ import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
-import CanvasItem, { canvasItemHeight, showsTask } from "./CanvasItem.jsx";
+import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -548,7 +548,8 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
     also: verbs.filter((c) => c.verb !== "next").map((c) => ({ verb: c.verb, label: c.label, title: c.hint, disabled: actions.busy, onClick: (e) => actions.chip(c, e?.currentTarget) })) };
   return (
     <>
-      <div className={passed ? "tq-msg tq-step" : "tq-msg"}>
+      {/* the item on the table takes the canvas's whole width, whatever card it wears (the owner, 2026-09-29) */}
+      <div className={passed ? "tq-msg tq-step" : live && card ? "tq-msg tq-live-card" : "tq-msg"}>
         {!passed && <div className="avatar"><AssistantMark /></div>}
         <div className="body">
           {/* NOT OVER A LIVE CARD: the card's lead says who wants what, and the sentence above it said
@@ -1604,7 +1605,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     else if (request.kind === "task") openTaskRef.current?.(request);
     else if (request.kind === "new") setNewNonce((x) => x + 1);
   }, [request, state]);
-  const canvasState = useMemo(() => ({ height: canvasItemHeight(bodyH), expanded, folded: foldedKey, browsing, phone,
+  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey, browsing, phone]);
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);

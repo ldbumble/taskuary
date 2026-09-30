@@ -121,5 +121,24 @@ class PipeListSaysForLaterTests(unittest.TestCase):
         self.assertIn('back in', out.split('FOR LATER')[1])
 
 
+
+class CardSaysItOnceTests(unittest.TestCase):
+    def test_a_task_written_from_one_pasted_paragraph_prints_it_once(self):
+        """TQ-0887 shape: the New box made the paragraph the title, the message's subject and the summary - the phone card
+        printed it three times (the owner, 2026-09-30)."""
+        para = 'why do I get thirty of these a day? One or more errors were encountered while editing user x. Alert E09.'
+        self.assertTrue(ra._repeats(para, ['Why do I get thirty of these a day?']))
+        self.assertTrue(ra._repeats('One or more errors were encountered while editing user x. Alert E09.', ['Why…', para]))
+        self.assertFalse(ra._repeats('#113 · keep inter-company rows in the export', ['Kai wants the export fixed']))
+
+
+class OpenSaysWhatItIsTests(unittest.TestCase):
+    def test_each_open_choice_names_its_task(self):
+        """"Open TQ-0800 / Open TQ-0876 / Open TQ-0887" said nothing about what they were (the owner, 2026-09-30)."""
+        import inspect
+        src = inspect.getsource(concierge)
+        self.assertIn("f\"Open {i.get('ref') or ''}\".strip(), _title_cut(", src)
+
+
 if __name__ == '__main__':
     unittest.main()

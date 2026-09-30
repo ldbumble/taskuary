@@ -47,6 +47,22 @@ class OneRoadTests(unittest.TestCase):
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})
         fresh.assert_called_once()
 
+    def test_continue_stays_on_the_cli_that_made_the_conversation_even_when_it_cannot_reopen(self):
+        """TQ-0887 shape: codex made the conversation, codex could not reopen it - the way on is a fresh CODEX session with the
+        handover, never the default CLI (the owner, 2026-09-30: "it should start as codex if i hit continue of course")."""
+        from fastapi import HTTPException
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
+             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coder', 'Brain': 'codex'}, '')), \
+             mock.patch.object(server, 'continue_session', side_effect=HTTPException(422, 'codex is out of sessions')), \
+             mock.patch.object(server, 'continue_task', return_value={'session': 'sid'}) as fresh:
+            out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'check the E09 mails'}).json()
+        self.assertFalse(out['resumed'])
+        self.assertEqual(fresh.call_args[0][1].brain, 'codex')
+        self.assertIn('check the E09 mails', fresh.call_args[0][1].instruction)
+        self.assertIn('fresh codex session', s.list_comments(tid)[-1]['Body'])
+
 
 class PhoneTests(unittest.TestCase):
     def test_the_pick_asks_and_the_next_typed_line_is_the_note(self):

@@ -1879,7 +1879,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                    f"I'll bring {'it' if n == 1 else 'them'} round again in a while - or open {'it' if n == 1 else 'one'} now.")
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
             # What waits on the owner first - a close-out, an agent's question - then the rest.
-            opens = [{'verb': 'open', 'key': i['key'], 'label': f"Open {i.get('ref') or _title_cut(i.get('title') or 'it', 40)}"}
+            # ...each saying WHAT it is, not a bare number (the owner, 2026-09-30: "have to write what they are about a little")
+            opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
+                         f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
                      for i in sorted(waiting, key=lambda i: not funnel.on_you(i))[:3]]
         elif only and left:
             # the filtered set is done; what remains is the rest of the pipe - offer it rather than call the day over

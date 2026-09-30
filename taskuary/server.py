@@ -280,6 +280,7 @@ class DecideBody(BaseModel):
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
+    brain: str | None = None         # WHICH CLI - continue_task read it, but nothing could ever send it
 class DocBody(BaseModel): content: str
 class SettingBody(BaseModel): name: str; value: str
 class SourceBody(BaseModel):
@@ -1528,8 +1529,22 @@ def continue_work(task_id: int, body: ContinueBody = None):
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
     note = with_images(note, imgs).strip()
     row, _why = _resumable(task_id)
-    if row: out = continue_session(task_id, CodeBody(instruction=note or None))
-    else: out = continue_task(task_id, CodeBody(instruction=(f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT))   # their words lead
+    # CONTINUE IS THE SAME CLI (the owner, 2026-09-30: "it should start as codex if i hit continue of course"): the one that made
+    # the conversation, else the one that last worked the task - never whatever the default happens to be today
+    last = row or store.last_transcript(task_id) or {}
+    brain = (last.get('Brain') or None) if isinstance(last, dict) else None
+    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, instruction=(f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT))   # their words lead
+    if row:
+        # the conversation belongs to the CLI that made it; when THAT CLI cannot open now (out of sessions, signed out), a fresh
+        # session seeded with the handover is the way on - not an error (the owner, 2026-09-30, TQ-0887: codex made it, codex was
+        # unavailable, and every Continue failed)
+        try: out = continue_session(task_id, CodeBody(instruction=note or None))
+        except HTTPException as e:
+            if e.status_code != 422: raise
+            store.add_comment(task_id, 'router', 'agent', f"{brain or row['Agent']} could not reopen its conversation ({e.detail}); "
+                                                          f"starting a fresh {brain or 'agent'} session with the handover instead.")
+            row, out = None, fresh()
+    else: out = fresh()
     store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'coding', 'resumed': bool(row), 'note': bool(note)})
     return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': bool(row), **(out if isinstance(out, dict) else {})}
 

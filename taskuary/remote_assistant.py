@@ -1484,6 +1484,19 @@ def summary_rest(store, item: dict | None) -> str:
     return ' '.join(re.split(r'(?<=[.!?])\s+', summary)[1:]).strip()
 
 
+def _repeats(line: str, shown: list) -> bool:
+    """A line that only says again what is already on the card: its opening is in a shown line, or a shown line's opening is
+    in it. A task written from one pasted paragraph has that paragraph as its title, its message's subject AND its summary,
+    and the card printed it three times (the owner, 2026-09-30, TQ-0887) - the desktop row keeps one (fyiRow.gistFor)."""
+    norm = lambda s: ' '.join(str(s or '').split()).lower().rstrip('…').strip()
+    a = norm(line)
+    if not a: return True
+    for s in shown:
+        b = norm(s)
+        if b and (a[:48] in b or b[:48] in a): return True
+    return False
+
+
 def story_block(store, item: dict | None, draft: str = '', say: str = '', full: bool = False) -> str:
     """The quiet part: a header (state · ref), who asked and what they want, then the agent and its evidence.
     `full`: the owner opened this one to READ it - the whole message, not its opening (full_body)."""
@@ -1513,9 +1526,10 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     # what the thing IS, in its own words - a pull request's title and number, an email's subject - and the rest of the
     # summary: the first sentence says who wants what, never what it is (the owner, 2026-09-28: "at least the title")
     subj = subject_of(store, it)
-    if subj and re.sub(r'^(PR |Issue )?#\d+( ·)?\s*', '', subj).lower() not in (said or '').lower(): lines.append(subj)
+    if subj and re.sub(r'^(PR |Issue )?#\d+( ·)?\s*', '', subj).lower() not in (said or '').lower() and not _repeats(subj, [said]):
+        lines.append(_cut(subj, 280))
     rest = summary_rest(store, it)
-    if rest: lines.append(_cut(rest, 280))
+    if rest and not _repeats(rest, [said, subj]): lines.append(_cut(rest, 280))
     if not it.get('tid') and say and kind != 'agentdone' and (not said or said.lower() not in say.lower()): lines.append(say)
     # their own words, when nothing of yours answers them yet (a draft puts them behind More)
     whole = full_body(store, it) if full else ''

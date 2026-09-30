@@ -17,7 +17,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono } from "./theme.jsx";
-import { ChannelIcon, AgentPicker, useAgents, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, AgentPicker, MicButton, useAgents, TaskuaryMark } from "./ui.jsx";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, planTask } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
@@ -98,6 +98,10 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
         : kind === "agent" ? (how === "chat" ? "why did Riverbend's census move four points in July?"
           : "work out why the nightly export drops the last facility")
         : "chase the Ashgrove AP replacement"}
+      // SAID, NOT TYPED (the owner, 2026-09-30: "can't ... use voice notes to write this prompt?"): the composer's own mic,
+      // its words appended where the typing would go
+      InputProps={{ endAdornment: <MicButton size={18} sx={{ alignSelf: "flex-start", width: 30, height: 30, p: 0, color: "#6e685f" }}
+        onText={(t) => changed({ target: { value: value ? `${value} ${t}` : t } })} /> }}
       sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
   );
 }));

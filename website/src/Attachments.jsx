@@ -33,6 +33,9 @@ const KIND = { pdf: "PDF", sheet: "XLSX", excel: "XLSX", csv: "CSV", zip: "ZIP",
 const kindOf = (a) => Object.entries(KIND).find(([k]) => (a.content_type + " " + a.name).toLowerCase().includes(k))?.[1]
   || (a.name.split(".").pop() || "file").slice(0, 5).toUpperCase();
 
+// a mail whose body points at a picture it does not carry ([image: ...], cid:) - worth a "look for attachments" offer
+export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
+
 export const Attachments = ({ messageId, canFetch, dense }) => {
   const [items, setItems] = useState(null);
   const [big, setBig] = useState(null);

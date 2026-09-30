@@ -49,8 +49,12 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
     <Box ref={box} data-tq-canvas-item={card.key} data-tq-pinned={pin ? "" : undefined}
       sx={{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: "8px",
+        // ...but a view with NO PANE in it (a stopped agent, a note, a closed task) is only as tall as what it says: the full
+        // height left a screen of blank canvas under three short bars (the owner, 2026-09-30: "what's with extra space???").
+        // A pane - terminal, agent chat, browser - still gets the one height it is sized for, so the pty is never grown.
+        ...(!pin && !phone ? { "&:not(:has(.xterm, [class*='tq-aui'], canvas, iframe))": { height: "auto", maxHeight: h } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
-      <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
+      <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex" }}>
       <TaskPage taskId={card.tid} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
         openAct={act} onActOpened={() => setAct(null)}
         expanded={expanded} onExpand={onExpand}

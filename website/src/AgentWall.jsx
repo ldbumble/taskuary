@@ -76,8 +76,9 @@ const Note = ({ n, onOpenTask }) => {
           <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{n.Agent}</Typography>
           <Kind kind={n.Kind} />
           {!!n.TaskId && (
-            <Typography onClick={() => onOpenTask?.(n.TaskId)}
-              sx={{ ...mono, fontSize: 10.5, color: "#55697a", cursor: onOpenTask ? "pointer" : "default",
+            <Typography component="button" type="button" disabled={!onOpenTask} onClick={() => onOpenTask?.(n.TaskId)}
+              sx={{ ...mono, appearance: "none", border: 0, bgcolor: "transparent", p: 0,
+                fontSize: 10.5, color: "#55697a", cursor: onOpenTask ? "pointer" : "default",
                 "&:hover": { textDecoration: onOpenTask ? "underline" : "none" } }}>
               TQ-{String(n.TaskId).padStart(4, "0")}
             </Typography>

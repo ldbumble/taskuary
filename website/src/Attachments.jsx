@@ -53,8 +53,9 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
   };
   if (items === null) return null;
   if (!items.length) return canFetch ? (
-    <Typography variant="caption" onClick={busy ? undefined : fetchNow}
-      sx={{ color: err ? FAINT : ACCENT2, cursor: busy ? "default" : "pointer", display: "inline-flex",
+    <Typography variant="caption" component="button" type="button" disabled={busy} onClick={fetchNow}
+      sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0,
+        color: err ? FAINT : ACCENT2, cursor: busy ? "default" : "pointer", display: "inline-flex",
         alignItems: "center", gap: 0.3, mt: 0.5, fontSize: 10.5, "&:hover": { color: err ? FAINT : "#55697a" } }}>
       {busy ? <CircularProgress size={10} /> : <AttachFileIcon sx={{ fontSize: 12 }} />}
       {err || "look for attachments on this mail"}
@@ -71,8 +72,9 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
       {imgs.length > 0 && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
           {imgs.map((a) => (
-            <Box key={a.id} onClick={() => setBig(a)} title={`${a.name} · ${kb(a.size)} — click to enlarge`}
-              sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", cursor: "zoom-in",
+            <Box key={a.id} component="button" type="button" onClick={() => setBig(a)}
+              title={`${a.name} · ${kb(a.size)} — click to enlarge`}
+              sx={{ appearance: "none", p: 0, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", cursor: "zoom-in",
                 bgcolor: "#fff", alignSelf: "flex-start", maxWidth: "100%",
                 "&:hover": { borderColor: "#d8cfbe" } }}>
               <Box component="img" src={attUrl(a)} alt={a.name}

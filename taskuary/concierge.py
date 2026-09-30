@@ -2720,7 +2720,8 @@ def _chat_proposed(store, dock_tid: int, oid: str) -> bool:
     return False
 
 
-def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None) -> dict:
+def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
+        open_card: str | None = None) -> dict:
     """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
     them (PW-121): a question is answered, a subject named is pulled in, and a decision becomes a PROPOSAL the
     owner confirms (PW-123/124) - except Next, which moves the walk and marks nothing, and a reply request, which
@@ -2761,6 +2762,9 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         raw = str(llm(system,
                       f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}\n\n"
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
+                      # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
+                      # mean that card - a connector, a settings group, a report - when no item is on the table
+                      + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' means that card; its own operations set it up\n\n" if open_card and not item else '')
                       + f"The owner says: {text}\nAnswer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
                       + ('If this is a decision about the item on the table, CALL it (bucket table).' if item else
                          'If they ask for something to be done, CALL it now - the card is their confirmation.'),

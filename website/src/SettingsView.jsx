@@ -323,7 +323,8 @@ const PageHead = ({ page, first }) => (
 // SettingsView instead - two components apart, so the panel's "go to Connections" was a
 // ReferenceError waiting for a click. The scope test only tracks set* setters, so eslint's
 // no-undef is what caught it before it shipped.
-function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDocSel, onCatalog }) {
+// `only` (the assistant canvas): draw ONE page - and on Configuration, one group of it - instead of the whole document
+function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDocSel, onCatalog, only = null }) {
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
@@ -622,8 +623,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       // by reading rather than by guessing which tab it was hiding on (the owner, 2026-09-18).
       return (
         <Box>
-          <AssistantChanges />
-          {cfgGroups.map((g) => (
+          {!only?.group && <AssistantChanges />}
+          {cfgGroups.map((g) => (only?.group && g !== only.group ? null :
             <Box key={g} sx={{ mb: 4.5 }}>
               <SectionHead page="config" name={g} />
               {panels[g]}
@@ -842,9 +843,10 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   return (
     <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      {NAV.map((k, i) => (
+      {/* ...or, on the assistant canvas, the one page it opened (`only`), without its heading - the canvas's frame says it */}
+      {NAV.map((k, i) => (!only || only.page === k) && (
         <React.Fragment key={k}>
-          <PageHead page={k} first={!i} />
+          {!only && <PageHead page={k} first={!i} />}
           {body(k)}
         </React.Fragment>
       ))}
@@ -886,7 +888,9 @@ const sameSel = (a, b) => !!a && !!b && (a.action || "") === (b.action || "")
   && (a.group || "") === (b.group || "") && (a.doc || "") === (b.doc || "");
 const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap beside it
 
-export default function SettingsView({ onNavigate }) {
+// `browse` (the assistant canvas, CanvasBrowse.jsx): the pages are the sections, Configuration's groups its cards, and one
+// group (or one page) opens with its own controls - drawn through the canvas's frame instead of this tab's rail.
+export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null }) {
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
   // Docs' rail entries switch the document, so the selection belongs here beside `page` - and the
   // catalog they draw comes from DocsView, which already fetches and derives both lists.
@@ -999,6 +1003,26 @@ export default function SettingsView({ onNavigate }) {
     const want = g ? decodeURIComponent(g[1]) : "";
     goTo(m[1], (SECTIONS[m[1]] || []).includes(want) ? want : "");
   }, [goTo]);
+
+  if (browse) {
+    const section = browseState.section ?? null;
+    const knobsIn = (g) => Object.values(schema.knobs || {}).filter((k) => k.group === g).length;
+    const cards = section === "config" ? GROUPS.map((g) => ({ key: g, title: g, sub: `${knobsIn(g) || "its own panel"}${knobsIn(g) ? " settings" : ""}` }))
+      : section ? [{ key: section, title: PAGES[section].title, sub: PAGES[section].desc }] : [];
+    const open = browseState.open;
+    return browse({
+      title: "Settings",
+      summary: "how Taskuary works for you · pick a section",
+      sections: NAV.map((k) => ({ key: k, label: PAGES[k].title })),
+      section,
+      onSection: (key) => onBrowseState?.({ section: key, open: null }),
+      cards: cards.map((c) => ({ ...c, onOpen: () => onBrowseState?.({ ...browseState, open: c.key }) })),
+      detail: open ? <SettingsPages only={{ page: section, group: section === "config" ? open : null }} q="" setQ={() => {}} onNavigate={onNavigate}
+        onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
+      onBack: () => onBrowseState?.({ ...browseState, open: null }),
+      openLabel: open ? `the settings group "${section === "config" ? open : PAGES[section]?.title}" (Settings)` : "",
+    });
+  }
 
   return (
     // THE BLOCK IS CENTRED, NOT THE PAGE INSIDE IT. Capping the page's width while the grid around

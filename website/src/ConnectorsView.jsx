@@ -1489,7 +1489,9 @@ function AlchemyWalletGuide({ onBack, onData }) {
   </Box>;
 }
 
-export default function ConnectorsView({ onNavigate }) {
+// `browse` (the assistant canvas, CanvasBrowse.jsx): draw the catalogue's groups, cards and one connector's detail through
+// the canvas's frame instead of this tab's rail - same data, same cards, same detail, same controls.
+export default function ConnectorsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null }) {
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
   const [types, setTypes] = useState([]);
@@ -1539,19 +1541,22 @@ export default function ConnectorsView({ onNavigate }) {
 
   if (!connectors) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
-  if (open?.kind === "agents") return <CliConnectionsPage onBack={() => setOpen(null)} />;
-  if (open?.kind === "voice-vocabulary") return <VoiceVocabulary onBack={() => setOpen(null)} />;
-  if (open?.kind === "alchemy-wallet") return <AlchemyWalletGuide onBack={() => setOpen(null)}
-    onData={() => { const c = byType.alchemy; if (c) setOpen({ kind: "connector", id: c.ConnectorId }); }} />;
-  if (open?.kind === "connector") {
-    const conn = connectors.find((c) => c.ConnectorId === open.id);
-    if (!conn) return null;
-    const shared = { conn, reload: load, onBack: () => setOpen(null),
-      onCreated: (id) => setOpen({ kind: "connector", id }) };
-    if (conn.Type === "mssql") return <MssqlDetail key={conn.ConnectorId} {...shared} drivers={drivers} />;
-    if (conn.Type === "winrm") return <WinrmDetail key={conn.ConnectorId} {...shared} />;
-    if (DATA_META[conn.Type]) return <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />;
-    return <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} />;
+  // back to the list: the tab's own state, and the canvas's line when it is browsing
+  const back = () => { setOpen(null); onBrowseState?.({ ...browseState, open: null }); };
+  const conn = open?.kind === "connector" ? connectors.find((c) => c.ConnectorId === open.id) : null;
+  const shared = conn ? { conn, reload: load, onBack: back, onCreated: (id) => setOpen({ kind: "connector", id }) } : null;
+  const detail = open?.kind === "agents" ? <CliConnectionsPage onBack={back} />
+    : open?.kind === "voice-vocabulary" ? <VoiceVocabulary onBack={back} />
+    : open?.kind === "alchemy-wallet" ? <AlchemyWalletGuide onBack={back}
+      onData={() => { const c = byType.alchemy; if (c) setOpen({ kind: "connector", id: c.ConnectorId }); }} />
+    : !conn ? null
+    : conn.Type === "mssql" ? <MssqlDetail key={conn.ConnectorId} {...shared} drivers={drivers} />
+    : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
+    : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
+    : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} />;
+  if (!browse) {
+    if (detail) return detail;
+    if (open?.kind === "connector") return null;
   }
 
   /* ── landing: searchable grouped catalog ── */
@@ -1695,6 +1700,31 @@ export default function ConnectorsView({ onNavigate }) {
     .map((c) => ({ ...c, crumb: g.title }))) : [];
 
   const shown = groups.find((g) => g.title === group) || groups[0];
+
+  if (browse) {
+    const all = groups.flatMap((g) => g.cards);
+    const connected = connectors.filter((c) => c.Active && (c.HasSecret || c.LastSyncAt) && !c.LastError).length;
+    const openCard = all.find((c) => c.key === browseState.open);
+    const inSection = q ? hits : (groups.find((g) => g.title === browseState.section)?.cards || []);
+    return browse({
+      title: "Connections",
+      summary: `${connected} connected · ${all.filter((c) => c.planned).length} more in the catalogue · pick a section`,
+      sections: groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null })),
+      section: q ? "" : browseState.section ?? null,
+      onSection: (key) => { setQ(""); setOpen(null); onBrowseState?.({ section: key, open: null }); },
+      note: q ? "" : groups.find((g) => g.title === browseState.section)?.note || "",
+      cards: inSection.map((c) => ({ key: c.key, node: <ConnCard c={{ ...c, go: c.go && (() => { c.go(); onBrowseState?.({ ...browseState, open: c.key }); }) }} /> })),
+      detail, onBack: back,
+      openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : "",
+      search: (
+        <Box component="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search connectors…"
+          aria-label="Search connectors" data-tq-browse-search=""
+          sx={{ mt: 1.5, width: "100%", boxSizing: "border-box", height: 34, px: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px",
+            fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "#fff", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
+      ),
+      empty: q ? `Nothing matches “${q}”.` : "Nothing in this section yet.",
+    });
+  }
 
   return (
     <SideRail title="Connections" q={q} setQ={setQ}

@@ -26,3 +26,27 @@ class RelayContextTests(unittest.TestCase):
         t = s.create_task({'Title': 'Renew the domain', 'Kind': 'task', 'Status': 'open'}, 'owner')
         with mock.patch.object(concierge, '_live', return_value=[]):
             self.assertNotIn('SCREEN', concierge.task_now(s, t))
+
+
+class OpenCardContextTests(unittest.TestCase):
+    """A card browsed open in the canvas (a connector, a settings group, a report) is what "this" means in the next turn."""
+    def test_the_open_card_rides_the_turn(self):
+        s = store()
+        seen = {}
+        def llm(system, prompt, **kw):
+            seen['prompt'] = prompt
+            return 'It reads card spend once it is connected.'
+        with mock.patch.object(concierge, '_live', return_value=[]):
+            out = concierge.say(s, 'what does this one do?', llm=llm, open_card='the Spendly connector card (Connections - Finance), not connected')
+        self.assertIn('ON SCREEN NOW: the Spendly connector card (Connections - Finance), not connected', seen['prompt'])
+        self.assertTrue(out['say'])
+
+    def test_no_card_no_line(self):
+        s = store()
+        seen = {}
+        def llm(system, prompt, **kw):
+            seen['prompt'] = prompt
+            return 'Hello.'
+        with mock.patch.object(concierge, '_live', return_value=[]):
+            concierge.say(s, 'hi', llm=llm)
+        self.assertNotIn('ON SCREEN NOW', seen['prompt'])

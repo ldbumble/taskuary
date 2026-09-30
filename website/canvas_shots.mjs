@@ -63,15 +63,23 @@ const SCENES = [
   ["agent-collapse", async (p) => click(p, "[data-tq-expand]"), "client"],
   ["nav-new", async (p) => click(p, '[data-tq-nav="new"]')],
   ["nav-reports", async (p) => { await p.keyboard.press("Escape"); return first(() => click(p, '[data-tq-nav="reports"]'), () => tab(p, "Reports")); }],
-  ["browse-open-report", async (p) => click(p, "[data-tq-browse-card]"), "client"],
-  ["browse-back-reports", async (p) => click(p, "[data-tq-browse-back]"), "client"],
+  ["reports-list", async (p) => click(p, '[data-tq-browse-chip="reports"]'), "client"],
+  ["reports-one", async (p) => click(p, "[data-tq-browse-card] > div > div"), "client"],
+  ["reports-back", async (p) => click(p, "[data-tq-browse-back]"), "client"],
+  ["reports-new", async (p) => click(p, '[data-tq-browse-chip="new-report"]'), "client"],
   ["nav-connections", async (p) => first(() => click(p, '[data-tq-nav="connections"]'), () => tab(p, "Connections"))],
-  ["browse-section", async (p) => click(p, "[data-tq-browse-chip]", 1), "client"],
-  ["browse-one", async (p) => click(p, "[data-tq-browse-card]"), "client"],
-  ["browse-back", async (p) => click(p, "[data-tq-browse-back]"), "client"],
+  ["connections-list", async (p) => click(p, '[data-tq-browse-chip="Email"]'), "client"],
+  ["connections-one", async (p) => click(p, "[data-tq-browse-card] > div"), "client"],
+  ["connections-back", async (p) => click(p, "[data-tq-browse-back]"), "client"],
+  ["connections-search", async (p) => { const ok = await click(p, "[data-tq-browse-search]"); if (ok) await p.keyboard.type("sql"); return ok; }, "client"],
   ["nav-settings", async (p) => first(() => click(p, '[data-tq-nav="settings"]'), () => tab(p, "Settings"))],
-  ["settings-group", async (p) => click(p, "[data-tq-browse-chip]", 2), "client"],
+  ["settings-list", async (p) => click(p, '[data-tq-browse-chip="config"]'), "client"],
+  ["settings-one", async (p) => click(p, "[data-tq-browse-card]", 1), "client"],
+  ["settings-back", async (p) => click(p, "[data-tq-browse-back]"), "client"],
+  ["settings-about", async (p) => { await click(p, '[data-tq-browse-chip="about"]'); await wait(300); return click(p, "[data-tq-browse-card]"); }, "client"],
   ["nav-hub", async (p) => first(() => click(p, '[data-tq-nav="hub"]'), () => tab(p, "Hub"))],
+  ["hub-one", async (p) => click(p, "[data-tq-post-open]"), "client"],
+  ["hub-back", async (p) => click(p, "[data-tq-browse-back]"), "client"],
   ["tasks-tab", async (p) => (await tab(p, "Tasks")) && (await wait(1500), first(() => click(p, "[data-tq-task-row]"), () => visible(p, "[data-tq-task-page]")))],
   ["board", async (p) => tab(p, "Board")],
 ];
@@ -91,7 +99,7 @@ const SCENES = [
     await page.evaluate(() => document.querySelectorAll(".MuiDialog-root").forEach((d) => d.remove()));
     for (const [name, step, kind] of SCENES) {
       if (only && !only.split(",").includes(name)) continue;
-      if (w === 390 && /^(rail|filter|timeline|work|section|row)/.test(name)) await openRail(page);
+      if (w === 390 && /^(rail|filter|timeline|work|section|row|agent-row|nav-)/.test(name)) await openRail(page);
       const before = pileHits.length;
       let ok = false;
       try { ok = await step(page, w); } catch (e) { ok = false; }

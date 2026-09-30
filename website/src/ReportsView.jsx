@@ -315,7 +315,9 @@ export const judgeQuestions = (c, lines = ROUTE_LINES) => aiLines(c, lines)
 // the short name a replayed run wears, so reading down the strip the DIFFERENCE is what stands out
 const LINE_CHIP = { timeline: "Reports", alert: "reached you", send: "sent out" };
 
-export default function ReportsView() {
+// `browse` (the assistant canvas, CanvasBrowse.jsx): Reports and Workflows are the sections, each report its tab row, and
+// one report its own editor - drawn through the canvas's frame instead of this tab's rail.
+export default function ReportsView({ browse = null, browseState = {}, onBrowseState = null }) {
   const [sources, setSources] = useState(null);
   const [types, setTypes] = useState([]);
   const [connectors, setConnectors] = useState([]);
@@ -388,18 +390,91 @@ export default function ReportsView() {
     { key: "new-invoices", label: "+ Monthly invoices" },
     { key: "new-agent", label: "+ AI agent" },
   ];
-  const workflowOverview = bucket === "workflows";
+  // the canvas keeps its own place: a section, then one report (or a new one) open in it
+  const bucketNow = browse ? (browseState.open ?? browseState.section ?? "reports") : bucket;
+  const workflowOverview = bucketNow === "workflows";
   const baseList = workflowOverview ? workflowSources : reportSources;
   const list = (q ? sources : baseList).filter((s) => !q || titleOf(s).toLowerCase().includes(q.toLowerCase()));
-  const openId = typeof bucket === "number" ? bucket : null;
-  const open = !q && (openId != null || ["new-report", "new-invoices", "new-agent", "draft"].includes(bucket));
+  const openId = typeof bucketNow === "number" ? bucketNow : null;
+  const open = !q && (openId != null || ["new-report", "new-invoices", "new-agent", "draft"].includes(bucketNow));
   const selectedSource = sources.find((s) => s.SourceId === openId);
-  const starter = bucket === "new-invoices" ? { type: "zoho_monthly_invoices", title: "Monthly customer invoices", cron: "0 9 1 * *", customers: [] }
-    : bucket === "new-agent" ? { type: "agent", access: "write", title: "", every_minutes: "" } : {};
+  const starter = bucketNow === "new-invoices" ? { type: "zoho_monthly_invoices", title: "Monthly customer invoices", cron: "0 9 1 * *", customers: [] }
+    : bucketNow === "new-agent" ? { type: "agent", access: "write", title: "", every_minutes: "" } : {};
   const selectedConfig = selectedSource ? parse(selectedSource.ConfigJson) : (draft || starter);
   const invoiceOpen = selectedConfig.type === "zoho_monthly_invoices";
   const workflowOpen = isWorkflowConfig(selectedConfig);
   const backTo = workflowOpen ? "workflows" : "reports";
+
+  // one report open: the tab's rail moves, or the canvas's line does
+  const openOne = (sid) => { setQ(""); if (browse) onBrowseState?.({ ...browseState, open: sid }); else setBucket(sid); };
+  const row = (s) => {
+        const c = parse(s.ConfigJson);
+        // both halves, not the first one: "on startup" alone hid the Monday cron behind it
+        const sched = [c.on_startup && startupText(c), c.cron && cronText(c.cron),
+          c.every_minutes && `every ${c.every_minutes}m`, c.daily_at && `daily ${c.daily_at}`]
+          .filter(Boolean).join(" + ");
+        // NO CLOCK IS A REPORT THAT STOPPED (D2, the owner 2026-09-28): it said "daily" and ran only by hand, so
+        // it wears a red border and says so - a workflow is started by hand on purpose and is left alone
+        const unscheduled = !sched && !workflowOverview;
+        return (
+          <Box key={s.SourceId} sx={{ borderBottom: `1px solid ${BORDER}`,
+            ...(unscheduled ? { border: `1px solid ${ALERT}`, borderRadius: 1, my: 0.5, px: 1 } : {}) }}>
+          <Box onClick={() => openOne(s.SourceId)}
+            sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
+              "&:hover": { bgcolor: "#faf8f4" } }}>
+            <StatusDot ok={!!s.Active} />
+            <ChannelIcon channel="report" />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
+                {(c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
+              </Typography>
+              {unscheduled && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block" }}>
+                No schedule — it only runs when you press Run now. Give it one in step 3.</Typography>}
+            </Box>
+            {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
+              bgcolor: "#eae4d8", border: "1px solid #d8cfbe" }}>
+              <AutoAwesomeIcon sx={{ fontSize: 12, color: "#55697a" }} />
+              <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, fontSize: 10 }}>AI summary</Typography>
+            </Box>}
+            <Button size="small" disabled={running === s.SourceId}
+              startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
+              onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
+            <Button size="small" onClick={() => openOne(s.SourceId)}>Edit</Button>
+            <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
+              onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
+          </Box>
+          {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} />}
+          </Box>
+        );
+  };
+  const wizard = (onBack, onSaved) => invoiceOpen
+    ? <InvoiceWorkflowWizard key={String(bucketNow)} sourceId={openId} sources={sources}
+        connectors={connectors} draft={selectedConfig} reload={load} onBack={onBack} onSaved={onSaved} />
+    : <ReportWizard key={String(bucketNow) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
+        types={types} connectors={connectors} draft={selectedConfig} workflow={workflowOpen}
+        reload={load} onBack={onBack} onSaved={onSaved} />;
+
+  if (browse) {
+    const section = browseState.section ?? null;
+    const back = () => { setDraft(null); load(); onBrowseState?.({ ...browseState, open: null }); };
+    const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : [];
+    const openSource = sources.find((x) => x.SourceId === browseState.open);
+    return browse({
+      title: "Reports",
+      summary: `${reportSources.length} report${reportSources.length === 1 ? "" : "s"} · ${workflowSources.length} workflow${workflowSources.length === 1 ? "" : "s"} · reports read and summarise, workflows write`,
+      sections: [{ key: "reports", label: "Reports", n: reportSources.length }, { key: "workflows", label: "Workflows", n: workflowSources.length },
+        { key: "new-report", label: "+ New report" }],
+      section,
+      onSection: (key) => { setDraft(null); onBrowseState?.(key === "new-report" ? { section: "reports", open: "new-report" } : { section: key, open: null }); },
+      cards: sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
+      detail: browseState.open != null ? wizard(back, (sid) => { setDraft(null); onBrowseState?.({ ...browseState, open: sid }); }) : null,
+      onBack: back,
+      openLabel: browseState.open === "new-report" ? "a new report being set up (Reports)"
+        : openSource ? `the report "${titleOf(openSource)}" (Reports), its editor open` : "",
+      empty: section === "workflows" ? "No workflows yet." : "No reports yet - + New report walks you through one.",
+    });
+  }
 
   return (
     <SideRail title="Reports & workflows" q={q} setQ={setQ} placeholder="Search reports and workflows…"
@@ -407,14 +482,7 @@ export default function ReportsView() {
       note="Reports only read data and summarize it. Workflows write data or keep state. Their connections live on the Connections tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {open ? (
-        invoiceOpen ? <InvoiceWorkflowWizard key={String(bucket)} sourceId={openId} sources={sources}
-          connectors={connectors} draft={selectedConfig} reload={load}
-          onBack={() => { setBucket("workflows"); setDraft(null); load(); }}
-          onSaved={(sid) => { setDraft(null); setBucket(sid); }} />
-        : <ReportWizard key={String(bucket) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
-            types={types} connectors={connectors} draft={selectedConfig} workflow={workflowOpen}
-            reload={load} onBack={() => { setBucket(backTo); setDraft(null); load(); }}
-            onSaved={(sid) => { setDraft(null); setBucket(sid); }} />
+        wizard(() => { setBucket(invoiceOpen ? "workflows" : backTo); setDraft(null); load(); }, (sid) => { setDraft(null); setBucket(sid); })
       ) : (<>
       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
@@ -442,47 +510,7 @@ export default function ReportsView() {
       {!list.length && <Empty>{q ? "Nothing here." : workflowOverview
         ? "No workflows yet — describe one above, or start with Monthly invoices or an AI agent."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
-      {list.map((s) => {
-        const c = parse(s.ConfigJson);
-        // both halves, not the first one: "on startup" alone hid the Monday cron behind it
-        const sched = [c.on_startup && startupText(c), c.cron && cronText(c.cron),
-          c.every_minutes && `every ${c.every_minutes}m`, c.daily_at && `daily ${c.daily_at}`]
-          .filter(Boolean).join(" + ");
-        // NO CLOCK IS A REPORT THAT STOPPED (D2, the owner 2026-09-28): it said "daily" and ran only by hand, so
-        // it wears a red border and says so - a workflow is started by hand on purpose and is left alone
-        const unscheduled = !sched && !workflowOverview;
-        return (
-          <Box key={s.SourceId} sx={{ borderBottom: `1px solid ${BORDER}`,
-            ...(unscheduled ? { border: `1px solid ${ALERT}`, borderRadius: 1, my: 0.5, px: 1 } : {}) }}>
-          <Box onClick={() => { setQ(""); setBucket(s.SourceId); }}
-            sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
-              "&:hover": { bgcolor: "#faf8f4" } }}>
-            <StatusDot ok={!!s.Active} />
-            <ChannelIcon channel="report" />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
-              <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
-                {(c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
-              </Typography>
-              {unscheduled && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block" }}>
-                No schedule — it only runs when you press Run now. Give it one in step 3.</Typography>}
-            </Box>
-            {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
-              bgcolor: "#eae4d8", border: "1px solid #d8cfbe" }}>
-              <AutoAwesomeIcon sx={{ fontSize: 12, color: "#55697a" }} />
-              <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, fontSize: 10 }}>AI summary</Typography>
-            </Box>}
-            <Button size="small" disabled={running === s.SourceId}
-              startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
-              onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
-            <Button size="small" onClick={() => { setQ(""); setBucket(s.SourceId); }}>Edit</Button>
-            <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
-              onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
-          </Box>
-          {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} />}
-          </Box>
-        );
-      })}
+      {list.map((s) => row(s))}
       </>)}
     </SideRail>
   );

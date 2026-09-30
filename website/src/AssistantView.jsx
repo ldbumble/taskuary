@@ -48,6 +48,7 @@ import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { canvasItemHeight, showsTask } from "./CanvasItem.jsx";
+import CanvasBrowse from "./CanvasBrowse.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
 import "./assistantView.css";
@@ -456,6 +457,14 @@ const StageMode = ({ mode, setMode, onGame }) => (
 // ── one line of the conversation, with its card ───────────────────────────────────────────
 function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}</div></div>;
+  // BROWSING (the canvas redesign, 2026-09-29): Connections, Settings, Reports or Hub, walked by clicks on this line
+  if (m.role === "browse") return (
+    <div className={`tq-browse-line${canvas?.browsing === m.id ? " tq-canvas-live" : ""}`} data-tq-browse-line={m.area}>
+      <CanvasBrowse area={m.area} state={m.state || {}} live={canvas?.browsing === m.id}
+        onState={(state) => actions.browseState(m.id, state)} onOpenCard={actions.openCard} onReopen={() => actions.browse(m.area, m.state)}
+        onNavigate={actions.navigate} onOpenTask={actions.openTask} />
+    </div>
+  );
   if (m.role === "receipt") return (
     <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}
       {!!m.tid && <button type="button" className="tq-chip" style={{ marginLeft: 8 }} onClick={() => actions.openTask?.(m.tid)}>Open {m.ref || "the task"}</button>}
@@ -518,7 +527,9 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
   // itself, so scrolling up reads as the steps already passed.
   const passed = !live && kind === "walk" && !!m.card;
   // THE TASK VIEW ON THE TABLE (the canvas redesign, 2026-09-29): the Tasks tab's own view, not a walk card
-  if (live && canvas && m.card && showsTask(c, kind) && canvas.folded !== c.key) return (
+  // ...folded to its title line by its X, or while a browse card is open below it (the mockup's Browse board)
+  const foldedNow = !!canvas && live && !!m.card && (canvas.folded === m.card.key || !!canvas.browsing);
+  if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={actions.advance}
@@ -553,16 +564,16 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
               <span>·</span>{m.card.title}</div>
           )}
           {/* AN EARLIER ITEM FOLDS TO ITS TITLE LINE, and clicking it puts it back on the table (the canvas redesign) */}
-          {!passed && (!live || canvas?.folded === m.card?.key) && m.card && kind && kind !== "setup" && kind !== "brief" && (
+          {!passed && (!live || foldedNow) && m.card && kind && kind !== "setup" && kind !== "brief" && (
             <button type="button" className="tq-fold" data-tq-folded={m.card.key} title="Put it back on the table"
-              disabled={actions.busy} onClick={() => actions.reopen(m.card.key, live)}>
+              disabled={actions.busy} onClick={() => actions.reopen(m.card.key, live && !canvas?.browsing)}>
               <SourceMark item={m.card} size={12} />
               {!!m.card.ref && <span className="ref">{m.card.ref}</span>}
               <b>{m.card.title}</b>
               <span className="grow" /><span className="again">open again</span>
             </button>
           )}
-          {card && !(canvas?.folded && canvas.folded === m.card?.key) && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
+          {card && !foldedNow && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
           {/* WHY ITS BUTTONS ARE DEAD, on the card itself: the walk is in a chat, and the one explanation was a banner
               at the foot of the page (2026-09-29: "Next" greyed out on the card with nothing saying why) */}
           {last && card && actions.handedTo && (
@@ -660,6 +671,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const [bodyH, setBodyH] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [foldedKey, setFoldedKey] = useState(null);
+  // the card browsed open, in words - what "this" means to the next turn (concierge.say open_card)
+  const openCardRef = useRef(null);
+  const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
   // the table changed: the next item opens un-expanded and unfolded
   const tableKey = currentItem?.key || null;
   useEffect(() => { setExpanded(false); setFoldedKey(null); }, [tableKey]);
@@ -928,13 +942,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   }, [active, loadPile]);
   // ...but only once there IS a conversation: on the empty welcome it scrolled "Good morning" and the
   // day's meetings off the top of the screen (the owner, 2026-09-23: "this is cutting off the top")
-  useEffect(() => { const el = bodyRef.current; if (el && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
+  // ...on a NEW line, not on a line's own state changing: browsing (a chip, a card, Back) rewrites its line in place, and
+  // pinning the bottom there threw the card you had just opened out of view (the canvas redesign, 2026-09-29)
+  const holdBottom = useRef(false);        // a browse card is being read from its top
+  useEffect(() => { const el = bodyRef.current; if (el && !holdBottom.current && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; }, [msgs.length, busy]);
   // ...and again whenever the thread GROWS - a card that loaded its draft, a report that unfolded - so the
   // bottom of the conversation is always what you see, unless you have scrolled up to read
   useEffect(() => {
     const el = bodyRef.current, inner = el?.firstElementChild;
     if (!el || !inner || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => { if (el.scrollHeight - el.scrollTop - el.clientHeight < 240 && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; });
+    const ro = new ResizeObserver(() => { if (!holdBottom.current && el.scrollHeight - el.scrollTop - el.clientHeight < 240 && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; });
     ro.observe(inner);
     return () => ro.disconnect();
   }, []);
@@ -1081,7 +1098,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     setText(""); setBusy(true); setErr("");
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t }]);
     try {
-      const ask = () => turn({ mode: "say", text: t, key: current, context_mid: currentItem?.mid || null });
+      const ask = () => turn({ mode: "say", text: t, key: current, context_mid: currentItem?.mid || null, open_card: openCardRef.current });
       const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
       if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
         setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: data.context_update }]);
@@ -1498,6 +1515,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     sectionRef.current = { level, seen };
     pull(first.key, null);
   };
+  // A SIDEBAR BUTTON POSTS ITS BROWSE CARD into the conversation - no AI, no tab: the newest one is the live one, and an
+  // earlier one folds to its line, so only one detail is ever mounted (the canvas redesign, 2026-09-29)
+  const browse = (area, state = {}) => {
+    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false);
+    const id = `b${Date.now()}`;
+    setMsgs((m) => [...m, { id, role: "browse", area, state }]);
+    setTimeout(() => bodyRef.current?.querySelector(`[data-tq-browse-line="${area}"]:last-of-type`)?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+  };
   const pull = (key, asUser) => {
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); surface(key, asUser || null);
   };
@@ -1535,6 +1560,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     goReports: () => onNavigate?.("Reports"),
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     reopen: (key, onTable) => { if (onTable) setFoldedKey(null); else pull(key); },
+    browseState: (id, state) => setMsgs((m) => m.map((x) => (x.id === id ? { ...x, state } : x))),
+    browse: (area, state) => browse(area, state),
+    openCard,
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
     handedTo: handoff ? ((state?.doorways || []).find((d) => d.channel === handoff.channel)?.label || handoff.channel) : "",
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
@@ -1543,8 +1571,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
   const shown = old ? old.messages : msgs;
-  const canvasState = useMemo(() => ({ height: canvasItemHeight(bodyH), expanded, folded: foldedKey,
-    toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey]);
+  // the live browse card: the newest one, unless the walk has put an item on the table since
+  const browsing = useMemo(() => {
+    for (let i = shown.length - 1; i >= 0; i -= 1) {
+      if (shown[i].role === "browse") return shown[i].id;
+      if (shown[i].card && !shown[i].card.background_event) return null;
+    }
+    return null;
+  }, [shown]);
+  const navOn = shown.find((x) => x.id === browsing)?.area || "";
+  useEffect(() => { holdBottom.current = !!browsing; }, [browsing]);
+  const canvasState = useMemo(() => ({ height: canvasItemHeight(bodyH), expanded, folded: foldedKey, browsing,
+    toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey, browsing]);
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
   const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
@@ -1747,7 +1785,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   );
 
   return (
-    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab) => onNavigate?.(tab)}
+    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={({ openByMid, openByItem }) => <Pile pile={pile} current={old ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}

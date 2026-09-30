@@ -54,8 +54,9 @@ const Label = ({ children }) => (
 
 /* ── one entry, with its thread ─────────────────────────────────────────────── */
 const byOwner = (author) => /^(owner|you|dana whitfield)$/i.test(String(author || "").trim());
-const Post = ({ p, onChanged, onOpenTask }) => {
-  const [open, setOpen] = useState(false);
+// onOpen (the assistant canvas): its thread opens as the one card on the canvas instead of inline; defaultOpen draws it open
+const Post = ({ p, onChanged, onOpenTask, onOpen = null, defaultOpen = false }) => {
+  const [open, setOpen] = useState(defaultOpen);
   const [full, setFull] = useState(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -130,7 +131,7 @@ const Post = ({ p, onChanged, onOpenTask }) => {
             ) : (
               <Typography variant="caption" sx={{ color: FAINT }}>posted by hand</Typography>
             )}
-            <Button size="small" onClick={() => setOpen((v) => !v)}
+            <Button size="small" data-tq-post-open="" onClick={() => (onOpen ? onOpen() : setOpen((v) => !v))}
               startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
               sx={{ fontSize: 11.5, color: commentCount ? ACCENT2 : DIM, minWidth: 0,
                 fontWeight: commentCount ? 700 : 400 }}>
@@ -241,7 +242,9 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
 };
 
 /* ── the page ───────────────────────────────────────────────────────────────── */
-export default function HubView({ onOpenTask }) {
+// `browse` (the assistant canvas, CanvasBrowse.jsx): topics are the sections, each post its own card, one post open with
+// its thread - drawn through the canvas's frame instead of this tab's topic rail.
+export default function HubView({ onOpenTask, browse = null, browseState = {}, onBrowseState = null }) {
   const [d, setD] = useState(null);
   const [topic, setTopic] = useState("");
   const [kind, setKind] = useState("");
@@ -263,6 +266,30 @@ export default function HubView({ onOpenTask }) {
 
   const topics = d?.topics || [];
   const posts = d?.data || [];
+  // the canvas holds the topic on its line; the load reads this page's own state, so follow it
+  useEffect(() => { if (browse) setTopic(browseState.section ?? ""); }, [browse, browseState.section]);
+  if (browse) {
+    const one = posts.find((x) => x.LoreId === browseState.open);
+    return browse({
+      title: "Hub",
+      summary: !d ? "loading…" : `${d.count.posts} posts · ${d.count.topics} topics · ${d.count.comments} comments`,
+      sections: [{ key: "", label: "everything", n: d?.count?.posts || 0 }, ...topics.map((t) => ({ key: t.Topic, label: t.Topic, n: t.n }))],
+      section: browseState.section ?? "",
+      onSection: (key) => onBrowseState?.({ section: key, open: null }),
+      search: (
+        <TextField size="small" fullWidth value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="search Hub…"
+          inputProps={{ "aria-label": "Search Hub", "data-tq-browse-search": "" }}
+          InputProps={{ startAdornment: <SearchIcon sx={{ fontSize: 16, color: FAINT, mr: 0.75 }} /> }}
+          sx={{ mt: 1.5, "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: "#fff" } }} />
+      ),
+      cards: posts.map((x) => ({ key: String(x.LoreId), node: <Post p={x} onChanged={load} onOpenTask={onOpenTask}
+        onOpen={() => onBrowseState?.({ ...browseState, open: x.LoreId })} /> })),
+      detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={load} onOpenTask={onOpenTask} defaultOpen /> : null,
+      onBack: () => onBrowseState?.({ ...browseState, open: null }),
+      openLabel: one ? `the Hub post "${one.Title}" (${one.Topic || "Hub"})` : "",
+      empty: q ? "Nothing here matches that." : "Nothing posted yet.",
+    });
+  }
   return (
     <Box sx={{ display: "grid", gap: 2, alignItems: "start",
       gridTemplateColumns: { xs: "minmax(0,1fr)", md: "220px minmax(0,1fr)" } }}>

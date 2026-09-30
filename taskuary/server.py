@@ -3370,7 +3370,7 @@ class SurfaceBody(BaseModel):
     expected_next_key: str | None = None
     leaving: str | None = None          # the item Next is walking away from: read on the way out (concierge.move_on)
     expected_next_members: list[str] | None = None
-class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None
+class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
 def _pile_payload(force: bool = False, current: str = None, only: str = None,
@@ -3571,6 +3571,7 @@ def concierge_open():
 
 class ConciergeStreamBody(BaseModel):
     mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None; context_mid: int | None = None
+    open_card: str | None = None                  # the card browsed open in the canvas, said in words
     include_surfaced: bool = False; exclude: str | None = None; leaving: str | None = None
     selection_revision: str | None = None
     expected_next_key: str | None = None
@@ -3661,7 +3662,8 @@ async def concierge_stream(body: ConciergeStreamBody):
                     out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
                                             include_surfaced=body.include_surfaced, exclude=body.exclude,
                                             leaving=body.leaving)
-            else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'))
+            else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'),
+                                      open_card=body.open_card)
             if notice: out['context_update'] = notice
             if body.mode == 'next': out = _with_pile(out, body)       # the rail rides along (design B)
             put({'type': 'done', **out})
@@ -3744,7 +3746,7 @@ def concierge_say(body: ConciergeSayBody):
         # Nothing is lost. The act boundary guards itself: operations.propose pins ContextRevision and
         # execute refuses a moved one (409), and verdicts.decide re-checks before a reply can leave.
         _hands_off()
-        return concierge.say(store, body.text, body.key, actor=ACTOR)
+        return concierge.say(store, body.text, body.key, actor=ACTOR, open_card=body.open_card)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.get('/api/concierge/chips')

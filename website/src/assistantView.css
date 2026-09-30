@@ -445,3 +445,5 @@
 .tq-fold b { min-width: 0; font-weight: 600; color: #2f3a42; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-fold .grow { flex: 1; }
 .tq-fold .again { flex-shrink: 0; font-size: 11px; }
+/* a browse card sits in the conversation at the canvas's width, like the task view */
+.tq-browse-line { margin: 0 0 14px; }

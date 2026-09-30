@@ -11,7 +11,7 @@ const view = src("AssistantView.jsx"), item = src("CanvasItem.jsx");
 test("an item with a task behind it is shown by TaskPage; a proposal, a batch or a meeting keeps its own card", () => {
   // (JSX cannot load under bare node - the rule is read from the source)
   assert.match(item, /export const showsTask = \(card, kind\) => !!card\?\.tid && !\["proposal", "setup", "walk", "brief", "fyis", "meeting"\]\.includes\(kind\)/);
-  assert.match(view, /if \(live && canvas && m\.card && showsTask\(c, kind\) && canvas\.folded !== c\.key\) return \(/);
+  assert.match(view, /if \(live && canvas && m\.card && showsTask\(c, kind\) && !foldedNow\) return \(/);
   assert.match(item, /<TaskPage taskId=\{card\.tid\} canvas active/);
 });
 

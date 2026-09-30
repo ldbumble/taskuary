@@ -80,7 +80,7 @@ def main():
                          'email. Prints what it WOULD change and writes nothing unless --apply.')
     ap.add_argument('--apply', action='store_true', help='with --backfill-asks: actually write the changes')
     ap.add_argument('--include-closed', action='store_true', help='with --backfill-asks: closed tasks too')
-    ap.add_argument('--evalset', choices=['build', 'share', 'evaluate', 'ablate'], metavar='ACTION',
+    ap.add_argument('--evalset', choices=['build', 'share', 'evaluate', 'ablate', 'jev'], metavar='ACTION',
                     help='triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), '
                          'evaluate (score the configured AI over them), ablate (score with and without memory), '
                          'share (anonymised copy for tests/data)')

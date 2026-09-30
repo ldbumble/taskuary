@@ -381,6 +381,33 @@ def tried(r) -> str:
     return f' after {RETRY_TRIES} tries' if r.status_code in RETRY_STATUS else ''
 
 
+def list_models(t, cfg: dict, key: str) -> list:
+    """The model ids this key can actually call, from the provider's own list endpoint - so the picker never offers a name the
+    account does not have. Azure names what you DEPLOYED (that is what a request carries), so it is its deployments, or the resource's base models when the
+    deployments list is closed to this key. RAISES on a provider that answers with an error: an empty list would read as "none exist"."""
+    if t == 'anthropic': url, h, k = 'https://api.anthropic.com/v1/models?limit=100', {'x-api-key': key, 'anthropic-version': '2023-06-01'}, 'data'
+    elif t == 'azure_openai':
+        ep, ids = (cfg.get('endpoint') or '').rstrip('/'), []
+        if not ep: return []
+        for u, k in ((f'{ep}/openai/deployments?api-version=2023-03-15-preview', 'data'), (f'{ep}/openai/v1/models', 'data')):
+            try: r = requests.get(u, headers={'api-key': key}, timeout=15)
+            except requests.RequestException: continue
+            if r.status_code == 200: ids += [m.get('id') for m in (r.json().get(k) or []) if m.get('id')]
+            if ids: break          # deployments are what a request can name; the base-model catalogue is only the fallback
+        if not ids: raise RuntimeError('Azure listed no deployments or models for this key')
+        return list(dict.fromkeys(ids))
+    else:
+        base = {'openai': 'https://api.openai.com/v1', 'openrouter': 'https://openrouter.ai/api/v1', 'meta': 'https://api.meta.ai/v1',
+                'ollama': 'http://127.0.0.1:11434/v1'}.get(t) or (OPENAI_COMPATIBLE.get(t) or ('',))[0]
+        base = (cfg.get('base_url') or base).rstrip('/')
+        if t == 'ollama' and base.endswith('11434'): base += '/v1'
+        if not base: return []
+        url, h, k = f'{base}/models', ({'Authorization': f'Bearer {key}'} if key else {}), 'data'
+    r = requests.get(url, headers=h, timeout=15)
+    if r.status_code != 200: raise RuntimeError(f'{t} answered {r.status_code}: {str(r.text)[:160]}')
+    return sorted({m.get('id') for m in (r.json().get(k) or []) if m.get('id')})
+
+
 def make_llm(t, cfg: dict, key: str):
     if not key and t != 'ollama': raise RuntimeError('no API key saved - paste one under Credentials')
     if t == 'anthropic':

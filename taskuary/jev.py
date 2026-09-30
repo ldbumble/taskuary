@@ -59,3 +59,37 @@ def ask(key: str, state: str, questions: dict, timeout: int = 20) -> dict:
             raise RuntimeError(f'TypeSafe did not answer {name!r} - got {sorted(answers) or "nothing"}')
         out[name] = (float(p) >= YES, float(p))
     return out
+
+
+# One boolean per verdict, argmax'd: `noul` answers yes/no, triage has three intents and three kinds. Every question is asked
+# OF THE OWNER'S OWN JUDGEMENT - the state carries their profile (SOUL), what was learned from their past verdicts (LEARNED) and
+# the verdicts on related mail (PAST VERDICTS) - so "would you make this a task" is answered the way they would, not in general.
+_OF = ' Judge as this owner would, using OWNER PROFILE, LEARNED and PAST VERDICTS in the state above: where a past verdict plainly fits, follow it.'
+TRIAGE = {
+    'task':       ('Would the owner make this message a task?' + _OF,
+                   'Something must be done beyond writing back - a system to change, something to produce, chase or look up that takes more than a sentence - and the owner is the one it falls to.'),
+    'reply_only': ('Would the owner answer this with a short reply and nothing more?' + _OF,
+                   'The message asks the owner a question or a favour that one sentence from them settles - a yes, a no, a time, a name, a go-ahead - and nothing has to be looked up, changed or produced behind it.'),
+    'fyi':        ('Would the owner file this as informational, with no action?' + _OF,
+                   'The owner would file it without acting: a notice, report, thanks or thread between others, or something their past verdicts say is not theirs.'),
+    'urgent':     ('Would the owner call this urgent?',
+                   'It carries a deadline today or tomorrow, an event happening today, or somebody blocked right now until it is done.'),
+}
+# Asked only to say WHO does a task, so they are read only when intent is task.
+KIND = {
+    'coding':  ("If this is a task, would it need code changed in one of the owner's repositories?" + _OF,
+                'The work is a bug fix, feature, script or pull request in a repository the owner holds; looking up, confirming or granting is not that.'),
+    'general': ('If this is a task, would an assistant that can read, research and draft do it for the owner?' + _OF,
+                'Thinking, reading, checking a value, chasing a person or drafting a reply would do it; nobody has to type at a system or act in the world.'),
+    'manual':  ('If this is a task, would only the owner themselves be able to do it?' + _OF,
+                'A person has to do it in the world - attend, sign, call, decide - and no amount of typing or thinking does it.'),
+}
+
+
+def triage(key: str, state: str, timeout: int = 20) -> dict:
+    """{intent, kind, urgent, p} - a verdict with NO reason; the words are not this model's to write. `kind` is None unless intent is task."""
+    got = ask(key, state, {**TRIAGE, **KIND}, timeout)
+    p = {k: v[1] for k, v in got.items()}
+    intent = max(('task', 'reply_only', 'fyi'), key=p.get)
+    kind = max(('coding', 'general', 'manual'), key=p.get) if intent == 'task' else None
+    return {'intent': intent, 'kind': {'manual': 'task'}.get(kind, kind), 'urgent': got['urgent'][0], 'p': p}

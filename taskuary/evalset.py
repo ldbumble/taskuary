@@ -295,6 +295,47 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     return out
 
 
+def jev_state(c: dict, thread: dict, soul: str = '', learned: str = '', notes=()) -> str:
+    """One case as the decision model reads it: the owner's own judgement first (profile, learned, past verdicts), then the message
+    and the thread signals the funnel would supply - the same evidence classify_intent hands the chat brain."""
+    from .triage import sender_body
+    body, _ = sender_body(c.get('body') or '', c.get('own_text') or None)
+    sig = {k: thread[k] for k in ('others_replied', 'last_on_thread', 'recently_closed') if thread.get(k)}
+    msg = json.dumps({'from': c.get('from_name') or c.get('from'), 'subject': c.get('subject'), 'addressed_to_you': c.get('addressed_to_you'),
+                      'recipients': c.get('recipients'), **sig, 'body': body}, ensure_ascii=False, default=str)
+    return (f"OWNER PROFILE:\n{soul[:2500]}\n\nLEARNED (patterns from their past verdicts):\n{learned[:1500]}\n\n"
+            "PAST VERDICTS on related mail:\n" + ('\n'.join(f'- {n}' for n in notes) or '(none)') + f"\n\nTHE MESSAGE:\n{msg}")
+
+
+def evaluate_jev(store, cases: list, key: str, notes: str = 'asof', learned: bool = True, verbose=True) -> dict:
+    """The same cases through the decision model, told what evaluate tells the chat brain: SOUL, LEARNED and the past verdicts
+    ('asof' = only those on file when the message arrived)."""
+    from . import jev
+    from .ingest import others_on_thread, owner_addresses, relevant_notes
+    from .learn import injectable
+    mine, conf, rows = owner_addresses(store), Counter(), []
+    soul, lrn = store.doc('soul') or '', injectable(store.doc('learned') or '') if learned else ''
+    for c in cases:
+        if not c.get('body'): continue
+        msg = as_message(c)
+        thread = others_on_thread(thread_store(c), msg, mine)
+        src = store if notes == 'today' else _AsOf(store, c.get('sent_at')) if notes == 'asof' else None
+        ns, _ = relevant_notes(src, [msg['from_email'] or ''], f"{msg['subject']} {msg['body']}"[:4000], subject=msg['subject']) if src else ([], 0)
+        try: r = jev.triage(key, jev_state(c, thread, soul, lrn, ns))
+        except Exception as e: print(f"  ERR {c['id']}: {e}"); continue
+        conf[(c['label'], r['intent'])] += 1
+        rows.append({'id': c['id'], 'label': c['label'], 'got': r['intent'], 'ok': r['intent'] == c['label'], 'kind': r['kind'], 'p': r['p'],
+                     'urgent': r['urgent'], 'notes_seen': len(ns), 'subject': c.get('subject')})
+    n = len(rows); ok = sum(r['ok'] for r in rows)
+    out = {'n': n, 'accuracy': ok / n if n else None, 'confusion': {f'{a}->{b}': v for (a, b), v in sorted(conf.items())},
+           'kinds': dict(Counter(r['kind'] for r in rows if r['kind'])), 'rows': rows}
+    if verbose:
+        print(f"jev ({notes} notes, learned={learned}): {n} cases, accuracy {out['accuracy']:.0%}" if n else 'no cases')
+        for k, v in out['confusion'].items(): print(f'  {k:22s} {v}')
+        print('  kinds picked on tasks:', out['kinds'])
+    return out
+
+
 def ablate(store, cases: list, llm, arms=MEMORY_ARMS, verbose=True, save=None) -> dict:
     """Does memory help? The same cases under each MEMORY_ARMS setting, side by side."""
     # one arm at a time: four arms in parallel throttled an Azure deployment hard enough that a
@@ -334,6 +375,13 @@ def run(store, what: str, home: Path, share_to=None, llm=None):
         p = write(share_to or Path.cwd() / 'tests' / 'data' / 'triage_cases.jsonl', anonymise(cases))
         print(f'{len(cases)} anonymised cases -> {p}  (review it before it leaves the machine)')
         return p
+    if what == 'jev':
+        row = next((c for c in store.list_connectors() if c['Type'] == 'typesafe' and c['Active']), None)
+        if not row: raise SystemExit('no active TypeSafe Jev connector - add one under Connections -> AI first')
+        key, strong = store.get_connector(row['ConnectorId'], with_secret=True)['Secret'] or '', [c for c in cases if not c['weak']]
+        out = {k: evaluate_jev(store, strong, key, **kw) for k, kw in {'asof': dict(notes='asof'), 'bare': dict(notes='none', learned=False)}.items()}
+        Path(home, 'eval').mkdir(parents=True, exist_ok=True); (Path(home) / 'eval' / 'jev_last.json').write_text(json.dumps(out, indent=1, default=str), encoding='utf-8')
+        return out
     if what in ('evaluate', 'ablate'):
         if llm is None:
             from .llm import build_llm
@@ -341,4 +389,4 @@ def run(store, what: str, home: Path, share_to=None, llm=None):
         if llm is None: raise SystemExit('no AI connector is configured - connect one under Connections -> AI first')
         strong = [c for c in cases if not c['weak']]
         return evaluate(store, strong, llm) if what == 'evaluate' else ablate(store, strong, llm, save=Path(home) / 'eval' / 'ablate_last.json')
-    raise SystemExit(f'unknown evalset action {what!r}: build | share | evaluate | ablate')
+    raise SystemExit(f'unknown evalset action {what!r}: build | share | evaluate | ablate | jev')

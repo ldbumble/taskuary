@@ -292,6 +292,7 @@ class DispatchBody(BaseModel):
     # general session resolves and saves; a cli_connections key would mean nothing to it.
     agent: str | None = None; brain: str | None = None; pick: str | None = None
     instruction: str | None = None; model: str | None = None
+    standing: bool = False          # a REPORT run only: learn this as a rule for every run, not a one-off use of this run
     # The button says "Send to agent".  The task's Kind remains authoritative once a task
     # exists; this hint is only how an unpromoted message says which kind of task to create.
     kind: str | None = None
@@ -2439,7 +2440,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     # kind nor an agent, guessing from triage is exactly the bug this endpoint must prevent.
     if not requested and not body.agent:
         raise HTTPException(422, 'Choose an agent type: general or coding')
-    _learn_promotion(m, background)
+    _learn_promotion(m, background, body.standing)
     verdict, route_id = operations.verdict_of_message(store, m)
     tid = m.get('TaskId') or task_from_message(
         store, mid, ACTOR, requested if requested in ('general', 'coding') else 'coding')
@@ -2457,7 +2458,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
                     'ref': task_ref(tid), 'reason': reason}
         raise
 
-def _learn_promotion(m: dict, background):
+def _learn_promotion(m: dict, background, standing: bool = False):
     """A FILED message the owner promotes by hand is a triage miss in the other direction -
     fyi was the wrong call. The under-reach lessons matter as much as the over-reach ones.
 
@@ -2467,6 +2468,11 @@ def _learn_promotion(m: dict, background):
     owner correction. A positive verdict is evidence, never a hard rule that every similar message
     must become work.
     """
+    # A REPORT RUN is one run, not a kind of mail. Its subject is the same every day, so a topic-scoped 'MADE A TASK' note turned
+    # the owner sending Monday's run to an agent into a standing order that every later run was a task (the owner, 2026-09-30:
+    # "i sent it to agent yesterday but now everyday it's being sent there"). What a report should do each run is the report's
+    # own routing, and that is the owner's to set there. So a run is one-off unless the owner says `standing`.
+    if m.get('Channel') == 'report' and not standing: return None
     if m.get('TaskId') or m.get('Status') != 'filed': return None
     em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
     if not (em or topic): return None
@@ -2598,6 +2604,7 @@ class MineBody(BaseModel):
     # assistant's chat (general.GENERAL_KINDS), which is not what "this one is mine" means.
     kind: str = 'task'
     title: str | None = None        # the assistant's suggested title, accepted as-is from the panel
+    standing: bool = False          # a REPORT run only: 'every run like this', not 'just this one'
 
 @app.post('/api/messages/{mid}/mine')
 def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = None):
@@ -2608,7 +2615,7 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     THIS is the queue it takes from."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    _learn_promotion(m, background)
+    _learn_promotion(m, background, bool(body and body.standing))
     verdict, route_id = operations.verdict_of_message(store, m)
     want = (body.kind if body else None) or 'task'
     # A message that ALREADY has a task short-circuits task_from_message, so "this one is mine"
@@ -7316,6 +7323,26 @@ def ai_defaults():
     """The three AI defaults with the model each will ACTUALLY run, and which screen owns it."""
     from . import aidefaults
     return aidefaults.state(store, cfg)
+
+
+_MODELS_TTL, _models_cache = 600, {}
+
+
+@app.get('/api/ai/models/{connector_id}')
+def ai_models(connector_id: int):
+    """Model ids the connector's own key can call, read from the provider (10 min cache). Failure is a 200 with `error`: the picker
+    falls back to its typed box, so a provider without a list endpoint costs nothing."""
+    from . import llm
+    hit = _models_cache.get(connector_id)
+    if hit and time.time() - hit[0] < _MODELS_TTL: return hit[1]
+    c = store.get_connector(connector_id, with_secret=True)
+    if not c or c['Type'] not in llm.AI_TYPES: raise HTTPException(404, 'no such AI connector')
+    try: conf = json.loads(c.get('ConfigJson') or '{}')
+    except ValueError: conf = {}
+    try: out = {'models': llm.list_models(c['Type'], conf, c.get('Secret') or '')}
+    except Exception as e: return {'models': [], 'error': str(e)[:200]}
+    _models_cache[connector_id] = (time.time(), out)
+    return out
 
 
 class AiDefaultBody(BaseModel):

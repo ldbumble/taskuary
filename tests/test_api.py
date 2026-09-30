@@ -1164,6 +1164,26 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])
         distilled.assert_called_once()
 
+    def test_promoting_one_report_run_is_not_a_standing_order_for_the_report(self):
+        """A report's subject is the same every day, so a topic note from sending ONE run to an agent made every later run a task."""
+        mid = server.store.add_message({'ExternalId': 'report:1:2026-09-29 10:04', 'Channel': 'report', 'SourceName': 'Daily Digest',
+                                        'Subject': 'Daily Digest - coder ran a prompt - 49 lines', 'SentAt': '2026-09-29 10:04',
+                                        'BodyText': 'Top 15 list.', 'Status': 'filed'})
+        before = {m['MemoryId'] for m in server.store.list_memories(active_only=False)}
+        with mock.patch.object(server.learn, 'learn_from') as distilled:
+            c.post(f'/api/messages/{mid}/mine', json={})
+        self.assertEqual([m for m in server.store.list_memories(active_only=False) if m['MemoryId'] not in before], [])
+        distilled.assert_not_called()
+
+    def test_a_report_run_promoted_as_standing_is_learned(self):
+        mid = server.store.add_message({'ExternalId': 'report:2:2026-09-29 10:04', 'Channel': 'report', 'SourceName': 'Weekly Digest',
+                                        'Subject': 'Weekly Digest - coder ran a prompt - 12 lines', 'SentAt': '2026-09-29 10:04',
+                                        'BodyText': 'Numbers.', 'Status': 'filed'})
+        before = {m['MemoryId'] for m in server.store.list_memories(active_only=False)}
+        with mock.patch.object(server.learn, 'learn_from'):
+            c.post(f'/api/messages/{mid}/mine', json={'standing': True})
+        self.assertEqual(len([m for m in server.store.list_memories(active_only=False) if m['MemoryId'] not in before]), 1)
+
     def test_a_taskless_fyi_reply_and_manual_edits_survive_reopening(self):
         mid = server.store.add_message({'ExternalId': 'teams:fyi-reply', 'Channel': 'teams',
                                         'ConversationId': 'chat-fyi', 'Subject': 'Team update',

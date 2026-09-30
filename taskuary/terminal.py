@@ -747,6 +747,15 @@ def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
     return '\n\n'.join(parts)
 
 
+def with_brain(profile: dict, cmd: dict) -> dict:
+    """The profile run by the brain's connection. The connection owns EVERY command field, not only the ones it sets: a profile saved when
+    claude was the only brain still carries claude's `model`, codex has none of its own, and overlaying just what codex names left
+    `-m claude-opus-5-5` on a Codex pane - which its ChatGPT login refuses with a 400."""
+    if not cmd: return profile
+    from .cli_connections import COMMAND_FIELDS
+    return {**{k: v for k, v in profile.items() if k not in COMMAND_FIELDS}, **cmd}
+
+
 def agent_argv(profile: dict, model: str = None) -> list:
     """Interactive invocation of a configured CLI: its command, its own flags minus the pipe
     ones, and the model flag the headless runner uses (`model_arg`, e.g. codex wants -m).
@@ -892,7 +901,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         # half-migrated install must still be able to start an agent at all.
         from . import agents as _hub
         # an explicit brain is the OWNER's choice at the picker and outranks the setting
-        profile = {**profile, **(_hub.brain_command(store, agent, want=brain) or {})}
+        profile = with_brain(profile, _hub.brain_command(store, agent, want=brain))
         label = agent
     else:
         label = 'shell'

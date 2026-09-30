@@ -1512,3 +1512,17 @@ class PhaseRenderTests(unittest.TestCase):
         self._paint(t, 'Levitating… (3s · esc to interrupt)')
         self.assertEqual(terminal.phase_of(t.status_tail(8)), 'working')
         self.assertIs(terminal.screen_asking(t), False)
+
+
+class WithBrainTests(unittest.TestCase):
+    """A brain picked at the dialog must not inherit another CLI's model from the role's saved profile."""
+    def test_codex_pick_drops_the_claude_model(self):
+        prof = {'purpose': 'code', 'cmd': 'claude', 'model': 'claude-opus-5-5', 'light_model': 'claude-sonnet-5-5', 'cwd_map': {'org/app': '/x'}}
+        out = terminal.with_brain(prof, {'cmd': 'codex', 'args': ['exec'], 'timeout': 1500})
+        self.assertEqual((out['cmd'], out.get('model'), out.get('light_model')), ('codex', None, None))
+        self.assertEqual((out['purpose'], out['cwd_map']), ('code', {'org/app': '/x'}))
+
+    def test_a_connection_with_its_own_model_wins_and_no_brain_changes_nothing(self):
+        prof = {'cmd': 'claude', 'model': 'a'}
+        self.assertEqual(terminal.with_brain(prof, {'cmd': 'codex', 'model': 'gpt-5.4'})['model'], 'gpt-5.4')
+        self.assertEqual(terminal.with_brain(prof, {}), prof)

@@ -47,6 +47,7 @@ import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
+import CanvasItem, { canvasItemHeight, showsTask } from "./CanvasItem.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
 import "./assistantView.css";
@@ -453,7 +454,7 @@ const StageMode = ({ mode, setMode, onGame }) => (
 );
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
-function Line({ m, live, last, actions, fresh, tableChips = [] }) {
+function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}</div></div>;
   if (m.role === "receipt") return (
     <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}
@@ -516,6 +517,14 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
   // one walk (the owner, running it). It keeps its place in the trail as one muted line that counts
   // itself, so scrolling up reads as the steps already passed.
   const passed = !live && kind === "walk" && !!m.card;
+  // THE TASK VIEW ON THE TABLE (the canvas redesign, 2026-09-29): the Tasks tab's own view, not a walk card
+  if (live && canvas && m.card && showsTask(c, kind) && canvas.folded !== c.key) return (
+    <div className="tq-canvas-live">
+      <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle}
+        onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={actions.advance}
+        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} />
+    </div>
+  );
   // THE WORDS RIDE IN THE CARD (2026-09-23): Next beside the card's verb, every other word on its
   // quiet Also line. Only answer chips (a model's own options) and a card-less line keep the strip.
   const inCard = !!card && kind !== "walk" && kind !== "setup";
@@ -543,13 +552,17 @@ function Line({ m, live, last, actions, fresh, tableChips = [] }) {
             <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} of {m.card.total}</b>
               <span>·</span>{m.card.title}</div>
           )}
-          {!passed && !live && m.card && kind && kind !== "setup" && kind !== "brief" && (
-            <div className="tq-card-note" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <SourceMark item={m.card} size={12} /> {m.card.title}
-              {m.card.tid && <a href={`#task=${m.card.tid}`} style={{ color: "#55697a", marginLeft: 4 }}>{m.card.ref}</a>}
-            </div>
+          {/* AN EARLIER ITEM FOLDS TO ITS TITLE LINE, and clicking it puts it back on the table (the canvas redesign) */}
+          {!passed && (!live || canvas?.folded === m.card?.key) && m.card && kind && kind !== "setup" && kind !== "brief" && (
+            <button type="button" className="tq-fold" data-tq-folded={m.card.key} title="Put it back on the table"
+              disabled={actions.busy} onClick={() => actions.reopen(m.card.key, live)}>
+              <SourceMark item={m.card} size={12} />
+              {!!m.card.ref && <span className="ref">{m.card.ref}</span>}
+              <b>{m.card.title}</b>
+              <span className="grow" /><span className="again">open again</span>
+            </button>
           )}
-          {card && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
+          {card && !(canvas?.folded && canvas.folded === m.card?.key) && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
           {/* WHY ITS BUTTONS ARE DEAD, on the card itself: the walk is in a chat, and the one explanation was a banner
               at the foot of the page (2026-09-29: "Next" greyed out on the card with nothing saying why) */}
           {last && card && actions.handedTo && (
@@ -642,6 +655,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
   const selectionRef = useRef(null);
   const sectionRef = useRef(null);                                 // {level, seen}: a section walk, from its heading
+  // THE CANVAS (2026-09-29): the task view takes the chat body's height, Expand hides the conversation around it, and
+  // its X folds it to one line - three pieces of client state; none of them asks the server for anything
+  const [bodyH, setBodyH] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const [foldedKey, setFoldedKey] = useState(null);
+  // the table changed: the next item opens un-expanded and unfolded
+  const tableKey = currentItem?.key || null;
+  useEffect(() => { setExpanded(false); setFoldedKey(null); }, [tableKey]);
+  // the chat body's height is the task view's (CanvasItem): measured, never guessed, and re-measured with the window
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(() => setBodyH(el.clientHeight));
+    ro.observe(el); setBodyH(el.clientHeight);
+    return () => ro.disconnect();
+  }, [walk]);
+  // Expand shows the view alone: the body scrolls it into place
+  useEffect(() => { if (expanded) bodyRef.current?.querySelector(".tq-canvas-live")?.scrollIntoView({ block: "start" }); }, [expanded]);
   const pileRef = useRef(null);
   const selectionContractSeen = useRef(false);
 
@@ -1500,6 +1531,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, items,
+    next: () => runChip({ verb: "next" }), advance: () => advance(), reload: () => loadPile(true), changed: onChanged,
+    goReports: () => onNavigate?.("Reports"),
+    // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
+    reopen: (key, onTable) => { if (onTable) setFoldedKey(null); else pull(key); },
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
     handedTo: handoff ? ((state?.doorways || []).find((d) => d.channel === handoff.channel)?.label || handoff.channel) : "",
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
@@ -1508,6 +1543,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
   const shown = old ? old.messages : msgs;
+  const canvasState = useMemo(() => ({ height: canvasItemHeight(bodyH), expanded, folded: foldedKey,
+    toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey]);
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
   const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
@@ -1591,8 +1628,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
         </>
       )}
       {!walk && (
-      <div className="tq-chat-body" ref={bodyRef}>
-        <div className="tq-chat-inner">
+      <div className={`tq-chat-body${expanded ? " expanded" : ""}`} ref={bodyRef}>
+        <div className={`tq-chat-inner${expanded ? " expanded" : ""}`}>
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
           {state && !shown.length && !busy && (
             <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
@@ -1629,7 +1666,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
             </div></div>
           )}
           {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips}
-                                     actions={actions} fresh={currentItem} />)}
+                                     actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {(busy || phoneBusy || nextComing) && (
             <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>

@@ -49,6 +49,8 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
+import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 
 // An open tab can still hold yesterday's entry bundle after a local upgrade. Vite names lazy
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
@@ -165,7 +167,8 @@ const askedAgo = (t) => {
 };
 
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded,
-  onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false }) {
+  onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
+  onNext = null, nextBusy = false, expanded = false, onExpand = null }) {
   const [detail, setDetail] = useState(null);
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
@@ -792,14 +795,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   and look at it rather than read it every time. */}
               <Box sx={{ px: liveSession ? 1.5 : 1.75, py: liveSession ? 0.7 : 1,
                 bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
-                <Box sx={{ display: "flex", gap: 0.9, alignItems: "center" }}>
+                {/* on a phone the strip WRAPS: ref and title keep the first line, the controls take the next - one line
+                    pushed Next, Expand and the X off the right edge (the canvas redesign's phone pass, 2026-09-29) */}
+                <Box sx={{ display: "flex", gap: 0.9, rowGap: 0.5, alignItems: "center", flexWrap: { xs: "wrap", sm: "nowrap" } }}>
                   <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
                     display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 800 }}>1</Box>
                   <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
                     letterSpacing: ".015em", fontWeight: 750, fontSize: 11.5 }}>{detail.ref}</Typography>
                   <Typography sx={{ color: INK, flex: 1, fontWeight: 650,
                     fontSize: liveSession ? 12.5 : 13,
-                    minWidth: { xs: 90, sm: 180 }, letterSpacing: "-.005em" }} noWrap>
+                    minWidth: { xs: 90, sm: 180 }, flexBasis: { xs: "calc(100% - 90px)", sm: "auto" }, letterSpacing: "-.005em" }} noWrap>
                     {t.Title}
                   </Typography>
                   {/* the list row said this and the task page did not, so a held task looked merely open */}
@@ -832,7 +837,22 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       </Tooltip>
                     </Box>
                   )}
-                  <LifecycleChip kind="task" phase={taskState} compact sx={{ flexShrink: 0 }} />
+                  <LifecycleChip kind="task" phase={taskState} compact sx={{ flexShrink: 0, display: { xs: "none", sm: "inline-flex" } }} />
+                  {/* ON THE ASSISTANT CANVAS (the canvas redesign, 2026-09-29) the walk's Next lives on this bar, as the
+                      mockup draws it, and Expand gives the view the whole canvas - the pane keeps its size either way */}
+                  {onNext && (
+                    <Button size="small" variant="outlined" data-tq-next="" disabled={nextBusy} onClick={onNext}
+                      title="Put this down and bring me the next one - nothing about it changes"
+                      sx={{ fontSize: 11, minHeight: 24, py: 0, px: 1.25, flexShrink: 0, color: INK, borderColor: BORDER }}>Next</Button>
+                  )}
+                  {onExpand && (
+                    <Tooltip title={expanded ? "Back to the conversation" : "Give this the whole canvas"}>
+                      <IconButton size="small" data-tq-expand="" aria-label={expanded ? "Collapse to the conversation" : "Expand to the whole canvas"}
+                        aria-pressed={expanded} onClick={onExpand} sx={{ color: "#41525f", flexShrink: 0 }}>
+                        {expanded ? <CloseFullscreenIcon sx={{ fontSize: 15 }} /> : <OpenInFullIcon sx={{ fontSize: 15 }} />}
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   {/* ONE X, TWO STEPS BACK. With the session filling the page, X first steps back to
                       the task behind it - the session keeps running; from the task, X goes to the list. */}
                   <Tooltip title={sessionView ? "Back to the task — the session keeps running" : "Close — back to the list (the task stays)"}>

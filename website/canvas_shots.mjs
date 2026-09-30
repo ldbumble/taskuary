@@ -56,6 +56,11 @@ const SCENES = [
   ["collapse", async (p) => click(p, "[data-tq-expand]"), "client"],
   ["fold-open", async (p) => click(p, "[data-tq-folded]"), "walk"],
   ["row-click", async (p) => first(() => click(p, "[data-tq-rail] [data-tq-row]", 2), () => click(p, "[data-tq-rail] .tq-pile-row", 2)), "walk"],
+  ["agent-row", async (p) => p.evaluate(() => {
+    const row = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row .card")].find((c) => /agent waiting|👋/.test(c.title || c.textContent));
+    if (!row) return false; row.click(); return true; }), "walk"],
+  ["agent-expand", async (p) => click(p, "[data-tq-expand]"), "client"],
+  ["agent-collapse", async (p) => click(p, "[data-tq-expand]"), "client"],
   ["nav-new", async (p) => click(p, '[data-tq-nav="new"]')],
   ["nav-reports", async (p) => { await p.keyboard.press("Escape"); return first(() => click(p, '[data-tq-nav="reports"]'), () => tab(p, "Reports")); }],
   ["browse-open-report", async (p) => click(p, "[data-tq-browse-card]"), "client"],
@@ -100,9 +105,11 @@ const SCENES = [
         xterm: [...document.querySelectorAll(".xterm")].filter((x) => x.getBoundingClientRect().width > 0)
           .map((x) => { const r = x.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }),
         taskPages: document.querySelectorAll("[data-tq-task-page]").length,
+        broken: document.body.innerText.includes("failed to draw") ? (document.querySelector("pre, code")?.textContent || "").slice(0, 160) : "",
       }));
       const pileFetched = pileHits.length > before;
       facts.push({ w, name, file: path.basename(file), ...f, pileFetched, clientOnlyViolated: kind === "client" && pileFetched });
+      if (f.broken) console.log(`${w} ${name}: BROKEN PAGE - ${f.broken}`);
       console.log(`${w} ${name}: hscroll=${f.hscroll} xterm=${JSON.stringify(f.xterm)} pages=${f.taskPages} pile=${pileFetched}${kind === "client" && pileFetched ? "  <-- CLIENT STEP FETCHED THE PILE" : ""}`);
     }
     await page.close();

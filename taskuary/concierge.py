@@ -347,6 +347,13 @@ def task_now(store, tid: int) -> str:
     rv = store.pending_review(tid)
     last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') in ('agent', 'assistant_agent')), None)
     lines = [f"TASK NOW: {task_ref(tid)} [{t.get('Status')}, {t.get('Kind')}] {t.get('Title') or ''} - {state}"]
+    # ...and WHAT ITS SCREEN SAYS, so "what is it doing?" is answered from the work, not from a status word - the canvas
+    # shows the agent's session beside the chat, and the assistant relays both ways about the thing on screen (2026-09-29)
+    if live and live.get('sid'):
+        from . import terminal as _term
+        try: screen = [str(l) for l in _term.asking_lines(live['sid'], 8) if str(l).strip()]
+        except Exception: screen = []
+        if screen: lines.append("THE AGENT'S SCREEN, last lines:\n" + '\n'.join(f'  {_cut(l, 200)}' for l in screen))
     sent = store.sent_reply(task_id=tid)
     if sent: lines.append(f"  YOU ALREADY REPLIED ({str(sent.get('DecidedAt') or sent.get('CreatedAt') or '')[:16]}): {_cut(sent.get('FinalText') or sent.get('DraftText'), 240)} - do not suggest answering again")
     if rv: lines.append(f"  a {rv.get('Kind')} waits for the owner's yes (rv{rv['ReviewId']})")

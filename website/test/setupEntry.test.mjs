@@ -10,11 +10,11 @@ import path from "node:path";
 const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
 const head = view.slice(view.indexOf('<div className="tq-chat-head">'), view.indexOf('<Popover open={!!aiEl}'));
 
-test("the Assistant header carries the setup entry and it calls the chat's own setup()", () => {
-  const at = head.indexOf("Set up Taskuary");
-  assert.notEqual(at, -1, "a Set up Taskuary control on the header");
-  const button = head.slice(head.lastIndexOf("<button", at), at);
-  assert.ok(button.includes("onClick={setup}"), "the header entry runs the same setup() the chat uses");
+test("the setup entry lives on the empty chat's welcome block, not the header, and it calls the chat's own setup()", () => {
+  assert.equal(head.includes("Set up Taskuary"), false, "the header no longer carries a setup chip - the top bar's badge and the welcome block do");
+  const at = view.indexOf('title="A walk through every part of Taskuary');
+  const button = view.slice(view.lastIndexOf("<button", at), at);
+  assert.ok(button.includes("onClick={setup}"), "the welcome entry runs the same setup() the chat uses");
 });
 
 test("setup() opens the conversation in place - no wizard route, no phrase to interpret", () => {

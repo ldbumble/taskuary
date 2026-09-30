@@ -8,7 +8,7 @@
    dot, the card 8px in - so the pipe reads as the top of the same list, ranked instead of dated.
    What comes out next is the FIRST row; the walls and the taper are gone (the owner, 2026-09-03:
    "no more funnel... everything comes out from the top"). */
-.tq-pile { position: relative; padding: 12px 0 8px; }
+.tq-pile { position: relative; padding: 0 0 8px; }
 /* how close the pipe is to empty - said once the count is small enough to be encouraging */
 .tq-pile-cheer { text-align: center; color: #6e685f; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 10px 0 2px; }
 .tq-pile-note { text-align: center; color: #8a847a; font: 500 10px 'IBM Plex Sans', system-ui, sans-serif; padding: 3px 0; }
@@ -22,7 +22,7 @@
    changes category jumps, and that is rare. */
 .tq-pile-band { position: relative; }
 .tq-pile-head { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
-  padding: 9px 10px 7px 58px; margin-top: 7px; background: #fffdfb; border-bottom: 1px solid #ece7e0; }
+  padding: 6px 10px 6px 4px; margin-top: 7px; background: #fffdfb; border-bottom: 1px solid #ece7e0; }
 .tq-pile-band:first-child .tq-pile-head { margin-top: 0; }
 /* importance lives on the CATEGORY and nowhere else, so this is the only coloured thing on the
    rail - and it wears the whole role rather than just its ink: a tinted PILL reads as a label you
@@ -133,10 +133,10 @@
 .tq-pile-empty b { display: block; color: #3c5740; font-size: 15px; margin: 6px 0 4px; }
 
 /* ── the chat ─────────────────────────────────────────────────────────────────────────────── */
-.tq-chat-head { display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 14px; border-bottom: 1px solid #e1dcd5; background: #fffdfb; }
-.tq-chat-head .who b { display: block; font-size: 14px; color: #262521; font-weight: 800; letter-spacing: .2px; }
+.tq-chat-head { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-bottom: 1px solid #e1dcd5; background: #fffdfb; }
+.tq-chat-head .who b { display: inline; font-size: 13px; color: #262521; font-weight: 800; letter-spacing: .2px; }
 .tq-chat-head .who { min-width: 0; }
-.tq-chat-head .who span { display: block; font-size: 10.5px; color: #6e685f; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-chat-head .who span { display: inline; font-size: 10.5px; color: #6e685f; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-chat-head .grow { flex: 1; }
 .tq-stage-mode { display: inline-flex; border: 1px solid #ddd6cb; border-radius: 99px; overflow: hidden; flex: 0 0 auto; }
 .tq-stage-mode button { border: 0; background: transparent; padding: 4px 10px; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; cursor: pointer; white-space: nowrap; }

@@ -36,7 +36,7 @@ import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import ContinueBox from "./ContinueBox.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
@@ -444,16 +444,18 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
     </div>
   );
 }
-// the ways to use the stage - shown in the chat's header and on the task view's empty stage,
-// so whichever one you are in, the other is one click away. Game swaps the whole tab for the office
-// (AssistantGame.jsx): the same pile, walked instead of talked through.
-const StageMode = ({ mode, setMode, onGame }) => (
-  <div className="tq-stage-mode" title="What a click on a row does">
-    <button type="button" className={mode === "chat" ? "on" : ""} onClick={() => setMode("chat")} title="Rows go to the conversation - Taskuary walks you through them">Chat</button>
-    <button type="button" className={mode === "task" ? "on" : ""} onClick={() => setMode("task")} title="Rows open here on their own - the message, the triage, the agent's work, the draft">Task</button>
-    {onGame && <button type="button" onClick={onGame} title="The same items as an office you walk around - people in the lobby, fyi's in the coffee room, points for every move">Game</button>}
-  </div>
-);
+// the ways to use the stage - lives in the page's top bar (TaskHubPage), since it decides what the sidebar's rows do.
+// Game swaps the whole tab for the office (AssistantGame.jsx): the same pile, walked instead of talked through.
+export const StageMode = ({ mode, onMode, game = false, onGame }) => {
+  const pick = (m) => () => { onMode(m); if (game) onGame(false); };
+  return (
+    <div className="tq-stage-mode" title="What a click on a row does">
+      <button type="button" className={!game && mode === "chat" ? "on" : ""} onClick={pick("chat")} title="Rows go to the conversation - Taskuary walks you through them">Chat</button>
+      <button type="button" className={!game && mode === "task" ? "on" : ""} onClick={pick("task")} title="Rows open here on their own - the message, the triage, the agent's work, the draft">Task</button>
+      {onGame && <button type="button" className={game ? "on" : ""} onClick={() => onGame(true)} title="The same items as an office you walk around - people in the lobby, fyi's in the coffee room, points for every move">Game</button>}
+    </div>
+  );
+};
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
 function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null }) {
@@ -600,7 +602,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
 }
 
 // ── the page ─────────────────────────────────────────────────────────────────────────────────
-export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGame, active = true, request = null }) {
+export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode, onMode, active = true, request = null }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
   // A set-up walk-through, running HERE. The conversation binds to that task's own session - which
@@ -649,7 +651,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const [continueOn, setContinueOn] = useState(null);  // the walk's Continue session: { task, anchor, ref }
   const [emojiEl, setEmojiEl] = useState(null);
   const [speakOnState, setSpeak] = useState(speakOn);
-  const [stageMode, setStageMode] = useState("chat");   // what a click on a row does: chat (default) or task view
+  const [modeIn, setModeIn] = useState("chat"), stageMode = mode ?? modeIn, setStageMode = onMode ?? setModeIn;   // what a click on a row does: chat (default) or task view
   const [railOpen, setRailOpen] = useState(false);      // on a phone: the rail instead of the chat
   const bodyRef = useRef(null);
   // Polls and state loads can already be in flight when New chat is pressed. Epoching the
@@ -1627,15 +1629,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
-        <Box sx={{ width: 30, height: 30, borderRadius: "50%", background: "#5f7a5f", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}><AssistantMark /></Box>
-        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : resetting ? "new chat" : !pile ? "Loading your items…" : statusLine(items, busy)}</span></div>
+        <Box sx={{ width: 22, height: 22, borderRadius: "50%", background: "#5f7a5f", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}><AssistantMark /></Box>
+        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
-        {/* Setting Taskuary up is not a first-run-only wizard (PW-189): the entry stays on the header, and it
-            opens the scripted walk in THIS conversation - nothing is navigated away from, and nothing here
-            is a phrase for an AI to interpret, since none may be connected yet when this gets pressed. */}
-        <Tooltip title="A walk through every part of Taskuary — one step at a time, no AI needed">
-          <button type="button" className="tq-chip tq-phone-hide" disabled={busy || resetting || walking} onClick={setup}>Set up Taskuary</button></Tooltip>
-        <StageMode mode={stageMode} setMode={setStageMode} onGame={onGame} />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
         <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
@@ -1812,7 +1808,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
         Hovering a row opens it here; clicking pins it. You get the message that arrived, why triage sent it
         where it did, what the agent is doing about it, and the reply waiting to go — each on its own tab.
       </Typography>
-      <Box sx={{ mt: 1 }}><StageMode mode={stageMode} setMode={setStageMode} onGame={onGame} /></Box>
     </Box>
   );
 

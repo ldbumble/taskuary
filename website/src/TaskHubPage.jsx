@@ -22,7 +22,7 @@ import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { StarMark, TaskuaryMark } from "./ui.jsx";
-import AssistantView from "./AssistantView.jsx";
+import AssistantView, { StageMode } from "./AssistantView.jsx";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
@@ -275,6 +275,7 @@ export default function TaskHubPage() {
   const [asstGame, setAsstGame] = useState(() => {
     try { const v = localStorage.getItem("taskuary.assistantMode"); return v ? v === "game" : DEMO; } catch { return DEMO; }
   });
+  const [stageMode, setStageMode] = useState("chat");   // what a click on a sidebar row does (chat | task)
   const pickAsstGame = (on) => { setAsstGame(on); try { localStorage.setItem("taskuary.assistantMode", on ? "game" : "chat"); } catch { /* private window */ } };
   // ...and the Board, which can hold a live session too: mounted once opened, hidden after. The
   // Assistant is the normal landing tab, but a deep link does not boot it until it is opened.
@@ -361,6 +362,7 @@ export default function TaskHubPage() {
               border: `1px solid ${tab === "Board" ? "transparent" : "#cbd4dc"}` }}>
             {tab === "Board" ? <><StarMark size={14} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}
           </Box>
+          {tab === "Assistant" && <Box sx={{ ml: { xs: 0.25, md: 1 } }}><StageMode mode={stageMode} onMode={setStageMode} game={asstGame} onGame={pickAsstGame} /></Box>}
           <Box sx={{ flex: 1 }} />
           {/* on the RIGHT, with the other transient chrome. On the left it grew the brand cluster
               until it slid UNDER the tab strip, which is absolutely centred on the window and so
@@ -403,7 +405,7 @@ export default function TaskHubPage() {
               {/* Game is the same Assistant, walked: the chat stays mounted behind it so its conversation survives the switch */}
               <Box sx={{ display: asstGame ? "none" : "block" }}>
                 <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} onChanged={refreshPending}
-                  onGame={() => pickAsstGame(true)} active={tab === "Assistant" && !asstGame} request={canvasReq} />
+                  mode={stageMode} onMode={setStageMode} active={tab === "Assistant" && !asstGame} request={canvasReq} />
               </Box>
               {asstGame && (
                 <React.Suspense fallback={<CircularProgress size={22} sx={{ m: 4 }} />}>

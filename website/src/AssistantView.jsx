@@ -507,7 +507,12 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
   // server-side at propose time, which is the only place that can know.
   // A proposal is waiting on its own Confirm: offering the item's verbs beside it invites two answers.
   const own = chipsOf(m);
-  const chips = last && !m.proposal && kind !== "proposal" ? (own.length || m.card ? own : tableChips) : [];
+  const said = last && !m.proposal && kind !== "proposal" ? (own.length || m.card ? own : tableChips) : [];
+  // NEVER A DEAD END (the owner, 2026-09-30: "it can write that ... but then should move to next or at least have buttons to
+  // navigate"): the newest line with nothing to press - a notice, an answer, a line read back from history - offers Next
+  // while the pipe still holds something
+  const chips = said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || !(actions.items || []).length
+    ? said : [{ verb: "next", label: "Next" }];
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,

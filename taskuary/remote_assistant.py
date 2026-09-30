@@ -639,6 +639,8 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             try: offered = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
             except ValueError: offered = []
             act = acts.get(question) if picked else None
+            # a pick that IS words (Try again): the same line goes to the model again, as if typed
+            if act and act.get('t') == 'ask': question, picked, act = str(act.get('text') or question), False, None
             # ...spent by a PICK now; words spend it only when their answer goes out - a tap made while the model is
             # still thinking about typed words must find its list (PickJumpsTheQueueTests)
             if picked: forget_offered(store, channel, chat)
@@ -1663,10 +1665,13 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         words = [label for label, _ in rows]
         _offer(rows)
     else:
-        _offer([(c['label'], {'t': 'next'} if c.get('verb') == 'next' else {'t': 'open', 'key': c['key']} if c.get('verb') == 'open'
+        # ...and a chip that is WORDS (Try again after the AI failed: the owner's own line, sent again) is a pick too - it was
+        # dropped for having no verb, and the phone offered nothing where the desktop offered Try again (2026-09-30)
+        _offer([(c['label'], {'t': 'ask', 'text': c['ask']} if c.get('ask') and not c.get('verb')
+                 else {'t': 'next'} if c.get('verb') == 'next' else {'t': 'open', 'key': c['key']} if c.get('verb') == 'open'
                  else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key')})
-                for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') and c.get('label')
-                and (item.get('key') or c.get('verb') in ('next', 'open'))])
+                for c in out.get('chips') or [] if isinstance(c, dict) and c.get('label')
+                and ((c.get('ask') and not c.get('verb')) or (c.get('verb') and (item.get('key') or c.get('verb') in ('next', 'open'))))])
     # THE CARD'S ORDER: the verb, then Next, then More, then the rest - the desktop's two buttons and its
     # Also line, as one numbered list (2026-09-23). A proposal's yes/no and an agent's own answers keep
     # theirs: those are the answer itself, not a choice of what to do.

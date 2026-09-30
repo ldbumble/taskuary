@@ -1490,7 +1490,10 @@ def continue_session(task_id: int, body: CodeBody = None):
     try:
         session = hub_term.start_on_task(store, task_id, row['Agent'], (body.model if body else None),
                                          (body.instruction if body else None), ACTOR,
-                                         cwd=row['Cwd'], resume=row['ExtId'])
+                                         cwd=row['Cwd'], resume=row['ExtId'],
+                                         # the id belongs to the CLI that made it: resuming a codex conversation on the default
+                                         # brain ran `claude --resume <codex id>` - "No conversation found with session ID"
+                                         brain=row.get('Brain') or None)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
     store.audit('task', task_id, 'continue-session', ACTOR, detail={'agent': row['Agent'], 'fromSid': row['Sid']})

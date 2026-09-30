@@ -257,3 +257,19 @@ def test_a_resumed_session_is_told_what_arrived_since_its_last_run_and_where_the
     cpath = seed.split(' in ', 1)[1].split(' (the thread section)')[0]
     text = open(cpath, encoding='utf-8').read()
     assert 'It says AI not set up but it is' in text and str(shot) in text
+
+
+def test_continuing_resumes_on_the_cli_that_made_the_conversation_not_the_default(tmp_path):
+    """A codex conversation id handed to the default brain ran `claude --resume <codex id>`: 'No conversation found'."""
+    store = MemoryStore(); coder(store); tid = task(store)
+    store.note_session_id(tid, 'pane-1', 'codex-thread', 'claude', str(tmp_path), 'codex')
+    with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True),          mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's2'}) as start:
+        TestClient(server.app).post(f'/api/tasks/{tid}/continue-session')
+    assert (start.call_args.kwargs['resume'], start.call_args.kwargs['brain']) == ('codex-thread', 'codex')
+
+
+def test_a_failed_resume_on_the_wrong_cli_does_not_rename_the_conversation(tmp_path):
+    store = MemoryStore(); coder(store); tid = task(store)
+    store.add_transcript(tid, 'pane-1', 'codex worked', 'coder', str(tmp_path), 'codex-thread', brain='codex')
+    store.add_transcript(tid, 'pane-2', 'No conversation found', 'coder', str(tmp_path), 'codex-thread', brain='claude')
+    assert store.resumable_session(tid)['Brain'] == 'codex'

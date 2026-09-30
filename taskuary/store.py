@@ -3593,19 +3593,25 @@ class SQLiteStore:
         self._exec('DELETE FROM transcript WHERE Sid=?', (sid,))      # one row per session, always the latest
         return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,ExtId,Brain,CreatedAt) VALUES (?,?,?,?,?,?,?,?)',
                           (task_id, sid, agent, cwd, text, ext_id or prev.get('ExtId') or '', brain, _now()))
-    def note_session_id(self, task_id, sid, ext_id, agent=None, cwd=None):
+    def note_session_id(self, task_id, sid, ext_id, agent=None, cwd=None, brain=None):
         """The CLI's OWN conversation id, filed the moment a hook or a rollout names it - NOT when
         the pane closes. keep() runs only on a clean exit, so a killed Taskuary (or a rebooted box)
         would otherwise take yesterday's resumable session with it."""
         if not (sid and ext_id): return None
         if self._one('SELECT TranscriptId FROM transcript WHERE Sid=?', (sid,)):
-            return self._exec('UPDATE transcript SET ExtId=? WHERE Sid=?', (ext_id, sid))
-        return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,ExtId,CreatedAt) VALUES (?,?,?,?,?,?,?)',
-                          (task_id, sid, agent, cwd, '', ext_id, _now()))
+            return self._exec('UPDATE transcript SET ExtId=?, Brain=COALESCE(?, Brain) WHERE Sid=?', (ext_id, brain, sid))
+        # the id is only meaningful to the CLI that made it, so it is filed with that CLI's name
+        return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,ExtId,CreatedAt,Brain) VALUES (?,?,?,?,?,?,?,?)',
+                          (task_id, sid, agent, cwd, '', ext_id, _now(), brain))
     def resumable_session(self, task_id):
         """The newest session on this task whose CLI conversation can be reopened by its own id."""
-        return self._one("SELECT * FROM transcript WHERE TaskId=? AND COALESCE(ExtId,'')<>'' "
-                         'ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
+        row = self._one("SELECT * FROM transcript WHERE TaskId=? AND COALESCE(ExtId,'')<>'' "
+                        'ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
+        # ...on the CLI that MADE that conversation: the first row carrying its id. A resume that failed on the wrong CLI filed
+        # the same id again under its own name, and the next continue read that and failed the same way (TQ-0887, three times)
+        first = row and self._one("SELECT Brain FROM transcript WHERE TaskId=? AND ExtId=? AND COALESCE(Brain,'')<>'' "
+                                  'ORDER BY TranscriptId LIMIT 1', (task_id, row['ExtId']))
+        return {**row, 'Brain': first['Brain']} if first else row
     def agented_task_ids(self) -> set:
         """Every task an agent has ever touched - a live-session transcript or a headless run. The
         Board is the agents' board: a reply the owner answered by hand is finished work, not board work."""

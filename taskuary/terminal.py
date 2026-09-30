@@ -714,7 +714,8 @@ def bind_ext(t, ext_id: str) -> None:
     t.ext_id = ext_id
     store = getattr(t, 'store', None)
     if not (store and getattr(t, 'task_id', None)): return
-    try: store.note_session_id(t.task_id, t.sid, ext_id, t.agent, t.cwd)
+    cli = getattr(t, 'cli', None)
+    try: store.note_session_id(t.task_id, t.sid, ext_id, t.agent, t.cwd, cli if isinstance(cli, str) else None)
     except Exception as e: logger.debug(f'could not file the session id for {t.sid}: {e}')
 
 

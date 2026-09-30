@@ -15,7 +15,11 @@ export const canvasItemHeight = (bodyHeight) => Math.max(420, Math.round((bodyHe
 // an item the canvas shows as a task view: it has a task, and it is not a proposal, a set-up step or a batch
 export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "walk", "brief", "fyis", "meeting"].includes(kind);
 
-export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onListChanged, onChanged, onGoReports }) {
+// ON A PHONE the view is the SCREEN's height from the start, and Expand pins that same box over the page with a back
+// arrow - full screen, and still never a resize: the box it pins is measured in place, the same width and height.
+export const phoneItemHeight = (innerHeight) => Math.max(420, Math.round((innerHeight || 0) - 16));
+
+export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onListChanged, onChanged, onGoReports, phone = false }) {
   // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
@@ -23,8 +27,21 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // by a link showing only its heading under a screenful of earlier lines
   const box = useRef(null);
   useEffect(() => { box.current?.scrollIntoView({ block: "start" }); }, [card.key]);
+  const [phoneH] = useState(() => phoneItemHeight(typeof window === "undefined" ? 0 : window.innerHeight));
+  // where the box sits in the page, taken the moment it is pinned - the pinned box keeps exactly this width
+  const [pin, setPin] = useState(null);
+  useEffect(() => {
+    if (!(phone && expanded)) { setPin(null); return; }
+    const r = box.current?.getBoundingClientRect();
+    if (r) setPin({ left: r.left, width: r.width });   // exact: a rounded width re-wrapped the strip and moved the pane by 2px
+  }, [phone, expanded]);
+  const h = phone ? phoneH : height;
   return (
-    <Box ref={box} data-tq-canvas-item={card.key} sx={{ height, display: "flex", minWidth: 0, scrollMarginTop: "8px" }}>
+    <>
+    {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
+    <Box ref={box} data-tq-canvas-item={card.key} data-tq-pinned={pin ? "" : undefined}
+      sx={{ height: h, display: "flex", minWidth: 0, scrollMarginTop: "8px",
+        ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       <TaskPage taskId={card.tid} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
         openAct={act} onActOpened={() => setAct(null)}
         onNext={onNext} nextBusy={busy} expanded={expanded} onExpand={onExpand}
@@ -32,7 +49,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // closed, put away or deleted here, the walk moves on - the same as Done on a walk card
         onSelect={(id) => { if (!id) onAfter(); }}
         onFinish={async (status, close) => { await close(); onAfter(); }}
-        onReminded={(out) => { if (out?.remindAt) onAfter(); }} />
+        onReminded={(out) => { if (out?.remindAt) onAfter(); }} backArrow={phone} />
     </Box>
+    </>
   );
 }

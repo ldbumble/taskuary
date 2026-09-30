@@ -18,11 +18,22 @@ test("an item with a task behind it is shown by TaskPage; a proposal, a batch or
 // HARD REQUIREMENT 1: no terminal redraw corruption. The view's box is the chat body's height in BOTH states - Expand
 // hides the conversation around it and never resizes it, so the pty inside can never be grown after it has output.
 test("Expand never changes the view's height, so the pane is never grown", () => {
-  assert.match(item, /data-tq-canvas-item=\{card\.key\} sx=\{\{ height, display: "flex", minWidth: 0, scrollMarginTop: "8px" \}\}>/);
+  assert.match(item, /sx=\{\{ height: h, display: "flex", minWidth: 0, scrollMarginTop: "8px",/);
   assert.match(item, /export const canvasItemHeight = \(bodyHeight\) => Math\.max\(420, Math\.round\(\(bodyHeight \|\| 0\) - 26\)\)/);
   assert.match(view, /height: canvasItemHeight\(bodyH\), expanded,/);
   assert.doesNotMatch(view.slice(view.indexOf("const canvasState"), view.indexOf("const canvasState") + 400), /expanded \?/);
   assert.match(src("assistantView.css"), /\.tq-chat-inner\.expanded > :not\(\.tq-canvas-live\) \{ display: none; \}/);
+});
+
+// ...and on a phone the view is the screen's height from the start; Expand pins that same box (measured in place) full
+// screen with a back arrow - still no resize
+test("a phone's full screen pins the same box, never a bigger one", () => {
+  assert.match(item, /export const phoneItemHeight = \(innerHeight\) => Math\.max\(420, Math\.round\(\(innerHeight \|\| 0\) - 16\)\)/);
+  assert.match(item, /const h = phone \? phoneH : height;/);
+  assert.match(item, /if \(r\) setPin\(\{ left: r\.left, width: r\.width \}\);/);
+  assert.match(item, /position: "fixed", top: 8, left: pin\.left, width: pin\.width/);
+  // ...the arrow the SAME size as the icon it replaces: 2px more re-flowed the strip and the pane grew on the way back
+  assert.match(src("TaskPage.jsx"), /backArrow \? <ArrowBackIcon sx=\{\{ fontSize: 15 \}\} \/> : <CloseFullscreenIcon sx=\{\{ fontSize: 15 \}\} \/>\) : <OpenInFullIcon sx=\{\{ fontSize: 15 \}\} \/>/);
 });
 
 // HARD REQUIREMENT 2: no rail rebuild on a click. Fold, unfold and Expand are client state.

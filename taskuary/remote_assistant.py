@@ -456,7 +456,7 @@ def asking() -> dict | None:
 # KEEP IN STEP with website/src/walkSummary.js: the four groups, and which lanes land in each. A grouping
 # of lanes the pile already carries - nothing is judged here (2026-09-23).
 GROUPS = (('people', 'People want'), ('you', 'You wanted'), ('agents', 'Agents waiting'), ('read', 'Nothing to decide'),
-          ('passed', 'You passed'))
+          ('passed', 'For later'))           # the rail's For later (the canvas redesign, 2026-09-29): walked past, or put away
 _AGENT_LANES = {'blocked', 'stopped', 'saved', 'queued', 'working', 'broken', 'unjudged'}
 AGENT_CARD_LANES = {'blocked', 'stopped', 'queued', 'working', 'saved'}     # the lanes whose card is an agent's
 ROWS_PER_GROUP = 5
@@ -464,7 +464,7 @@ ROWS_PER_GROUP = 5
 
 def group_of(i: dict) -> str:
     # walked past with Next: the rail's Passed band (funnelPile.levelOf) - never back under "Agents waiting" (2026-09-24)
-    if i.get('surfaced') and i.get('order_band') == 2: return 'passed'
+    if (i.get('surfaced') or i.get('deferred')) and i.get('order_band') == 2: return 'passed'
     if i.get('kind') in ('action', 'agent', 'agentdone') or i.get('lane') in _AGENT_LANES: return 'agents'
     if i.get('lane') in ('report', 'fyi') or i.get('kind') in ('fyis', 'report', 'idea', 'wrapup'): return 'read'
     if i.get('channel') in ('own', 'assistant'): return 'you'
@@ -491,7 +491,7 @@ def who_wants_what(items: list) -> str:
     parts = [x for x in (ready and f"{ready} {'is' if ready == 1 else 'are'} ready - you only approve",
                          word and f"{word} {'needs' if word == 1 else 'need'} a word",
                          yours and f"{yours} {'is' if yours == 1 else 'are'} on your list",
-                         skip and f"{skip} you can skip", passed and f"{passed} you passed") if x]
+                         skip and f"{skip} you can skip", passed and f"{passed} for later") if x]
     lines = [f"{len(live)} thing{'' if len(live) == 1 else 's'}. " + ', '.join(parts)[:1].upper() + ', '.join(parts)[1:] + '.']
     for key, word_ in GROUPS:
         rows = [i for i in live if group_of(i) == key]
@@ -500,9 +500,20 @@ def who_wants_what(items: list) -> str:
         for i in rows[:ROWS_PER_GROUP]:
             state = ('draft ready' if i.get('kind') != 'action' else 'wants a yes') if i.get('lane') == 'approve' \
                 else (funnel.LANE_WORDS.get(str(i.get('lane') or '')) or ('',))[0]
+            # FOR LATER says when it comes back, in the rail's own short form (funnelPile.railBack)
+            if key == 'passed': state = f"back in {_back_in(i.get('back_at') or i.get('defer_until'))}" if _back_in(i.get('back_at') or i.get('defer_until')) else ''
             lines.append(f"· {who_of(i)} - {_cut(i.get('title') or '', 70)}" + (f' ({state})' if state else ''))
         if len(rows) > ROWS_PER_GROUP: lines.append(f'  and {len(rows) - ROWS_PER_GROUP} more')
     return '\n'.join(lines)
+
+
+def _back_in(iso) -> str:
+    """'< 30m', '< 1h', '3h', '2d' until a For later row comes back - the rail's gutter, said on the phone. '' once due."""
+    from datetime import datetime as _dt
+    try: at = _dt.strptime(str(iso or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
+    except ValueError: return ''
+    m = round((at - _dt.now()).total_seconds() / 60)
+    return '' if m <= 0 else '< 30m' if m < 30 else '< 1h' if m < 60 else f'{m // 60}h' if m < 1440 else f'{m // 1440}d'
 
 
 def meetings_line(store) -> str:
@@ -518,7 +529,9 @@ def meetings_line(store) -> str:
 
 MORNING_KEY, MORNING_AT = 'phone_morning_line', 'phone_morning_line_at'
 SCRIPT_LINES = [('Walk me through my tasks', {'t': 'walk'}), ('Set up Taskuary', {'t': 'script', 'script': 'set up Taskuary'}),
-                ('Set up a report', {'t': 'script', 'script': 'set up a report'})]
+                ('Set up a report', {'t': 'script', 'script': 'set up a report'}),
+                # the sidebar's browse buttons, as picks (doorway_browse): sections, then the list, then one
+                ('Connections', {'t': 'browse', 'area': 'connections'}), ('Settings', {'t': 'browse', 'area': 'settings'})]
 
 
 def greeting(now=None) -> str:
@@ -564,7 +577,10 @@ def morning_line(store, now=None, force: bool = False) -> int:
     if not items and not force: return 0
     # the desktop's opener: the day's meetings, then who wants what (2026-09-23)
     head = day_opener(store, items, now)
-    text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, (w, _) in enumerate(SCRIPT_LINES, 1))
+    from . import doorway_browse
+    # the three scripts keep the numbers the owner knows; then each section the rail holds; then the browse picks
+    lines = SCRIPT_LINES[:3] + doorway_browse.section_rows(items) + SCRIPT_LINES[3:]
+    text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, (w, _) in enumerate(lines, 1))
     # ...never into a conversation: a walk handed to a chat is its own opener, and a door with a turn in flight or a word in
     # the last minutes is left for the next pass (this runs after every report pass)
     if handoff(store) and not force:
@@ -573,7 +589,7 @@ def morning_line(store, now=None, force: bool = False) -> int:
     if not doors: return 0
     sent = 0
     for d in doors:
-        _offer(SCRIPT_LINES)                    # per send: remember_offered spends what was offered
+        _offer(lines)                           # per send: remember_offered spends what was offered
         try: send(store, d['channel'], d['chat'], text, d['connectorId']); sent += 1
         except Exception as e: logger.warning(f'the morning line did not reach {d["channel"]}: {e}')
     if sent:
@@ -866,9 +882,32 @@ def _settle(store, prop: dict, item: dict | None, actor: str) -> str:
 
 def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     """One numbered pick, run the way the desktop's button runs it - never through the model."""
-    from . import concierge, operations
+    from . import concierge, funnel, operations
     t = act.get('t')
+    from . import doorway_browse
     try:
+        if t == 'section':
+            # a section, walked (the desktop's heading click): its first row, and Next stays in it until it is empty
+            sec = act.get('section') or ''
+            first = doorway_browse.next_in(store, sec, ())
+            if not first: return f"Nothing in {funnel.SECTION_WORDS.get(sec, sec)} right now."
+            doorway_browse.hold(store, asking(), sec, [first['key']])
+            nxt = concierge.surface(store, first['key'], actor=actor)
+            return carry_out(store, nxt, nxt.get('item'), actor)
+        if t == 'browse':
+            text, rows = doorway_browse.browse(store, act.get('area') or '', act.get('section'), act.get('open'))
+            return turn_text({'say': text, 'item': None}, store=store, extra=rows)
+        if t == 'next' and doorway_browse.held(store, asking()):
+            here, walking = (item or {}).get('key'), doorway_browse.held(store, asking())
+            seen = [*walking.get('seen', []), *([here] if here else [])]
+            nxt = doorway_browse.next_in(store, walking['section'], seen)
+            if nxt:
+                doorway_browse.hold(store, asking(), walking['section'], [*seen, nxt['key']])
+                out = concierge.surface(store, nxt['key'], actor=actor, leaving=here)
+                return carry_out(store, out, out.get('item'), actor)
+            doorway_browse.hold(store, asking(), None)          # the section ran out: say so, and the walk goes on as normal
+            return carry_out(store, concierge.surface(store, actor=actor, leaving=here, exclude=here), None, actor,
+                             lead=funnel.section_done(walking['section']))
         if t == 'next':
             # the desktop's Next: what is on the table is put down on the way out (read - Passed when it is yours) and not
             # the next pick; the phone surfaced afresh, so a failed item could be handed straight back or left unread

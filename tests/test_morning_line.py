@@ -49,7 +49,8 @@ class MorningLineTests(unittest.TestCase):
         self.assertFalse(hasattr(ra, 'script_direct'))
         self.assertIn('what is connected', ra.run_act(self.s, {'t': 'script', 'script': 'set up Taskuary'}, None))
         self.assertIn('sentence', ra.run_act(self.s, {'t': 'script', 'script': 'set up a report'}, None))
-        self.assertEqual([t for t, _ in ra.SCRIPT_LINES], ['Walk me through my tasks', 'Set up Taskuary', 'Set up a report'])
+        # ...and the sidebar's browse picks after them (the canvas redesign, 2026-09-29)
+        self.assertEqual([t for t, _ in ra.SCRIPT_LINES], ['Walk me through my tasks', 'Set up Taskuary', 'Set up a report', 'Connections', 'Settings'])
 
 
 class NeverIntoAConversationTests(unittest.TestCase):

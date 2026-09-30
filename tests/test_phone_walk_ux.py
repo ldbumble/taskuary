@@ -340,14 +340,14 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
         items = [{'key': 'a', 'lane': 'stopped', 'kind': 'agent', 'who': 'Erin Blake', 'title': 'Budget tab', 'surfaced': True, 'order_band': 2},
                  {'key': 'b', 'lane': 'asked', 'kind': 'asked', 'who': 'Gail Moreno', 'title': 'Q3 numbers', 'order_band': 2}]
         text = remote_assistant.who_wants_what(items)
-        self.assertTrue(text.startswith('2 things. 1 needs a word, 1 you passed.'), text)
-        self.assertIn('YOU PASSED · 1', text); self.assertNotIn('AGENTS WAITING', text)
+        self.assertTrue(text.startswith('2 things. 1 needs a word, 1 for later.'), text)
+        self.assertIn('FOR LATER · 1', text); self.assertNotIn('AGENTS WAITING', text)   # the rail's For later (2026-09-29)
 
     def test_it_groups_exactly_as_the_desktop_does(self):
         from pathlib import Path
         js = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'walkSummary.js').read_text(encoding='utf-8')
         for lane in remote_assistant._AGENT_LANES: self.assertIn(f'"{lane}"', js.split('AGENT_LANES')[1].split(';')[0])
-        self.assertEqual([w for _, w in remote_assistant.GROUPS], ['People want', 'You wanted', 'Agents waiting', 'Nothing to decide', 'You passed'])
+        self.assertEqual([w for _, w in remote_assistant.GROUPS], ['People want', 'You wanted', 'Agents waiting', 'Nothing to decide', 'For later'])
         for _, word in remote_assistant.GROUPS: self.assertIn(f'word: "{word}"', js)
 
 

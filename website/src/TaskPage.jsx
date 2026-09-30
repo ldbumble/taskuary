@@ -51,6 +51,7 @@ import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 // An open tab can still hold yesterday's entry bundle after a local upgrade. Vite names lazy
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
@@ -168,7 +169,7 @@ const askedAgo = (t) => {
 
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded,
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
-  onNext = null, nextBusy = false, expanded = false, onExpand = null }) {
+  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
   const [detail, setDetail] = useState(null);
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
@@ -847,9 +848,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   )}
                   {onExpand && (
                     <Tooltip title={expanded ? "Back to the conversation" : "Give this the whole canvas"}>
-                      <IconButton size="small" data-tq-expand="" aria-label={expanded ? "Collapse to the conversation" : "Expand to the whole canvas"}
+                      <IconButton size="small" data-tq-expand="" aria-label={expanded ? (backArrow ? "Back to the chat" : "Collapse to the conversation") : "Expand to the whole canvas"}
                         aria-pressed={expanded} onClick={onExpand} sx={{ color: "#41525f", flexShrink: 0 }}>
-                        {expanded ? <CloseFullscreenIcon sx={{ fontSize: 15 }} /> : <OpenInFullIcon sx={{ fontSize: 15 }} />}
+                        {/* a phone's full screen goes BACK to the chat - an arrow, the way every phone says it. The SAME size
+                            as the icon it replaces: 2px more re-flowed the strip and shrank the pane, a grow on the way back */}
+                        {expanded ? (backArrow ? <ArrowBackIcon sx={{ fontSize: 15 }} /> : <CloseFullscreenIcon sx={{ fontSize: 15 }} />) : <OpenInFullIcon sx={{ fontSize: 15 }} />}
                       </IconButton>
                     </Tooltip>
                   )}

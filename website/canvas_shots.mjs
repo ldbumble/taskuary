@@ -57,7 +57,8 @@ const SCENES = [
   ["fold-open", async (p) => click(p, "[data-tq-folded]"), "walk"],
   ["row-click", async (p) => first(() => click(p, "[data-tq-rail] [data-tq-row]", 2), () => click(p, "[data-tq-rail] .tq-pile-row", 2)), "walk"],
   ["agent-row", async (p) => p.evaluate(() => {
-    const row = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row .card")].find((c) => /agent waiting|👋/.test(c.title || c.textContent));
+    const rows = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row .card")].filter((c) => /agent waiting|👋/.test(c.title || c.textContent));
+    const row = rows.find((c) => !c.closest(".tq-pile-row.current")) || rows[0];
     if (!row) return false; row.click(); return true; }), "walk"],
   ["agent-expand", async (p) => click(p, "[data-tq-expand]"), "client"],
   ["agent-collapse", async (p) => click(p, "[data-tq-expand]"), "client"],

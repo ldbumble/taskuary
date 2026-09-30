@@ -109,7 +109,7 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
   const items = pile?.items || [];
   // A full account can return dozens of canonical rows together. Painting that entire stack in
   // one React commit leaves the rail blank until the browser has laid out every card. On the
@@ -372,7 +372,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection }) {
                     {/* the dot is WHERE IT CAME FROM. The logo says the same at reading size; the
                         dot says it at scanning size, down a column you can run an eye along. */}
                     <span className="rail"><i style={{ background: sourceColor(i) }} /></span>
-                    <div className="card" onClick={() => !i.settling && !isCur && onPull(i.key, `Show me “${i.title}”`)}
+                    {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it */}
+                    <div className="card" onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key, `Show me “${i.title}”`))}
                       title={[i.who, meta.word, i.ref, i.promoted ? 'triage moved it up' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         <span className="logo"><SourceMark item={i} size={15} /></span>
@@ -531,7 +532,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
   const foldedNow = !!canvas && live && !!m.card && (canvas.folded === m.card.key || !!canvas.browsing);
   if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
-      <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle}
+      <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={actions.advance}
         onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} />
     </div>
@@ -1602,8 +1603,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     else if (request.kind === "task") openTaskRef.current?.(request);
     else if (request.kind === "new") setNewNonce((x) => x + 1);
   }, [request, state]);
-  const canvasState = useMemo(() => ({ height: canvasItemHeight(bodyH), expanded, folded: foldedKey, browsing,
-    toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey, browsing]);
+  const canvasState = useMemo(() => ({ height: canvasItemHeight(bodyH), expanded, folded: foldedKey, browsing, phone,
+    toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey, browsing, phone]);
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
   const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
@@ -1811,7 +1812,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
       top={({ openByMid, openByItem }) => <Pile pile={pile} current={old ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
-        onSection={walkSection} />}
+        onSection={walkSection} onCurrent={() => setRailOpen(false)} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r) => pull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} />

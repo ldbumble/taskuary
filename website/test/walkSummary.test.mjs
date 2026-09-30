@@ -27,7 +27,7 @@ test("what you walked past with Next is its own group, as in the rail - never ba
   assert.equal(groupOf(passed), "passed");
   assert.equal(groupOf(it("stopped", "agent")), "agents");
   const s = summarize([passed, it("asked")]);
-  assert.equal(s.lead, "2 things. 1 needs a word, 1 you passed.");
+  assert.equal(s.lead, "2 things. 1 needs a word, 1 for later.");
   assert.deepEqual(s.groups.map((g) => g.key), ["people", "passed"]);
 });
 

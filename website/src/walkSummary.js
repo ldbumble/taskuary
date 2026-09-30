@@ -9,7 +9,7 @@ export const GROUPS = [
   { key: "you", word: "You wanted" },
   { key: "agents", word: "Agents waiting" },
   { key: "read", word: "Nothing to decide" },
-  { key: "passed", word: "You passed" },
+  { key: "passed", word: "For later" },   // the rail's For later (the canvas redesign, 2026-09-29)
 ];
 
 const AGENT_LANES = new Set(["blocked", "stopped", "saved", "queued", "working", "broken", "unjudged"]);
@@ -51,7 +51,7 @@ export function summarize(items) {
   const word = live.length - ready - skip - yours - passed;
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   const parts = [ready && `${n(ready, "is", "are")} ready - you only approve`, word && `${n(word, "needs", "need")} a word`,
-                 yours && `${yours} ${yours === 1 ? "is" : "are"} on your list`, skip && `${skip} you can skip`, passed && `${passed} you passed`].filter(Boolean);
+                 yours && `${yours} ${yours === 1 ? "is" : "are"} on your list`, skip && `${skip} you can skip`, passed && `${passed} for later`].filter(Boolean);
   const lead = live.length
     ? `${live.length} thing${live.length === 1 ? "" : "s"}. ${parts.join(", ").replace(/^./, (c) => c.toUpperCase())}.`
     : "Nothing is waiting on you.";

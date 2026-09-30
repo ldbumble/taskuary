@@ -417,12 +417,10 @@ def health_ideas(store, now: datetime = None) -> list:
                         'text': f"{r['title']} is a workflow that has never run - its clock is {r['schedule'] or 'not set'}.",
                         'action': {'type': 'health', 'tab': 'Reports', 'hash': f"report={r['source_id']}", 'source_id': r['source_id'],
                                    'why': 'a workflow that never ran is either mis-clocked or waiting on a sign-in'}})
-    for c in appfacts.connections(store):
-        if c['active'] and c['last_error']:
-            out.append({'key': f"health:connection:{c['connector_id']}", 'kind': 'health', 'sig': re.sub(r'\d+', '#', _short(c['last_error'], 60)),
-                        'text': f"{c['name']} is erroring - {_short(c['last_error'], 80)}.",
-                        'action': {'type': 'health', 'tab': 'Connections', 'hash': f"connector={c['type']}", 'connector_id': c['connector_id'],
-                                   'why': 'a connection that errors reads nothing until somebody looks'}})
+    # An erroring CONNECTION is not raised here: the rail already carries it as its own "stopped answering" row
+    # (funnel.broken_connections), and said twice it became an idea, then a task, then a coding agent investigating
+    # a connection the owner was looking at (the owner, 2026-09-30: "don't need both ... if it fails we don't need
+    # advisor to tell us").
     try:
         waiting = len(store.pending_triage(limit=50))
         brain = str(store.get_setting('triage_ai') or '').strip()

@@ -165,7 +165,7 @@ def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None
 
 # ── the producers: each reads one thing the hub holds ─────────────────────────────────────────
 
-CONN_LABELS = {'outlook': 'Outlook', 'gmail': 'Gmail', 'imap': 'IMAP', 'teams': 'Teams', 'slack': 'Slack',
+CONN_LABELS = {'chatgpt': 'ChatGPT', 'outlook': 'Outlook', 'gmail': 'Gmail', 'imap': 'IMAP', 'teams': 'Teams', 'slack': 'Slack',
                'github': 'GitHub', 'gitlab': 'GitLab', 'whatsapp': 'WhatsApp', 'telegram': 'Telegram',
                'jira': 'Jira', 'sentry': 'Sentry', 'intacct': 'Intacct', 'quickbooks': 'QuickBooks'}
 

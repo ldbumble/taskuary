@@ -66,7 +66,7 @@ class CatalogueTests(unittest.TestCase):
 
 
 class HealthTests(unittest.TestCase):
-    def test_three_failures_a_never_run_workflow_and_an_erroring_connection_each_raise_one_row(self):
+    def test_three_failures_and_a_never_run_workflow_each_raise_one_row_and_a_connection_is_the_rails_alone(self):
         s = A.store()
         for _ in range(2):
             s.add_report_run(A.AR['sid'], {'at': '2026-09-18 07:00:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
@@ -78,8 +78,10 @@ class HealthTests(unittest.TestCase):
         self.assertIn('failed its last three runs', ideas[f"health:report:{A.AR['sid']}"]['text'])
         self.assertEqual(ideas[f"health:report:{A.AR['sid']}"]['action']['tab'], 'Reports')
         self.assertIn('never run', ideas[f'health:workflow:{wf}']['text'])
-        self.assertIn('token expired', ideas[f'health:connection:{cid}']['text'])
-        self.assertEqual(ideas[f'health:connection:{cid}']['action']['hash'], 'connector=teams')
+        # the rail's "stopped answering" row says this; an idea too became a task and an agent (2026-09-30)
+        self.assertNotIn(f'health:connection:{cid}', ideas)
+        from taskuary import funnel
+        self.assertIn('Teams stopped answering', [r['title'] for r in funnel.broken_connections(s)])
         # the ADP workflow in the fixture failed ONCE: one failure is a bad day, not a broken report
         self.assertNotIn('health:workflow:' + str([r for r in A.appfacts.reports(s) if r['title'] == 'ADP hours export'][0]['source_id']), ideas)
 

@@ -133,3 +133,12 @@ class BrainTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+class ModelListTests(unittest.TestCase):
+    def test_the_plan_list_is_read_from_models_or_data_and_hidden_ones_are_left_out(self):
+        rows = [{'slug': 'gpt-plan-a', 'display_name': 'A', 'visibility': 'list'}, {'slug': 'gpt-hidden', 'visibility': 'hide'}]
+        for key in ('models', 'data'):
+            with mock.patch.object(ca.requests, 'get', return_value=_Resp(200, {key: rows})):
+                self.assertEqual(ca.models('tok'), [('gpt-plan-a', 'A')])
+        with mock.patch.object(ca.requests, 'get', return_value=_Resp(200, {'object': 'list'})):
+            with self.assertRaisesRegex(RuntimeError, "carried: \['object'\]"): ca.models('tok')

@@ -376,7 +376,8 @@ export const levelOf = (item) => {
 };
 // when a For later row comes back: the server's own clock for it (surfaced_at + task_return_minutes), or its Remind me date
 export const backAt = (item) => item?.back_at || item?.defer_until || null;
-// ...said in the age gutter's own short form, counting DOWN: "< 30m", "< 1h", "3h", "2d". A time already past says
+// ...said in the age gutter's own short form, counting DOWN and reading forward: "in 30m", "in 1h", "in 3h", "in 2d" - "< 30m"
+// read as an age, as if it had come in (the owner, 2026-09-30), so it says "in" the way a meeting's does. A time already past says
 // nothing - the row is on its way back to On you, and a negative age would be a lie about which way time runs.
 export const railBack = (iso, now = Date.now()) => {
   if (!iso) return "";
@@ -384,10 +385,10 @@ export const railBack = (iso, now = Date.now()) => {
   if (Number.isNaN(t)) return "";
   const m = Math.round((t - now) / 60000);
   if (m <= 0) return "";
-  if (m < 30) return "< 30m";
-  if (m < 60) return "< 1h";
-  if (m < 1440) return `${Math.floor(m / 60)}h`;
-  return `${Math.floor(m / 1440)}d`;
+  if (m < 30) return "in 30m";
+  if (m < 60) return "in 1h";
+  if (m < 1440) return `in ${Math.floor(m / 60)}h`;
+  return `in ${Math.floor(m / 1440)}d`;
 };
 export const levelLabel = (level) => LEVEL_META[level]?.word || "";
 // the levels actually present, in the order the rail draws them - the jump menu's entries

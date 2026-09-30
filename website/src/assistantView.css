@@ -65,12 +65,12 @@
 .tq-pile-waitrow .why { flex: 0 0 auto; font-size: 10.5px; color: #9aa39d; }
 
 .tq-pile-stack { position: relative; }
-.tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 58px 14px minmax(0, 1fr); align-items: stretch;
+.tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 44px 14px minmax(0, 1fr); align-items: stretch;
   transition: top .55s cubic-bezier(.2,.8,.2,1), opacity .3s ease, transform .3s ease; }
 .tq-pile-row.landing { opacity: 0; transform: translateY(-6px) scale(.98); }
 /* HOW LONG IT HAS WAITED, not what o'clock it arrived: the rail is ranked, not dated. No mono -
    at 10px its figures were the hardest thing on the rail to read (the owner, 2026-09-16). */
-.tq-pile-row .when { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; text-align: right; padding: 8px 12px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tq-pile-row .when { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; text-align: right; padding: 8px 6px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tq-pile-row .rail { position: relative; }
 .tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: #e1dcd5; }
 /* the dot is the SOURCE (assistantCards.sourceColor) - one size for every row, because importance

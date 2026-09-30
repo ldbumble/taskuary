@@ -253,8 +253,8 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   const css = read("assistantView.css");
   // The work rail's gutter carries an AGE, not a clock, so it needs less width than the dated
   // Timeline's - the two rails are separate views now and their gutters say different things.
-  assert.match(css, /\.tq-pile-row \{[^}]*grid-template-columns: 58px 14px minmax\(0, 1fr\)/);
-  assert.match(read("FeedView.jsx"), /const GUTTER = 76;/);   // ...and the dated Timeline keeps its own
+  assert.match(css, /\.tq-pile-row \{[^}]*grid-template-columns: 44px 14px minmax\(0, 1fr\)/);
+  assert.match(read("FeedView.jsx"), /const GUTTER = 66;/);   // ...and the dated Timeline keeps its own
   // ...but they are set in ONE type: the Timeline's clock reads at the rail's size and weight,
   // and its dot is the SOURCE, the same answer the logo beside it gives (the owner, 2026-09-17).
   assert.match(read("FeedView.jsx"), /const gutterTime = \{ font: "600 11px 'IBM Plex Sans'/);

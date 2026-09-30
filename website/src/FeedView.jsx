@@ -274,12 +274,12 @@ const blurb = (r) => {
 // The time gutter. 58px broke "12:40 PM" onto two lines, which is what made the column look
 // unkempt - the number and its meridiem have to live on one line; 76 is what that costs now the
 // clock is read at the work rail's size rather than in 10px mono.
-const GUTTER = 76;
+const GUTTER = 66;
 // ...and the clock is set the way the work rail sets its age column (assistantView.css
 // .tq-pile-row .when): sans, not mono - at 10px its figures were the hardest thing on the rail to
 // read (the owner, 2026-09-16). Two rails reading the same list must read in one type.
 const gutterTime = { font: "600 11px 'IBM Plex Sans', system-ui, sans-serif", color: FAINT,
-  textAlign: "right", pt: "6px", pl: "8px", pr: "12px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  textAlign: "right", pt: "6px", pl: 0, pr: "10px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
 // The rail dot says WHERE IT CAME FROM, exactly as the work rail's does (assistantCards.sourceColor),
 // and it must never disagree with the logo drawn beside the sender (the owner, 2026-09-17: the
 // work rail's dots are the right ones). State is still on the row - the card's left edge carries
@@ -1620,7 +1620,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             delete railRef.current?.dataset.tqHoverLocked;
           }}
           sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
-          position: "relative", px: 1, pt: view === "unread" ? 0 : 1, pb: 3,   // no top padding under the pipe: a sticky heading sticks at the padding edge, and rows showed through above it
+          position: "relative", pl: "2px", pr: 1, pt: view === "unread" ? 0 : 1, pb: 3,   // no top padding under the pipe: a sticky heading sticks at the padding edge, and rows showed through above it
           "&[data-tq-scrolling='true'] .tqRow [data-tq-keep]": {
             transition: "none !important",
           },
@@ -1733,10 +1733,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                               <Box sx={{ display: "flex", flexShrink: 0 }}>
                                 <ChannelIcon channel={r.Channel} sx={{ fontSize: 16 }} />
                               </Box>
-                              {/* 11.5px, the size the work rail sets its subjects in: the two rails
+                              {/* the sender gives way FIRST when the row is too narrow for its chips: a fixed-width sender pushed
+                                  "task · in progress" and "coding" past the card's border and clipped them (the owner, 2026-09-30).
+                              11.5px, the size the work rail sets its subjects in: the two rails
                                   are one list read two ways, so they read at one size. */}
                               <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: view !== "unread" && ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? DIM : INK,
-                                fontSize: 11.5, letterSpacing: "-.1px", maxWidth: 118, minWidth: 0, flexShrink: 0 }}>
+                                fontSize: 11.5, letterSpacing: "-.1px", maxWidth: 118, minWidth: 0, flexShrink: 1 }}>
                                 {r.FromName || r.FromEmail || "unknown"}
                               </Typography>
                               <Typography variant="body2" noWrap sx={{ color: view === "unread" ? INK : DIM, fontSize: 11.5, fontWeight: 500, letterSpacing: "-.1px", flex: 1, minWidth: 0 }}>

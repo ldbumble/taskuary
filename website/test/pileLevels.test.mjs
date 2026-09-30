@@ -100,10 +100,10 @@ test("For later's gutter says how long until it comes back, soonest first", asyn
   const { railBack, backAt, bandsOf } = await import("../src/funnelPile.js");
   const now = Date.parse("2026-09-29T12:00:00");
   const at = (m) => new Date(now + m * 60000).toISOString();
-  assert.equal(railBack(at(10), now), "< 30m");
-  assert.equal(railBack(at(45), now), "< 1h");
-  assert.equal(railBack(at(185), now), "3h");
-  assert.equal(railBack(at(60 * 50), now), "2d");
+  assert.equal(railBack(at(10), now), "in 30m");
+  assert.equal(railBack(at(45), now), "in 1h");
+  assert.equal(railBack(at(185), now), "in 3h");
+  assert.equal(railBack(at(60 * 50), now), "in 2d");
   assert.equal(railBack(at(-5), now), "", "a return time already past is no age at all");
   assert.equal(railBack(null, now), "");
   assert.equal(backAt({ back_at: "2026-09-29 15:00:00" }), "2026-09-29 15:00:00");

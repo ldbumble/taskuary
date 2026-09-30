@@ -360,7 +360,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [repoPick, setRepoPick] = useState(false);
   const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
   const [sourceOpen, setSourceOpen] = useState(false);
-  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); setPeek(false); }, [selected]);
+  const [reportOpen, setReportOpen] = useState(false);
+  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); setReportOpen(false); setPeek(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
   // ...in the scope ON SCREEN: with no dependencies this kept the first render's scope, so Refresh always went back to
@@ -922,6 +923,24 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     result of the work is the thing you are looking at */}
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
+                {/* In the agent view the task card (and its "Where this came from") is not drawn, and a report task's
+                    whole substance is the report - so it is one click away here (the owner, 2026-09-30) */}
+                {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
+                  <Box sx={{ ...card, mb: 1.25, px: 1.5, py: 0.85, bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #55697a" }}>
+                    <Box onClick={() => setReportOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
+                      <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 750, letterSpacing: 1.35 }}>THE REPORT</Typography>
+                      <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
+                        {sourceMessage.SourceName || sourceMessage.Subject} · {fmtDateTime(sourceMessage.SentAt)}</Typography>
+                      <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: reportOpen ? "rotate(180deg)" : "none" }} />
+                    </Box>
+                    {reportOpen && (
+                      <Box sx={{ mt: 0.85, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
+                        {looksMd(sourceMessage.BodyText) ? <Md text={cleanText(sourceMessage.BodyText)} />
+                          : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{cleanText(sourceMessage.BodyText)}</Typography>}
+                      </Box>
+                    )}
+                  </Box>
+                )}
                 {!sessionView && (
                   <Box sx={{ ...card, mb: 1.25, px: 1.5, py: stage === "task" ? 1.5 : 0.85,
                     bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #55697a" }}>
@@ -1078,9 +1097,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   </Box>
                                   {m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>
                                     {m.Subject}</Typography>}
-                                  <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
-                                    overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
-                                    WebkitBoxOrient: "vertical", overflow: "hidden" }}>{cleanText(m.ReadText ?? m.BodyText)}</Typography>
+                                  {/* a REPORT run is the whole point of its task - the report itself, in full and formatted,
+                                      not three lines of it (the owner, 2026-09-30: "i can't see the full report once it gets sent to agent") */}
+                                  {m.Channel === "report"
+                                    ? <Box sx={{ mt: 0.5, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
+                                        {looksMd(m.BodyText) ? <Md text={cleanText(m.BodyText)} />
+                                          : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{cleanText(m.BodyText)}</Typography>}
+                                      </Box>
+                                    : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
+                                        overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
+                                        WebkitBoxOrient: "vertical", overflow: "hidden" }}>{cleanText(m.ReadText ?? m.BodyText)}</Typography>}
                                 </Box>
                               </Box>
                             ))}

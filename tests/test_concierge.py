@@ -803,10 +803,27 @@ class AgentGotThereFirstTests(unittest.TestCase):
         live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 3, 'waiting': False, 'tail': []}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             out = concierge.surface(s, key=todo['key'], llm=lambda *a, **k: 'never')
-        self.assertIsNone(out['item']); self.assertIn("is with codex right now - nothing for you until it stops or asks", out['say'])
+        # PICKED BY NAME it goes on the table, agent and all - the owner wants to see it (2026-09-30: "task should pull up")
+        self.assertEqual((out['item']['tid'], out['item']['lane']), (t, 'working'))
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             self.assertEqual([(i['key'], i['lane']) for i in funnel.build(s)['items']], [(f'review:{r2}', 'approve'), (f'agent:{t}', 'working')])   # in hand, at the top, under the agent's key
-            self.assertEqual(funnel.next_item(s)['key'], f'review:{r2}')
+            self.assertEqual(funnel.next_item(s)['key'], f'review:{r2}')   # ...and NEXT still lets a working agent be
+
+
+    def test_an_agent_that_is_asking_is_not_shown_as_working(self):
+        """TQ-0887: codex finished its turn with a question; the task's message row, held as 'working' under the SAME agent:<tid>
+        key, came first and won the dedup - the rail said "Agents working" over a pane waiting on the owner (2026-09-30)."""
+        s = store()
+        t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+        s.add_message({'TaskId': t, 'ExternalId': 'x:pto', 'ConversationId': 'c:pto', 'Channel': 'email', 'Subject': 'PTO', 'FromName': 'Erin',
+                       'FromEmail': 'c@ours.com', 'SentAt': ago(3), 'BodyText': 'Can you import PTO for Aug 9-22?', 'Status': 'routed'})
+        live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(1), 'idle': 600, 'waiting': True, 'sid': 's1',
+                 'tail': ['Can you send the PTO file for Aug 9-22?']}]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
+            rows = [(i['key'], i['kind'], i['lane']) for i in funnel.build(s)['items'] if i.get('tid') == t]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertEqual(rows[0][1], 'agent')
+        self.assertNotEqual(rows[0][2], 'working')
 
 
 class ActTests(unittest.TestCase):

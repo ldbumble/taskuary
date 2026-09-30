@@ -7,8 +7,6 @@
     "learn_enabled": "1",
     "reply_channels": "email,teams,slack,telegram,whatsapp,imessage,discord,github",
     "calendar_enabled": "1",
-    "chat_ack_enabled": "1",
-    "chat_ack_text": "On it - I'll get back to you here.",
     "assistant_ai": "",
     "assistant_model": "",
     "assistant_max_lines": "5",

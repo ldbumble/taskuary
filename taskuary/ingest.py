@@ -919,7 +919,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 store.add_comment(tid, 'router', 'agent', f'Unattended start allowed: {who}.')
                 if f['kind'] == 'coding': _spawn(_auto_code, store, tid)
                 else: _spawn(_auto_general, store, tid, advisor_brief(store, msg, mid))
-                if is_chat(msg): _spawn(_ack_chat, store, msg, mid, tid)   # they hear at once that somebody is on it
             else:
                 held = who
                 # A stranger's first message is its own state, not just an absent session. An
@@ -1306,7 +1305,7 @@ def _secs(a: str, b: str) -> float:
 
 
 def is_ack(store, m: dict) -> bool:
-    """Taskuary's own chat acknowledgement (_ack_chat): the `ack:` row it files, or - on a channel that hands
+    """Taskuary's own chat acknowledgement (sent by itself until 2026-09-30, now never): the `ack:` row it files, or - on a channel that hands
     our sends back as context (ECHOES) - the echo, which carries the acknowledgement's exact words."""
     if str(m.get('ExternalId') or '').startswith('ack:'): return True
     text = (store.get_setting('chat_ack_text') or ACK_DEFAULT).strip()
@@ -1497,38 +1496,13 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
 
 
 # ── the first thing they hear ───────────────────────────────────────────────────────────
-# In chat, "the agent isn't working" is a task AND a question. The task starts a coder, and the
-# person hears nothing until it wraps - ten minutes if it is quick, an hour of silence if not.
-# So the moment an agent actually starts on a chat ask, one line goes back into the chat. Fixed
-# words the owner chose (Settings - Replies), never a drafted answer: it promises nothing but
-# attention, which is the one thing that is true at that moment. Not twice in half an hour on one
-# chat, and never over a line of the owner's own - they have already heard from us.
+# NOTHING GOES BACK INTO A CHAT BY ITSELF (the owner, 2026-09-30: "for this chat where it's just a input into tasks you should
+# never respond without approval ... like doing that in teams which we never do without approval"). An agent starting on a chat
+# ask used to send "On it - I'll get back to you here." into Teams or WhatsApp at once; every word that leaves now leaves by your
+# yes (verdicts.decide). Only the assistant's OWN chats answer by themselves - they are the owner talking to Taskuary
+# (remote_assistant). The old line is still recognised, because it sits in owners' threads already (is_ack).
 ACK_DEFAULT = "On it - I'll get back to you here."
-ACK_QUIET_MIN = 30
-ACK_FRESH_MIN = 10      # only an ask that just arrived: a startup catch-up must not answer yesterday's chat
 ECHOES = {'teams', 'imessage'}      # channels that hand our own sends back as context rows (no local copy needed)
-
-
-def _ack_chat(store, msg: dict, mid: int, tid: int) -> bool:
-    cfg = store.get_settings()
-    if not is_chat(msg) or cfg.get('chat_ack_enabled', '1') != '1': return False
-    from datetime import datetime
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    if _secs(msg.get('sent_at'), now) > ACK_FRESH_MIN * 60: return False
-    from .outbound import can_reply, reply_to_message
-    if not can_reply(store, msg.get('channel')): return False
-    for m in store.thread_messages(msg.get('conversation_id'), None, limit=12):
-        if is_ours(m) and _secs(m.get('SentAt'), msg.get('sent_at')) <= ACK_QUIET_MIN * 60: return False
-    text = (cfg.get('chat_ack_text') or ACK_DEFAULT).strip()
-    try: reply_to_message(store, store.get_message(mid) or {}, text)
-    except Exception as e:
-        logger.warning(f'chat acknowledgement failed for {task_ref(tid)}: {e}'); return False
-    if msg.get('channel') not in ECHOES:
-        store.add_message({'TaskId': tid, 'ExternalId': f'ack:{mid}', 'ConversationId': msg.get('conversation_id'),
-                           'Channel': msg.get('channel'), 'SourceName': msg.get('source_name'), 'Subject': msg.get('subject'),
-                           'FromName': 'You', 'SentAt': now, 'BodyText': text, 'Status': 'context', 'Direction': 'out'})
-    store.add_comment(tid, 'router', 'agent', f"Acknowledged in {msg.get('channel')}: \"{text}\"")
-    return True
 
 
 def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> list:

@@ -75,9 +75,11 @@ class BrowseTests(unittest.TestCase):
         s = MemoryStore()
         self.assertIn('Replies', ra.run_act(s, {'t': 'browse', 'area': 'settings'}, None))
         group = ra.run_act(s, {'t': 'browse', 'area': 'settings', 'section': 'Replies'}, None)
-        self.assertIn('Acknowledge chat asks at once', group)
-        one = ra.run_act(s, {'t': 'browse', 'area': 'settings', 'section': 'Replies', 'open': 'chat_ack_enabled'}, None)
-        self.assertIn('Acknowledge chat asks at once', one)
+        from taskuary import doorway_browse
+        key, meta = next((k, m) for k, m in doorway_browse._schema()['knobs'].items() if m.get('group') == 'Replies')
+        self.assertIn(meta['label'], group)
+        one = ra.run_act(s, {'t': 'browse', 'area': 'settings', 'section': 'Replies', 'open': key}, None)
+        self.assertIn(meta['label'], one)
         self.assertIn('now:', one)
 
     def test_connections_and_settings_are_offered_every_morning(self):

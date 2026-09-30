@@ -7,6 +7,7 @@ catalogue's groups, a group lists its cards, a card opens as text with its state
 model - a pick is a button (remote_assistant.run_act). What the rail calls a section is funnel.level_of's to say.
 """
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import funnel
@@ -24,15 +25,25 @@ def section_rows(items: list) -> list:
 def _key(chat: dict) -> str: return f"{SECTION_KEY}:{chat.get('channel')}:{chat.get('chat')}"
 
 
+def _now() -> datetime: return datetime.now()
+
+
 def held(store, chat: dict | None) -> dict | None:
+    """The section this chat is walking - over once it is older than the quiet hours: a walk abandoned in the morning
+    must not capture a Next days later (the final review)."""
     if not chat: return None
     try: v = json.loads(store.get_setting(_key(chat)) or 'null')
     except ValueError: return None
-    return v if isinstance(v, dict) and v.get('section') else None
+    if not (isinstance(v, dict) and v.get('section')): return None
+    from .processing_unread import return_minutes
+    try: at = datetime.fromisoformat(str(v.get('at') or ''))
+    except ValueError: return None
+    return v if _now() - at <= timedelta(minutes=return_minutes(store)) else None
 
 
 def hold(store, chat: dict | None, section: str | None, seen=()):
-    if chat: store.set_setting(_key(chat), json.dumps({'section': section, 'seen': list(seen)}) if section else '', 'assistant')
+    if chat: store.set_setting(_key(chat), json.dumps({'section': section, 'seen': list(seen), 'at': _now().isoformat(timespec='seconds')})
+                               if section else '', 'assistant')
 
 
 def next_in(store, section: str, seen) -> dict | None:

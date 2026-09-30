@@ -95,3 +95,16 @@ class LegacyPileForLaterTests(unittest.TestCase):
         self.assertEqual(out['msg:1']['back_at'], (now - timedelta(minutes=10) + timedelta(minutes=180)).strftime('%Y-%m-%d %H:%M:%S'))
         self.assertEqual((out['msg:3']['deferred'], out['msg:3']['back_at']), (True, until))
         self.assertEqual({funnel.level_of(i | {'order_band': 2}) for i in out.values()}, {'later'})
+
+
+class ServedRailTests(unittest.TestCase):
+    """The final review: Remind me rows were kept by processing_unread.build but dropped by funnel.pile - the rail the page
+    is actually served. Tested through the road the page reads."""
+    def test_a_task_put_away_is_on_the_served_rail(self):
+        s, settle = settled()
+        t = s.create_task({'Title': 'Renew the domain', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        remind.set_reminder(s, t, 'monday'); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            rows = [i for i in funnel.pile(s, force=True)['items'] if i.get('tid') == t]
+        self.assertEqual([(funnel.level_of(i), i['actionable']) for i in rows], [('later', False)])

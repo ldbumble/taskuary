@@ -22,3 +22,11 @@ test("a link that is not a page is left alone", () => {
   assert.equal(canvasRequestFromHash(""), null);
   assert.equal(canvasRequestFromHash("#report=nonsense").state.open, null, "an unknown report bucket opens the list, not a blank editor");
 });
+
+// the final review (2026-09-29): "#settings=foo" crashed the whole app, on every reload - a page the app does not have
+// opens the Settings sections instead
+test("a settings link to a page that does not exist opens the section list", () => {
+  assert.deepEqual(canvasRequestFromHash("#settings=foo").state, { section: null, open: null });
+  assert.deepEqual(canvasRequestFromHash("#settings=config&group=Renamed%20group").state, { section: "config", open: "Renamed group" },
+    "a group is checked by the view, which knows the groups");
+});

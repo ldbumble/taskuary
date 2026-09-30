@@ -1,67 +1,29 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
-import { says, subState } from "./laneSays.js";
-import ContinueBox from "./ContinueBox.jsx";
-import QueuedStart from "./QueuedStart.jsx";
+import { says } from "./laneSays.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
-  Drawer, IconButton, InputAdornment, Link, MenuItem, Select, TextField, Tooltip, Typography,
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, IconButton, InputAdornment, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
-import RemindMe from "./RemindMe.jsx";
-import BlockIcon from "@mui/icons-material/Block";
-import AltRouteIcon from "@mui/icons-material/AltRoute";
-import DifferenceIcon from "@mui/icons-material/Difference";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
-import { runOperation } from "./taskOps.js";
-import { agentName } from "./agentWork.js";
-import { lazyGeneral } from "./lazyGeneral.js";
-import { outcomeOf } from "./dispatchOutcome.js";
-import { progressLine } from "./checklist.js";
-import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
-import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
-import ReviewDecision from "./ReviewDecision.jsx";
 import { onLive } from "./live.js";
-import { pollWhileActive } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
-import { Handoff } from "./Handoff.jsx";
-import { Reshape } from "./Reshape.jsx";
-import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
-import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
-import { Md, looksMd } from "./md.jsx";
-import TerminalIcon from "@mui/icons-material/Terminal";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import DoneAllIcon from "@mui/icons-material/DoneAll";
-import HistoryIcon from "@mui/icons-material/History";
-import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
-import CallSplitIcon from "@mui/icons-material/CallSplit";
-import AccountTreeIcon from "@mui/icons-material/AccountTree";
-import AttachFileIcon from "@mui/icons-material/AttachFile";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
-import { Divider, ListItemText } from "@mui/material";
-import { TerminalPane } from "./TerminalView.jsx";
+import { PANEL2, BORDER, DIM, FAINT, INK, card, ACCENT, PILL_COLORS, ALERT } from "./theme.jsx";
+import { StateChip, stateOf, TASK_STATES, asUtc, timeAgo, Empty, FilterPills, isWaiting, assignedAgent } from "./ui.jsx";
+import { ListItemText } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
 
 // An open tab can still hold yesterday's entry bundle after a local upgrade. Vite names lazy
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
 // Recover once automatically; a real module error still reaches the view boundary on retry.
-import { autostartPlan, isGeneralKind } from "./autostart.js";
-import { agentWorkspaceMode } from "./taskWorkspace.js";
+import { isGeneralKind } from "./autostart.js";
 import { ASK_TAG } from "./newTask.js";
-import {
-  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
-} from "./taskLifecycle.js";
-import { closeoutOf } from "./reviewProposal.js";
 
-const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
-
-const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
-
+// three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and what is done.
+// "all" held the other two over again, so a live task sat in two pills at once ("we don't want one for
+// all if it's another group"); every task now has one pill. Dropped has none - search finds it.
 // `assistant` is a legacy alias from Timeline discussions. New discussions use `general`, but
 // old ones must still open here instead of falling through to the coding terminal.
 // CATEGORY is where a task is; the chip on the row says what it needs. Filtering by "needs
@@ -72,9 +34,6 @@ const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] |
 // the pills wear the same colours as the chips on the rows they hold: "in progress" in the
 // slate-blue brand chrome next to a sage "agent working" chip read as two different states
 const ST_C = Object.fromEntries(TASK_STATES.map((s) => [s.key, s.c]));
-// three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and what is done.
-// "all" held the other two over again, so a live task sat in two pills at once ("we don't want one for
-// all if it's another group"); every task now has one pill. Dropped has none - search finds it.
 const STATE_FILTERS = [
   { key: "live", label: "in progress", c: ST_C.working },
   { key: "upcoming", label: "upcoming", c: ST_C.queued },
@@ -102,28 +61,14 @@ const KIND_OPTIONS = [
   { key: "coding", label: "agent · coding", hint: "the configured CLI in a repository terminal" },
   { key: "reply", label: "reply", hint: "drafted by the model triage uses and approved on the task - it never opens a session" },
 ];
-const KINDS = KIND_OPTIONS.map((o) => o.key);
 const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
 
 // The task's settings read as FACTS you can change, not as a form: pill-shaped, label-less,
 // sitting on the card's bottom edge. Stacked "Type / Task status / Priority" labels over boxed
 // selects made a four-field form out of four words, and put the one button that completes the
 // task at the end of it (the owner, 2026-09-16: "on bottom the filters agent·coding, waiting").
-const chipSel = {
-  fontSize: 11.5, fontWeight: 600, height: 26, bgcolor: "#f4f1ec", borderRadius: 13, color: INK,
-  "& .MuiSelect-select": { py: 0, pl: 1.25, pr: "24px !important", minHeight: 0, display: "flex", alignItems: "center" },
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER },
-  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#d8cfbe" },
-  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#55697a" },
-  "& .MuiSelect-icon": { right: 2, fontSize: 18, color: "rgba(0,0,0,.45)" },
-};
 // the repo is a filter like the others, but it opens a picker rather than a menu of values
-const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0, px: 1.25,
-  borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
-  "&:hover": { borderColor: "#d8cfbe", bgcolor: "#f4f1ec" } };
-const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
 // ...and the one filled move beside them. Every card's bar reads [ primaryBtn ] | [ barBtn ] [ barBtn ].
-const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
 // A LIVE SESSION'S CONTROLS LOOK LIKE CONTROLS. These were bare text buttons sitting next to
 // the outlined role/brain/repo pills, so the two things you could press had less edge than the
 // three facts you can only read - "buttons are still not clear what they are. and they are
@@ -131,14 +76,7 @@ const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
 // the app uses for every control: the colour says pressable, the border says where it ends.
 // Not filled - filled is Mark done's, one strip up, and a live session has no primary.
 // ...and SMALL, because every row this bar spends is a row the terminal does not get.
-const liveCtl = { fontSize: 10.5, fontWeight: 650, height: 23, minHeight: 23, py: 0, px: 0.9,
-  borderRadius: 11.5, color: ACCENT, bgcolor: "#f1f4f7", borderColor: "#c7d2dc", whiteSpace: "nowrap",
-  "& .MuiButton-startIcon": { mr: 0.5, ml: 0 },
-  "&:hover": { borderColor: ACCENT, bgcolor: "#e7eef4" } };
 // the same pill as chipBtn, for a fact you read rather than a control you press
-const chipBtnStatic = { display: "inline-flex", alignItems: "center", height: 26, px: 1.25,
-  borderRadius: 13, bgcolor: "#f4f1ec", border: `1px solid ${BORDER}`, color: INK,
-  fontSize: 11.5, fontWeight: 600 };
 
 // ── the list rail's row ──────────────────────────────────────────────────────────────────
 // One word for the kind: the agent's own name follows it on the same line, so "agent · coding ·

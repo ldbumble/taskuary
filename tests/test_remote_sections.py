@@ -84,3 +84,18 @@ class BrowseTests(unittest.TestCase):
         labels = [label for label, _ in ra.SCRIPT_LINES]
         self.assertIn('Connections', labels)
         self.assertIn('Settings', labels)
+
+
+class SectionWalkEndsTests(unittest.TestCase):
+    """The final review: a phone section walk abandoned today captured Next days later. It ends with a new walk, a named
+    pick, or when it is older than the quiet hours."""
+    def test_a_held_section_expires_and_a_new_walk_drops_it(self):
+        s = MemoryStore()
+        chat = {'channel': 'whatsapp', 'chat': 'c1'}
+        db.hold(s, chat, 'fyi', ['msg:3'])
+        self.assertEqual(db.held(s, chat)['section'], 'fyi')
+        with mock.patch.object(db, '_now', return_value=datetime.now() + timedelta(hours=4)):
+            self.assertIsNone(db.held(s, chat), 'past the quiet hours it is over')
+        with mock.patch.object(ra, 'asking', return_value=chat), mock.patch.object(ra, 'walk', return_value='walked'):
+            ra.run_act(s, {'t': 'walk'}, None)
+        self.assertIsNone(db.held(s, chat), 'a new walk is not the old section')

@@ -1147,7 +1147,8 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         shared = getattr(store, 'processing_reads_active', lambda: False)()
         full = build(store, keep_surfaced=True) if shared else None
         if shared:
-            items = [i for i in full['items'] if i['unread']]
+            from .processing_unread import on_rail
+            items = [i for i in full['items'] if on_rail(i)]
             p = {**full, 'items': items, 'lanes': [{**l, 'n': sum(i['lane'] == l['lane'] for i in items)} for l in full['lanes']],
                  'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
         else: p = build(store)

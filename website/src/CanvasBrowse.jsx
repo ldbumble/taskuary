@@ -21,7 +21,7 @@ const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px so
 // The frame every area draws through. sections: [{key, label, n}]; cards: [{key, title, sub, badge, icon, onOpen}];
 // detail: the view's own element for the one open card, or null. `openLabel` names the open card for the assistant.
 export function BrowseFrame({ title, summary, sections = [], section, onSection, note, cards = [], detail = null, onBack,
-  openLabel = "", search = null, onOpenCard, live = true, empty = "Nothing here.", onReopen = null }) {
+  openLabel = "", search = null, tools = null, onOpenCard, live = true, empty = "Nothing here.", onReopen = null, wide = false }) {
   useEffect(() => { if (live) onOpenCard?.(detail ? openLabel : null); }, [live, detail, openLabel, onOpenCard]);
   // a card opened, or a section picked, is brought into view - the conversation above it does not move
   const root = useRef(null), one = useRef(null);
@@ -44,6 +44,10 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
           {!!summary && <Typography sx={{ fontSize: 12, color: DIM }}>{summary}</Typography>}
         </Box>
         {search}
+        {/* what the tab offered beside its list - Run due now, Write one, the filters: the tab is gone, so it is here */}
+        {tools}
+        {/* a note with no list under it yet (a link to something that is gone) is said here, where it is seen */}
+        {!!note && section == null && <Typography sx={{ mt: 1.25, fontSize: 12.5, color: "#7a2f3c", lineHeight: 1.5 }}>{note}</Typography>}
         {!!sections.length && (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1.5 }}>
             {sections.map((s) => (
@@ -77,7 +81,8 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
       {!detail && section != null && (
         <>
           {!!note && <Typography sx={{ fontSize: 12.5, color: DIM, lineHeight: 1.55, px: 0.5 }}>{note}</Typography>}
-          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "repeat(auto-fill, minmax(240px, 1fr))" } }}>
+          {/* a tab whose list is ROWS (Reports, Hub) keeps them rows - `wide`; cards (Connections, Settings) sit in a grid */}
+          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: wide ? "minmax(0, 1fr)" : { xs: "minmax(0, 1fr)", sm: "repeat(auto-fill, minmax(240px, 1fr))" } }}>
             {cards.map((c) => c.node ? (
               <Box key={c.key} data-tq-browse-card={c.key} sx={{ minWidth: 0 }}>{c.node}</Box>
             ) : (

@@ -271,7 +271,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
   if (browse) {
     const one = posts.find((x) => x.LoreId === browseState.open);
     return browse({
-      title: "Hub",
+      title: "Hub", wide: true,
       summary: !d ? "loading…" : `${d.count.posts} posts · ${d.count.topics} topics · ${d.count.comments} comments`,
       sections: [{ key: "", label: "everything", n: d?.count?.posts || 0 }, ...topics.map((t) => ({ key: t.Topic, label: t.Topic, n: t.n }))],
       section: browseState.section ?? "",
@@ -287,7 +287,26 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
       detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={load} onOpenTask={onOpenTask} defaultOpen /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: one ? `the Hub post "${one.Title}" (${one.Topic || "Hub"})` : "",
-      empty: q ? "Nothing here matches that." : "Nothing posted yet.",
+      empty: q ? "Nothing here matches that." : removed ? "Nothing has been voted off." : "Nothing posted yet.",
+      // the tab's own controls: which order, which tag, the shelf the vote took things off, and writing one
+      tools: (
+        <Box sx={{ mt: 1.25, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+          <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)} sx={{ fontSize: 12, bgcolor: PANEL, height: 32 }}>
+            <MenuItem value="top" sx={{ fontSize: 12.5 }}>most valuable</MenuItem>
+            <MenuItem value="new" sx={{ fontSize: 12.5 }}>newest</MenuItem>
+          </Select>
+          <Select size="small" value={kind} onChange={(e) => setKind(e.target.value)} displayEmpty sx={{ fontSize: 12, bgcolor: PANEL, height: 32, minWidth: 120 }}>
+            <MenuItem value="" sx={{ fontSize: 12.5 }}>all tags</MenuItem>
+            {Object.entries(KINDS).map(([key, value]) => <MenuItem key={key} value={key} sx={{ fontSize: 12.5 }}>{value.mark} {value.label}</MenuItem>)}
+          </Select>
+          <Button size="small" onClick={() => setRemoved((v) => !v)} sx={{ fontSize: 11.5, color: removed ? INK : FAINT, minWidth: 0 }}
+            title="what the vote took off, or you did - never deleted">{removed ? "back to Hub" : "removed"}</Button>
+          <Box sx={{ flex: 1 }} />
+          <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+            onClick={() => setNewOpen(true)} sx={{ background: GRADIENT, fontSize: 12.5 }}>Write one</Button>
+          <NewEntry open={newOpen} onClose={() => setNewOpen(false)} onDone={load} topics={topics} />
+        </Box>
+      ),
     });
   }
   return (

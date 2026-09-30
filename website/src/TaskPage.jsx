@@ -235,7 +235,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
 
   // the list is the page around this view (TasksView, or the assistant canvas): it reloads its own rows when told
-  const loadTasks = useCallback(async () => { await onListChanged?.(); }, [onListChanged]);
+  // THE PAGE'S CALLBACKS, HELD: the canvas hands fresh functions every render, and a load that listed them in its deps
+  // refetched the task and rebuilt its live subscription on every keystroke in the composer (the final review)
+  const onSelectRef = useRef(onSelect); onSelectRef.current = onSelect;
+  const listRef = useRef(onListChanged); listRef.current = onListChanged;
+  const loadTasks = useCallback(async () => { await listRef.current?.(); }, []);
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
     try {
@@ -251,13 +255,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // repainted "task not found" each time, which reads as the app being broken rather than
       // as the thing you just did. Let go of it, and say it once.
       if (e?.response?.status === 404) {
-        setDetail(null); onSelect(null);
+        setDetail(null); onSelectRef.current?.(null);
         setErr("That task is gone - it was deleted.");
         return;
       }
       setErr(e?.response?.data?.detail || "Failed to load task");
     }
-  }, [onSelect]);
+  }, []);
 
   // ...and keep it honest. The list was fetched ONCE, so a task whose agent picked it up
   // kept wearing "needs you" - and the pill counts kept agreeing with it - until something

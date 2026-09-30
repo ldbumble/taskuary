@@ -948,7 +948,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
   // ...on a NEW line, not on a line's own state changing: browsing (a chip, a card, Back) rewrites its line in place, and
   // pinning the bottom there threw the card you had just opened out of view (the canvas redesign, 2026-09-29)
   const holdBottom = useRef(false);        // a browse card is being read from its top
-  useEffect(() => { const el = bodyRef.current; if (el && !holdBottom.current && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; }, [msgs.length, busy]);
+  // a NEW line lets go of the hold: the answer to "what does this one do?" must land in view (the final review)
+  useEffect(() => { holdBottom.current = false; const el = bodyRef.current; if (el && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; }, [msgs.length, busy]);
   // ...and again whenever the thread GROWS - a card that loaded its draft, a report that unfolded - so the
   // bottom of the conversation is always what you see, unless you have scrolled up to read
   useEffect(() => {
@@ -1101,7 +1102,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     setText(""); setBusy(true); setErr("");
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t }]);
     try {
-      const ask = () => turn({ mode: "say", text: t, key: current, context_mid: currentItem?.mid || null, open_card: openCardRef.current });
+      // a card browsed open is what "this" means - not the item folded above it (the final review)
+      const ask = () => turn({ mode: "say", text: t, key: openCardRef.current ? null : current, context_mid: currentItem?.mid && !openCardRef.current ? currentItem.mid : null, open_card: openCardRef.current });
       const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
       if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
         setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: data.context_update }]);
@@ -1572,7 +1574,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     goReports: () => onNavigate?.("Reports"),
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     reopen: (key, onTable) => { if (onTable) setFoldedKey(null); else pull(key); },
-    browseState: (id, state) => setMsgs((m) => m.map((x) => (x.id === id ? { ...x, state } : x))),
+    browseState: (id, state) => { holdBottom.current = true; setMsgs((m) => m.map((x) => (x.id === id ? { ...x, state } : x))); },
     browse: (area, state) => browse(area, state),
     openCard,
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
@@ -1592,7 +1594,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGam
     return null;
   }, [shown]);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";
-  useEffect(() => { holdBottom.current = !!browsing; }, [browsing]);
   // WHAT THE PAGE ASKS THE CANVAS TO OPEN (TaskHubPage canvasReq): once each, and only once the chat has loaded - the
   // first load replaces the conversation, and a card posted before it would be wiped
   const doneReq = useRef(0);

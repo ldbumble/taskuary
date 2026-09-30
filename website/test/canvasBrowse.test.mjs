@@ -44,3 +44,28 @@ test("the card open in the canvas rides the next turn as its subject", () => {
   assert.match(view, /open_card: openCardRef\.current/);
   assert.match(src("CanvasBrowse.jsx"), /useEffect\(\(\) => \{ if \(live\) onOpenCard\?\.\(detail \? openLabel : null\); \}/);
 });
+
+// the final review (2026-09-29): the tabs are gone, so what only they offered must be on the browse cards - "with today's
+// controls" (the spec)
+test("each browse card carries the controls its tab had", () => {
+  assert.match(src("CanvasBrowse.jsx"), /\{tools\}/);
+  // ...and a tab whose list is rows keeps them rows (the fix pass: report rows were crushed into a 240px card grid)
+  assert.match(src("ReportsView.jsx"), /title: "Reports", wide: true,/);
+  assert.match(src("HubView.jsx"), /title: "Hub", wide: true,/);
+  const reports = src("ReportsView.jsx"), hub = src("HubView.jsx"), settings = src("SettingsView.jsx");
+  const r = reports.slice(reports.indexOf("return browse({"));
+  for (const want of ["Run due now", "<Composer", '"new-invoices"', '"new-agent"']) assert.ok(r.slice(0, 5000).includes(want), `Reports: ${want}`);
+  const h = hub.slice(hub.indexOf("return browse({"));
+  for (const want of ["Write one", "setSort", "setKind", "setRemoved", "<NewEntry"]) assert.ok(h.slice(0, 5000).includes(want), `Hub: ${want}`);
+  const st = settings.slice(settings.indexOf("return browse({"));
+  for (const want of ["<AssistantChanges", "Search settings"]) assert.ok(st.slice(0, 5000).includes(want), `Settings: ${want}`);
+});
+
+// the final review: "#report=999" opened an empty editor whose Save aimed at a missing id; "#connector=gone" said nothing
+test("a link to a report or a connection that is gone says so, and opens nothing empty", () => {
+  const reports = src("ReportsView.jsx"), conns = src("ConnectorsView.jsx");
+  assert.match(reports, /const missing = typeof browseState\.open === "number" && !sources\.some\(\(x\) => x\.SourceId === browseState\.open\);/);
+  assert.match(reports, /detail: browseState\.open != null && !missing \?/);
+  assert.match(conns, /if \(!direct\) setErr\(`That connection \(\$\{t\}\) is not here any more/);
+  assert.match(conns, /note: err \|\| \(q \?/);
+});

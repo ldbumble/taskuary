@@ -894,6 +894,8 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             doorway_browse.hold(store, asking(), sec, [first['key']])
             nxt = concierge.surface(store, first['key'], actor=actor)
             return carry_out(store, nxt, nxt.get('item'), actor)
+        # a new walk, or one item by name, is not the section being walked
+        if t in ('walk', 'open'): doorway_browse.hold(store, asking(), None)
         if t == 'browse':
             text, rows = doorway_browse.browse(store, act.get('area') or '', act.get('section'), act.get('open'))
             return turn_text({'say': text, 'item': None}, store=store, extra=rows)

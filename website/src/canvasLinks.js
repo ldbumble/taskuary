@@ -3,6 +3,9 @@
 // becomes a request for the assistant canvas: open this task's view, or post this browse card at this place.
 // Pure, so test/canvasLinks.test.mjs can hold every link the app writes. `n` numbers the request; null = not ours.
 const REPORT_BUCKETS = ["workflows", "new-invoices", "new-agent"];
+// Settings' pages (SettingsView NAV): a link to any other opens the section list - "#settings=foo" crashed the app on
+// every reload (the final review, 2026-09-29)
+export const SETTINGS_PAGES = ["about", "docs", "config", "policies", "memory", "audit", "updates"];
 
 export function canvasRequestFromHash(hash, n = 0) {
   const h = String(hash || "");
@@ -21,6 +24,7 @@ export function canvasRequestFromHash(hash, n = 0) {
   if (/^#(?:connector=|cli-agents)/.test(h)) return { kind: "browse", area: "connections", state: {}, n };
   if ((m = /^#settings=([^&]*)(?:&group=([^&]*))?/.exec(h))) {
     const page = decodeURIComponent(m[1] || "config") || "config", group = m[2] ? decodeURIComponent(m[2]) : "";
+    if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
     return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page }, n };
   }
   // a playbook or the profiles: the words live in Settings -> Docs (DocsView reads the hash itself)

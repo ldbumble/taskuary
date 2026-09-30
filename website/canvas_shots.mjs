@@ -88,6 +88,9 @@ const SCENES = [
   ["link-settings", async (p) => p.evaluate(() => { location.hash = "settings=config&group=Replies"; return true; }), "walk"],
   ["link-connector", async (p) => p.evaluate(() => { location.hash = "connector=gmail"; return true; }), "walk"],
   ["link-report", async (p) => p.evaluate(() => { location.hash = "report=new"; return true; }), "walk"],
+  ["link-gone-settings", async (p) => p.evaluate(() => { location.hash = "settings=nosuchpage"; return true; }), "walk"],
+  ["link-gone-report", async (p) => p.evaluate(() => { location.hash = "report=9999"; return true; }), "walk"],
+  ["link-gone-connector", async (p) => p.evaluate(() => { location.hash = "connector=nosuchtype"; return true; }), "walk"],
 ];
 
 (async () => {
@@ -129,5 +132,18 @@ const SCENES = [
     await page.close();
   }
   fs.writeFileSync(path.join(outdir, `${label}-facts.json`), JSON.stringify(facts, null, 1));
+  // THE HARD REQUIREMENTS, CHECKED (the spec): a client-only step (fold, expand, Back, browsing) never fetches the pile,
+  // no page breaks, and the live terminal never GROWS across expand and collapse - a pty grown after output is the
+  // ConPTY corruption. Any of these fails the run.
+  const bad = facts.filter((f) => f.clientOnlyViolated || f.broken).map((f) => `${f.w} ${f.name}: ${f.broken ? "broken page" : "fetched the pile"}`);
+  const box = (w, n) => facts.find((f) => f.w === w && f.name === n && !f.skipped)?.xterm?.[0];
+  for (const w of new Set(facts.map((f) => f.w))) {
+    for (const [a, b] of [["agent-row", "agent-expand"], ["agent-expand", "agent-collapse"], ["walk-next-3", "expand"], ["expand", "collapse"]]) {
+      const x = box(w, a), y = box(w, b);
+      if (x && y && (y[0] > x[0] || y[1] > x[1])) bad.push(`${w} ${a} -> ${b}: the pane grew ${x.join("x")} -> ${y.join("x")}`);
+    }
+  }
+  if (bad.length) { console.log(`HARD REQUIREMENTS FAILED:\n  ${bad.join("\n  ")}`); process.exitCode = 1; }
+  else console.log("hard requirements held: no client step fetched the pile, no page broke, no pane grew");
   await browser.close();
 })();

@@ -460,19 +460,44 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     const back = () => { setDraft(null); load(); onBrowseState?.({ ...browseState, open: null }); };
     const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : [];
     const openSource = sources.find((x) => x.SourceId === browseState.open);
+    // a link to a report that has since been removed: the list, and why - never an empty editor saving to a missing id
+    const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
-      title: "Reports",
+      title: "Reports", wide: true,
       summary: `${reportSources.length} report${reportSources.length === 1 ? "" : "s"} · ${workflowSources.length} workflow${workflowSources.length === 1 ? "" : "s"} · reports read and summarise, workflows write`,
       sections: [{ key: "reports", label: "Reports", n: reportSources.length }, { key: "workflows", label: "Workflows", n: workflowSources.length },
-        { key: "new-report", label: "+ New report" }],
+        { key: "new-report", label: "+ New report" }, { key: "new-invoices", label: "+ Monthly invoices" }, { key: "new-agent", label: "+ AI agent" }],
       section,
-      onSection: (key) => { setDraft(null); onBrowseState?.(key === "new-report" ? { section: "reports", open: "new-report" } : { section: key, open: null }); },
+      onSection: (key) => {
+        setDraft(null);
+        onBrowseState?.(key === "new-report" ? { section: "reports", open: "new-report" }
+          : key === "new-invoices" || key === "new-agent" ? { section: "workflows", open: key } : { section: key, open: null });
+      },
+      // the tab's own tools, beside its list: run what is due, and describe one for the AI to draft
+      tools: section && browseState.open == null ? (
+        <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing}
+              startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
+              {syncing ? "Running…" : "Run due now"}
+            </Button>
+            {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
+          </Box>
+          <Composer kind={section === "workflows" ? "workflow" : "report"} onDraft={(config, meta) => {
+            setDraft(config);
+            setNote({ ok: true, detail: `${meta.explain || "Drafted."} Check it below and preview before saving.`
+              + (meta.confidence === "low" ? " It is not confident about this one." : "") });
+            onBrowseState?.({ section, open: "draft" });
+          }} />
+        </Box>
+      ) : null,
       cards: sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
-      detail: browseState.open != null ? wizard(back, (sid) => { setDraft(null); onBrowseState?.({ ...browseState, open: sid }); }) : null,
+      detail: browseState.open != null && !missing ? wizard(back, (sid) => { setDraft(null); onBrowseState?.({ ...browseState, open: sid }); }) : null,
       onBack: back,
       openLabel: browseState.open === "new-report" ? "a new report being set up (Reports)"
         : openSource ? `the report "${titleOf(openSource)}" (Reports), its editor open` : "",
       empty: section === "workflows" ? "No workflows yet." : "No reports yet - + New report walks you through one.",
+      note: missing ? `That report (#${browseState.open}) is not here any more - these are the ones there are.` : "",
     });
   }
 

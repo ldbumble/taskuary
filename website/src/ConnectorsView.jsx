@@ -1536,6 +1536,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const t = m[1];
     const direct = /^\d+$/.test(t) ? connectors.find((c) => c.ConnectorId === Number(t)) : byType[t];
     if (direct) setOpen({ kind: "connector", id: direct.ConnectorId });
+    // ...and a link to one that has since been removed says so, rather than landing on the catalogue unexplained
+    if (!direct) setErr(`That connection (${t}) is not here any more - pick another, or add it again from its section.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectors]);
 
@@ -1712,7 +1714,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       sections: groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null })),
       section: q ? "" : browseState.section ?? null,
       onSection: (key) => { setQ(""); setOpen(null); onBrowseState?.({ section: key, open: null }); },
-      note: q ? "" : groups.find((g) => g.title === browseState.section)?.note || "",
+      note: err || (q ? "" : groups.find((g) => g.title === browseState.section)?.note || ""),
       cards: inSection.map((c) => ({ key: c.key, node: <ConnCard c={{ ...c, go: c.go && (() => { c.go(); onBrowseState?.({ ...browseState, open: c.key }); }) }} /> })),
       detail, onBack: back,
       openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : conn ? `the ${conn.Name} connector card (Connections)` : "",

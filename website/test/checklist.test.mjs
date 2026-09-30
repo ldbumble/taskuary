@@ -29,7 +29,7 @@ test("the progress line counts boxes and never calls the task done", () => {
 });
 
 test("the task page and the assistant card render the shared list", () => {
-  for (const f of ["TasksView.jsx", "assistantCards.jsx"]) {
+  for (const f of ["TaskPage.jsx", "assistantCards.jsx"]) {   // the task page is TaskPage.jsx since the canvas redesign
     const src = readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
     assert.match(src, /from "\.\/checklist\.js"/, `${f} uses the shared checklist helpers`);
   }

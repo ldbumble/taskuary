@@ -1005,22 +1005,38 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   }, [goTo]);
 
   if (browse) {
-    const section = browseState.section ?? null;
+    // a page or a group this install does not have (an old link) opens the list, and says why - never a crash or a blank card
+    const section = PAGES[browseState.section] ? browseState.section : null;
+    const gone = section === "config" && browseState.open && !GROUPS.includes(browseState.open);
     const knobsIn = (g) => Object.values(schema.knobs || {}).filter((k) => k.group === g).length;
-    const cards = section === "config" ? GROUPS.map((g) => ({ key: g, title: g, sub: `${knobsIn(g) || "its own panel"}${knobsIn(g) ? " settings" : ""}` }))
+    // SEARCH, as the tab had it: a setting you half remember is found by its words, and opens the group it lives in
+    const needle = q.trim().toLowerCase();
+    const hits = needle ? Object.entries(schema.knobs || {}).filter(([k, m]) => `${k} ${m.label || ""} ${m.desc || ""}`.toLowerCase().includes(needle)) : [];
+    const cards = needle ? hits.map(([k, m]) => ({ key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config" }))
+      : section === "config" ? GROUPS.map((g) => ({ key: g, title: g, sub: `${knobsIn(g) || "its own panel"}${knobsIn(g) ? " settings" : ""}` }))
       : section ? [{ key: section, title: PAGES[section].title, sub: PAGES[section].desc }] : [];
-    const open = browseState.open;
+    const open = gone || !section ? null : browseState.open;
     return browse({
       title: "Settings",
       summary: "how Taskuary works for you · pick a section",
       sections: NAV.map((k) => ({ key: k, label: PAGES[k].title })),
-      section,
-      onSection: (key) => onBrowseState?.({ section: key, open: null }),
-      cards: cards.map((c) => ({ ...c, onOpen: () => onBrowseState?.({ ...browseState, open: c.key }) })),
+      section: needle ? "" : section,
+      onSection: (key) => { setQ(""); onBrowseState?.({ section: key, open: null }); },
+      cards: cards.map((c, i) => ({ ...c, key: needle ? `${c.key}-${i}` : c.key,
+        onOpen: () => { setQ(""); onBrowseState?.({ ...browseState, section: c.section || section, open: c.key }); } })),
+      search: (
+        <TextField fullWidth size="small" placeholder="Search settings…" value={q} onChange={(e) => setQ(e.target.value)}
+          inputProps={{ "aria-label": "Search settings", "data-tq-browse-search": "" }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }}
+          sx={{ mt: 1.5, bgcolor: "#fff", borderRadius: 2 }} />
+      ),
+      // what the assistant changed here, and the way to undo it - the tab drew it over Configuration
+      tools: section === "config" && !open && !needle ? <Box sx={{ mt: 1.5 }}><AssistantChanges /></Box> : null,
       detail: open ? <SettingsPages only={{ page: section, group: section === "config" ? open : null }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: open ? `the settings group "${section === "config" ? open : PAGES[section]?.title}" (Settings)` : "",
+      note: gone ? `“${browseState.open}” is not a settings group any more - here are the ones there are.` : "",
     });
   }
 

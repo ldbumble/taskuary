@@ -449,6 +449,13 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     return card
 
 
+def on_rail(card) -> bool:
+    """What the rail holds: the unread, and a task put away with Remind me - still open work, in For later with its day
+    (the canvas redesign, 2026-09-29). ONE rule for the builder and for funnel.pile, the road the page is served - the
+    builder alone kept put-away rows that pile() then dropped (the final review)."""
+    return bool(card.get('unread') or (card.get('deferred') and card.get('tid') and not card.get('closed')))
+
+
 def build(store, *, now=None, live_state=None, include_read=False, only=None,
           full_history=False):
     from . import funnel, terminal
@@ -476,7 +483,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet, walk_at) for row in rows]
     # ...and a task put away with Remind me stays on the rail, in For later, saying its day - it is still open work, and
     # the rail is where open work lives (2026-09-29). It is never actionable, so the walk does not offer it early.
-    kept = lambda card: card['unread'] or (card.get('deferred') and card.get('tid') and not card.get('closed'))
+    kept = on_rail
     cards = [card for card in cards if (include_read or kept(card)) and not card.get('ranked_wait')]
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)

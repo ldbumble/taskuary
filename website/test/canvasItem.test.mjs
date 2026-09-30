@@ -49,3 +49,23 @@ test("only the item on the table is mounted live", () => {
   assert.match(view, /live=\{!old && i === lastCardIdx\}/);
   assert.equal((view.match(/<CanvasItem /g) || []).length, 1);
 });
+
+// the final review (2026-09-29): the canvas passes fresh callbacks on every render, and loadDetail listed onSelect in its
+// deps - so every keystroke in the composer refetched the task and rebuilt its live subscription
+test("the task view's loads do not depend on the callbacks its page passes", () => {
+  const page = src("TaskPage.jsx");
+  assert.match(page, /const onSelectRef = useRef\(onSelect\); onSelectRef\.current = onSelect;/);
+  const load = page.slice(page.indexOf("const loadDetail = useCallback"), page.indexOf("const loadDetail = useCallback") + 1400);
+  assert.match(load, /\}, \[\]\);/);
+  assert.match(page, /const loadTasks = useCallback\(async \(\) => \{ await listRef\.current\?\.\(\); \}, \[\]\);/);
+});
+
+test("a new line always shows; only a browse card's own steps hold the bottom", () => {
+  assert.match(view, /browseState: \(id, state\) => \{ holdBottom\.current = true; setMsgs/);
+  assert.match(view, /useEffect\(\(\) => \{ holdBottom\.current = false; const el = bodyRef\.current;/);
+  assert.doesNotMatch(view, /holdBottom\.current = !!browsing/);
+});
+
+test("a card open in the canvas is the turn's subject, not the item folded above it", () => {
+  assert.match(view, /key: openCardRef\.current \? null : current, context_mid: currentItem\?\.mid && !openCardRef\.current \? currentItem\.mid : null, open_card: openCardRef\.current/);
+});

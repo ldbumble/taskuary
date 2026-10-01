@@ -545,7 +545,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
-        onLeave={() => canvas.putDown(c.key)} onStay={(why) => canvas.pickUp(c.key, why)}
+        onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)}
         onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} />
     </div>
   );
@@ -631,6 +631,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // surface() raises busy, and that second drew nothing at all (the owner, 2026-09-25: "for a second
   // there is no ... loading the next"). Its own flag, because busy would make surface() refuse to run.
   const [nextComing, setNextComing] = useState(false);
+  // THE TASK BEING PUT DOWN leaves the rail at the press too. The card folded while the close ran behind the "…", but the rail
+  // drew the server's pile - and a task closed off a live session waits on its write-up first, so for eighteen seconds it
+  // sat on the rail as an open task already seen: under For later (the owner, 2026-10-01: "it first went to Later ... and
+  // did not disappear right away"). Held until the pile no longer carries it, so a reopened task is never hidden.
+  const [leavingTid, setLeavingTid] = useState(null);
   // the walk validates Current against the pile before it can say anything, and that read was
   // 5-47s (2026-09-09). busy is the TURN's interlock and surface() refuses to run while it is
   // set, so opening needs its own flag - without one the button stayed enabled, said nothing,
@@ -1668,11 +1673,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     else if (request.kind === "task") openTaskRef.current?.(request);
     else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
   }, [request, state]);
+  const railPile = useMemo(() => (leavingTid && pile?.items ? { ...pile, items: pile.items.filter((i) => i.tid !== leavingTid) } : pile),
+    [pile, leavingTid]);
+  useEffect(() => {                                   // the close has landed: the server's pile no longer has it
+    if (leavingTid && pile?.items && !pile.items.some((i) => i.tid === leavingTid)) setLeavingTid(null);
+  }, [pile, leavingTid]);
   const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); },
     // the task leaves the table the moment it is put down, the "…" under its title line while the server closes it
-    putDown: (key) => { setExpanded(false); setFoldedKey(key); setNextComing(true); },
-    pickUp: (key, why) => { setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); if (why) setErr(why); } }),
+    putDown: (key, tid = null) => { setExpanded(false); setFoldedKey(key); setNextComing(true); setLeavingTid(tid); },
+    pickUp: (key, why) => { setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); setLeavingTid(null); if (why) setErr(why); } }),
     [bodyH, expanded, foldedKey, browsing, phone]);
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
@@ -1881,7 +1891,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   return (
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
-      top={({ openByMid, openByItem }) => <Pile pile={pile} current={old ? null : currentItem}
+      top={({ openByMid, openByItem }) => <Pile pile={railPile} current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
         onSection={walkSection} onCurrent={() => setRailOpen(false)} />}

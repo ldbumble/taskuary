@@ -510,6 +510,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const stopAndFinish = async () => {
     setConfirmDone(false);
     const id = selected;
+    // ...and it is put down at the press like any close: the write-up below takes as long as the AI does (18 s on
+    // 2026-10-01), and the task sat open on the page and the rail all that time - under For later, already seen
+    onLeave?.();
     if (canWrap) {
       setWrapping("done"); setErr("");
       try { await api.post(`/api/tasks/${id}/wrap`, { close: false, no_reply: true }); } catch { /* the close still stops it */ }

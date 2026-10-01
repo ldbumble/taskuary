@@ -150,7 +150,8 @@ class GeometryOwnerTests(unittest.TestCase):
             _until_ready(kept)
             kept.send_json({'type': 'release'})
             kept.send_json({'type': 'resize', 'rows': 40, 'cols': 140})          # back on screen, same size
-            geom = kept.receive_json()
+            # the pty's own late output can come first under load (the full suite, 2026-10-01): read to the answer
+            geom = next(f for f in (kept.receive_json() for _ in range(12)) if f.get('type') == 'geom')
         self.assertEqual((geom['type'], geom['rows'], geom['cols'], geom['owner']), ('geom', 40, 140, True))
 
 

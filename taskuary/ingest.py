@@ -823,6 +823,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if same and own.startswith('gh:') and any(str(m.get('ConversationId') or '').startswith('gh:') and m.get('ConversationId') != own
                                                     for m in store.list_messages(same)):
             same = None
+        # ...and a report's run that needs nobody is never filed away on a CLOSED task: every run shares one conversation,
+        # so yesterday's closed task reads as "the same", and a row on a closed task is shown nowhere - the morning report
+        # never appeared (2026-10-01). It lands as its own row and the report's Timeline line decides; an open task keeps it.
+        if same and msg.get('channel') == 'report' and intent.get('intent') == 'fyi' and (store.get_task(same) or {}).get('Status') in ('done', 'dropped'):
+            same = None
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
             elif intent.get('urgent'): _mark_urgent(store, same, intent, actor)

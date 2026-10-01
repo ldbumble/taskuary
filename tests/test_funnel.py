@@ -985,6 +985,25 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail], [(True, False)])   # ...but it is on the rail, in Passed
         self.assertEqual(s.get_task(t)['Status'], 'open')
 
+    def test_next_on_a_task_back_from_its_quiet_hours_puts_it_down_again(self):
+        """The owner, 2026-09-30: "i hit next why is this still showing in on you tasks?" - the receipt kept the FIRST read,
+        so once that was three hours old the task was `back` for good: Next read it again, recorded nothing, and it stayed
+        on you. A look again moves the receipt's clock."""
+        from taskuary import concierge, processing_unread
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'Complete the raise paperwork', 'Kind': 'task', 'Status': 'open'}, 'o')
+        mid = mail(s, 'Raise paperwork', who='Gail', email='gail@northwind.example', hours=30, tid=t)
+        s.add_route(mid, t, 'route', 1.0, 'triage: task', [], 'triage')
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        card = lambda: [(i.get('why_open') is not None, bool(i.get('surfaced')), i['actionable'])
+                        for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            key = concierge.surface(s, llm=lambda *a, **k: 'never')['item']['key']
+            s._exec("UPDATE processing_read_receipt SET ReadAt=?", (ago(4),)); funnel.invalidate()   # that read was 4 hours ago
+            self.assertEqual(card(), [(True, False, True)])                                       # ...so it is back on you
+            s.set_funnel_state(key, 'surfaced', read=True); funnel.invalidate()                     # Next, now
+        self.assertEqual(card(), [(False, True, False)])                                          # put down again: For later
+
     def test_a_task_its_agent_finished_shows_once_as_a_result(self):
         """"same for finished agent task?" - an agent that closed its task left nothing on the rail: the result
         the owner asked for was only on the Tasks tab. It is a result now, with Reports, until it is read."""

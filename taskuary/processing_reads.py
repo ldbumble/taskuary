@@ -148,10 +148,17 @@ def state(item, now):
 
 
 def record(cur, current, *, version, at, by, origin):
+    # A LOOK AGAIN MOVES THE CLOCK. The receipt is what "quiet since you last looked" reads (processing_unread `back`,
+    # task_return_minutes), and it was INSERT OR IGNORE: reading the same content again recorded nothing, so an open task
+    # first read more than three hours ago came straight back to On you every time Next put it down (the owner,
+    # 2026-09-30: "i hit next why is this still showing in on you"). A later read now moves ReadAt forward - never back,
+    # and compared as times, since an older receipt may be spelled with a T.
     for unit in current:
-        cur.execute('''INSERT OR IGNORE INTO processing_read_receipt
+        cur.execute('''INSERT INTO processing_read_receipt
             (EntityKind,LocalId,Fingerprint,Version,ReadAt,ReadBy,Origin)
-            VALUES (?,?,?,?,?,?,?)''', (unit['entity_kind'], unit['local_id'],
+            VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT(EntityKind,LocalId,Fingerprint) DO UPDATE SET ReadAt=excluded.ReadAt, ReadBy=excluded.ReadBy
+            WHERE julianday(excluded.ReadAt) > julianday(processing_read_receipt.ReadAt)''', (unit['entity_kind'], unit['local_id'],
             unit['fingerprint'], version, at, by, origin))
 
 

@@ -22,7 +22,7 @@ import json, os, re, subprocess, threading, time
 from pathlib import Path
 from loguru import logger
 
-HOOKED = ('claude', 'codex')
+HOOKED = ('claude', 'codex', 'devin', 'copilot')
 MARK = '/api/hooks/claude'
 # THE ASK HOOK (the owner, 2026-09-28: "hook is better if it's supported" - measured: a PreToolUse hook that returns
 # updatedInput.answers answers AskUserQuestion, no form drawn). Its own mark, so the event hooks above never replace
@@ -42,12 +42,23 @@ EVENTS = ('PostToolUse', 'PostToolUseFailure', 'Stop', 'UserPromptSubmit', 'Noti
 CODEX_EVENTS = ('UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'Stop', 'Interrupt',
                 'SessionStart', 'SessionEnd')
 CODEX_MARK = os.path.join('hooks', 'codex.jsonl')       # the spool's tail, so our entries are recognisable
+# DEVIN AND COPILOT, measured 2026-10-01 with probe hooks (Devin 3000.10.21, Copilot 1.0.86). Both speak Claude's schema
+# and POST like Claude does. Devin reads ~/.claude/settings.json too - and REJECTS A WHOLE hooks block that names one
+# event it does not know ("unknown variant `Notification`... Using the default ({})"), so Claude's entries never ran
+# there: it gets its own block in its user config, with only events from its list. Copilot runs PascalCase event
+# names with Claude-shaped payloads from a file of its own in ~/.copilot/hooks.
+DEVIN_EVENTS = ('PostToolUse', 'PermissionRequest', 'UserPromptSubmit', 'Stop', 'SessionStart', 'SessionEnd')
+# ...but NOT PermissionRequest: Copilot runs that hook FAIL-CLOSED (its log: "execution failed (fail-closed)"), so a
+# Taskuary that is down would have every permission denied. And no shell: its hook shell failed our curl line with
+# code 1 where Claude's ran it, so the entry names the executable and its args (Copilot's `exec`), stdin -> body.
+COPILOT_EVENTS = ('PostToolUse', 'PostToolUseFailure', 'Stop', 'UserPromptSubmit', 'Notification', 'SessionStart', 'SessionEnd')
 # the CLI version the events, AskUserQuestion's tool_input and Stop's last_assistant_message were validated
 # against: Claude 2.1.278 and Codex 0.154.0 (2026-09-20). Below the floor the status may be incomplete:
 # installed anyway, said out loud.
 MIN_VERSION = (2, 0, 0)
-# a SessionEnd whose reason leaves the process alive: /clear resets the conversation, resume swaps it
-SESSION_GOES_ON = ('clear', 'resume')
+# a SessionEnd whose reason leaves the process alive: /clear resets the conversation, resume swaps it - and Copilot's
+# `complete`, which it sends at the end of every turn (measured 2026-10-01); the pane's own exit still says disconnected
+SESSION_GOES_ON = ('clear', 'resume', 'complete')
 
 
 def cli_version(cmd: str = 'claude') -> str | None:
@@ -92,14 +103,14 @@ def wanted(store, profile: dict) -> bool:
     return bool(cli_for(profile)) and store.get_setting('agent_hooks', '1') == '1'
 
 
-def command(base: str, token: str = '') -> str:
+def command(base: str, token: str = '', cli: str = 'claude') -> str:
     """Claude's hook: POST the event. curl.exe by name on Windows (bare `curl` is a PowerShell alias for
     Invoke-WebRequest there). -m 3: a hook must never hold the agent. stdin -> body. -o to the null
     device (not a shell redirect: PowerShell has no /dev/null) - a hook's stdout is read by Claude as a
     decision, and our reply is not one."""
     curl, null = ('curl.exe', 'NUL') if os.name == 'nt' else ('curl', '/dev/null')
     tok = f' -H "X-Taskuary-Token: {token}"' if token else ''
-    return f'{curl} -s -m 3 -o {null} -X POST {base}{MARK} -H "Content-Type: application/json"{tok} --data-binary @-'
+    return f'{curl} -s -m 3 -o {null} -X POST {base}/api/hooks/{cli} -H "Content-Type: application/json"{tok} --data-binary @-'
 
 
 def ask_command(base: str, token: str = '') -> str:
@@ -151,7 +162,14 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     version from; without it no version is read."""
     if cli not in HOOKED: return False
     home = home or os.path.expanduser('~')
-    if cli == 'claude':
+    if cli == 'copilot': return _install_copilot(Path(home), base or base_url(), agent_token() if token is None else token)
+    if cli == 'devin':
+        # %APPDATA%\devin\config.json on Windows, ~/.config/devin/config.json elsewhere (its --help names the latter)
+        roam = os.environ.get('APPDATA') if os.name == 'nt' and home == os.path.expanduser('~') else None
+        p = Path(roam) / 'devin' / 'config.json' if roam else Path(home) / '.config' / 'devin' / 'config.json'
+        entry = {'type': 'command', 'command': command(base or base_url(), agent_token() if token is None else token, cli), 'timeout': 5}
+        events, mark = DEVIN_EVENTS, '/api/hooks/devin'
+    elif cli == 'claude':
         p = Path(home) / '.claude' / 'settings.json'
         entry = {'type': 'command', 'command': command(base or base_url(), agent_token() if token is None else token), 'timeout': 5}
         events, mark = EVENTS, MARK
@@ -180,6 +198,22 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     else: logger.warning(f'{cli} hooks -> {p} for {cli} {v or "unknown version"} - the events were validated for '
                          f'>= {".".join(map(str, MIN_VERSION))}; worker status from this session may be incomplete')
     return True
+
+
+def _install_copilot(home: Path, base: str, token: str) -> bool:
+    """Copilot's own file, wholly ours: ~/.copilot/hooks/taskuary.json (or $COPILOT_HOME/hooks). Its schema is flat - each
+    event a list of entries - and `timeoutSec`."""
+    curl, null = ('curl.exe', 'NUL') if os.name == 'nt' else ('curl', '/dev/null')
+    args = ['-s', '-m', '3', '-o', null, '-X', 'POST', f'{base}/api/hooks/copilot', '-H', 'Content-Type: application/json',
+            *(['-H', f'X-Taskuary-Token: {token}'] if token else []), '--data-binary', '@-']
+    root = Path(os.environ['COPILOT_HOME']) if os.environ.get('COPILOT_HOME') and home == Path(os.path.expanduser('~')) else home / '.copilot'
+    p = root / 'hooks' / 'taskuary.json'
+    want = {'version': 1, 'hooks': {ev: [{'type': 'command', 'exec': curl, 'args': args, 'timeoutSec': 5}] for ev in COPILOT_EVENTS}}
+    if _read_json(p) == want: return False
+    try: _write_json(p, want)
+    except OSError as e:
+        logger.warning(f'could not write copilot hooks to {p}: {e}'); return False
+    logger.info(f'copilot hooks -> {p}'); return True
 
 
 def retire_project(cwd: str) -> bool:
@@ -260,6 +294,9 @@ def _events(t, p: dict) -> None:
     st = getattr(t, 'store', None)
     if not st or not getattr(t, 'task_id', None): return
     ev, tid, sid = str(p.get('hook_event_name') or ''), t.task_id, t.sid
+    from . import background
+    if not isinstance(getattr(t, 'bg', None), dict): t.bg = {}
+    background.track(t.bg, p)
     def close(kinds, why):
         for r in ws.open_requests(ws.events(st, tid, sid)):
             if r['Kind'] in kinds and (r.get('Source') or 'api') != 'screen':
@@ -342,10 +379,11 @@ def _events(t, p: dict) -> None:
             for i, (q, choices) in enumerate(asks, 1):
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
                           text=q, choices=choices, source='hook')
-            # the response ended, the WORK did not: a shell, a monitor or a subagent it left running (background.py)
-            from . import background
+            # the response ended, the WORK did not: a shell, a monitor or a subagent it left running and will be woken by
+            # (background.py) - Claude's own list, else the jobs its hooks started (Copilot), else Claude's transcript.
+            # Devin is not here on purpose: it does not wake for a background shell, so one left running is the owner's
             jobs = background.from_hook(p)
-            if jobs is None: jobs = background.pending(p.get('transcript_path'))
+            if jobs is None: jobs = background.live(list(t.bg.values())) or (background.pending(p.get('transcript_path')) if 'claude' in _cli(t) else [])
             if jobs: ws.record(st, tid, sid, 'background', text=background.summary(jobs), choices=jobs, source='hook')
         elif ev == 'Interrupt': ws.record(st, tid, sid, 'turn_end', text='interrupted', source='hook')
         elif ev == 'SessionEnd':
@@ -353,6 +391,10 @@ def _events(t, p: dict) -> None:
             if str(p.get('reason') or 'other') not in SESSION_GOES_ON:
                 ws.record(st, tid, sid, 'disconnected', text=f"session ended ({p.get('reason') or 'other'})", source='hook')
     except Exception as e: logger.debug(f'worker event from hook skipped: {e}')
+
+
+def _cli(t) -> str:
+    return os.path.basename(str((getattr(t, 'argv', None) or [''])[0])).lower()
 
 
 def _same_dir(a: str, b: str) -> bool:

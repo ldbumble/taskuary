@@ -760,6 +760,14 @@ def funnel_age(item: dict) -> str:
 
 
 
+def _back_words(at) -> str:
+    """'back in 2h' - the rail's own countdown for a row put away (funnelPile.railBack), so the line and the rail agree."""
+    try: m = (datetime.fromisoformat(str(at).replace('T', ' ')[:19]) - datetime.now()).total_seconds() / 60
+    except ValueError: return 'back in a while'
+    if m <= 0: return 'back now'
+    return 'back in ' + ('30m' if m < 30 else '1h' if m < 60 else f'{int(m // 60)}h' if m < 1440 else f'{int(m // 1440)}d')
+
+
 def _title_cut(s: str, n: int = 120) -> str:
     """A title at most n long, cut at a word and marked as cut - "...check the schedule config, a" read as a typo."""
     s = str(s or '').strip()
@@ -1892,7 +1900,10 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     if not item:
         opens = []
         left = [i for i in p['items'] if not i.get('settling')]
-        waiting = [i for i in left if i.get('surfaced') and i['lane'] != 'working']
+        # everything the rail holds For later: shown and put down for a while, AND put away to a day (Remind me) - the line
+        # counted only the first, and said "1 thing" over a rail of two (the owner, 2026-10-01: "why does it say one thing
+        # when there are 2?")
+        waiting = [i for i in left if i['lane'] != 'working' and (i.get('surfaced') or i.get('back_at'))]
         if key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
         elif not only and waiting:
             # Shown in this walk and still on the rail: a task waiting to start, one an agent left, or a
@@ -1900,8 +1911,10 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # them yet, so the line must not promise it does - it did ("Say next and I'll take them"), and
             # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
             n = len(waiting)
-            say = (f"{n} thing{'s' if n != 1 else ''} you've already seen still wait{'s' if n == 1 else ''} in Work. "
-                   f"I'll bring {'it' if n == 1 else 'them'} round again in a while - or open {'it' if n == 1 else 'one'} now.")
+            when = ', '.join(f"{i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40)} {_back_words(i.get('back_at'))}"
+                             for i in sorted(waiting, key=lambda i: str(i.get('back_at') or ''))[:4])
+            say = (f"Nothing new right now. {n} thing{'s' if n != 1 else ''} wait{'s' if n == 1 else ''} for later - {when}"
+                   f"{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
             # What waits on the owner first - a close-out, an agent's question - then the rest.
             # ...each saying WHAT it is, not a bare number (the owner, 2026-09-30: "have to write what they are about a little")

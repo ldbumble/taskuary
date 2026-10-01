@@ -186,7 +186,7 @@ class TurnTests(unittest.TestCase):
         drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertIsNone(again['item']); self.assertEqual(again['say'], "1 thing you've already seen still waits in Work. I'll bring it round again in a while - or open it now.")
+        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^Nothing new right now\. 1 thing waits for later - TQ-\d+ back in \d+h\. Open it now if you want it sooner\.$")
         # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23)
         self.assertEqual([c['verb'] for c in again['chips']], ['open'])
         self.assertTrue(again['chips'][0]['label'].startswith('Open TQ-'))
@@ -285,7 +285,7 @@ class DecisionTests(unittest.TestCase):
         # ...and nothing on the table means nothing to decide - the words move the WALK instead
         out = concierge.say(s, 'done', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nCALL: {"kind": "done", "params": {}}')
         self.assertIsNone(out.get('decision'))
-        self.assertIn('still wait', out['say'])
+        self.assertIn('waits for later', out['say'])
 
     def test_mine_with_nothing_on_the_table_is_a_new_to_do_in_their_words(self):
         """"remind me to renew the contract" came back as DECIDE: mine - theirs to do - and was answered
@@ -950,3 +950,20 @@ class FyiHandOffTests(unittest.TestCase):
         self.assertEqual(concierge.triage_agent(s, {'tid': t}), 'coder')
         s.update_task(t, {'Kind': 'general'}, 'o')
         self.assertEqual(concierge.triage_agent(s, {'tid': t}), 'regular_agent')
+
+
+class ForLaterLine(unittest.TestCase):
+    def test_the_line_counts_what_the_rail_holds_for_later_and_says_when_each_is_back(self):
+        """The rail held two For later - one shown and put down for 2h, one put away until tomorrow with Remind me - and the
+        line said "1 thing you've already seen" (the owner, 2026-10-01: "why does it say one thing when there are 2?")."""
+        from unittest import mock
+        soon, tomorrow = [(datetime.now() + timedelta(hours=h, minutes=5)).strftime('%Y-%m-%d %H:%M:%S') for h in (2, 19)]
+        rows = [{'key': 'task:14', 'ref': 'TQ-0014', 'title': 'Compliance follow-up', 'lane': 'asked', 'surfaced': True, 'back_at': soon},
+                {'key': 'task:8', 'ref': 'TQ-0008', 'title': 'Raise approval', 'lane': 'asked', 'deferred': True, 'back_at': tomorrow}]
+        s = MemoryStore()
+        with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
+             mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            out = concierge.surface(s, llm=lambda *a, **k: 'never')
+        self.assertEqual(out['say'], "Nothing new right now. 2 things wait for later - TQ-0014 back in 2h, TQ-0008 back in 19h. "
+                                     "Open one now if you want it sooner.")
+        self.assertEqual(concierge._back_words('not a time'), 'back in a while')

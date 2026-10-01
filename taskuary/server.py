@@ -837,7 +837,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'task.defer':
         from . import remind
         try: return remind.set_reminder(store, tid, p.get('until'), ACTOR)
-        except ValueError as e: raise HTTPException(422, str(e))
+        except ValueError as e: raise HTTPException(409 if isinstance(e, remind.AgentOpen) else 422, str(e))
     # the assistant's proposals (concierge.PROPOSALS): each runs the same code the page's own button runs
     if kind == 'task.create_from_text':
         from . import concierge
@@ -1341,7 +1341,7 @@ def remind_task(task_id: int, body: RemindBody):
     """Remind me (the task page's picker): off the rail until that morning, Upcoming meanwhile. None brings it back."""
     from . import remind
     try: out = remind.set_reminder(store, task_id, body.until, ACTOR)
-    except ValueError as e: raise HTTPException(404 if 'not found' in str(e) else 422, str(e))
+    except ValueError as e: raise HTTPException(409 if isinstance(e, remind.AgentOpen) else 404 if 'not found' in str(e) else 422, str(e))
     operations.record_direct(store, 'task.defer', task_id, {'until': body.until or 'none'}, ACTOR, out)
     return out
 

@@ -7013,17 +7013,20 @@ async def terminal_ws(ws: WebSocket, sid: str):
         while True:
             data = await q.get()
             if data is None: return await send_frame({'type': 'exit'})
+            if data is hub_term.RESIZED:
+                delivered += 1; await send_frame(geom_frame(t, owns_geometry())); continue
             # Codex repaints its WHOLE screen for every keystroke, and ConPTY hands that back in
             # several reads. One websocket frame - and one xterm parse - per read meant a fast
             # sentence typed its own repaints into a backlog the echo had to queue behind, which
             # is what "typing is really slow" was. Drain whatever is already waiting and send it
             # as one ordered chunk, exactly as to_pty() does for keystrokes. Nothing is dropped:
             # this only changes how many frames the same bytes arrive in.
-            chunks, ended = [data], False
+            chunks, ended, resized = [data], False, False
             while True:
                 try: more = q.get_nowait()
                 except asyncio.QueueEmpty: break
                 if more is None: ended = True; break     # the exit marker keeps its place in the order
+                if more is hub_term.RESIZED: resized = True; break   # ...and so does a resize: bytes before it, geom, bytes after
                 chunks.append(more)
             inflight += 1
             try: await send_frame({'type': 'out', 'data': ''.join(chunks),
@@ -7033,7 +7036,8 @@ async def terminal_ws(ws: WebSocket, sid: str):
                                    'promptPending': hub_term.prompt_pending(t),
                                    'cli': hub_term.cli_of(t.argv)})
             finally: inflight -= 1
-            delivered += len(chunks)
+            delivered += len(chunks) + resized
+            if resized: await send_frame(geom_frame(t, owns_geometry()))
             # Ignore output that was already queued when the resize began. The first new chunk
             # and every repaint chunk after it move the quiet barrier; ready follows the burst.
             if redraw_boundary is not None and delivered >= redraw_boundary:
@@ -7085,6 +7089,10 @@ async def terminal_ws(ws: WebSocket, sid: str):
         while True:
             m = await ws.receive_json()
             if m.get('type') == 'in': input_q.put_nowait(m.get('data') or '')
+            # A pane put out of sight stays connected so showing it again is instant - and must not keep the geometry while
+            # it is away, or the surface you are looking at renders at the size of one you are not.
+            elif m.get('type') == 'release':
+                if owns_geometry(): t.geom_owner = None
             elif m.get('type') == 'resize':
                 rows, cols = m.get('rows') or 32, m.get('cols') or 110
                 # A free token is claimed by whoever asks next: close the task page and the Wall
@@ -7113,6 +7121,8 @@ async def terminal_ws(ws: WebSocket, sid: str):
                     redraw_boundary = delivered + inflight + q.qsize() + 1
                     redraw_cap = asyncio.create_task(finish_redraw(.35))
                 elif (int(rows), int(cols)) == (int(t.rows), int(t.cols)):
+                    # a kept pane coming back asks before it fits itself; already the right size, it still needs the answer
+                    await send_frame(geom_frame(t, owns_geometry()))
                     continue
                 t.resize(rows, cols)
                 # ...and the next session opens at this size instead of being grown into it

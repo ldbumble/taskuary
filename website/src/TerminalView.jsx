@@ -18,6 +18,7 @@ import { MicButton } from "./ui.jsx";
 import { adoptPtyGeometry, canRevealTerminal, changedTerminalSize, safeTerminalRows, usableTerminalBox } from "./terminalSizing.js";
 import { pastedImageFiles, pastedImagePrompt } from "./terminalInput.js";
 import { terminalOutputBatcher } from "./terminalOutput.js";
+import { createPool, paneCap } from "./terminalPool.js";
 import api from "./api.js";
 import BrowserPane from "./BrowserPane.jsx";
 import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl } from "./browserSplit.js";
@@ -88,6 +89,276 @@ const wsUrl = (sid) => {
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminals/${sid}/ws${t ? `?token=${encodeURIComponent(t)}` : ""}`;
 };
 
+// Panes put out of sight stay alive (terminalPool.js), up to the "Agents at once" setting - read once per page load.
+const POOL = createPool((s) => s.dispose());
+let poolCap = null;
+const keptCap = () => {
+  if (poolCap === null) {
+    poolCap = 4;
+    api.get("/api/settings").then(({ data }) => {
+      poolCap = paneCap((data?.data || []).find((row) => row.Name === "auto_sessions")?.Value);
+    }).catch(() => {});
+  }
+  return poolCap;
+};
+
+const makeTerm = (readOnly) => {
+  const term = new Terminal({ fontSize: savedSize(), fontFamily: TERM_FONT, fontWeightBold: 600,
+    theme: THEMES[savedTheme()], cursorBlink: !readOnly, cursorStyle: "bar", scrollback: 10000,
+    disableStdin: readOnly,
+    allowProposedApi: true, drawBoldTextInBrightColors: false, letterSpacing: 0, lineHeight: leading(savedSize()) });
+  const fit = new FitAddon();
+  term.loadAddon(fit);
+  term.loadAddon(new WebLinksAddon((_e, uri) => window.open(uri, "_blank", "noopener")));
+  const uni = new Unicode11Addon();
+  term.loadAddon(uni);
+  term.unicode.activeVersion = "11";              // emoji + box glyphs measure correctly
+  return { term, fit };
+};
+
+// One session's xterm and socket, apart from the pane showing it: attach() puts it in a box, detach() takes it out
+// and it goes on taking output out of sight, so showing it again needs no replay. What the pane displays (connection
+// word, curtain, prompt note) is kept here and handed to whichever pane attaches next.
+function liveSession(sid, readOnly) {
+  const el = document.createElement("div");
+  el.style.cssText = "width:100%;height:100%";
+  const { term, fit } = makeTerm(readOnly);
+  // No WebGL renderer here on purpose: it renders nothing at all on software-GL stacks
+  // (WebView2 without a GPU, remote desktop, headless), and a blank terminal is a much
+  // worse failure than a few dropped frames. The DOM renderer draws the same colors.
+  let ui = null, opened = false, disposed = false;
+  const s = { sid, term, alive: true, state: "connecting", restoring: true, prompt: { pending: false, cli: "agent" } };
+  const show = {
+    state: (v) => { s.state = typeof v === "function" ? v(s.state) : v; ui?.setState(s.state); },
+    restoring: (v) => { s.restoring = v; ui?.setRestoring(v); },
+    prompt: (v) => { s.prompt = v; ui?.setPromptState(v); },
+  };
+  // ONE PTY, ONE GEOMETRY (server: Term.geom_owner). Several panes can watch one session - the
+  // task page, a Wall cell, the Feed preview - and each used to fit its own box and send that
+  // size to the shared pty. Whoever spoke last won, and every other pane was then rendering a
+  // child that wraps at a width its emulator does not have: absolute cursor moves land on the
+  // wrong rows and the pane shows two frames at once (the owner, 2026-09-16, on the Wall).
+  // A pane that does not own the geometry renders at the pty's size instead of its box - and so does a pane put away,
+  // which hands the geometry back and follows every resize the server reports while it is out of sight.
+  let ownsGeometry = true, ptySize = null;
+  const fitSafely = () => {
+    if (!ownsGeometry || !ui) {
+      if (ptySize && (term.cols !== ptySize.cols || term.rows !== ptySize.rows)) {
+        term.resize(ptySize.cols, ptySize.rows);
+      }
+      return;
+    }
+    fit.fit();
+    const rows = safeTerminalRows(term.rows);
+    if (rows !== term.rows) term.resize(term.cols, rows);
+  };
+  const ws = new WebSocket(wsUrl(sid));
+  const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
+  s.send = send;
+  // ResizeObserver may fire several times for one unchanged box (and every parent poll used
+  // to render this component again). Sending the same rows/cols still makes a full-screen TUI
+  // repaint; Codex visibly flashed even though no dimensions changed. Only real size changes
+  // belong on the wire. Do not remember a size before the socket opens, or the initial resize
+  // would be swallowed.
+  let sentSize = "";
+  const sendSize = () => {
+    // A Timeline preview watches the same PTY as the task page. It must never resize that PTY
+    // to its smaller card or make the real terminal redraw and reflow beneath the agent.
+    if (readOnly || !ownsGeometry || !ui || ws.readyState !== 1) return;
+    const sizeNow = changedTerminalSize(sentSize, term.rows, term.cols);
+    if (!sizeNow) return;
+    sentSize = sizeNow;
+    send({ type: "resize", rows: term.rows, cols: term.cols });
+  };
+  ws.onopen = () => { show.state("live"); sendSize(); };
+  // Every xterm write is asynchronous. The replay can finish while live redraw frames are still
+  // queued behind it, so one replayPending boolean was not enough: the curtain lifted between
+  // those writes and exposed Codex repainting from top to bottom. Count ALL queued writes and
+  // reveal only after the server's redraw barrier and xterm's final write callback both land.
+  // The reveal happens ONCE per replay. Every write's completion used to call maybeLift(), and
+  // once the curtain was up the condition stayed true - so every live frame Codex painted ran
+  // lift() again: scrollToBottom + focus(), several times a second. That stole the keyboard from
+  // every other input on the page (the queue bar, the New task dialog - the Tasks tab stays
+  // mounted behind the others) and made the pane jump: "it just flickers, can't type in it".
+  // Every xterm write completes asynchronously, and the pane can be unmounted in between (a
+  // phone leaving the task page, a Wall cell closing). term.dispose() drops the renderer, and the
+  // write's own callback then called scrollToBottom on a terminal with none - "Cannot read
+  // properties of undefined (reading 'dimensions')" on every such exit (2026-09-18).
+  let bail = null, revealFrame = null, pendingWrites = 0, readySeen = false, lifted = false;
+  const lift = () => {
+    if (disposed) return;
+    clearTimeout(bail); cancelAnimationFrame(revealFrame);
+    revealFrame = null; lifted = true;
+    term.scrollToBottom(); show.restoring(false); if (!readOnly && ui?.autoFocus) term.focus();
+  };
+  const maybeLift = () => {
+    if (canRevealTerminal(readySeen, pendingWrites, lifted) && !revealFrame) revealFrame = requestAnimationFrame(lift);
+  };
+  const write = (data) => {
+    if (revealFrame) { cancelAnimationFrame(revealFrame); revealFrame = null; }
+    pendingWrites += 1;
+    // behind the curtain the viewport follows the replay; once live, xterm's own follow-output
+    // rule applies, so scrolling up to read while the agent works is not yanked back down
+    term.write(data, () => { if (disposed) return; pendingWrites -= 1; if (!lifted) term.scrollToBottom(); maybeLift(); });
+  };
+  // Codex repaints its full TUI for each key, spread over several websocket frames. Writing
+  // every fragment into xterm separately makes rendering fall behind input while the agent is
+  // active. One ordered write per browser paint keeps the live screen current without dropping
+  // bytes. A ready/exit frame flushes synchronously so the reveal barrier remains exact.
+  const output = terminalOutputBatcher(({ data, replay }) => {
+    if (replay) { show.restoring(true); lifted = false; }
+    write(data);
+  });
+  // Compatibility with an older server: this marks the barrier seen, but still NEVER uncovers
+  // an unfinished replay. The old escape hatch called lift() directly at four seconds.
+  bail = setTimeout(() => { readySeen = true; maybeLift(); }, 4000);
+  // an agent that ends while its pane is put away has nothing left to switch back to: let it go at once
+  const gone = () => { s.alive = false; if (!ui) { POOL.forget(sid, s); s.dispose(); } };
+  let sawOutput = false;      // did this socket ever carry a screen? (see ws.onclose)
+  ws.onmessage = (e) => {
+    if (disposed) return;
+    const m = JSON.parse(e.data);
+    if (m.type === "out") {
+      sawOutput = true;
+      if (typeof m.promptPending === "boolean") {
+        show.prompt({ pending: m.promptPending, cli: m.cli || "agent" });
+      }
+      output.push(m.data, m.replay);                    // a fresh replay curtains again when this batch writes
+      // Read-only viewers deliberately send no resize, so the server has no redraw barrier to
+      // answer with `ready`. The replay itself is their complete initial screen.
+      if (readOnly && m.replay) { output.flush(); readySeen = true; maybeLift(); }
+    }
+    else if (m.type === "geom") {
+      // Sent on attach, whenever a resize of ours was declined, and whenever the pty changes size. Taking ownership
+      // back (the owning pane closed) means our box is authoritative again, so refit and say so.
+      const was = ownsGeometry;
+      ownsGeometry = m.owner !== false && !!ui;
+      ptySize = { rows: m.rows, cols: m.cols };
+      adoptPtyGeometry(term, m);                       // ConPTY grows top-anchored; xterm must too
+      fitSafely();
+      if (ownsGeometry && !was) { sentSize = ""; sendSize(); }
+    }
+    else if (m.type === "ready") { output.flush(); readySeen = true; maybeLift(); }
+    else if (m.type === "exit") {
+      output.flush(); show.state("exited"); readySeen = true;
+      write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); ui?.onExit(); maybeLift(); gone();
+    }
+  };
+  // A SESSION THAT IS ALREADY GONE SENDS NO `exit` FRAME. The socket just closes, so nothing was
+  // ever written and the pane sat as a frozen black rectangle - while the page, never told, went
+  // on saying "coder is working" over a session that had ended (the owner, 2026-09-17: "it should
+  // never be frozen black screen", on a task whose run had closed twenty minutes earlier).
+  //
+  // So say it on the screen, lift the curtain that is waiting for a replay that will never come,
+  // and tell the page: onExit is what makes it re-read and fall back to the saved transcript.
+  ws.onclose = () => {
+    if (disposed) return;
+    show.state((v) => (v === "exited" ? v : "closed"));
+    if (!sawOutput) {
+      output.flush();
+      write(`\r\n\x1b[90m— this session is no longer running —\x1b[0m\r\n`);
+    }
+    readySeen = true; maybeLift();
+    ui?.onExit(); gone();
+  };
+  const input = readOnly ? null : term.onData((d) => send({ type: "in", data: d }));
+  let resizeTimer = null, ro = null;
+  let wasHidden = false;
+  const onResize = () => {
+    if (disposed || !ui) return;
+    const box = el.parentElement?.getBoundingClientRect();
+    if (!box || !usableTerminalBox(box.width, box.height)) { wasHidden = true; return; }
+    fitSafely();
+    // A pane hidden behind another tab (the Tasks tab stays mounted) comes back with the
+    // canvas xterm painted before it went away - sometimes nothing at all, and no scroll
+    // until the next byte arrives (the owner, 2026-09-18: "can't see anything ... especially
+    // when I click away and come back"). Repaint every row from xterm's buffer on the way back.
+    if (wasHidden) { wasHidden = false; term.refresh(0, Math.max(0, term.rows - 1)); }
+    // Flex layout, tab visibility and the browser split can report several intermediate
+    // boxes in one gesture. Codex redraws its whole TUI for every PTY resize; send only the
+    // settled geometry while still fitting xterm locally on each frame.
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(sendSize, 90);
+  };
+  s.refit = onResize;                               // the size picker drives the same path
+  // ...and the same on the browser tab itself coming back to the foreground
+  const onVisible = () => { if (!disposed && ui && document.visibilityState === "visible") term.refresh(0, Math.max(0, term.rows - 1)); };
+  // The wheel never leaves the terminal. When xterm has nothing to scroll (an idle TUI in the
+  // alternate buffer, or a CLI that exited) it lets the event BUBBLE, so scrolling over the
+  // session yanked the whole page instead - "scroll defaults to page". A live TUI still gets
+  // the wheel first (xterm consumes it before this fires); this only swallows the leftovers.
+  const trap = (e) => e.preventDefault();
+  el.addEventListener("wheel", trap, { passive: false });
+  // xterm forwards text paste through onData, but clipboard images have no text for it to send.
+  // Save each image on this task and type the returned local paths into the CLI's own prompt.
+  const pasteImages = async (e) => {
+    const files = pastedImageFiles(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    try {
+      const paths = [];
+      for (const file of files) paths.push((await api.post(`/api/terminals/${sid}/image`, file,
+        { headers: { "Content-Type": file.type } })).data.path);
+      send({ type: "in", data: pastedImagePrompt(paths) });
+    } catch { /* leave the current prompt untouched when an upload is rejected */ }
+    term.focus();
+  };
+  el.addEventListener("paste", pasteImages, true);       // capture before xterm discards a file-only paste
+  // ...and the scrollbar only shows when there is genuinely something behind it: a TUI in the
+  // alternate buffer scrolls ITSELF (the wheel is forwarded to it), so xterm's own bar would be
+  // a full-height slider that drags nothing.
+  const gauge = () => {
+    const scrollable = term.buffer.active.type === "normal" && term.buffer.active.length > term.rows;
+    el.style.setProperty("--sbar", scrollable ? "1" : "0");
+  };
+  const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
+  const unbind = () => {
+    ui = null; ro?.disconnect(); ro = null; clearTimeout(resizeTimer);
+    window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVisible);
+  };
+  // A kept pane coming back stays at the pty's size and ASKS for its box's: if another pane owns the geometry, fitting
+  // first shrank it to this box and grew it back, which moves its rows - the next keystroke landed a row low on the
+  // Wall (2026-10-01). The server answers with a geom frame either way, and a yes refits it (see m.type === "geom").
+  const claim = () => {
+    if (readOnly || ws.readyState !== 1) return;
+    const d = fit.proposeDimensions();
+    if (!d?.cols || !d?.rows) return;
+    const rows = safeTerminalRows(d.rows);
+    sentSize = `${rows}x${d.cols}`;
+    send({ type: "resize", rows, cols: d.cols });
+  };
+  s.attach = (host, binding) => {
+    ui = binding;
+    host.appendChild(el);
+    const back = opened;
+    if (!opened) { opened = true; term.open(el); gauge(); ownsGeometry = true; }   // a fresh pane: the first-resize barrier settles it
+    binding.setState(s.state); binding.setRestoring(s.restoring); binding.setPromptState(s.prompt);
+    sentSize = ""; wasHidden = true;
+    window.addEventListener("resize", onResize);
+    document.addEventListener("visibilitychange", onVisible);
+    ro = new ResizeObserver(onResize);
+    ro.observe(host);
+    onResize();
+    if (back) claim();
+    if (!readOnly && binding.autoFocus && !s.restoring) term.focus();
+  };
+  s.detach = () => {
+    unbind();
+    send({ type: "release" });                      // out of sight: whatever is on screen sizes the pty
+    ownsGeometry = false;
+    el.remove();
+    fitSafely();
+  };
+  s.dispose = () => {
+    if (disposed) return;
+    disposed = true; s.alive = false; unbind();
+    clearTimeout(bail); cancelAnimationFrame(revealFrame); output.dispose();
+    el.removeEventListener("wheel", trap); el.removeEventListener("paste", pasteImages, true);
+    input?.dispose(); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); el.remove();
+  };
+  return s;
+}
+
 // One live session. Mounts xterm once, streams both ways, resizes the pty to the pane.
 // The effect keys on `sid` ALONE: the task page re-renders every few seconds while a run
 // polls, and taking a fresh callback identity as a dependency tore the terminal down and
@@ -139,44 +410,15 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     return () => cancelAnimationFrame(id);
   }, [size]);
   useEffect(() => {
-    setPromptState({ pending: false, cli: "agent" });
-    const term = new Terminal({ fontSize: savedSize(), fontFamily: TERM_FONT, fontWeightBold: 600,
-      theme: THEMES[savedTheme()], cursorBlink: !readOnly, cursorStyle: "bar", scrollback: 10000,
-      disableStdin: readOnly,
-      allowProposedApi: true, drawBoldTextInBrightColors: false, letterSpacing: 0, lineHeight: leading(savedSize()) });
-    termRef.current = term;
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon((_e, uri) => window.open(uri, "_blank", "noopener")));
-    const uni = new Unicode11Addon();
-    term.loadAddon(uni);
-    term.unicode.activeVersion = "11";              // emoji + box glyphs measure correctly
-    term.open(host.current);
-    // No WebGL renderer here on purpose: it renders nothing at all on software-GL stacks
-    // (WebView2 without a GPU, remote desktop, headless), and a blank terminal is a much
-    // worse failure than a few dropped frames. The DOM renderer draws the same colors.
-    // ONE PTY, ONE GEOMETRY (server: Term.geom_owner). Several panes can watch one session - the
-    // task page, a Wall cell, the Feed preview - and each used to fit its own box and send that
-    // size to the shared pty. Whoever spoke last won, and every other pane was then rendering a
-    // child that wraps at a width its emulator does not have: absolute cursor moves land on the
-    // wrong rows and the pane shows two frames at once (the owner, 2026-09-16, on the Wall).
-    // A pane that does not own the geometry renders at the pty's size instead of its box.
-    let ownsGeometry = true, ptySize = null;
-    const fitSafely = () => {
-      if (!ownsGeometry) {
-        if (ptySize && (term.cols !== ptySize.cols || term.rows !== ptySize.rows)) {
-          term.resize(ptySize.cols, ptySize.rows);
-        }
-        return;
-      }
-      fit.fit();
-      const rows = safeTerminalRows(term.rows);
-      if (rows !== term.rows) term.resize(term.cols, rows);
-    };
-    fitSafely();
-    // the static demo has no socket to open: the session's recorded scrollback is typed out
-    // instead, at reading speed, so an agent is visibly working on a page with no server
     if (import.meta.env.VITE_DEMO === "1") {
+      setPromptState({ pending: false, cli: "agent" });
+      const { term, fit } = makeTerm(readOnly);
+      termRef.current = term;
+      term.open(host.current);
+      const fitSafely = () => { fit.fit(); const rows = safeTerminalRows(term.rows); if (rows !== term.rows) term.resize(term.cols, rows); };
+      fitSafely();
+      // the static demo has no socket to open: the session's recorded scrollback is typed out
+      // instead, at reading speed, so an agent is visibly working on a page with no server
       let stop = false;
       refit.current = fitSafely;
       const observer = new ResizeObserver(() => {
@@ -200,173 +442,18 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
       })();
       return () => { stop = true; observer.disconnect(); refit.current = () => {}; term.dispose(); };
     }
-    const ws = new WebSocket(wsUrl(sid));
-    const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
-    // ResizeObserver may fire several times for one unchanged box (and every parent poll used
-    // to render this component again). Sending the same rows/cols still makes a full-screen TUI
-    // repaint; Codex visibly flashed even though no dimensions changed. Only real size changes
-    // belong on the wire. Do not remember a size before the socket opens, or the initial resize
-    // would be swallowed.
-    let sentSize = "";
-    const sendSize = () => {
-      // A Timeline preview watches the same PTY as the task page. It must never resize that PTY
-      // to its smaller card or make the real terminal redraw and reflow beneath the agent.
-      if (readOnly || !ownsGeometry || ws.readyState !== 1) return;
-      const sizeNow = changedTerminalSize(sentSize, term.rows, term.cols);
-      if (!sizeNow) return;
-      sentSize = sizeNow;
-      send({ type: "resize", rows: term.rows, cols: term.cols });
+    // A pane put away earlier on this page comes back as it was - the same xterm on the same socket, nothing to replay
+    // and nothing to wait for. Switching between the agents you are juggling is instant (2026-10-01).
+    const s = (!readOnly && POOL.take(sid)) || liveSession(sid, readOnly);
+    termRef.current = s.term; sendRef.current = s.send; refit.current = s.refit;
+    Object.assign(s.term.options, { theme: THEMES[savedTheme()], fontSize: savedSize(), lineHeight: leading(savedSize()) });  // picked elsewhere while it was away
+    s.attach(host.current, { setState, setRestoring, setPromptState, autoFocus, onExit: () => exit.current?.() });
+    return () => {
+      refit.current = () => {};
+      s.detach();
+      if (readOnly || !s.alive) s.dispose();
+      else POOL.keep(sid, s, keptCap());
     };
-    sendRef.current = send;
-    ws.onopen = () => { setState("live"); sendSize(); };
-    // Every xterm write is asynchronous. The replay can finish while live redraw frames are still
-    // queued behind it, so one replayPending boolean was not enough: the curtain lifted between
-    // those writes and exposed Codex repainting from top to bottom. Count ALL queued writes and
-    // reveal only after the server's redraw barrier and xterm's final write callback both land.
-    // The reveal happens ONCE per replay. Every write's completion used to call maybeLift(), and
-    // once the curtain was up the condition stayed true - so every live frame Codex painted ran
-    // lift() again: scrollToBottom + focus(), several times a second. That stole the keyboard from
-    // every other input on the page (the queue bar, the New task dialog - the Tasks tab stays
-    // mounted behind the others) and made the pane jump: "it just flickers, can't type in it".
-    // Every xterm write completes asynchronously, and the pane can be unmounted in between (a
-    // phone leaving the task page, a Wall cell closing). term.dispose() drops the renderer, and the
-    // write's own callback then called scrollToBottom on a terminal with none - "Cannot read
-    // properties of undefined (reading 'dimensions')" on every such exit (2026-09-18).
-    let disposed = false;
-    let bail = null, revealFrame = null, pendingWrites = 0, readySeen = false, lifted = false;
-    const lift = () => {
-      if (disposed) return;
-      clearTimeout(bail); cancelAnimationFrame(revealFrame);
-      revealFrame = null; lifted = true;
-      term.scrollToBottom(); setRestoring(false); if (!readOnly && autoFocus) term.focus();
-    };
-    const maybeLift = () => {
-      if (canRevealTerminal(readySeen, pendingWrites, lifted) && !revealFrame) revealFrame = requestAnimationFrame(lift);
-    };
-    const write = (data) => {
-      if (revealFrame) { cancelAnimationFrame(revealFrame); revealFrame = null; }
-      pendingWrites += 1;
-      // behind the curtain the viewport follows the replay; once live, xterm's own follow-output
-      // rule applies, so scrolling up to read while the agent works is not yanked back down
-      term.write(data, () => { if (disposed) return; pendingWrites -= 1; if (!lifted) term.scrollToBottom(); maybeLift(); });
-    };
-    // Codex repaints its full TUI for each key, spread over several websocket frames. Writing
-    // every fragment into xterm separately makes rendering fall behind input while the agent is
-    // active. One ordered write per browser paint keeps the live screen current without dropping
-    // bytes. A ready/exit frame flushes synchronously so the reveal barrier remains exact.
-    const output = terminalOutputBatcher(({ data, replay }) => {
-      if (replay) { setRestoring(true); lifted = false; }
-      write(data);
-    });
-    // Compatibility with an older server: this marks the barrier seen, but still NEVER uncovers
-    // an unfinished replay. The old escape hatch called lift() directly at four seconds.
-    bail = setTimeout(() => { readySeen = true; maybeLift(); }, 4000);
-    let sawOutput = false;      // did this socket ever carry a screen? (see ws.onclose)
-    ws.onmessage = (e) => {
-      const m = JSON.parse(e.data);
-      if (m.type === "out") {
-        sawOutput = true;
-        if (typeof m.promptPending === "boolean") {
-          setPromptState({ pending: m.promptPending, cli: m.cli || "agent" });
-        }
-        output.push(m.data, m.replay);                    // a fresh replay curtains again when this batch writes
-        // Read-only viewers deliberately send no resize, so the server has no redraw barrier to
-        // answer with `ready`. The replay itself is their complete initial screen.
-        if (readOnly && m.replay) { output.flush(); readySeen = true; maybeLift(); }
-      }
-      else if (m.type === "geom") {
-        // Sent on attach, and again whenever a resize of ours was declined. Taking ownership back
-        // (the owning pane closed) means our box is authoritative again, so refit and say so.
-        const was = ownsGeometry;
-        ownsGeometry = m.owner !== false;
-        ptySize = { rows: m.rows, cols: m.cols };
-        adoptPtyGeometry(term, m);                       // ConPTY grows top-anchored; xterm must too
-        fitSafely();
-        if (ownsGeometry && !was) { sentSize = ""; sendSize(); }
-      }
-      else if (m.type === "ready") { output.flush(); readySeen = true; maybeLift(); }
-      else if (m.type === "exit") {
-        output.flush(); setState("exited"); readySeen = true;
-        write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); maybeLift();
-      }
-    };
-    // A SESSION THAT IS ALREADY GONE SENDS NO `exit` FRAME. The socket just closes, so nothing was
-    // ever written and the pane sat as a frozen black rectangle - while the page, never told, went
-    // on saying "coder is working" over a session that had ended (the owner, 2026-09-17: "it should
-    // never be frozen black screen", on a task whose run had closed twenty minutes earlier).
-    //
-    // So say it on the screen, lift the curtain that is waiting for a replay that will never come,
-    // and tell the page: onExit is what makes it re-read and fall back to the saved transcript.
-    ws.onclose = () => {
-      setState((s) => (s === "exited" ? s : "closed"));
-      if (!sawOutput) {
-        output.flush();
-        write(`\r\n\x1b[90m— this session is no longer running —\x1b[0m\r\n`);
-      }
-      readySeen = true; maybeLift();
-      exit.current?.();
-    };
-    const input = readOnly ? null : term.onData((d) => send({ type: "in", data: d }));
-    let resizeTimer = null;
-    let wasHidden = false;
-    const onResize = () => {
-      if (disposed) return;
-      const box = host.current?.getBoundingClientRect();
-      if (!box || !usableTerminalBox(box.width, box.height)) { wasHidden = true; return; }
-      fitSafely();
-      // A pane hidden behind another tab (the Tasks tab stays mounted) comes back with the
-      // canvas xterm painted before it went away - sometimes nothing at all, and no scroll
-      // until the next byte arrives (the owner, 2026-09-18: "can't see anything ... especially
-      // when I click away and come back"). Repaint every row from xterm's buffer on the way back.
-      if (wasHidden) { wasHidden = false; term.refresh(0, Math.max(0, term.rows - 1)); }
-      // Flex layout, tab visibility and the browser split can report several intermediate
-      // boxes in one gesture. Codex redraws its whole TUI for every PTY resize; send only the
-      // settled geometry while still fitting xterm locally on each frame.
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(sendSize, 90);
-    };
-    refit.current = onResize;                       // the size picker drives the same path
-    window.addEventListener("resize", onResize);
-    // ...and the same on the browser tab itself coming back to the foreground
-    const onVisible = () => { if (!disposed && document.visibilityState === "visible") term.refresh(0, Math.max(0, term.rows - 1)); };
-    document.addEventListener("visibilitychange", onVisible);
-    const ro = new ResizeObserver(onResize);
-    ro.observe(host.current);
-    // The wheel never leaves the terminal. When xterm has nothing to scroll (an idle TUI in the
-    // alternate buffer, or a CLI that exited) it lets the event BUBBLE, so scrolling over the
-    // session yanked the whole page instead - "scroll defaults to page". A live TUI still gets
-    // the wheel first (xterm consumes it before this fires); this only swallows the leftovers.
-    const el = host.current;
-    const trap = (e) => e.preventDefault();
-    el.addEventListener("wheel", trap, { passive: false });
-    // xterm forwards text paste through onData, but clipboard images have no text for it to send.
-    // Save each image on this task and type the returned local paths into the CLI's own prompt.
-    const pasteImages = async (e) => {
-      const files = pastedImageFiles(e.clipboardData);
-      if (!files.length) return;
-      e.preventDefault();
-      try {
-        const paths = [];
-        for (const file of files) paths.push((await api.post(`/api/terminals/${sid}/image`, file,
-          { headers: { "Content-Type": file.type } })).data.path);
-        send({ type: "in", data: pastedImagePrompt(paths) });
-      } catch { /* leave the current prompt untouched when an upload is rejected */ }
-      term.focus();
-    };
-    el.addEventListener("paste", pasteImages, true);       // capture before xterm discards a file-only paste
-    // ...and the scrollbar only shows when there is genuinely something behind it: a TUI in the
-    // alternate buffer scrolls ITSELF (the wheel is forwarded to it), so xterm's own bar would be
-    // a full-height slider that drags nothing.
-    const gauge = () => {
-      const scrollable = term.buffer.active.type === "normal" && term.buffer.active.length > term.rows;
-      el.style.setProperty("--sbar", scrollable ? "1" : "0");
-    };
-    gauge();
-    const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
-    if (!readOnly && autoFocus) term.focus();
-    return () => { disposed = true; window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVisible); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame); output.dispose();
-      el.removeEventListener("wheel", trap); el.removeEventListener("paste", pasteImages, true);
-      input?.dispose(); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid, readOnly, autoFocus]);
   return (
     // height="100%": the pane fills the flex slot its parent gives it (the task page sizes it to

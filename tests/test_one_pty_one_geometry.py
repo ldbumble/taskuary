@@ -104,5 +104,55 @@ class GeometryOwnerTests(unittest.TestCase):
                                 'the second pane never inherited the geometry')
 
 
+    def test_a_pane_put_away_hands_the_geometry_back(self):
+        """The page keeps the last few panes alive when you switch away, so switching back is instant. A pane kept that
+        way stays connected - and while it held the geometry, the Wall could never size the pty to its own cells."""
+        sizes = []
+        with mock.patch.object(self.t, 'resize', side_effect=lambda r, cl: sizes.append((r, cl))):
+            with c.websocket_connect(f'/api/terminals/{self.t.sid}/ws') as kept:
+                kept.send_json({'type': 'resize', 'rows': 40, 'cols': 140})
+                kept.send_json({'type': 'release'})
+                kept.send_json({'type': 'in', 'data': ''})
+                time.sleep(.15)
+                with c.websocket_connect(f'/api/terminals/{self.t.sid}/ws') as wall:
+                    wall.send_json({'type': 'resize', 'rows': 20, 'cols': 70})
+                    wall.send_json({'type': 'in', 'data': ''})
+                    self.assertTrue(_wait(lambda: (20, 70) in sizes), 'the kept pane still held the geometry')
+
+    def test_every_pane_hears_the_pty_change_size(self):
+        """A kept pane is out of sight while another surface resizes the pty. If it went on drawing at the old size, the
+        CLI's repaint for the new one would land in it wrapped wrong, and showing it again at an unchanged size would
+        bring that back with no repaint to fix it. So every socket is told, in order with the bytes."""
+        tick = terminal.Term([sys.executable, os.path.join(os.path.dirname(__file__), 'fake_tui.py')], os.getcwd(), 'test',
+                             rows=40, cols=140)          # it answers a line, so a missed frame fails rather than hangs
+        terminal.SESSIONS[tick.sid] = tick
+        self.addCleanup(terminal.close, tick.sid)
+        with c.websocket_connect(f'/api/terminals/{tick.sid}/ws') as owner:
+            owner.send_json({'type': 'resize', 'rows': 40, 'cols': 140})
+            _until_ready(owner)
+            with c.websocket_connect(f'/api/terminals/{tick.sid}/ws') as kept:
+                kept.send_json({'type': 'release'})
+                _until_ready(kept)                                     # the attach geom, then the curtain lifts
+                owner.send_json({'type': 'resize', 'rows': 30, 'cols': 100})
+                owner.send_json({'type': 'in', 'data': 'hello' + chr(13)})
+                frames = [kept.receive_json() for _ in range(12)]
+                geom = [f for f in frames if f.get('type') == 'geom']
+        self.assertTrue(geom, f'the kept pane never heard the pty change size: {frames}')
+        self.assertEqual((geom[0]['rows'], geom[0]['cols'], geom[0]['owner']), (30, 100, False))
+
+
+    def test_a_pane_back_on_screen_asking_for_the_size_it_already_has_is_answered(self):
+        """A kept pane coming back does not fit itself first - if another pane owns the geometry it would shrink to its
+        box and grow back, and that moves its rows (2026-10-01, on the Wall). It asks, and waits for the answer. When the
+        pty is already the size it asks for, silence would leave it believing it owns nothing."""
+        with c.websocket_connect(f'/api/terminals/{self.t.sid}/ws') as kept:
+            kept.send_json({'type': 'resize', 'rows': 40, 'cols': 140})
+            _until_ready(kept)
+            kept.send_json({'type': 'release'})
+            kept.send_json({'type': 'resize', 'rows': 40, 'cols': 140})          # back on screen, same size
+            geom = kept.receive_json()
+        self.assertEqual((geom['type'], geom['rows'], geom['cols'], geom['owner']), ('geom', 40, 140, True))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -14,11 +14,13 @@ import hashlib, json, re, threading, time
 from pathlib import Path
 from loguru import logger
 
-KINDS = ('working', 'turn_end', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped')
+KINDS = ('working', 'turn_end', 'background', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped')
 # A `stalled` request is a turn that DIED on a wall - a rate limit, a token ceiling, an API error - with the
 # CLI alive at its prompt. On the screen that looks exactly like a question. It is not terminal (Claude can
 # auto-resume; the owner can retry), so it is a request: open until the run speaks again (hooks.py).
 REQUESTS = ('input_needed', 'approval_needed', 'stalled')
+# `background` is a turn that ended with work still RUNNING - a shell, a monitor, a subagent (background.py) - its
+# jobs in ChoicesJson, each with a deadline. Working while any is inside it; past them all it is a plain turn_end.
 TERMINAL = ('failed', 'disconnected', 'stopped')
 # ONE SENTENCE PER SUB-STATE of a blocked agent, from lanes.json (the desktop reads the same entry in
 # funnelPile.js). Seven surfaces each spelled "parked at its prompt" their own way, and none of them
@@ -80,6 +82,14 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
     try: store._poke('task-changed', task_id=tid)
     except Exception: pass
     return True
+
+
+def background_jobs(e: dict) -> list:
+    "the jobs of a `background` event still running now; [] for any other event"
+    if not e or e.get('Kind') != 'background': return []
+    from . import background
+    try: return background.live(json.loads(e.get('ChoicesJson') or '[]'))
+    except ValueError: return []
 
 
 def events(store, tid: int, sid: str = None) -> list:
@@ -172,7 +182,9 @@ def status(store, tid: int) -> dict:
     if not live: out['state'] = 'disconnected'; return out
     # the newest word decides: a prompt submitted is work in flight; an answer delivered is work resumed; a
     # response that merely ended is nothing anyone should act on (PW-226)
-    out['state'] = 'working' if last['Kind'] in ('working', 'answered') else 'unknown'
+    jobs = background_jobs(last)
+    if jobs: out['background'] = jobs
+    out['state'] = 'working' if last['Kind'] in ('working', 'answered') or jobs else 'unknown'
     return out
 
 
@@ -403,7 +415,7 @@ def waiting_of(store, t):
     evs = events(store, tid, sid)
     if not evs: return None
     if open_requests(evs): return True
-    return False if evs[-1]['Kind'] in ('working', 'answered') else None
+    return False if evs[-1]['Kind'] in ('working', 'answered') or background_jobs(evs[-1]) else None
 
 
 def asking_of(store, t):

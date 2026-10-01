@@ -1,5 +1,6 @@
 """The bell (problems.py): what is failing, each with where to fix it - and quiet once it is not."""
 import unittest
+from datetime import datetime, timedelta
 from taskuary import problems
 from taskuary.store import MemoryStore
 
@@ -18,6 +19,23 @@ class Problems(unittest.TestCase):
         s.touch_connector(wa['ConnectorId'])                         # a clean poll: the bell goes quiet
         self.assertNotIn(key, {p['key'] for p in problems.collect(s)})
 
+    def test_a_failure_says_when_and_ages_out(self):
+        """An error from yesterday that has not happened since is not "failing right now"."""
+        s = MemoryStore()
+        c = next(c for c in s.list_connectors() if c['Type'] == 'whatsapp')
+        s._exec('UPDATE connector SET Active=1 WHERE ConnectorId=?', (c['ConnectorId'],))
+        s.touch_connector(c['ConnectorId'], 'Unsupported parameter')
+        key = f"connector:{c['ConnectorId']}"
+        got = {p['key']: p for p in problems.collect(s)}
+        self.assertTrue(got[key]['since'])                           # when it FAILED, not when it last worked
+        old = (datetime.now() - timedelta(hours=problems.STALE_HOURS, minutes=5)).strftime('%Y-%m-%d %H:%M:%S')
+        s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (old, c['ConnectorId']))
+        self.assertNotIn(key, {p['key'] for p in problems.collect(s)})
+        s._exec('UPDATE connector SET LastErrorAt=NULL WHERE ConnectorId=?', (c['ConnectorId'],))   # from before the stamp
+        self.assertNotIn(key, {p['key'] for p in problems.collect(s)})
+        s.touch_connector(c['ConnectorId'], 'Unsupported parameter')   # it fails again: back
+        self.assertIn(key, {p['key'] for p in problems.collect(s)})
+
     def test_an_inactive_connector_with_an_old_error_does_not_nag(self):
         s = MemoryStore()
         c = next(c for c in s.list_connectors() if c['Type'] == 'slack')
@@ -27,6 +45,7 @@ class Problems(unittest.TestCase):
     def test_the_triage_brain_down_is_a_problem(self):
         s = MemoryStore()
         s.set_setting('triage_last_error', 'azure_openai: 401 Unauthorized', 'system')
+        s.set_setting('triage_last_error_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'system')
         s.set_setting('triage_ai', 'connector:azure_openai', 'owner')
         got = {p['key']: p for p in problems.collect(s)}
         self.assertEqual(got['triage']['connector'], 'azure_openai')

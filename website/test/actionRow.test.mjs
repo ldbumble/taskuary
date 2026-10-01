@@ -122,7 +122,15 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   assert.match(finish, /onStay\?\.\(msg\)/);
   assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("api.post"), "the reminder too");
   assert.match(remind, /if \(leaving\) onStay\?\.\(msg\)/);
-  assert.match(view, /putDown: \(key\) => \{ setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); \}/, "folded, and the … under it");
+  assert.match(view, /putDown: \(key, tid = null\) => \{ setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); setLeavingTid\(tid\); \}/, "folded, and the … under it");
+  // ...and off the RAIL at the press as well, a live session's Mark done included: it waited on an 18-second write-up
+  // first, sitting under For later the whole time (the owner, 2026-10-01: "it first went to Later ... did not disappear")
+  const stop = task.slice(task.indexOf("const stopAndFinish = async"), task.indexOf("const markDoneHint"));
+  assert.ok(stop.indexOf("onLeave?.()") > -1 && stop.indexOf("onLeave?.()") < stop.indexOf("/wrap"), "put down before the write-up");
+  assert.match(view, /onLeave=\{\(\) => canvas\.putDown\(c\.key, c\.tid\)\}/);
+  assert.match(view, /items: pile\.items\.filter\(\(i\) => i\.tid !== leavingTid\)/, "the rail drops it");
+  assert.match(view, /!pile\.items\.some\(\(i\) => i\.tid === leavingTid\)\) setLeavingTid\(null\)/, "until the server's pile has let it go - a reopened task is never hidden");
+  assert.match(view, /pickUp: \(key, why\) => \{[^\n]*setLeavingTid\(null\)/, "a failed close puts it back on the rail too");
   assert.match(view, /onAfter=\{\(\) => actions\.advance\(null, true\)\}/, "the next one comes without the half-second of grace");
 });
 

@@ -162,6 +162,7 @@ def check_budget(store, name: str, text: str) -> str:
     return text
 
 MARKER = '<!-- counsel:deciding -->'
+MATCH_MARKER = '<!-- counsel:match-first -->'     # the deciding section's first bullet, added 2026-10-01
 
 def _squash(s): return ' '.join(str(s or '').split())
 
@@ -176,28 +177,38 @@ def _goal_line(lines):
     return None
 
 def migrate(store) -> str:
-    """The shipped document gained `## When the owner decides` (the prose that left concierge.SYSTEM). A stock
-    document - blank, never edited, or matching any previously shipped template - is replaced outright; an
-    owner's document keeps every word and gets the section inserted before the real My goal heading (or
-    appended at the end), budget-checked and audited (PW-256, PW-258)."""
+    """The shipped document gained `## When the owner decides` (the prose that left concierge.SYSTEM), and then that
+    section's first bullet - match the words to the actions on the table, ask when unsure (the 2026-10-01 press audit).
+    A stock document - blank, never edited, or matching any previously shipped template - is replaced outright; an
+    owner's document keeps every word and gets whichever is missing: the section before the real My goal heading (or
+    at the end), the bullet right under the section's marker - budget-checked and audited (PW-256, PW-258)."""
     from pathlib import Path
     tdir = Path(__file__).parent / 'templates'
     new = tdir.joinpath('counsel.md').read_text(encoding='utf-8')
     cur = store.get_doc('counsel')
-    if cur and MARKER in cur: return 'unchanged'
+    if cur and MARKER in cur and MATCH_MARKER in cur: return 'unchanged'
     row = store.get_doc_row('counsel')
     stock = {_squash(p.read_text(encoding='utf-8')) for p in tdir.glob('history/counsel-*.md')}
     if not (cur or '').strip() or (row and row.get('UpdatedBy') == 'template') or _squash(cur) in stock:
         store.save_doc('counsel', new, 'template'); return 'replaced'
-    new_lines = new.splitlines()
-    start = new_lines.index(f'## {DECIDING_HEAD}')
-    end = next((i for i in range(start + 1, len(new_lines)) if new_lines[i].startswith('## ')), len(new_lines))
-    section = new_lines[start:end]
-    while section and not section[-1].strip(): section.pop()
-    lines = cur.rstrip('\n').splitlines()
-    at = _goal_line(lines)
-    lines = lines + [''] + section if at is None else lines[:at] + section + [''] + lines[at:]
+    new_lines, lines, added = new.splitlines(), cur.rstrip('\n').splitlines(), []
+    if MARKER not in cur:
+        start = new_lines.index(f'## {DECIDING_HEAD}')
+        end = next((i for i in range(start + 1, len(new_lines)) if new_lines[i].startswith('## ')), len(new_lines))
+        section = new_lines[start:end]
+        while section and not section[-1].strip(): section.pop()
+        at = _goal_line(lines)
+        lines = lines + [''] + section if at is None else lines[:at] + section + [''] + lines[at:]
+        added.append(DECIDING_HEAD)
+    if not any(MATCH_MARKER in l for l in lines):
+        i = next(n for n, l in enumerate(new_lines) if l.strip() == MATCH_MARKER)
+        j = i + 2
+        while j < len(new_lines) and new_lines[j].startswith('  '): j += 1
+        at = next(n for n, l in enumerate(lines) if l.strip() == MARKER) + 1
+        if at < len(lines) and not lines[at].strip(): at += 1
+        lines = lines[:at] + new_lines[i:j] + lines[at:]
+        added.append('match-first')
     text = '\n'.join(lines) + '\n'
     store.save_doc('counsel', check_budget(store, 'counsel', text), 'migration')
-    store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': DECIDING_HEAD})
+    store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': ' + '.join(added)})
     return 'appended'

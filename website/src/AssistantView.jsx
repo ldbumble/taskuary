@@ -38,7 +38,7 @@ import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
@@ -637,6 +637,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // sat on the rail as an open task already seen: under For later (the owner, 2026-10-01: "it first went to Later ... and
   // did not disappear right away"). Held until the pile no longer carries it, so a reopened task is never hidden.
   const [leavingTid, setLeavingTid] = useState(null);
+  // A TASK BEING CONTINUED moves to Agents working at the press the same way: "Continuing" said so at 0.3 s while its row
+  // sat under On you until the next pile, two seconds on (press audit, 2026-10-01). Held until the pile has it working.
+  const [continuingTid, setContinuingTid] = useState(null);
   // the walk validates Current against the pile before it can say anything, and that read was
   // 5-47s (2026-09-09). busy is the TURN's interlock and surface() refuses to run while it is
   // set, so opening needs its own flag - without one the button stayed enabled, said nothing,
@@ -1675,11 +1678,22 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     else if (request.kind === "task") openTaskRef.current?.(request);
     else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
   }, [request, state]);
-  const railPile = useMemo(() => (leavingTid && pile?.items ? { ...pile, items: pile.items.filter((i) => i.tid !== leavingTid) } : pile),
-    [pile, leavingTid]);
+  const railPile = useMemo(() => ((leavingTid || continuingTid) && pile?.items
+    ? { ...pile, items: asPressed(pile.items, { leaving: leavingTid, continuing: continuingTid }) } : pile),
+    [pile, leavingTid, continuingTid]);
   useEffect(() => {                                   // the close has landed: the server's pile no longer has it
     if (leavingTid && pile?.items && !pile.items.some((i) => i.tid === leavingTid)) setLeavingTid(null);
   }, [pile, leavingTid]);
+  useEffect(() => {                                   // ...and the continue has: the server's pile has it working (or not at all)
+    const row = continuingTid && pile?.items ? pile.items.find((i) => i.tid === continuingTid) : undefined;
+    if (continuingTid && pile?.items && (!row || attentionBand(row) === 5)) setContinuingTid(null);
+  }, [pile, continuingTid]);
+  // ...and never for long on the page's word alone: a session that ended at once is the server's to say
+  useEffect(() => {
+    if (!continuingTid) return undefined;
+    const t = setTimeout(() => setContinuingTid((x) => (x === continuingTid ? null : x)), 20000);
+    return () => clearTimeout(t);
+  }, [continuingTid]);
   const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); },
     // the task leaves the table the moment it is put down, the "…" under its title line while the server closes it
@@ -1800,6 +1814,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           {!old && continueOn && (
             <div className="tq-browse-line" ref={(el) => { if (el && !el.dataset.seen) { el.dataset.seen = "1"; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } }}>
               <ContinueBox inline task={continueOn.task} taskRef={continueOn.ref} onClose={() => setContinueOn(null)}
+                onPress={() => setContinuingTid(continueOn.task.TaskId)} onFail={() => setContinuingTid(null)}
                 onDone={(_out, note) => {
                   setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: continueOn.task.TaskId, ref: continueOn.ref,
                     text: `Continuing${note ? " with your note" : ""} - it picks up where it left off, and comes back here when it stops or asks.` }]);

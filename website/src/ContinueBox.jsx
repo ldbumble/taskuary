@@ -9,7 +9,9 @@ import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 // conversation - and what you type here is the first thing it hears. Leave it empty to continue as is.
 // IN LINE, LIKE NEW (the owner, 2026-09-30: "shouldn't this show up in line of the assistant ... same as the new box ... with
 // voice note/images"): on the canvas it is a card in the conversation, with the mic and pictures; elsewhere still a popover.
-export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "" }) {
+// `onPress` fires AT THE PRESS, before the server answers, so the rail can move the row to Agents working at once;
+// `onFail(error)` if it could not continue
+export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -17,10 +19,11 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   const said = note.trim() || pics.imgs.length;
   const go = async () => {
     setBusy(true); setErr("");
+    onPress?.();
     try {
       const { data } = await api.post(`/api/tasks/${task.TaskId}/continue-work`, { note: note.trim() || null, images: pics.paths });
       onClose?.(); onDone?.(data, note.trim() || (pics.imgs.length ? "(images)" : ""));
-    } catch (e) { setErr(e?.response?.data?.detail || e?.message || "it could not continue"); }
+    } catch (e) { const msg = e?.response?.data?.detail || e?.message || "it could not continue"; setErr(msg); onFail?.(msg); }
     finally { setBusy(false); }
   };
   const body = (

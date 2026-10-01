@@ -368,6 +368,13 @@ export const placed = (row, card) => {
   for (const k of PLACEMENT) { if (k in row) out[k] = row[k]; else delete out[k]; }
   return out;
 };
+// THE RAIL AS PRESSED: a press the server has not answered yet still moves its row (the put-down, ac051beb). `leaving`: the
+// task being closed or deleted leaves the rail; `continuing`: a task whose session was just continued is drawn under Agents
+// working - it stayed under On you for the two seconds until the next pile (press audit B23b, 2026-10-01).
+export const asPressed = (items, { leaving = null, continuing = null } = {}) => (!leaving && !continuing ? items
+  : items.filter((i) => !leaving || i.tid !== leaving)
+    .map((i) => (continuing && i.tid === continuing
+      ? { ...i, lane: "working", order_band: 5, surfaced: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
 export const levelOf = (item) => {
   const band = attentionBand(item);
   if (band === 2 && (item?.surfaced || item?.deferred)) return "later";

@@ -13,20 +13,23 @@ def later(minutes):
     return (datetime.now() + timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
 
 
-PILE = [{'key': 'msg:1', 'lane': 'asked', 'order_band': 2, 'title': 'Approve the Q3 invoice', 'who': 'Paula Vance'},
-        {'key': 'msg:2', 'lane': 'yours', 'order_band': 2, 'surfaced': True, 'back_at': later(185), 'title': 'Lease renewal', 'who': 'Ray Colton'},
-        {'key': 'msg:3', 'lane': 'fyi', 'order_band': 4, 'title': 'Quarterly newsletter', 'who': 'Marcus Reed'},
-        {'key': 'msg:4', 'lane': 'fyi', 'order_band': 4, 'title': 'Back Tuesday', 'who': 'Gail Moreno'}]
+# built per test, not at import: a slow suite reached this file minutes after collection, and "back in 3h" read
+# "back in 2h" (2026-10-01)
+def pile():
+    return [{'key': 'msg:1', 'lane': 'asked', 'order_band': 2, 'title': 'Approve the Q3 invoice', 'who': 'Paula Vance'},
+            {'key': 'msg:2', 'lane': 'yours', 'order_band': 2, 'surfaced': True, 'back_at': later(185), 'title': 'Lease renewal', 'who': 'Ray Colton'},
+            {'key': 'msg:3', 'lane': 'fyi', 'order_band': 4, 'title': 'Quarterly newsletter', 'who': 'Marcus Reed'},
+            {'key': 'msg:4', 'lane': 'fyi', 'order_band': 4, 'title': 'Back Tuesday', 'who': 'Gail Moreno'}]
 
 
 class ForLaterTests(unittest.TestCase):
     def test_for_later_is_its_own_group_and_says_when_each_comes_back(self):
-        text = ra.who_wants_what(PILE)
+        text = ra.who_wants_what(pile())
         self.assertIn('FOR LATER · 1', text)
         self.assertIn('Lease renewal (back in 3h)', text)
 
     def test_the_sections_are_offered_as_picks(self):
-        rows = db.section_rows(PILE)
+        rows = db.section_rows(pile())
         self.assertEqual([label for label, _ in rows], ['Walk On you', 'Walk For later', 'Walk FYI'])
         self.assertEqual(rows[-1][1], {'t': 'section', 'section': 'fyi'})
 
@@ -38,7 +41,7 @@ class SectionWalkTests(unittest.TestCase):
         def surface(store, key=None, **kw):
             self.shown.append(key)
             return {'say': f'shown {key}', 'item': {'key': key} if key else None}
-        self.patches = [mock.patch.object(funnel, 'pile', return_value={'items': PILE}),
+        self.patches = [mock.patch.object(funnel, 'pile', return_value={'items': pile()}),
                         mock.patch.object(concierge, 'surface', side_effect=surface),
                         mock.patch.object(ra, 'carry_out', side_effect=lambda store, out, item, actor='owner', lead='', picked=False: (lead + ' ' + out['say']).strip()),
                         mock.patch.object(ra, 'asking', return_value={'channel': 'whatsapp', 'chat': 'c1'})]

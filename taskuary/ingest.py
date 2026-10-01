@@ -11,7 +11,7 @@ from loguru import logger
 from .routing import ask_line, route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
-from .store import task_ref, auto_code_enabled
+from .store import task_ref, auto_code_enabled, _now
 from . import senders
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -437,6 +437,7 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
                     store.add_route(mid, tid, 'file', None, f'triage failed ({str(e)[:160]}) - unclassified; retry available', [], 'triage',
                                     parse_error=str(e)[:1000])
                     store.set_setting('triage_last_error', str(e)[:200], 'system')
+                    store.set_setting('triage_last_error_at', _now(), 'system')   # the bell ages a failure out by this
                 if on_complete: on_complete(r)
                 if progress: progress(len(rows))
         return n
@@ -687,6 +688,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                 f"AI triage failed ({_fail['err']}) - kept on {task_ref(tid)}, unclassified; retry available",
                                 [], 'triage', parse_error=_fail['err'])
                 store.set_setting('triage_last_error', _fail['err'][:200], 'system')
+                store.set_setting('triage_last_error_at', _now(), 'system')   # the bell ages a failure out by this
                 return {'status': 'error', 'task_id': tid, 'message_id': mid}
             if follow and follow.get('degraded'):
                 mid = _land(store, msg, tid, 'error')
@@ -785,6 +787,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                     f"AI triage failed ({fail['err']}) - unclassified; fix the AI connector and retry",
                                     [], 'triage', parse_error=fail['err'])
                     store.set_setting('triage_last_error', fail['err'][:200], 'system')
+                    store.set_setting('triage_last_error_at', _now(), 'system')   # the bell ages a failure out by this
                     logger.warning(f"ingest: AI triage failed - {fail['err']}")
                     return {'status': 'error', 'task_id': None, 'message_id': mid}
                 if cfg.get('triage_last_error'): store.set_setting('triage_last_error', '', 'system')   # it answered: the brain is back

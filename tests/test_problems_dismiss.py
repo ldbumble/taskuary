@@ -5,6 +5,7 @@ error's own text and timestamp - the same connector failing the same way an hour
 again, and comes back.
 """
 import json, unittest
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -14,12 +15,16 @@ from taskuary.store import MemoryStore
 c = TestClient(server.app)
 
 
-def _failing(err='the bridge is down', when='2026-09-02 10:02:29'):
+def _ago(m): return (datetime.now() - timedelta(minutes=m)).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _failing(err='the bridge is down', when=None):
+    when = when or _ago(60)
     s = MemoryStore()
     cid = s.get_connector_by_type('github')['ConnectorId']
     s.save_connector({'ConnectorId': cid, 'Active': 1}, 'o')
     s.touch_connector(cid, err)
-    if when: s._exec('UPDATE connector SET LastSyncAt=? WHERE ConnectorId=?', (when, cid))
+    if when: s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (when, cid))
     return s, f'connector:{cid}'
 
 
@@ -37,7 +42,7 @@ class DismissTests(unittest.TestCase):
         problems.dismiss(s, key)
         self.assertEqual(problems.collect(s), [])
         cid = int(key.split(':')[1])
-        s._exec('UPDATE connector SET LastSyncAt=? WHERE ConnectorId=?', ('2026-09-02 11:02:29', cid))
+        s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (_ago(30), cid))
         self.assertEqual([p['key'] for p in problems.collect(s)], [key])   # same error, later: news again
 
     def test_a_different_error_on_the_same_card_is_not_dismissed(self):
@@ -45,7 +50,7 @@ class DismissTests(unittest.TestCase):
         problems.dismiss(s, key)
         cid = int(key.split(':')[1])
         s.touch_connector(cid, 'the token expired')
-        s._exec('UPDATE connector SET LastSyncAt=? WHERE ConnectorId=?', ('2026-09-02 10:02:29', cid))
+        s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (_ago(60), cid))
         got = problems.collect(s)
         self.assertEqual([p['key'] for p in got], [key])
         self.assertIn('token expired', got[0]['detail'])

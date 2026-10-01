@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
   Owner TEXT, ConnectorId INTEGER, Active INTEGER DEFAULT 1, ConfigJson TEXT, LastPolledAt TEXT);
 CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT, Name TEXT,
-  ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, Roles TEXT,
+  ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, LastErrorAt TEXT, Roles TEXT,
   Scope TEXT);
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
 CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, ScopeKey TEXT, Note TEXT,
@@ -887,6 +887,9 @@ class SQLiteStore:
                     self.cx.execute('ROLLBACK TO widen_connector_type')
                     self.cx.execute('RELEASE widen_connector_type')
                     raise
+            # after the widen above, which rebuilds the table without it
+            if 'LastErrorAt' not in {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}:
+                self.cx.execute('ALTER TABLE connector ADD COLUMN LastErrorAt TEXT')
             for ix in INDEXES:
                 self.cx.execute(ix)
             for table in PROCESSING_DIRTY_TABLES:
@@ -4111,7 +4114,7 @@ class SQLiteStore:
                          (source_id, customer_id, before_period))
 
     # channel connectors (secrets are write-only: list/get never return them)
-    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, LastSyncAt, LastError, (Secret IS NOT NULL AND Secret != '') HasSecret"
+    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, LastSyncAt, LastError, LastErrorAt, (Secret IS NOT NULL AND Secret != '') HasSecret"
     def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
     def get_connector(self, cid, with_secret=False):
         return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
@@ -4146,8 +4149,9 @@ class SQLiteStore:
                                      config_remove=config_remove, expect_fields=expect_fields,
                                      expect_config=expect_config)
     def touch_connector(self, cid, error=None):
-        if error: self._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', (error[:500], cid))
-        else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL WHERE ConnectorId=?', (_now(), cid))
+        # LastErrorAt is WHEN it failed: LastSyncAt is the last time it worked, and the bell was showing that as the failure's time
+        if error: self._exec('UPDATE connector SET LastError=?, LastErrorAt=? WHERE ConnectorId=?', (error[:500], _now(), cid))
+        else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL, LastErrorAt=NULL WHERE ConnectorId=?', (_now(), cid))
         self._processing_ignored_writes += 1
     def get_settings(self): return {r['Name']: r['Value'] for r in self._rows('SELECT * FROM setting')}
     def get_setting(self, name, default=None):

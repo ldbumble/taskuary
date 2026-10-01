@@ -21,7 +21,7 @@ import { DEMO } from "./demoApi.js";
 import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
-import { StarMark, TaskuaryMark } from "./ui.jsx";
+import { StarMark, TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
 import AssistantView, { StageMode } from "./AssistantView.jsx";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
@@ -54,8 +54,10 @@ const BROWSED = { Reports: "reports", Connections: "connections", Settings: "set
 const SUPPORT_URL = "https://github.com/ldbumble/taskuary/issues/new/choose";
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
-// report that failed today - each with the way to where it is fixed. The setup chip beside it says
+// report that failed - in the last few hours (problems.STALE_HOURS) - each with the way to where it is fixed. The setup chip beside it says
 // what is not yet set up; this says what was working and is not. Grey and quiet when nothing is.
+// "3h ago" alone hides a day boundary: the clock time says which morning
+const fmtWhen = (s) => asUtc(s).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
 function Bell({ onGo }) {
   const [items, setItems] = useState([]);
   const [el, setEl] = useState(null);
@@ -80,13 +82,13 @@ function Bell({ onGo }) {
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { width: 440, p: 1.5, mt: 0.5 } } }}>
         <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
-        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Every connection polled clean, the triage brain answered, and every report's last run worked. Anything you dismissed comes back if it happens again.</Typography>}
+        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Nothing has failed in the last few hours: connections, the triage brain and reports. Anything you dismissed comes back if it happens again.</Typography>}
         {items.map((p) => (
           <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" sx={{ fontWeight: 650, color: INK, fontSize: 12.5 }}>{p.title}</Typography>
               <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45, wordBreak: "break-word" }}>{p.detail}</Typography>
-              {p.since && <Typography variant="caption" sx={{ color: FAINT }}>last tried {p.since}</Typography>}
+              {p.since && <Typography variant="caption" sx={{ color: FAINT }} title={p.since}>failed {timeAgo(p.since)} · {fmtWhen(p.since)}</Typography>}
             </Box>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4, alignItems: "stretch", flexShrink: 0 }}>
               <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}

@@ -27,6 +27,7 @@ API = 'https://pypistats.org/api/packages'
 # shared address (observed 2026-08-31 from a laptop; a named agent went straight through). So the
 # library is the road and a named plain request is the shoulder.
 UA = 'taskuary-downloads-chart (+https://github.com/ldbumble/taskuary)'
+HTTP_PARAMS = ('mirrors',)      # the rest are pypistats' own presentation options, not the API's
 
 WIDTH, HEIGHT = 880, 260
 PAD_L, PAD_R, PAD_T, PAD_B = 52, 78, 52, 30      # right padding holds the two direct labels
@@ -209,7 +210,10 @@ def main(argv=None) -> int:
             # a package with no downloads yet, or pypistats having a bad day, is not a reason to
             # paint the repository's checks red
             print(f'could not read pypistats for {a.package}: {e}', file=sys.stderr)
-            return 1 if a.strict else 0
+            if a.strict: return 1
+            # ...and the days already kept are still the chart: drawing nothing left the publish step without its file,
+            # which reddened the workflow anyway (2026-10-01)
+            new = []
     rows = merge(read_history(hist), new)
     if not rows:
         print('nothing to chart yet'); return 0

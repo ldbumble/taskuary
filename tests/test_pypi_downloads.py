@@ -157,6 +157,33 @@ class TheCommandTests(unittest.TestCase):
             self.assertEqual(dl.main(args + ['--strict']), 1)
         self.assertFalse((tmp / 'o.svg').exists())
 
+    def test_a_fetch_that_fails_still_draws_the_days_already_kept(self):
+        """pypistats answered 500 on 2026-10-01 and the job drew nothing - and the step after it copies the chart, so the
+        "bad day" this path exists for turned the workflow red anyway. The history it already has is still the chart."""
+        tmp = Path(mkdtemp())
+        dl.write_history(tmp / 'h.csv', [('2026-09-29', 4), ('2026-09-30', 6)])
+        import unittest.mock as mock
+        with mock.patch.object(dl, 'fetch', side_effect=RuntimeError('HTTP Error 500')):
+            self.assertEqual(dl.main(['--history', str(tmp / 'h.csv'), '--out', str(tmp / 'o.svg')]), 0)
+        self.assertIn('</svg>', (tmp / 'o.svg').read_text(encoding='utf-8'))
+        self.assertEqual(len(dl.read_history(tmp / 'h.csv')), 2)
+
+
+class TheFallbackTests(unittest.TestCase):
+    def test_when_the_library_fails_the_plain_request_asks_without_mirrors(self):
+        """The fallback named a constant a later edit had deleted, so the one road for a day pypistats is down ended in
+        a NameError (2026-10-01)."""
+        import io, types, unittest.mock as mock
+        broken = types.SimpleNamespace(overall=mock.Mock(side_effect=RuntimeError('HTTP Error 500')))
+        asked = []
+        def answer(req, timeout=None):
+            asked.append(req.full_url); return io.BytesIO(json.dumps(_payload(2)).encode())
+        with mock.patch.dict(sys.modules, {'pypistats': broken}), mock.patch.object(dl, 'urlopen', side_effect=answer):
+            got = dl._get('taskuary', 'overall', mirrors=False, total='daily')
+        self.assertEqual(len(got['data']), len(_payload(2)['data']))
+        self.assertTrue(asked[0].endswith('/taskuary/overall?mirrors=false'), asked[0])
+
+
 
 class TheWorkflowTests(unittest.TestCase):
     def test_the_daily_update_publishes_to_the_stats_branch_without_opening_a_pr(self):

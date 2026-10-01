@@ -27,6 +27,11 @@ async function clickVisibleExact(page, text, selector = "div,p,span") {
   assert.equal(clicked, true, `visible control not found: ${text}`);
 }
 
+// A chip or a card opening smooth-scrolls the browse frame into view, and page.click() aims at coordinates taken before
+// the scroll ends - the click landed beside the button about one run in four and the test waited out its timeout
+// (CI, 2026-10-01). A DOM click is not aimed.
+const press = (page, selector) => page.$eval(selector, (node) => node.click());
+
 async function fixtureState(page) {
   return page.evaluate(async () => {
     const headers = { "X-Taskuary-Token": localStorage.getItem("taskuary_token") };
@@ -76,7 +81,7 @@ test("PW-003/PW-004/PW-005 render the six chat clocks and global off help read-o
   await clickNav(page, "Connections");
   await page.waitForSelector('input[placeholder^="Search connectors"]', { timeout: 10000 });
   // the canvas (0.3.7.0): a section is its chip, and Back returns to that section's cards
-  await page.click('[data-tq-browse-chip="Messaging"]');
+  await press(page, '[data-tq-browse-chip="Messaging"]');
   await page.waitForFunction(() => document.body.innerText.includes("Apple Messages"), { timeout: 10000 });
 
   const rendered = [];
@@ -107,8 +112,10 @@ test("PW-003/PW-004/PW-005 render the six chat clocks and global off help read-o
       assert.match(field.helper, /sending notifications is event-driven/i);
     }
 
-    await page.click("[data-tq-browse-back]");
-    await page.waitForFunction(() => document.body.innerText.includes("Apple Messages"), { timeout: 5000 });
+    await press(page, "[data-tq-browse-back]");
+    // the list is back when the open card is gone - "Apple Messages" alone is also the title of that card while it is open
+    await page.waitForFunction(() => !document.querySelector("[data-tq-browse-one]")
+      && document.body.innerText.includes("Apple Messages"), { timeout: 5000 });
   }
 
   const renderedCopy = rendered.join("\n");
@@ -119,7 +126,7 @@ test("PW-003/PW-004/PW-005 render the six chat clocks and global off help read-o
 
   await clickNav(page, "Settings");
   await page.waitForSelector('input[placeholder^="Search settings"]', { timeout: 10000 });
-  await page.click('[data-tq-browse-chip="config"]');
+  await press(page, '[data-tq-browse-chip="config"]');
   await page.waitForFunction(() => document.body.innerText.includes("Triage & routing"), { timeout: 5000 });
   await clickVisibleExact(page, "Sync & startup");
   await page.waitForFunction(() => document.body.innerText.includes("Background sync (minutes)"), { timeout: 5000 });

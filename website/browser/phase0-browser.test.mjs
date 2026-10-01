@@ -108,7 +108,8 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
     await clickNav(page, label);
     if (label === "Reports") {
       await page.waitForSelector('[data-tq-browse-chip="reports"]', { timeout: limits.navigationMs });
-      await page.click('[data-tq-browse-chip="reports"]');
+      // a DOM click: the chip's frame smooth-scrolls into view, and a coordinate click can land beside it mid-scroll
+      await page.$eval('[data-tq-browse-chip="reports"]', (node) => node.click());
     }
     if (waitKind === "selector") await page.waitForSelector(readyMarker, { timeout: limits.navigationMs });
     else await waitForBody(page, readyMarker, limits.navigationMs);

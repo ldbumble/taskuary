@@ -23,10 +23,11 @@ test("nothing to decide: Mark done is the move, and Next stays outlined", () => 
   assert.deepEqual(r.more.map((x) => x.id), ["nat"]);
 });
 
-test("the way back into an agent's session leads before Mark done does", () => {
+test("the way back into an agent's session leads, and Mark done stands outlined beside it - not behind More", () => {
   const r = rowOf({ ref: "", list: [v("continue", "agent", { lead: true }), v("done", "more"), v("next", "next")] });
   assert.deepEqual(filled(r), ["continue"]);
-  assert.ok(r.more.some((x) => x.id === "done"));
+  assert.deepEqual(r.agent.map((x) => [x.id, x.tone]), [["continue", "p"], ["done", "s"]]);
+  assert.ok(!r.more.some((x) => x.id === "done"));
 });
 
 test("a live session has no primary: Mark done is not promoted, Next is the one filled button", () => {
@@ -111,4 +112,16 @@ test("every card's move and foot ride in the row: YourMove and Foot register, th
   assert.match(src, /row: outer\.row/, "the walk's foot rides in the row as well");
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReplyFiles.jsx"), "utf8"), /toRow && mail/, "Attach a file is a More verb in the row");
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8"), /id: "ask-sender", group: "more"/, "Ask sender is a More verb in the row");
+});
+
+test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and a failure puts it back", () => {
+  const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
+  const task = read("TaskPage.jsx"), remind = read("RemindMe.jsx"), view = read("AssistantView.jsx");
+  const finish = task.slice(task.indexOf("const finish = async"), task.indexOf("const reminded ="));
+  assert.ok(finish.indexOf("onLeave?.()") < finish.indexOf("runOperation"), "the close is asked for after the task is put down");
+  assert.match(finish, /onStay\?\.\(msg\)/);
+  assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("api.post"), "the reminder too");
+  assert.match(remind, /if \(leaving\) onStay\?\.\(msg\)/);
+  assert.match(view, /putDown: \(key\) => \{ setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); \}/, "folded, and the … under it");
+  assert.match(view, /onAfter=\{\(\) => actions\.advance\(null, true\)\}/, "the next one comes without the half-second of grace");
 });

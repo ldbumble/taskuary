@@ -60,7 +60,8 @@ export function afterExecute(p, res) {
   // the server's own receipt when it wrote one (it names the task and what became of it); ours was a
   // shorter second "Done" drawn beside it (2026-09-23)
   // ...a close-out whose merge landed but whose reply did not is done, and NOT settled: the reply still waits on you
-  if (res?.status === "done") return { receipt: res.receipt || `Done - ${label}.`, settle: !!p.settles && !res.outcome?.reply_error, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat) };
+  if (res?.status === "done") return { receipt: res.receipt || `Done - ${label}.`, settle: !!p.settles && !res.outcome?.reply_error, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat),
+    ...(res.outcome?.taskId ? { tid: res.outcome.taskId } : {}) };
   if (res?.status === "error" && res.outcome?.dispatch === "needs_repo")
     return { receipt: `Not started - ${res.error || "it needs a repository first"}. Pick one on the card and confirm again.`, settle: false, status: "error",
              repo: { taskId: res.outcome.taskId, agent: res.outcome.agent } };
@@ -77,7 +78,11 @@ export function afterExecute(p, res) {
 // is not walking it, so the table is put down and Next becomes a button under the receipt rather than
 // something the page does for you (the owner, 2026-09-11: "it doesn't have to move on but should show
 // button next"). A sweep that left the table alone reloads - nothing on the table moved.
+//
+// A HAND-OFF THAT STARTED is "watch": its task opens on the table with the agent working in it, and the walk waits for Next
+// (the owner, 2026-10-01: "it should open the task and I can see the agent doing its work, why did it just close it?").
 export function afterConfirm(p, out, current) {
+  if (out?.handoff && out.tid) return "watch";
   if (!(out?.settle && p.key && p.key === current)) return "reload";
   if (p.kind === "pipe.clear") return "offer";
   return p.kind === "item.settle" || out.handoff ? "advance" : "settle";

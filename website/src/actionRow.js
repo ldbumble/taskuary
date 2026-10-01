@@ -62,7 +62,8 @@ export function movesOf(node, group = "decide", prefix = "m") {
 }
 
 // the row's layout, from the registered verbs: the decision first, the session's verbs, then the rest behind More.
-// A task with no decision waiting has Mark done as its decision (unless a live session holds the page: that has no primary).
+// A task with no decision waiting has Mark done as its decision (unless a live session holds the page: that has no primary) - or, when
+// the session's way back in leads, Mark done stands outlined beside it.
 // ONE FILLED BUTTON AT MOST: Next is the filled one only when nothing else on the row is a move of its own.
 export function rowOf({ list, ref }) {
   const by = (g) => list.filter((v) => v.group === g);
@@ -73,6 +74,9 @@ export function rowOf({ list, ref }) {
   if (lead) { agent = agent.map((v) => (v === lead ? { ...v, tone: "p" } : v)); primary = lead; }
   const done = more.find((v) => v.id === "done");
   if (done && done.promote && !primary) { primary = { ...done, tone: "p" }; decide = [primary, ...decide]; more = more.filter((v) => v !== done); }
+  // ...and beside the way back in, not behind More: a closed session is as often finished as continued (the owner, 2026-10-01: "mark done
+  // should not be inside the more"). Outlined, so the row still has one filled button. A waiting decision still sends it behind More.
+  else if (done && done.promote && lead) { agent = [...agent, done]; more = more.filter((v) => v !== done); }
   const next = by("next")[0] || null;
   if (decide.length > 4) { more = [...decide.slice(4), ...more]; decide = decide.slice(0, 4); }   // the row stays a short line of chips; the rest wait behind More
   return { ref, decide, agent, more, primary, next: next && { ...next, tone: primary ? "s" : "p" },

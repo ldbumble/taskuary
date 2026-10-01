@@ -14,17 +14,23 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
 // the day picker itself, anchored wherever it was asked for: the task page's button, or the walk's own
 // "Remind me" word (the owner, 2026-09-25: "remind me should be a walk button")
 // `path`: where the day goes - a task's reminder by default, or an Advisor idea's (its Remind me, 2026-09-27)
-export function RemindPicker({ task, anchor, onClose, onDone, path }) {
+// `onLeave` fires AT THE PRESS, before the server answers, so the walk can put the task down at once; `onStay(error)` if it failed
+export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onStay }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const away = remindWaiting(task);
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const set = async (until) => {
     setBusy(true); setErr("");
+    const leaving = until !== "none";
+    if (leaving) onLeave?.();
     try {
       const { data } = await api.post(path || `/api/tasks/${task.TaskId}/remind`, { until });
       onClose?.(); onDone?.(data);
-    } catch (e) { setErr(e?.response?.data?.detail || e?.message || "could not set the reminder"); }
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || "could not set the reminder";
+      setErr(msg); if (leaving) onStay?.(msg);
+    }
     finally { setBusy(false); }
   };
   return (
@@ -51,7 +57,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path }) {
   );
 }
 
-export default function RemindMe({ task, compact = false, sx, onDone }) {
+export default function RemindMe({ task, compact = false, sx, onDone, onLeave, onStay }) {
   const [at, setAt] = useState(null);
   const away = remindWaiting(task);
   const title = away ? `Away until ${remindDay(task.RemindAt)} - change the day or bring it back now`
@@ -63,7 +69,7 @@ export default function RemindMe({ task, compact = false, sx, onDone }) {
             <EventIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
         : <Button size="small" variant="outlined" sx={sx} title={title} startIcon={<EventIcon sx={{ fontSize: 16, color: "#55697a" }} />}
             onClick={(e) => setAt(e.currentTarget)}>{away ? `Back ${remindDay(task.RemindAt)}` : "Remind me"}</Button>}
-      <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} />
+      <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} onLeave={onLeave} onStay={onStay} />
     </>
   );
 }

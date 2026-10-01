@@ -6,6 +6,9 @@ import { RepoPicker } from "./RepoPicker.jsx";
 // The confirmation box (PW-123): what will happen, on what, with which parameters - and one specifically
 // labelled button that submits the structured proposal. Cancel leaves everything where it is. A card
 // read back from history carries no version, so it shows what was proposed and offers nothing.
+// an answer as a button that DOES it: "A coding agent" -> "Send to a coding agent"; an answer that is already a verb stays as it is
+export const altLabel = (l) => (/^an? /i.test(l) ? `Send to ${l.charAt(0).toLowerCase()}${l.slice(1)}` : l);
+
 export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview }) {
   const [peek, setPeek] = useState(null);
   // THE CARD'S OWN QUESTION (2026-09-25): Not ours asks how far, Send to agent asks which agent. Another answer
@@ -13,25 +16,31 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
   const [p, setP] = useState(given);
   const [repo, setRepo] = useState(given?.params?.repo || "");
   if (!p) return null;
-  const pick = async (verb) => {
-    try {
-      const { data } = await api.post("/api/concierge/propose", { verb, key: p.key, table: !!p.settles, exact: true });
-      setP(data); setRepo(data?.params?.repo || ""); setPeek(null);
-    } catch (e) { setPeek({ error: e?.response?.data?.detail || e?.message || "that answer is not available here", pick: true }); }
-  };
   const d = describe(p);
   // A CHECKOUT NOBODY NAMED IS CHOSEN HERE, before Start: the dropdown holds every repository, the words' best
   // guess preselected, and Start waits until one is chosen. The card used to say "you pick it when it starts" and
   // the start then guessed on its own (the owner, 2026-09-24: "it should be dropdown to choose repo if it's not clear")
   const open = p.version != null && (p.status || "proposed") === "proposed";
   const picking = pickingRepo(p);
-  const rows = picking ? d.params.filter(([k]) => k !== "repository") : d.params;
+  // THE ANSWERS ARE THE BUTTONS (the owner, 2026-10-01: "what are these buttons? it's confusing"): a card that asks its own
+  // question drew its answers as pills - the proposed one filled, as if already pressed - and then a separate confirm under
+  // them. Now each answer confirms in one press; only a repository still to choose keeps a confirm of its own.
+  const asks = open && !!p.alts?.length;
+  const rows = (picking ? d.params.filter(([k]) => k !== "repository") : d.params).filter(([k]) => !(asks && k === "verb"));
   const confirm = async () => {
     if (!picking || repo === (p.params?.repo || "")) return onConfirm?.(p);
     try {
       const { data } = await api.patch(`/api/operations/${p.id}`, { params: { ...p.params, repo } });
       return onConfirm?.({ ...p, version: data.version, params: data.params });
     } catch (e) { setPeek({ error: e?.response?.data?.detail || e?.message || "the repository could not be set" }); }
+  };
+  const choose = async (a) => {
+    if (a.current) return confirm();
+    try {
+      const { data } = await api.post("/api/concierge/propose", { verb: a.verb, key: p.key, table: !!p.settles, exact: true });
+      setP(data); setRepo(data?.params?.repo || ""); setPeek(null);
+      if (!pickingRepo(data)) onConfirm?.(data);           // a checkout still to choose waits for its picker and Start
+    } catch (e) { setPeek({ error: e?.response?.data?.detail || e?.message || "that answer is not available here", pick: true }); }
   };
   const preview = async () => {
     setPeek({ busy: true });
@@ -54,12 +63,13 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
           {rows.map(([k, v]) => <div key={k}><span style={{ fontWeight: 600 }}>{k}:</span> {String(v)}</div>)}
         </div>
       )}
-      {open && !!p.alts?.length && (
+      {asks && (
         <div className="tq-alts" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
           {p.alts.map((a) => (
-            <button key={a.verb} type="button" className={`tq-chip${a.current ? " primary" : ""}`} aria-pressed={!!a.current}
-              onClick={() => !a.current && pick(a.verb)}>{a.label}</button>
+            <button key={a.verb} type="button" className={`tq-chip${a.current ? " primary" : ""}`} disabled={a.current && picking && !repo}
+              title={a.current ? "the one proposed" : undefined} onClick={() => choose(a)}>{altLabel(a.label)}</button>
           ))}
+          {!picking && <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>{d.cancel}</button>}
         </div>
       )}
       {picking && open && (
@@ -84,7 +94,7 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
           <RepoPicker taskId={p.repo.taskId} agent={p.repo.agent} onDone={(data) => { if (data?.repo) onConfirm?.(p); }} />
           <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>Not now</button>
         </div>
-      ) : open ? (
+      ) : open && !(asks && !picking) ? (
         <div className="tq-options" style={{ marginTop: 8 }}>
           <button type="button" className="tq-chip primary" disabled={picking && !repo} onClick={confirm}>{d.confirm}</button>
           {d.preview && <button type="button" className="tq-chip" disabled={!!peek?.busy} onClick={preview}>{peek?.busy ? "Running…" : "Preview"}</button>}

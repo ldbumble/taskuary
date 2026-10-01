@@ -39,3 +39,20 @@ test("the page advances without settling on a started hand-off, and the card ask
   assert.match(card, /const askRepo = p\.status === "error" && p\.repo\?\.taskId/);
   assert.match(card, /<RepoPicker taskId=\{p\.repo\.taskId\} agent=\{p\.repo\.agent\} onDone=\{\(data\) => \{ if \(data\?\.repo\) onConfirm\?\.\(p\); \}\}/);
 });
+
+test("a started hand-off with its task OPENS that task on the table, and the walk waits (2026-10-01: \"why did it just close it?\")", () => {
+  const out = afterExecute({ ...coder, params: { kind: "general" } }, { status: "done", outcome: { taskId: 9, chat: true } });
+  assert.deepEqual([out.handoff, out.tid], [true, 9]);
+  assert.equal(afterConfirm(coder, out, coder.key), "watch");
+  assert.match(read("AssistantView.jsx"), /if \(step === "watch"\) \{ clearTable\(\); loadPile\(\); openTaskCard\(\{ tid: out\.tid \}\); \}/);
+});
+
+test("a card that asks its own question: each answer is the button that does it, no separate confirm", async () => {
+  const card = read("ProposalCard.jsx");
+  const { altLabel } = await import("../src/ProposalCard.jsx").catch(() => ({}));
+  assert.match(card, /onClick=\{\(\) => choose\(a\)\}>\{altLabel\(a\.label\)\}/);
+  assert.match(card, /open && !\(asks && !picking\) \?/, "the separate confirm row is drawn only with no question, or a repository to choose");
+  assert.match(card, /if \(!pickingRepo\(data\)\) onConfirm\?\.\(data\)/, "the other answer confirms in the same press");
+  assert.match(card, /!\(asks && k === "verb"\)/, "no raw 'verb:' line under the question");
+  if (altLabel) assert.deepEqual(["A coding agent", "A non-coding agent", "Just this once"].map(altLabel), ["Send to a coding agent", "Send to a non-coding agent", "Just this once"]);
+});

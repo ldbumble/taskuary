@@ -544,7 +544,8 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
   if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
-        onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={actions.advance}
+        onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
+        onLeave={() => canvas.putDown(c.key)} onStay={(why) => canvas.pickUp(c.key, why)}
         onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} />
     </div>
   );
@@ -1242,7 +1243,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
       // repository still to choose, a failed start or a cancel keep the item where it is. A sweep that
       // cleared the table settled it too, but does NOT walk on: the table is put down and Next is offered.
-      if (step === "advance") advance();
+      if (step === "watch") { clearTable(); loadPile(); openTaskCard({ tid: out.tid }); }
+      else if (step === "advance") advance();
       else if (step === "settle") await done(null);
       else { if (step === "offer") clearTable(); loadPile(); }
     } finally { setBusy(false); }
@@ -1337,7 +1339,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     currentRef.current = null; selectionRef.current = null;
     setCurrent(null); setCurrentItem(null);
   };
-  const advance = (pile = null) => {
+  // `settled`: the server has answered already (a Mark done or Remind me that closed the task before calling here)
+  const advance = (pile = null, settled = false) => {
     clearTable();
     onChanged?.();                                     // a draft may have gone out: the Review badge recounts
     // a settle that brought the rail back with it: held under the empty table's scope, and the walk needs
@@ -1345,7 +1348,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // render (a proposal's busy flag is released the moment its caller returns)
     if (pile) holdPile(pile, nextSelectionScope(only.current, null));
     setNextComing(true);
-    deferInChat(() => surfaceRef.current?.(), pile ? 120 : 500);
+    deferInChat(() => surfaceRef.current?.(), pile || settled ? 120 : 500);
   };
   const done = async (receipt) => {
     // the card folds to its line the moment its verb is pressed - see interactiveCardIndex
@@ -1654,7 +1657,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
   }, [request, state]);
   const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone,
-    toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); } }), [bodyH, expanded, foldedKey, browsing, phone]);
+    toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); },
+    // the task leaves the table the moment it is put down, the "…" under its title line while the server closes it
+    putDown: (key) => { setExpanded(false); setFoldedKey(key); setNextComing(true); },
+    pickUp: (key, why) => { setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); if (why) setErr(why); } }),
+    [bodyH, expanded, foldedKey, browsing, phone]);
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
   const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);

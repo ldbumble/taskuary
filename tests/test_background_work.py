@@ -181,3 +181,13 @@ class OtherCLIs(Base):
             self.assertIn('http://127.0.0.1:1/api/hooks/copilot', cp['hooks']['Stop'][0]['args'])
             self.assertNotIn('PermissionRequest', cp['hooks'])                            # fail-closed there: a down app would deny
             self.assertFalse(hooks.install_user('copilot', base='http://127.0.0.1:1', token='t', home=home))
+
+    def test_a_codex_background_process_leaves_the_turn_with_the_owner(self):
+        """Codex 0.159.2 never wakes for a background command (upstream closed waking it as not planned; measured: it
+        started one detached, ended its turn and said nothing more) - so a turn that ends is the owner's, as with Devin."""
+        t = self.pane('codex')
+        self.fire('PostToolUse', cli='codex', tool_name='Bash', tool_response='',
+                  tool_input={'command': "Start-Process -FilePath ping.exe -ArgumentList '-n','25','127.0.0.1' -WindowStyle Hidden"})
+        self.fire('Stop', cli='codex', last_assistant_message='started')
+        self.assertIsNone(ws.waiting_of(self.s, t))
+        self.assertNotEqual(self.state()['state'], 'working')

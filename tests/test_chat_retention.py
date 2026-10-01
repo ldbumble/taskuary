@@ -109,7 +109,7 @@ class RetentionTests(unittest.TestCase):
         t, m = real_task(s); s._exec('UPDATE task SET CreatedAt=? WHERE TaskId=?', (ago(days=40), t))
         gone = chat(s, 'archived', days=40)
         cur = chat(s, 'today, still open', days=40, archive=False)                                        # the open guide, old rows and all
-        now = datetime(2026, 9, 6, 8, 0, 0)
+        now = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)                             # the rows are dated off today, so is the tick
         first = retention.tick(s, now)
         self.assertEqual(first['removed'], [gone]); self.assertTrue(s.get_task(cur)); self.assertTrue(s.get_task(t))
         self.assertIsNone(retention.tick(s, now + timedelta(hours=5)))                                      # same day: not again

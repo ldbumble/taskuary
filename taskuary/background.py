@@ -85,8 +85,31 @@ def from_hook(p: dict):
 
 
 def is_wake(prompt) -> bool:
-    "a turn Claude took because background work reported - a UserPromptSubmit nobody typed"
-    return str(prompt or '').lstrip().startswith('<task-notification>')
+    "a turn the CLI took because background work reported - a UserPromptSubmit nobody typed (Claude's, Copilot's)"
+    return str(prompt or '').lstrip().startswith(('<task-notification>', '<system_notification>'))
+
+
+# COPILOT (1.0.86, measured 2026-10-01) sends no list on Stop, but says both ends in its hooks: a shell started with
+# `mode: async` answers "<command started in background with shellId: 0>", and its end is a Notification
+# `shell_completed` naming "(shellId: 0)" - then Copilot wakes and takes a turn on it. `detach` is the other way: a
+# server left to outlive the session, which nobody wakes for, so it is not counted. No timeout is said, so a cap.
+_STARTED = re.compile(r'started in background with shellId:\s*([\w-]+)')
+_SHELL_ID = re.compile(r'shellId:\s*([\w-]+)')
+CAP_S = 7200
+
+
+def track(jobs: dict, p: dict) -> None:
+    "keep a session's own running jobs from its hook events (`jobs` lives on the pane: a pane and its jobs die together)"
+    ev = p.get('hook_event_name')
+    if ev == 'PostToolUse':
+        inp, res = p.get('tool_input') or {}, p.get('tool_result') or p.get('tool_response') or {}
+        m = _STARTED.search(str(res.get('text_result_for_llm') if isinstance(res, dict) else res))
+        if m and isinstance(inp, dict) and not inp.get('detach'):
+            jobs[m.group(1)] = {'id': m.group(1), 'kind': 'shell', 'what': str(inp.get('description') or inp.get('command') or '')[:120],
+                                'until': time.time() + CAP_S}
+    elif ev == 'Notification' and str(p.get('notification_type') or '').startswith('shell_'):
+        m = _SHELL_ID.search(str(p.get('message') or ''))
+        if m: jobs.pop(m.group(1), None)
 
 
 def live(jobs, now: float = None) -> list:

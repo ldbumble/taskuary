@@ -123,3 +123,61 @@ class StopWithWorkRunning(Files, Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OtherCLIs(Base):
+    """Devin and Copilot speak Claude's hook schema (measured 2026-10-01: Devin 3000.10.21, Copilot 1.0.86)."""
+    def pane(self, cli):
+        t = self.session(argv=(cli,), ext_id='c-sess'); return t
+
+    def test_copilot_running_a_shell_it_will_be_woken_by_reads_working(self):
+        t = self.pane('copilot')
+        self.fire('UserPromptSubmit', cli='copilot', prompt='pull the ledger')
+        self.fire('PostToolUse', cli='copilot', tool_name='Bash', tool_input={'command': 'python pull.py', 'description': 'pull the ledger', 'mode': 'async'},
+                  tool_result={'result_type': 'success', 'text_result_for_llm': '<command started in background with shellId: 0>'})
+        self.fire('Stop', cli='copilot', stop_reason='end_turn')
+        self.assertEqual(self.state()['state'], 'working')
+        self.assertIs(ws.waiting_of(self.s, t), False)
+        # its end, then the turn Copilot takes on it - which is not the owner speaking
+        self.fire('Notification', cli='copilot', notification_type='shell_completed',
+                  message='Shell command "pull the ledger" (shellId: 0) has completed successfully.')
+        self.fire('UserPromptSubmit', cli='copilot', prompt='<system_notification>\nShell command "pull the ledger" (shellId: 0) has completed successfully.\n</system_notification>')
+        self.assertEqual(self.s.worker_events(self.tid)[-1]['Text'], ws.WAKE)
+        self.fire('Stop', cli='copilot', stop_reason='end_turn')
+        self.assertIsNone(ws.waiting_of(self.s, t))                                    # nothing runs: the screen decides
+
+    def test_a_detached_copilot_shell_is_not_counted(self):
+        """`detach` is a server left to outlive the session - nobody is woken when it ends."""
+        t = self.pane('copilot')
+        self.fire('PostToolUse', cli='copilot', tool_name='Bash', tool_input={'command': 'npm run dev', 'mode': 'async', 'detach': True},
+                  tool_result={'text_result_for_llm': '<command started in background with shellId: 3>'})
+        self.fire('Stop', cli='copilot', stop_reason='end_turn')
+        self.assertIsNone(ws.waiting_of(self.s, t))
+
+    def test_a_devin_background_shell_leaves_the_turn_with_the_owner(self):
+        """Devin does not wake for a background shell - it streams to its card for the owner - so the agent is not working."""
+        t = self.pane('devin')
+        self.fire('PostToolUse', cli='devin', tool_name='exec', tool_input={'command': 'sleep 25', 'timeout': 0},
+                  tool_response={'success': True, 'output': 'Command running in background with ID: d6c8bd'})
+        self.fire('Stop', cli='devin', last_assistant_message='started')
+        self.assertIsNone(ws.waiting_of(self.s, t))
+        self.assertEqual(self.state()['said'], 'started')                              # its hooks reach the pane now
+
+    def test_devin_and_copilot_hooks_install_at_user_scope(self):
+        from taskuary import hooks
+        with tempfile.TemporaryDirectory() as home:
+            p = os.path.join(home, '.config', 'devin', 'config.json'); os.makedirs(os.path.dirname(p))
+            json.dump({'version': 1, 'theme_mode': 'dark'}, open(p, 'w'))
+            self.assertTrue(hooks.install_user('devin', base='http://127.0.0.1:1', token='t', home=home))
+            cur = json.load(open(p, encoding='utf-8'))
+            self.assertEqual(cur['theme_mode'], 'dark')
+            # ONLY events Devin knows: one unknown name and it drops the whole block
+            self.assertTrue(set(cur['hooks']) <= {'PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'PostCompaction', 'SessionStart', 'SessionEnd', 'PermissionRequest'})
+            self.assertIn('/api/hooks/devin', cur['hooks']['Stop'][0]['hooks'][0]['command'])
+            self.assertFalse(hooks.install_user('devin', base='http://127.0.0.1:1', token='t', home=home))
+            self.assertTrue(hooks.install_user('copilot', base='http://127.0.0.1:1', token='t', home=home))
+            cp = json.load(open(os.path.join(home, '.copilot', 'hooks', 'taskuary.json'), encoding='utf-8'))
+            self.assertEqual(cp['version'], 1)
+            self.assertIn('http://127.0.0.1:1/api/hooks/copilot', cp['hooks']['Stop'][0]['args'])
+            self.assertNotIn('PermissionRequest', cp['hooks'])                            # fail-closed there: a down app would deny
+            self.assertFalse(hooks.install_user('copilot', base='http://127.0.0.1:1', token='t', home=home))

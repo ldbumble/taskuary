@@ -62,4 +62,43 @@ class Migration(unittest.TestCase):
         self.assertEqual(len(rows), 1)
 
 
+class MatchFirst(unittest.TestCase):
+    """The 2026-10-01 press audit: the assistant's FIRST job on typed words is to match them to one of the actions offered
+    for the item on the table, and to ask when it cannot tell - an owner-edited COUNSEL gains that one bullet, nothing else."""
+    RULE = 'first I match them to one of its actions'
+
+    def test_the_shipped_document_says_it_and_reaches_the_chat(self):
+        st = MemoryStore()                                          # a fresh install is seeded from the template itself
+        self.assertEqual(counsel.migrate(st), 'unchanged')
+        self.assertIn(counsel.MATCH_MARKER, st.get_doc('counsel'))
+        self.assertIn(self.RULE, counsel.for_chat(st))
+        self.assertLessEqual(len((TEMPLATES / 'counsel.md').read_text(encoding='utf-8')), counsel.BUDGET)
+
+    def test_the_last_stock_release_is_replaced(self):
+        st = MemoryStore()
+        st.save_doc('counsel', (TEMPLATES / 'history' / 'counsel-0.3.7.4.md').read_text(encoding='utf-8'), 'owner')
+        self.assertEqual(counsel.migrate(st), 'replaced')
+        self.assertIn(self.RULE, st.get_doc('counsel'))
+
+    def test_an_owner_edited_document_with_the_deciding_section_gains_only_the_bullet(self):
+        mine = ("# Mine\n\nAlex's rule: never touch Friday.\n\n## When the owner decides\n<!-- counsel:deciding -->\n\n"
+                "- Erin's mail always waits a day.\n\n## My goal\n- Finish.\n")
+        st = MemoryStore(); st.save_doc('counsel', mine, 'owner')
+        self.assertEqual(counsel.migrate(st), 'appended')
+        after = st.get_doc('counsel')
+        for kept in ("Alex's rule: never touch Friday.", "- Erin's mail always waits a day.", '- Finish.'): self.assertIn(kept, after)
+        self.assertLess(after.index(self.RULE), after.index("- Erin's mail always waits a day."))
+        self.assertGreater(after.index(self.RULE), after.index('<!-- counsel:deciding -->'))
+        self.assertEqual(after.count('## When the owner decides'), 1)
+        self.assertEqual(counsel.migrate(st), 'unchanged')
+        self.assertEqual(st.get_doc('counsel'), after)
+
+    def test_an_owner_document_without_either_gets_both_once(self):
+        st = MemoryStore(); st.save_doc('counsel', '# Mine\n\n## Voice\n- Dry.\n\n## My goal\n- Finish.\n', 'owner')
+        self.assertEqual(counsel.migrate(st), 'appended')
+        after = st.get_doc('counsel')
+        self.assertEqual(after.count(self.RULE), 1); self.assertEqual(after.count(counsel.MATCH_MARKER), 1)
+        self.assertEqual(counsel.migrate(st), 'unchanged')
+
+
 if __name__ == '__main__': unittest.main()

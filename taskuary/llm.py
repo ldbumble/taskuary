@@ -412,7 +412,15 @@ def _chatgpt_llm(cfg: dict, refresh_token: str):
     return llm
 
 
+# a model that cannot answer a prompt is no brain: Azure lists an embedding deployment beside the chat ones, and the picker offered it
+_NOT_A_BRAIN = re.compile(r'embed|whisper|tts|transcri|dall-e|image|moderation|realtime|audio', re.I)
+
+
 def list_models(t, cfg: dict, key: str) -> list:
+    return [m for m in _list_models(t, cfg, key) if not _NOT_A_BRAIN.search(m)]
+
+
+def _list_models(t, cfg: dict, key: str) -> list:
     """The model ids this key can actually call, from the provider's own list endpoint - so the picker never offers a name the
     account does not have. Azure names what you DEPLOYED (that is what a request carries), so it is its deployments, or the resource's base models when the
     deployments list is closed to this key. RAISES on a provider that answers with an error: an empty list would read as "none exist"."""

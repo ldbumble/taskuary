@@ -146,3 +146,19 @@ test("every connector card is the same size: a 1px border with the live weight d
   assert.match(card, /minHeight: "3em"/);
   assert.match(card, /c\.channel === "cli" \? "Installed" : "Connected"/);
 });
+
+test("on the canvas the task view SHRINKS to its box - no percentage height, so it can never draw over the next line (2026-10-01)", () => {
+  const task = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
+  assert.match(task, /height: canvas \? "auto" : "calc\(100vh - 118px\)"/, "no height: 100% against a box that only has a max-height");
+  assert.match(task, /\.\.\.\(canvas \? \{ boxSizing: "border-box", flex: "1 1 auto", display: "flex", flexDirection: "column" \}/);
+  assert.match(task, /\.\.\.\(canvas \? \{ boxSizing: "border-box", flex: "1 1 auto", minHeight: 0 \} : \{ height: "100%" \}\)/);
+  const item = fs.readFileSync(path.join(process.cwd(), "src", "CanvasItem.jsx"), "utf8");
+  assert.match(item, /<Box sx=\{\{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" \}\}>/);
+});
+
+test("a typed question is about what is OPEN on the table, whatever put it there (2026-10-01)", () => {
+  const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
+  assert.match(view, /const table = msgs\[interactiveCardIndex\(msgs\)\]\?\.card;/);
+  assert.match(view, /const subject = openCardRef\.current \? null : \(tableKey \|\| current\);/);
+  assert.match(view, /turn\(\{ mode: "say", text: t, key: subject,/);
+});

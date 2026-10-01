@@ -68,7 +68,8 @@ test("a new line always shows; only a browse card's own steps hold the bottom", 
 });
 
 test("a card open in the canvas is the turn's subject, not the item folded above it", () => {
-  assert.match(view, /key: openCardRef\.current \? null : current, context_mid: currentItem\?\.mid && !openCardRef\.current \? currentItem\.mid : null, open_card: openCardRef\.current/);
+  assert.match(view, /const subject = openCardRef\.current \? null : \(tableKey \|\| current\);/);
+  assert.match(view, /key: subject, context_mid: currentItem\?\.mid && subject === current && !openCardRef\.current \? currentItem\.mid : null,\n\s+open_card: openCardRef\.current/);
 });
 
 // the owner, 2026-09-29: "fill up more width and more height for tasks so you can see more in one screen ... same for all items"

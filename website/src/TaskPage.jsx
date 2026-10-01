@@ -836,9 +836,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   return (
     <>
       {/* ── detail ────────────────────────────────────────────────────── */}
-      <Box data-tq-task-page={selected || ""} sx={{ ...frame, flex: 1, minWidth: 0, height: canvas ? "100%" : "calc(100vh - 118px)", minHeight: canvas ? 0 : 420,
-        display: { xs: selected ? "block" : "none", md: "block" } }}>
-        <Box sx={{ ...frameInner, height: "100%", display: "flex", flexDirection: "column" }}>
+      {/* ON THE CANVAS THE VIEW FITS ITS BOX EXACTLY (the owner, 2026-10-01: "check the issue with task view if it can draw on top of
+          it next message. That should never happen"). Two causes, both measured by website/task_overflow_probe.mjs: `frame`'s padding
+          and borders sat OUTSIDE a height of 100% (14px over), and that 100% was of a box with only a max-height - which a percentage
+          cannot resolve against - so a long task grew to its whole content (34px over) and the next line of the chat landed on it.
+          On the canvas the chain is flex columns that SHRINK to the box instead, and the task's own scroller takes what is left. */}
+      <Box data-tq-task-page={selected || ""} sx={{ ...frame, flex: 1, minWidth: 0, height: canvas ? "auto" : "calc(100vh - 118px)", minHeight: canvas ? 0 : 420,
+        ...(canvas ? { boxSizing: "border-box", flex: "1 1 auto", display: "flex", flexDirection: "column" }
+                   : { display: { xs: selected ? "block" : "none", md: "block" } }) }}>
+        <Box sx={{ ...frameInner, display: "flex", flexDirection: "column",
+          ...(canvas ? { boxSizing: "border-box", flex: "1 1 auto", minHeight: 0 } : { height: "100%" }) }}>
           {/* this view's own errors - they were drawn over the list column when the two were one component */}
           {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1, flexShrink: 0 }}>{err}</Alert>}
           {!t ? (

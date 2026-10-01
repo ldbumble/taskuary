@@ -54,7 +54,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // A pane - terminal, agent chat, browser - still gets the one height it is sized for, so the pty is never grown.
         ...(!pin && !phone ? { "&:not(:has(.xterm, [class*='tq-aui'], canvas, iframe))": { height: "auto", maxHeight: h } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
-      <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex" }}>
+      {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
+      <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
       <TaskPage taskId={card.tid} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
         openAct={act} onActOpened={() => setAct(null)}
         expanded={expanded} onExpand={onExpand}

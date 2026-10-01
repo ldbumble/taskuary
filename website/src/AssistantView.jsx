@@ -1142,7 +1142,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t, shots }]);
     try {
       // a card browsed open is what "this" means - not the item folded above it (the final review)
-      const ask = () => turn({ mode: "say", text: t, key: openCardRef.current ? null : current, context_mid: currentItem?.mid && !openCardRef.current ? currentItem.mid : null, open_card: openCardRef.current, images });
+      // ...and otherwise WHAT IS OPEN ON THE TABLE, whatever put it there (the owner, 2026-10-01: "the assistant has the open box in
+      // context always regardless of what it is"): a task opened by name or from the rail never became the walk's `current`, so a
+      // question about it went out about the walk's old item, or about nothing. The newest live card that is not folded leads.
+      const table = msgs[interactiveCardIndex(msgs)]?.card;
+      const tableKey = table?.key && table.key !== foldedKey && !browsing ? table.key : null;
+      const subject = openCardRef.current ? null : (tableKey || current);
+      const ask = () => turn({ mode: "say", text: t, key: subject, context_mid: currentItem?.mid && subject === current && !openCardRef.current ? currentItem.mid : null,
+                               open_card: openCardRef.current, images });
       const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
       if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
         setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: data.context_update }]);

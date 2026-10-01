@@ -71,6 +71,21 @@ class SameAsTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         self.assertEqual(len(s.list_tasks()), 1)
 
+    def test_a_report_run_is_never_filed_away_on_yesterdays_closed_task(self):
+        """A daily report shares one conversation, so triage saw yesterday's closed task and called today's run "the
+        same", fyi - and filing it on a closed task put it nowhere: the morning report never showed (2026-10-01). A
+        run judged fyi lands as its own row, where the report's Timeline line decides; an OPEN task still takes it."""
+        s = MemoryStore()
+        run = lambda ext, llm: mail(s, ext, llm, conv='report:7', channel='report', frm='', subject='Morning digest - 40 lines')
+        first = run('report:7:mon', brain('task', title='Review the morning digest')); tid = first['task_id']
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        today = run('report:7:tue', brain('fyi', same_as=tid, title='Morning digest'))
+        self.assertEqual((today['status'], today['task_id']), ('filed', None), 'today\'s run vanished into the closed task')
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        s.update_task(tid, {'Status': 'open'}, 'owner')
+        again = run('report:7:wed', brain('fyi', same_as=tid, title='Morning digest'))
+        self.assertEqual(again['task_id'], tid, 'an open task is still where its next run belongs')
+
     def test_a_task_it_was_never_shown_joins_nothing(self):
         s = MemoryStore()
         first = mail(s, 'a', brain('task'), conv='c1')

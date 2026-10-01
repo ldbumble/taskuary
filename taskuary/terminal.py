@@ -974,13 +974,13 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
             except Exception as e: logger.debug(f'codex pretrust skipped: {e}')
     # One scrub for BOTH roads: the prompt is about to go either into argv (seed_argv) or be
     # typed into the pane, and either way it reaches the CLI's provider. See redact.py.
-    seed = redact.scrub(' '.join(seed_fn(cwd).split())) if (seed_fn and agent) else None
+    seed = redact.scrub(paragraphs(seed_fn(cwd))) if (seed_fn and agent) else None
     # CODEX ASKS IN WORDS (the owner, 2026-09-28: "you can't do this for codex"): it has no question tool and its hooks
     # cannot wait on us, so it is told the marker regular agents use - one line per question - and its Stop hook turns
     # them into questions the card answers together (hooks._events). Claude asks through AskUserQuestion instead.
     if seed and cli_named(profile, argv) == 'codex':
         from . import selfclose as _sc
-        seed = f'{seed} {_sc.ASK_LINE}'
+        seed = f'{seed}\n\n{_sc.ASK_LINE}'
     extra = seed_argv(profile, seed) if seed and not resume else None
     # pywinpty joins argv with list2cmdline - correct for a direct .exe - but an npm .CMD shim
     # runs through `cmd /c`, and cmd.exe parses & | < > and stray quotes as ITS OWN syntax:
@@ -1351,6 +1351,14 @@ SEED_CEILING = 24000        # the whole prompt, leaving room for the exe path an
 TTY_CANON = 1000
 
 
+def paragraphs(text: str) -> str:
+    """The brief as paragraphs: each block's own spacing collapsed, a blank line between blocks. On the command line a
+    line break is just text, and one 8000-character line was what Claude showed as "(0 lines hidden)" - the task, the
+    rules and the mail run together (the owner, 2026-09-30: "yes why not if it clearer"). Typed into a pane it is still
+    ONE line (fit_typed): there a line break is Enter."""
+    return '\n\n'.join(' '.join(b.split()) for b in re.split(r'\n\s*\n', str(text or '')) if b.strip())
+
+
 def fit_typed(text: str, ceiling: int = TTY_CANON) -> str:
     """A seed trimmed to what a tty will actually take. The MESSAGE gives, never the rules that
     keep an agent inside its checkout - the same order seed_text uses against SEED_CEILING - and
@@ -1542,7 +1550,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if handbook.enabled(store):
         known = handbook.block(store, task_blob(store, tid))
         if known: parts.append(no_emails(' '.join(known.split())))
-    out = ' '.join(' '.join(parts).split())
+    out = paragraphs('\n\n'.join(parts))
     # A command line has a hard limit (32767 on Windows) and the OS does not warn - it refuses
     # or clips. If we are over, the ASK is what gives, never the rules that keep an agent
     # inside its checkout, and it gives out loud. `tail` used to run from FROM to the end of the

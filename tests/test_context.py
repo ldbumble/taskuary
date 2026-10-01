@@ -74,7 +74,8 @@ class FileTests(unittest.TestCase):
         seed = terminal.seed_text(s, tid, None, 'northwind/Census', 'C:/src/Census')
         self.assertIn(f'CONTEXT FILE: {path}', seed)
         self.assertIn('and in the context file', seed)
-        self.assertNotIn('\n', seed)
+        # in PARAGRAPHS on the command line - a blank line between blocks, none inside one (2026-09-30: "(0 lines hidden)")
+        self.assertIn('\n\n', seed); self.assertNotIn('\n', seed.replace('\n\n', ''))
 
     def test_the_switch_turns_the_file_off_and_the_seed_stays_as_it_was(self):
         s = _store()

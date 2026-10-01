@@ -7,7 +7,7 @@ ran, timings from the run rows, CI from the checks API. A claim we cannot substa
 left OUT rather than guessed at: 'no test run detected' is information, 'probably fine' is
 not.
 """
-import re
+import os, re
 from datetime import datetime
 from loguru import logger
 from . import spawn
@@ -276,6 +276,17 @@ def working_diff(cwd: str) -> str:
     return '\n'.join(x for x in out if x.strip())
 
 
+def _rel(cwd: str, path: str) -> str:
+    """A tool call's file path as git names it: relative to the checkout, forward slashes; '' when it is outside it."""
+    p = str(path or '').strip()
+    if not p: return ''
+    if os.path.isabs(p):
+        try: p = os.path.relpath(os.path.realpath(p), os.path.realpath(cwd))
+        except ValueError: return ''          # another drive
+    p = p.replace('\\', '/')
+    return '' if p.startswith('../') or p == '..' else p
+
+
 def touched_by(store, task_id: int, cwd: str) -> tuple:
     """(paths this task's agents changed, attributed unpushed commits) - the task's OWN footprint
     in a checkout other tasks share. Paths come from the sessions' dirty-now-minus-dirty-at-open
@@ -291,6 +302,10 @@ def touched_by(store, task_id: int, cwd: str) -> tuple:
             known = True
             try: paths.update(x.files())
             except Exception: pass
+            # ...and every file the agent EDITED, by its own tool calls (the witness, fed by its hooks). dirty-now-minus-dirty-at-open
+            # alone lost a file the task's own earlier session had left dirty: TQ-0930's real change was not in its drawer (2026-10-01)
+            edited = getattr(getattr(x, 'witness', None), 'files', None)
+            if isinstance(edited, dict): paths.update(p for p in (_rel(cwd, f) for f in list(edited)) if p)
     for r in store.list_runs(task_id):
         if r.get('TraceJson'): known = True
         paths.update(blackboard.trace_files(r.get('TraceJson')))
@@ -304,7 +319,10 @@ def touched_by(store, task_id: int, cwd: str) -> tuple:
             head, _, body = chunk.partition('\n')
             sha, _, subj = head.partition('\x1f')
             files = {l.strip() for l in body.splitlines() if l.strip()}
-            if ref in subj or (paths and files & paths):
+            # ITS OWN: the commit names the task, or EVERY file in it is one the task changed. One shared file was enough, and then
+            # all the commit's files joined the task's - another task's fix (two transforms and the test file both had touched)
+            # showed as "1 commit of its own" in TQ-0930's drawer (the owner, 2026-10-01: "these are the wrong changes")
+            if ref in subj or (files and files <= paths):
                 commits.append({'sha': sha[:10], 'subject': subj[:120], 'files': sorted(files)})
                 paths.update(files)
     return sorted(paths), commits, known

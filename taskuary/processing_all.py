@@ -46,8 +46,16 @@ def _preview(body, n: int) -> str:
 # an Advisor's task wore the report's icon over the Advisor's work (2026-09-28), and a chat whose platform then mailed a
 # "you have a new message" copy wore the envelope over a chat ask (2026-09-29). Only the mark: the reply still goes
 # where the message came from. 'manual' names no channel, so a task typed in by hand keeps its message's mark.
+# ...and 'assistant' names the ADVISOR only when the task came from one of its ideas (SourceRef assistant:idea:<n>). A hand-off,
+# an agent job or a set-up the owner asked for in the chat is the owner's own work, with the same mark as one typed in by hand
+# (the owner, 2026-10-01: "why does 930 show advisor when i started it manually?")
+def advisor_task(t: dict) -> bool:
+    return str(t.get('Source') or '') == 'assistant' and str(t.get('SourceRef') or '').startswith('assistant:idea:')
+
+
 def task_mark(tasks) -> str | None:
-    return next((str(t['Source']) for t in tasks or [] if t.get('Source') not in (None, '', 'manual')), None)
+    return next((str(t['Source']) for t in tasks or [] if t.get('Source') not in (None, '', 'manual')
+                 and (t.get('Source') != 'assistant' or advisor_task(t))), None)
 
 
 def idea_lane(idea: dict) -> str:
@@ -325,7 +333,7 @@ def _generic_target(item, query, cutoff, include_excluded=False, vehicles_only=F
             source = str(entity.get('Source') or '')
             # an Advisor idea that became a task is still the Advisor's: it wore the grey "your own note" mark, which
             # nobody could see (the owner, 2026-09-28: "advisor should be more prominent")
-            channel = 'assistant' if kind == 'idea' or (kind == 'task' and source == 'assistant') else 'own'
+            channel = 'assistant' if kind == 'idea' or (kind == 'task' and advisor_task(entity)) else 'own'
             stamp = entity.get(stamp_field) or entity.get('FirstSeen') or entity.get('CreatedAt')
             candidate = {'Subject': entity.get('Title') or entity.get('Text') or entity.get('Reason'),
                          'FromName': entity.get('CreatedBy'), 'Channel': channel}

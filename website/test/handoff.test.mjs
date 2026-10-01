@@ -56,3 +56,12 @@ test("a card that asks its own question: each answer is the button that does it,
   assert.match(card, /!\(asks && k === "verb"\)/, "no raw 'verb:' line under the question");
   if (altLabel) assert.deepEqual(["A coding agent", "A non-coding agent", "Just this once"].map(altLabel), ["Send to a coding agent", "Send to a non-coding agent", "Just this once"]);
 });
+
+test("an agent started from the owner's own words opens its new task too (2026-10-01)", () => {
+  const fromWords = { ...coder, kind: "task.create_from_text", params: { kind: "coding", text: "stop the mails" }, key: null, tid: null, ref: null, settles: false };
+  assert.equal(isHandoff(fromWords), true);
+  const out = afterExecute(fromWords, { status: "done", outcome: { taskId: 930, ref: "TQ-0930", kind: "coding" } });
+  assert.deepEqual([out.handoff, out.tid], [true, 930]);
+  assert.equal(afterConfirm(fromWords, out, "task:912"), "watch");
+  assert.equal(isHandoff({ ...fromWords, params: { kind: "task" } }), false, "a plain to-do is not a hand-off");
+});

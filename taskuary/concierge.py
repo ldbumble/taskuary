@@ -2298,6 +2298,11 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb == 'setup': target, params = 0, {'text': d_text or text}
     if target is None: raise ValueError(f"there is nothing to {SAYS_VERB.get(verb, verb)} on this one")
     params = {k: v for k, v in params.items() if v is not None}
+    # A NEW TASK FROM THE OWNER'S OWN WORDS is not about the item on the table (the owner, 2026-10-01: "why did it say starting coding
+    # agent on 912? 912 was another one about GL's"): typed while TQ-0912 was open, "stop sending me the vendor-create mails" became
+    # TQ-0930 - and its card, both receipts and the settle all named TQ-0912. Only a hand-off pressed with no words carries the item
+    # as its brief, and stays the item's.
+    if kind == 'task.create_from_text' and (d_text or text or '').strip(): it, settles = {}, False
     prev = open_proposal(store, dock_tid)
     # an undo still on offer is NOT a proposal to revise into the next ask: a second setting change
     # would have rewritten the undo of the first. The next act closes the old undo (it no longer applies).

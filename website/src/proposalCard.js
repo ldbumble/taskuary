@@ -52,7 +52,8 @@ export function describe(p) {
 
 // a hand-off to an agent (PW-135): when it STARTS, the walk moves on once and the delegated task stays in
 // Unread as Working - nothing is settled; a repository still to choose is a decision the card asks for
-export const isHandoff = (p) => p.kind === "task.create_from_message" && ["coding", "general"].includes(p.params?.kind);
+// ...and a task STARTED from the owner's own words: the same hand-off, with no message behind it (2026-10-01)
+export const isHandoff = (p) => ["task.create_from_message", "task.create_from_text"].includes(p.kind) && ["coding", "general"].includes(p.params?.kind);
 
 export function afterExecute(p, res) {
   const label = p.label || p.title || p.kind;
@@ -60,7 +61,7 @@ export function afterExecute(p, res) {
   // the server's own receipt when it wrote one (it names the task and what became of it); ours was a
   // shorter second "Done" drawn beside it (2026-09-23)
   // ...a close-out whose merge landed but whose reply did not is done, and NOT settled: the reply still waits on you
-  if (res?.status === "done") return { receipt: res.receipt || `Done - ${label}.`, settle: !!p.settles && !res.outcome?.reply_error, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat),
+  if (res?.status === "done") return { receipt: res.receipt || `Done - ${label}.`, settle: !!p.settles && !res.outcome?.reply_error, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat || (p.kind === "task.create_from_text" && res.outcome?.taskId)),
     ...(res.outcome?.taskId ? { tid: res.outcome.taskId } : {}) };
   if (res?.status === "error" && res.outcome?.dispatch === "needs_repo")
     return { receipt: `Not started - ${res.error || "it needs a repository first"}. Pick one on the card and confirm again.`, settle: false, status: "error",

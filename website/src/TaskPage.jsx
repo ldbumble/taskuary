@@ -1110,16 +1110,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   </Box>
                                   {m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>
                                     {m.Subject}</Typography>}
-                                  {/* a REPORT run is the whole point of its task - the report itself, in full and formatted,
-                                      not three lines of it (the owner, 2026-09-30: "i can't see the full report once it gets sent to agent") */}
-                                  {m.Channel === "report"
-                                    ? <Box sx={{ mt: 0.5, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
-                                        {looksMd(m.BodyText) ? <Md text={cleanText(m.BodyText)} />
-                                          : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{cleanText(m.BodyText)}</Typography>}
-                                      </Box>
-                                    : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
-                                        overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
-                                        WebkitBoxOrient: "vertical", overflow: "hidden" }}>{cleanText(m.ReadText ?? m.BodyText)}</Typography>}
+                                  {/* WHERE IT CAME FROM IS THE WHOLE MESSAGE, in full and scrolling - three lines of it were
+                                      never enough to check the ask against: first for a report run (the owner, 2026-09-30: "i
+                                      can't see the full report once it gets sent to agent"), then for the email behind a task
+                                      (2026-10-01: "don't see the full email that this task came from") */}
+                                  <Box sx={{ mt: 0.5, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
+                                    {m.Channel === "report" && looksMd(m.BodyText) ? <Md text={cleanText(m.BodyText)} />
+                                      : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                                          {cleanText(m.Channel === "report" ? m.BodyText : (m.ReadText ?? m.BodyText))}</Typography>}
+                                  </Box>
                                 </Box>
                               </Box>
                             ))}

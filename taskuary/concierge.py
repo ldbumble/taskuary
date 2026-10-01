@@ -705,6 +705,34 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     return out
 
 
+# the chips whose verb is not itself a decision tool, and the tool each one is
+CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connection': 'connection.test', 'split': 'task.split'}
+
+def table_actions(store, item: dict | None, chips: list = None) -> str:
+    """THE BUTTONS UNDER THE LINE, BY NAME. The model was told the action words "are already chosen for this item" and
+    never told which they were, so "send it" over a draft could not be matched to the button that sends it and became a
+    redraft (the 2026-10-01 press audit). This is the payload - what is offered and the tool each one is; how to match
+    the owner's words to it, and when to ask instead, is COUNSEL's."""
+    if not item: return ''
+    chips = chips_for(store, item) if chips is None else chips
+    def what(v):
+        tool = v if v in toolcatalog.DECISIONS else CHIP_TOOL.get(v)
+        said = toolcatalog.DECISIONS.get(v) or toolcatalog.PURPOSE.get(tool or '', '')
+        return f"{tool}: {_cut(' '.join(str(said).split()), 160)}" if tool else "the card's own button"
+    rows = [f'  "{c["label"]}" = {what(c["verb"])}' for c in chips if c.get('verb')]
+    return 'ACTIONS FOR THE ITEM ON THE TABLE (the buttons under your line, and the tool each one is):\n' + '\n'.join(rows) if rows else ''
+
+
+def table_line(store, item: dict | None) -> str:
+    """What a look-up round and a retry carry, so "it" still means the item on the table after the first round."""
+    if not item: return ''
+    refs = ', '.join(x for x in (task_ref(item['tid']) if item.get('tid') else '', f"m{item['mid']}" if item.get('mid') else '',
+                                 f"report source_id {item['source_id']}" if item.get('source_id') else '') if x)
+    return (f"ON THE TABLE (what 'it' and 'this' mean, and what an action names when it names nothing else): "
+            f"[{item.get('kind')}] {item.get('title') or ''} - from {item.get('who') or '?'}" + (f" ({refs})" if refs else '')
+            + (f"\n{table_actions(store, item)}"))
+
+
 def parse_options(text: str) -> tuple[str, list]:
     m = _OPTIONS.search(text or '')
     if not m: return (text or '').strip(), []
@@ -949,9 +977,43 @@ DISCUSSION_USER_TYPE = 'concierge_user'
 DISCUSSION_ASSISTANT_TYPE = 'concierge_assistant'
 
 
+# THE TURN BEING ANSWERED (say): its table item, the owner's words not yet mirrored onto it, and whether the turn turned
+# out to be about something else. An answer read off ANOTHER task was written onto this one's notes, and the next turn
+# read it back as this task's own (the 2026-10-01 press audit) - so the owner's line waits until the turn knows.
+_TURN = contextvars.ContextVar('taskuary_turn', default=None)
+
+def _same(a: dict | None, b: dict | None) -> bool: return bool(a and b and a.get('key') and a.get('key') == b.get('key'))
+
+def _about_table(item: dict | None, call: dict | None) -> bool:
+    """A look-up or an action is about the item on the table when it names nothing else: its own task, its own message,
+    its own report - or nothing at all. A search, another task, the calendar or the pipe is a turn about something else."""
+    if not item or not call: return True
+    kind, p = call.get('kind') or '', call.get('params') or {}
+    if kind in ('tools.list', 'tools.describe', 'agents.list', 'repos.list', 'docs.search', 'knowledge.search'): return True
+    ref = re.search(r'(\d+)', str(p.get('ref') or p.get('id') or ''))
+    if kind == 'task.read': return bool(ref and item.get('tid') and int(ref.group(1)) == int(item['tid']))
+    if kind == 'message.read': return bool(item.get('mid') and str(p.get('mid') or '').lstrip('m') == str(item['mid']))
+    if kind == 'report.read': return bool(item.get('source_id') and str(p.get('source_id') or '') == str(item['source_id']))
+    if toolcatalog.is_read(kind): return False
+    return not ref or bool(item.get('tid') and int(ref.group(1)) == int(item['tid']))
+
+def _strays(item: dict | None, call: dict | None):
+    turn = _TURN.get()
+    if turn is not None and not _about_table(item, call): turn['aside'] = True
+
+
 def record_related(store, dock_tid: int, item: dict | None, role: str, text: str, card: dict = None):
     """Record a dock turn and mirror it onto every real task the turn discusses."""
     result = record(store, dock_tid, role, text, card)
+    turn = _TURN.get()
+    if turn is not None and _same(item, turn.get('item')):
+        if turn.get('aside'): return result                      # about something else: the chat keeps it, this item does not
+        if turn.get('said'): _mirror(store, dock_tid, item, 'user', turn.pop('said'))
+    _mirror(store, dock_tid, item, role, text)
+    return result
+
+
+def _mirror(store, dock_tid: int, item: dict | None, role: str, text: str):
     candidates = list((item or {}).get('items') or []) if (item or {}).get('kind') == 'fyis' else [item or {}]
     tids = {int(i['tid']) for i in candidates if i.get('tid') and int(i['tid']) != int(dock_tid)}
     actor = 'owner' if role == 'user' else 'Taskuary'
@@ -974,7 +1036,6 @@ def record_related(store, dock_tid: int, item: dict | None, role: str, text: str
             if body and not any(x.get('Actor') == actor and x.get('Body') == body for x in recent):   # a double send (owner line + answer) is one turn
                 operations.discuss(store, actor, body, message_id=item.get('mid'), task_id=tid)
         except Exception as e: logger.warning(f'concierge: the discussion was not kept against the item - {e}')
-    return result
 
 
 def history(store, tid: int) -> list:
@@ -1607,8 +1668,12 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if tk in ('source', 'connector', 'setting', 'script'):
         from . import appfacts
         def _miss(say_): raise CallMiss(say_)         # the model's to fix (say), never passed on as it stands
+        # NAMING NOTHING MEANS THE TABLE: "rerun it" over a failed report came as report.rerun {} and missed, and the retry
+        # picked another report by name (the 2026-10-01 press audit)
         if tk == 'source':
-            r = appfacts.find_report(store, str(params.pop('title', '') or ''), params.pop('source_id', None) or params.get('target'))
+            title, sid = str(params.pop('title', '') or ''), params.pop('source_id', None) or params.get('target')
+            if not title and not sid: sid = it.get('source_id')
+            r = appfacts.find_report(store, title, sid)
             if not r: return _miss('No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20]) + '.')
             params['target'], named = r['source_id'], r['title']
             if kind == 'report.route' and (str(params.get('line') or '').lower() not in ('timeline', 'alert', 'send')
@@ -1616,7 +1681,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                 return _miss('Say which line (timeline, alert or send) and how it goes: every run (always), '
                              'the AI decides (ai, with what to look for), a rule, or never.')
         elif tk == 'connector' and kind != 'connection.create':
-            c = appfacts.find_connection(store, str(params.pop('name', '') or ''), params.pop('connector_id', None) or params.get('target'))
+            name, cid = str(params.pop('name', '') or ''), params.pop('connector_id', None) or params.get('target')
+            if not name and not cid and str(it.get('key') or '').startswith('conn:'): cid = it['key'][5:]
+            c = appfacts.find_connection(store, name, cid)
             if not c: return _miss('No connection by that name. Connected: ' + ', '.join(x['name'] for x in appfacts.connections(store) if x['active']) + '.')
             params['target'], named = c['connector_id'], c['name']
         elif tk == 'setting':
@@ -2810,6 +2877,13 @@ def _chat_proposed(store, dock_tid: int, oid: str) -> bool:
 
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
         open_card: str | None = None, images: list | None = None) -> dict:
+    token = _TURN.set({})
+    try: return _say(store, text, key, llm, actor, trace, cancel, item, open_card, images)
+    finally: _TURN.reset(token)
+
+
+def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
+         open_card: str | None = None, images: list | None = None) -> dict:
     """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
     them (PW-121): a question is answered, a subject named is pulled in, and a decision becomes a PROPOSAL the
     owner confirms (PW-123/124) - except Next, which moves the walk and marks nothing, and a reply request, which
@@ -2831,8 +2905,12 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         words = [c['label'] for c in chips_for(store, item)]
         i = int(text.strip().lstrip('#').rstrip('.').strip())
         if 1 <= i <= len(words): text = words[i - 1]
-    record_related(store, tid, item, 'user', text)
+    # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
+    record(store, tid, 'user', text)
+    turn = _TURN.get()
+    if item: turn.update(item=item, said=text)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
+    table = table_line(store, item)
     llm = _brain_for(store, tid, llm, trace, cancel)
     if not llm:
         say_ = f"{fallback(item, False, p['items'])} {NO_BRAIN}".strip()
@@ -2856,11 +2934,12 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
                       + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item else '')
+                      + (f"{table_actions(store, item)}\n\n" if item else '')
                       + f"The owner says: {text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
                       + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
-                      + ('If this is a decision about the item on the table, CALL it (bucket table).' if item else
+                      + ('If their words mean one of the actions for the item on the table, CALL it.' if item else
                          'If they ask for something to be done, CALL it now - the card is their confirmation.'),
                       max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
         raw, call = parse_call(raw)
@@ -2873,12 +2952,12 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         # "i asked it to research for me which should open a agent card but it did nothing")
         for n in range(READ_ROUNDS):
             if not (call and toolcatalog.is_read(call['kind'])): break
-            did_read = True
+            did_read = True; _strays(item, call)
             found = read_op(store, call['kind'], call['params'])
             trace and trace('tool', call['kind'], {'params': call['params']})
             then = (LAST_READ if n == READ_ROUNDS - 1 else
                     'Answer them with what you just read, briefly. If it did not answer them and another look-up would, CALL that one now - never offer to look.')
-            raw = str(llm(system, f"You looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\n"
+            raw = str(llm(system, f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\n"
                                   f"The owner asked: {text}\n{then}",
                           max_tokens=MAX_TOKENS) or '').strip()
             raw, call = parse_call(raw)
@@ -2899,10 +2978,11 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         # it back, may look the name up, and calls again; only a second miss is said - once, in the owner's hearing.
         miss = None
         for _ in range(3):
+            _strays(item, call)
             if toolcatalog.is_read(call['kind']):
                 found = read_op(store, call['kind'], call['params'])
                 trace and trace('tool', call['kind'], {'params': call['params']})
-                ask = (f"You looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\nThe owner asked: {text}\n"
+                ask = (f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\nThe owner asked: {text}\n"
                        'Now CALL the action again with the exact name you read, or answer them in plain words.')
             else:
                 try: return call_turn(store, tid, call, item, text, actor)
@@ -2913,7 +2993,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                     say_ = f"I could not put that in front of you - {e}."
                     rec('assistant', say_)
                     return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
-                ask = (f"You asked Taskuary for {call['kind']} {json.dumps(call.get('params') or {}, default=str)[:400]} and it "
+                ask = (f"{table}\n\nYou asked Taskuary for {call['kind']} {json.dumps(call.get('params') or {}, default=str)[:400]} and it "
                        f"answered: {miss}\n\nThe owner asked: {text}\nFix it yourself: CALL a look-up for the right name, then the "
                        'action again - or answer them in plain words. Never pass that answer on to them.')
             try:
@@ -2972,6 +3052,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         members = {e.get('key'): e for e in (item.get('items') or [])} if item.get('kind') == 'fyis' else {}
         it2 = members.get(other) or funnel.next_item(store, other) or funnel.item_for_key(store, other)
         if it2 and it2.get('key') != item.get('key'): target_item, elsewhere = it2, True
+    if elsewhere: turn['aside'] = True
     if decision and verb and target_item:
         why = cannot(target_item, verb, store)
         if why:

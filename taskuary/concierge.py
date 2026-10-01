@@ -2820,7 +2820,8 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table
-                      + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' means that card; its own operations set it up\n\n" if open_card and not item else '')
+                      # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
+                      + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item else '')
                       + f"The owner says: {text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')

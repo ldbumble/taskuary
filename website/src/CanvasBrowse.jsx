@@ -23,13 +23,17 @@ const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px so
 // detail: the view's own element for the one open card, or null. `openLabel` names the open card for the assistant.
 export function BrowseFrame({ title, summary, sections = [], section, onSection, note, cards = [], detail = null, onBack,
   openLabel = "", search = null, tools = null, onOpenCard, live = true, empty = "Nothing here.", onReopen = null, wide = false }) {
-  useEffect(() => { if (live) onOpenCard?.(detail ? openLabel : null); }, [live, detail, openLabel, onOpenCard]);
+  // ...and a page with nothing opened on it still says WHERE the owner is: a question typed over the Connections wall went to the
+  // assistant with no context at all, and "which AI agent tool do I need for this thing to work" was answered about the app in
+  // general (the owner, 2026-10-01: "the open field should be the top of query ... that is current context")
+  const sectionLabel = sections.find((s) => s.key === section)?.label || "";
+  const where = `the ${title} page${sectionLabel ? `, ${sectionLabel} section` : ""} - nothing opened on it yet`;
+  useEffect(() => { if (live) onOpenCard?.(detail ? openLabel : where); }, [live, detail, openLabel, where, onOpenCard]);
   // a card opened, or a section picked, is brought into view - the conversation above it does not move
   const root = useRef(null), one = useRef(null);
   const opened = !!detail;
   useEffect(() => { if (live && opened) one.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, opened, openLabel]);
   useEffect(() => { if (live && section != null) root.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, section]);
-  const sectionLabel = sections.find((s) => s.key === section)?.label || "";
   // an earlier browse card is one line, and clicking it browses there again (a new card, at the bottom)
   if (!live) return (
     <button type="button" className="tq-fold" onClick={onReopen || undefined} title={`Browse ${title} again`}>

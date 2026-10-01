@@ -34,8 +34,8 @@ test("the sidebar posts a browse card; only the newest is live, so one detail is
   assert.match(view, /onGo=\{\(tab, key\) => browse\(key\)\}/);
   assert.match(view, /return \[\.\.\.m, \{ id, role: "browse", area, state \}\];/);
   // ...and the area already open moves its own card rather than posting a second
-  assert.match(view, /if \(live\?\.role === "browse" && live\.area === area\) return m\.map\(\(x\) => \(x\.id === live\.id \? \{ \.\.\.x, state \} : x\)\);/);
-  assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.id;/);
+  assert.match(view, /if \(live\?\.role === "browse" && live\.area === area\) return m\.map\(\(x\) => \(x\.id === live\.id \? \{ \.\.\.x, state, down: false \} : x\)\);/);
+  assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/);
   assert.match(src("CanvasBrowse.jsx"), /if \(!live\) return frame\(\{ title: AREA_TITLES\[area\] \}\);/);
   // ...and the item on the table folds to its line while a browse card is open below it
   assert.match(view, /const foldedNow = !!canvas && live && !!m\.card && \(canvas\.folded === m\.card\.key \|\| !!canvas\.browsing\);/);
@@ -44,7 +44,7 @@ test("the sidebar posts a browse card; only the newest is live, so one detail is
 test("the card open in the canvas rides the next turn as its subject", () => {
   const view = src("AssistantView.jsx");
   assert.match(view, /open_card: openCardRef\.current/);
-  assert.match(src("CanvasBrowse.jsx"), /useEffect\(\(\) => \{ if \(live\) onOpenCard\?\.\(detail \? openLabel : null\); \}/);
+  assert.match(src("CanvasBrowse.jsx"), /useEffect\(\(\) => \{ if \(live\) onOpenCard\?\.\(detail \? openLabel : where\); \}/);
 });
 
 // the final review (2026-09-29): the tabs are gone, so what only they offered must be on the browse cards - "with today's

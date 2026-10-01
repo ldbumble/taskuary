@@ -1307,27 +1307,39 @@ const TestLine = ({ test, mt = 1 }) => {
   );
 };
 
-const ConnCard = ({ c }) => (
-  <Box onClick={c.planned ? undefined : c.go}
-    sx={{ bgcolor: CARD_STATE[connState(c)].bg, border: `${CARD_STATE[connState(c)].width}px solid ${CARD_STATE[connState(c)].border}`, borderRadius: 2.5, p: 1.6,
-      opacity: c.planned ? 0.5 : connState(c) === "off" ? 0.85 : 1, cursor: c.planned ? "default" : "pointer",
-      transition: "border-color .15s, box-shadow .15s",
-      ...(c.planned ? {} : { "&:hover": { boxShadow: "0 2px 8px rgba(47,107,79,.12)" } }) }}>
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
-      <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#e9e3d8", flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#55697a" }} />
-          : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
+// EVERY CARD THE SAME SIZE (the owner, 2026-10-01: "the size of the connection card gets bigger if connected ... keep the connector
+// card the same size. check them all"): a connected card's 2px border and a one-line status against a two-line description made
+// three heights on one wall. The border is always 1px - a live or failing card's extra weight is drawn INSIDE it, taking no room -
+// the description always holds two lines, and being connected says so in a pill on the title line.
+const ConnCard = ({ c }) => {
+  const st = CARD_STATE[connState(c)], extra = st.width - 1;
+  const ring = extra > 0 ? `inset 0 0 0 ${extra}px ${st.border}` : "";
+  return (
+    <Box onClick={c.planned ? undefined : c.go}
+      sx={{ bgcolor: st.bg, border: `1px solid ${st.border}`, boxShadow: ring || "none", borderRadius: 2.5, p: 1.6, boxSizing: "border-box",
+        opacity: c.planned ? 0.5 : connState(c) === "off" ? 0.85 : 1, cursor: c.planned ? "default" : "pointer",
+        transition: "border-color .15s, box-shadow .15s",
+        ...(c.planned ? {} : { "&:hover": { boxShadow: [ring, "0 2px 8px rgba(47,107,79,.12)"].filter(Boolean).join(", ") } }) }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
+        <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#e9e3d8", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#55697a" }} />
+            : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
+        </Box>
+        <Typography noWrap sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
+        {connState(c) === "on" && (
+          <Box component="span" data-tq-conn-pill sx={{ flexShrink: 0, px: 0.75, py: 0.1, borderRadius: 99, fontSize: 10, fontWeight: 700,
+            lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>{c.channel === "cli" ? "Installed" : "Connected"}</Box>
+        )}
+        <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: connDot(c), flexShrink: 0 }} />
       </Box>
-      <Typography noWrap sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
-      <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: connDot(c), flexShrink: 0 }} />
+      <Typography sx={{ color: FAINT, fontSize: 11.5, lineHeight: 1.5, pt: 1, minHeight: "3em", boxSizing: "content-box",
+        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        {c.desc}
+      </Typography>
     </Box>
-    <Typography sx={{ color: FAINT, fontSize: 11.5, lineHeight: 1.5, pt: 1,
-      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-      {c.desc}
-    </Typography>
-  </Box>
-);
+  );
+};
 
 // The catalog's sections, named once: the rail reads them before `groups` is built (groups
 // needs the loaded connectors), and they must stay in step.

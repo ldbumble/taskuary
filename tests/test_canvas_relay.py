@@ -41,6 +41,20 @@ class OpenCardContextTests(unittest.TestCase):
         self.assertIn('ON SCREEN NOW: the Spendly connector card (Connections - Finance), not connected', seen['prompt'])
         self.assertTrue(out['say'])
 
+    def test_a_page_with_nothing_opened_is_the_context_too(self):
+        """Asked over the Connections wall with no card open, the turn went out with no context at all, and "which AI agent tool
+        do I need for this thing to work" was answered about the app in general (the owner, 2026-10-01)."""
+        s = store()
+        seen = {}
+        def llm(system, prompt, **kw):
+            seen['prompt'] = prompt
+            return 'For the agents section: an AI CLI agent.'
+        page = 'the Connections page, AI - agents & models section - nothing opened on it yet'
+        with mock.patch.object(concierge, '_live', return_value=[]):
+            concierge.say(s, 'which ai agent tool do I need for this thing to work', llm=llm, open_card=page)
+        self.assertIn(f"ON SCREEN NOW: {page} - 'this' and 'here' mean what is on screen", seen['prompt'])
+        self.assertLess(seen['prompt'].index('ON SCREEN NOW'), seen['prompt'].index('The owner says:'), 'the screen first, then the words')
+
     def test_no_card_no_line(self):
         s = store()
         seen = {}

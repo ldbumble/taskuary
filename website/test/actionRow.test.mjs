@@ -125,3 +125,24 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   assert.match(view, /putDown: \(key\) => \{ setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); \}/, "folded, and the … under it");
   assert.match(view, /onAfter=\{\(\) => actions\.advance\(null, true\)\}/, "the next one comes without the half-second of grace");
 });
+
+test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as one sidebar area replaces another (2026-10-01)", () => {
+  const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
+  assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/, "a put-down view is no longer the live one");
+  assert.match(view, /const openTaskCard = \(req\) => \{\n\s+setRailOpen\(false\);[^\n]*browseDown\(\);/);
+  assert.match(view, /setStageMode\("chat"\); browseDown\(\); surface\(key, asUser \|\| null\);/, "pull");
+  assert.match(view, /const pullOrOpen = \(key, asUser, openByMid, openByItem\) => \{\n\s+browseDown\(\);/);
+  assert.match(view, /\{ \.\.\.x, state, down: false \}/, "opening the same area again picks it back up");
+  const browse = fs.readFileSync(path.join(process.cwd(), "src", "CanvasBrowse.jsx"), "utf8");
+  assert.match(browse, /onOpenCard\?\.\(detail \? openLabel : where\)/, "the page itself is the context when nothing is opened on it");
+});
+
+test("every connector card is the same size: a 1px border with the live weight drawn inside, two lines held, a pill when connected", () => {
+  const src = fs.readFileSync(path.join(process.cwd(), "src", "ConnectorsView.jsx"), "utf8");
+  const card = src.slice(src.indexOf("const ConnCard"), src.indexOf("const ConnCard") + 2600);
+  assert.match(card, /border: `1px solid \$\{st\.border\}`/);
+  assert.doesNotMatch(card, /\$\{CARD_STATE\[connState\(c\)\]\.width\}px solid/, "no border that grows with the state");
+  assert.match(card, /inset 0 0 0 \$\{extra\}px/);
+  assert.match(card, /minHeight: "3em"/);
+  assert.match(card, /c\.channel === "cli" \? "Installed" : "Connected"/);
+});

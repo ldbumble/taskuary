@@ -1574,22 +1574,26 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // one - a second unmounted the first mid-dialog (a #playbook link opening New playbook), and old links posted two
     setMsgs((m) => {
       const live = [...m].reverse().find((x) => x.role === "browse" || (x.card && !x.card.background_event));
-      if (live?.role === "browse" && live.area === area) return m.map((x) => (x.id === live.id ? { ...x, state } : x));
+      if (live?.role === "browse" && live.area === area) return m.map((x) => (x.id === live.id ? { ...x, state, down: false } : x));
       return [...m, { id, role: "browse", area, state }];
     });
     setTimeout(() => bodyRef.current?.querySelector(`[data-tq-browse-line="${area}"]:last-of-type`)?.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
   };
   // A TASK OPENED BY NAME - a link, a notification, the Board, a card's "Open TQ-0005" - is shown the same way the walk
   // shows one: its task view, as the newest line (the canvas redesign: the Tasks tab is gone)
+  // A ROW, A TASK OR AN FYI PUTS THE BROWSE CARD DOWN AT THE CLICK, as one sidebar area replaces another (the owner, 2026-10-01:
+  // "if i click on settings while hub is open it closes hub right away ... same should happen if you hit show task after
+  // connection tab open"): the open view folds to its line now, and the "…" waits under it while the item loads
+  const browseDown = () => { openCardRef.current = null; setMsgs((m) => m.map((x) => (x.role === "browse" && !x.down ? { ...x, down: true } : x))); };
   const openTaskCard = (req) => {
-    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false); setFoldedKey(null);
+    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false); setFoldedKey(null); browseDown();
     const ref = `TQ-${String(req.tid).padStart(4, "0")}`;
     setMsgs((m) => [...m, { id: `t${Date.now()}`, role: "assistant", text: "",
       card: { kind: "task", key: `task:${req.tid}`, tid: req.tid, title: ref, ref, autostart: req.start || null, act: req.act || null } }]);
   };
   browseRef.current = browse; openTaskRef.current = openTaskCard;
   const pull = (key, asUser) => {
-    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); surface(key, asUser || null);
+    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); browseDown(); surface(key, asUser || null);
   };
 
   // What the Chat/Task toggle MEANS on the pipe rail: chat pulls the row into the conversation,
@@ -1597,6 +1601,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // opened - a meeting, a wrapup or an agent has no message, so those still answer in the chat,
   // and pull() switches the stage there so the answer is not written somewhere invisible.
   const pullOrOpen = (key, asUser, openByMid, openByItem) => {
+    browseDown();
     // ...and an entry of the batch on the table, which is drawn on the rail but is not a pile row
     const it = (pile?.items || []).find((i) => i.key === key)
       || (currentItem?.items || []).find((i) => i.key === key);
@@ -1640,7 +1645,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // the live browse card: the newest one, unless the walk has put an item on the table since
   const browsing = useMemo(() => {
     for (let i = shown.length - 1; i >= 0; i -= 1) {
-      if (shown[i].role === "browse") return shown[i].id;
+      if (shown[i].role === "browse") return shown[i].down ? null : shown[i].id;
       if (shown[i].card && !shown[i].card.background_event) return null;
     }
     return null;

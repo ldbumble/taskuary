@@ -89,6 +89,30 @@ class StopWithWorkRunning(Files, Base):
         self.assertIsNone(ws.waiting_of(self.s, t))                                    # silent again: the screen decides
         self.assertNotEqual(self.state()['state'], 'working')
 
+    def test_claudes_own_list_on_stop_is_the_answer(self):
+        """Claude 2.1.286 sends `background_tasks` on Stop (the shape measured 2026-10-01). Its word beats the
+        transcript: here the transcript knows nothing, and the agent still reads working."""
+        t = self.session()
+        listed = [{'id': 'b1', 'type': 'shell', 'status': 'running', 'description': 'pull the ledger', 'command': 'python pull.py'},
+                  {'id': 'a1', 'type': 'subagent', 'status': 'running', 'description': 'review the pull', 'agent_type': 'general-purpose'}]
+        self.fire('Stop', last_assistant_message='Pulling.', background_tasks=listed, transcript_path=self.file([]))
+        st = self.state()
+        self.assertEqual((st['state'], sorted(j['kind'] for j in st['background'])), ('working', ['agent', 'shell']))
+        self.assertIs(ws.waiting_of(self.s, t), False)
+        # ...and an empty list is Claude saying nothing runs - even if the transcript still shows a job open
+        self.fire('Stop', last_assistant_message='Done.', background_tasks=[], transcript_path=self.file(SHELL))
+        self.assertIsNone(ws.waiting_of(self.s, t))
+
+    def test_a_job_waking_the_agent_is_not_the_owner_answering(self):
+        """A job ending wakes Claude with a UserPromptSubmit nobody typed. It is working again - but a question
+        it asked is still the owner's to answer."""
+        t = self.session()
+        self.fire('Notification', notification_type='agent_needs_input', message='Which ledger, 2024 or 2025?')
+        self.fire('UserPromptSubmit', prompt='<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>')
+        self.assertEqual([r['text'] for r in ws.status(self.s, self.tid)['requests']], ['Which ledger, 2024 or 2025?'])
+        self.fire('UserPromptSubmit', prompt='2025')                                   # the owner, typing
+        self.assertEqual(ws.status(self.s, self.tid)['requests'], [])
+
     def test_a_question_still_outranks_running_work(self):
         t = self.session()
         self.fire('PermissionRequest', tool_name='Bash', tool_input={'command': 'rm -rf build'})

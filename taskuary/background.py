@@ -1,5 +1,6 @@
-"""What a Claude run left RUNNING when its turn ended - background shells, monitors, subagents - read off its own
-transcript (the Stop hook names it: `transcript_path`).
+"""What a Claude run left RUNNING when its turn ended - background shells, monitors, subagents. Claude's own word
+first: its Stop payload lists them (`from_hook`); a Claude that does not send that list is read off its own
+transcript instead (`pending` - the Stop hook names it: `transcript_path`).
 
 Stop is the end of a RESPONSE. A coder that starts a long pull in the background, arms a monitor on it and says
 "re-pulling Jan 2024 now" ends its turn there, and the pane sits at a bare prompt with "1 shell, 1 monitor still
@@ -67,6 +68,25 @@ def pending(path, now: float = None) -> list:
                     got = _started(o['toolUseResult'], (uses.get(b.get('tool_use_id')) or {}).get('input') or {}, _epoch(o.get('timestamp')))
                     if got: jobs[got[0]] = got[1]
     return [dict(id=k, **v) for k, v in jobs.items() if v['until'] is None or v['until'] > now]
+
+
+def from_hook(p: dict):
+    """The jobs Claude itself says are running, off its Stop payload - None when this Claude does not send the list.
+
+    Claude 2.1.286 carries `background_tasks` on Stop and SubagentStop (measured 2026-10-01; the hooks reference does
+    not list it): [{id, type: shell|subagent, status, description, command|agent_type}], shrinking as each job ends.
+    A monitor is a `shell` there. The CLI's own word, so it needs no deadline; the transcript read is for a Claude
+    without it. `ambient` is the SDK's mark for housekeeping a host should not count as activity."""
+    got = p.get('background_tasks')
+    if not isinstance(got, list): return None
+    return [{'id': str(t.get('id') or ''), 'kind': 'agent' if t.get('type') == 'subagent' else str(t.get('type') or 'task'),
+             'what': str(t.get('description') or t.get('command') or '')[:120], 'until': None}
+            for t in got if isinstance(t, dict) and t.get('status', 'running') == 'running' and not t.get('ambient')]
+
+
+def is_wake(prompt) -> bool:
+    "a turn Claude took because background work reported - a UserPromptSubmit nobody typed"
+    return str(prompt or '').lstrip().startswith('<task-notification>')
 
 
 def live(jobs, now: float = None) -> list:

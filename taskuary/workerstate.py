@@ -21,6 +21,8 @@ KINDS = ('working', 'turn_end', 'background', 'input_needed', 'approval_needed',
 REQUESTS = ('input_needed', 'approval_needed', 'stalled')
 # `background` is a turn that ended with work still RUNNING - a shell, a monitor, a subagent (background.py) - its
 # jobs in ChoicesJson, each with a deadline. Working while any is inside it; past them all it is a plain turn_end.
+# A job ending wakes the run for a turn of its own: `working` with this text, which is not the owner speaking.
+WAKE = 'woken by background work'
 TERMINAL = ('failed', 'disconnected', 'stopped')
 # ONE SENTENCE PER SUB-STATE of a blocked agent, from lanes.json (the desktop reads the same entry in
 # funnelPile.js). Seven surfaces each spelled "parked at its prompt" their own way, and none of them
@@ -111,7 +113,7 @@ def open_requests(evs: list) -> list:
     it comes after that turn's own prompt.
     """
     answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
-    spoke = max((i for i, e in enumerate(evs) if e['Kind'] == 'working'), default=-1)
+    spoke = max((i for i, e in enumerate(evs) if e['Kind'] == 'working' and e.get('Text') != WAKE), default=-1)
     return [e for i, e in enumerate(evs)
             if i > spoke and e['Kind'] in REQUESTS and e['RequestId'] not in answered]
 

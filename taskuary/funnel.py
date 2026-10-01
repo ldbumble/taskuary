@@ -1509,8 +1509,10 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         # Mail landing mid-settle moves the membership census, and the owner was handed that sentence
         # verbatim while nothing moved - 27 items stayed in the pipe (the owner, 2026-09-07: "what does
         # this mean as well when I got it to clear the rest of what was left?"). It is the worker's lag,
-        # not a refusal: do the very thing the message asks for, once, and settle again.
-        if 'reconciled before settlement' not in str(e): raise
+        # not a refusal: do the very thing the message asks for, once, and settle again. A row that only just
+        # landed is the same lag - its item is not built yet ("processing target is unavailable"): a report the
+        # AI judge turned down stayed on the rail and its run was logged as failed (2026-10-01).
+        if 'reconciled before settlement' not in str(e) and 'processing target is unavailable' not in str(e): raise
         from . import processing_all
         processing_all.wait_settled(store)
         store.reconcile_processing_membership()

@@ -206,6 +206,18 @@ def test_a_census_that_moved_under_a_settle_is_reconciled_instead_of_refused(sto
     assert key not in {i['key'] for i in both(store)[1]['items']}
 
 
+def test_a_row_that_just_landed_can_be_settled_before_the_worker_reaches_it(store):
+    """A report the AI judge turns down is settled off the rail the moment it lands - and its rail item was not
+    built yet: "processing target is unavailable", the run was logged as failed and the row the judge had said
+    no to stayed on the rail (2026-10-01). The same lag as the census above: reconcile once and settle."""
+    mid = add(store, 'Nightly check - all clear', channel='report')
+    key = f'report:{mid}'
+    with pytest.raises(ValueError, match='processing target is unavailable'):
+        store.set_funnel_state(key, 'done', 'report')  # the raw write is what refused
+    funnel.settle(store, key, 'done', 'report')        # ...and the pipe's own road settles it anyway
+    assert key not in {i['key'] for i in both(store)[1]['items']}
+
+
 def test_fyi_summary_survives_refresh_but_is_dropped_when_its_source_changes(store):
     mid = add(store, 'Summary subject')
     _, initial = both(store)

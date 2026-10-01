@@ -4,7 +4,8 @@ The landing page. Static — `index.html`, the interactive Three.js Studio hero 
 the icon, and a social card. No build step, no framework, nothing to install.
 
 The interactive demo is built to `site/demo/` with `npm --prefix website run build:demo`
-and is served at `https://taskuary.com/demo/`.
+and is served at `https://taskuary.com/demo/`. It opens in Assistant by default;
+visitors can switch to Game, and their choice is remembered in their browser.
 
 ## Deploy (Cloudflare Workers)
 

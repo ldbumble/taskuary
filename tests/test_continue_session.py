@@ -83,6 +83,19 @@ class CodexResumeModelTests(unittest.TestCase):
         self.assertEqual(terminal.codex_resume_model(['claude', '--resume', 'abc']), ['claude', '--resume', 'abc'])
 
 
+class BriefInParagraphsTests(unittest.TestCase):
+    """The brief went to the CLI as one 8000-character line, which Claude showed as "(0 lines hidden)" with the task, the
+    rules and the mail run together (2026-09-30). On the command line it keeps its paragraphs; typed, it is still one line."""
+    def test_blocks_keep_a_blank_line_between_them_and_lose_their_inner_spacing(self):
+        from taskuary import terminal
+        out = terminal.paragraphs('TASK TQ-0001 - fix   the\nexport\n\n\n  RULES: stay in\n the checkout \n\nFROM Gail Moreno')
+        self.assertEqual(out, 'TASK TQ-0001 - fix the export\n\nRULES: stay in the checkout\n\nFROM Gail Moreno')
+
+    def test_typed_into_a_pane_it_is_still_one_line(self):
+        from taskuary import terminal
+        self.assertNotIn('\n', terminal.fit_typed('TASK one\n\nRULES two\n\nFROM three'))
+
+
 class PhoneTests(unittest.TestCase):
     def test_the_pick_asks_and_the_next_typed_line_is_the_note(self):
         s = MemoryStore()

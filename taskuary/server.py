@@ -2308,6 +2308,12 @@ def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTask
     verdict, route_id = operations.verdict_of_message(store, m)
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner', [], ACTOR)
+    # ARCHIVE is "I am done with this": it filed the mail and left it UNREAD under FYI on the walk (press audit,
+    # 2026-10-01). It writes at least what Next writes - the read receipt - so a new reply still brings it back.
+    if body is not None and body.archive:
+        from . import funnel
+        try: funnel.settle(store, f'msg:{mid}', 'surfaced', ACTOR, read=True, note='archived')
+        except Exception as e: logger.debug(f'the archived message {mid} did not settle read: {e}')
     operations.record_direct(store, 'message.file', mid, {}, ACTOR, {'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived'}, verdict=verdict, route_id=route_id)
     return {'ok': True, 'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived',
             'ref': task_ref(tid) if tid else None, 'memoryId': learned}

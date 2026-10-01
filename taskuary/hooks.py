@@ -265,7 +265,11 @@ def _events(t, p: dict) -> None:
             if r['Kind'] in kinds and (r.get('Source') or 'api') != 'screen':
                 ws.record(st, tid, sid, 'answered', request_id=r['RequestId'], text=why, source='hook')
     try:
-        if ev == 'UserPromptSubmit': ws.record(st, tid, sid, 'working', source='hook')
+        if ev == 'UserPromptSubmit':
+            # ...including a turn Claude took because a background job reported. That one is marked: it is the agent
+            # working again, not the owner speaking, so it must not overtake a question still open (open_requests)
+            from .background import is_wake
+            ws.record(st, tid, sid, 'working', text=ws.WAKE if is_wake(p.get('prompt')) else '', source='hook')
         # a tool that FAILED had its permission decided too - the run went on either way - and a request left open
         # read "waiting for your approval" over an agent that kept working until its next prompt
         elif ev == 'PostToolUseFailure': close(('approval_needed',), 'decided in the pane')
@@ -340,7 +344,8 @@ def _events(t, p: dict) -> None:
                           text=q, choices=choices, source='hook')
             # the response ended, the WORK did not: a shell, a monitor or a subagent it left running (background.py)
             from . import background
-            jobs = background.pending(p.get('transcript_path'))
+            jobs = background.from_hook(p)
+            if jobs is None: jobs = background.pending(p.get('transcript_path'))
             if jobs: ws.record(st, tid, sid, 'background', text=background.summary(jobs), choices=jobs, source='hook')
         elif ev == 'Interrupt': ws.record(st, tid, sid, 'turn_end', text='interrupted', source='hook')
         elif ev == 'SessionEnd':

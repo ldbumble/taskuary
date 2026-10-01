@@ -20,5 +20,5 @@ test("the view takes the list's part as props - it never loads the task list its
   assert.match(page, /export default function TaskPage\(\{ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded,/);
   assert.doesNotMatch(page, /api\.get\("\/api\/tasks", /);
   assert.match(page, /data-tq-task-page=\{selected \|\| ""\}/);
-  assert.match(page, /height: canvas \? "100%" : "calc\(100vh - 118px\)"/);
+  assert.match(page, /height: canvas \? "auto" : "calc\(100vh - 118px\)"/);
 });

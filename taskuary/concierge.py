@@ -366,7 +366,23 @@ def task_now(store, tid: int) -> str:
     return '\n'.join(lines)
 
 
-def facts(store, item: dict) -> str:
+def _task_whole(store, tid: int) -> str:
+    """The task as its page shows it, bounded: description, checklist, and its notes newest last - the agent's report kept long."""
+    t = store.get_task(tid) or {}
+    out = []
+    if str(t.get('Summary') or '').strip(): out.append(f"THE TASK'S DESCRIPTION: {_cut(t['Summary'], 1500)}")
+    try: cl = store.checklist_markdown(tid)
+    except Exception: cl = ''
+    if str(cl or '').strip(): out.append(f"ITS CHECKLIST:\n{_cut(cl, 1500)}")
+    notes = [c for c in store.list_comments(tid) if str(c.get('Body') or '').strip()][-12:]
+    if notes:
+        out.append('ITS NOTES (oldest first):\n' + '\n'.join(
+            f"  {str(c.get('CreatedAt') or '')[:16]} {c.get('Actor') or '?'}: "
+            f"{_cut(c.get('Body'), 1500 if str(c.get('Body') or '').lstrip().startswith('CODER REPORT') else 300)}" for c in notes))
+    return _cut('\n'.join(out), 7000)
+
+
+def facts(store, item: dict, whole: bool = False) -> str:
     """What the model is handed about ONE item: the item's own words, then the body, the draft,
     the agent's screen or the meeting, whichever it has. Bounded, so a turn stays fast."""
     if not item: return '(no item on the table - the owner is just talking)'
@@ -433,6 +449,17 @@ def facts(store, item: dict) -> str:
             lines.append('IMPORTANT: newer messages arrived after that draft. It is stale and must be redrafted before sending; do not recommend approving it.')
     if item['kind'] == 'agent':
         lines.append('the agent\'s last lines:\n' + '\n'.join(item.get('tail') or ['(nothing captured)']))
+    # THE WHOLE OPEN BOX (the owner, 2026-10-01: "if it has task open, entire task is in context, same with anything else, 4 fyi's"):
+    # a task's own description, checklist and notes - the agent's report among them - not only its mail; and every message of a
+    # batch, not its title ("4 fyi" was all the model was told)
+    # ...for a question asked about it, and a brief handed on - the walk's own one-line intro stays small and quick
+    if whole and item.get('tid'): lines.append(_task_whole(store, item['tid']))
+    if whole and item['kind'] == 'fyis':
+        from .triage import own_words
+        for n, i in enumerate(item.get('items') or [], 1):
+            m = store.get_message(i['mid']) if i.get('mid') else {}
+            body = own_words(str((m or {}).get('BodyText') or i.get('preview') or ''))
+            lines.append(f"FYI {n} of {len(item['items'])}: {i.get('who') or '?'} - {i.get('title') or ''}" + (f"\n  {_cut(body, 600)}" if body else ''))
     if item['kind'] == 'meeting':
         e = item.get('event') or {}
         lines.append(f"meeting {e.get('start')} - {e.get('end') or ''}" + (f" with {', '.join(e.get('who') or [])}" if e.get('who') else '')
@@ -2175,7 +2202,7 @@ def _where(it: dict) -> str:
 def _brief_from_item(store, item: dict) -> str:
     """What to tell an agent when the owner pressed a button instead of typing: the item itself - what it
     is, who it is from, and everything already known about it (the same facts the assistant reads)."""
-    return f"Take this on and report back what you find: {_where(item) or 'the item below'}.\n\n{facts(store, item)}".strip()
+    return f"Take this on and report back what you find: {_where(item) or 'the item below'}.\n\n{facts(store, item, whole=True)}".strip()
 
 
 def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: str, actor: str = 'owner',
@@ -2788,6 +2815,8 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     tid = task['TaskId']
     p = funnel.pile(store)
     if item is None: item = funnel.next_item(store, key, items=funnel.full_items(store)) if key else None   # the route already built it
+    # ...and a task opened by name or from the rail may not be in the pile at all: it is still what is on screen (2026-10-01)
+    if item is None and key: item = funnel.item_for_key(store, key)
     # "1" MEANS THE SAME THING ON BOTH SCREENS. The phone numbers its options because a chat has no
     # buttons, and the owner, having answered by number there, typed "1" on the desktop too - where it
     # was just a digit for the model to interpret, so it answered about something else entirely (the
@@ -2816,7 +2845,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = _system(store, llm) + '\n\n' + toolcatalog.block(store)
         raw = str(llm(system,
-                      f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}\n\n"
+                      f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table

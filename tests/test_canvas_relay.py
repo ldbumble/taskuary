@@ -64,3 +64,49 @@ class OpenCardContextTests(unittest.TestCase):
         with mock.patch.object(concierge, '_live', return_value=[]):
             concierge.say(s, 'hi', llm=llm)
         self.assertNotIn('ON SCREEN NOW', seen['prompt'])
+
+
+class WholeOpenBoxTests(unittest.TestCase):
+    """Whatever is open is the turn's context, WHOLE (the owner, 2026-10-01: "if it has task open, entire task is in context, same
+    with anything else, 4 fyi's"): a task opened by name or from the rail - often not in the pile at all - its description,
+    checklist and notes with the agent's report; a batch of fyis, every message in it."""
+    def ask(self, s, key=None, item=None):
+        seen = {}
+        def llm(system, prompt, **kw):
+            seen['prompt'] = prompt
+            return 'Noted.'
+        with mock.patch.object(concierge, '_live', return_value=[]):
+            concierge.say(s, 'what is left on this?', key=key, item=item, llm=llm)
+        return seen['prompt']
+
+    def test_a_task_opened_by_name_is_the_subject_whole(self):
+        s = store()
+        t = s.create_task({'Title': 'Pull the ledger export', 'Kind': 'coding', 'Status': 'open',
+                           'Summary': 'Extend the monthly pull to a full year, one workbook per site.'}, 'owner')
+        s.set_task_checklist(t, ['Pull 2024', 'Reconcile against the ledger'], 'owner')
+        s.add_comment(t, 'owner', 'owner', 'Keep it throwaway; do not push.')
+        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nPulled 2024; 2023 flagged as built from bad data.')
+        prompt = self.ask(s, key=f'task:{t}')
+        for want in ("THE TASK'S DESCRIPTION: Extend the monthly pull to a full year", 'Pull 2024', 'Reconcile against the ledger',
+                     'Keep it throwaway; do not push.', '2023 flagged as built from bad data'):
+            self.assertIn(want, prompt)
+
+    def test_a_batch_of_fyis_is_every_message_in_it(self):
+        s = store()
+        mids = [s.add_message({'ExternalId': f'x:f{n}', 'Channel': 'email', 'Subject': subj, 'FromName': who, 'FromEmail': f'{who.lower()}@northwind.example',
+                               'SentAt': '2026-10-01 08:00:00', 'BodyText': body, 'Status': 'filed'})
+                for n, (who, subj, body) in enumerate([('Erin', 'Back Tuesday', 'I am out until Tuesday.'),
+                                                       ('Gail', 'Office closed Friday', 'The office closes at noon Friday.')])]
+        batch = {'key': 'fyis:x', 'kind': 'fyis', 'lane': 'fyi', 'title': '2 fyi', 'who': '', 'when': '', 'why': 'people told you things',
+                 'items': [{'mid': m, 'who': w, 'title': t} for m, w, t in zip(mids, ('Erin', 'Gail'), ('Back Tuesday', 'Office closed Friday'))]}
+        prompt = self.ask(s, item=batch)
+        self.assertIn('FYI 1 of 2: Erin - Back Tuesday', prompt); self.assertIn('I am out until Tuesday.', prompt)
+        self.assertIn('FYI 2 of 2: Gail - Office closed Friday', prompt); self.assertIn('closes at noon Friday', prompt)
+
+    def test_the_walks_own_intro_stays_small(self):
+        s = store()
+        t = s.create_task({'Title': 'Pull the ledger export', 'Kind': 'coding', 'Status': 'open', 'Summary': 'A long description.'}, 'owner')
+        item = {'key': f'task:{t}', 'kind': 'task', 'lane': 'asked', 'title': 'Pull the ledger export', 'tid': t}
+        with mock.patch.object(concierge, '_live', return_value=[]):
+            self.assertNotIn("THE TASK'S DESCRIPTION", concierge.facts(s, item))
+            self.assertIn("THE TASK'S DESCRIPTION", concierge.facts(s, item, whole=True))

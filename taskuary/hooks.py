@@ -338,6 +338,10 @@ def _events(t, p: dict) -> None:
             for i, (q, choices) in enumerate(asks, 1):
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
                           text=q, choices=choices, source='hook')
+            # the response ended, the WORK did not: a shell, a monitor or a subagent it left running (background.py)
+            from . import background
+            jobs = background.pending(p.get('transcript_path'))
+            if jobs: ws.record(st, tid, sid, 'background', text=background.summary(jobs), choices=jobs, source='hook')
         elif ev == 'Interrupt': ws.record(st, tid, sid, 'turn_end', text='interrupted', source='hook')
         elif ev == 'SessionEnd':
             # the run's own ending, before the pty's EOF gets there - unless the process lives on

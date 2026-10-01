@@ -1180,16 +1180,23 @@ def replay_text(t, lines: int = REPLAY_LINES) -> str:
     The reset prefix leaves the alternate screen and clears, so the pane starts from a known
     state whatever the old bytes left behind - and a terminal QUERY cannot survive a render, so
     the replay can no longer make xterm answer one into the CLI as typed junk."""
-    text, cy, cx = render_at(t.scrollback(), getattr(t, 'cols', 110), getattr(t, 'rows', 32))
-    rows = text.splitlines()
+    n = max(4, int(getattr(t, 'rows', 32) or 32))
+    text, cy, cx = render_at(t.scrollback(), getattr(t, 'cols', 110), n)
+    rows = text.split('\n')                               # splitlines() eats a blank last row
+    # The last n rows are the pty's SCREEN, and they must land on the pane's rows one for one. Claude Code repaints
+    # from ESC[H and Codex by absolute row: a seed shifted by one blank row put the next keystroke on the line
+    # below the input box (the owner, 2026-09-30). So blank rows are trimmed only where it moves nothing - the
+    # scrollback above the screen, and the bottom of a screen that never scrolled (top-anchored either way).
+    screen = len(rows) - n if cy is not None else len(rows)
     first = max(0, len(rows) - max(1, lines))
+    while first < min(screen, len(rows)) and not rows[first].strip(): first += 1
     tail = rows[first:]
-    while tail and not tail[0].strip(): tail.pop(0); first += 1
-    # ...nor trailing ones: render() hands back the pty's whole grid, blank rows included, so a
-    # 32-row pty seeded into a 26-row Wall cell had six empty rows of "scrollback" - a scrollbar
-    # that dragged nothing and the cursor parked at the very bottom (2026-09-18)
-    while tail and not tail[-1].strip(): tail.pop()
-    if not tail: return ''
+    # ...nor trailing ones on a screen with nothing above it: a 32-row pty seeded into a 26-row Wall cell had six
+    # empty rows of "scrollback" - a scrollbar that dragged nothing (2026-09-18). With scrollback the seed fills the
+    # pane from the bottom, so there the blank rows ARE the alignment and stay.
+    if cy is None or first >= screen:
+        while tail and not tail[-1].strip(): tail.pop()
+    if not any(r.strip() for r in tail): return ''
     return REPLAY_RESET + CRLF.join(tail) + cursor_back(len(tail) - 1, (cy - first) if cy is not None else None, cx)
 
 

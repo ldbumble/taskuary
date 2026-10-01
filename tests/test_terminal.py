@@ -1013,6 +1013,43 @@ class ReplaySeedTests(unittest.TestCase):
         # ...and it ends with the cursor where the CLI left it - after 'two', column 4 (2026-09-25)
         self.assertEqual(body.split(terminal.CRLF), ['one', 'two' + self.ESC + '[4G'])
 
+    def _pane_vs_truth(self, before, after):
+        """Rows a pane seeded from `before` then fed the CLI's next paint shows, beside the rows of a terminal that saw it all."""
+        import pyte
+        def show(*parts):
+            sc = pyte.HistoryScreen(self.Fake.cols, self.Fake.rows, history=500, ratio=1.0); st = pyte.Stream(sc)
+            for p in parts: st.feed(p)
+            return [r.rstrip() for r in sc.display]
+        return show(self._seed(before), after), show(before, after)
+
+    def test_the_next_keystroke_lands_on_the_input_line(self):
+        """Claude Code paints a keystroke from the top of the screen - ESC[H, then down N rows - so the seed's screen rows
+        must sit on the pane's rows one for one. Trimming the blank rows under the footer slid the seed down by two, and
+        what the owner typed after clicking away and back landed on the line below the input box (2026-09-30)."""
+        E, n = self.ESC, self.Fake.rows
+        history = terminal.CRLF.join('earlier line %d' % i for i in range(30)) + terminal.CRLF
+        screen = 'the agent answered' + terminal.CRLF * 7 + '> ' + terminal.CRLF + 'bypass permissions on' + terminal.CRLF * 2
+        before = history + screen + E + '[%d;3H' % (n - 3)          # parked on the input line, two blank rows below the footer
+        after = E + '[H' + chr(13) + E + '[2C' + E + '[%dBx' % (n - 4)
+        pane, truth = self._pane_vs_truth(before, after)
+        self.assertEqual(truth[n - 4], '> x')
+        self.assertEqual(pane, truth)
+
+    def test_a_blank_top_row_is_kept(self):
+        """Claude Code and Codex both leave the screen's first row blank. The seed dropped it, every row moved up one, and
+        the next keystroke - painted from the top, ESC[H then down - landed a row below the input box (2026-09-30)."""
+        E, C = self.ESC, terminal.CRLF
+        before = C + 'the agent answered' + C * 4 + '> ' + C + 'bypass permissions on' + E + '[6;3H'
+        pane, truth = self._pane_vs_truth(before, E + '[H' + chr(13) + E + '[2C' + E + '[5Bx')
+        self.assertEqual(truth[5], '> x')
+        self.assertEqual(pane, truth)
+
+    def test_a_screen_with_nothing_above_it_stays_top_anchored(self):
+        E = self.ESC
+        pane, truth = self._pane_vs_truth('welcome' + terminal.CRLF + '> ' + E + '[2;3H', E + '[H' + E + '[1B' + chr(13) + E + '[2Cx')
+        self.assertEqual(truth[1], '> x')
+        self.assertEqual(pane, truth)
+
     def test_the_seed_is_capped_to_the_tail(self):
         raw = chr(10).join('line %d' % n for n in range(1200))
         out = self._seed(raw, lines=50)

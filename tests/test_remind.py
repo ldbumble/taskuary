@@ -96,3 +96,34 @@ class ToolTests(unittest.TestCase):
             self.assertEqual(r.status_code, 200, r.text)
             self.assertTrue(remind.waiting(s.get_task(t)))
             self.assertEqual(TestClient(server.app).post(f'/api/tasks/{t}/remind', json={'until': 'someday'}).status_code, 422)
+
+
+class LiveAgentTests(unittest.TestCase):
+    """Remind me on a task whose agent session is still open put it away anyway, and the row sat on under "agent waiting
+    on you" (press audit, 2026-10-01). The owner: warn that the agent is open and has to be saved and ended first - and
+    do not defer it. Every door refuses the same way; bringing it back stays allowed."""
+    LIVE = {'sid': 'abc', 'alive': True}
+
+    def test_set_reminder_refuses_while_the_agent_is_open_and_leaves_the_task_as_it_was(self):
+        s = store(); t = asked(s)
+        with mock.patch('taskuary.terminal.for_task', return_value=self.LIVE):
+            with self.assertRaisesRegex(remind.AgentOpen, 'Save and end session'): remind.set_reminder(s, t, '2 weeks')
+            self.assertFalse(remind.waiting(s.get_task(t)))
+            self.assertIsNone(remind.set_reminder(s, t, 'none')['remindAt'], 'bringing it back is never refused')
+
+    def test_the_task_page_door_answers_409_with_the_reason(self):
+        s = store(); t = asked(s)
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.terminal.for_task', return_value=self.LIVE):
+            r = TestClient(server.app).post(f'/api/tasks/{t}/remind', json={'until': '1 week'})
+        self.assertEqual(r.status_code, 409, r.text)
+        self.assertIn('Save and end session', r.json()['detail'])
+        self.assertFalse(remind.waiting(s.get_task(t)))
+
+    def test_the_operation_door_refuses_the_same_way(self):
+        s = store(); t = asked(s)
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.terminal.for_task', return_value=self.LIVE):
+            with self.assertRaises(server.HTTPException) as e:
+                server._run_operation({'kind': 'task.defer', 'target': t, 'params': {'until': '2 weeks'}}, None)
+        self.assertEqual(e.exception.status_code, 409)
+        self.assertIn('Save and end session', e.exception.detail)
+        self.assertFalse(remind.waiting(s.get_task(t)))

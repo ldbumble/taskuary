@@ -1050,7 +1050,8 @@ def _remind(store, act: dict, actor: str) -> str:
         from . import assistant
         out = assistant.act(store, int(act['idea']), 'snooze', actor, until=act['until'])
         return _on(store, actor, [f"Put away until {out['when']} - it comes back that morning."], done_with=(asking_key(store) or None))
-    out = remind.set_reminder(store, int(act['tid']), act['until'], actor)
+    try: out = remind.set_reminder(store, int(act['tid']), act['until'], actor)
+    except remind.AgentOpen as e: return str(e)
     operations.record_direct(store, 'task.defer', int(act['tid']), {'until': act['until']}, actor, out)
     if not out.get('remindAt'): return 'It is back on your rail now.'
     said = f"Away until {out['when']} - it is under Upcoming in Tasks, and back on your rail that morning."

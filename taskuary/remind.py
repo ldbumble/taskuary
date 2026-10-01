@@ -50,12 +50,29 @@ def waiting(task: dict, now: datetime = None) -> bool:
     return bool(r) and (task or {}).get('Status') not in ('done', 'dropped') and r > f"{now or datetime.now():%Y-%m-%d %H:%M:%S}"
 
 
+class AgentOpen(ValueError):
+    """Remind me on a task whose agent session is still open: the doors answer 409 with this."""
+
+
+OPEN_SAYS = 'An agent session is still open on this task - Save and end session first, then put it away.'
+
+
+def agent_open(tid: int) -> bool:
+    """A live session on the task (the same truth Mark done's "Stop the agent and mark done?" reads)."""
+    from . import terminal as term
+    try: return bool(term.for_task(tid, details=False))
+    except Exception: return False
+
+
 def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
     """Put the task away until `until` (or bring it back now with none). The receipt carries the undo."""
     t = store.get_task(tid)
     if not t: raise ValueError('task not found')
     if t.get('Status') in ('done', 'dropped'): raise ValueError('that task is done - reopen it first')
     at, prev = parse(until), t.get('RemindAt') or None
+    # Put away with an agent still open, it was deferred anyway and its row stayed under "agent waiting on you" (press
+    # audit, 2026-10-01). The owner: the agent is open - save and end it first. Bringing it back is never refused.
+    if at and agent_open(tid): raise AgentOpen(OPEN_SAYS)
     store.update_task(tid, {'RemindAt': at or ''}, actor)
     store.audit('task', tid, 'remind', actor, detail={'from': prev, 'to': at})
     return {'taskId': tid, 'remindAt': at, 'when': when(at) if at else '',

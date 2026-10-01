@@ -391,8 +391,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // did nothing visible read as broken; with a live session it also stops an agent, so it asks first
   const [finishing, setFinishing] = useState(false);
   const [confirmDone, setConfirmDone] = useState(false);
+  // ...put down AT THE PRESS, as Mark done is: cleared only once the delete returned, the task sat on the rail as an
+  // open one already seen - under For later - then left, then its mail came back as the FYI it now is (press audit,
+  // 2026-10-01). The FYI is right; the steps between were the flicker. A delete that fails puts it back with the reason.
   const notATask = async () => {
-    await api.post(`/api/tasks/${selected}/not-a-task`);
+    onLeave?.();
+    try { await api.post(`/api/tasks/${selected}/not-a-task`); }
+    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Could not delete the task"; setErr(msg); onStay?.(msg); return; }
     onSelect(null); await loadTasks(); onChanged?.();
   };
   // The task's own session - the only terminal in the app. undefined means "not looked

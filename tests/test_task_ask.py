@@ -11,7 +11,7 @@ The automatic road kept the raw body a while longer: a verdict that names no sum
 characters of quoted thread landed on the task whose ask was one sentence (the owner, 2026-09-14:
 "why is the whole email showing up not the specific task?").
 """
-import json, unittest
+import json, threading, unittest
 from unittest import mock
 
 from taskuary import ingest, triage
@@ -213,6 +213,8 @@ class PromoteTests(unittest.TestCase):
                                                    'checklist': ['Confirm the rollout date']}))
         with mock.patch('taskuary.llm.build_llm', return_value=brain):
             tid = ingest.task_from_message(s, mid, 'owner')
+        # read after the press (test_press_never_waits), so wait for it
+        for th in [th for th in threading.enumerate() if th.name == ingest.ENRICH_THREAD]: th.join(5)
         t = s.get_task(tid)
         self.assertEqual(t['Summary'], 'Ellis is chasing the rollout.')
         self.assertNotIn('confidential', t['Summary'])

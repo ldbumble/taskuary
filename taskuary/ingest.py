@@ -1562,14 +1562,14 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     # the greeting, the signature, the legal footer and the quoted thread underneath - and it
     # carried no checklist, because the automatic road is the only one that had ever asked for
     # one (the owner, 2026-09-10). Same question, same wording, so a task promoted by hand reads
-    # like a task triage made. No brain: strip_boilerplate, still better than the raw body.
-    from . import llm as _llm, triage as _triage
-    ask = _triage.extract_ask(m, _llm.build_llm(store))
-    tid = store.create_task({'Title': title, 'Summary': ask['summary'], 'Kind': kind,
+    # like a task triage made - but AFTER the press: the task starts on the sender's own words (ask_later).
+    from . import triage as _triage
+    plain = _triage.extract_ask(m)['summary']
+    tid = store.create_task({'Title': title, 'Summary': plain, 'Kind': kind,
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink'),
                              **({'Assignee': assignee} if assignee else {})}, actor)
-    if ask['checklist']: store.set_task_checklist(tid, ask['checklist'], 'triage')
     store.attach_message(mid, tid)
+    ask_later(store, tid, m, plain)
     # what was said about THIS message before it was work travels with it (operations.py, PW-133)
     from . import operations
     operations.link_discussion(store, tid, [mid])
@@ -1593,14 +1593,14 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
     # shares - and the ask is never the greeting line it opens with
     if parent and (parent.get('Title') or '').strip().lower() == title.strip().lower():
         title = ask_line(body) or title
-    # the split-off task gets the same treatment as the promoted one: the ask, not the mail
-    from . import llm as _llm, triage as _triage
-    ask = _triage.extract_ask(m, _llm.build_llm(store))
-    tid = store.create_task({'Title': title, 'Summary': ask['summary'],
+    # the split-off task gets the same treatment as the promoted one: the ask, not the mail - read after the press
+    from . import triage as _triage
+    plain = _triage.extract_ask(m)['summary']
+    tid = store.create_task({'Title': title, 'Summary': plain,
                              'Kind': kind or (parent or {}).get('Kind') or 'coding',
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink')}, actor)
-    if ask['checklist']: store.set_task_checklist(tid, ask['checklist'], 'triage')
     store.attach_message(mid, tid)
+    ask_later(store, tid, m, plain)
     store.add_route(mid, tid, 'create', None,
                     f'split off {task_ref(old)} - a separate ask in the same thread' if old else 'made its own task',
                     [], actor)
@@ -1611,6 +1611,33 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
 
 def _spawn(fn, *args):
     threading.Thread(target=fn, args=args, daemon=True).start()
+
+
+# A BUTTON NEVER WAITS ON THE AI (the owner, 2026-10-01: "Split, Make a task are buttons - act instantly, triage enriches
+# after"). Make a task, Mine, Dispatch and Split message each asked the model for the summary and the to-dos INSIDE the
+# press, so the row sat on a spinner for as long as the brain took. The task is made from what is known - the subject, the
+# sender's own words, the kind the button says - and the model's reading lands on it in place once it has answered.
+ENRICH_THREAD = 'press-enrich'
+
+
+def ask_later(store, tid: int, m: dict, plain: str):
+    """Read the ask out of `m` off the press and put it on `tid`. No brain, nothing to wait for: `plain` is the answer."""
+    from . import llm as _llm
+    llm = _llm.build_llm(store)
+    if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm), daemon=True, name=ENRICH_THREAD).start()
+
+
+def _enrich(store, tid: int, m: dict, plain: str, llm):
+    """Fill in only what the press left plain: an ask or a checklist the owner wrote meanwhile is theirs."""
+    from . import triage as _triage
+    try:
+        ask = _triage.extract_ask(m, llm)
+        t = store.get_task(tid)
+        if not t: return
+        if ask['summary'] and ask['summary'] != plain and (t.get('Summary') or '') == plain:
+            store.update_task(tid, {'Summary': ask['summary']}, 'triage')
+        if ask['checklist'] and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
+    except Exception as e: logger.warning(f"the ask on {task_ref(tid)} stays the sender's own words - {e}")
 
 
 AUTO_SESSIONS = 4      # DEFAULT unattended sessions to keep alive at once; past this it waits for you

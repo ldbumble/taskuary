@@ -273,9 +273,9 @@ export default function TaskHubPage() {
   const [everBoard, setEverBoard] = useState(false);
   const [everAssistant, setEverAssistant] = useState(tab === "Assistant");
   // the Assistant as a chat or as the game - remembered per browser, like any view choice
-  // ...and the public demo opens straight into the game: it is the one that shows off what the assistant does
+  // The public demo also starts in the assistant unless the visitor has chosen the game.
   const [asstGame, setAsstGame] = useState(() => {
-    try { const v = localStorage.getItem("taskuary.assistantMode"); return v ? v === "game" : DEMO; } catch { return DEMO; }
+    try { return localStorage.getItem("taskuary.assistantMode") === "game"; } catch { return false; }
   });
   const [stageMode, setStageMode] = useState("chat");   // what a click on a sidebar row does (chat | task)
   const pickAsstGame = (on) => { setAsstGame(on); try { localStorage.setItem("taskuary.assistantMode", on ? "game" : "chat"); } catch { /* private window */ } };

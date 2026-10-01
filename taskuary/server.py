@@ -3676,10 +3676,13 @@ async def concierge_stream(body: ConciergeStreamBody):
             def fetched(n):                      # once per turn, as the new lines land - the result line follows
                 if not started: started.append(n); put({'type': 'context_update', 'say': RETRIAGE_STARTED, 'stage': 'started', 'new': n})
             # A typed question polls NOTHING up front: the words are read first, and the item is
-            # brought in below only if the answer turns out to be about it. A NAMED pull still refreshes,
-            # because there the item IS the subject (PW-050). The walk's Next does not either: it answers
-            # from the rail and the change-check follows the four (_refresh_after, design C, 2026-09-17).
-            if body.key and body.mode != 'say': freshness = _refresh_chat_key(body.key, body.context_mid, on_fetched=fetched)
+            # brought in below only if the answer turns out to be about it. The walk's Next does not either:
+            # it answers from the rail and the change-check follows the four (_refresh_after, design C,
+            # 2026-09-17) - and neither does a row you click (mode 'next' with its key). That one used to wait
+            # on its mailbox first, 9 of the 12 seconds a click took (the owner, 2026-10-01: "open now, check
+            # after"); what lands after it reaches the page the way it does for Next. An ACTION - a reply, an
+            # approval, an agent - still reads the provider before it acts (_refresh_chat_context's gate).
+            if body.key and body.mode not in ('say', 'next'): freshness = _refresh_chat_key(body.key, body.context_mid, on_fetched=fetched)
             else: freshness = {}
             if freshness.get('polled'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
@@ -3707,7 +3710,7 @@ async def concierge_stream(body: ConciergeStreamBody):
             if notice: out['context_update'] = notice
             if body.mode == 'next': out = _with_pile(out, body)       # the rail rides along (design B)
             put({'type': 'done', **out})
-            if body.mode == 'next' and not body.key: _refresh_after(out)     # after the answer, never before it (design C)
+            if body.mode == 'next': _refresh_after(out)     # after the answer, never before it (design C) - a clicked row too
         except NavigationStale as error:
             put({'type': 'error', 'code': 'selection_stale', 'detail': error.detail, 'error': str(error)})
         except SelectionUnavailable as error:
@@ -6184,7 +6187,7 @@ def _refresh_after(out: dict):
     afterwards, here, on a thread: every channel of an FYI batch once (_refresh_items). Mail that arrives
     writes through ingest, the rail's dirty rows and the live event carry it to the page, whose reload
     refreshes the card in place and says so on the strip (funnelPile.currentItemFromPile). The item on
-    the table is NOT re-picked. A named pull keeps its up-front refresh - there the item is the subject."""
+    the table is NOT re-picked. A clicked row is checked here too, since 2026-10-01: it opens at once."""
     item = (out or {}).get('item') or {}
     members = item.get('items') if item.get('kind') == 'fyis' else [item]
     members = [m for m in (members or []) if isinstance(m, dict) and (m.get('mid') or m.get('tid'))]

@@ -207,7 +207,10 @@ class FreshnessBelongsAtLoadTimeTests(unittest.TestCase):
     def test_the_stream_checks_on_load_and_not_on_say(self):
         import inspect
         src = inspect.getsource(server.concierge_stream)
-        self.assertIn("body.key and body.mode != 'say'", src)
+        # a typed turn polls nothing up front; an item loaded into the chat is checked - since 2026-10-01 right AFTER it
+        # opens rather than before ("open now, check after": the wait was 9 of the 12 seconds a click took)
+        self.assertIn("body.key and body.mode not in ('say', 'next')", src)
+        self.assertIn("if body.mode == 'next': _refresh_after(out)", src)
 
 
 class ReadsTests(unittest.TestCase):

@@ -117,15 +117,22 @@ class NoticeTests(Base):
         cur = c.get('/api/funnel/pile', params={'force': 1, 'current': f'review:{rid}'}).json()['current']
         self.assertEqual(cur['mid'], newest, "the page's next read carries the line that arrived")
 
-    def test_a_named_pull_still_refreshes_its_item_first(self):
-        """Clicking a row is about THAT item: the check stays up front, with its notice (PW-050/052)."""
+    def test_a_clicked_row_opens_at_once_and_its_source_is_checked_after(self):
+        """A row you click opened only after its mailbox had been polled - 9 of the 12 seconds a click took (the owner,
+        2026-10-01: "open now, check after"). It answers from the rail like Next, and the line that lands after it
+        reaches the page on its next read."""
         tid, first, rid = teams_task(self.s)
         c = TestClient(server.app)
-        with mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: later(self.s, tid) and 1), \
-             mock.patch.dict(server.hub_term.SESSIONS, {}, clear=True):
+        polls = []
+        def poll(*a, **k):
+            polls.append(k.get('only')); later(self.s, tid); return 1
+        with mock.patch.object(server, '_poll_reports', side_effect=poll), mock.patch.dict(server.hub_term.SESSIONS, {}, clear=True):
             lines = self.stream(c, key=f'review:{rid}')
-        self.assertEqual([l['type'] for l in lines], ['context_update', 'done'])
-        self.assertIn('works now', lines[0]['say'])
+            self.assertEqual([l['type'] for l in lines], ['done'], 'no notice and no wait before the answer')
+            server.wait_refresh_after(5)
+        self.assertEqual(polls, [['teams']], 'the source is still checked - after')
+        cur = c.get('/api/funnel/pile', params={'force': 1, 'current': f'review:{rid}'}).json()['current']
+        self.assertEqual(cur['mid'], self.s.last_inbound_on_task(tid)['MessageId'])
 
     def test_a_provider_that_cannot_be_reached_does_not_fail_the_answer(self):
         tid, first, rid = teams_task(self.s)

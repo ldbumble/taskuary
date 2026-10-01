@@ -14,6 +14,9 @@ from loguru import logger
 from . import redact     # imports nothing of ours: safe at module level
 
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
+# Put in every socket's queue, in order with the bytes, when the pty changes size. A pane kept alive out of sight goes
+# on taking output; it has to wrap at the size the child is painting for, or it is wrong when it is shown again.
+RESIZED = object()
 # What phase detection reads. A 32x110 screen is ~3.5k chars and a TUI repaints its footer
 # constantly, so the last few KB always carry a whole one - while a pyte pass over the FULL
 # scrollback measured 1.9s against 0.10s here, per request, per session (2026-09-08: one working
@@ -448,8 +451,10 @@ class Term:
         if self.alive:
             try:
                 self.pty.resize(int(rows), int(cols))
+                changed = (self.rows, self.cols) != (int(rows), int(cols))
                 self.rows, self.cols = int(rows), int(cols)
                 self.quiet_for(3)                         # the repaint this triggers is not activity
+                if changed: self._emit(RESIZED)
             except Exception as e: logging.getLogger(__name__).warning('resize %s to %sx%s failed: %s', self.sid, rows, cols, e)
     def close(self):
         self.keep()                                       # before the bytes go, not after

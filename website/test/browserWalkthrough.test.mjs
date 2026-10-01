@@ -24,7 +24,8 @@ test("an embedded terminal never steals focus and scrolls the Assistant upward",
   const cards = read("assistantCards.jsx");
   const terminal = read("TerminalView.jsx");
   assert.match(cards, /TerminalPane[^>]+autoFocus=\{false\}/);
-  assert.match(terminal, /!readOnly && autoFocus/);
+  assert.match(terminal, /!readOnly && ui\?\.autoFocus/);
+  assert.match(terminal, /!readOnly && binding\.autoFocus/);
 });
 
 test("an expected walkthrough browser reserves the side-by-side pane while Chrome starts", () => {

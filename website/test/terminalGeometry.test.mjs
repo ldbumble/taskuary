@@ -19,8 +19,8 @@ test("a pane that does not own the geometry renders at the PTY's size, not its b
   const at = term.indexOf("const fitSafely = () => {");
   assert.notEqual(at, -1, "fitSafely must exist");
   const fitFn = term.slice(at, at + 500);
-  assert.ok(fitFn.includes("if (!ownsGeometry) {"),
-    "fitSafely has to bail out before fit() for a non-owner");
+  assert.ok(fitFn.includes("if (!ownsGeometry || !ui) {"),
+    "fitSafely has to bail out before fit() for a non-owner - and for a pane put away, which has no box to fit");
   assert.ok(/term\.resize\(ptySize\.cols, ptySize\.rows\)/.test(fitFn),
     "a non-owner must match the PTY's geometry, or it wraps where the child did not");
   // and fit() must still be reachable for the owner - a bail-out that swallowed both is worse
@@ -38,8 +38,8 @@ test("the geom frame is handled, and taking ownership back re-sends the size", (
   const at = term.indexOf('else if (m.type === "geom")');
   assert.notEqual(at, -1, "the client must handle the server's geom frame");
   const handler = term.slice(at, at + 600);
-  assert.ok(handler.includes('ownsGeometry = m.owner !== false;'),
-    "absent or true means this pane owns it - an older server sends no geom at all");
+  assert.ok(handler.includes('ownsGeometry = m.owner !== false && !!ui;'),
+    "absent or true means this pane owns it - an older server sends no geom at all - unless it is put away");
   assert.ok(handler.includes("fitSafely();"), "the new geometry has to be applied at once");
   // The owning pane can close while this one is still open. The server frees the token, this
   // pane claims it on its next resize - but sentSize still holds the size it last sent, so
@@ -85,9 +85,29 @@ test("nothing touches xterm after the pane is disposed", () => {
   // A write's completion callback ran scrollToBottom on a terminal whose renderer dispose() had
   // already dropped: "Cannot read properties of undefined (reading 'dimensions')" on a phone
   // leaving the task page (2026-09-18). The unmount flips one flag and every late callback obeys it.
-  assert.match(term, /let disposed = false;/);
-  assert.match(term, /return \(\) => \{ disposed = true; window\.removeEventListener\("resize", onResize\)/);
+  assert.match(term, /let ui = null, opened = false, disposed = false;/);
+  assert.match(term, /s\.dispose = \(\) => \{\n\s+if \(disposed\) return;\n\s+disposed = true; s\.alive = false; unbind\(\);/);
   assert.match(term, /term\.write\(data, \(\) => \{ if \(disposed\) return; pendingWrites -= 1;/);
   assert.match(term, /const lift = \(\) => \{\n\s+if \(disposed\) return;/);
-  assert.match(term, /const onResize = \(\) => \{\n\s+if \(disposed\) return;/);
+  assert.match(term, /const onResize = \(\) => \{\n\s+if \(disposed \|\| !ui\) return;/);
+});
+
+test("a pane put away hands the geometry back and follows the pty out of sight", () => {
+  // Kept panes stay connected so switching back is instant (terminalPool.js). Holding the geometry while away made the
+  // surface on screen render at the size of one that was not; drawing at the old size while the CLI repainted for a new
+  // one would show that wrong frame again on the way back, with no resize to repaint it (2026-10-01).
+  const at = term.indexOf("s.detach = () => {");
+  assert.notEqual(at, -1);
+  const detach = term.slice(at, at + 300);
+  assert.match(detach, /send\(\{ type: "release" \}\)/);
+  assert.match(detach, /ownsGeometry = false;/);
+  // ...and back on screen it asks before it fits: fitting first, while another pane owned the geometry, shrank it to
+  // its box and grew it back, which moved its rows (the Wall, 2026-10-01)
+  const attach = term.slice(term.indexOf("s.attach = (host, binding) => {"), term.indexOf("s.detach = () => {"));
+  assert.match(attach, /const back = opened;/);
+  assert.match(attach, /if \(back\) claim\(\);/);
+  assert.doesNotMatch(attach.slice(attach.indexOf("binding.setState")), /ownsGeometry = true/, "only a fresh pane assumes the geometry");
+  assert.match(term, /const d = fit\.proposeDimensions\(\);/, "the claim sends its box's size without resizing xterm to it");
+  assert.match(term, /if \(readOnly \|\| !s\.alive\) s\.dispose\(\);\n\s+else POOL\.keep\(sid, s, keptCap\(\)\);/,
+    "a read-only preview or an ended session is let go, never kept");
 });

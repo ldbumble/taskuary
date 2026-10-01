@@ -151,8 +151,8 @@ OPENING = (
 RECEIPTS = {'reply': "I'll draft that - it lands below for your yes.", 'approve': 'Sending it as drafted. Moving on.',
             'not_ours': "Not ours, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
             'not_ours_sender': "Noted: that sender is noise - everything from them files itself from now on. Moving on.",
-            'remember': "Remembered. Moving on.", 'coder': "Sent off to the coding agent - watch it on the Board if you like; I'll bring its findings back here when it's done. Meanwhile, the next thing.",
-            'regular_agent': "Sent off to the regular agent - I'll bring its answer back here when it is done. Meanwhile, the next thing.",
+            'remember': "Remembered. Moving on.", 'coder': "Sent to the coding agent - it is starting on it now, and its findings come back here when it is done.",
+            'regular_agent': "Sent to an agent - it is starting on it now, and its answer comes back here when it is done.",
             'clear': 'Cleared. Moving on.',
             'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Queued the rerun - it lands back in the pipe when it's done. Moving on.",
             'setup': "I'll walk you through it - opening it as a conversation with the assistant, no code, nothing built. "

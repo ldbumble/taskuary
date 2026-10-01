@@ -43,7 +43,7 @@ test("All read, next: the settle brings the rail back and the walk takes it with
   assert.match(done, /advance\(pile\)/);
   const advance = between("const advance = (pile", "const done = async");
   assert.match(advance, /if \(pile\) holdPile\(pile, nextSelectionScope\(only\.current, null\)\)/, "the table is empty after a settle: nothing excluded");
-  assert.match(advance, /pile \? 120 : 500/, "a rail in hand needs no half-second of grace");
+  assert.match(advance, /pile \|\| settled \? 120 : 500/, "a rail in hand - or a close the server already answered - needs no half-second of grace");
   assert.ok(advance.indexOf("clearTable()") < advance.indexOf("holdPile("), "clearTable nulls the capture; the held one must land after it");
 });
 

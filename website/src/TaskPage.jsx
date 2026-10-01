@@ -168,7 +168,7 @@ const askedAgo = (t) => {
   return `asked you ${mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`} ago`;
 };
 
-export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded,
+export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay,
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
   const [detail, setDetail] = useState(null);
@@ -474,9 +474,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // walks on) - `onFinish(status, close)` runs the close itself so the list can pre-record the state it is about to see.
   const finish = async (status) => {
     setFinishing(true);
+    // PUT DOWN AT THE PRESS (the owner, 2026-10-01: "you hit mark done it closes ... why does it take an extra second or 2?"): the
+    // walk folds the task now and the close runs behind the "…"; a close that fails hands it back with the reason
+    onLeave?.();
     const close = () => runOperation(api, "task.complete", selected);   // the shared road (PW-215)
     try { await (onFinish ? onFinish(status, close) : close()); }
-    catch (e) { setErr(e?.response?.data?.detail || e?.message || "Failed to finish task"); loadTasks(); return; }
+    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Failed to finish task"; setErr(msg); onStay?.(msg); loadTasks(); return; }
     finally { setFinishing(false); }
     loadTasks(); onChanged?.();
   };
@@ -882,7 +885,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
-                      <RemindMe task={t} compact onDone={reminded} />
+                      <RemindMe task={t} compact onDone={reminded} onLeave={onLeave} onStay={onStay} />
                       <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
                         <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
                           <ForwardToInboxIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -967,7 +970,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                                 <BlockIcon sx={{ fontSize: 16 }} /></IconButton>
                             </Tooltip>
-                            <RemindMe task={t} compact onDone={reminded} />
+                            <RemindMe task={t} compact onDone={reminded} onLeave={onLeave} onStay={onStay} />
                             <Divider orientation="vertical" flexItem sx={{ mx: 0.25, my: 0.5, borderColor: BORDER }} />
                             <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
                               <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
@@ -996,7 +999,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
                           title="Delete it and teach triage why — the sender keeps writing to you."
                           onClick={() => setConfirmNAT(true)}>Not a task</Button>
-                        <RemindMe task={t} sx={barBtn} onDone={reminded} />
+                        <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} />
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
                         <Button size="small" variant="outlined" sx={barBtn}
                           startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
@@ -1838,7 +1841,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         </DialogActions>
       </Dialog>
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
-      {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} />}
+      {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} onLeave={onLeave} onStay={onStay} />}
       <Confirm open={confirmDone} title="Stop the agent and mark done?"
         text="An agent session is still open on this task. Mark done ends it - what it did so far is written up and saved with the task, then the task closes."
         confirmLabel="Stop it and mark done" onClose={() => setConfirmDone(false)}

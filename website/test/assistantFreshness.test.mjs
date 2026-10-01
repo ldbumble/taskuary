@@ -24,7 +24,7 @@ test("selection freshness preserves explicit action advancement while background
   const events = view.slice(view.indexOf("if (data.events?.length)"), view.indexOf("// the item on the table is live"));
   assert.doesNotMatch(events, /setCurrent|setCurrentItem|surfaceRef|deferInChat/);
   // the grace is 500 ms unless the settle brought the rail back with it (pileAlong.test.mjs)
-  assert.match(view, /deferInChat\(\(\) => surfaceRef\.current\?\.\(\), pile \? 120 : 500\)/);
+  assert.match(view, /deferInChat\(\(\) => surfaceRef\.current\?\.\(\), pile \|\| settled \? 120 : 500\)/);
   // explicit advancement after a confirmed proposal: only a success that settles the item on the table moves the walk (PW-125)
   assert.match(view, /const step = afterConfirm\(p, out, current\);/);
   assert.match(view, /if \(step === "advance"\) advance\(\);/);

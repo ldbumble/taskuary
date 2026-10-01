@@ -27,7 +27,9 @@ const Model = ({ slot, onSave }) => {
   useEffect(() => { setV(slot.model || ""); }, [slot.model, slot.value]);
   const commit = (next) => { if ((next || "") !== (slot.model || "")) onSave({ model: next || "" }); };
   return (
-    <Autocomplete freeSolo size="small" options={[...new Set([...live, ...(slot.choices || [])])]} value={v} disabled={!slot.ready}
+    // A DROPDOWN THAT LOOKS LIKE ONE (the owner, 2026-10-01: "i thought you were going to get dropdown of models?"): freeSolo hid
+    // the arrow and opened only on typing, so a list of five deployments read as an empty text box. Typing a name still works.
+    <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={[...new Set([...live, ...(slot.choices || [])])]} value={v} disabled={!slot.ready}
       onInputChange={(_e, next) => setV(next)}
       onChange={(_e, next) => { setV(next || ""); commit(next || ""); }}
       onBlur={() => commit(v)}

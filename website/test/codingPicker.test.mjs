@@ -67,3 +67,8 @@ test("Settings defaults and backups offer coding CLIs rather than profile names"
   assert.match(defaults, /\{isAgent \? "which CLI" : isJudge \? "what decides" : "which brain"\}/);
   assert.match(defaults, /state\.agent_options \|\| agents/);
 });
+
+test("the model box is a dropdown that LOOKS like one: an arrow, and the list opens on click (2026-10-01)", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/AiDefaults.jsx", import.meta.url)), "utf8");
+  assert.match(src, /<Autocomplete freeSolo forcePopupIcon openOnFocus /);
+});

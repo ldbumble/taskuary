@@ -56,8 +56,9 @@ export const InvoiceLine = ({ meta }) => (
 // `onOpenTask` is optional: on the task page you are already there.
 // `closeout` is the task's pending close-out (merge the PR, close the issue): given beside its reply, the two are
 // ONE decision on this card, and the close-out runs first (verdicts.decide's reply_text).
+// `onMarkDone`: the task's own Mark done (TaskPage puts the task down at the press) - a reply draft's other choice.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, toRow = false }) {
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, toRow = false }) {
   const [text, setText] = useState(null);           // the owner's edit; null means "the draft as filed"
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
   const [busy, setBusy] = useState(false);
@@ -134,7 +135,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
 
   // THE DECISION'S VERBS, one list for the card's buttons and the action row: what presses, what it says, when it is off
   const no = (id) => `${r.ReviewId}:${id}`;
-  const rejectTitle = proposal ? "Dismisses it - nothing runs and nothing is sent" : "Throws this draft away - nothing is sent and the task stays open. Taskuary learns from the rejection.";
+  const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
+  const doneTitle = "Marks the task done without sending - the draft stays on it, to send later if you want";
+  // Redraft / Refresh / Draft with AI: the same handler the in-card button has
+  const canRedraft = !proposal && meta.kind !== "zoho_invoice";
+  const redraftWord = r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI";
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
   const altSends = sendable && !!value.trim();
   const altTitle = co?.alt ? `${co.alt.label} ${co.alt.then}${altSends ? ", then sends the text above exactly as you have it - edit it first if it reads as an accept" : ". The box is empty, so nothing is sent"}.` : "";
@@ -159,12 +164,15 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
     ...(co ? [{ id: no("reject"), label: co.rejectLabel, tone: "q", disabled: busy, run: () => decideBoth("reject"), title: "Leaves the pull request as it is; the task stays open and on you, the reply unsent" }]
-      : [{ id: no("reject"), label: proposal?.rejectLabel || "Reject", tone: "q", disabled: busy, run: () => decide("reject"), title: rejectTitle }]),
+      : proposal ? [{ id: no("reject"), label: proposal.rejectLabel, tone: "q", disabled: busy, run: () => decide("reject"), title: rejectTitle }]
+      // A REPLY DRAFT IS NEVER REJECTED (the owner, 2026-10-01: "rejected is useless - it should be redraft or close task"): Reject
+      // threw the draft away and left the task open, which is neither. Its other choices are Redraft and the task's own Mark done.
+      : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: redraftWord, disabled: busy, run: redraft,
+          title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : []),
+        ...(onMarkDone && r.CanSend !== false ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: "Mark done", disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
   ].map((v) => ({ ...v, group: "decide" }));
-  // Redraft / Refresh / Draft with AI rides in the row too, behind More: the same handler the in-card button had
-  const canRedraft = !proposal && meta.kind !== "zoho_invoice";
-  const redraftWord = r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI";
-  useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length ? [{ id: no("redraft"), group: "more", tone: "s", label: redraftWord, disabled: busy, run: redraft,
+  // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
+  useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: redraftWord, disabled: busy, run: redraft,
     title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])], toRow && moves.length > 0);
 
   if (r.Status === "held") {
@@ -326,8 +334,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {co && <Button size="small" disabled={busy} onClick={() => decideBoth("reject")}
           title="Leaves the pull request as it is; the task stays open and on you, the reply unsent">{co.rejectLabel}</Button>}
         {/* a close-out card is Close out / Decline / Not yet and nothing else (the owner, 2026-09-28: "what does reject
-            reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart */}
-        {!co && <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")} title={rejectTitle}>{proposal?.rejectLabel || "Reject"}</Button>}
+            reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart;
+            and a plain draft is Close out, Redraft (at the row's end) or the task bar's own Mark done (2026-10-01) */}
+        {proposal && <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
         </>}
         <Box sx={{ flex: 1 }} />
         {!toRow && canRedraft && <Button size="small" disabled={busy} onClick={redraft}>

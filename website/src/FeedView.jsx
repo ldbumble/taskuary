@@ -3923,7 +3923,6 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
             title="Marks the task done without sending this draft">Mark done</Button>
         </>
       )}
-      <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>Reject</Button>
       <Box sx={{ flex: 1 }} />
       <Button size="small" variant="outlined" disabled={generating} onClick={generate}>
         {generating ? <CircularProgress size={12} /> : text.trim() ? "Regenerate with AI" : "Generate with AI"}

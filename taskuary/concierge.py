@@ -90,7 +90,9 @@ CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from 
 # Not ours's own question. The rest of CHIP_WORDS is what `first` may still promote from a typed decision.
 # Remind me (`defer`) is on every card with an open task behind it (the owner, 2026-09-25: "remind me should be a walk
 # button") - it asks for the day, then the walk moves on; cannot() drops it where there is no task to put away
-CHIPS = {'review': ('approve', 'close', 'defer', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+# ...and Redraft is back on a draft: its choices are Close out, Redraft or Mark done (the owner, 2026-10-01: "rejected is
+# useless - it should be redraft or close task")
+CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('mine', 'regular_agent', 'next'),
          'report': ('mine', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
          'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'next'),

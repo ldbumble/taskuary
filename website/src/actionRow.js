@@ -9,7 +9,7 @@ import React, { useEffect, useSyncExternalStore } from "react";
 const live = new Map();          // id -> the latest verb (its run closes over the freshest state)
 const owners = new Map();        // owner -> { verbs, ref }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", promote: v.promote !== false, lead: !!v.lead });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 
 export function put(owner, verbs, ref = "") {
@@ -77,6 +77,8 @@ export function rowOf({ list, ref }) {
   // ...and beside the way back in, not behind More: a closed session is as often finished as continued (the owner, 2026-10-01: "mark done
   // should not be inside the more"). Outlined, so the row still has one filled button. A waiting decision still sends it behind More.
   else if (done && done.promote && lead) { agent = [...agent, done]; more = more.filter((v) => v !== done); }
+  // a decision that carries its own close (a reply draft's Mark done, 2026-10-01) is the task's Mark done - never twice in one row
+  if (decide.some((v) => v.closes)) more = more.filter((v) => v.id !== "done");
   const next = by("next")[0] || null;
   if (decide.length > 4) { more = [...decide.slice(4), ...more]; decide = decide.slice(0, 4); }   // the row stays a short line of chips; the rest wait behind More
   return { ref, decide, agent, more, primary, next: next && { ...next, tone: primary ? "s" : "p" },

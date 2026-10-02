@@ -1596,7 +1596,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
-                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow}
+                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>

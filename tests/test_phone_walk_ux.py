@@ -246,7 +246,17 @@ class AnAgentsQuestionComesBackAnsweredTests(unittest.TestCase):
     def test_words_that_are_not_one_of_its_answers_take_the_ordinary_walk(self):
         s = MemoryStore()
         self.assertEqual(remote_assistant.answer_the_agent(s, asking_agent(), 'stop it', picked=True), '')
-        self.assertEqual(remote_assistant.answer_the_agent(s, asking_agent(), 'main', picked=False), '')
+        # ...words typed to an agent that is NOT asking are the assistant's
+        self.assertEqual(remote_assistant.answer_the_agent(s, {**asking_agent(), 'asking': False}, 'main', picked=False), '')
+
+    def test_typed_words_to_an_asking_agent_go_straight_to_it(self):
+        # the owner, 2026-10-02: "if agent asks you a question in whatsapp and you respond it should go directly to the agent"
+        from taskuary import workerstate as ws
+        s = MemoryStore()
+        with mock.patch.object(ws, 'answer_open', return_value={'delivered': True, 'state': 'delivered'}) as sent:
+            said = remote_assistant.answer_the_agent(s, asking_agent(), 'use the staging branch', picked=False)
+        self.assertEqual(sent.call_args[0][2], 'use the staging branch')
+        self.assertIn('Told codex: "use the staging branch"', said)
 
     def test_answer_it_with_no_words_asks_instead_of_saying_yes(self):
         s = MemoryStore()

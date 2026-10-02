@@ -153,8 +153,12 @@ class PollTests(unittest.TestCase):
         # the owner, 2026-09-25: "even if only next we should have poll to go next no?"
         s, _ = armed()
         got = offer(s, {'say': 'x', 'item': ITEM, 'chips': [{'verb': 'next', 'label': 'Next'}]})
-        self.assertEqual(got[-1][1], ['Next'])
+        # ...and WhatsApp sends no poll of one, so the second option is asking the assistant (2026-10-02)
+        self.assertEqual(got[-1][1], ['Next', ra.ASK_SOMETHING])
         self.assertNotIn('Reply with one of', got[-1][0])
+        self.assertEqual(ra.acts_for(s, 'whatsapp', JID)[ra.ASK_SOMETHING], {'t': 'prompt'})
+        # tapped, it only invites the question - no model, and the lone Next still answers its own tap
+        self.assertEqual(sent_to(s, ra.ASK_SOMETHING, poll=True)[-1][0], 'Taskuary:\nGo ahead - type your question.')
 
     def test_a_finished_agents_card_offers_its_report(self):
         # an agent finished the task behind a report that came again - the card asked "want to see the final report?"

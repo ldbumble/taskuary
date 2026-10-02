@@ -23,7 +23,7 @@ def graph(sent, inbox, n=1):
 SENT = [{'id': 's1', 'subject': 'RE: PTO import', 'receivedDateTime': '2026-08-01T10:00:00Z',
          'conversationId': 'c1', 'body': {'content': 'Fixed - rerunning tonight.\nFrom: Sarah\nSent: old'}}]
 INBOX = [{'id': 'i1', 'subject': 'PTO import failing', 'receivedDateTime': '2026-08-01T09:00:00Z',
-          'conversationId': 'c1', 'from': {'emailAddress': {'address': 'sarah@corp.example'}}},
+          'conversationId': 'c1', 'from': {'emailAddress': {'address': 'paula@corp.example'}}},
          {'id': 'i2', 'subject': 'Weekly vendor newsletter', 'receivedDateTime': '2026-08-02T09:00:00Z',
           'conversationId': 'c2', 'from': {'emailAddress': {'address': 'news@vendor.com'}}}]
 
@@ -99,12 +99,12 @@ class HistgenTests(unittest.TestCase):
 class VocabularyFromHistoryTests(unittest.TestCase):
     """The Shared voice vocabulary page's Generate from history: names off the envelopes and subjects,
     the model picks, the owner's list is kept whole and the new terms fill the room left."""
-    INBOX = [{'id': 'i1', 'subject': 'RE: Careview export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
-              'from': {'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}},
+    INBOX = [{'id': 'i1', 'subject': 'RE: Payworth export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
+              'from': {'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}},
              {'id': 'i2', 'subject': 'Intacct sync', 'receivedDateTime': '2026-08-02T09:00:00Z', 'conversationId': 'c2',
-              'from': {'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}}]
-    SENT = [{'id': 's1', 'subject': 'RE: Careview export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
-             'toRecipients': [{'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}], 'body': {'content': 'done'}}]
+              'from': {'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}}]
+    SENT = [{'id': 's1', 'subject': 'RE: Payworth export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
+             'toRecipients': [{'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}], 'body': {'content': 'done'}}]
 
     def test_history_terms_join_the_owners_list_without_displacing_it(self):
         from taskuary import voice
@@ -113,15 +113,15 @@ class VocabularyFromHistoryTests(unittest.TestCase):
         def llm(system, user, max_tokens=0):
             seen['user'] = user
             # numbering, quotes, a duplicate of the owner's own term and an over-long line: each handled per line
-            return '1. Sarah Okafor\n- "Careview"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
+            return '1. Paula Vance\n- "Payworth"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
         with graph(self.SENT, self.INBOX), mock.patch('taskuary.llm.build_llm', return_value=llm):
             detail = histgen.generate(s, 'vocabulary')
-        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Sarah Okafor', 'Careview', 'Northwind Group'])
+        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Paula Vance', 'Payworth', 'Northwind Group'])
         self.assertIn('kept 2, added 3', detail); self.assertIn('1 sent + 2 inbound', detail)
-        self.assertIn('Sarah Okafor: 3', seen['user']); self.assertIn('corp.example: 2', seen['user'])
-        self.assertIn('Careview export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
+        self.assertIn('Paula Vance: 3', seen['user']); self.assertIn('corp.example: 2', seen['user'])
+        self.assertIn('Payworth export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
         self.assertIn('CURRENT LIST: Taskuary, Intacct', seen['user'])
-        self.assertEqual(histgen.STATUS['state'], 'done'); self.assertTrue(any('Sarah Okafor' in l for l in histgen.STATUS['evidence']))
+        self.assertEqual(histgen.STATUS['state'], 'done'); self.assertTrue(any('Paula Vance' in l for l in histgen.STATUS['evidence']))
         self.assertIsNone(s.get_doc('vocabulary'))                        # a setting, never a doc
 
     def test_the_list_never_overflows_and_says_what_did_not_fit(self):
@@ -204,12 +204,12 @@ class TopicRollUpTests(unittest.TestCase):
 class VocabularyFromHistoryTests(unittest.TestCase):
     """The Shared voice vocabulary page's Generate from history: names off the envelopes and subjects,
     the model picks, the owner's list is kept whole and the new terms fill the room left."""
-    INBOX = [{'id': 'i1', 'subject': 'RE: Careview export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
-              'from': {'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}},
+    INBOX = [{'id': 'i1', 'subject': 'RE: Payworth export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
+              'from': {'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}},
              {'id': 'i2', 'subject': 'Intacct sync', 'receivedDateTime': '2026-08-02T09:00:00Z', 'conversationId': 'c2',
-              'from': {'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}}]
-    SENT = [{'id': 's1', 'subject': 'RE: Careview export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
-             'toRecipients': [{'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}], 'body': {'content': 'done'}}]
+              'from': {'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}}]
+    SENT = [{'id': 's1', 'subject': 'RE: Payworth export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
+             'toRecipients': [{'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}], 'body': {'content': 'done'}}]
 
     def test_history_terms_join_the_owners_list_without_displacing_it(self):
         from taskuary import voice
@@ -218,15 +218,15 @@ class VocabularyFromHistoryTests(unittest.TestCase):
         def llm(system, user, max_tokens=0):
             seen['user'] = user
             # numbering, quotes, a duplicate of the owner's own term and an over-long line: each handled per line
-            return '1. Sarah Okafor\n- "Careview"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
+            return '1. Paula Vance\n- "Payworth"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
         with graph(self.SENT, self.INBOX), mock.patch('taskuary.llm.build_llm', return_value=llm):
             detail = histgen.generate(s, 'vocabulary')
-        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Sarah Okafor', 'Careview', 'Northwind Group'])
+        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Paula Vance', 'Payworth', 'Northwind Group'])
         self.assertIn('kept 2, added 3', detail); self.assertIn('1 sent + 2 inbound', detail)
-        self.assertIn('Sarah Okafor: 3', seen['user']); self.assertIn('corp.example: 2', seen['user'])
-        self.assertIn('Careview export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
+        self.assertIn('Paula Vance: 3', seen['user']); self.assertIn('corp.example: 2', seen['user'])
+        self.assertIn('Payworth export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
         self.assertIn('CURRENT LIST: Taskuary, Intacct', seen['user'])
-        self.assertEqual(histgen.STATUS['state'], 'done'); self.assertTrue(any('Sarah Okafor' in l for l in histgen.STATUS['evidence']))
+        self.assertEqual(histgen.STATUS['state'], 'done'); self.assertTrue(any('Paula Vance' in l for l in histgen.STATUS['evidence']))
         self.assertIsNone(s.get_doc('vocabulary'))                        # a setting, never a doc
 
     def test_the_list_never_overflows_and_says_what_did_not_fit(self):

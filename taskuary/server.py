@@ -2193,7 +2193,7 @@ def open_reply(mid: int, body: OpenReplyBody = None):
 
 
 def _reply_nudge(instruction) -> str | None:
-    """The owner's own words on what to say ("tell Ravi it is not owned here"), ridden into the draft."""
+    """The owner's own words on what to say ("tell Omar it is not owned here"), ridden into the draft."""
     said = (instruction or '').strip()
     return f"THE OWNER'S INSTRUCTION FOR THIS REPLY - follow it: {said}" if said else None
 

@@ -321,7 +321,7 @@ class ArrivalsTests(unittest.TestCase):
 # ── what the owner says back, and what actually happens ──────────────────────────────────────
 class WrongThreadTests(unittest.TestCase):
     """A reply must join ITS OWN thread's task, or open a new one - never a third task that merely
-    looks similar. It did: "RE: July 2026 Financials" landed on the Careview task after the
+    looks similar. It did: "RE: July 2026 Financials" landed on the Payworth task after the
     financials task closed, and the reply drafted for that task was about the financials (the owner,
     2026-09-03: "the reply was about another task? How does this happen. really bad????")."""
 
@@ -330,8 +330,8 @@ class WrongThreadTests(unittest.TestCase):
             fin = arrive(s, subject='July 2026 Financials', conv='c:fin', hours=6, who='Gail Moreno',
                          email='gail@vendor.example', body='Please send the July financial package to the VPO list.',
                          llm=brain('task', 'coding'))
-            pcc = arrive(s, subject='Careview custom data extract', conv='c:pcc', hours=5, who='Gail Moreno',
-                         email='gail@vendor.example', body='Compass needs a sample of the Careview AR extract we consume.',
+            pcc = arrive(s, subject='Payworth custom data extract', conv='c:pcc', hours=5, who='Gail Moreno',
+                         email='gail@vendor.example', body='Spendly needs a sample of the Payworth AR extract we consume.',
                          llm=brain('task', 'coding'))
         return fin['task_id'], pcc['task_id']
 
@@ -374,12 +374,12 @@ class WrongThreadTests(unittest.TestCase):
         seen = {}
         def llm(system, user, **kw):
             seen['user'] = user
-            return 'Gail, attached is the Careview sample.'
+            return 'Gail, attached is the Payworth sample.'
         with mock.patch('taskuary.calendar.context_for', return_value=''):
             text = responder.draft_reply(s, pcc, llm=llm)
-        self.assertIn('Careview', seen['user'])
+        self.assertIn('Payworth', seen['user'])
         self.assertNotIn('Paul Rivera', seen['user'])                        # the other thread is not in this draft's context
-        self.assertIn('Careview', text)
+        self.assertIn('Payworth', text)
 
     def test_the_newest_session_is_what_was_done_when_an_agent_ran_twice(self):
         from taskuary import responder
@@ -568,8 +568,8 @@ class ResponseTests(unittest.TestCase):
         for n in range(3):
             arrive(s, subject=f'Northwind Financial Report - .0{n}', body='from Intacct', who='Paula Vance',
                    email='pvance@vendor.example', hours=n + 1, llm=brain('fyi', None))
-        keep = arrive(s, subject='RE: Careview', body='please respond', who='Ravi',
-                      email='ravi@vendor.com', hours=1, llm=brain('fyi', None))
+        keep = arrive(s, subject='RE: Payworth', body='please respond', who='Omar',
+                      email='omar@vendor.example', hours=1, llm=brain('fyi', None))
         self.assertEqual(len(pile(s)), 4)
         words = "skip all the northwind financial reports, that is taken care of"
         p = decide(s, words, 'clear', key=pile(s)[0]['key'])['proposal']
@@ -577,7 +577,7 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(len(pile(s)), 4)                              # nothing swept on the words
         r = run(s, p)
         self.assertEqual(r.json()['outcome']['cleared'], 3)
-        self.assertEqual([i['who'] for i in pile(s)], ['Ravi'])
+        self.assertEqual([i['who'] for i in pile(s)], ['Omar'])
         self.assertEqual(funnel.mutes(s), [])                          # a reason in the words writes no rule (R8)
         self.assertTrue(any('Cleared 3 from the pipe' in b for b in receipts(s)), receipts(s)[-2:])
         self.assertTrue(keep['message_id'])
@@ -652,8 +652,8 @@ class WrongTargetTests(unittest.TestCase):
     def _two(self):
         """A drafted reply on the table; an outage from somebody else waiting behind it."""
         s = store()
-        out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', who='Ravi Shah',
-                     email='ravi@vendor.com', conv='c:inv', hours=1, llm=brain('reply_only', None))
+        out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', who='Omar Keller',
+                     email='omar@vendor.example', conv='c:inv', hours=1, llm=brain('reply_only', None))
         rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Attached.')
         other = arrive(s, subject='Payroll portal is down', body='Nobody in Roanoke can clock in.', who='Elena Ross',
                        email='elena@ours.com', conv='c:outage', channel='teams', hours=0, llm=brain('task', 'general'))
@@ -775,16 +775,16 @@ class OneTruthPerTurnTests(unittest.TestCase):
         self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])        # still on the table
 
     def test_a_second_decision_replaces_the_proposal_on_the_table(self):
-        """"approve and remember that Ravi handles refunds" is two decisions: one proposal is on the table at a
+        """"approve and remember that Omar handles refunds" is two decisions: one proposal is on the table at a
         time, so the second replaces the first - the approve is cancelled, never sent on the side."""
         s, tid, rid, item = ResponseTests()._drafted()
         first = decide(s, 'approve', 'approve', key=item['key'])['proposal']
-        second = decide(s, 'and remember that Ravi handles refunds', 'remember', key=item['key'], text_arg='Ravi handles refunds')['proposal']
+        second = decide(s, 'and remember that Omar handles refunds', 'remember', key=item['key'], text_arg='Omar handles refunds')['proposal']
         self.assertEqual(second['kind'], 'memory.remember')
         self.assertEqual(operations.get(s, first['id'])['status'], 'cancelled')
         self.assertEqual(s.list_memories(), [])
         run(s, second)
-        self.assertEqual([m['Note'] for m in s.list_memories()], ['Ravi handles refunds'])
+        self.assertEqual([m['Note'] for m in s.list_memories()], ['Omar handles refunds'])
         self.assertEqual(s.get_review(rid)['Status'], 'pending')                     # the approve never went out
 
 
@@ -1100,8 +1100,8 @@ class WalkOrderTests(unittest.TestCase):
             asked = arrive(s, subject='Refund for Mrs Garnett', conv='c:ask', hours=4, who='Nina', email='nina@ours.com',
                            body='Please approve the refund.', llm=brain('task', 'coding'))
         s.update_task(agent['task_id'], {'Status': 'in_progress'}, 'router')
-        draft = arrive(s, subject='Where is the June invoice?', conv='c:draft', hours=6, who='Ravi',
-                       email='ravi@vendor.com', body='Can you send it?', llm=brain('reply_only', None))
+        draft = arrive(s, subject='Where is the June invoice?', conv='c:draft', hours=6, who='Omar',
+                       email='omar@vendor.example', body='Can you send it?', llm=brain('reply_only', None))
         rep = s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Nightly export',
                              'Subject': 'Nightly export - 0 errors', 'FromName': 'Nightly export',
                              'SentAt': ago(3), 'BodyText': 'all clear', 'Status': 'feed'})

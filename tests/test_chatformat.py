@@ -15,7 +15,7 @@ DIGEST = """\U0001f64b People want
 2. Autumn Evans wants resolution on two refund threads.
 
 \U0001f680 In flight
-1. TQ-0646 is finished for the Careview thread.
+1. TQ-0646 is finished for the Payworth thread.
 
 \U0001f50e What happened
 1. No meetings are listed for today.

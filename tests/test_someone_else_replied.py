@@ -141,7 +141,7 @@ class ChatIdentityTests(unittest.TestCase):
             s.add_message({'ExternalId': f'tm{i}', 'ConversationId': 'teams:19:grp', 'Channel': 'teams', 'Subject': 'VPN Helpdesk',
                            'FromEmail': None, 'FromName': name, 'SentAt': when, 'BodyText': 'body', 'Status': 'filed'})
         return s
-    ARRIVING = {'external_id': 'tnew', 'channel': 'teams', 'conversation_id': 'teams:19:grp', 'from_name': 'Sam Okafor',
+    ARRIVING = {'external_id': 'tnew', 'channel': 'teams', 'conversation_id': 'teams:19:grp', 'from_name': 'Marcus Reed',
                 'subject': 'VPN Helpdesk', 'body': 'Anyone able to reset my VPN token?'}
 
     def test_a_participant_with_no_address_still_counts(self):
@@ -155,7 +155,7 @@ class ChatIdentityTests(unittest.TestCase):
         self.assertEqual(alone, {})
 
     def test_the_asker_by_name_is_still_the_asker(self):
-        out = ingest.others_on_thread(self._chat(('Sam Okafor', '2026-08-21 13:00:00')), self.ARRIVING, (OWNER,))
+        out = ingest.others_on_thread(self._chat(('Marcus Reed', '2026-08-21 13:00:00')), self.ARRIVING, (OWNER,))
         self.assertEqual(out, {})
 
 

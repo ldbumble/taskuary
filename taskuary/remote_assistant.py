@@ -566,7 +566,9 @@ def morning_line(store, now=None, force: bool = False) -> int:
     from . import funnel
     now = now or _dt.now()
     st = store.get_settings()
-    if str(st.get(MORNING_KEY, '1')).strip() in ('0', 'false', 'off'): return 0
+    # OFF UNLESS TURNED ON (the owner, 2026-10-02: "it should not be sending to whatsapp anything unless the user asks the
+    # assistant a question"): the day's opener comes with "Walk me through my tasks", never on its own
+    if str(st.get(MORNING_KEY, '0')).strip() not in ('1', 'true', 'on'): return 0
     today = now.strftime('%Y-%m-%d')
     if not force and (str(st.get(MORNING_AT) or '') == today or now.hour < 6): return 0
     doors = doorways(store)
@@ -652,6 +654,9 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 forget_offered(store, channel, chat)
                 send(store, channel, chat, _continue(store, pending, question), connector_id)
                 return
+            if act and act.get('t') == 'prompt':
+                send(store, channel, chat, 'Go ahead - type your question.', connector_id)
+                return
             if act:
                 send(store, channel, chat, run_act(store, act, item), connector_id)
                 return
@@ -690,7 +695,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
 
 
 def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: str = 'owner') -> str:
-    """The owner picked one of the answers THE AGENT offered: send it, as typed, to the run that asked.
+    """The owner picked one of the answers THE AGENT offered, or typed one while it asks: send it, as written, to the run.
 
     This is the desktop's choice button, in a chat. It deliberately goes nowhere near the model: the
     words are the agent's own, the request they answer is the one on the item, and interpreting them
@@ -699,8 +704,12 @@ def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: 
     when this was not one of those picks and the ordinary walk should take the turn.
     """
     from . import workerstate as ws
-    if not picked or not item or item.get('kind') != 'agent': return ''
-    if words not in agent_answers(item): return ''
+    if not item or item.get('kind') != 'agent': return ''
+    # ...and TYPED words too, while the agent on the table is asking (the owner, 2026-10-02: "if agent asks you a question
+    # in whatsapp and you respond it should go directly to the agent") - the card says it goes straight in, so it does;
+    # several questions are one typed line, split by workerstate.answer_open
+    if picked and words not in agent_answers(item): return ''
+    if not picked and not item.get('asking'): return ''
     out = ws.answer_open(store, int(item['tid']), words, actor) if item.get('tid') else {'delivered': False, 'state': 'no_request'}
     who = item.get('agent') or 'the agent'
     if out.get('delivered'): return f'Told {who}: "{words}".'
@@ -1575,8 +1584,10 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
     elif it.get('kind') == 'agent' and not it.get('paused') and it.get('lane') != 'working':
         asked = ' '.join(str((it.get('tail') or [''])[0]).split()) if it.get('asking') else ''
         if asked: body.append(f'**{_cut(asked, 600)}**')
-        body.append('Pick an answer below, or type your own - it goes straight in.' if it.get('choices')
-                    else 'Type your answer - it goes straight in.')
+        # "goes straight in" only where it does: an agent ASKING takes typed words as its answer (answer_the_agent)
+        body.append(('Pick an answer below, or type your own - it goes straight in.' if it.get('choices')
+                     else 'Type your answer - it goes straight in.') if it.get('asking')
+                    else 'Pick below, or tell me what to do with it.')
     elif draft:
         via = _VIA.get(str(it.get('channel') or '').lower(), 'by email')
         body.append('Your draft - it goes when you pick Close out:' if is_own(it) else f'Your reply to {story_who(it)} {via} - it goes when you pick Close out:')
@@ -1752,6 +1763,7 @@ def acts_for(store, channel: str, chat: str) -> dict:
     except ValueError: return {}
 
 
+ASK_SOMETHING = 'Ask the assistant something'
 POLL_LABEL = 100                               # WhatsApp's option length, in UTF-16 units (whatsapp/poll.mjs)
 
 
@@ -1829,6 +1841,13 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
         # still answers - the list is remembered above - it is only not printed twice. Numbered lines that are the
         # CONTENT (an fyi batch's members, above the lead-in) stay.
         text = _CHOICES_BLOCK.sub('', str(text or '')).rstrip()
+    # ...and WhatsApp will not send a poll of ONE (the bridge needs two), so a lone choice - Next on a closed task, one
+    # "Open TQ-…", one Undo - showed nothing to tap. The second option is the other thing the owner can always do
+    # (the owner, 2026-10-02: "just ask assistant question option")
+    if channel == 'whatsapp' and len(offered) == 1:
+        offered = offered + [ASK_SOMETHING]
+        store.set_setting(f'{OFFERED_KEY}:{channel}:{chat}', json.dumps(offered), 'assistant')
+        store.set_setting(f'{ACTS_KEY}:{channel}:{chat}', json.dumps({**acts_for(store, channel, chat), ASK_SOMETHING: {'t': 'prompt'}}), 'assistant')
     msgs = []
     for part in str(text or '').split(chatformat.BREAK):
         shown = chatformat.render(part, channel)

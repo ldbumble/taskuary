@@ -342,7 +342,7 @@
       "label": "A morning line in the chat",
       "type": "switch",
       "desc": "Once a day, the assistant's chat says what is waiting and offers the three ways in: walk me through my tasks, set up Taskuary, set up a report.",
-      "help": "On (the default once a chat is chosen): the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the three scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day. Set-up is always offered: there is always more to set up, and from a chat it opens on what is connected.\n\nOff: the chat speaks first only for a hand-off, a review ping or a report aimed at it."
+      "help": "Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the three scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day. Set-up is always offered: there is always more to set up, and from a chat it opens on what is connected.\n\nOff: the chat speaks first only for a hand-off, a review ping or a report aimed at it."
     },
     "vision_enabled": {
       "group": "Attachments & images",

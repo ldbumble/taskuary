@@ -384,12 +384,32 @@ def _task_whole(store, tid: int) -> str:
     return _cut('\n'.join(out), 7000)
 
 
+# AN IDEA OR A MEETING HAS NO THREAD (the 2026-10-01 press audit): told nothing about it, the model looked up message 4321 and
+# TQ-0123 - the examples in the tool index - and put them to the owner as "which do you mean?". It is told plainly, a look-up
+# that misses says it again, and a reference that does not exist never reaches the owner (unreal_refs).
+NO_THREAD = ('this item has no thread and no task yet - no message id and no TQ ref belong to it, so never name or look one up '
+             'for it; what is written here is all there is')
+
+def no_thread(item: dict | None) -> bool:
+    return bool(item) and item.get('kind') not in ('fyis',) and not item.get('mid') and not item.get('tid')
+
+_TQ_REF = re.compile(r'\bTQ-(\d{1,7})\b', re.I)
+_MSG_REF = re.compile(r'\bmessage\s+#?m?(\d{2,9})\b', re.I)
+
+def unreal_refs(store, text: str, said: str = '') -> list:
+    """The task and message references in `text` that name nothing in the store - except the ones the owner said himself."""
+    text, own = str(text or ''), {int(n) for n in _TQ_REF.findall(said or '')} | {-int(n) for n in _MSG_REF.findall(said or '')}
+    return ([f'TQ-{int(n):04d}' for n in dict.fromkeys(_TQ_REF.findall(text)) if int(n) not in own and not store.get_task(int(n))]
+            + [f'message {n}' for n in dict.fromkeys(_MSG_REF.findall(text)) if -int(n) not in own and not store.get_message(int(n))])
+
+
 def facts(store, item: dict, whole: bool = False) -> str:
     """What the model is handed about ONE item: the item's own words, then the body, the draft,
     the agent's screen or the meeting, whichever it has. Bounded, so a turn stays fast."""
     if not item: return '(no item on the table - the owner is just talking)'
     lines = [f"ITEM [{item['kind']} / {funnel.LANE_WORDS.get(item['lane'], (item['lane'],))[0]}]: {item['title']}",
              f"from: {item.get('who') or '?'} | when: {item.get('when') or '?'} | why it is here: {item.get('why') or ''}"]
+    if no_thread(item): lines.append(f"NO THREAD: {NO_THREAD}.")
     if item.get('tid'):
         now = task_now(store, item['tid'])
         if now: lines.append(now)
@@ -1538,6 +1558,14 @@ def know(store, q: str) -> str:
     found = NEWLINE.join(x.strip() for x in parts if x.strip())
     return found or (f'Nothing the company has written down matches "{q}" - not in the Hub, the documents or the kept facts. '
                      'Say so plainly; a report or the timeline may still hold it (reports.list, timeline.search).')
+
+
+def _read(store, item: dict | None, call: dict) -> str:
+    """A look-up in a turn: a task or message that does not exist, asked for over an item with no thread, says why."""
+    found = read_op(store, call['kind'], call['params'])
+    if no_thread(item) and call['kind'] in ('task.read', 'message.read') and found.startswith('There is no'):
+        found += f" The item on the table: {NO_THREAD}."
+    return found
 
 
 def read_op(store, kind: str, params: dict) -> str:
@@ -3035,7 +3063,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         for n in range(READ_ROUNDS):
             if not (call and toolcatalog.is_read(call['kind'])): break
             did_read = True; _strays(item, call)
-            found = read_op(store, call['kind'], call['params'])
+            found = _read(store, item, call)
             trace and trace('tool', call['kind'], {'params': call['params']})
             then = (LAST_READ if n == READ_ROUNDS - 1 else
                     'Answer them with what you just read, briefly. If it did not answer them and another look-up would, CALL that one now - never offer to look.')
@@ -3062,7 +3090,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         for _ in range(3):
             _strays(item, call)
             if toolcatalog.is_read(call['kind']):
-                found = read_op(store, call['kind'], call['params'])
+                found = _read(store, item, call)
                 trace and trace('tool', call['kind'], {'params': call['params']})
                 ask = (f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\nThe owner asked: {text}\n"
                        'Now CALL the action again with the exact name you read, or answer them in plain words.')
@@ -3183,6 +3211,21 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         chips = [{'label': 'Try again', 'ask': text}, *(chips_for(store, item) or walk_chips(len(p['items'])))]
         rec('assistant', say_)
         return {'say': say_, 'options': [], 'chips': chips, 'decision': None, 'error': True}
+    # NEVER A REFERENCE THAT DOES NOT EXIST: a choice naming one is dropped, and an answer naming one is asked for again once
+    options = [o for o in options if not unreal_refs(store, o, text)]
+    bad = unreal_refs(store, reply, text)
+    if bad and failed is None:
+        try:
+            raw = str(llm(system, f"{table}\n\nYour answer named {', '.join(bad)}, which do not exist"
+                                  + (f" - {NO_THREAD}" if no_thread(item) else '') + f".\nThe owner asked: {text}\n"
+                                  'Answer them again from what you know, naming no reference that does not exist, and CALL nothing.',
+                          max_tokens=MAX_TOKENS) or '').strip()
+        except Exception as e:
+            logger.warning(f'concierge: the second answer failed - {e}'); raw = ''
+        raw, _ = parse_call(raw); raw, _ = parse_decision(raw)
+        reply, options = parse_options(raw)
+        if unreal_refs(store, reply, text): reply = ''
+        options = [o for o in options if not unreal_refs(store, o, text)]
     # a brain that answered with nothing is not "no AI": say what happened, never the missing-connector line
     if not reply: reply = fallback(item, False, p['items'], brain=True)
     chips = chips_for(store, item) or walk_chips(len(p['items']))

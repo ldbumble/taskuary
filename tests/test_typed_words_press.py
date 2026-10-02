@@ -109,4 +109,33 @@ class ANamedTaskIsFound(unittest.TestCase):
         self.assertIn('ANOTHER task', seen[0])
 
 
+class NoThreadNoInventedRefs(unittest.TestCase):
+    def test_an_idea_is_said_to_have_no_thread_and_no_task(self):
+        s = T.store(); item = an_idea(s)
+        llm, seen = scripted('It is about the Payworth seat count.')
+        ask(s, 'summarize the thread', item['key'], llm)
+        self.assertIn('no thread and no task', seen[0])
+
+    def test_a_reference_that_does_not_exist_never_reaches_the_owner(self):
+        s = T.store(); item = an_idea(s)
+        llm, seen = scripted('There is no task TQ-0123 - which do you mean?\nOPTIONS: TQ-0123 | the item on the table',
+                             'Nobody asked - the Advisor raised it: the Payworth renewal is close.')
+        out = ask(s, 'who asked and when?', item['key'], llm)
+        self.assertNotIn('TQ-0123', out['say'] + ' '.join(out['options']))
+        self.assertIn('TQ-0123', seen[-1])
+
+    def test_a_reference_the_owner_named_himself_may_be_answered_about(self):
+        s = T.store(); item = an_idea(s)
+        llm, seen = scripted('There is no task TQ-0999 - that number was never used.')
+        out = ask(s, 'what happened with TQ-0999?', item['key'], llm)
+        self.assertIn('TQ-0999', out['say'])
+        self.assertEqual(len(seen), 1)
+
+    def test_a_look_up_of_a_task_that_does_not_exist_says_the_table_has_none(self):
+        s = T.store(); item = an_idea(s)
+        llm, seen = scripted(call('task.read', ref='TQ-0123'), 'It is the Payworth seat count.')
+        ask(s, "what's the latest on it?", item['key'], llm)
+        self.assertIn('no thread and no task', seen[1])
+
+
 if __name__ == '__main__': unittest.main()

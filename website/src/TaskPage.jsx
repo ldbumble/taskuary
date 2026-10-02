@@ -1358,6 +1358,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
                         </Button>}
+                        {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
+                            the pick resumes this start - the same road a start that ran into the question takes */}
+                        {!handOff && startRepo === "" && <>
+                          <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>Pick a repo first</Typography>
+                          <Button size="small" variant="outlined" sx={chipBtn} disabled={!!startingAgent}
+                            startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
+                            title="Which checkout the session works in - the session starts once you pick"
+                            onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>pick a repo</Button>
+                        </>}
                         {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
                           startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save result</Button>}

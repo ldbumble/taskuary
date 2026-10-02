@@ -51,7 +51,12 @@ LAST = {}                       # sid -> the newest frame seen by any relay: wha
 _CACHE = {}                     # sid -> (when, state)
 _START_LOCKS = {}               # sid -> one launch at a time; session mount + first prompt race otherwise opens two Chromes
 _START_LOCKS_GUARD = threading.Lock()
-_KEPT = re.compile(r'^\{\s*"type"\s*:\s*"(frame|url)"')   # the head of the message, before paying for a 50KB parse
+# WHICH MESSAGE THIS IS, wherever its "type" sits. This anchored on the HEAD - `{"type":"frame"` - and
+# agent-browser 0.38.2 writes `{"data":...,"type":"frame"}`, data first: every frame failed the match, LAST
+# never held one, and Snapshot said "no frame yet" over a page that was plainly painting (2026-10-02). A
+# search finds the key in any order, and it cannot be fooled by the payload: base64 holds no quote, and a
+# url that spells `"type":"frame"` inside its string arrives with those quotes escaped.
+_KIND = re.compile(r'"type"\s*:\s*"(frame|url)"')
 
 
 def installed() -> bool: return bool(shutil.which('agent-browser'))
@@ -72,7 +77,10 @@ IDLE_MS = '0'
 # SECOND site, closes the browser: measured 2026-09-18 outside Taskuary (launch, wikipedia, a login
 # page, dead at +34s; example.com then example.org, dead at +40s; one site alone, or no --restore, or
 # this set to 0: alive for minutes). The pane went white, and the next command opened a fresh browser
-# without the restored login. The per-command save keeps what the owner typed; the clock only broke it.
+# without the restored login. With the clock off there is NO per-command save either: 0.37.1 and 0.38.2
+# alike write the restore state only when the browser closes (close(), the pty's end) - so a login the
+# owner typed survives a session that ends cleanly, and not one whose daemon is killed. Still required on
+# 0.38.2, as is the env-borne idle timeout above (re-measured 2026-10-02).
 AUTOSAVE_MS = '0'
 def env(sid: str) -> dict:
     return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS,
@@ -110,16 +118,21 @@ def state(sid: str, fresh: bool = False) -> dict:
 
 def remember(sid: str, raw: str):
     """Keep the newest frame and the current page per session - what Snapshot files, and what the
-    listing shows as the URL between polls. Cheap check first: a frame is ~50KB of base64 and
-    only frames and url messages matter here."""
-    if not _KEPT.match(raw): return
-    try: m = json.loads(raw)
-    except ValueError: return
-    cur = LAST.setdefault(sid, {'data': '', 'seq': 0, 'url': '', 'at': 0})
-    if m.get('type') == 'frame' and m.get('data'):
-        cur.update(data=m['data'], seq=m.get('seq') or 0, at=time.time())
-    elif m.get('type') == 'url' and m.get('url'):
-        cur['url'] = m['url']
+    listing shows as the URL between polls. A frame is ~50KB of base64 at up to MAX_FPS, and only
+    Snapshot ever reads one, so it is kept AS SENT and parsed there - once per press, not per frame."""
+    k = _KIND.search(raw)
+    if not k: return
+    cur = LAST.setdefault(sid, {'frame': '', 'url': '', 'at': 0})
+    if k.group(1) == 'frame': cur.update(frame=raw, at=time.time()); return
+    try: u = json.loads(raw).get('url')
+    except (ValueError, AttributeError): return
+    if u: cur['url'] = u
+
+
+def _frame(raw: str) -> str:
+    try: m = json.loads(raw or '{}')
+    except ValueError: return ''
+    return (m.get('data') or '') if isinstance(m, dict) and m.get('type') == 'frame' else ''
 
 
 async def relay(ws, sid: str):
@@ -159,7 +172,8 @@ def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:
     task's message, plus a comment naming the page - so the record of the work shows the page,
     not just that a browser was open."""
     last = LAST.get(sid) or {}
-    if not last.get('data'): raise ValueError('no frame yet - the browser has not painted for this session')
+    data = _frame(last.get('frame'))
+    if not data: raise ValueError('no frame yet - the browser has not painted for this session')
     if not tid:
         from . import terminal as hub_term
         t = hub_term.get(sid); tid = t.task_id if t else None
@@ -167,7 +181,7 @@ def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:
     msgs = store.list_messages(tid)
     if not msgs: raise ValueError('the task has no message to attach the snapshot to')
     from .artifacts import attachment_dir
-    mid, raw = msgs[0]['MessageId'], base64.b64decode(last['data'])
+    mid, raw = msgs[0]['MessageId'], base64.b64decode(data)
     name = f"browser-{datetime.now():%Y%m%d-%H%M%S}.jpg"
     p = attachment_dir(mid) / name
     p.write_bytes(raw)

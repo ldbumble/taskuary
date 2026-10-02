@@ -106,8 +106,9 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
   assert.match(source, /conversation: generalStarted/);
   // ...under the one name every ending wears, a chat's and a coding run's alike (2026-09-25)
-  // ...named for what is left to do: the session has ended, so it saves the result (T15, 2026-09-25)
-  assert.ok(source.includes("onClick={wrapUp}>Save result</Button>}"), "the finished chat needs its own close-out");
+  // ...ONE name for the write-up, live or ended (2026-10-02: "Save result" and "Save and end session" were one button twice)
+  assert.ok(source.includes("onClick={wrapUp}>Save and end session</Button>}"), "the finished chat needs its own close-out");
+  assert.ok(!source.includes(">Save result<") && !source.includes('label: "Save result"'));
   assert.ok(!source.includes("Save this conversation's result") && !source.includes("Save stopped run result"));
   // interrupted work says so on the task page, not only in the list row
   assert.match(source, /interruptedTask && <Chip/);

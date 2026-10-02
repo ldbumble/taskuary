@@ -86,6 +86,18 @@ class DocsReachThePromptTests(unittest.TestCase):
                                llm=lambda sysm, usr, **k: (seen.update(p=sysm + usr), 'ok')[1])
         self.assertFlows(seen['p'], [MARK['soul'], NOTE])
 
+    def test_the_handoff_writer_carries_the_agents_whole_result(self):
+        """Hand it to a person is also how a finished agent's result is sent on (2026-10-02), so the newest
+        CODER REPORT rides whole - task_context alone cut it to 300 characters."""
+        s = seeded()
+        tid = _task(s)
+        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nan older run')
+        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\n' + 'x' * 500 + ' THE-END-OF-IT')
+        seen = {}
+        outbound.draft_handoff(s, tid, 'gail@northwind.example', None, llm=lambda sysm, usr, **k: (seen.update(u=usr), 'ok')[1])
+        self.assertIn("The agent's result:\n" + 'x' * 500 + ' THE-END-OF-IT', seen['u'])
+        self.assertNotIn("The agent's result:\nan older run", seen['u'])
+
     def test_style_holds_an_untouched_template_out_of_prompts(self):
         """The one doc that is deliberately silent until it says something real - headings alone
         are not a voice, and the shipped placeholder must not ride into a draft as noise."""

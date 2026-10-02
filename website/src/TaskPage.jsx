@@ -799,7 +799,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         disabled={!!wrapping} sx={barContinue ? barBtn : primaryBtn}
         startIcon={<DoneAllIcon sx={{ fontSize: 16, color: barContinue ? "#6f8a6e" : undefined }} />}
         title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
-        onClick={wrapUp}>Save result</Button>}{/* the session has ended: nothing is left to END (T15) */}
+        onClick={wrapUp}>Save and end session</Button>}{/* ONE NAME for the write-up (the owner, 2026-10-02): an ended session has nothing left to end */}
       {!isGeneral && <>
         {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
         <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
@@ -807,13 +807,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue || canSave ? "#6f8a6e" : undefined }} />}
           title="A fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
           onClick={() => setRestartOpen(true)}>Run another agent</Button>
-      </>}
-      {report && <>
-        {isGeneral && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
-        <Button size="small" variant="outlined" sx={barBtn}
-          startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
-          title="Forwards the saved result to a person. The AI writes it, you send it."
-          onClick={() => setHandoff(true)}>Send this result to someone</Button>
       </>}
     </Box>
   );
@@ -852,13 +845,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       { id: "nat", group: "more", label: "Not a task", run: () => setConfirmNAT(true), title: "Delete it and teach triage why — the sender keeps writing to you." },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "Remind me", run: (e, a) => setRemindAt(a || e?.currentTarget),
         title: "Put it away until a day; it is back on your work rail that morning" },
-      { id: "hand", group: "more", label: "Hand it to a person", run: () => setHandoff(true), title: "Not ours to do — the AI writes the forward, you send it." },
+      { id: "hand", group: "more", label: "Hand it to a person", run: () => setHandoff(true),
+        title: report ? "Forwards it to a person with the agent's result in it — the AI writes the forward, you send it." : "Not ours to do — the AI writes the forward, you send it." },
       { id: "reshape", group: "more", label: "Split or merge", run: () => setReshape(true), title: "Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats." },
-      ...(!liveSession && canSave && agentBar ? [{ id: "save-result", group: "more", label: "Save result", disabled: !!wrapping, run: wrapUp,
-        title: "Writes up what this session did and files it as the task's result. The task stays open until you press Mark done." }] : []),
+      // ...the same write-up once the session has ended by itself: one button, one name (the owner, 2026-10-02 - its own name made it look like a second button)
+      ...(!liveSession && canSave && agentBar ? [{ id: "save-end", group: "more", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
+        title: "Writes up what the session did and files it as the task's result. The task stays open until you press Mark done." }] : []),
       ...(!liveSession && continueHere && !isGeneral && agentBar ? [{ id: "run-another", group: "more", label: "Run another agent", run: () => setRestartOpen(true),
         title: "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation." }] : []),
-      ...(!liveSession && report ? [{ id: "send-result", group: "more", label: "Send this result to someone", run: () => setHandoff(true), title: "Forwards the saved result to a person. The AI writes it, you send it." }] : []),
     ];
   useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
   return (
@@ -1285,10 +1279,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               onClick={() => setOpenStage("agent")}>
                               {report || detail?.transcript ? "Run another agent" : "Start an agent"}</Button>
                           )}
-                          {report && <Tooltip title="Send this result to someone">
-                            <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
-                              <ForwardToInboxIcon sx={{ fontSize: 15 }} /></IconButton>
-                          </Tooltip>}
                         </Box>
                       : null} />
                   </Box>
@@ -1377,7 +1367,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </>}
                         {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
-                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save result</Button>}
+                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save and end session</Button>}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
                             become the profile, brain and model, and the next press starts it */}
                         {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
@@ -1625,7 +1615,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
-                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent}
+                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} onRemind={(e, a) => setRemindAt(a || e?.currentTarget)}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>

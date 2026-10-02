@@ -657,7 +657,8 @@ HANDOFF_SYSTEM = (
     'receive: one short paragraph of what is being asked and why it is theirs, then the '
     'concrete details (systems, names, ids, errors) as short lines, then what you need back. '
     'No greeting fluff, no "I hope this finds you well", no markdown headers. '
-    'Plain text, under 200 words, in the owner\'s voice.')
+    'Plain text, under 200 words, in the owner\'s voice. When an agent\'s result is given, pass on what it '
+    'found and did - that result is what is being handed over.')
 
 
 def draft_handoff(store, task_id: int, to: str, note: str = None, llm=None) -> str:
@@ -667,6 +668,11 @@ def draft_handoff(store, task_id: int, to: str, note: str = None, llm=None) -> s
     llm = llm or build_llm(store)
     if not llm: raise RuntimeError('no AI connector is set up to write the message')
     ctx = hub_agents.task_context(store, task_id)
+    # ONE HAND-OFF, WITH THE RESULT IN IT (the owner, 2026-10-02: "Send this result to someone" and "Hand it to a person" were
+    # the same button): task_context cuts every note to 300 characters, so the agent's newest report rides whole
+    rep = next((str(c.get('Body') or '') for c in reversed(store.list_comments(task_id))
+                if str(c.get('Body') or '').startswith('CODER REPORT')), '')
+    if rep: ctx += f"\n\nThe agent's result:\n{rep.removeprefix('CODER REPORT').strip()[:4000]}"
     ask = f'Forward this to {to}.' + (f' The owner adds: {note}' if note else '')
     out = llm(f"{HANDOFF_SYSTEM}\n\n{store.doc('soul') or ''}", f'{ask}\n\n{ctx}', max_tokens=700)
     return (out or '').strip()

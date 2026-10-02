@@ -2417,11 +2417,15 @@ def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: Backgr
     if requested and requested not in ('general', 'coding'):
         raise HTTPException(422, 'kind must be general or coding')
 
+    # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Continue session
+    # instead). Another dispatch on a live session either started a second worker or typed into the first unasked; every
+    # door - button, chip, chat word, operation - comes through here, so the refusal is said here.
+    live = hub_term.session_for(tid)
+    if live and live.alive:
+        who = getattr(live, 'agent', None) or getattr(live, 'label', None) or 'An agent'
+        raise HTTPException(409, f'{who} is already working on this task - Continue that session instead of sending it to another agent'
+                                 + ('' if not requested or requested == task_kind else ', or stop it before changing agent type'))
     if requested and requested != task_kind:
-        live = hub_term.session_for(tid)
-        if live and live.alive:
-            who = getattr(live, 'agent', None) or getattr(live, 'label', None) or 'agent'
-            raise HTTPException(409, f'{who} is already working on this task; stop that agent before changing agent type')
         was_kind, was_route = operations.verdict_of_task(store, tid)
         store.update_task(tid, {'Kind': requested}, ACTOR)
         operations.record_direct(store, 'dispatch.prepare', tid, {'kind': requested}, ACTOR, {'kind': requested}, verdict=was_kind, route_id=was_route)

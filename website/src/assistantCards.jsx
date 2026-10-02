@@ -27,6 +27,7 @@ import { says, subState } from "./laneSays.js";
 const KICK = { asking: "asked", approval: "asks permission", stalled: "is stuck", parked: "is waiting on you" };
 import { sendBlockLine, draftState } from "./sendState.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
+import { agentRuns } from "./taskFilter.js";
 import { progressLine } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
 import { agentCardView } from "./agentCardView.js";
@@ -1126,7 +1127,8 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     catch (e) { setErr(errText(e)); }
     setBusy("");
   };
-  const handIt = card.mid ? () => startAgent(suggestedKind) : card.tid ? startTask : null;
+  // NOT WHILE AN AGENT RUNS ON IT (the owner, 2026-10-01): its own session is the way in, and the dispatch door refuses it too
+  const handIt = agentRuns(card) ? null : card.mid ? () => startAgent(suggestedKind) : card.tid ? startTask : null;
   const verb = !asks ? null : own || mineAlone
     ? handIt && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={handIt} sx={moveSx}>
         {busy === "agent" ? "Handing it over…" : hand}</Button>

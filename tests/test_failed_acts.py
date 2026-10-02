@@ -61,7 +61,7 @@ class AFailureCarriesItsWayOnTests(unittest.TestCase):
 
     def test_the_models_pick_leads_and_its_sentence_follows_the_fact(self):
         s = store(); tid, rid, item, p = drafted(s)
-        got = failed_send(s, tid, rid, item, p, model='Their mail server bounced it - the address may be wrong. Mark it done and ring them.\nPICK: 2')
+        got = failed_send(s, tid, rid, item, p, model='Their mail server bounced it - the address may be wrong. Mark it done and ring them.\nPICK: 3')   # Try again, Redraft it, Mark done
         self.assertIn('bounced', got['receipt']); self.assertNotIn('PICK', got['receipt'])
         self.assertTrue(got['receipt'].startswith('Not sent'))
         self.assertEqual(got['chips'][0]['verb'], 'close')

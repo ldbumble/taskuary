@@ -255,7 +255,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
       if (data.send_error) throw new Error(data.send_error);
       const message = verb === "approve"
         ? (r.Kind === "action" ? "Action completed." : `Sent to ${reviewTarget(r)}.`)
-        : verb === "reject" ? "Action dismissed; nothing was run." : "Dismissed; no reply was sent.";
+        : verb === "reject" ? "Action dismissed; nothing was run." : "Marked done; no reply was sent.";
       setEdits((old) => { const next = { ...old }; delete next[r.ReviewId]; return next; });
       await refresh(message);
     } catch (e) { setError(errText(e)); }
@@ -323,7 +323,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
             )}
             <Button size="small" variant="outlined" disabled={!!busy} startIcon={<RefreshRoundedIcon />}
               onClick={() => redraft(review)}>{busy.includes("redraft") ? "Drafting…" : review.DraftText ? "Redraft" : "Draft with AI"}</Button>
-            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} onClick={() => decide(review, "no_reply")}>Dismiss</Button>
+            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} title="Marks the task done without sending this draft" onClick={() => decide(review, "no_reply")}>Mark done</Button>
           </>}
           <Box sx={{ flex: 1 }} />
           <Button size="small" onClick={() => onNavigate?.("Assistant")}>All that needs you</Button>

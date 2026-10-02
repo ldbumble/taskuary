@@ -730,6 +730,10 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
           } })),
           ...(cop?.alt ? [{ verb: cop.alt.verb, label: busy === cop.alt.verb ? cop.alt.busy : cop.alt.label, title: `${cop.alt.label} ${cop.alt.then}.`,
           disabled: !!busy || !rv, onClick: () => decide(cop.alt.verb) }] : []),
+        // a draft's choices are Close out, Redraft or Mark done (the owner, 2026-10-01: "rejected is useless - it should be redraft
+        // or close task") - an empty or stale draft has its redraft as the move itself
+        ...(rv && !action && !stale && value.trim() ? [{ verb: "redraft", label: busy === "redraft" ? "Drafting…" : "Redraft",
+          title: "Writes the draft again from the thread as it is now", disabled: !!busy, onClick: redraft }] : []),
         ...(card.tid && !conflict ? [{ verb: "back", label: "Send back to the agent", title: "Tell the agent what to change - it picks up where it stopped",
           disabled: !!busy, onClick: () => setBack((b) => (b === null ? "" : null)) }] : []),
         ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",

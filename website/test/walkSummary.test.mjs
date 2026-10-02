@@ -1,45 +1,33 @@
-// The start of the walk groups the pile into who wants what (2026-09-23) - a grouping of lanes the pile
-// already carries, so every lane lands in exactly one group and nothing is judged here.
+// The start of the walk IS the rail (the owner, 2026-10-02: "it should just read from the rail no?"): the rail's bands,
+// in its order, under its names - so the opener can never put a row in a group the rail does not.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { groupOf, refOf, stateOf, summarize, whoOf, GROUPS } from "../src/walkSummary.js";
+import { LEVEL_ORDER, SECTION_WORDS, bandsOf, levelOf } from "../src/funnelPile.js";
 
 const it = (lane, kind = "asked", extra = {}) => ({ key: `${lane}:${kind}:${Math.random()}`, lane, kind, who: "Erin Blake", title: "Q3 numbers", ...extra });
 
-test("people, your own list, agents and the rest each land in their own group", () => {
-  assert.equal(groupOf(it("approve", "review")), "people");         // a drafted reply: someone wants an answer
-  assert.equal(groupOf(it("asked")), "people");
-  assert.equal(groupOf(it("yours", "todo", { channel: "own" })), "you");   // a task you made yourself
-  assert.equal(groupOf(it("yours", "todo", { channel: "email" })), "people");   // a person's ask, filed as a to-do
-  assert.equal(groupOf(it("yours", "asked", { channel: "own" })), "you");
-  assert.equal(groupOf(it("approve", "action")), "agents");          // an agent stopped before it acts
-  assert.equal(groupOf(it("blocked", "agent")), "agents");
-  assert.equal(groupOf(it("queued", "task")), "agents");
-  assert.equal(groupOf(it("fyi", "fyi")), "read");
-  assert.equal(groupOf(it("report", "report")), "read");
-  assert.deepEqual(GROUPS.map((g) => g.key), ["people", "you", "agents", "read", "passed"]);
+test("the groups are the rail's bands, in the rail's order, under the rail's names", () => {
+  assert.deepEqual(GROUPS.map((g) => g.key), LEVEL_ORDER);
+  for (const g of GROUPS) assert.equal(g.word, SECTION_WORDS[g.key]);
+  const rows = [it("approve", "review", { order_band: 2 }), it("working", "agent", { order_band: 5 }), it("report", "report", { order_band: 3 }),
+    it("fyi", "fyi", { order_band: 4 }), it("asked", "asked", { order_band: 2, surfaced: true })];
+  for (const r of rows) assert.equal(groupOf(r), levelOf(r));
+  assert.deepEqual(summarize(rows).groups.map((g) => [g.key, g.n]), bandsOf(rows).map((b) => [b.level, b.items.length]));
 });
 
-test("what you walked past with Next is its own group, as in the rail - never back under Agents waiting", () => {
-  // the owner, 2026-09-24: "now it's gone from work but in the good evening list of tasks??"
-  const passed = it("stopped", "agent", { surfaced: true });
-  assert.equal(groupOf(passed), "passed");
-  assert.equal(groupOf(it("stopped", "agent")), "agents");
-  const s = summarize([passed, it("asked")]);
-  assert.equal(s.lead, "2 things. 1 needs a word, 1 for later.");
-  assert.deepEqual(s.groups.map((g) => g.key), ["people", "passed"]);
+test("a finished agent's task is On you, as on the rail - not an agent waiting (the owner's screenshot, 2026-10-02)", () => {
+  const done = it("report", "agentdone", { agent: "coder", title: "Investigate the export" });
+  assert.equal(groupOf(done), "task");
+  assert.equal(summarize([done]).groups[0].word, "On you");
 });
 
-test("the lead counts what is ready to approve first, and working rows are not waiting on anyone", () => {
-  const s = summarize([it("approve", "review"), it("approve", "review", { title: "Budget sign-off" }), it("asked", "asked", { title: "Rota" }), it("yours", "todo", { channel: "own" }),
-    it("fyi", "fyi"), it("working", "agent")]);
-  assert.equal(s.n, 5);
-  assert.equal(s.lead, "5 things. 2 are ready - you only approve, 1 needs a word, 1 is on your list, 1 you can skip.");
-  assert.deepEqual(s.groups.map((g) => [g.key, g.rows.length]), [["people", 3], ["you", 1], ["read", 1]]);
+test("the lead counts each band as the rail does", () => {
+  const s = summarize([it("approve", "review", { order_band: 2 }), it("asked", "asked", { order_band: 2, surfaced: true }),
+    it("report", "report", { order_band: 3 }), it("fyi", "fyi", { order_band: 4 }), it("fyi", "fyi", { order_band: 4, title: "Other" })]);
+  assert.equal(s.lead, "5 things: 1 on you, 1 for later, 1 reports, 2 FYI.");
   assert.equal(summarize([]).lead, "Nothing is waiting on you.");
-  // a meeting is the day's strip above, never a row under People want
-  assert.equal(summarize([it("time", "meeting"), it("asked")]).n, 1);
 });
 
 test("a drafted reply says it is ready, everything else says its lane's word", () => {
@@ -62,7 +50,7 @@ test("every group the opener draws has a colour role - a missing one crashed the
   for (const g of GROUPS) assert.ok(css.includes(`.tq-sum-head span.lvl-${g.key}`), `no pill colour for ${g.key}`);
 });
 
-test("a row reads cleanly: its task number, the agent under Agents waiting, an address's name, one line for a repeat", () => {
+test("a row reads cleanly: its task number, the agent on an agent row, an address's name, one line for a repeat", () => {
   // the owner, 2026-09-30: "let's clean this table up per row - it looks messy and maybe include task numbers?"
   assert.equal(refOf({ tid: 887 }), "TQ-0887");
   assert.equal(refOf({ ref: "TQ-0018", tid: 18 }), "TQ-0018");
@@ -72,7 +60,7 @@ test("a row reads cleanly: its task number, the agent under Agents waiting, an a
   assert.equal(whoOf({ kind: "asked", who: "erin@northwind.example", title: "Q3 numbers" }), "erin");
   const twice = { lane: "fyi", kind: "fyi", who: "alerts@vendor.example", title: "Vendor Create - 0 created" };
   const s = summarize([{ ...twice, key: "a" }, { ...twice, key: "b" }, it("fyi", "fyi", { title: "Other" })]);
-  const read = s.groups.find((g) => g.key === "read").rows;
+  const read = s.groups.find((g) => g.key === "fyi").rows;
   assert.deepEqual(read.map((r) => [r.title, r.count || 1]), [["Vendor Create - 0 created", 2], ["Other", 1]]);
   assert.equal(s.n, 3);   // the lead still counts both - folding is how the row reads, not what is waiting
   // two TASKS with one title are two jobs, never folded

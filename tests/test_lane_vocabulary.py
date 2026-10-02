@@ -72,7 +72,7 @@ def test_the_walk_line_reads_its_counting_words_from_the_vocabulary():
     view = (ROOT / 'website' / 'src' / 'AssistantView.jsx').read_text(encoding='utf-8')
     cards = (ROOT / 'website' / 'src' / 'assistantCards.jsx').read_text(encoding='utf-8')
     walk = (ROOT / 'website' / 'src' / 'walkSummary.js').read_text(encoding='utf-8')
-    assert 'summarize(items).lead' in view
+    assert 'summarize(railPile?.items || items).lead' in view          # the rail's own rows (2026-10-02)
     assert 'stateOf(i, laneMeta(i.lane).word)' in cards
     assert '["landed", "report"]' not in view + walk, 'the third copy of the counting words is gone'
     assert 'agent waiting on you' not in walk and 'asked you' not in walk

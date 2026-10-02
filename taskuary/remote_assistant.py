@@ -455,23 +455,23 @@ def asking() -> dict | None:
     return getattr(_ASKING, 'chat', None)
 
 
-# ── the start of the walk: who wants what, the same grouping the desktop draws (walkSummary.js) ──
-# KEEP IN STEP with website/src/walkSummary.js: the four groups, and which lanes land in each. A grouping
-# of lanes the pile already carries - nothing is judged here (2026-09-23).
-GROUPS = (('people', 'People want'), ('you', 'You wanted'), ('agents', 'Agents waiting'), ('read', 'Nothing to decide'),
-          ('passed', 'For later'))           # the rail's For later (the canvas redesign, 2026-09-29): walked past, or put away
-_AGENT_LANES = {'blocked', 'stopped', 'saved', 'queued', 'working', 'broken', 'unjudged'}
+# ── the start of the walk: THE RAIL, said in a chat (walkSummary.js) ──────────────────────────────────────────
+# Its own who-wants-what grouping put a finished agent's task under "Agents waiting" while the rail had it On you (the
+# owner, 2026-10-02: "it should just read from the rail no?"). The bands, their order and their names are the rail's:
+# funnel.level_of, which mirrors funnelPile.levelOf.
+LEVEL_ORDER = ('urgent', 'task', 'agents', 'later', 'reports', 'ideas', 'fyi')     # funnelPile.LEVEL_ORDER
 AGENT_CARD_LANES = {'blocked', 'stopped', 'queued', 'working', 'saved'}     # the lanes whose card is an agent's
 ROWS_PER_GROUP = 5
 
 
 def group_of(i: dict) -> str:
-    # walked past with Next: the rail's Passed band (funnelPile.levelOf) - never back under "Agents waiting" (2026-09-24)
-    if (i.get('surfaced') or i.get('deferred')) and i.get('order_band') == 2: return 'passed'
-    if i.get('kind') in ('action', 'agent', 'agentdone') or i.get('lane') in _AGENT_LANES: return 'agents'
-    if i.get('lane') in ('report', 'fyi') or i.get('kind') in ('fyis', 'report', 'idea', 'wrapup'): return 'read'
-    if i.get('channel') in ('own', 'assistant'): return 'you'
-    return 'people'
+    from . import funnel
+    return funnel.level_of(i)
+
+
+def groups():
+    from . import funnel
+    return [(k, funnel.SECTION_WORDS[k]) for k in LEVEL_ORDER]
 
 
 def who_of(i: dict) -> str:
@@ -483,28 +483,21 @@ def who_of(i: dict) -> str:
 def who_wants_what(items: list) -> str:
     """The desktop's opener, as a chat can print it: the count in a sentence, then each group's rows."""
     from . import funnel
-    # meetings are the day's strip (meetings_line), never a row someone wants - as on the desktop
-    live = [i for i in items or [] if i.get('lane') != 'working' and i.get('kind') != 'meeting']
+    live = list(items or [])
     if not live: return 'Nothing is waiting on you.'
-    ready = sum(1 for i in live if i.get('lane') == 'approve')
-    skip = sum(1 for i in live if group_of(i) == 'read')
-    yours = sum(1 for i in live if group_of(i) == 'you')
-    passed = sum(1 for i in live if group_of(i) == 'passed')
-    word = len(live) - ready - skip - yours - passed
-    parts = [x for x in (ready and f"{ready} {'is' if ready == 1 else 'are'} ready - you only approve",
-                         word and f"{word} {'needs' if word == 1 else 'need'} a word",
-                         yours and f"{yours} {'is' if yours == 1 else 'are'} on your list",
-                         skip and f"{skip} you can skip", passed and f"{passed} for later") if x]
-    lines = [f"{len(live)} thing{'' if len(live) == 1 else 's'}. " + ', '.join(parts)[:1].upper() + ', '.join(parts)[1:] + '.']
-    for key, word_ in GROUPS:
-        rows = [i for i in live if group_of(i) == key]
-        if not rows: continue
+    have = [(k, w, [i for i in live if group_of(i) == k]) for k, w in groups()]
+    have = [(k, w, rows) for k, w, rows in have if rows]
+    lines = [f"{len(live)} thing{'' if len(live) == 1 else 's'}: "
+             + ', '.join(f"{len(rows)} {w if k == 'fyi' else w.lower()}" for k, w, rows in have) + '.']
+    for key, word_, rows in have:
+        # For later is sorted soonest-back first, as the rail draws it (funnelPile.bandsOf)
+        if key == 'later': rows = sorted(rows, key=lambda i: str(i.get('back_at') or i.get('defer_until') or '9999'))
         lines.append(f'\n{word_.upper()} · {len(rows)}')
         for i in rows[:ROWS_PER_GROUP]:
             state = ('draft ready' if i.get('kind') != 'action' else 'wants a yes') if i.get('lane') == 'approve' \
                 else (funnel.LANE_WORDS.get(str(i.get('lane') or '')) or ('',))[0]
             # FOR LATER says when it comes back, in the rail's own short form (funnelPile.railBack)
-            if key == 'passed': state = f"back in {_back_in(i.get('back_at') or i.get('defer_until'))}" if _back_in(i.get('back_at') or i.get('defer_until')) else ''
+            if key == 'later': state = f"back in {_back_in(i.get('back_at') or i.get('defer_until'))}" if _back_in(i.get('back_at') or i.get('defer_until')) else ''
             lines.append(f"· {who_of(i)} - {_cut(i.get('title') or '', 70)}" + (f' ({state})' if state else ''))
         if len(rows) > ROWS_PER_GROUP: lines.append(f'  and {len(rows) - ROWS_PER_GROUP} more')
     return '\n'.join(lines)

@@ -949,14 +949,14 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
 // since the chat opened is gone from here too; a row's click brings that one card up.
 const ROWS_PER_GROUP = 5;
 // the group's name in a pill of its own tint - assistantView.css `.tq-sum-head span.lvl-<group>`, the rail bands' own
-// family (the owner, 2026-09-28: "make them subtly different"); every group of walkSummary.GROUPS has one
+// own tint, the same class the rail's heading wears (walkSummary.GROUPS are the rail's levels, 2026-10-02)
 // the groups themselves - also drawn on the empty chat's welcome, which is what the walk starts from
 // `quiet` groups show their pill and count only - on the day's opener, what needs no decision is on the
 // rail already, and its rows were what pushed the way in off the screen (2026-09-23: "one screen")
 export function WhoWantsWhat({ groups, onRow, max = ROWS_PER_GROUP, quiet = [] }) {
   return (groups || []).map((g) => ({ g, n: quiet.includes(g.key) ? 0 : max })).map(({ g, n }) => (
     <div key={g.key} className="tq-sum-group">
-      <div className="tq-sum-head"><span className={`lvl-${g.key}`}>{g.word}</span><em>{g.rows.length}</em></div>
+      <div className="tq-sum-head"><span className={`lvl-${g.key}`}>{g.word}</span><em>{g.n ?? g.rows.length}</em></div>
       {g.rows.slice(0, n).map((i) => (
         <button key={i.key} type="button" className="tq-sum-row" onClick={() => onRow?.(i.key)} title="Bring this one up now">
           <span className="dot" style={{ background: sourceColor(i) }} />
@@ -966,7 +966,7 @@ export function WhoWantsWhat({ groups, onRow, max = ROWS_PER_GROUP, quiet = [] }
           <span className="st">{stateOf(i, laneMeta(i.lane).word)}</span>
         </button>
       ))}
-      {n > 0 && g.rows.length > n && <div className="tq-sum-more">and {g.rows.length - n} more</div>}
+      {n > 0 && (g.n ?? g.rows.length) > n && <div className="tq-sum-more">and {(g.n ?? g.rows.length) - Math.min(n, g.rows.length)} more</div>}
     </div>
   ));
 }

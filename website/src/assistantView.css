@@ -37,12 +37,12 @@
 .tq-pile-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 /* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance, and only urgent is loud */
-.tq-pile-head span.lvl-urgent { color: #7a2f3c; background: #f4e3e6; border-color: #e3c1c7; }
-.tq-pile-head span.lvl-task, .tq-sum-head span.lvl-people, .tq-sum-head span.lvl-you, .tq-sum-head span.lvl-agents { color: #86505b; background: #f8eff0; border-color: #ecdade; }
-.tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas { color: #6b5f45; background: #f3eee2; border-color: #e3d9c3; }
-.tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-read { color: #6e685f; background: #f3efe8; border-color: #e2dbcf; }
-.tq-pile-head span.lvl-later, .tq-sum-head span.lvl-passed { color: #8a847a; background: #faf8f4; border: 1px dashed #d8d0c3; }
-.tq-pile-head span.lvl-agents { color: #41525f; background: #edf1f4; border-color: #d3dbe2; }
+.tq-pile-head span.lvl-urgent, .tq-sum-head span.lvl-urgent { color: #7a2f3c; background: #f4e3e6; border-color: #e3c1c7; }
+.tq-pile-head span.lvl-task, .tq-sum-head span.lvl-task { color: #86505b; background: #f8eff0; border-color: #ecdade; }
+.tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #6b5f45; background: #f3eee2; border-color: #e3d9c3; }
+.tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #6e685f; background: #f3efe8; border-color: #e2dbcf; }
+.tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later { color: #8a847a; background: #faf8f4; border: 1px dashed #d8d0c3; }
+.tq-pile-head span.lvl-agents, .tq-sum-head span.lvl-agents { color: #41525f; background: #edf1f4; border-color: #d3dbe2; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
 .tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #a09889; font-variant-numeric: tabular-nums; }

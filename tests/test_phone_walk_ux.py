@@ -327,38 +327,38 @@ class FyiGroupOnAPhoneTests(unittest.TestCase):
 
 
 class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
-    """The phone opens the day the way the desktop does (2026-09-23): the count, then the four groups."""
+    """The phone opens the day with THE RAIL (the owner, 2026-10-02: "it should just read from the rail no?"): its bands,
+    in its order, under its names - funnel.level_of, the server's mirror of funnelPile.levelOf."""
 
-    def test_the_groups_and_the_lead(self):
-        items = [{'key': 'a', 'lane': 'approve', 'kind': 'review', 'who': 'Erin Blake', 'title': 'Q3 numbers'},
-                 {'key': 'b', 'lane': 'yours', 'kind': 'todo', 'channel': 'own', 'who': 'you', 'title': 'Renew Trainly'},
-                 {'key': 'c', 'lane': 'blocked', 'kind': 'agent', 'agent': 'coder', 'title': 'Reconcile the GL'},
-                 {'key': 'd', 'lane': 'report', 'kind': 'report', 'who': 'Spend report', 'title': 'Spend report - 3 over'},
-                 {'key': 'e', 'lane': 'working', 'kind': 'agent', 'title': 'busy'},
-                 {'key': 'f', 'lane': 'time', 'kind': 'meeting', 'who': 'Omar Keller', 'title': 'Portal sync'}]
+    def test_the_rails_bands_and_the_lead(self):
+        items = [{'key': 'a', 'lane': 'approve', 'kind': 'review', 'who': 'Erin Blake', 'title': 'Q3 numbers', 'order_band': 2},
+                 {'key': 'c', 'lane': 'working', 'kind': 'agent', 'agent': 'coder', 'title': 'Reconcile the GL', 'order_band': 5},
+                 {'key': 'd', 'lane': 'report', 'kind': 'report', 'who': 'Spend report', 'title': 'Spend report - 3 over', 'order_band': 3},
+                 {'key': 'f', 'lane': 'fyi', 'kind': 'fyi', 'who': 'Omar Keller', 'title': 'Portal is back', 'order_band': 4}]
         text = remote_assistant.who_wants_what(items)
-        self.assertTrue(text.startswith('4 things. 1 is ready - you only approve, 1 needs a word, 1 is on your list, 1 you can skip.'))
-        self.assertIn('PEOPLE WANT · 1\n· Erin Blake - Q3 numbers (draft ready)', text)
-        self.assertIn('YOU WANTED · 1', text); self.assertIn('AGENTS WAITING · 1', text)
-        self.assertIn('· Report - Spend report - 3 over', text)          # a report's sender is its title
-        self.assertNotIn('busy', text)                                   # working rows wait on nobody
+        self.assertTrue(text.startswith('4 things: 1 on you, 1 agents working, 1 reports, 1 FYI.'), text)
+        self.assertIn('ON YOU · 1\n· Erin Blake - Q3 numbers (draft ready)', text)
+        self.assertIn('AGENTS WORKING · 1', text); self.assertIn('· Report - Spend report - 3 over', text)
+        self.assertLess(text.index('ON YOU'), text.index('AGENTS WORKING')); self.assertLess(text.index('REPORTS ·'), text.index('FYI ·'))
         self.assertEqual(remote_assistant.who_wants_what([]), 'Nothing is waiting on you.')
 
-    def test_what_you_passed_is_its_own_group_as_on_the_rail(self):
-        """"now it's gone from work but in the good evening list" (the owner, 2026-09-24): an agent row passed
-        with Next is in the rail's Passed band, and the opener says so instead of listing it as waiting."""
+    def test_a_finished_agents_task_is_on_you_as_on_the_rail(self):
+        # the owner's screenshot, 2026-10-02: the rail had it On you, the opener said "Agents waiting" - no agent was working
+        done = {'key': 'agentdone:9', 'lane': 'report', 'kind': 'agentdone', 'agent': 'coder', 'title': 'Investigate the export'}
+        self.assertEqual(remote_assistant.group_of(done), 'task')
+        self.assertIn('ON YOU · 1', remote_assistant.who_wants_what([done]))
+
+    def test_what_you_passed_is_for_later_as_on_the_rail(self):
         items = [{'key': 'a', 'lane': 'stopped', 'kind': 'agent', 'who': 'Erin Blake', 'title': 'Budget tab', 'surfaced': True, 'order_band': 2},
                  {'key': 'b', 'lane': 'asked', 'kind': 'asked', 'who': 'Gail Moreno', 'title': 'Q3 numbers', 'order_band': 2}]
         text = remote_assistant.who_wants_what(items)
-        self.assertTrue(text.startswith('2 things. 1 needs a word, 1 for later.'), text)
-        self.assertIn('FOR LATER · 1', text); self.assertNotIn('AGENTS WAITING', text)   # the rail's For later (2026-09-29)
+        self.assertTrue(text.startswith('2 things: 1 on you, 1 for later.'), text)
 
-    def test_it_groups_exactly_as_the_desktop_does(self):
+    def test_it_names_the_bands_exactly_as_the_rail_does(self):
         from pathlib import Path
-        js = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'walkSummary.js').read_text(encoding='utf-8')
-        for lane in remote_assistant._AGENT_LANES: self.assertIn(f'"{lane}"', js.split('AGENT_LANES')[1].split(';')[0])
-        self.assertEqual([w for _, w in remote_assistant.GROUPS], ['People want', 'You wanted', 'Agents waiting', 'Nothing to decide', 'For later'])
-        for _, word in remote_assistant.GROUPS: self.assertIn(f'word: "{word}"', js)
+        js = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'funnelPile.js').read_text(encoding='utf-8')
+        self.assertIn('export const LEVEL_ORDER = [' + ', '.join(f'"{k}"' for k in remote_assistant.LEVEL_ORDER) + '];', js)
+        for k, word in remote_assistant.groups(): self.assertIn(f'{k}: "{word}"', js)
 
 
 class TheVerbDoesTheThingTests(unittest.TestCase):

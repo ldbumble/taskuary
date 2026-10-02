@@ -1782,8 +1782,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
                   digest, on the screen the day opens on (2026-09-23) */}
               <div className="tq-welcome-sum"><TodayMeetingsStrip /></div>
-              <span>{items.length ? summarize(items).lead : "Nothing is waiting on you - ask me anything, or set something up."}</span>
-              {!!items.length && <div className="tq-welcome-sum"><WhoWantsWhat groups={summarize(items).groups} onRow={actions.surface} max={3} /></div>}
+              <span>{items.length ? summarize(railPile?.items || items).lead : "Nothing is waiting on you - ask me anything, or set something up."}</span>
+              {!!items.length && <div className="tq-welcome-sum"><WhoWantsWhat groups={summarize(railPile?.items || items).groups} onRow={actions.surface} max={3} /></div>}
               <div className="tq-modes">
                 <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
                   title="Everything in the pipe, most important first - mail, reports, agents, meetings">{starting ? "Reading your pipe..." : "Walk me through my tasks"}</button>

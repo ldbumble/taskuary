@@ -37,8 +37,8 @@ class MorningLineTests(unittest.TestCase):
             self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 12, 0)), 0)      # never twice in a day
         text = self.sent[0][2]
         # the desktop's opener, in words: the count, then who wants what (2026-09-23)
-        self.assertIn('7 things. 1 is ready - you only approve, 6 you can skip.', text)
-        self.assertIn('PEOPLE WANT · 1', text); self.assertIn('NOTHING TO DECIDE · 6', text)
+        self.assertIn('7 things: 1 on you, 6 FYI.', text)     # the rail's own bands (2026-10-02)
+        self.assertIn('ON YOU · 1', text); self.assertIn('FYI · 6', text)
         self.assertIn('1 · Walk me through my tasks', text); self.assertIn('2 · Set up Taskuary', text); self.assertIn('3 · Set up a report', text)
         # the numbers are remembered against the chat, so "2" is the words
         self.assertEqual(ra.resolve_index(self.s, 'whatsapp', '1555@s.whatsapp.net', '2'), ('Set up Taskuary', True))
@@ -91,7 +91,7 @@ class NeverIntoAConversationTests(unittest.TestCase):
         with self._pile(3), mock.patch.object(ra, 'QUIET', 0.0):
             ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0))
         tid = general.dock_task(self.s)[0]['TaskId']
-        said = lambda ts: any(t.startswith('Good morning.') and 'PEOPLE WANT' in t for t in ts)
+        said = lambda ts: any(t.startswith('Good morning.') and 'ON YOU' in t for t in ts)
         self.assertFalse(said(h['text'] for h in concierge.history(self.s, tid)))             # what the desktop draws
         self.assertTrue(said(c['Body'] for c in general.chat_rows(self.s, tid)))              # what the model and the desk read
 
@@ -105,7 +105,7 @@ class TheWalkOpensWithTheDayTests(unittest.TestCase):
              mock.patch.object(ra, 'meetings_line', return_value="TODAY'S MEETINGS · 1\n· 10:00-10:30 Budget review"), \
              mock.patch('taskuary.concierge.resume', return_value={'say': 'Nothing is on the table.', 'item': None}):
             text = ra.walk(s)
-        self.assertIn("TODAY'S MEETINGS · 1", text); self.assertIn('PEOPLE WANT · 1', text)
+        self.assertIn("TODAY'S MEETINGS · 1", text); self.assertIn('ON YOU · 1', text)
         self.assertEqual(str(s.get_settings().get(ra.MORNING_AT) or ''), datetime.now().strftime('%Y-%m-%d'))   # not said twice today
 
 

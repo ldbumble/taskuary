@@ -1,32 +1,12 @@
-// The start of the walk: who wants what, before the first card (the owner, 2026-09-23: "summary of who
-// wants what task (or list of tasks that we created for ourselves), agent actions, and pending reply so
-// we just approve"). It replaces the Morning digest as the day's opener. A pure GROUPING of lanes the
-// pile already carries - nothing is judged here, and the rail's own split is untouched.
-import { levelOf } from "./funnelPile.js";
+// The start of the walk: what is waiting, before the first card (the owner, 2026-09-23). It replaces the Morning digest
+// as the day's opener. IT IS THE RAIL (the owner, 2026-10-02: "it should just read from the rail no?"): the same bands in
+// the same order with the same names - its own who-wants-what grouping put a finished agent's task under "Agents
+// waiting" while the rail had it On you, and no agent was working on it.
+import { LEVEL_ORDER, SECTION_WORDS, bandsOf, levelOf } from "./funnelPile.js";
 
-export const GROUPS = [
-  { key: "people", word: "People want" },
-  { key: "you", word: "You wanted" },
-  { key: "agents", word: "Agents waiting" },
-  { key: "read", word: "Nothing to decide" },
-  { key: "passed", word: "For later" },   // the rail's For later (the canvas redesign, 2026-09-29)
-];
-
+export const GROUPS = LEVEL_ORDER.map((key) => ({ key, word: SECTION_WORDS[key] }));
+export const groupOf = (i) => levelOf(i);
 const AGENT_LANES = new Set(["blocked", "stopped", "saved", "queued", "working", "broken", "unjudged"]);
-const READ_LANES = new Set(["report", "fyi"]);
-
-export const groupOf = (i) => {
-  if (!i) return "read";
-  // what you walked past with Next sits in the rail's Passed band - here too, never back under "Agents waiting"
-  // as if it were new (the owner, 2026-09-24: "now it's gone from work but in the good evening list")
-  if (levelOf(i) === "later") return "passed";
-  if (i.kind === "action" || i.kind === "agent" || i.kind === "agentdone" || AGENT_LANES.has(i.lane)) return "agents";
-  if (READ_LANES.has(i.lane) || ["fyis", "report", "idea", "wrapup"].includes(i.kind)) return "read";
-  // what YOU made - a task born by hand or from the assistant. A person's ask triage filed as a to-do
-  // is still someone else wanting something
-  if (i.channel === "own" || i.channel === "assistant") return "you";
-  return "people";
-};
 
 // who asks: the person or the agent - and for a report, whose sender IS its title, the word "Report"
 // An agent's row names the AGENT - the task's "who" was the owner who started it, and "You" under Agents waiting
@@ -47,26 +27,17 @@ export const stateOf = (i, laneWord) => i?.lane === "approve"
   ? (i.kind === "action" && !i.closeout ? "wants a yes" : laneWord) : laneWord;   // a reply and a close-out: the lane's one word
 
 export function summarize(items) {
-  // a meeting is on the day's strip right above - listed again under People want it read as someone's ask
-  // (the owner, 2026-09-23: "the calendar invite in people want section is wrong if it's in top section")
-  const live = (items || []).filter((i) => i && i.lane !== "working" && i.kind !== "meeting");
   // the same sender saying the same thing twice is one row with a count - two identical lines read as a glitch
   const fold = (rows) => rows.reduce((out, i) => {
     const twin = !refOf(i) && out.find((o) => !refOf(o) && whoOf(o) === whoOf(i) && o.title === i.title);
     if (twin) twin.count = (twin.count || 1) + 1; else out.push({ ...i });
     return out;
   }, []);
-  const groups = GROUPS.map((g) => ({ ...g, rows: fold(live.filter((i) => groupOf(i) === g.key)) })).filter((g) => g.rows.length);
-  const ready = live.filter((i) => i.lane === "approve").length;
-  const skip = live.filter((i) => groupOf(i) === "read").length;
-  const passed = live.filter((i) => groupOf(i) === "passed").length;
-  const yours = live.filter((i) => groupOf(i) === "you").length;
-  const word = live.length - ready - skip - yours - passed;
-  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
-  const parts = [ready && `${n(ready, "is", "are")} ready - you only approve`, word && `${n(word, "needs", "need")} a word`,
-                 yours && `${yours} ${yours === 1 ? "is" : "are"} on your list`, skip && `${skip} you can skip`, passed && `${passed} for later`].filter(Boolean);
-  const lead = live.length
-    ? `${live.length} thing${live.length === 1 ? "" : "s"}. ${parts.join(", ").replace(/^./, (c) => c.toUpperCase())}.`
+  // the band's count is the RAIL's count (every row), the rows under it fold twins
+  const groups = bandsOf(items).map((b) => ({ key: b.level, word: SECTION_WORDS[b.level], n: b.items.length, rows: fold(b.items) }));
+  const n = groups.reduce((t, g) => t + g.n, 0);
+  const lead = n
+    ? `${n} thing${n === 1 ? "" : "s"}: ${groups.map((g) => `${g.n} ${g.key === "fyi" ? g.word : g.word.toLowerCase()}`).join(", ")}.`
     : "Nothing is waiting on you.";
-  return { n: live.length, groups, lead };
+  return { n, groups, lead };
 }

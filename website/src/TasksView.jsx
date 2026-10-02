@@ -101,6 +101,7 @@ const askedAgo = (t) => {
 
 export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened }) {
   const [tasks, setTasks] = useState(null);
+  const [leavingId, setLeavingId] = useState(null);     // a task closed at the press, still closing on the server (finishWith)
   // "live" on arrival: what is still on somebody's plate is what you came here for. "done"
   // opens on a list whose top is whatever finished most recently.
   const [filter, setFilter] = useState("live");
@@ -198,7 +199,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
   // is what makes a completed PR/task discoverable instead of merely searching the visible rows -
   // and the rows ARE the matches now, so there is nothing left here to filter them by.
-  const bucket = (tasks || []).filter((x) => sent || ((!filter || inBucket(x, filter)) && (!only || filter !== "live" || stateOf(x).label === only)));
+  const bucket = (tasks || []).filter((x) => x.TaskId !== leavingId).filter((x) => sent || ((!filter || inBucket(x, filter)) && (!only || filter !== "live" || stateOf(x).label === only)));
   // ONE RULE, FOR THE ROWS AND FOR THE COUNTS. The cut used to be decided per pill, which gave
   // `in progress` a wider window than `all` - live work of any age against today only - so two
   // live rows from last night counted for one pill and not the other and "all 5" sat over
@@ -252,9 +253,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const before = seenState.current;
     seenState.current = transition.seen;
     setFilter(transition.filter); setOlder(false); setQuery("");
-    try { await close(); } catch (e) { seenState.current = before; throw e; }
-    onSelect(transition.next);
+    // PUT DOWN AT THE PRESS, as the Assistant's canvas does (the owner, 2026-10-02: "the task stays open for a 2 count then
+    // closes"): it leaves the list and the next one opens now; the close runs behind, and one that fails comes back with why
+    const was = selected;
+    setLeavingId(was); onSelect(transition.next);
+    try { await close(); } catch (e) { seenState.current = before; setLeavingId(null); onSelect(was); throw e; }
   };
+  // ...and it stays off the list until a reload no longer has it as live work
+  useEffect(() => {
+    if (leavingId && tasks && !tasks.some((x) => x.TaskId === leavingId && inBucket(x, "live"))) setLeavingId(null);
+  }, [tasks, leavingId]);
   // Remind me: put away until a day, the list moves on with it - into Upcoming, or back into In progress
   const reminded = (out) => {
     if (out?.remindAt && filter === "live") {

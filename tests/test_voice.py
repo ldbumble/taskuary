@@ -245,3 +245,65 @@ class VoiceToTheAssistantTests(unittest.TestCase):
         self.assertEqual(heard, [])
         self.assertEqual(len(said), 1)
         self.assertIn('could not hear that voice note', said[0])
+
+
+class TelegramVoiceToTheAssistantTests(unittest.TestCase):
+    """The owner, 2026-10-02: "yes fix the transcribe thing for telegram" - a Telegram voice note to the Assistant chat
+    was dropped, the interceptor reading text only. It is heard first now, through the same transcriber as WhatsApp."""
+    ME, TOKEN = '4242', '123:secret-bot-token'
+
+    def _setup(self, s):
+        cid = s.get_connector_by_type('telegram')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': self.TOKEN, 'ConfigJson': json.dumps({'assistant_chat': self.ME})}, 'o')
+        return s.get_connector_by_type('telegram', with_secret=True)
+
+    def _tg(self, token, method, **kw):
+        if method == 'getUpdates':
+            return [{'update_id': 7, 'message': {'message_id': 31, 'chat': {'id': int(self.ME), 'type': 'private'},
+                                                 'from': {'id': int(self.ME), 'first_name': 'Alex'},
+                                                 'voice': {'file_id': 'f1', 'duration': 4, 'mime_type': 'audio/ogg'}}}]
+        if method == 'getFile': return {'file_path': 'voice/file_1.oga'}
+        return {}
+
+    def test_a_voice_note_in_the_assistant_chat_reaches_the_assistant_as_words(self):
+        from taskuary import remote_assistant
+        s = _voice_store('groq_stt'); c = self._setup(s)
+        heard = []
+        with mock.patch.object(messengers, 'tg', self._tg), \
+             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS')), \
+             mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'walk me through my tasks'})), \
+             mock.patch.object(remote_assistant, 'enabled', return_value=True), \
+             mock.patch.object(remote_assistant, 'intercept', lambda store, ch, chat, text, **kw: heard.append((ch, chat, text)) or True):
+            messengers.poll_telegram(s, c, s.list_sources())
+        self.assertEqual(heard, [('telegram', self.ME, 'walk me through my tasks')])
+
+    def test_one_it_cannot_hear_says_so_in_the_chat_and_never_logs_the_token(self):
+        from taskuary import remote_assistant
+        s = MemoryStore(); c = self._setup(s)                       # no voice connector at all
+        said, heard = [], []
+        with mock.patch.object(messengers, 'tg', self._tg), \
+             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS')), \
+             mock.patch.object(remote_assistant, 'enabled', return_value=True), \
+             mock.patch.object(remote_assistant, 'send', lambda store, ch, chat, text, cid=None: said.append((ch, text))), \
+             mock.patch.object(remote_assistant, 'intercept', lambda *a, **kw: heard.append(a) or True):
+            messengers.poll_telegram(s, c, s.list_sources())
+        self.assertEqual(heard, [])
+        self.assertEqual(len(said), 1)
+        self.assertEqual(said[0][0], 'telegram')
+        self.assertIn('could not hear that voice note', said[0][1])
+        # ...and a download that fails names no token in the log
+        with mock.patch.object(messengers, 'tg', self._tg), \
+             mock.patch.object(messengers.requests, 'get', side_effect=RuntimeError(f'bad url https://x/file/bot{self.TOKEN}/v.oga')), \
+             mock.patch.object(messengers.logger, 'warning') as warned:
+            self.assertIsNone(messengers._tg_file(self.TOKEN, {'file_id': 'f1'}, 'voice.ogg'))
+        self.assertNotIn(self.TOKEN, str(warned.call_args))
+
+    def test_a_note_in_a_chat_that_is_not_the_assistants_is_never_transcribed(self):
+        from taskuary import remote_assistant
+        s = _voice_store('groq_stt'); c = self._setup(s)
+        with mock.patch.object(messengers, 'tg', self._tg), \
+             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS')), \
+             mock.patch.object(voice.requests, 'post') as stt, \
+             mock.patch.object(remote_assistant, 'enabled', return_value=False):
+            messengers.poll_telegram(s, c, s.list_sources())
+        stt.assert_not_called()

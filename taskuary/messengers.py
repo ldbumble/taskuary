@@ -73,7 +73,8 @@ def _tg_file(token: str, f: dict, fallback_name: str):
         name = f.get('file_name') or (path.rsplit('/', 1)[-1] or fallback_name)
         return data, name, (f.get('mime_type') or 'audio/ogg').split(';')[0]
     except Exception as e:
-        logger.warning(f'telegram file fetch failed: {e}'); return None
+        # the token never reaches a log: requests names the whole URL, /file/bot<token>/..., in its exception
+        logger.warning(f"telegram file fetch failed: {str(e).replace(token, '<token>') if token else e}"); return None
 
 
 def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
@@ -108,6 +109,15 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         cid = str(chat.get('id') or '')
         if not cid or frm.get('is_bot'): continue
         from . import remote_assistant
+        # A VOICE NOTE TO THE ASSISTANT is the owner talking, as on WhatsApp (_hear): heard first, then its words take the
+        # text road below. Telegram dropped it - the interceptor reads text only (the owner, 2026-10-02: "yes fix the
+        # transcribe thing for telegram"). Only in the chat that would answer typed words, so a stranger's note to a
+        # public bot is never sent to a transcription service.
+        v = m.get('voice') or m.get('audio')
+        if (v and not (m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
+                and remote_assistant.enabled(store, 'telegram', cid, c)):
+            m = {**m, 'text': _tg_hear(store, c, cid, v)}
+            if not m['text']: continue
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
         # named private chat is what says the words are the owner's - there is no fromMe to read.
@@ -343,21 +353,38 @@ def _read_media(path: str):
         logger.warning(f'could not read the media the bridge saved ({path}): {e}'); return None
 
 
+def _unheard(store, channel: str, chat: str, c, e):
+    """Say in the chat that a voice note could not be heard - instead of the note simply never arriving."""
+    from . import remote_assistant
+    logger.warning(f'{channel}: a voice note to Taskuary was not transcribed - {e}')
+    try: remote_assistant.send(store, channel, chat, f"I could not hear that voice note - {str(e)[:200]}. "
+                               "Type it, or add a voice connector under Connections > AI - voice.", c.get('ConnectorId'))
+    except Exception as e2: logger.warning(f'{channel}: could not say so either - {e2}')
+
+
+def _tg_hear(store, c, chat: str, v: dict) -> str:
+    """The words of a Telegram voice note (or audio file) the owner sent the Assistant chat, or ''."""
+    from . import voice
+    got = _tg_file(c.get('Secret') or '', v, 'voice.ogg')
+    if not got:
+        _unheard(store, 'telegram', chat, c, 'it could not be downloaded from Telegram'); return ''
+    data, name, mime = got
+    try: return str(voice.transcribe(store, data, mime, name)['text'] or '').strip()
+    except Exception as e:
+        _unheard(store, 'telegram', chat, c, e); return ''
+
+
 def _hear(store, c, jid: str, m: dict) -> str:
     """The words of a voice note the owner sent to a control chat, or '' - and when it cannot be heard, the
     owner is told so in that same chat, instead of the note simply never arriving."""
     import os
-    from . import voice, remote_assistant
+    from . import voice
     data = _read_media(m.get('audio'))
     if data is None: return ''
     mime = (m.get('mime') or 'audio/ogg').split(';')[0]
     try: return str(voice.transcribe(store, data, mime, os.path.basename(m['audio']))['text'] or '').strip()
     except Exception as e:
-        logger.warning(f'whatsapp: a voice note to Taskuary was not transcribed - {e}')
-        try: remote_assistant.send(store, 'whatsapp', jid, f"I could not hear that voice note - {str(e)[:200]}. "
-                                   "Type it, or add a voice connector under Connections > AI - voice.", c.get('ConnectorId'))
-        except Exception as e2: logger.warning(f'whatsapp: could not say so either - {e2}')
-        return ''
+        _unheard(store, 'whatsapp', jid, c, e); return ''
 
 
 def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:

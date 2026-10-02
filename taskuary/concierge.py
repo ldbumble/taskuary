@@ -57,7 +57,7 @@ _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
-         'rerun', 'setup', 'clear', 'done', 'next', 'answer_agent', 'redraft',
+         'rerun', 'setup', 'clear', 'done', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
          'confirm', 'cancel', 'none')
 # The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
 # CODE's and it is fixed (the owner, 2026-09-07: "make it hardcoded, meaning add inline in the chat words
@@ -67,7 +67,7 @@ VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'rem
 CHIP_WORDS = {'approve': 'Close out', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Send to a coding agent',
               'regular_agent': 'Send to agent', 'mine': 'Make a task', 'not_ours': 'Not ours',
               'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
-              'archive': 'Archive it', 'close': 'Mark done',
+              'not_ours_kind': 'No more ideas like this', 'archive': 'Archive it', 'close': 'Mark done',
               'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
               'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
               'prep': 'Prep me', 'defer': 'Remind me', 'continue': 'Continue session', 'test_connection': 'Test it'}
@@ -93,7 +93,9 @@ CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from 
 # ...and Redraft is back on a draft: its choices are Close out, Redraft or Mark done (the owner, 2026-10-01: "rejected is
 # useless - it should be redraft or close task")
 CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
-         'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('mine', 'regular_agent', 'next'),
+         # a meeting is read and passed: Join is a link on the card, not a verb (the owner, 2026-10-02: "Meeting card should
+         # only have a next button like what it has on desktop")
+         'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('next',),
          'report': ('mine', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
          'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'next'),
          'asked': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
@@ -628,7 +630,7 @@ def _live_task(store, item) -> bool:
 
 
 # an idea's words and what each does to the idea (assistant.act) - the page's Remind me posts its own day
-IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coder': 'agent', 'not_ours': 'dismiss'}
+IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coder': 'agent', 'not_ours': 'dismiss', 'not_ours_kind': 'dismiss_kind'}
 
 
 def cannot(item: dict | None, verb: str, store=None) -> str:
@@ -640,6 +642,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # "no Make a task on an item that already is a task"); a closed one is history, and new work may be a task again
     if verb == 'mine' and item.get('kind') == 'idea' and _live_task(store, item): return f"{what} is already a task on your list."
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
+    if verb == 'not_ours_kind': return f"{what} is not one of the assistant's ideas - say Not ours."
     if verb == 'answer_agent' and item.get('kind') != 'agent':
         return f"There is nothing to answer on this one - no agent is parked on {what}. Say stop the agent, or open the Board."
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
@@ -2240,14 +2243,18 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
 ALTS = {'not_ours': (('not_ours', 'Just this once'), ('not_ours_sender', 'From now on - triage learns this sender'),
                      ('block_sender', 'A rule in Settings - it never reaches triage')),
         'agent': (('coder', 'A coding agent'), ('regular_agent', 'A non-coding agent'))}
-ALT_OF = {v: k for k, vs in ALTS.items() for v, _ in vs}
+# ...and on an ADVISOR IDEA there is no sender to learn: how far means this one, or this kind of idea (the owner, 2026-10-02:
+# "feedback on assistant ideas ... does it teach it anything? we should have that") - the kind is a lesson the Advisor reads
+IDEA_ALTS = (('not_ours', 'Just this one'), ('not_ours_kind', 'No more ideas like this'))
+ALT_OF = {v: k for k, vs in ALTS.items() for v, _ in vs} | {v: 'not_ours' for v, _ in IDEA_ALTS}
 
 
 def alts_for(store, item: dict | None, verb: str) -> list:
     """The answers the card offers to its own question - each one this item can actually carry."""
     group = ALT_OF.get(verb)
     if not group or not (item or {}).get('key'): return []
-    out = [{'verb': v, 'label': l, 'current': v == verb} for v, l in ALTS[group] if v == verb or not cannot(item, v, store)]
+    pairs = IDEA_ALTS if group == 'not_ours' and item.get('kind') == 'idea' and item.get('idea') else ALTS[group]
+    out = [{'verb': v, 'label': l, 'current': v == verb} for v, l in pairs if v == verb or not cannot(item, v, store)]
     return out if len(out) > 1 else []
 
 
@@ -2270,6 +2277,7 @@ PROPOSALS = {
     'mine': ('task.create_from_message', 'Put it on my list', True),
     'not_ours': ('message.file', 'File it', True), 'not_ours_remember': ('preference.exclude_sender', 'File it and remember this kind', True),
     'not_ours_sender': ('preference.exclude_sender', 'Ignore this sender from now on', True),
+    'not_ours_kind': ('idea.act', 'No more ideas like this', True),
     'block_sender': ('preference.sender_rule', 'Add an exclusion rule in Settings', True),
     'archive': ('message.archive', 'Archive it', True),
     'close': ('task.complete', 'Mark done', True), 'done': ('item.settle', 'Mark it handled', True),
@@ -2784,7 +2792,8 @@ def op_label(kind: str, p: dict) -> str:
              'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': 'Reopen it',
              'task.not_a_task': 'Delete it - not a task', 'dispatch.prepare': 'Start an agent on it', 'agent.continue': 'Continue the agent',
              'review.reject': 'Reject the draft'}.get(kind, label)
-    if kind == 'idea.act': label = {'task': 'Put it on my list', 'agent': 'Send to an agent', 'dismiss': 'Not ours - never raise it again'}.get(str(p.get('verb')), label)
+    if kind == 'idea.act': label = {'task': 'Put it on my list', 'agent': 'Send to an agent', 'dismiss': 'Not ours - put this one down',
+                                    'dismiss_kind': 'No more ideas like this'}.get(str(p.get('verb')), label)
     if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"Remind me: {p.get('until')}"
     return label[0].upper() + label[1:] if label else kind
 
@@ -3184,7 +3193,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             rec('assistant', why)
             return {'say': why, 'options': [], 'chips': chips_for(store, target_item), 'decision': None}
     # a decision the item has no button for is answered in words, never offered as a card (the 2026-10-01 press audit)
-    if decision and verb and target_item and not elsewhere and not is_button(store, target_item, verb):
+    # ...but "create an agent to research X" over a card with no message behind it (a meeting, an idea) is a NEW job in the
+    # owner's words, not the card's hand-off - it still comes back as a proposal for his yes (2026-10-02: the meeting lost
+    # its Send to agent button, and the typed road must not go with it)
+    own_job = verb in ('coder', 'regular_agent') and str((decision or {}).get('text') or '').strip() and not (target_item or {}).get('mid')
+    if decision and verb and target_item and not elsewhere and not own_job and not is_button(store, target_item, verb):
         if not reply: reply, options = _in_words(llm, system, table, text, verb)
         decision = verb = None
     # the two immediate exceptions the owner approved: Next moves the walk (PW-128); a reply DRAFTS (PW-126)

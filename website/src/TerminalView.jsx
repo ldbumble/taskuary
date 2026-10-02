@@ -21,7 +21,8 @@ import { terminalOutputBatcher } from "./terminalOutput.js";
 import { createPool, paneCap } from "./terminalPool.js";
 import api from "./api.js";
 import BrowserPane from "./BrowserPane.jsx";
-import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl } from "./browserSplit.js";
+import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser,
+  splitRatio } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -609,18 +610,29 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const slot = useRef(null);
   const [browser, setBrowser] = useState({ open: false, url: "" });
   const [width, setWidth] = useState(0);
-  const [folded, setFolded] = useState(() => savedFold(sid));
+  const [folded, setFolded] = useState(() => !!sid && savedFold(sid));
+  // the browser has been seen OPEN on this session: from then on a closed one folds the pane (showsBrowser)
+  const [seen, setSeen] = useState(false);
   const [ratio, setRatio] = useState(savedRatio);
   const [peek, setPeek] = useState(false);
   // A Wall tile is one of four across and a drawer pane is 480px tall: enough to notice an agent
   // working, not enough to watch one - and far too little once a browser is beside the terminal.
   // The chat workspace runs this itself, from its own strip, so it asks for no button here.
   const { full, toggle: toggleFull } = useFullScreen();
+  // NO SESSION YET is a slot like any other. The chat workspace mounts this before its first turn has a
+  // session, so the conversation sits inside the same tree it will sit in once one exists - swapping the
+  // wrapper in mid-turn would remount the thread that is streaming the answer (GeneralWorkspace.started).
   useEffect(() => {
+    setBrowser({ open: false, url: "" }); setSeen(false); setFolded(!!sid && savedFold(sid));
+    if (!sid) return undefined;
     let stop = false;
     const tick = async () => {
-      try { const r = await api.get(`/api/terminals/${sid}/browser`); if (!stop) setBrowser(r.data || { open: false }); }
-      catch { /* server away for a moment: keep showing what we had */ }
+      try {
+        const r = await api.get(`/api/terminals/${sid}/browser`);
+        if (stop) return;
+        setBrowser(r.data || { open: false });
+        if (r.data?.open) setSeen(true);
+      } catch { /* server away for a moment: keep showing what we had */ }
     };
     tick();
     const id = setInterval(tick, 3000);
@@ -631,7 +643,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
     ro.observe(slot.current);
     return () => ro.disconnect();
   }, []);
-  const showingBrowser = browser.open || expectBrowser;
+  const showingBrowser = !!sid && showsBrowser(browser.open, expectBrowser, seen);
   const layout = layoutFor(width, showingBrowser, folded);
   const fold = (f) => { setFolded(f); rememberFold(f, sid); };
   // the handle: the pointer's place across the slot IS the split, remembered on release
@@ -674,7 +686,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
           </IconButton>
         </Tooltip>
       )}
-      <Box sx={{ flex: layout === "split" ? `0 0 calc(${((1 - ratio) * 100).toFixed(2)}% - 4px)` : 1, minWidth: 0, minHeight: 0,
+      <Box sx={{ flex: layout === "split" ? `0 0 calc(${((1 - splitRatio(ratio, width)) * 100).toFixed(2)}% - 4px)` : 1, minWidth: 0, minHeight: 0,
         display: "flex", flexDirection: "column", position: "relative",
         // the terminal takes what is left after the chip's row; only IT stretches
         "& > .tq-term-slot": { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
@@ -690,14 +702,14 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
             <Box sx={{ width: 2, height: 36, borderRadius: 99, bgcolor: BORDER, transition: "background .15s" }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
-            <BrowserPane sid={sid} url={browser.url} onFold={() => fold(true)} />
+            <BrowserPane sid={sid} url={browser.url} open={browser.open} onFold={() => fold(true)} />
           </Box>
         </>
       )}
       {/* peek is the CHIP layout's browser. Left standing when the box grew into a split - a wider
           window, the full-screen button - it mounted a second pane on the same session: two sockets,
           two decodes, two screencast clients on one Chrome, for one page. */}
-      {peek && layout === "chip" && showingBrowser && <BrowserPane sid={sid} url={browser.url} overlay onFold={() => setPeek(false)} />}
+      {peek && layout === "chip" && showingBrowser && <BrowserPane sid={sid} url={browser.url} open={browser.open} overlay onFold={() => setPeek(false)} />}
     </Box>
   );
 };

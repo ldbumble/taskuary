@@ -30,7 +30,8 @@ test("an expected walkthrough browser reserves the side-by-side pane while Chrom
   const workspace = read("GeneralWorkspace.jsx");
   const terminal = read("TerminalView.jsx");
   assert.match(workspace, /expectBrowser=\{wantsBrowser\(task\)\}/);
-  assert.match(terminal, /browser\.open \|\| expectBrowser/);
+  // ...until that browser has been seen open: one that opened and closed folds (showsBrowser, 2026-10-02)
+  assert.match(terminal, /showsBrowser\(browser\.open, expectBrowser, seen\)/);
   assert.match(terminal, /browser · starting…/);
 });
 
@@ -68,7 +69,7 @@ test("every agent screen can take the whole window - the chat's and the terminal
 test("the browser is told the pane's shape, debounced, and never blocks the picture", () => {
   const pane = read("BrowserPane.jsx");
   assert.match(pane, /viewportFor\(r\.width, r\.height\)/);
-  assert.match(pane, /if \(!viewportMoved\(shape\.current, want\)\) return;/);
+  assert.match(pane, /if \(!want \|\| \(!claim && !viewportMoved\(shape\.current, want\)\)\) return;/);
   assert.match(pane, /setTimeout\(\(\) => \{[\s\S]{0,240}?browser\/viewport`, want\)\.catch/);
   assert.match(pane, /new ResizeObserver\(\(\) => \{ paint\(\); fitViewport\(\); \}\)/);
 });

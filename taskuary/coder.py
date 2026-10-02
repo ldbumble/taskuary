@@ -529,7 +529,6 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         store.update_review_reason(rid, f"{who}'s own reply from the session - approve to send"
                                    + (' (the thread moved on after it was written - reread it)' if fresh.get('state') == 'changed' else ''), run_id)
         if fresh.get('state') in ('changed', 'unresolved'): store.mark_review_stale(rid)
-        _notify_done(store, task_id, rid)
         return
     src = complete_result or resolution_text(rep)
     if fresh.get('state') == 'changed' and fresh.get('latest'):
@@ -549,18 +548,5 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
     # a refresh that failed is an unresolved freshness state the owner sees: the draft waits, stale, for one that succeeds
     if fresh.get('state') == 'unresolved': store.mark_review_stale(rid)
-    _notify_done(store, task_id, rid)
-
-
-def _notify_done(store, task_id: int, rid: int) -> None:
-    # the ping that matters most: work FINISHED and its reply is sitting on the task on you
-    if (store.get_setting('notify_level') or 'needs_me') != 'off':
-        from .outbound import notify
-        from .store import task_ref
-        t = store.get_task(task_id) or {}
-        head = (t.get('Title') or '')[:100]
-        try: notify(store, f'{task_ref(task_id)} is done - the reply is drafted and waiting on '
-                           f'your approval on the task.\n{head}')
-        except Exception as e: logger.warning(f'notify failed for task {task_id}: {e}')
 
 

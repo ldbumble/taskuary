@@ -27,7 +27,6 @@ import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, ConfirmDelete, Empty } from "./ui.jsx";
-import { notifyState } from "./notify.js";
 import { normalizeBrainOptions } from "./brainOptions.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
@@ -166,8 +165,7 @@ const PhoneDoorways = ({ onLoaded }) => {
       {rows === null && !err && <Typography variant="body2" sx={{ color: FAINT, py: 2 }}>reading your channels…</Typography>}
       <Typography variant="body2" sx={{ color: FAINT, mt: 2 }}>
         Only chats you are alone in are offered. A group can never command the assistant, and an answer
-        about your mail must not land where other people are reading. This is separate from the
-        Notifications role — the assistant chat is not subscribed to ordinary Taskuary alerts.
+        about your mail must not land where other people are reading.
       </Typography>
       {wErr && <Typography variant="body2" sx={{ color: "#6b2733", mt: 1 }}>✗ {wErr}</Typography>}
     </Box>
@@ -567,7 +565,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     && !(panelOk && PANEL_OWNED.has(s.Name)));
   const panels = {
     "Triage & agents": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
-    "Notifications": <NotifyStatus connectors={connectors} settings={settings} />,
     "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} />,
   };
   const cfgGroups = GROUPS.filter((g) => panels[g] || rowsOf(g).length);
@@ -1231,18 +1228,3 @@ const HelpDialog = ({ help, onClose }) => (
   </Dialog>
 );
 
-// The two knobs above are mute until a chat is actually named. Say so here, rather
-// than leaving the page looking like a finished setup that silently goes nowhere.
-const NotifyStatus = ({ connectors, settings }) => {
-  const val = (n, d) => (settings.find((s) => s.Name === n) || {}).Value ?? d;
-  const st = notifyState(connectors, val("notify_level", "needs_me"), val("phone_assistant") === "1");
-  const good = st.kind === "pinging", warn = st.kind === "none" || st.kind === "unnamed" || st.kind === "inactive";
-  return (
-    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5, mt: -0.5, px: 1.25, py: 0.85,
-      bgcolor: good ? "#dfeade" : warn ? "#eae4d8" : "#f4f1ec",
-      border: `1px solid ${good ? "#c8d9c7" : warn ? "#d8cfbe" : BORDER}`, borderRadius: 1.5 }}>
-      {st.targets[0] && <ChannelIcon channel={st.targets[0].Type} sx={{ fontSize: 15, mt: 0.15 }} />}
-      <Typography variant="caption" sx={{ color: good ? "#47654a" : warn ? "#55697a" : DIM, lineHeight: 1.45 }}>{st.text}</Typography>
-    </Box>
-  );
-};

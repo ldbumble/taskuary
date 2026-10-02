@@ -27,7 +27,7 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual((by[('email', 'Microsoft account')]['value'], by[('email', 'Microsoft account')]['name']), ('dana@other.example', 'Dana W'))
         self.assertIn('Sign in with Microsoft', by[('email', 'Microsoft account')]['source'])
         self.assertEqual(by[('teams', 'UPN')]['value'], 'dana@northwind.example')
-        self.assertEqual(by[('telegram', 'your chat id')]['value'], '777'); self.assertIn('notify chat', by[('telegram', 'your chat id')]['source'])
+        self.assertEqual(by[('telegram', 'your chat id')]['value'], '777'); self.assertIn('your own chat', by[('telegram', 'your chat id')]['source'])
         self.assertEqual(by[('whatsapp', 'phone')]['source'], 'you typed it here')
         self.assertEqual(p['facts']['owner_name'], 'Dana Whitfield'); self.assertTrue(p['avatar'].startswith('<svg'))
         self.assertIn('DW', p['avatar'])                                       # the monogram: first and last initials

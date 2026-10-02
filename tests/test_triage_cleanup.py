@@ -70,13 +70,10 @@ class SmallThingsTests(unittest.TestCase):
                                         'from_email': 'alex@northwind.example', 'body': 'Done.'}, 'your reply')
         self.assertEqual(s._one("SELECT Direction FROM message WHERE ExternalId='me1'")['Direction'], 'out')
 
-    def test_a_question_on_a_coding_task_pings_and_carries_its_own_title(self):
+    def test_a_question_on_a_coding_task_carries_its_own_title(self):
         s = MemoryStore()
         first = mail(s, 'a', verdict('task', kind='coding'))
-        with mock.patch.object(ingest, '_notify_new') as ping:
-            mail(s, 'b', verdict('reply_only', title='Asks when the fix ships'), body='When will it ship?')
-        self.assertTrue(ping.called)
-        self.assertEqual(ping.call_args[0][4], 'a question for you')
+        mail(s, 'b', verdict('reply_only', title='Asks when the fix ships'), body='When will it ship?')
         row = s._one("SELECT TriageTitle FROM message WHERE ExternalId='b'")
         self.assertEqual(row['TriageTitle'], 'Asks when the fix ships')
         self.assertTrue(first['task_id'])

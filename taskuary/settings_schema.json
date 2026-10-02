@@ -288,23 +288,6 @@
       "desc": "How many unattended agent sessions may run together. The rest queue.",
       "help": "The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.\n\nPast the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board's floor view is drawn to this number, so raising it widens the room instead of crowding it.\n\nRaise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this."
     },
-    "notify_level": {
-      "group": "Notifications",
-      "label": "Push to your chat",
-      "type": "select",
-      "options": [
-        "needs_me",
-        "all",
-        "off"
-      ],
-      "optionLabels": {
-        "needs_me": "needs me",
-        "all": "everything",
-        "off": "off"
-      },
-      "desc": "Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.",
-      "help": "Give a chat connector the Notifications role (its Role step) and name the chat in its config; this decides what gets pushed there.\n\nneeds me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — 'the work is done, the reply is drafted and waiting on the task'. everything = every new timeline item. off = never push.\n\nEvents that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output."
-    },
     "hand_sound": {
       "group": "Notifications",
       "label": "Sound when an agent raises its hand",

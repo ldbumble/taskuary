@@ -17,7 +17,7 @@ before 1.0.
 - Plain-English report building against real connected schemas, with preview before save
 - Inbound mail, chat, code-host, work-tracker, incident, and monitoring connectors
 - Data sources spanning databases, AWS, Azure, Prometheus, Datadog, Sage Intacct, REST, RSS, and MCP
-- Per-connection trigger, feed, report, tool, and notification roles
+- Per-connection trigger, feed, report, and tool roles
 - Configurable cloud, CLI, or local-model triage brains
 - Self-learning triage through evidence-backed verdicts in `LEARNED.md`
 - History-generated `TRIAGE.md` and `STYLE.md` guidance from the user's own mailbox

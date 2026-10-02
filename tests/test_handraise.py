@@ -18,30 +18,26 @@ class FakeTerm:
 class ChatHandRaiseTests(unittest.TestCase):
     def setUp(self): handraise.reset()
 
-    def test_first_observation_waiting_pings_once_and_rearms_after_work(self):
+    def test_a_hand_goes_up_once_per_wait_and_rearms_after_work(self):
         s = MemoryStore()
-        tid = s.create_task({'Title': 'Fix notifications', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
         term = FakeTerm(tid, True, ['Which repository should I use?'])
-        pings = []
-        with mock.patch.dict(terminal.SESSIONS, {'sid': term}, clear=True), \
-             mock.patch.object(outbound, 'notify', side_effect=lambda st, text: pings.append(text)):
+        with mock.patch.dict(terminal.SESSIONS, {'sid': term}, clear=True):
             self.assertEqual(handraise.tick(s), 1)
             self.assertEqual(handraise.tick(s), 0)
             term._waiting = False
             self.assertEqual(handraise.tick(s), 0)
             term._waiting = True
             self.assertEqual(handraise.tick(s), 1)
-        self.assertEqual(len(pings), 2)
-        self.assertIn('codex asked you something', pings[0])
-        self.assertNotIn('[tq', pings[0])                 # a ping is read-only - phone approvals are gone (2026-09-25)
 
-    def test_notifications_off_consumes_the_transition_without_sending(self):
-        s = MemoryStore(); s.set_setting('notify_level', 'off', 't')
-        tid = s.create_task({'Title': 'quiet', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
-        with mock.patch.dict(terminal.SESSIONS, {'sid': FakeTerm(tid, True, ['Done.'])}, clear=True), \
-             mock.patch.object(outbound, 'notify') as notify:
-            self.assertEqual(handraise.tick(s), 0)
-        notify.assert_not_called()
+
+class NoPushTests(unittest.TestCase):
+    """The notify pushes are gone (the owner, 2026-10-02: the phone chat speaks only when spoken to). The invariant, not a
+    list of call sites: there is no push to call, and no setting that would choose what it sends."""
+    def test_there_is_no_push_into_a_chat_any_more(self):
+        import pathlib
+        self.assertFalse(hasattr(outbound, 'notify') or hasattr(outbound, 'notify_targets'))
+        self.assertNotIn('notify_level', (pathlib.Path(handraise.__file__).parent / 'settings_schema.json').read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__': unittest.main()

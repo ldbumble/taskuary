@@ -12,8 +12,8 @@ pick the chat and whether it may listen.
 1. Connect WhatsApp or Telegram under [Connections](connections#chat).
 2. Send a message to the private chat you want to use — on WhatsApp that is the **Message
    yourself** chat.
-3. Pick that chat in Settings. Taskuary adds the notification role, names the chat, and switches
-   on the assistant for it.
+3. Pick that chat in Settings. Taskuary names it as the Assistant chat and switches on the
+   assistant for it.
 
 The Assistant then offers **Walk me through them in WhatsApp** (or Telegram) for each chat set up
 this way. **Which chat the Assistant offers** in the same section picks one — WhatsApp, Telegram,
@@ -74,11 +74,11 @@ Typed words are answered by the **Assistant's** brain - the same one, and the sa
 
 A drafted reply comes to the chat with its **Close out** choice - the same button as on the desktop, as a
 number or a poll tap. Nothing goes out without that pick: approving on your phone is the same deliberate act as
-approving on the page. Alerts sent to a notify chat are read-only.
+approving on the page. The chat never pings you on its own: it speaks when you write to it or hand it the walk.
 
 ## The morning line
 
-Once a day, the assistant can open with a short line about the day ahead — what slipped, what is
+Off unless you switch it on (Settings → Assistant on your phone). Once a day, the assistant can then open with a short line about the day ahead — what slipped, what is
 waiting, today's meetings. It is the morning brief's voice, cut to the length of something you
 read while walking.
 

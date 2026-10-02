@@ -1,7 +1,7 @@
 """About you: what the system knows about its owner, gathered in one place.
 
 Every connector learns a piece of who the owner is - the Outlook sign-in knows the account, the
-Teams card holds a UPN, Telegram and WhatsApp carry the owner's own chat under notify_chat, the
+Teams card holds a UPN, Telegram and WhatsApp may carry the owner's own chat under notify_chat, the
 mailboxes under Sources are theirs. None of it was visible anywhere as a whole, and the agents
 that act on the owner's behalf are told about them through SOUL.md alone. This module reads all
 of it back - each fact with WHERE it came from - and lets the owner add what nothing can infer
@@ -51,7 +51,7 @@ def profile(store) -> dict:
     for t, kind in (('telegram', 'your chat id'), ('whatsapp', 'your chat (JID)'), ('teams', 'notify chat id')):
         for c in cards(t):
             if _cfg(c).get('notify_chat'):
-                add(t, kind, _cfg(c)['notify_chat'], f'notify chat on the {card_name(c, t)} - where pings and your verdicts go')
+                add(t, kind, _cfg(c)['notify_chat'], f'your own chat on the {card_name(c, t)}')
     # the paired WhatsApp account IS a phone number - read live off the bridge, best effort
     for wa in cards('whatsapp'):
         if wa.get('Active'):

@@ -31,7 +31,6 @@ A role is a permission, not a ranking.
 | **feed** | Show inbound items on the Timeline, unread by any AI |
 | **report** | Make the source available to scheduled reports |
 | **tool** | Let agents query it while working a task |
-| **notify** | Send notifications out through it |
 
 :::rule Feed is not a quieter trigger
 `feed` means no model ever reads those items — cheaper, quieter, and no verdict to argue with.
@@ -39,7 +38,7 @@ A role is a permission, not a ranking.
 a source is noisy but you still want to see it, make it a feed.
 :::
 
-A card can hold more than one role. A mailbox is usually `trigger` and `notify`; a database is
+A card can hold more than one role. A mailbox is usually `trigger` and `tool`; a database is
 usually `report` and `tool`.
 
 ## Mail
@@ -64,8 +63,8 @@ me" from "someone asked the team".
 | System | Notes |
 |---|---|
 | **Teams**, **Slack** | Messages enter the Timeline through triage |
-| **Telegram** | Bot-based inbound, approved in-chat replies, optional phone notifications; each chat is opt-in |
-| **WhatsApp** | A local bridge for inbound messages, approved replies and notifications. Unofficial protocol — use a number you can afford to lose |
+| **Telegram** | Bot-based inbound, approved in-chat replies, the Assistant walk on your phone; each chat is opt-in |
+| **WhatsApp** | A local bridge for inbound messages, approved replies and the Assistant walk on your phone. Unofficial protocol — use a number you can afford to lose |
 | **Discord** | Watches selected bot channels and posts approved replies back into the originating channel |
 | **Apple Messages** | macOS only. Reads the Mac's local Messages history and replies through Messages.app; needs Full Disk Access and Automation permissions |
 | **Mattermost**, **Rocket.Chat** | A server you host. Each watched channel is its own source, and approved replies post back into it. Rocket.Chat needs two values — the token and the user id issued beside it |

@@ -11,7 +11,7 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 
 test("each fyi entry shows its own summary and acts alone through the proposal road", () => {
   const cards = read("assistantCards.jsx");
-  const fyis = cards.slice(cards.indexOf("export function FyisCard"), cards.indexOf("export function WrapupCard"));
+  const fyis = cards.slice(cards.indexOf("export function FyisCard"), cards.indexOf("export function SetupCard"));
   // the gist rides through gistFor now: it is dropped when it only restates the line above it,
   // which is every assistant idea (fyiRow.js, and test/fyiRow.test.mjs)
   assert.match(fyis, /\{open !== i\.key && !folded && gistFor\(i\) && <div className="tq-fyi-gist">\{gistFor\(i\)\}<\/div>\}/);
@@ -41,9 +41,6 @@ test("the grouped context, the task summary and the checklist stay renderable - 
   // the walk's cards lead with who wants what and link to the task; the checklist lives on the task
   // (the owner, 2026-09-23: "let's keep the detail task list on the actual task tab")
   assert.match(combined, /const task = list && /);
-  const task = cards.slice(cards.indexOf("export function TaskCard"), cards.indexOf("export function FyisCard"));
-  // ...as the story: who asked, then the agent - its summary is the agent's step, never the ask (2026-09-28)
-  assert.match(task, /lead=\{<Story card=\{card\} agent=/);
   assert.doesNotMatch(cards, /<CombinedTaskText card=\{card\} \/>/, "every card in the walk passes list={false}");
 });
 
@@ -70,13 +67,6 @@ test("a box means an item you can tick, and the job is not said twice", () => {
 });
 
 test("a paused assistant task exposes resume instead of pretending nobody has worked it", () => {
-  const cards = read("assistantCards.jsx");
-  const agent = cards.slice(cards.indexOf("export function AgentCard"), cards.indexOf("export function MeetingCard"));
-  assert.match(agent, /card\.paused \? "agent stopped"/);
-  assert.match(agent, /\/api\/tasks\/\$\{card\.tid\}\/resume/);
-  assert.match(agent, /"Continue session"/);
-  // ...its task text inside the ask, where the story tells it (2026-09-28)
-  assert.match(agent, /words=\{card\.paused \? <div className="tq-thr-words"><CombinedTaskText/);
   const tasks = taskSource();
   // one set of words for the one act, whichever agent held the conversation (2026-09-15) - and one box, the rail's,
   // with a note for the agent (T14, 2026-09-25)

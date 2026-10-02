@@ -32,13 +32,6 @@ test("the timeline handoff asks for an agent type before Send is enabled", () =>
   assert.match(handoff, /\{ kind: agentKind/);
 });
 
-test("a handed-off agent workspace is folded in the main Assistant by default", () => {
-  const cards = src("assistantCards.jsx");
-  const agentCard = cards.slice(cards.indexOf("export function AgentCard"), cards.indexOf("export function MeetingCard"));
-  assert.match(agentCard, /useState\(false\)/);
-  assert.match(agentCard, /Open agent workspace/);
-});
-
 test("opening a general task reads state without starting an agent", () => {
   const workspace = src("GeneralWorkspace.jsx");
   const mount = workspace.slice(workspace.indexOf("useEffect(() => {", workspace.indexOf("export function GeneralWorkspace")));

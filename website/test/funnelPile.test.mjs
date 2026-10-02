@@ -227,15 +227,13 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(view, /chip: runChip/);                    // one road for every one of them
   assert.match(view, /triage moved it up/);                // the rail shows promotions
   assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
-  assert.match(cardsSrc(), /show the final report/i);        // ...and a finished job's report reads right there
   // a rerun is the chat line's word now, not a second button on the card (2026-09-07: "only one place")
   assert.doesNotMatch(cardsSrc(), /Run it again/);
   assert.match(cardsSrc(), /Open walkthrough/);             // set-up opens the Assistant operator, not a coding checkout
   // the answers an agent NAMED are answers you can click, bound to the request that asked - the
   // waiting room is for a pane that is not asking anything (the owner, 2026-09-17)
-  assert.match(cardsSrc(), /className="tq-card-picks"/);
-  assert.match(cardsSrc(), /\/api\/tasks\/\$\{card\.tid\}\/worker\/answer/);
-  assert.match(cardsSrc(), /card\.choices \|\| \[\]\)\.length && !!card\.request_id/);
+  // (the walk's agent card is gone - an agent's item opens its task, answered in its own pane; the game keeps the picks)
+  assert.match(read("gameItem.jsx"), /\/worker\/answer/);
   assert.doesNotMatch(view, /onClick=\{\(\) => settle\("done"\)\}/);   // Done is a suggestion, not a button that settles
   assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
   // the chat keeps its bottom in view as it grows - except while a browse card is read from its top (the canvas redesign)
@@ -247,7 +245,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(read("FeedView.jsx"), /r\.TaskId && r\.MsgStatus !== "filed" && <LifecycleChip kind="task"/);
   assert.match(read("FeedView.jsx"), /\{!!\(verdict\.existing_task_id \|\| \(verdict\.related_message_ids/);
   assert.match(cardsSrc(), /All read, next/);             // a handful of fyi's goes in one click
-  assert.match(cardsSrc(), /<TerminalPane sid=\{card\.sid\}/);   // a stopped agent's own screen, in the chat
+  assert.match(read("TaskPage.jsx"), /<TerminalPane sid=\{term\.sid\}/);   // a stopped agent's own screen: its task view on the canvas
   assert.doesNotMatch(view, /left: side, right: side/);    // no taper: every row is a Timeline row's width
   assert.doesNotMatch(view, /<Drawer/);                    // no reader drawer: reading happens in the card
   const css = read("assistantView.css");
@@ -297,13 +295,13 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   // that exact task bundle together. The conversation endpoint is intentionally not used here: a
   // long WhatsApp room may contain several separate tasks.
   assert.match(cards, /function CombinedTaskText/);
-  assert.match(cards, /api\.get\(`\/api\/tasks\/\$\{card\.tid\}`\)/);
+  assert.match(cards, /useFetched\(card\?\.tid \? `\/api\/tasks\/\$\{card\.tid\}`/);
   assert.match(cards, /filter\(\(m\) => String\(m\.Status \|\| ""\) !== "context"\)/);
   assert.match(cards, /messages combined by triage/);
   assert.match(cards, /<Clamp><CombinedTaskText card=\{card\} list=\{false\} \/><\/Clamp>/);   // the message shown, More only when it is cut off
   assert.match(cards, /\(over \|\| open\) && <button/);
-  // reply + paused agent + ordinary message, each WITHOUT the checklist - that stays on the task (2026-09-23)
-  assert.equal((cards.match(/<CombinedTaskText card=\{card\} list=\{false\} \/>/g) || []).length, 3);
+  // reply + ordinary message, each WITHOUT the checklist - that stays on the task (2026-09-23)
+  assert.equal((cards.match(/<CombinedTaskText card=\{card\} list=\{false\} \/>/g) || []).length, 2);
   assert.match(read("SettingsView.jsx"), /funnel_hours/); assert.match(read("SettingsView.jsx"), /funnel_max/);
 });
 

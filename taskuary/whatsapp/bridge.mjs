@@ -172,10 +172,13 @@ async function connect() {
         const picked = polls.vote(pu, { creators: mine, voters: [m.key.participant, m.key.remoteJid, ...(m.key.fromMe ? mine : [])] });
         // ...a real pick on an OLDER list of ours is not nothing: it never fires (its choices are gone), but the owner is
         // told so - a silent tap read as the assistant freezing (2026-09-29). It goes on as a marked, wordless message.
-        const stale = picked ? "" : polls.stale(pu, { creators: mine, voters: [m.key.participant, m.key.remoteJid, ...(m.key.fromMe ? mine : [])] });
-        if (picked || stale) messages.push({ seq: ++seq, id: m.key.id, jid: picked ? m.key.remoteJid : stale, sender: m.key.participant || m.key.remoteJid,
+        const who = { creators: mine, voters: [m.key.participant, m.key.remoteJid, ...(m.key.fromMe ? mine : [])] };
+        const stale = picked ? "" : polls.stale(pu, who);
+        // ...and a second pick on the newest one, already spent (2026-10-02): told the same way, never run
+        const spent = picked || stale ? "" : polls.spent(pu, who);
+        if (picked || stale || spent) messages.push({ seq: ++seq, id: m.key.id, jid: picked ? m.key.remoteJid : stale || spent, sender: m.key.participant || m.key.remoteJid,
           group: m.key.remoteJid?.endsWith("@g.us"), name: m.pushName || "", text: picked, poll: true, quoted: "",
-          ...(stale ? { stalePoll: true } : {}),
+          ...(stale ? { stalePoll: true } : spent ? { stalePoll: true, spentPoll: true } : {}),
           ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000), fromMe: !!m.key.fromMe, taskuary: false });
         while (messages.length > MAX_KEPT) messages.shift();
         continue;

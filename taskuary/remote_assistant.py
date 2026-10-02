@@ -29,6 +29,9 @@ _turns: dict = {}                            # chat -> the Event that cancels it
 OPENED = ('Walking you through it here. Reply in this chat and I keep going; '
           'take it back on the desktop when you want the buttons again.')
 CLOSED = 'Taken back on the desktop - this walk is over here. Message me any time and I will pick it up again.'
+HAND_BACK = 'Hand back to the desktop'
+MORE_CHOICES, POLL_MAX = 'More choices', 12      # WhatsApp's poll and Telegram's buttons both stop at twelve
+HANDED_BACK = 'Handed back - the walk is on the desktop again. Message me any time and I will pick it up again.'
 
 
 def _config(connector) -> dict:
@@ -654,6 +657,15 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 forget_offered(store, channel, chat)
                 send(store, channel, chat, _continue(store, pending, question), connector_id)
                 return
+            if act and act.get('t') == 'page':
+                # the same list, the next page - kept whole again (the pick spent it above) so a typed number still answers
+                store.set_setting(f'{OFFERED_KEY}:{channel}:{chat}', json.dumps(offered), 'assistant')
+                store.set_setting(f'{ACTS_KEY}:{channel}:{chat}', json.dumps(acts), 'assistant')
+                send(store, channel, chat, 'More choices:', connector_id, page=int(act.get('at') or 0), choices=offered)
+                return
+            if act and act.get('t') == 'handback':
+                end_handoff(store, 'owner', HANDED_BACK)            # tells this chat itself
+                return
             if act and act.get('t') == 'prompt':
                 send(store, channel, chat, 'Go ahead - type your question.', connector_id)
                 return
@@ -830,12 +842,14 @@ def _item_for(store, key: str, item: dict | None) -> dict | None:
     return funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
 
 
-def stale_tap(store, channel: str, chat: str, connector_id=None):
+def stale_tap(store, channel: str, chat: str, connector_id=None, spent: bool = False):
     """A tap on a poll that is no longer the newest: its choices went with the card it was under, so nothing runs (a stale
     pick must never fire) - but a tap that got no answer read as the assistant freezing (2026-09-29). The current choices
-    are the ones under the last message; say so, once, in words."""
-    try: send(store, channel, chat, 'That was an older list, so nothing ran - the choices under my last message are the current ones.',
-              connector_id)
+    are the ones under the last message; say so, once, in words. `spent`: a second pick on the newest poll, which answers
+    once (the owner, 2026-10-02: "once a poll is answered it should never be allowed to be used again")."""
+    said = ('That list was already used - nothing ran. The choices under my last message are the current ones.' if spent
+            else 'That was an older list, so nothing ran - the choices under my last message are the current ones.')
+    try: send(store, channel, chat, said, connector_id)
     except Exception as e: logger.warning(f'{channel}: could not answer a tap on an older list - {e}')
 
 
@@ -1714,6 +1728,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     # lines of menu for the one word the owner can always type (2026-09-24 audit). The desktop's lone Next is
     # one small button; on a phone it is noise.
     if not item and [str(w).strip().lower() for w in words] == ['next']: words = []
+    # THE WALK RAN OUT, ON THE PHONE: hand it back from here (the owner, 2026-10-02: "hand back choice at the end of the walk
+    # though asking question of assistant will always work") - a pick, the desktop's Take it back; typed words still talk
+    if out.get('over') and store is not None and handoff(store): extra = list(extra or []) + [(HAND_BACK, {'t': 'handback'})]
     if extra:
         words = words + [label for label, _ in extra]
         _offer(extra)
@@ -1817,7 +1834,7 @@ def _chunks(text: str, limit=3900) -> list[str]:
     return chatformat.split(str(text or '').strip(), limit)
 
 
-def send(store, channel: str, chat: str, text: str, connector_id: int = None):
+def send(store, channel: str, chat: str, text: str, connector_id: int = None, page: int = 0, choices: list = None):
     """Everything we say to the owner leaves through here, so this is where it is SPELLED.
 
     WhatsApp formats client-side, so its own emphasis reaches it; Telegram renders nothing
@@ -1831,7 +1848,8 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
     talked(store, channel, chat)
     # every road to this chat passes here, so this is where what we offered is written down -
     # off the text AS WRITTEN, before any of it is respelled for the channel
-    try: offered = remember_offered(store, channel, chat, text)
+    # `choices`: a further PAGE of a list already kept (More choices) - its words are not numbered in this text
+    try: offered = list(choices) if choices else remember_offered(store, channel, chat, text)
     except Exception as e:
         logger.debug(f'could not keep the offered options for {channel}: {e}'); offered = []
     # ONE CHOICE IS STILL A POLL (the owner, 2026-09-25: "even if only next we should have poll to go next no?") - a card
@@ -1848,15 +1866,29 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None):
         offered = offered + [ASK_SOMETHING]
         store.set_setting(f'{OFFERED_KEY}:{channel}:{chat}', json.dumps(offered), 'assistant')
         store.set_setting(f'{ACTS_KEY}:{channel}:{chat}', json.dumps({**acts_for(store, channel, chat), ASK_SOMETHING: {'t': 'prompt'}}), 'assistant')
+    # ...and past TWELVE, a page and "More choices" (the owner, 2026-10-02: "the 12 choice should always be click to see more"):
+    # a poll and Telegram's buttons both stop at 12, and the rest were reachable only by a typed number. The list kept for
+    # typed numbers stays whole; the tap shows the next eleven, and the last page comes round to the first.
+    tapped = offered
+    if channel in ('whatsapp', 'telegram') and len(offered) > POLL_MAX:
+        rest = [w for w in offered if w != MORE_CHOICES]
+        at = page if 0 < page < len(rest) else 0
+        nxt = at + POLL_MAX - 1 if at + POLL_MAX - 1 < len(rest) else 0
+        kept = rest + [MORE_CHOICES]
+        store.set_setting(f'{OFFERED_KEY}:{channel}:{chat}', json.dumps(kept), 'assistant')
+        store.set_setting(f'{ACTS_KEY}:{channel}:{chat}', json.dumps({**acts_for(store, channel, chat), MORE_CHOICES: {'t': 'page', 'at': nxt}}), 'assistant')
+        tapped = rest[at:at + POLL_MAX - 1] + [MORE_CHOICES]
+        labels = dict(zip(kept, poll_labels(kept)))         # cut and told apart over the WHOLE list, as resolve_index reads it
+    else: labels = dict(zip(offered, poll_labels(offered)))
     msgs = []
     for part in str(text or '').split(chatformat.BREAK):
         shown = chatformat.render(part, channel)
         if shown.strip(): msgs.extend(chatformat.split(shown, chatformat.HARD))
     for i, msg in enumerate(msgs):
         # the LAST bubble carries the choices as a poll: WhatsApp's one tappable thing (the owner, 2026-09-25)
-        last = i == len(msgs) - 1 and offered
+        last = i == len(msgs) - 1 and tapped
         # ...and on Telegram, its own buttons under the same last bubble (messengers.tg_send)
-        kw = {'poll': poll_labels(offered)} if last and channel == 'whatsapp' else {'buttons': offered} if last and channel == 'telegram' else {}
+        kw = {'poll': [labels[w] for w in tapped]} if last and channel == 'whatsapp' else {'buttons': tapped} if last and channel == 'telegram' else {}
         out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id, **kw)
     # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one
     # that never did (2026-09-24)

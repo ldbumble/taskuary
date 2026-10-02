@@ -255,3 +255,40 @@ class PhoneCardTests(unittest.TestCase):
         t = s.create_task({'Title': 'Export timeouts', 'Kind': 'coding', 'Status': 'done'}, 'coder')
         s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nThe mass update made the export 6x larger.')
         self.assertEqual(ra.more_text(s, {'kind': 'agentdone', 'tid': t}), 'The mass update made the export 6x larger.')
+
+
+class OwnerRulingsOctoberTwoTests(unittest.TestCase):
+    """The owner, 2026-10-02: a hand-back choice when the walk runs out, a poll that answers once, and past twelve choices
+    a "More choices" page - never a list cut short."""
+
+    def test_past_twelve_a_page_and_more_choices_and_typed_numbers_still_answer_the_whole_list(self):
+        s, _ = armed()
+        many = [{'verb': f'v{i}', 'label': f'Choice {i}'} for i in range(1, 16)]
+        got = offer(s, {'say': 'x', 'item': ITEM, 'chips': many})
+        self.assertEqual(got[-1][1], [f'Choice {i}' for i in range(1, 12)] + [ra.MORE_CHOICES])
+        page = sent_to(s, ra.MORE_CHOICES, poll=True)
+        self.assertEqual(page[-1][1], [f'Choice {i}' for i in range(12, 16)] + [ra.MORE_CHOICES])
+        self.assertEqual(ra.resolve_index(s, 'whatsapp', JID, '14'), ('Choice 14', True))
+        # ...and the last page comes round to the first
+        self.assertEqual(sent_to(s, ra.MORE_CHOICES, poll=True)[-1][1][0], 'Choice 1')
+
+    def test_a_second_tap_on_a_spent_poll_runs_nothing_and_says_so(self):
+        s, _ = armed()
+        got = []
+        with mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append(body)):
+            ra.stale_tap(s, 'whatsapp', JID, None, spent=True)
+        self.assertIn('That list was already used - nothing ran.', got[-1])
+
+    def test_the_walk_running_out_on_the_phone_offers_the_hand_back(self):
+        s, _ = armed()
+        out = {'item': None, 'say': concierge.ALL_DONE, 'chips': [], 'over': True}
+        with mock.patch.object(ra, 'handoff', return_value={'channel': 'whatsapp', 'chat': JID}):
+            got = offer(s, out)
+        self.assertIn(ra.HAND_BACK, got[-1][1])
+        with mock.patch.object(ra, 'end_handoff') as ended:
+            sent_to(s, ra.HAND_BACK, poll=True)
+        ended.assert_called_once()
+        self.assertEqual(ended.call_args[0][2], ra.HANDED_BACK)
+        # ...and with no walk on the phone (a chat that always listens) it is not offered
+        with mock.patch.object(ra, 'handoff', return_value=None):
+            self.assertNotIn(ra.HAND_BACK, offer(s, out)[-1][1] or [])

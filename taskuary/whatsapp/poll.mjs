@@ -62,11 +62,22 @@ export function createPolls(max = 200, keep = 8) {
     // Found by the poll's id, not the chat: a vote can name the chat by its LID while we sent to the number.
     // Which jid signed the vote depends on the account (a phone number or a LID, with or without the
     // device), so each plausible pair is tried - the GCM tag says which one is right.
+    // A POLL ANSWERS ONCE (the owner, 2026-10-02: "once a poll is answered it should never be allowed to be used again"):
+    // WhatsApp cannot close a poll, so the first real pick spends it here - a re-tap or a changed vote answers nothing
     vote(update, { creators = [], voters = [] } = {}) {
       const key = update?.pollCreationMessageKey, enc = update?.vote;
       const p = key && [...byChat.values()].find((x) => x.id === key.id);
-      if (!p || !enc?.encPayload) return "";
-      return open(p, enc, creators, voters);
+      if (!p || p.used || !enc?.encPayload) return "";
+      const got = open(p, enc, creators, voters);
+      if (got) p.used = true;
+      return got;
+    },
+    // the chat of the NEWEST poll when this update is a real pick on it after it was already spent, or "" - told, never run
+    spent(update, { creators = [], voters = [] } = {}) {
+      const key = update?.pollCreationMessageKey, enc = update?.vote;
+      if (!key || !enc?.encPayload) return "";
+      for (const [jid, p] of byChat) if (p.id === key.id) return p.used && open(p, enc, creators, voters) ? jid : "";
+      return "";
     },
   };
 }

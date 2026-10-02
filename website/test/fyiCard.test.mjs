@@ -23,7 +23,7 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   for (const label of ["Reply", "Make task", "Coding agent", "Regular agent", "Talk about it"]) assert.match(fyis, new RegExp(`>${label}</Button>`));
   assert.match(fyis, /propose\("mine", i\)/); assert.match(fyis, /propose\("coder", i\)/); assert.match(fyis, /propose\("regular_agent", i\)/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's
-  assert.match(fyis, /api\.post\(`\/api\/messages\/\$\{i\.mid\}\/reply`, \{ draft: true \}\)/);   // a reply drafts at once
+  assert.match(fyis, /openReply\(api, i\.mid\)/);   // a reply opens at once, its draft written behind it (replyDraft.js)
   assert.doesNotMatch(fyis.slice(0, fyis.indexOf('variant="contained"')), /onDone\?\./);  // no entry action settles the handful
   assert.match(fyis, /\{open === i\.key && \(\s*<div className="tq-card-actions tq-fyi-acts"/);   // ...and they belong to the one you opened
   const view = read("AssistantView.jsx");

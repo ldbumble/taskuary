@@ -132,15 +132,11 @@ readable part of the configuration.</p>
 <td><strong>tool</strong></td>
 <td>Let agents query it while working a task</td>
 </tr>
-<tr>
-<td><strong>notify</strong></td>
-<td>Send notifications out through it</td>
-</tr>
 </tbody></table>
 <div class="callout rule"><p class="eyebrow">Feed is not a quieter trigger</p><p><code>feed</code> means no model ever reads those items — cheaper, quieter, and no verdict to argue with.
 <code>ignore</code> is a judgement <em>about</em> a message and happens further down, in your routing policies. If
 a source is noisy but you still want to see it, make it a feed.</p>
-</div><p>A card can hold more than one role. A mailbox is usually <code>trigger</code> and <code>notify</code>; a database is
+</div><p>A card can hold more than one role. A mailbox is usually <code>trigger</code> and <code>tool</code>; a database is
 usually <code>report</code> and <code>tool</code>.</p>
 <h2 id="mail">Mail<a class="anchor" href="#mail" aria-label="Link to this section">#</a></h2>
 <table>
@@ -179,11 +175,11 @@ me&quot; from &quot;someone asked the team&quot;.</p>
 </tr>
 <tr>
 <td><strong>Telegram</strong></td>
-<td>Bot-based inbound, approved in-chat replies, optional phone notifications; each chat is opt-in</td>
+<td>Bot-based inbound, approved in-chat replies, the Assistant walk on your phone; each chat is opt-in</td>
 </tr>
 <tr>
 <td><strong>WhatsApp</strong></td>
-<td>A local bridge for inbound messages, approved replies and notifications. Unofficial protocol — use a number you can afford to lose</td>
+<td>A local bridge for inbound messages, approved replies and the Assistant walk on your phone. Unofficial protocol — use a number you can afford to lose</td>
 </tr>
 <tr>
 <td><strong>Discord</strong></td>

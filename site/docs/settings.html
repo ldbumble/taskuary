@@ -229,7 +229,7 @@ is what you see if those cards cannot load.</li>
 <h3 id="a-morning-line-in-the-chat">A morning line in the chat<a class="anchor" href="#a-morning-line-in-the-chat" aria-label="Link to this section">#</a></h3>
 <p><code>phone_morning_line</code> · type: switch</p>
 <p>Once a day, the assistant&#39;s chat says what is waiting and offers the three ways in: walk me through my tasks, set up Taskuary, set up a report.</p>
-<p>On (the default once a chat is chosen): the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the three scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day. Set-up is always offered: there is always more to set up, and from a chat it opens on what is connected.</p>
+<p>Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the three scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day. Set-up is always offered: there is always more to set up, and from a chat it opens on what is connected.</p>
 <p>Off: the chat speaks first only for a hand-off, a review ping or a report aimed at it.</p>
 <h2 id="advisor">Advisor<a class="anchor" href="#advisor" aria-label="Link to this section">#</a></h2>
 <h3 id="lines-per-post-at-most">Lines per post, at most<a class="anchor" href="#lines-per-post-at-most" aria-label="Link to this section">#</a></h3>
@@ -321,13 +321,6 @@ is what you see if those cards cannot load.</li>
 <p>Past the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board&#39;s floor view is drawn to this number, so raising it widens the room instead of crowding it.</p>
 <p>Raise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this.</p>
 <h2 id="notifications">Notifications<a class="anchor" href="#notifications" aria-label="Link to this section">#</a></h2>
-<h3 id="push-to-your-chat">Push to your chat<a class="anchor" href="#push-to-your-chat" aria-label="Link to this section">#</a></h3>
-<p><code>notify_level</code> · type: select · default: <code>needs_me</code></p>
-<p>Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.</p>
-<p>Options: <code>needs_me</code>, <code>all</code>, <code>off</code></p>
-<p>Give a chat connector the Notifications role (its Role step) and name the chat in its config; this decides what gets pushed there.</p>
-<p>needs me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — &#39;the work is done, the reply is drafted and waiting on the task&#39;. everything = every new timeline item. off = never push.</p>
-<p>Events that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output.</p>
 <h3 id="sound-when-an-agent-raises-its-hand">Sound when an agent raises its hand<a class="anchor" href="#sound-when-an-agent-raises-its-hand" aria-label="Link to this section">#</a></h3>
 <p><code>hand_sound</code> · type: sound · default: <code>chime</code></p>
 <p>A session that stops at its prompt, or asks you a question, plays this - from any tab. Off silences it.</p>

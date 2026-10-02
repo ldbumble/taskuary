@@ -28,7 +28,8 @@ class FakeScreencast:
         async def handle(ws):
             self.paths.append(ws.request.path); self.origins.append(ws.request.headers.get('Origin'))
             await ws.send(json.dumps({'type': 'status', 'connected': True}))
-            await ws.send(json.dumps({'type': 'frame', 'seq': 7, 'data': JPEG, 'metadata': {'deviceWidth': 1280, 'deviceHeight': 720}}))
+            # data FIRST, type last: the order agent-browser 0.38.2 actually sends (2026-10-02)
+            await ws.send(json.dumps({'data': JPEG, 'metadata': {'deviceWidth': 1280, 'deviceHeight': 720}, 'seq': 7, 'type': 'frame'}))
             await ws.send(json.dumps({'type': 'url', 'url': 'https://example.test/login'}))
             async for m in ws: self.got.append(json.loads(m))
         async def main():
@@ -142,7 +143,7 @@ class RelayTests(unittest.TestCase):
         self.assertIn('pacing=ack', self.fake.paths[0]); self.assertIn(f'maxFps={bv.MAX_FPS}', self.fake.paths[0])
         self.assertEqual(self.fake.origins[0], 'http://localhost')     # agent-browser admits localhost origins only
         # the newest frame and the page it showed are kept for Snapshot and the listing
-        self.assertEqual((bv.LAST['r1']['seq'], bv.LAST['r1']['url']), (7, 'https://example.test/login'))
+        self.assertEqual((bv._frame(bv.LAST['r1']['frame']), bv.LAST['r1']['url']), (JPEG, 'https://example.test/login'))
         self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://example.test/login')
 
     def test_no_browser_refuses_the_socket_like_a_missing_terminal(self):
@@ -167,6 +168,27 @@ class RelayTests(unittest.TestCase):
         self.assertIn('Browser snapshot of https://example.test/login', s.list_comments(tid)[-1]['Body'])
         # a session on no task, with no task named, is refused - not attached to a guess
         self.assertEqual(c.post('/api/terminals/r1/browser/snapshot', json={}).status_code, 422)
+
+
+class RememberTests(unittest.TestCase):
+    """What Snapshot files. The kind was read off the message's HEAD, and agent-browser 0.38.2 puts `data`
+    first - so no frame was ever kept and Snapshot answered "no frame yet" over a painting page (2026-10-02)."""
+    def setUp(self): bv.LAST.clear()
+
+    def test_a_frame_is_kept_whatever_order_its_keys_come_in(self):
+        for i, m in enumerate([{'type': 'frame', 'seq': 1, 'data': 'QUFB'}, {'data': 'QkJC', 'seq': 2, 'type': 'frame'},
+                               {'seq': 3, 'data': 'Q0ND', 'metadata': {'deviceWidth': 9}, 'type' : 'frame'}]):
+            bv.remember('k', json.dumps(m, separators=(',', ':') if i else (', ', ': ')))
+            self.assertEqual(bv._frame(bv.LAST['k']['frame']), m['data'])
+
+    def test_the_page_is_kept_and_nothing_else_is(self):
+        bv.remember('k', json.dumps({'url': 'https://a.example/', 'type': 'url'}))
+        for m in [{'type': 'status', 'connected': False}, {'type': 'tabs', 'tabs': []},
+                  {'type': 'console', 'text': '"type":"frame"'}, {'type': 'url', 'url': 'https://b.example/?q="type":"frame"'}]:
+            bv.remember('k', json.dumps(m))
+        self.assertEqual((bv.LAST['k']['frame'], bv.LAST['k']['url']), ('', 'https://b.example/?q="type":"frame"'))
+        bv.remember('k', 'not json "type":"url"'); bv.remember('k', '{"type":"url"}')   # junk and an empty url change nothing
+        self.assertEqual(bv.LAST['k']['url'], 'https://b.example/?q="type":"frame"')
 
 
 class NavigateTests(unittest.TestCase):

@@ -2839,7 +2839,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                 onSent={() => { setHandoff(false); onSkipped?.(); }} />}
             </Drawer>
 
-            <Drawer anchor="right" open={!!reshape && !!sel.TaskId} onClose={() => setReshape(false)}
+            <Drawer anchor="right" open={reshape === true && !!sel.TaskId} onClose={() => setReshape(false)} ModalProps={{ keepMounted: !!reshape }}
               PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
                 <CallSplitIcon sx={{ fontSize: 18, color: ACCENT2 }} />
@@ -2851,6 +2851,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               </Typography>
               {reshape && sel.TaskId && (
                 <Reshape taskId={sel.TaskId} taskRef={ref(sel.TaskId)}
+                  // folded away, it goes at the press like every close; a fold that fails reopens the drawer with the reason
+                  onLeave={(tid) => tid === sel.TaskId && setReshape("merging")} onStay={(tid) => tid === sel.TaskId && setReshape(true)}
                   onDone={(r) => { onRefresh?.(); if (r?.merged) onOpenTask?.(r.merged); }} />
               )}
             </Drawer>

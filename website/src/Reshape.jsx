@@ -27,10 +27,12 @@ const Section = ({ children }) => (
   <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2, p: 1.5, mb: 1.5 }}>{children}</Box>
 );
 
-export const Reshape = ({ taskId, taskRef, onDone }) => (
+// `onLeave(tid)` / `onStay(tid, msg)`: a fold puts the merged-away task down at the press, like every close, and takes it back
+// with the reason if the fold fails - the page decides what that means for the task it shows
+export const Reshape = ({ taskId, taskRef, onDone, onLeave, onStay }) => (
   <Box>
     <SplitInTwo taskId={taskId} taskRef={taskRef} onDone={onDone} />
-    <FoldIntoAnother taskId={taskId} taskRef={taskRef} onDone={onDone} />
+    <FoldIntoAnother taskId={taskId} taskRef={taskRef} onDone={onDone} onLeave={onLeave} onStay={onStay} />
   </Box>
 );
 
@@ -117,7 +119,7 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
 
 // The router's own signals, run backwards: whatever it nearly attached this to is the task it
 // probably IS. Which one survives is the owner's call - the loser keeps its notes and a pointer.
-const FoldIntoAnother = ({ taskId, taskRef, onDone }) => {
+const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
   const [cands, setCands] = useState(null);
   const [pick, setPick] = useState(null);
   const [keep, setKeep] = useState("other");     // which task survives the fold
@@ -131,10 +133,13 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone }) => {
   const go = async () => {
     setBusy(true); setErr("");
     const [src, dst] = keep === "other" ? [taskId, pick.task_id] : [pick.task_id, taskId];
+    // PUT DOWN AT THE PRESS (the owner, 2026-10-01: "the merged-away task leaves the rail at once, like a close"): the fold
+    // runs behind it, and one that fails - a session still running on it - brings it back with the reason
+    onLeave?.(src);
     try {
       const { data } = await api.post(`/api/tasks/${src}/merge`, { into: dst });
       setDone(data); onDone?.({ merged: dst, dropped: src, ref: data.ref });
-    } catch (e) { setErr(msgOf(e, "Could not fold them together")); }
+    } catch (e) { const msg = msgOf(e, "Could not fold them together"); setErr(msg); onStay?.(src, msg); }
     setBusy(false);
   };
   if (done) return (

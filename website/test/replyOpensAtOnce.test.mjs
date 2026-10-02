@@ -43,6 +43,15 @@ test("a draft that fails says why in the card", async () => {
   assert.match(draftJob(41).error, /no AI connector/);
 });
 
+test("the Game's Reply presses open at once too, and its draft box says Drafting until the draft lands", () => {
+  const game = read("gameItem.jsx");
+  assert.doesNotMatch(game, /\/reply`, \{ draft: true, instruction: null \}/, "no Game press waits on the model for a fresh draft");
+  assert.equal((game.match(/openReply\(api, item\.mid\)/g) || []).length, 3, "Draft a reply, Reply from this, the reply chip");
+  const draft = game.slice(game.indexOf("function Draft("), game.indexOf("export function Moves("));
+  assert.match(draft, /useDraftJob\(item\.rid\)/);
+  assert.match(draft, /drafting \? "Drafting…"/);
+});
+
 test("every Reply press opens at once, and both views of a draft show Drafting while it is written", () => {
   const cards = read("assistantCards.jsx"), view = read("AssistantView.jsx"), page = read("TaskPage.jsx"), dec = read("ReviewDecision.jsx");
   assert.doesNotMatch(cards, /\/reply`, \{ draft: true/, "no card waits on the model");

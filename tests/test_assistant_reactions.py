@@ -1263,10 +1263,7 @@ class WhichCheckoutTests(unittest.TestCase):
         prop = concierge.propose_for(s, dock, {'verb': 'regular_agent', 'text': ask}, None, ask)
         self.assertIn('whether anything else would stop with it', prop['say'])
         self.assertLessEqual(len(prop['summary']), 121)
-        prop['clear'] = True
-        started = concierge._start_when_clear(prop, 'regular_agent')
-        self.assertTrue(started['auto']); self.assertIn('whether anything else would stop with it.', started['say'])
-        self.assertNotIn('…', started['say'])
+        self.assertNotIn('…', prop['say'])
 
     def test_a_task_that_matches_nothing_refuses_rather_than_opening_the_default_folder(self):
         s = store()

@@ -311,11 +311,12 @@ class ReadsTests(unittest.TestCase):
             out = concierge.say(s, 'can you do this for me', llm=lambda system, user, **kw: answer)
         return s, out, out.get('proposal') or {}
 
-    def test_an_ask_for_a_worker_that_fits_starts_it_at_once(self):
-        """The owner, 2026-09-24: "if i ask it to do something especially if we have profile for it it should start
-        a general agent" / "start right away if it's clear ... if unclear which profile to choose ... then ask"."""
+    def test_an_ask_for_a_worker_that_fits_picks_it_and_waits_for_the_press(self):
+        """The owner, 2026-09-24: "if we have profile for it it should start a general agent" - the worker is chosen; and
+        2026-10-01: typed words never start an agent without his yes, so the card waits for the press."""
         s, out, prop = self._handoff('Research job.' + chr(10) + 'CALL: {"kind": "regular_agent", "params": {"text": "find out what the CLI Anything project does", "as": "researcher"}}')
-        self.assertTrue(prop.get('auto'), prop)
+        self.assertFalse(prop.get('auto'), prop)
+        self.assertTrue(prop.get('clear'), prop)
         self.assertEqual(prop['params']['profile'], 'researcher')
         self.assertIn('researcher', out['say'])
         # ...and the task it makes is the researcher's, so the session is seeded with the researcher's rules
@@ -329,15 +330,15 @@ class ReadsTests(unittest.TestCase):
         _s, _out, prop = self._handoff('CALL: {"kind": "regular_agent", "params": {"text": "find out what it does", "as": "astrologer"}}')    # not on the roster
         self.assertFalse(prop.get('auto'))
 
-    def test_a_coding_ask_starts_when_the_checkout_is_clear_and_asks_when_it_is_not(self):
+    def test_a_coding_ask_names_its_checkout_when_clear_and_offers_the_pick_when_not(self):
         soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
                 + '- **northwind/portal**: the expense portal' + chr(10))
-        # NAMED - by the model off the map, or in the owner's own words - it starts, in that checkout
+        # NAMED - by the model off the map, or in the owner's own words - the card is set for that checkout, and waits for
+        # the press like every hand-off typed in words (the owner, 2026-10-01)
         _s, out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the fan mobile app", "as": "ledger"}}', soul=soul)
-        self.assertTrue(prop.get('auto'))
-        self.assertIn('northwind/ledger', out['say'])
+        self.assertEqual((prop.get('auto'), prop.get('clear'), prop['params']['repo']), (None, True, 'northwind/ledger'))
         _s, out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the ledger app"}}', soul=soul)
-        self.assertTrue(prop.get('auto'))
+        self.assertEqual((prop.get('auto'), prop.get('clear')), (None, True))
         # only MATCHED by the description: a guess, shown on the card for a yes - a weak best match once pointed at
         # a checkout the job was not in
         _s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the fan mobile app"}}', soul=soul)
@@ -361,7 +362,7 @@ class ReadsTests(unittest.TestCase):
         prof = {'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger', 'northwind/portal': 'C:/x/portal'}}
         self.assertEqual(terminal.guess_repo(s, made['taskId'], prof)[0], 'northwind/portal')
 
-    def test_a_checkout_the_owner_wrote_starts_even_when_the_model_rewords_it_away(self):
+    def test_a_checkout_the_owner_wrote_is_kept_even_when_the_model_rewords_it_away(self):
         """"if i ask for coding agent on taskuary (explicitly write it) will it start right away" - the model's
         brief can drop the name; the owner's own message still has it."""
         import json
@@ -374,7 +375,8 @@ class ReadsTests(unittest.TestCase):
             out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload',
                                 llm=lambda system, user, **kw: 'CALL: {"kind": "coder", "params": {"text": "fix the receipt upload"}}')
         prop = out.get('proposal') or {}
-        self.assertTrue(prop.get('auto'), prop)
+        self.assertFalse(prop.get('auto'), prop)
+        self.assertTrue(prop.get('clear'), prop)
         self.assertEqual(prop['params']['repo'], 'northwind/portal')
         self.assertEqual(terminal.repo_named_in(s, 'the portal and the ledger'), '')          # two named: ask
         # ...and the model names a checkout by its FULL name, slash and all - a bracket that could not hold a '/'

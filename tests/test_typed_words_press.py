@@ -1,0 +1,64 @@
+"""Typed words in the Assistant, after the owner's rulings on the 2026-10-01 press audit:
+
+1. typed words never start an agent without the owner's yes - the assistant proposes, he presses;
+2. the assistant only offers or runs actions that are real buttons for the item on the table - "what is this about?"
+   over a report came back as a "File it" card, and File it is not a button a report has;
+3. a typed question reads the item on the table first, another task when the words name one, and a search when they
+   ask to find one - and naming a task by its person and subject finds it ("Omar's Spendly lockout" matched nothing,
+   because the search wanted the literal phrase);
+4. an idea or a meeting has no thread and no task, and the model invented TQ refs for it - it is told so, and a
+   reference that does not exist is never put in front of the owner.
+"""
+import json, unittest
+from unittest import mock
+
+from taskuary import concierge, funnel, lookups, operations, terminal
+import tests.test_assistant_reactions as T
+from tests.test_table_context import ask, call, scripted, two_tasks
+
+
+def an_idea(s, text='The Payworth contract auto-renews on 15 Oct and nobody has reviewed the seat count - review it?'):
+    s.upsert_idea({'key': 'idea:payworth', 'kind': 'idea', 'text': text, 'sig': 'p', 'action': {}}, T.ago(hours=1))
+    return next(i for i in T.pile(s) if i.get('kind') == 'idea')
+
+
+def a_report(s):
+    s.save_source({'Channel': 'report', 'Address': 'Nightly AR aging', 'Owner': 'o', 'Active': 1,
+                   'ConfigJson': json.dumps({'type': 'agent', 'title': 'Nightly AR aging'})}, 'o')
+    m = s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Nightly AR aging', 'Subject': 'Nightly AR aging - 214 open invoices',
+                       'FromName': 'Nightly AR aging', 'SentAt': T.ago(1), 'BodyText': 'Open invoices: 214 (up from 198).', 'Status': 'feed'})
+    s.add_route(m, None, 'feed', None, 'a report you set up', [], 'feed')
+    return next(i for i in T.pile(s) if i.get('kind') == 'report')
+
+
+def tasks(s): return len(s.list_tasks())
+
+
+class TypedWordsNeverStartAnAgent(unittest.TestCase):
+    def test_an_agent_asked_for_over_an_idea_is_a_card_the_owner_presses(self):
+        s = T.store()
+        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
+        item, before = an_idea(s), tasks(s)
+        llm, _ = scripted('I would have it researched.\n' + call('regular_agent', text='review the Payworth seat count', **{'as': 'researcher'}))
+        p = ask(s, 'what should I do next?', item['key'], llm).get('proposal')
+        self.assertIsNotNone(p)
+        self.assertFalse(p.get('auto'), 'typed words started an agent with no yes')
+        self.assertEqual(tasks(s), before)
+
+    def test_a_new_hand_off_with_a_named_checkout_still_waits_for_the_yes(self):
+        s = T.store()
+        s.save_doc('soul', '# SOUL.md\n## Repository map\n- **northwind/ledger**: the ledger app\n', 'owner')
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger'}}))
+        llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': 'fix the login crash', 'repo': 'ledger'}}))
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            p = concierge.say(s, 'start a coding agent on ledger to fix the login crash', llm=llm).get('proposal')
+        self.assertIsNotNone(p)
+        self.assertFalse(p.get('auto'))
+        self.assertNotIn('Starting', p['say'])
+
+    def test_continue_session_in_words_is_a_card_but_the_button_still_runs_at_once(self):
+        self.assertIn('continue', concierge.AGENT_STARTS)
+        self.assertIn('continue', concierge.AUTO)        # the chip under the composer is a press: it runs
+
+
+if __name__ == '__main__': unittest.main()

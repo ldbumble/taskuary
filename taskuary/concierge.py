@@ -777,6 +777,14 @@ def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, 
     return parse_options(raw)
 
 
+# THE CONTEXT ORDER for typed words over an item (the owner, 2026-10-01): asked "what's left to do?" over an idea, the model
+# listed the whole pipe; asked about another task by its person, it searched for the sentence and found nothing
+WHAT_ABOUT = ('WHAT THEIR WORDS ARE ABOUT, in this order: the item on the table - a question that names nothing else is about it, '
+              'never the whole pipe; ANOTHER task when they name one (its TQ ref, its title or its person) - read that task with '
+              'task.read, finding its ref with tasks.list or timeline.search on the person and a subject word, never their whole '
+              'sentence; an old task they ask you to FIND - search for it.')
+
+
 def table_line(store, item: dict | None) -> str:
     """What a look-up round and a retry carry, so "it" still means the item on the table after the first round."""
     if not item: return ''
@@ -1457,6 +1465,18 @@ def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> di
     return {'cleared': hit, 'titles': titles, 'mid': next((m for m in mids if m), None), 'words': used}
 
 
+# A TASK NAMED BY ITS PERSON AND SUBJECT, NOT BY A SENTENCE (the 2026-10-01 press audit): "what did Omar's Spendly lockout
+# say?" searched for every word, and the mail says "locked me out" - 7 of 11 such asks found nothing. When every word finds
+# nothing, a row is scored by how many of the words it has, each by its stem ("lockout" finds "locked"), and the rows with
+# at least half of them come back best first.
+def _stem(w: str) -> str: return w[:4] if len(w) >= 6 else w
+def word_hits(words: list, text: str) -> int:
+    from .routing import tokens
+    toks = set(tokens(text))
+    return sum(1 for w in words if any(t.startswith(_stem(w)) for t in toks))
+def _enough(words: list) -> int: return max(1, (len(words) + 1) // 2)
+
+
 def search_timeline(store, sel: dict, limit: int = 12) -> list:
     """The history, by the same selector the pipe uses - and over ALL of it, not the last fortnight.
     lookup() only ever looked 14 days back and needed half the owner's words to hit, so anything older
@@ -1487,7 +1507,24 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
         out.append({'ref': task_ref(r['TaskId']) if r.get('TaskId') else '', 'when': str(r.get('SentAt') or ''),
                     'who': r.get('FromName') or r.get('FromEmail') or '?', 'title': subj, 'mid': r.get('MessageId')})
         if len(out) >= limit: break
+    if not out and len(words) > 1: return _search_loose(store, words, who, cat, days, limit)
     return out
+
+
+def _search_loose(store, words: list, who: str, cat: str, days: int, limit: int) -> list:
+    ids = store.message_search([_stem(w) for w in words], who, days, loose=True)
+    if ids is None: rows = store.feed(limit=4000, days=days)
+    else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids), key=lambda r: rank[r['MessageId']])
+    scored = []
+    for r in rows:
+        if r.get('Channel') == 'assistant': continue
+        hay = f"{r.get('FromName') or ''} {r.get('FromEmail') or ''}".lower()
+        if (who and who not in hay) or (cat and str(r.get('Category') or '').lower() != cat): continue
+        n = word_hits(words, f"{hay} {r.get('Subject') or ''} {r.get('Preview') or ''}")
+        if n >= _enough(words): scored.append((-n, len(scored), r))
+    return [{'ref': task_ref(r['TaskId']) if r.get('TaskId') else '', 'when': str(r.get('SentAt') or ''),
+             'who': r.get('FromName') or r.get('FromEmail') or '?', 'title': str(r.get('Subject') or ''), 'mid': r.get('MessageId')}
+            for *_, r in sorted(scored)[:limit]]
 
 
 def know(store, q: str) -> str:
@@ -2979,7 +3016,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
                       + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item else '')
-                      + (f"{table_actions(store, item)}\n\n" if item else '')
+                      + (f"{table_actions(store, item)}\n\n{WHAT_ABOUT}\n\n" if item else '')
                       + f"The owner says: {text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')

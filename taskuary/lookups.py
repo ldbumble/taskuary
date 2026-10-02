@@ -25,8 +25,19 @@ def _day(s): return str(s or '')[:16]
 
 def tasks_list(store, p: dict) -> str:
     status, limit = str(p.get('status') or 'open').strip().lower(), max(1, min(int(p.get('limit') or 25), 60))
-    rows = store.list_tasks(status=None if status in ('open', 'all') else status, q=str(p.get('contains') or '').strip() or None)
+    q = str(p.get('contains') or '').strip() or None
+    rows = store.list_tasks(status=None if status in ('open', 'all') else status, q=q)
     if status == 'open': rows = [t for t in rows if t.get('Status') in ACTIVE]
+    # ...and a task named by its person and subject, not the literal sentence: every word must match, so "Omar Spendly lockout"
+    # missed the task whose mail says "locked me out" (the 2026-10-01 press audit). Each word by its stem; best match first.
+    words = [w for w in tokens(q or '')]
+    if not rows and len(words) > 1:
+        from .concierge import _enough, _stem
+        hits = {}
+        for w in words:
+            for t in store.list_tasks(status=None if status in ('open', 'all') else status, q=_stem(w)):
+                if status != 'open' or t.get('Status') in ACTIVE: hits.setdefault(t['TaskId'], [t, 0])[1] += 1
+        rows = [t for t, n in sorted(hits.values(), key=lambda x: (-x[1], -x[0]['TaskId'])) if n >= _enough(words)]
     if not rows: return f'No {"" if status == "all" else status + " "}tasks match that.'
     run = lambda t: f" - agent {t['RunAgent']} {t['RunStatus']}" if t.get('RunStatus') in ('running', 'queued') else ''
     out = [f"{task_ref(t['TaskId'])} [{t.get('Status')}/{t.get('Kind')}] {_cut(t.get('Title'), 120)} - updated {_day(t.get('UpdatedAt') or t.get('CreatedAt'))}{run(t)}"

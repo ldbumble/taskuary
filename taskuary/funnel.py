@@ -848,7 +848,7 @@ def _activity_time(value):
 
 
 def _order(items: list) -> list:
-    """The five levels, then the oldest first inside one, then a stable key - and nothing else (the
+    """The five levels, then the oldest first inside one (newest first among reports), then a stable key - and nothing else (the
     owner, 2026-09-07: "within one level oldest wins first"). A lane sub-rank and the saved priority
     used to sit in between, which put a reply drafted ten minutes ago ahead of an ask from Tuesday:
     "no reason why open task is before a reply drafted". Urgency has a level of its own."""
@@ -859,7 +859,10 @@ def _order(items: list) -> list:
         band = _band(item)
         # ...and an Advisor idea leads the quiet band it shares with fyi: the rail draws Advisor ideas above FYI, and oldest-first
         # put a fresh idea behind every older mail, so Next reached the FYI batch first and walked past it (the owner, 2026-09-30)
-        return (band, not todays_brief(item), not (band == 4 and item.get('kind') == 'idea'), activity is None, activity or datetime.max, str(item.get('key') or ''))
+        # ...and reports read NEWEST first: oldest-first is for work, where the longest wait goes first; a report is only news,
+        # and yesterday's evening checkup sat above this morning's error check (the owner, 2026-10-02: "oldest first?")
+        t = (activity - datetime.min).total_seconds() if activity else 0.0
+        return (band, not todays_brief(item), not (band == 4 and item.get('kind') == 'idea'), activity is None, -t if band == 3 else t, str(item.get('key') or ''))
     return sorted(items, key=key)
 
 

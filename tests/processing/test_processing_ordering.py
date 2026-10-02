@@ -82,6 +82,17 @@ def test_the_owners_work_is_one_level_oldest_first_and_a_result_is_not_in_it():
     assert rows == before
 
 
+def test_reports_read_newest_first_under_todays_brief():
+    """Oldest-first is for work: whatever has waited longest goes first. A report is only news, and
+    yesterday's evening checkup sat above this morning's error check (the owner, 2026-10-02: "why are
+    these out of order? oldest first?"). Today's brief still leads; a report with no time stays last."""
+    rows = [item("evening", "report", at=stamp(-14 * 60)), item("check", "report", at=stamp(-20)),
+            item("brief", "report", at=stamp(-25), brief_today=True), item("undated", "report", at=""),
+            item("noon", "report", at=stamp(-4 * 60)), item("old-ask", "asked", at=stamp(-60)), item("ask", "asked", at=stamp(-1))]
+    rows[3]["when"] = ""
+    assert [row["key"] for row in funnel._order(rows)] == ["old-ask", "ask", "brief", "check", "noon", "evening", "undated"]
+
+
 def test_age_alone_orders_one_level_and_urgency_earns_a_level_instead():
     """Saved priority used to reorder rows inside a level, which put a draft from ten minutes ago
     ahead of an ask from Tuesday (the owner, 2026-09-07: "no reason why open task is before a reply

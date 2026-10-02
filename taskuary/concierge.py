@@ -2147,8 +2147,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             put_down()
             if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
             record(store, tid, 'assistant', say, {'kind': 'words', 'key': None, 'chips': opens} if opens else None)
+        # `over`: the walk itself ran out (not a name that was not found, not one filter done) - a phone offers the hand-back
         return {'item': None, 'say': say, 'options': [], 'chips': opens or walk_chips(len(left)), 'left': len(p['items']),
-                'exhausted': only if (only and left) else None}
+                'exhausted': only if (only and left) else None, 'over': not key and not (only and left)}
     # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
     # nothing for the owner to do until it stops, so say so, let it go, and take the next one. It comes
     # back by itself - as the agent's question, its draft, or its finished job.

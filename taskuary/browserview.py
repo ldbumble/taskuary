@@ -187,8 +187,11 @@ def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:
     p.write_bytes(raw)
     aid = store.add_attachment({'MessageId': mid, 'Name': name, 'ContentType': 'image/jpeg', 'Size': len(raw),
                                 'Inline': 0, 'Path': str(p)})
-    store.add_comment(tid, actor, 'human', f"Browser snapshot of {last.get('url') or 'the page'} - {name}")
-    return {'attachmentId': aid, 'name': name, 'url': f'/api/attachments/{aid}', 'page': last.get('url') or ''}
+    # the relay hears a url only when the page MOVES: a pane opened on a page already loaded has none, so
+    # the page is named from agent-browser's own .target, as the listing does (live check, 2026-10-02)
+    page = last.get('url') or state(sid)['url']
+    store.add_comment(tid, actor, 'human', f"Browser snapshot of {page or 'the page'} - {name}")
+    return {'attachmentId': aid, 'name': name, 'url': f'/api/attachments/{aid}', 'page': page or ''}
 
 
 def navigate(sid: str, url: str) -> str:

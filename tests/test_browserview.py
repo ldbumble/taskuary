@@ -169,6 +169,14 @@ class RelayTests(unittest.TestCase):
         # a session on no task, with no task named, is refused - not attached to a guess
         self.assertEqual(c.post('/api/terminals/r1/browser/snapshot', json={}).status_code, 422)
 
+    def test_a_snapshot_names_a_page_the_relay_never_heard_a_url_for(self):
+        """A pane opened on a page already loaded gets frames and no url message - the page still has a name."""
+        s = server.store
+        tid = s.create_task({'Title': 'portal', 'Kind': 'general'}, 'o')
+        s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'x', 'BodyText': 'x', 'Status': 'new'})
+        bv.remember('r1', json.dumps({'data': JPEG, 'type': 'frame'}))
+        self.assertEqual(c.post('/api/terminals/r1/browser/snapshot', json={'task_id': tid}).json()['page'], 'https://example.test/')
+
 
 class RememberTests(unittest.TestCase):
     """What Snapshot files. The kind was read off the message's HEAD, and agent-browser 0.38.2 puts `data`

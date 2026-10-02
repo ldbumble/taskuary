@@ -273,8 +273,9 @@ export default function TaskHubPage() {
   const [everBoard, setEverBoard] = useState(false);
   const [everAssistant, setEverAssistant] = useState(tab === "Assistant");
   // the Assistant as a chat or as the game - remembered per browser, like any view choice
-  // The public demo also starts in the assistant unless the visitor has chosen the game.
+  // The public demo always opens on the chat: a visitor who tried the game once still lands on the chat next visit.
   const [asstGame, setAsstGame] = useState(() => {
+    if (import.meta.env.VITE_DEMO === "1") return false;
     try { return localStorage.getItem("taskuary.assistantMode") === "game"; } catch { return false; }
   });
   const [stageMode, setStageMode] = useState("chat");   // what a click on a sidebar row does (chat | task)

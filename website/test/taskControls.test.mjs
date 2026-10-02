@@ -18,7 +18,7 @@ test("each control carries the caption that names its effect on task versus agen
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
     ["Save and end session", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
-    ["Save result", "Saves the stopped session's result and report. The task stays open."],
+    ["Save and end session", "Saves the stopped session's result and report. The task stays open."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
     // was named for (2026-09-22), so the caption says what the press does

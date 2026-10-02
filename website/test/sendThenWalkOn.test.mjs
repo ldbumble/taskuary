@@ -11,11 +11,11 @@ const read = (f) => readFileSync(path(f), "utf8");
 
 test("a clean send hands over to the task page, which walks on only when the task closed", () => {
   const dec = read("ReviewDecision.jsx"), page = read("TaskPage.jsx");
-  assert.match(dec, /onMarkDone = null, onSent = null, toRow = false/);
+  assert.match(dec, /onMarkDone = null, onSent = null, onRemind = null, toRow = false/);
   // after the error checks, never instead of them: a refused or failed send keeps the card and says why
   assert.match(dec, /else if \(data\.send_error\) setSendErr\(data\.send_error\);\n\s+\/\/[^\n]*\n\s+\/\/[^\n]*\n\s+else if \(data\.ok && verb === "approve" && onSent\) \{ await onSent\(\); setBusy\(false\); return; \}/);
   assert.match(dec, /else if \(data\.ok && verb !== "reject" && onSent\) \{ await onSent\(\);/);   // the close-out (merge + reply) too
-  assert.match(page, /onMarkDone=\{askFinish\} onSent=\{sent\}/);
+  assert.match(page, /onMarkDone=\{askFinish\} onSent=\{sent\} onRemind=/);
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
   assert.match(sent, /api\.get\(`\/api\/tasks\/\$\{selected\}`\)/);
   assert.match(sent, /if \(done\) \{ onLeave\?\.\(\); return closedHere\(\); \}/);

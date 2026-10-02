@@ -58,9 +58,10 @@ export const InvoiceLine = ({ meta }) => (
 // `closeout` is the task's pending close-out (merge the PR, close the issue): given beside its reply, the two are
 // ONE decision on this card, and the close-out runs first (verdicts.decide's reply_text).
 // `onMarkDone`: the task's own Mark done (TaskPage puts the task down at the press) - a reply draft's other choice.
+// `onRemind`: the task's own Remind me - a close-out's "not now" (the owner, 2026-10-02: Not yet IS remind me later).
 // `onSent`: a send or close-out that went through - the task page reads the task and, when that closed it, walks on.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, toRow = false }) {
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false }) {
   const [text, setText] = useState(null);           // the owner's edit; null means "the draft as filed"
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
   const [busy, setBusy] = useState(false);
@@ -151,6 +152,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // THE DECISION'S VERBS, one list for the card's buttons and the action row: what presses, what it says, when it is off
   const no = (id) => `${r.ReviewId}:${id}`;
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
+  const remindTitle = "Puts the task away until a day - nothing is merged, closed or sent; it is back on your rail that morning";
   const doneTitle = "Marks the task done without sending - the draft stays on it, to send later if you want";
   // Redraft / Refresh / Draft with AI: the same handler the in-card button has
   const canRedraft = !proposal && meta.kind !== "zoho_invoice";
@@ -178,7 +180,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         run: () => decide("approve"), title: `Sends this response to ${replyContext(r)}` },
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
-    ...(co ? [{ id: no("reject"), label: co.rejectLabel, tone: "q", disabled: busy, run: () => decideBoth("reject"), title: "Leaves the pull request as it is; the task stays open and on you, the reply unsent" }]
+    // A CLOSE-OUT HAS NO "NOT YET" (the owner, 2026-10-02): Next keeps it open and moves on, Remind me keeps it open until a day
+    ...(co || proposal?.kind === "closeout" ? (onRemind ? [{ id: no("remind"), label: "Remind me", tone: "q", disabled: busy, run: onRemind, title: remindTitle }] : [])
       : proposal ? [{ id: no("reject"), label: proposal.rejectLabel, tone: "q", disabled: busy, run: () => decide("reject"), title: rejectTitle }]
       // A REPLY DRAFT IS NEVER REJECTED (the owner, 2026-10-01: "rejected is useless - it should be redraft or close task"): Reject
       // threw the draft away and left the task open, which is neither. Its other choices are Redraft and the task's own Mark done.
@@ -346,12 +349,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
         {proposal?.alt && <Button size="small" variant="outlined" disabled={busy} onClick={() => decide(proposal.alt.verb)}
           title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}
-        {co && <Button size="small" disabled={busy} onClick={() => decideBoth("reject")}
-          title="Leaves the pull request as it is; the task stays open and on you, the reply unsent">{co.rejectLabel}</Button>}
-        {/* a close-out card is Close out / Decline / Not yet and nothing else (the owner, 2026-09-28: "what does reject
+        {(co || proposal?.kind === "closeout") && onRemind && <Button size="small" disabled={busy} onClick={(e) => onRemind(e)} title={remindTitle}>Remind me</Button>}
+        {/* a close-out card is Close out / Decline / Remind me and nothing else (the owner, 2026-09-28: "what does reject
             reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart;
             and a plain draft is Close out, Redraft (at the row's end) or the task bar's own Mark done (2026-10-01) */}
-        {proposal && <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
+        {proposal && proposal.kind !== "closeout" && <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
         </>}
         <Box sx={{ flex: 1 }} />
         {!toRow && canRedraft && <Button size="small" disabled={busy || drafting} onClick={redraft}>

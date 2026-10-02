@@ -207,6 +207,7 @@ DECISIONS = {
     'not_ours':        'file it, just this once - its card asks whether from now on, or as a rule',
     'not_ours_sender': 'file everything from this sender from now on - their mail still arrives and stays readable',
     'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule',
+    'not_ours_kind':   "an Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that",
     'close':           'Mark done - the task behind the item is finished',
     'done':            'the owner handled it - Mark done on a task; on an idea, a report or an fyi it is read and settled',
     'next':            'move on to the next thing',

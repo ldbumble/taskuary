@@ -802,7 +802,9 @@ def _said(store, cap: int = 40, done_days: float = 7, report_id=None) -> str:
         except ValueError: chat = []
         for turn in chat[-4:]:
             out.append(f"    {turn.get('role')}: {_short(turn.get('text'), 300)}")
-    return '\n'.join(out) or '(nothing yet)'
+    said = '\n'.join(out) or '(nothing yet)'
+    v = verdicts_block(store, report_id)
+    return f'{said}\n\n{v}' if v else said
 
 
 def raised(store, days: float = 2) -> str:
@@ -1661,7 +1663,35 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
 # Make a task (task: yours, nothing works it), Send to agent (agent), Not ours (dismiss: never said again), Remind me
 # (snooze: back on its day), and done - handled some other way, which is what the rail's Done writes. Next is the
 # walk's own and touches nothing. Draft follow-up, Discuss and the talk-back chat are gone: a task's agent drafts.
-VERBS = ('task', 'agent', 'dismiss', 'snooze', 'done')
+VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done')
+# WHAT THE OWNER DID WITH AN IDEA, kept where the Advisor reads it (the owner, 2026-10-02: "feedback on assistant ideas even on
+# desktop does it teach it anything? we should have that"). The idea row's status said dismissed or done - and done covered a
+# task made from it and a line merely handled alike - and a dismissed row ages out of ALREADY SAID with the rest. This log is
+# the verdict itself, newest first and capped, so the prompt stays small and a turned-down KIND outlives its one idea.
+VERDICTS_KEY, VERDICTS_CAP = 'advisor_idea_verdicts', 30
+VERDICT_WORD = {'task': 'took it up - made it a task', 'agent': 'took it up - sent it to an agent', 'done': 'handled it',
+                'dismiss': 'turned it down', 'dismiss_kind': 'turned it down - no more ideas like this'}
+
+
+def verdicts(store) -> list:
+    try: v = json.loads(store.get_setting(VERDICTS_KEY) or '[]')
+    except ValueError: v = []
+    return v if isinstance(v, list) else []
+
+
+def _keep_verdict(store, i: dict, verb: str, actor: str):
+    row = {'key': i.get('Key'), 'text': _short(i.get('Text'), 160), 'verdict': verb, 'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    store.set_setting(VERDICTS_KEY, json.dumps(([row] + [r for r in verdicts(store) if r.get('key') != row['key']])[:VERDICTS_CAP]), actor)
+
+
+def verdicts_block(store, report_id=None) -> str:
+    """The owner's verdicts on this report's ideas, as evidence - the model reads intent, nothing here routes on a word."""
+    mine = owns(store, report_id)
+    rows = [r for r in verdicts(store) if mine(str(r.get('key') or ''))]
+    if not rows: return ''
+    return ("WHAT THE OWNER DID WITH YOUR IDEAS (newest first - raise more like the ones taken up; do not raise again what was "
+            "turned down, and nothing like the ones marked 'no more ideas like this', unless the facts are new):\n"
+            + '\n'.join(f"- {VERDICT_WORD.get(r.get('verdict'), r.get('verdict'))} ({_when(r.get('at'))}): {r.get('text')}" for r in rows))
 
 
 def linked_task(store, idea_id: int, a: dict) -> dict | None:
@@ -1728,6 +1758,7 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
         store.audit('idea', idea_id, verb, actor, detail={'until': at})
         return out | {'until': at, 'remindAt': at, 'when': remind.when(at)}
     if verb in ('task', 'agent'): out |= _make_task(store, i, a, verb == 'agent', actor)
-    store.set_idea_status(idea_id, 'dismissed' if verb == 'dismiss' else 'done', actor)
+    store.set_idea_status(idea_id, 'dismissed' if verb in ('dismiss', 'dismiss_kind') else 'done', actor)
     store.audit('idea', idea_id, verb, actor, detail={'kind': i.get('Kind')})
+    _keep_verdict(store, i, verb, actor)
     return out

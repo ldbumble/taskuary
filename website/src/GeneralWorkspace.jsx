@@ -347,7 +347,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
   );
 }
 
-function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy,
+function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onReport, reportBusy,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
@@ -394,6 +394,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             isError: !!event.detail?.is_error });
           yield { content: content() };
         } else if (event.type === "start") {
+          onStarted?.(event.session);
           progress.push(`Started ${event.session?.provider || "the selected agent"}`);
           yield { content: content() };
         } else if (event.type === "progress" && event.detail) {
@@ -420,7 +421,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
         onBusyChange?.(false);
       }
     },
-  }), [attachmentsRef, onBusyChange, onClearAttachments, onSent, selectionRef, task.TaskId]);
+  }), [attachmentsRef, onBusyChange, onClearAttachments, onSent, onStarted, selectionRef, task.TaskId]);
   const runtime = useLocalRuntime(modelAdapter, { initialMessages: initial(messages) });
   /* WHAT ARRIVED WHILE YOU WERE TYPING goes into the thread that is already standing. This used to
      be a key bump, which remounts - and the draft lives in the composer INSIDE this runtime, so the
@@ -629,6 +630,17 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   };
   const clearAttachments = useCallback((path) => setAttachments((old) => path ? old.filter((a) => a.path !== path) : []), []);
   const sent = useCallback((payload) => accept(payload), [accept]);
+  /* THE SESSION IS KNOWN AT THE START OF THE TURN, not its end. The stream's first event carries it
+     (server.assistant_stream puts `start` before the prompt is sent), and nothing read it: the pane
+     learned its session only from `done`, so a browser that opened ten seconds into a first turn was
+     first painted a minute later, when the answer landed (the 2026-10-02 pane pass). Taking it here
+     mounts the browser beside the conversation while the agent is still driving it. Only into a pane
+     with no session yet - an existing one is already polled and is the fresher copy. */
+  const started = useCallback((s) => {
+    if (!s?.sid) return;
+    setData((d) => (d && !d.session ? { ...d, session: s } : d));
+    onSession?.(s);
+  }, [onSession]);
   const stopRun = useCallback(() => {
     api.post(`/api/tasks/${task.TaskId}/assistant/cancel`).catch(() => {});
   }, [task.TaskId]);
@@ -704,7 +716,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     <AgentNameCtx.Provider value={name}>
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages} published={data?.published}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
-        attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
+        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={asking} onAnswer={answerAsk}
@@ -797,9 +809,9 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        {session ? (
-          <SessionPane sid={session.sid} height="100%" expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
-        ) : thread}
+        {/* ALWAYS inside the pane, session or not: a session that arrives mid-turn (`started`) must not
+            change the tree around the thread, or the answer streaming into it is remounted away */}
+        <SessionPane sid={session?.sid || null} height="100%" expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
       </Box>
     </Box>
   );

@@ -20,8 +20,8 @@ test("the general workspace has no view switcher - the conversation is the only 
 });
 
 test("the chat renders with or without a live session - a session only adds the browser split", () => {
-  const body = workspace.slice(workspace.indexOf("{session ? ("));
-  assert.match(body.slice(0, 400), /<SessionPane[^>]*expectBrowser=\{wantsBrowser\(task\)\}>\{thread\}<\/SessionPane>\s*\) : thread\}/);
+  // one tree either way: the pane takes a null sid, so a session that arrives mid-turn never remounts the thread (2026-10-02)
+  assert.match(workspace, /<SessionPane sid=\{session\?\.sid \|\| null\}[^>]*expectBrowser=\{wantsBrowser\(task\)\}>\{thread\}<\/SessionPane>/);
 });
 
 test("the chat takes the room on the task page, the way a live session does", () => {

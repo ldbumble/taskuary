@@ -8,7 +8,7 @@ const review = feed.slice(feed.indexOf("const ReviewCanvas"), feed.indexOf("cons
 
 test("the Timeline keeps handoff behind one action instead of an always-open form", () => {
   assert.match(review, /<TrayBtn onClick=\{\(\) => setHandoff\(true\)\}[\s\S]*?>\s*Hand off<\/TrayBtn>/);
-  assert.match(review, /<Drawer[^>]+open=\{handoff && !!sel\.TaskId\}/);
+  assert.match(review, /<Drawer[^>]+open=\{handoff === true && !!sel\.TaskId\}/);   // "sending" is the hand-off put down at the press
   assert.match(review, /\{handoff && sel\.TaskId && <Handoff/);
   assert.doesNotMatch(review, /<TrayGroupLabel[^>]*>HAND OFF<\/TrayGroupLabel>/);
 });

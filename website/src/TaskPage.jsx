@@ -489,6 +489,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     finally { setFinishing(false); }
     loadTasks(); onChanged?.();
   };
+  // HANDED TO A PERSON: the forward went out and the server closed the task after it (server.handoff), so what comes next is
+  // what comes after any close - the list moves on, the walk brings the next; there is nothing left to close here
+  const handedOff = async () => {
+    setHandoff(false);
+    try { await (onFinish ? onFinish("done", async () => {}) : loadDetail(selected)); } catch { /* already closed on the server */ }
+    loadTasks(); onChanged?.();
+  };
   // Remind me: put away until a day - the page around this view decides where to go next
   const reminded = (out) => { onReminded?.(out); loadTasks(); onChanged?.(); };
   const dismiss = () => onClose?.();
@@ -1808,7 +1815,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       </Drawer>
 
       {/* ── hand off: a right-hand drawer, so it cannot hide above a tall terminal ── */}
-      <Drawer anchor="right" open={!!handoff && !!t} onClose={() => setHandoff(false)}
+      {/* ...and "sending" is the hand-off put down at the press: the drawer goes with the task, the form stays mounted behind
+          it so a send that fails brings back what was typed (2026-10-01) */}
+      <Drawer anchor="right" open={handoff === true && !!t} onClose={() => setHandoff(false)} ModalProps={{ keepMounted: !!handoff }}
         PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <ForwardToInboxIcon sx={{ fontSize: 18, color: "#55697a" }} />
@@ -1818,7 +1827,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
         </Typography>
-        {handoff && <Handoff taskId={selected} onSent={() => { loadDetail(selected); loadTasks(); }} />}
+        {handoff && <Handoff taskId={selected} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
+          onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />}
       </Drawer>
 
       {/* ── split / merge: the same right-hand drawer, because it is one question ── */}

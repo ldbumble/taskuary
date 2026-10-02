@@ -43,7 +43,7 @@ import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentio
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
-import { AgentCard, AgentDoneCard, BriefCard, CardNav, WhoWantsWhat, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
+import { BriefCard, CardNav, WhoWantsWhat, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { refreshToday } from "./calendarToday.js";
@@ -512,16 +512,14 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
   const said = last && !m.proposal && kind !== "proposal" ? (own.length || m.card ? own : tableChips) : [];
   // NEVER A DEAD END (the owner, 2026-09-30: "it can write that ... but then should move to next or at least have buttons to
   // navigate"): the newest line with nothing to press - a notice, an answer, a line read back from history - offers Next
-  // while the pipe still holds something
-  const chips = said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || !(actions.items || []).length
+  // while the pipe still holds something. Not under an FYI batch: its own "All read, next" IS Next (the owner, 2026-10-02)
+  const chips = said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis" || !(actions.items || []).length
     ? said : [{ verb: "next", label: "Next" }];
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
-    agent: <AgentCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} />,
-    agentdone: <AgentDoneCard card={c} onOpenTask={actions.openTask} onDone={actions.done} onSurface={actions.surface} />,
     idea: <IdeaCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} />,
     message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} onNavigate={actions.navigate} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
@@ -530,9 +528,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
       onRestart={actions.walkRestart} onFinish={() => actions.walk(-1)}
       onSaved={() => actions.walkSaved(m.id)} />,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
-    task: <TaskCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} />,
-    wrapup: <WrapupCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
   }[kind] : null;
   // A STOP THE WALK HAS MOVED PAST is a finished step, not something the assistant said. Falling
   // through to the title note below drew six near-identical rows, each carrying the message avatar

@@ -21,9 +21,7 @@ test("a new walkthrough is offered as a link and never yanks the tab", () => {
 });
 
 test("an embedded terminal never steals focus and scrolls the Assistant upward", () => {
-  const cards = read("assistantCards.jsx");
   const terminal = read("TerminalView.jsx");
-  assert.match(cards, /TerminalPane[^>]+autoFocus=\{false\}/);
   assert.match(terminal, /!readOnly && ui\?\.autoFocus/);
   assert.match(terminal, /!readOnly && binding\.autoFocus/);
 });

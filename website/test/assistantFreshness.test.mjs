@@ -45,7 +45,6 @@ test("lazy card reads are revision-bound and discard superseded responses", () =
   assert.match(cards, /const key = `\$\{url\}\|\$\{revision \?\? ""\}`;/);
   assert.match(cards, /flight\.then\(\(\{ seq, d \}\) => \{ if \(live && seq === newest\.get\(url\) && d !== undefined\) setData\(d\); \}\)/);
   assert.match(cards, /\[card\.rid, card\.mid, card\.presentation_revision\]/);
-  assert.match(cards, /\[open, card\.tid, card\.presentation_revision\]/);
   assert.ok((cards.match(/return \(\) => \{ live = false; \}/g) || []).length >= 4);
   assert.match(cards, /if \(!live\) return;/);
 });
@@ -54,7 +53,7 @@ test("a refreshed backend draft does not overwrite text being edited locally", (
   const cards = read("assistantCards.jsx");
   assert.match(cards, /const value = text \?\? draft\(\)/);
   const replyStart = cards.indexOf("export function ReplyCard");
-  const replyEnd = cards.indexOf("export function AgentCard", replyStart);
+  const replyEnd = cards.indexOf("export function MeetingCard", replyStart);
   const reply = cards.slice(replyStart, replyEnd);
   const refreshEffect = reply.slice(reply.indexOf("useEffect"), reply.indexOf("const action"));
   assert.match(reply, /setRv\(\(data\.data \|\| \[\]\)\.find/);

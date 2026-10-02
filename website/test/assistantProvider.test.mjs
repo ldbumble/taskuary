@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { pickFor } from "../src/assistantProvider.js";
-import { agentCardView } from "../src/agentCardView.js";
 
 const read = (f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), "utf8");
 const cli = { id: "cli:coder", label: "Claude Code · coder (your CLI)", type: "cli", model: "" };
@@ -29,30 +28,7 @@ test("an older server, or a pick that no longer exists, still lands on something
   assert.equal(pickFor(null), null);
 });
 
-test("an assistant chat is not a terminal to look at", () => {
-  assert.equal(agentCardView("assistant"), "chat");
-  assert.equal(agentCardView("terminal"), "terminal");
-  assert.equal(agentCardView(undefined), "terminal");
-});
-
-test("the workspace and the agent card use those readings", () => {
+test("the workspace uses the picker's reading", () => {
   assert.match(read("../src/GeneralWorkspace.jsx"), /pickFor\(payload\)/);
-  const card = read("../src/assistantCards.jsx");
-  assert.match(card, /agentCardView\(card\.mode\)/);
-  const body = card.slice(card.indexOf("export function AgentCard"));
-  assert.ok(body.indexOf("tq-card-chat") < body.indexOf("tq-card-term"),
-    "the chat branch must be reached before the terminal one, so an assistant is never drawn as a screen");
-  // ...nor beside a live SCREEN: one place to answer, whichever is open (2026-09-23: "why do we need both?")
-  // (...nor for several questions, which each carry their own "Other…" box, 2026-09-28)
-  assert.match(body, /!card\.paused && !live && (!multi && )?<TextField/, "the box is not offered beside a live chat composer or an open screen");
 });
 
-test("a coding screen is shown whole or not at all", () => {
-  const body = read("../src/assistantCards.jsx").slice(read("../src/assistantCards.jsx").indexOf("export function AgentCard"));
-  const term = body.slice(body.indexOf("tq-card-term"), body.indexOf("tq-card-note"));
-  // one size, and it is the expanded one - a 340px peek at a terminal mid-redraw is escape codes
-  assert.match(term, /height: 640/);
-  assert.doesNotMatch(term, /340/);
-  // ...and folded, a terminal card draws NOTHING: the raw last lines were the same unreadable thing
-  assert.match(body, /: chat && !!card\.tail\?\.length && <div className="tq-card-tail">/);
-});

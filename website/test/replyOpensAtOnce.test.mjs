@@ -55,10 +55,10 @@ test("the Game's Reply presses open at once too, and its draft box says Drafting
 test("every Reply press opens at once, and both views of a draft show Drafting while it is written", () => {
   const cards = read("assistantCards.jsx"), view = read("AssistantView.jsx"), page = read("TaskPage.jsx"), dec = read("ReviewDecision.jsx");
   assert.doesNotMatch(cards, /\/reply`, \{ draft: true/, "no card waits on the model");
-  assert.equal((cards.match(/openReply\(api, /g) || []).length, 3, "Draft a reply, an fyi's Reply, a finished agent's reply");
+  assert.equal((cards.match(/openReply\(api, /g) || []).length, 2, "Draft a reply, an fyi's Reply");
   assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null\);/);
   assert.match(page, /await \(generate \? openReply\(api, replyMessage\.MessageId\)/);
   for (const src of [cards, dec]) assert.match(src, /useDraftJob\(/);
   assert.match(dec, /drafting \? "Drafting…"/);
-  assert.match(cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function AgentCard")), /drafting \? "Drafting…"/);
+  assert.match(cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function MeetingCard")), /drafting \? "Drafting…"/);
 });

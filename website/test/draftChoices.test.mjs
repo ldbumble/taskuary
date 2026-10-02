@@ -42,7 +42,7 @@ test("the Timeline's reply box and the dock's reply are Send, Mark done and Redr
 
 test("the walk's reply card offers Redraft over a draft it has", () => {
   const cards = read("assistantCards.jsx");
-  const reply = cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function AgentCard"));
+  const reply = cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function MeetingCard"));
   assert.match(reply, /\{ verb: "redraft", label: busy === "redraft" \? "Drafting…" : "Redraft"/);
   assert.doesNotMatch(reply, /"Reject"/);
 });

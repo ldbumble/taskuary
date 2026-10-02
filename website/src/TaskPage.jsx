@@ -494,10 +494,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   };
   // HANDED TO A PERSON: the forward went out and the server closed the task after it (server.handoff), so what comes next is
   // what comes after any close - the list moves on, the walk brings the next; there is nothing left to close here
-  const handedOff = async () => {
-    setHandoff(false);
+  const handedOff = async () => { setHandoff(false); await closedHere(); };
+  const closedHere = async () => {
     try { await (onFinish ? onFinish("done", async () => {}) : loadDetail(selected)); } catch { /* already closed on the server */ }
     loadTasks(); onChanged?.();
+  };
+  // SENT (Close out / Approve & send): the send already went through, so the task is read again - closed by it means walk on,
+  // still open (a playbook not yet settled, an agent still working) means stay on it with the new state
+  const sent = async () => {
+    let done = false;
+    try { done = String((await api.get(`/api/tasks/${selected}`)).data?.task?.Status || "") === "done"; } catch { /* read it below */ }
+    if (done) { onLeave?.(); return closedHere(); }
+    loadDetail(selected); loadTasks(); onChanged?.();
   };
   // Remind me: put away until a day - the page around this view decides where to go next
   const reminded = (out) => { onReminded?.(out); loadTasks(); onChanged?.(); };
@@ -1617,7 +1625,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
-                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish}
+                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>

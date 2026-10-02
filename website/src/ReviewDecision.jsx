@@ -58,8 +58,9 @@ export const InvoiceLine = ({ meta }) => (
 // `closeout` is the task's pending close-out (merge the PR, close the issue): given beside its reply, the two are
 // ONE decision on this card, and the close-out runs first (verdicts.decide's reply_text).
 // `onMarkDone`: the task's own Mark done (TaskPage puts the task down at the press) - a reply draft's other choice.
+// `onSent`: a send or close-out that went through - the task page reads the task and, when that closed it, walks on.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, toRow = false }) {
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, toRow = false }) {
   const [text, setText] = useState(null);           // the owner's edit; null means "the draft as filed"
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
   const [busy, setBusy] = useState(false);
@@ -102,6 +103,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // refused before anything happened is not "approved, but it did not send"
       if (!data.ok && data.send_error) setCoFail({ text: data.send_error, offers: data.offers || [] });
       else if (data.send_error) setSendErr(data.send_error);
+      // WAIT FOR IT, THEN MOVE ON (the owner, 2026-10-02): the close-out landed with no error, so the task may be closed now
+      else if (data.ok && verb !== "reject" && onSent) { await onSent(); setBusy(false); return; }
       reloadGh(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
     setBusy(false);
@@ -121,6 +124,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // a close-out GitHub's state refused is "not now", with what fits instead - never "approved, but it did not send"
       if (data.refused) { setCoFail({ text: data.send_error || "", offers: data.offers || [] }); reloadGh(); }
       else if (data.send_error) setSendErr(data.send_error);
+      // Close out / Approve & send is not put down at the press: it waits for the send so an error shows HERE, then the
+      // task page closes the walk on it when that send closed the task (the owner, 2026-10-02)
+      else if (data.ok && verb === "approve" && onSent) { await onSent(); setBusy(false); return; }
       onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
     setBusy(false);

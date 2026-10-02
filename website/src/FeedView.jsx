@@ -2823,7 +2823,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               body={voiceNoteBody(sel, (detail?.messages || []).find((m) => m.MessageId === sel.MessageId))}
               onRefresh={onRefresh} onMessageChanged={onMessageChanged} />
 
-            <Drawer anchor="right" open={handoff && !!sel.TaskId} onClose={() => setHandoff(false)}
+            {/* put down at the press like every close (2026-10-01): the drawer goes while it sends, the form kept behind it for a
+                send that fails; once it is sent the task is closed and the panel goes too */}
+            <Drawer anchor="right" open={handoff === true && !!sel.TaskId} onClose={() => setHandoff(false)} ModalProps={{ keepMounted: !!handoff }}
               PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
                 <ForwardToInboxIcon sx={{ fontSize: 18, color: ACCENT }} />
@@ -2833,7 +2835,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
                 {sel.TaskId ? ref(sel.TaskId) : ""} · {sel.Subject}
               </Typography>
-              {handoff && sel.TaskId && <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />}
+              {handoff && sel.TaskId && <Handoff taskId={sel.TaskId} onLeave={() => setHandoff("sending")} onStay={() => setHandoff(true)}
+                onSent={() => { setHandoff(false); onSkipped?.(); }} />}
             </Drawer>
 
             <Drawer anchor="right" open={!!reshape && !!sel.TaskId} onClose={() => setReshape(false)}

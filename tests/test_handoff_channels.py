@@ -71,6 +71,22 @@ class HandingItToAPerson(unittest.TestCase):
             c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess', 'channel': 'whatsapp', 'text': 'yours'})
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
+    def test_the_task_closes_only_once_the_forward_went_out(self):
+        """The page puts the task down at the press (2026-10-01) and brings it back when the send fails - so the
+        server must send FIRST: a refused send leaves the task open, with the reason in the answer."""
+        tid = _task()
+        order = []
+        with mock.patch('taskuary.outbound.send_email', side_effect=lambda *a, **k: order.append('sent') or {'ok': True}), \
+             mock.patch('taskuary.concierge.close_task', side_effect=lambda *a, **k: order.append('closed')):
+            c.post(f'/api/tasks/{tid}/handoff', json={'to': 'erin@northwind.example', 'channel': 'email', 'text': 'yours'})
+        self.assertEqual(order, ['sent', 'closed'])
+        tid = _task()
+        with mock.patch('taskuary.outbound.send_email', side_effect=RuntimeError('the mailbox refused it')):
+            r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'erin@northwind.example', 'channel': 'email', 'text': 'yours'})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn('refused', r.json()['detail'])
+        self.assertNotEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
+
     def test_a_draft_never_sends_anything(self):
         tid = _task()
         with mock.patch('taskuary.outbound.draft_handoff', return_value='a drafted forward'), \

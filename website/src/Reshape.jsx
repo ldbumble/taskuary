@@ -2,7 +2,7 @@
 // holding one. Same drawer for both, because it is the same question - "is this one job?" -
 // and the answer is either "no, break it out" or "no, fold it in". Its own module because
 // two places offer it: the Tasks header bar and the Timeline panel, like Handoff.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, TextField, Typography } from "@mui/material";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import MergeIcon from "@mui/icons-material/MergeType";
@@ -46,12 +46,23 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
   const [err, setErr] = useState("");
+  // OPENS AT ONCE (the owner, 2026-10-01: buttons never wait on the AI): the form is there at the press and the model's split
+  // fills in behind it - but only the sides the owner has not started typing in
+  const typed = useRef({ first: false, second: false });
   useEffect(() => {
-    setSug(null); setDone(null); setErr(""); setMove([]);
+    let live = true;
+    const empty = { title: "", summary: "" };
+    setSug(null); setDone(null); setErr(""); setMove([]); setFirst(empty); setSecond(empty); typed.current = { first: false, second: false };
     api.get(`/api/tasks/${taskId}/split/suggest`).then(({ data }) => {
-      setSug(data); setFirst(data.first || { title: "", summary: "" }); setSecond(data.second || { title: "", summary: "" });
-    }).catch((e) => { setSug({ messages: [] }); setErr(msgOf(e, "Could not read the task")); });
+      if (!live) return;
+      setSug(data);
+      setFirst((v) => typed.current.first ? v : data.first || empty);
+      setSecond((v) => typed.current.second ? v : data.second || empty);
+    }).catch((e) => { if (live) { setSug({ messages: [] }); setErr(msgOf(e, "Could not read the task")); } });
+    return () => { live = false; };
   }, [taskId]);
+  const editFirst = (v) => { typed.current.first = true; setFirst(v); };
+  const editSecond = (v) => { typed.current.second = true; setSecond(v); };
   const go = async () => {
     setBusy(true); setErr("");
     try {
@@ -71,24 +82,23 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
     <Section>
       <Head icon={<CallSplitIcon sx={{ fontSize: 17, color: "#6f8a6e" }} />} title="Break it into two tasks"
         sub={`Two jobs filed as one. ${taskRef || "This task"} keeps its session, report and history — the second job starts clean.`} />
-      {!sug ? <CircularProgress size={16} /> : (
-        <>
-          <Typography variant="caption" sx={{ color: sug.two ? "#6f8a6e" : FAINT, display: "block", mb: 1 }}>
-            {sug.ai
+      <>
+          <Typography variant="caption" sx={{ color: sug?.two ? "#6f8a6e" : FAINT, display: "block", mb: 1 }}>
+            {!sug ? "Reading it for two jobs… the AI's split fills in here - or write your own." : sug.ai
               ? sug.two ? `The AI reads two jobs in here — ${sug.why}. Edit either side; nothing happens until you say so.`
                         : `The AI reads this as one job${sug.why ? ` — ${sug.why}` : ""}. Split it anyway if you disagree.`
               : sug.why}
           </Typography>
           <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>① STAYS HERE</Typography>
           <TextField fullWidth size="small" sx={{ mt: 0.25, mb: 1 }} value={first.title}
-            onChange={(e) => setFirst({ ...first, title: e.target.value })} placeholder="what this task is really about" />
+            onChange={(e) => editFirst({ ...first, title: e.target.value })} placeholder="what this task is really about" />
           <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>② BECOMES A NEW TASK</Typography>
-          <TextField fullWidth size="small" sx={{ mt: 0.25, mb: 0.75 }} value={second.title} autoFocus={!!sug.two}
-            onChange={(e) => setSecond({ ...second, title: e.target.value })} placeholder="the other job, in one line" />
+          <TextField fullWidth size="small" sx={{ mt: 0.25, mb: 0.75 }} value={second.title} autoFocus
+            onChange={(e) => editSecond({ ...second, title: e.target.value })} placeholder="the other job, in one line" />
           <TextField fullWidth multiline minRows={2} size="small" value={second.summary}
-            onChange={(e) => setSecond({ ...second, summary: e.target.value })}
+            onChange={(e) => editSecond({ ...second, summary: e.target.value })}
             placeholder="the part of the ask that belongs to it — the agent reads this" />
-          {(sug.messages || []).length > 0 && (
+          {(sug?.messages || []).length > 0 && (
             <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1, py: 0.5 }}>
               <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Messages that move with it</Typography>
               {sug.messages.map((m) => (
@@ -111,8 +121,7 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
               onClick={go}>Break it in two</Button>
             {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
           </Box>
-        </>
-      )}
+      </>
     </Section>
   );
 };

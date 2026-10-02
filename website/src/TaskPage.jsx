@@ -373,10 +373,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, [diffScope]);
   useEffect(() => { if (diffOpen && selected) loadDiff(selected); }, [diffOpen, selected, loadDiff]);
   // A fold DROPS the task you were looking at, so follow the work to the survivor - staying
-  // put would leave the detail pane on a task that no longer holds anything.
+  // put would leave the detail pane on a task that no longer holds anything. On the walk it was put down at the press
+  // like every close (2026-10-01), so the walk moves on as after one; the server has already dropped it.
   const reshaped = (r) => {
     loadTasks(); onChanged?.();
-    if (r?.dropped === selected) onSelect(r.merged); else loadDetail(selected);
+    if (r?.dropped !== selected) return loadDetail(selected);
+    setReshape(false);
+    canvas && onFinish ? onFinish("dropped", async () => {}).catch(() => {}) : onSelect(r.merged);
   };
   // one click, inside a MENU, where the pointer is already moving - and it deletes the task and
   // writes a standing verdict triage reads. The two sharpest things in the app were the two
@@ -1832,7 +1835,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       </Drawer>
 
       {/* ── split / merge: the same right-hand drawer, because it is one question ── */}
-      <Drawer anchor="right" open={!!reshape && !!t} onClose={() => setReshape(false)}
+      {/* ...and "merging" is this task folded away, put down at the press: the drawer goes with it, the form kept behind it so a
+          fold that fails comes back with the reason (2026-10-01) */}
+      <Drawer anchor="right" open={reshape === true && !!t} onClose={() => setReshape(false)} ModalProps={{ keepMounted: !!reshape }}
         PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <CallSplitIcon sx={{ fontSize: 18, color: "#6f8a6e" }} />
@@ -1842,7 +1847,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
         </Typography>
-        {reshape && <Reshape taskId={selected} taskRef={detail?.ref} onDone={reshaped} />}
+        {reshape && <Reshape taskId={selected} taskRef={detail?.ref} onDone={reshaped} onLeave={(tid) => { if (tid === selected) { setReshape("merging"); onLeave?.(); } }}
+          onStay={(tid, msg) => { if (tid === selected) { setReshape(true); onStay?.(msg); } }} />}
       </Drawer>
 
       {/* ── new task dialog ───────────────────────────────────────────── */}

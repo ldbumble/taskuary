@@ -905,6 +905,13 @@ class GeneralSession:
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
             def visible(kind, name, detail):
+                if kind == 'artifact':                 # a published page: kept on the task, not a line of the trace
+                    from . import claude_artifacts
+                    try:
+                        if isinstance(detail, dict): claude_artifacts.keep(self.store, self.task_id, detail, by=self.agent or 'agent')
+                    except Exception as e: logger.warning(f'general: published page not kept on task {self.task_id}: {e}')
+                    self.trace_revision += 1
+                    return
                 # the ask marker is for Taskuary, never for the screen - and a CLI that narrates its
                 # plan puts it in a progress line long before the reply it is stripped from
                 if kind in ('progress', 'live') and isinstance(detail, str):

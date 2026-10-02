@@ -23,6 +23,7 @@ import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
 import { agentName, workOf, doingNow, trailText, turnStart, elapsedText } from "./agentWork.js";
 import { Md } from "./md.jsx";
+import PublishedPages from "./PublishedPages.jsx";
 import { SessionPane } from "./TerminalView.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
@@ -346,7 +347,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
   );
 }
 
-function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy,
+function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
@@ -502,6 +503,7 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
               </div>
             </div>
           )}
+          {!dock && <PublishedPages pages={published} />}
           {!dock && !serverBusy && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
               <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
@@ -700,7 +702,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
   const thread = (
     <AgentNameCtx.Provider value={name}>
-      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
+      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages} published={data?.published}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}

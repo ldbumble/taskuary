@@ -49,7 +49,7 @@ ROUTING_FACT_COLS = ('Field', 'Signal', 'SignalKey', 'Value', 'Confidence', 'Evi
 PROJECT_LINK_COLS = ('ProjectId', 'Kind', 'Value', 'Label', 'Confidence', 'EvidenceCount',
                      'Confirmed', 'Source')
 ATT_COLS = ('MessageId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId', 'Inline', 'Path')
-ARTIFACT_COLS = ('TaskId', 'Name', 'ContentType', 'Size', 'Path', 'Kind', 'CreatedBy')
+ARTIFACT_COLS = ('TaskId', 'Name', 'ContentType', 'Size', 'Path', 'Kind', 'CreatedBy', 'Url', 'ExtId', 'Version')
 
 # ── is this review live? one answer, two queries ─────────────────────────────────────────
 # LEFT JOIN: a reply opened on a FILED message carries no task at all - the inner join made
@@ -215,7 +215,7 @@ CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId 
 CREATE TABLE IF NOT EXISTS session_resume (TaskId INTEGER PRIMARY KEY, Pick TEXT, Model TEXT,
   NativeId TEXT, ContextKey TEXT, UpdatedAt TEXT);
 CREATE TABLE IF NOT EXISTS task_artifact (ArtifactId INTEGER PRIMARY KEY, TaskId INTEGER, Name TEXT,
-  ContentType TEXT, Size INTEGER, Path TEXT, Kind TEXT, CreatedBy TEXT, CreatedAt TEXT);
+  ContentType TEXT, Size INTEGER, Path TEXT, Kind TEXT, CreatedBy TEXT, CreatedAt TEXT, Url TEXT, ExtId TEXT, Version TEXT);
 CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER,
   Decision TEXT, Score REAL, Reason TEXT, CandidatesJson TEXT, RoutedBy TEXT, CreatedAt TEXT,
   RawOutput TEXT, ParseError TEXT, VerdictJson TEXT);
@@ -747,6 +747,11 @@ class SQLiteStore:
                 self.cx.execute('ALTER TABLE message ADD COLUMN OwnText TEXT')
             # Keep the evidence when triage answers but breaks its JSON contract. Without the
             # raw answer another machine could only report "could not read it", not why.
+            # A page a Claude session published (claude_artifacts): its claude.ai link, the tool's own id for
+            # it - so a republish updates its row - and which version the local copy is
+            acols = {r[1] for r in self.cx.execute('PRAGMA table_info(task_artifact)')}
+            for c in ('Url', 'ExtId', 'Version'):
+                if c not in acols: self.cx.execute(f'ALTER TABLE task_artifact ADD COLUMN {c} TEXT')
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
             if 'RawOutput' not in routecols:
                 self.cx.execute('ALTER TABLE route ADD COLUMN RawOutput TEXT')
@@ -3583,6 +3588,11 @@ class SQLiteStore:
         return self._rows('SELECT * FROM task_artifact WHERE TaskId=? ORDER BY ArtifactId DESC', (task_id,))
     def get_task_artifact(self, aid):
         return self._one('SELECT * FROM task_artifact WHERE ArtifactId=?', (aid,))
+    def task_artifact_by_ext(self, task_id, kind, ext_id):
+        return self._one('SELECT * FROM task_artifact WHERE TaskId=? AND Kind=? AND ExtId=?', (task_id, kind, ext_id))
+    def update_task_artifact(self, aid, fields):
+        d = {k: fields[k] for k in ARTIFACT_COLS if k in fields and k not in ('TaskId', 'Kind', 'ExtId')}
+        if d: self._exec(f"UPDATE task_artifact SET {','.join(f'{k}=?' for k in d)} WHERE ArtifactId=?", [*d.values(), aid])
     # A pty is not storage: the session's readable transcript is written here when it ends, so
     # "Done - wrap it up" still works an hour later, on a task whose CLI has long since exited.
     def add_transcript(self, task_id, sid, text, agent=None, cwd=None, ext_id=None, brain=None):

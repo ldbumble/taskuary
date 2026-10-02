@@ -1140,6 +1140,8 @@ def _assistant_payload(task_id: int, session=None):
             # the prose ("tell me when you're signed in") and the two choices it named were never
             # clickable anywhere (2026-09-15). The chip said "needs you"; the question did not.
             'asking': _workerstate().asking_of(store, session) if session else None,
+            # pages its Claude session published (claude_artifacts) - the foot of the conversation lists them
+            'published': [_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') == 'claude_artifact'],
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')
@@ -2010,7 +2012,9 @@ def _artifact_row(a: dict) -> dict:
             'content_type': a.get('ContentType') or 'text/markdown', 'size': a.get('Size') or 0,
             'kind': a.get('Kind') or 'session', 'created_by': a.get('CreatedBy') or '',
             'created_at': a.get('CreatedAt'),
-            'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None}
+            'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None,
+            # a page a Claude session published: its claude.ai link (claude_artifacts); `url` is the local copy
+            **({'external_url': a['Url'], 'version': a.get('Version') or ''} if a.get('Url') else {})}
 
 # SVG/HTML as a navigable document on this origin runs script as Taskuary. PNG/JPEG
 # stay `inline` so the panel <img> can draw them; SVG still displays in <img> with
@@ -2091,11 +2095,15 @@ def task_artifact(aid: int, download: bool = False):
     if not artifact: raise HTTPException(404, 'artifact not found')
     path = session_artifacts.confined(artifact.get('Path'))
     if not path: raise HTTPException(404, 'this artifact is no longer on disk')
-    # Old artifacts copied the raw PTY stream after the useful result. Keep that durable source
-    # file intact, but do not make the in-app reader render terminal repaints and tool chatter.
     text = path.read_text(encoding='utf-8', errors='replace')
-    text = text.split('\n## Full session transcript', 1)[0].rstrip() + '\n'
-    response = Response(text, media_type='text/markdown; charset=utf-8')
+    # a page a Claude session published: the task page draws it in a sandboxed frame from this TEXT -
+    # served as plain text, so opening the url itself never runs the page as Taskuary (_NOSCRIPT)
+    if artifact.get('Kind') == 'claude_artifact': media = 'text/plain; charset=utf-8'
+    else:
+        # Old artifacts copied the raw PTY stream after the useful result. Keep that durable source
+        # file intact, but do not make the in-app reader render terminal repaints and tool chatter.
+        text, media = text.split('\n## Full session transcript', 1)[0].rstrip() + '\n', 'text/markdown; charset=utf-8'
+    response = Response(text, media_type=media)
     disposition = 'attachment' if download else 'inline'
     response.headers['Content-Disposition'] = f'{disposition}; filename="{_att_filename(artifact.get("Name"))}"'
     response.headers['X-Content-Type-Options'] = 'nosniff'

@@ -1,4 +1,4 @@
-/**
+.tq-published{width:100%;margin:2px auto 10px;display:flex;flex-direction:column;gap:6px}.tq-published-page{border:1px solid #e3ddd2;border-radius:11px;background:#fff;overflow:hidden}.tq-published-row{display:flex;align-items:center;gap:10px;padding:8px 10px;flex-wrap:wrap}.tq-published-name{flex:1;min-width:160px;display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:0;background:none;padding:0;text-align:left;cursor:pointer;font:inherit}.tq-published-name:disabled{cursor:default}.tq-published-name b{color:#4d514b;font-size:12.5px}.tq-published-name span{color:#8a8d86;font-size:11px}.tq-published-frame{display:block;width:100%;height:min(70vh,640px);border:0;border-top:1px solid #e3ddd2;background:#fff}.tq-published-md{border-top:1px solid #e3ddd2;padding:10px 14px;max-height:min(70vh,640px);overflow:auto;font-size:13px}.tq-published-note{border-top:1px solid #e3ddd2;padding:10px 14px;color:#8a8d86;font-size:12px}/**
  * Copyright (c) 2014 The xterm.js authors. All rights reserved.
  * Copyright (c) 2012-2013, Christopher Jeffrey (MIT License)
  * https://github.com/chjj/term.js

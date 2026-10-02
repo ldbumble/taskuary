@@ -86,4 +86,27 @@ class OnlyRealButtons(unittest.TestCase):
         self.assertIsNotNone(p, 'Not ours is a button on a mail that asks for something')
 
 
+class ANamedTaskIsFound(unittest.TestCase):
+    def test_the_timeline_finds_a_task_by_its_person_and_subject_words(self):
+        s, a, b, item = two_tasks()
+        hits = concierge.search_timeline(s, {'contains': "Omar's Spendly lockout"})
+        self.assertTrue(hits, 'the literal phrase is not in the mail; its person and subject are')
+        self.assertEqual(hits[0]['ref'], f'TQ-{a:04d}')
+        with mock.patch.object(s, 'message_search', return_value=None):        # a store with no index scans the feed the same way
+            self.assertEqual(concierge.search_timeline(s, {'contains': "Omar's Spendly lockout"})[0]['ref'], f'TQ-{a:04d}')
+        self.assertEqual(concierge.search_timeline(s, {'contains': 'quarterly budget forecast'}), [])
+
+    def test_tasks_list_finds_it_the_same_way(self):
+        s, a, b, item = two_tasks()
+        out = lookups.tasks_list(s, {'contains': 'Omar Spendly lockout'})
+        self.assertTrue(out.startswith(f'TQ-{a:04d}'), out)
+
+    def test_the_turn_is_told_to_read_the_table_first_then_a_named_task_then_search(self):
+        s = T.store(); item = an_idea(s)
+        llm, seen = scripted('The seat count.')
+        ask(s, "what's left to do?", item['key'], llm)
+        self.assertIn('never the whole pipe', seen[0])
+        self.assertIn('ANOTHER task', seen[0])
+
+
 if __name__ == '__main__': unittest.main()

@@ -304,9 +304,8 @@ def pr_ended(store, task_id: int, at: dict) -> bool:
     _save_pr(store, task_id, {**{k: v for k, v in at.items() if k != 'kind'}, 'state': 'closed', 'merged': bool(cur.get('merged'))})
     if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, 'github', f'pull request #{at["number"]} was {what} on GitHub')
     store.add_comment(task_id, 'github', 'agent', f"Pull request #{at['number']} was {what} on GitHub - its close-out is answered.")
-    if not store.pending_review(task_id, live_only=False):
-        from . import concierge
-        concierge.close_task(store, task_id, 'github')
+    # ...and its playbook, if the agent left one, is the other half the task still waits on (proposals.closed_out)
+    if not proposals.owed(store, task_id): proposals.closed_out(store, task_id, 'github', 'The pull request is closed.')
     return True
 
 

@@ -179,6 +179,44 @@ def closeout_pending(store, tid: int):
                  if _action(r) in CLOSEOUT), None)
 
 
+# ── close-out and playbook are TWO things (the owner, 2026-10-01) ────────────────────────────────────────────────────
+# A task closes only when BOTH are settled: its close-out (the reply sent, the pull request merged or closed, the issue
+# closed) and the playbook proposal its agent left (approved or dismissed). A sent reply used to close the task and dismiss
+# the undecided playbook with it; deciding the playbook first and sending after closed it right, but the other order never
+# closed at all. Whichever half lands second closes the task, from every door - each one calls in here.
+PLAYBOOK = 'write_playbook'
+
+
+def playbook_pending(store, tid: int):
+    """The playbook proposal still waiting on the owner's approve or dismiss, if any."""
+    return next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+                 if _action(r) == PLAYBOOK), None)
+
+
+def owed(store, tid: int) -> bool:
+    """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the playbook."""
+    return any(_action(r) != PLAYBOOK for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,)))
+
+
+def closed_out(store, tid: int, actor: str, said: str) -> bool:
+    """The close-out is done. The task closes now - unless its playbook still waits, when it stays open on the owner with
+    that one decision left, marked so that deciding it closes the task. True when it closed."""
+    if playbook_pending(store, tid):
+        store.audit('task', tid, 'closed_out', actor)
+        store.add_comment(tid, actor, 'human', f'{said} The task closes when you approve or dismiss its playbook.')
+        return False
+    from . import concierge
+    return concierge.close_task(store, tid, actor)
+
+
+def _playbook_decided(store, tid: int, actor: str) -> None:
+    """The playbook was approved or dismissed: the task closes if its close-out was already done and nothing else waits."""
+    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped') or owed(store, tid) or playbook_pending(store, tid): return
+    if not store._one("SELECT 1 x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='closed_out' LIMIT 1", (tid,)): return
+    from . import concierge
+    if concierge.close_task(store, tid, actor): store.add_comment(tid, actor, 'human', 'Closed - the close-out was done and the playbook is decided.')
+
+
 def _action(rv) -> str:
     try: return str(json.loads((rv or {}).get('DraftText') or '{}').get('action') or '')
     except (TypeError, ValueError): return ''
@@ -253,6 +291,7 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     them (the reply to send); "not yet" leaves it open and on them - it is not closed until the act is."""
     tid = rv.get('TaskId')
     if not tid: return
+    if _action(rv) == PLAYBOOK: return _playbook_decided(store, tid, actor)
     # a pull request opened on the owner's yes AFTER the agent finished is still a task that ends by merging it
     if _action(rv) in ('land', 'open_pr') and verb in ('approve', 'edit') and (store.get_task(tid) or {}).get('Status') != 'dropped':
         due = closeout_due(store, tid)
@@ -263,9 +302,8 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     if verb not in ('approve', 'edit'):
         store.update_task(tid, {'Status': 'open'}, actor)
         return
-    if store.pending_review(tid, live_only=False): return
-    from . import concierge
-    concierge.close_task(store, tid, actor)
+    if owed(store, tid): return
+    closed_out(store, tid, actor, 'Closed out.')
 
 
 def close_pr(store, rv: dict, actor='owner') -> dict:

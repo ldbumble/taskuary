@@ -145,8 +145,8 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
     if proposals.closeout_pending(store, task_id):
         store.add_comment(task_id, actor, 'human', 'Reply sent. The task closes when you answer its close-out.')
         return
-    from . import concierge
-    if concierge.close_task(store, task_id, actor):
+    # ...nor while its playbook is undecided: the close-out is done, the playbook is the other half (the owner, 2026-10-01)
+    if proposals.closed_out(store, task_id, actor, 'Reply sent.'):
         store.add_comment(task_id, actor, 'human', 'Closed - the reply went out.')
 
 

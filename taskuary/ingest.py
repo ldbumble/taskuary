@@ -977,36 +977,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         verdict = _stored_verdict(intent)
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor, verdict=verdict)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
-    # the timeline pushed INTO a chat: 'needs_me' pings only what is waiting on YOU - a question
-    # to answer, or a task nobody was dispatched at. A task an agent just started is being
-    # handled; the ping for those comes later, when its reply is drafted (coder.raise_reply).
-    lvl = cfg.get('notify_level') or 'needs_me'
-    # on an attach the FOLLOW-UP says what it needs: a question landing on a coding task used to read the task's
-    # kind, "coding", and pinged nobody (X2, 2026-09-25)
-    kind = (f['kind'] if r['decision'] != 'attach' else
-            'reply' if (follow or {}).get('intent') == 'reply_only' else (store.get_task(tid) or {}).get('Kind'))
-    # both worker kinds are auto-dispatched (PW-069); a personal task or a held one still waits on the owner
-    dispatched = kind in ('coding', 'general') and not held and not msg.get('no_auto') and (
-        auto_code_enabled(cfg) if kind == 'coding' else cfg.get('general_auto_enabled', '1') == '1')
-    if lvl == 'all' or (lvl == 'needs_me' and not dispatched):
-        _notify_new(store, msg, tid, mid,
-                    'a question for you' if kind == 'reply' else 'new task on your list', rid=new_rid)
     return {'status': 'attached' if r['decision'] == 'attach' else 'created', 'task_id': tid, 'message_id': mid}
-
-
-def _notify_new(store, msg: dict, tid, mid, why: str, rid=None):
-    """One short line to the notify channels - read-only; a draft is decided on the task or in the Assistant.
-    Failure is a log line, never a broken ingest."""
-    from .outbound import notify
-    from .store import task_ref
-    try:
-        who = msg.get('from_name') or msg.get('from_email') or msg.get('source_name') or 'someone'
-        body_head = str(msg.get('body') or '').strip().splitlines()
-        head = msg.get('subject') or (body_head[0][:80] if body_head else '(no subject)')
-        line = f"{task_ref(tid)} - {why}\n{head}\nfrom {who} on {msg.get('channel') or 'api'}"
-        notify(store, line, about={'Channel': msg.get('channel'), 'ConversationId': msg.get('conversation_id')})
-    except Exception as e:
-        logger.warning(f'notify failed for message {mid}: {e}')
 
 
 # ── which standing notes reach a prompt ─────────────────────────────────────────────────

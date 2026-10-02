@@ -270,19 +270,5 @@ class ADraftToAPersonTests(unittest.TestCase):
         self.assertTrue(all(len(g) <= cf.HARD for g in got))
 
 
-class NotifyTests(unittest.TestCase):
-    def test_a_notify_ping_is_spelled_for_its_channel(self):
-        from unittest import mock
-        from taskuary import messengers, outbound
-        from taskuary.store import MemoryStore
-        s = MemoryStore()
-        with mock.patch.object(outbound, 'notify_targets', return_value=[('whatsapp', 'c1', None)]), \
-             mock.patch.object(messengers, 'wa_send') as out:
-            outbound.notify(s, 'triage stopped: **no AI connector**')
-        said = out.call_args.args[2]
-        self.assertNotIn('**', said)                 # ** would have matched the one-star test too
-        self.assertIn('*no AI connector*', said)
-
-
 if __name__ == '__main__':
     unittest.main()

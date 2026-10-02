@@ -28,7 +28,6 @@
     "coder_context_file": "1",
     "agent_hooks": "1",
     "auto_sessions": "4",
-    "notify_level": "needs_me",
     "hand_sound": "chime",
     "hand_desktop": "1",
     "phone_assistant": "0",

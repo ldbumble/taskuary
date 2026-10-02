@@ -11,7 +11,7 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import funnel, handraise, outbound, terminal, workerstate as ws
+from taskuary import funnel, handraise, terminal, workerstate as ws
 from taskuary.store import MemoryStore
 
 
@@ -76,14 +76,12 @@ class AskedOnScreenTests(unittest.TestCase):
                     self.assertIs(ws.waiting_of(self.s, t), False, 'the run still says it is working')
                     self.assertIs(terminal.worker_fields(self.s, t)['waiting'], waiting, why)
 
-    def test_the_hand_goes_up_once_and_the_ping_carries_the_question(self):
-        t, pings = self._term(self.CHOOSER), []
-        with mock.patch.dict(terminal.SESSIONS, {'run1': t}, clear=True), \
-             mock.patch.object(outbound, 'notify', side_effect=lambda st, text: pings.append(text)):
+    def test_the_hand_goes_up_once(self):
+        t = self._term(self.CHOOSER)
+        with mock.patch.dict(terminal.SESSIONS, {'run1': t}, clear=True):
             ws.record(self.s, self.tid, 'run1', 'working', source='hook')
             self.assertEqual(handraise.tick(self.s), 1)
             self.assertEqual(handraise.tick(self.s), 0, 'not announced twice')
-        self.assertIn('Ashley confirmed PDF links', pings[0])
 
     def test_an_api_conversation_has_no_screen_to_be_asked_on(self):
         t = self._term(self.CHOOSER); t.blocks_on_owner = False
@@ -171,11 +169,9 @@ class HandRaiseTests(unittest.TestCase):
         self.s = MemoryStore(); handraise.reset()
         self.tid = self.s.create_task({'Title': 'Fix notifications', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
 
-    def test_the_ping_carries_the_exact_question_and_a_working_run_raises_no_hand_however_quiet(self):
+    def test_a_working_run_raises_no_hand_however_quiet_and_a_question_raises_one(self):
         term = FakeTerm(self.tid, 'run1', waiting=True, tail=['> '])
-        pings = []
-        with mock.patch.dict(terminal.SESSIONS, {'run1': term}, clear=True), \
-             mock.patch.object(outbound, 'notify', side_effect=lambda st, text: pings.append(text)):
+        with mock.patch.dict(terminal.SESSIONS, {'run1': term}, clear=True):
             ws.record(self.s, self.tid, 'run1', 'working')
             self.assertEqual(handraise.tick(self.s), 0)                                 # the screen says parked; the run says working
             ws.record(self.s, self.tid, 'run1', 'input_needed', request_id='q1', text='Which repository should I use?')
@@ -183,7 +179,6 @@ class HandRaiseTests(unittest.TestCase):
             self.assertEqual(handraise.tick(self.s), 0)                                 # not announced twice
             ws.record(self.s, self.tid, 'run1', 'answered', request_id='q1', text='the exports repo')
             self.assertEqual(handraise.tick(self.s), 0)
-        self.assertEqual(len(pings), 1); self.assertIn('Which repository should I use?', pings[0]); self.assertIn('asked you', pings[0])
 
     def test_a_pty_that_ended_its_turn_raises_a_hand_and_an_api_conversation_does_not(self):
         pty = FakeTerm(self.tid, 'run1', waiting=True, tail=['bypass permissions on (shift+tab to cycle)'])
@@ -192,21 +187,17 @@ class HandRaiseTests(unittest.TestCase):
             s = MemoryStore(); handraise.reset()
             tid = s.create_task({'Title': 'Fix notifications', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
             t.task_id = tid
-            with mock.patch.dict(terminal.SESSIONS, {'run1': t}, clear=True), \
-                 mock.patch.object(outbound, 'notify', side_effect=lambda st, text: None):
+            with mock.patch.dict(terminal.SESSIONS, {'run1': t}, clear=True):
                 ws.record(s, tid, 'run1', 'working')
                 self.assertEqual(handraise.tick(s), 0)
                 ws.record(s, tid, 'run1', 'turn_end', text='Done with the T12 half.')
                 self.assertEqual(handraise.tick(s), expected)
 
-    def test_an_approval_request_is_said_as_an_approval(self):
+    def test_an_approval_request_raises_a_hand(self):
         term = FakeTerm(self.tid, 'run1', waiting=False)
-        pings = []
-        with mock.patch.dict(terminal.SESSIONS, {'run1': term}, clear=True), \
-             mock.patch.object(outbound, 'notify', side_effect=lambda st, text: pings.append(text)):
+        with mock.patch.dict(terminal.SESSIONS, {'run1': term}, clear=True):
             ws.record(self.s, self.tid, 'run1', 'approval_needed', request_id='p1', text='Run alembic upgrade head?')
             self.assertEqual(handraise.tick(self.s), 1)
-        self.assertIn('approval', pings[0].lower()); self.assertIn('alembic', pings[0])
 
 
 class FunnelTests(unittest.TestCase):

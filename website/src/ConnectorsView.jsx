@@ -22,7 +22,6 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete, Confirm } from "./ui.jsx";
-import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -105,7 +104,6 @@ const META = {
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}) and say SETUP DONE."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
-      ["Notify chat id", "notify_chat", "19:…@thread.v2", "Only for the Notifications role — the chat id from a Teams URL"],
       pollSecondsField("teams")],
     secretLabel: "client secret",
     desc: "Ingest Teams chats via Graph. Leave credentials blank to reuse the Outlook connector's app.",
@@ -131,7 +129,6 @@ const META = {
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
     fields: [["Assistant chat id", "assistant_chat", "",
       "Your own private chat with the bot — the assistant walks you through your work there, and the Assistant tab can hand its walk to it"],
-      ["Notify chat id", "notify_chat", "", "Only for the Notifications role — same id the chat's Source card shows"],
       pollSecondsField("telegram")],
     secretLabel: "bot token (from @BotFather)",
     desc: "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
@@ -147,9 +144,7 @@ const META = {
   whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID). There is no catch-all: a paired account sees every chat you are in, which is far too much to take.", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
       ["Assistant chat JID", "assistant_chat", "15551234567@s.whatsapp.net",
-       "Your private Message yourself chat; this does not turn on ordinary Taskuary notifications"],
-      ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
-       "Only for the Notifications role — alerts and approval requests are separate from Assistant chat"],
+       "Your private Message yourself chat - the assistant walks you through your work there"],
       pollSecondsField("whatsapp")],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
@@ -1587,9 +1582,10 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const m = META[c.Type] || {};
     const srcs = m.channel && m.channel !== "ai"
       ? sources.filter((s) => s.ConnectorId === c.ConnectorId) : null;   // owned, never channel-shared
-    const roles = String(c.Roles || "").split(",").filter(Boolean);
+    // 'notify' is retired (2026-10-02): a card saved with it still loads, it is just not a role any more
+    const roles = String(c.Roles || "").split(",").filter((r) => r && r !== "notify");
     const status = `${c.Active ? "on" : "off"}`
-      + (roles.length ? ` · ${roles.map((r) => r === "notify" ? "notifications" : r).join(" + ")}` : "")
+      + (roles.length ? ` · ${roles.join(" + ")}` : "")
       + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}`
         : c.HasSecret ? " · key saved"
           : ["ollama", "local_whisper"].includes(c.Type) ? " · local — no key needed"
@@ -2181,9 +2177,8 @@ function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack:
     ...(isAI ? [] : [
       { label: "Inbound — what becomes work", done: inboundDone(conn, mine),
         body: <InboundStep conn={conn} m={m} mine={mine} reload={reload} /> },
-      { label: CAN_NOTIFY.has(conn.Type) ? "More roles — reports, agents, notifications" : "More roles — reports, agents", done: true,
-        body: <RoleStep conn={conn} reload={reload}
-          only={CAN_NOTIFY.has(conn.Type) ? ["report", "tool", "notify"] : ["report", "tool"]} /> },
+      { label: "More roles — reports, agents", done: true,
+        body: <RoleStep conn={conn} reload={reload} only={["report", "tool"]} /> },
     ]),
     ...(conn.Type === "github" ? [{ label: "Agent permissions", done: true, body: <GithubPerms conn={conn} reload={reload} /> },
       { label: "Close out — what finishing a task does on GitHub", done: true, body: <GithubCloseout conn={conn} mine={mine} reload={reload} /> }] : []),
@@ -2743,7 +2738,6 @@ const ROLE_META = {
   feed: ["Timeline feed — shows, never assigns", "Poll it and show every new item on the Timeline, but stop there: no triage, no AI call, no task. Good for GitHub issues or a chatty channel you want to SEE without being handed."],
   report: ["Report source", "Selectable on the Reports tab: query it on a schedule and put the (optionally AI-summarized) result on the Timeline."],
   tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
-  notify: ["Notifications", "The outbound direction: Taskuary pushes a ping into this chat when something needs you. Name the chat in Credentials; what qualifies is Settings → Notifications."],
 };
 
 // The GitHub DECISIONS live on the GitHub card: is GitHub the issue tracker for tasks (agents
@@ -2969,20 +2963,12 @@ const AuthorityRow = ({ conn, reload }) => {
 const RoleStep = ({ conn, reload, only }) => {
   const [roles, toggle] = useRoles(conn, reload);
   const keys = only || Object.keys(ROLE_META);
-  const chat = String(parse(conn.ConfigJson).notify_chat || "").trim();
   return (
     <Box sx={{ mt: 1, maxWidth: 620 }}>
       {keys.map((key) => (
         <RoleRow key={key} on={roles.has(key)} onToggle={() => toggle(key)}
           label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
       ))}
-      {keys.includes("notify") && roles.has("notify") && (
-        <Typography variant="caption" sx={{ color: chat ? "#47654a" : "#55697a", display: "block", mt: 1, lineHeight: 1.45 }}>
-          {chat
-            ? `Pinging chat ${chat} · what goes out is Settings → Notifications`
-            : "Name the chat in Credentials, or pings have nowhere to go."}
-        </Typography>
-      )}
       {keys.includes("tool") && <AuthorityRow conn={conn} reload={reload} />}
     </Box>
   );

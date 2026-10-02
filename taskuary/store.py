@@ -493,8 +493,6 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # the ONE copy of your name. The docs say {{owner}} / {{owner_first}} /
                     # {{owner_email}} and are filled in when an AI reads them - see store.doc().
                     'owner_name': '', 'owner_email': '',
-                    # what gets pushed to notify-role channels: off | needs_me | all
-                    'notify_level': 'needs_me',
                     # the agent raised its hand (a session parked at its prompt, or asked a question):
                     # a sound in the app and the browser's own desktop notification - each its own switch
                     'hand_sound': 'chime', 'hand_desktop': '1',
@@ -578,8 +576,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
 #             no AI call. "I want to see new GitHub issues, not be assigned them."
 #   report  - selectable as a scheduled report source (Reports tab)
 #   tool    - the agents may read from / write to it (listed for them in SOUL.md)
-#   notify  - the OUTBOUND direction: Taskuary pushes timeline events INTO this channel
-#             (a Telegram/WhatsApp ping when something needs you) - see outbound.notify
+#   notify  - RETIRED 2026-10-02 (pushes into a chat; the phone chat now speaks only when spoken to) - still parsed
+#             so a card saved with it keeps loading, and nothing reads it
 # Defaults match how each system is usually used; every one is owner-configurable.
 DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 'trigger,tool',
                  'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool', 'imessage': 'trigger,tool',
@@ -643,7 +641,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # something asks for one, and lands as an attachment where the owner can see it
                  'openai_image': 'tool', 'azure_openai_image': 'tool', 'xai_image': 'tool', 'image_server': 'tool',
                  'gemini_image': 'tool', 'stability_image': 'tool', 'openrouter_image': 'tool', 'replicate_image': 'tool'}
-ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
+ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')      # 'notify': retired, kept so old rows parse
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
 

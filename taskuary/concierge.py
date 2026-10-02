@@ -1564,19 +1564,6 @@ def read_op(store, kind: str, params: dict) -> str:
     return lookups.read(store, kind, p)
 
 
-def _start_when_clear(prop: dict, verb: str) -> dict:
-    """A hand-off in words with nothing left to guess - one worker, one checkout - runs at once (the page, or the
-    phone's carry_out, presses the button); anything still open stays a card that asks."""
-    if not prop.get('clear'): return prop
-    role = (prop.get('params') or {}).get('profile')
-    who = f'the {role}' if role else ('the coding agent' if verb == 'coder' else 'an agent')
-    where = (prop.get('params') or {}).get('repo')
-    job = _title_cut((prop.get('params') or {}).get('text') or prop['summary'], 400).rstrip('.')      # the whole ask; the card's title may be cut
-    prop.update(auto=True, say=f"Starting {who} on it{f' in {where}' if where else ''}: {job}.")
-    prop['say_card'] = prop['say']
-    return prop
-
-
 class CallMiss(Exception):
     """A CALL whose target could not be found - "no report by that name". Written for the model, which gets it back."""
 
@@ -1606,7 +1593,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         verb = 'coder' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
                'as': str(params.get('profile') or params.get('repo') or params.get('agent') or params.get('as') or '').strip()}
-        prop = _start_when_clear(propose_for(store, tid, dec, None, text, actor), verb)
+        # TYPED WORDS NEVER START AN AGENT (the owner, 2026-10-01): a hand-off in words is a card he presses, however clear
+        prop = propose_for(store, tid, dec, None, text, actor)
         record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'],
                                                                     'op': prop['id'], 'tid': prop.get('tid'), 'ref': prop.get('ref')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
@@ -2183,6 +2171,8 @@ PROPOSALS = {
 # end session as well same as in task", having been asked to confirm a card that read "wrap: false")
 AUTO = ('done', 'skip', 'later', 'close', 'stop_agent', 'continue',     # settles what is on the table; nothing leaves, nothing is handed off
         'test_connection')                                              # ...and a connection test, which only asks and changes nothing
+# the verbs that start or resume an agent: a press of their button runs them, typed words only ever PROPOSE them
+AGENT_STARTS = ('coder', 'regular_agent', 'continue')
 # the operations that take the item off the table, so the walk moves on after them (the page reads
 # `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
 SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles)
@@ -2416,7 +2406,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     say_card = (lead + note.strip() + ' Nothing has been started - confirm below, or tell me what to change.').strip()
     return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
             'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'say_card': say_card, 'note': note.strip(),
-            # a hand-off in words with no doubt left in it - one worker, one checkout - starts without a card
+            # a hand-off with no doubt left in it - one worker, one checkout - has nothing to pick; it still waits for the press
             'clear': clear, 'repo_choices': choices, 'alts': alts_for(store, it, verb) if not elsewhere else []}
 
 
@@ -3093,14 +3083,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # a plain verb on the item on the table runs at once - the page presses the button itself (the owner,
         # 2026-09-07: "I did already - it should close it; only confirm when you are not sure"). A hand-off, a
         # send, a rule or a verb aimed elsewhere still waits for the button.
-        if verb in AUTO and not elsewhere:
+        # ...but never an agent: typed words that would start or resume one wait for the owner's press (the owner, 2026-10-01 -
+        # "what should I do next?" over an Advisor idea started a researcher; it had earlier asked for a clear ask to start at once)
+        if verb in AUTO and verb not in AGENT_STARTS and not elsewhere:
             # ...and a run at once still says what it could not do ("nothing to wrap")
             prop.update(auto=True, say=f"{prop['label']} - {_where(target_item or {})}." + (f" {prop['note']}" if prop.get('note') else ''))
-        # ASKED FOR AN AGENT, AND NOTHING LEFT TO GUESS: it starts. "Research this for me" with a researcher on the
-        # roster, "fix this" in a checkout the words name - the owner asked, so the card that waited for a second
-        # yes was friction (2026-09-24: "it should start right away if it's clear they are asking for that. same
-        # for coding. if it's not sure ... which profile to choose or for coding which repo ... then ask").
-        elif verb in ('coder', 'regular_agent') and not elsewhere: _start_when_clear(prop, verb)
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}

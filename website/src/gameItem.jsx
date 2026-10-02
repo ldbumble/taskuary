@@ -14,7 +14,7 @@ import { cleanText } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
-import { agentOpen } from "./taskFilter.js";
+import { agentOpen, agentRuns } from "./taskFilter.js";
 import { cardFor, laneMeta } from "./funnelPile.js";
 import { afterExecute, proposalOf } from "./proposalCard.js";
 import { CLOSE_OUT, closeoutOf } from "./reviewProposal.js";
@@ -352,7 +352,8 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {item.lane === "unjudged" && <Row><Btn kind="gold" disabled={!!busy} onClick={() => play("sort", item.key, () => api.post(`/api/messages/${item.mid}/retriage`, {}))}>🔁 Try triage again · +10</Btn></Row>}
       {asks && item.mid && <Row>
         <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}>✍ Draft a reply · +20</Btn>
-        <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={() => dispatch(coding ? "coding" : "general")}>🤖 Hand to {coding ? "a coding agent" : "an agent"} · +45</Btn>
+        {/* not while an agent runs on it - its session is the way in (2026-10-01) */}
+        {!agentRuns(item) && <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={() => dispatch(coding ? "coding" : "general")}>🤖 Hand to {coding ? "a coding agent" : "an agent"} · +45</Btn>}
         <Btn disabled={!!busy} onClick={() => setMine((v) => v == null ? "" : null)}>✎ Write it myself</Btn>
       </Row>}
       {mine != null && <Box onClick={(e) => e.stopPropagation()}>

@@ -612,6 +612,13 @@ def _agent_holds(store, item) -> bool:
     return str(t.get('Assignee') or item.get('assignee') or '').startswith('agent:')
 
 
+def _agent_running(tid) -> bool:
+    """A live agent session - coding terminal or assistant chat - is on this task right now."""
+    from . import terminal
+    try: return terminal.for_task(int(tid), details=False) is not None
+    except Exception: return False
+
+
 def _live_task(store, item) -> bool:
     """The item names a task that is still open (with no store to ask, naming one is enough)."""
     if not item.get('tid'): return False
@@ -639,6 +646,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03)
         return (f"There is nothing to approve yet - no reply has been drafted on {what}. Say reply and what to tell them, "
                 'and it lands here for your yes.')
+    # an agent already RUNNING on the task is not handed it again (the owner, 2026-10-01) - the dispatch door refuses it too
+    if verb in ('coder', 'regular_agent') and item.get('tid') and _agent_running(item['tid']):
+        return f"An agent is already working on {what} - Continue that session instead of sending it to another agent."
     if verb == 'coder' and store is not None:
         gone = no_agent(store)
         if gone: return (f"There is nothing to hand it to - {gone} is not set up on this machine. "

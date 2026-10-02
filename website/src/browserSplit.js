@@ -10,6 +10,12 @@ const KEY_RATIO = "tq-browser-ratio", KEY_FOLD = "tq-browser-folded";
 const foldKey = (sid) => sid ? `${KEY_FOLD}.${sid}` : KEY_FOLD;
 
 export const clampRatio = (r) => (Number.isFinite(r) ? Math.min(MAX_RATIO, Math.max(MIN_RATIO, r)) : DEFAULT_RATIO);
+// ...AND THE CHAT KEEPS A READABLE WIDTH. Four fifths of a 1000px slot left the conversation ~200px - a
+// column of two-word lines beside a browser nobody needed that wide (the 2026-10-02 pane pass). The ratio
+// is still the owner's; it just never takes the chat below this many pixels (plus the 8px handle).
+export const MIN_CHAT_PX = 360;
+export const splitRatio = (r, width) =>
+  (width > 0 ? Math.max(MIN_RATIO, Math.min(clampRatio(r), (width - MIN_CHAT_PX - 8) / width)) : clampRatio(r));
 
 // the pointer's position across the whole split, as the browser's share (it sits on the right)
 export const ratioFromPointer = (x, left, width) => (width > 0 ? clampRatio(1 - (x - left) / width) : DEFAULT_RATIO);
@@ -109,6 +115,18 @@ export const shortUrl = (u, max = 64) => {
   const s = String(u).replace(/^https?:\/\//, "").replace(/\/$/, "");
   return s.length <= max ? s : `${s.slice(0, Math.ceil(max * 0.6))}…${s.slice(-Math.floor(max * 0.35))}`;
 };
+
+// IS THERE A BROWSER TO SHOW. A task that asked for one shows its pane while Chrome is still coming up
+// (`expect`) - but only until that browser has been seen open: once it has, and closes, the pane folds.
+// `expect` alone kept it standing for ever over a frozen last frame and a "no page open" note, its socket
+// knocking every two seconds on a relay that refused it (the 2026-10-02 pane pass).
+export const showsBrowser = (open, expect, seen) => !!open || (!!expect && !seen);
+
+// WHO SHAPES THE PAGE. Every tab watching one session used to set its viewport - a phone and a desktop on
+// the same task fought, and the desktop's page came back phone-shaped between black bars (2026-10-02).
+// One Chrome, one shape: the tab the owner is AT (visible and focused), or one they just pressed in
+// (`claim`: a click in the pane, Take over, the window coming back) - never a background tab's resize.
+export const mayShape = (hidden, focused, claim = false) => !hidden && (!!claim || !!focused);
 
 // Should this slot hold the split, or just a chip? The Wall tiles three or four sessions across.
 export const layoutFor = (width, open, folded) => (!open ? "none" : width < CHIP_BELOW ? "chip" : folded ? "folded" : "split");

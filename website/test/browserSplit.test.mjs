@@ -6,10 +6,14 @@ import {
   fitFrame,
   keyMessage,
   layoutFor,
+  MIN_CHAT_PX,
+  mayShape,
   mouseMessage,
   parseMessage,
   ratioFromPointer,
   shortUrl,
+  showsBrowser,
+  splitRatio,
   toPage,
   viewportFor,
   viewportMoved,
@@ -104,4 +108,28 @@ test("dragging the splitter does not re-lay-out Chrome for six pixels", () => {
   assert.equal(viewportMoved(was, { w: 1200, h: 1460 }), true);
   assert.equal(viewportMoved(null, was), true, "the first measurement always lands");
   assert.equal(viewportMoved(was, null), false);
+});
+
+// The 2026-10-02 pane pass: a live run of Board -> New task -> "It needs a browser", watched from a desktop and a phone.
+test("the chat keeps a readable width whatever share the browser was dragged to", () => {
+  assert.equal(splitRatio(0.8, 1000), (1000 - MIN_CHAT_PX - 8) / 1000);   // 4/5 of 1000 left the chat ~200px
+  assert.ok((1 - splitRatio(0.8, 1000)) * 1000 - 8 >= MIN_CHAT_PX);
+  assert.equal(splitRatio(0.5, 2000), 0.5);                               // room enough: the owner's ratio stands
+  assert.equal(splitRatio(0.8, 0), 0.8);                                  // not measured yet
+  assert.equal(splitRatio(0.6, 400), 0.3);                                // never below the browser's own floor
+});
+
+test("a browser that was open and closed folds the pane; one still starting keeps it", () => {
+  assert.equal(showsBrowser(false, true, false), true);    // asked for, Chrome still coming up
+  assert.equal(showsBrowser(true, true, true), true);
+  assert.equal(showsBrowser(false, true, true), false);    // it was open and has gone: fold, stop knocking
+  assert.equal(showsBrowser(true, false, true), true);     // the agent opened one unasked
+  assert.equal(showsBrowser(false, false, false), false);
+});
+
+test("only the tab the owner is at shapes the page, so a phone tab cannot reshape the desktop's", () => {
+  assert.equal(mayShape(false, true), true);
+  assert.equal(mayShape(false, false), false);             // a background window's resize
+  assert.equal(mayShape(false, false, true), true);        // a press in the pane, Take over, the window coming back
+  assert.equal(mayShape(true, true, true), false);         // a hidden tab never does
 });

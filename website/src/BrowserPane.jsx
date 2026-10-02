@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import api from "./api.js";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, mono } from "./theme.jsx";
-import { fitFrame, keyMessage, mouseMessage, parseMessage, shortUrl, viewportFor, viewportMoved,
+import { fitFrame, keyMessage, mayShape, mouseMessage, parseMessage, shortUrl, viewportFor, viewportMoved,
   wheelMessage } from "./browserSplit.js";
 
 const wsUrl = (sid) => {
@@ -17,10 +17,16 @@ const wsUrl = (sid) => {
 const btn = { ...mono, fontSize: 10.5, lineHeight: 1, px: 0.9, py: 0.45, borderRadius: 1, cursor: "pointer",
   border: `1px solid ${BORDER}`, bgcolor: "transparent", color: "#b9b2a8", "&:hover": { color: "#e1dcd5", borderColor: "#6b655c" } };
 
-export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overlay = false }) {
+// `open`: the parent's poll of browserview.state - the relay refuses a session with no browser, so this
+// connects only while that says open (a caller that does not poll leaves it true and always tries).
+export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false }) {
   const box = useRef(null), canvas = useRef(null), sendRef = useRef(null), img = useRef(null), fit = useRef(null);
   const [live, setLive] = useState(false);
   const [url, setUrl] = useState(url0);
+  /* THE PAGE THE SERVER SAYS IT IS ON. A reopened task mounts this before the parent's first poll, so
+     url0 is "" here - and the relay only sends a url message when the page MOVES. The address bar sat
+     blank and "an empty tab, live" was drawn over a real, painting page (the 2026-10-02 pane pass). */
+  useEffect(() => { if (url0) setUrl(url0); }, [url0]);
   const [driving, setDriving] = useState(false);
   // {t, bad}: a refusal must not read as a success - both used to come out in the same green
   const [note, setNote] = useState(null);
@@ -35,11 +41,12 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
 
   /* THE PAGE IS GIVEN THIS PANE'S SHAPE, so there is nothing left to letterbox. Debounced, because
      the splitter drags; ignored on failure, because a browser that will not resize still draws. */
-  const fitViewport = () => {
-    if (!box.current) return;
+  const fitViewport = (claim = false) => {
+    if (!box.current || !mayShape(document.hidden, document.hasFocus(), claim)) return;
     const r = box.current.getBoundingClientRect();
     const want = viewportFor(r.width, r.height);
-    if (!viewportMoved(shape.current, want)) return;
+    // a claim re-sends even an unchanged shape: another tab may have reshaped the page since we last did
+    if (!want || (!claim && !viewportMoved(shape.current, want))) return;
     clearTimeout(shapeTimer.current);
     shapeTimer.current = setTimeout(() => {
       shape.current = want;
@@ -64,7 +71,8 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
   };
 
   useEffect(() => {
-    let ws, closed = false, retry = null;
+    if (!open) { setLive(false); return undefined; }
+    let ws, closed = false, retry = null, tries = 0;
     const connect = () => {
       ws = new WebSocket(wsUrl(sid));
       const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
@@ -99,28 +107,38 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
            in himself). Measured on his live session: one status message, zero frames. */
         else if (m.type === "status") setAttached(m.connected !== false);
       };
-      // the relay closes when the agent's browser goes; the parent polls and unmounts us. Until
-      // then a dropped socket (server restart) comes back on its own.
-      ws.onclose = () => { setLive(false); if (!closed) retry = setTimeout(connect, 2000); };
+      /* A dropped socket (a server restart) comes back on its own - while the parent still says the
+         browser is OPEN. When the browser itself goes, the relay refuses the handshake (a 403 to the
+         page, no close code to read) and this knocked every two seconds for as long as the task stayed
+         open (the 2026-10-02 pane pass). Now the poll turning `open` false tears this effect down and
+         true brings it back; in between, the retry backs off instead of hammering. */
+      ws.onopen = () => { tries = 0; };
+      ws.onclose = () => { setLive(false); if (!closed) retry = setTimeout(connect, Math.min(15000, 2000 * 2 ** tries++)); };
     };
     connect();
+    return () => { closed = true; clearTimeout(retry); ws?.close(); };
+  }, [sid, open]);
+  useEffect(() => {
     const wake = () => {
-      if (document.hidden || !held.current) return;
+      if (document.hidden) return;
+      fitViewport(true);                       // back at this tab: it is the one being watched again
+      if (!held.current) return;
       sendRef.current?.({ type: "ack", seq: held.current });
       held.current = 0;
     };
-    document.addEventListener("visibilitychange", wake);
+    const focus = () => fitViewport(true);
+    document.addEventListener("visibilitychange", wake); window.addEventListener("focus", focus);
     const ro = new ResizeObserver(() => { paint(); fitViewport(); });
     ro.observe(box.current);
     fitViewport();
-    return () => { closed = true; clearTimeout(retry); clearTimeout(shapeTimer.current);
-      document.removeEventListener("visibilitychange", wake); ro.disconnect(); ws?.close(); };
+    return () => { clearTimeout(shapeTimer.current); ro.disconnect();
+      document.removeEventListener("visibilitychange", wake); window.removeEventListener("focus", focus); };
   }, [sid]);
 
   // input reaches the page only while the owner is driving - a stray click on a watched pane
   // must not click the agent's page out from under it
   const forward = (m) => m && drivingRef.current && sendRef.current?.(m);
-  const takeOver = () => { setAsked(false); setDriving(true); requestAnimationFrame(() => canvas.current?.focus()); };
+  const takeOver = () => { setAsked(false); setDriving(true); fitViewport(true); requestAnimationFrame(() => canvas.current?.focus()); };
   // THE OWNER CAN OPEN A PAGE. The pane had no address bar, so when the agent handed the keyboard
   // over - which it is told to do for a password or a 2FA code - there was nowhere to hand it to:
   // Take over only forwards clicks, and there is nothing to click on about:blank. The task the
@@ -192,7 +210,8 @@ Take over to drive it yourself; close the session to close it."
       </Box>
       {/* the page. tabIndex so keystrokes land here while driving; the canvas swallows the wheel
           the same way the terminal does, so scrolling the page never scrolls the app */}
-      <Box ref={box} sx={{ flex: 1, minHeight: 0, position: "relative", cursor: driving ? "default" : "not-allowed" }}>
+      <Box ref={box} onPointerDown={() => fitViewport(true)}
+        sx={{ flex: 1, minHeight: 0, position: "relative", cursor: driving ? "default" : "not-allowed" }}>
         <Box component="canvas" ref={canvas} tabIndex={0} onMouseDown={onMouse} onMouseUp={onMouse} onMouseMove={onMouse}
           onWheel={onWheel} onKeyDown={onKey} onKeyUp={onKey} onContextMenu={(e) => e.preventDefault()}
           sx={{ display: "block", outline: "none", position: "absolute", inset: 0 }} />

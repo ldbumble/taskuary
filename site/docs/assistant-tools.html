@@ -106,7 +106,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <tbody><tr>
 <td><strong>table</strong></td>
 <td>decide about the item on the table</td>
-<td>reply(text), approve, redraft(text), mine, regular_agent(text, as?), coder(text, as?), not_ours, not_ours_sender, block_sender, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), clear(text), confirm, cancel</td>
+<td>reply(text), approve, redraft(text), mine, regular_agent(text, as?), coder(text, as?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), clear(text), confirm, cancel</td>
 </tr>
 <tr>
 <td><strong>task</strong></td>
@@ -179,6 +179,8 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p>File everything from this sender from now on - their mail still arrives and stays readable.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="block-sender"><code>block_sender</code><a class="anchor" href="#block-sender" aria-label="Link to this section">#</a></h3>
 <p>An exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="not-ours-kind"><code>not_ours_kind</code><a class="anchor" href="#not-ours-kind" aria-label="Link to this section">#</a></h3>
+<p>An Advisor idea only: put it down AND no more ideas like it - the Advisor&#39;s next run reads that.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="close"><code>close</code><a class="anchor" href="#close" aria-label="Link to this section">#</a></h3>
 <p>Mark done - the task behind the item is finished.</p>
 <p class="runs">At once.</p><h3 id="done"><code>done</code><a class="anchor" href="#done" aria-label="Link to this section">#</a></h3>

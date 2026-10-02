@@ -64,12 +64,12 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(p.call_args[1]['headers'], {'xi-api-key': 'k1'}); self.assertEqual(p.call_args[1]['data']['model_id'], 'scribe_v2')
 
     def test_one_shared_vocabulary_reaches_every_existing_provider_shape(self):
-        terms = ['Taskuary', 'Careview']
+        terms = ['Taskuary', 'Payworth']
         for t in ('groq_stt', 'openai_stt', 'stt_server'):
             s = _voice_store(t, secret=None if t == 'stt_server' else 'k1'); voice.save_vocabulary(s, terms)
             with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'ok'})) as p:
                 voice.transcribe(s, b'x', 'audio/wav')
-            self.assertEqual(p.call_args[1]['data']['prompt'], 'Taskuary, Careview')
+            self.assertEqual(p.call_args[1]['data']['prompt'], 'Taskuary, Payworth')
         s = _voice_store('deepgram'); voice.save_vocabulary(s, terms)
         with mock.patch.object(voice.requests, 'post', return_value=R(200, {'results': {'channels': [{'alternatives': [{'transcript': 'ok'}]}]}})) as p:
             voice.transcribe(s, b'x', 'audio/wav')
@@ -82,10 +82,10 @@ class ProviderTests(unittest.TestCase):
     def test_gpt_transcribe_receives_native_keywords_and_language(self):
         s = _voice_store('openai_stt'); cid = s.get_connector_by_type('openai_stt')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'model': 'gpt-transcribe', 'language': 'en'})}, 'o')
-        voice.save_vocabulary(s, ['Taskuary', 'Careview'])
+        voice.save_vocabulary(s, ['Taskuary', 'Payworth'])
         with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'ok'})) as p:
             voice.transcribe(s, b'x', 'audio/wav')
-        self.assertEqual(p.call_args[1]['data']['keywords[]'], ['Taskuary', 'Careview'])
+        self.assertEqual(p.call_args[1]['data']['keywords[]'], ['Taskuary', 'Payworth'])
         self.assertEqual(p.call_args[1]['data']['languages[]'], ['en'])
 
     def test_local_whisper_receives_the_shared_vocabulary_as_its_initial_prompt(self):
@@ -99,7 +99,7 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(calls[0]['initial_prompt'], 'Taskuary, Spendly Card')
 
     def test_gemini_uploads_transcribes_with_vocabulary_and_deletes_the_clip(self):
-        s = _voice_store('gemini_stt'); voice.save_vocabulary(s, ['Taskuary', 'Careview'])
+        s = _voice_store('gemini_stt'); voice.save_vocabulary(s, ['Taskuary', 'Payworth'])
         replies = [R(200, {}, {'X-Goog-Upload-URL': 'https://upload.example/one'}),
                    R(200, {'file': {'name': 'files/one', 'alex': 'https://files.example/one', 'state': 'ACTIVE'}}),
                    R(200, {'steps': [{'type': 'model_output', 'content': [{'type': 'text', 'text': 'queue TQ-0243'}]}]})]
@@ -107,14 +107,14 @@ class ProviderTests(unittest.TestCase):
             out = voice.transcribe(s, b'webm', 'audio/webm', 'clip.webm')
         self.assertEqual(out, {'text': 'queue TQ-0243', 'provider': 'gemini_stt', 'model': 'gemini-3.5-transcribe'})
         payload = p.call_args_list[2].kwargs['json']
-        self.assertEqual(payload['generation_config']['transcription_config']['custom_vocabulary'], ['Taskuary', 'Careview'])
+        self.assertEqual(payload['generation_config']['transcription_config']['custom_vocabulary'], ['Taskuary', 'Payworth'])
         self.assertEqual(payload['input'][0]['mime_type'], 'audio/webm')
         d.assert_called_once_with('https://generativelanguage.googleapis.com/v1beta/files/one', headers={'x-goog-api-key': 'k1'}, timeout=30)
 
     def test_vocabulary_is_normalized_validated_and_persisted_once_for_the_system(self):
         s = MemoryStore()
-        self.assertEqual(voice.save_vocabulary(s, [' Taskuary ', 'taskuary', 'Careview']), ['Taskuary', 'Careview'])
-        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Careview'])
+        self.assertEqual(voice.save_vocabulary(s, [' Taskuary ', 'taskuary', 'Payworth']), ['Taskuary', 'Payworth'])
+        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Payworth'])
         with self.assertRaises(ValueError): voice.save_vocabulary(s, ['six word phrases are not accepted here'])
         with self.assertRaises(ValueError): voice.save_vocabulary(s, ['x' * 51])
         with self.assertRaises(ValueError): voice.save_vocabulary(s, [f'term {i}' for i in range(101)])
@@ -195,10 +195,10 @@ class FunnelTests(unittest.TestCase):
     def test_voice_vocabulary_api_is_shared_validated_and_audited(self):
         s = MemoryStore()
         with mock.patch.object(server, 'store', s):
-            r = c_api.put('/api/voice/vocabulary', json={'terms': [' Taskuary ', 'Careview', 'taskuary']})
-            self.assertEqual(r.json(), {'terms': ['Taskuary', 'Careview'], 'limit': 100})
-            self.assertEqual(c_api.get('/api/voice/vocabulary').json()['terms'], ['Taskuary', 'Careview'])
-            self.assertEqual(c_api.get('/api/voice/status').json()['vocabulary'], ['Taskuary', 'Careview'])
+            r = c_api.put('/api/voice/vocabulary', json={'terms': [' Taskuary ', 'Payworth', 'taskuary']})
+            self.assertEqual(r.json(), {'terms': ['Taskuary', 'Payworth'], 'limit': 100})
+            self.assertEqual(c_api.get('/api/voice/vocabulary').json()['terms'], ['Taskuary', 'Payworth'])
+            self.assertEqual(c_api.get('/api/voice/status').json()['vocabulary'], ['Taskuary', 'Payworth'])
             self.assertEqual(s._rows("SELECT Action FROM audit WHERE Action='voice_vocabulary'")[0]['Action'], 'voice_vocabulary')
             self.assertEqual(c_api.put('/api/voice/vocabulary', json={'terms': ['x' * 51]}).status_code, 422)
 

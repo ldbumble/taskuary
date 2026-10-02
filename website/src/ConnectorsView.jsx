@@ -1409,7 +1409,7 @@ const VoiceVocabulary = ({ onBack }) => {
       </Typography>
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, p: 2 }}>
         <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} disabled={busy || genBusy}
-          label="Words and phrases" placeholder={"Taskuary\nCareview\nIntacct\nTQ-0243"}
+          label="Words and phrases" placeholder={"Taskuary\nNorthwind\nPayworth\nTQ-0243"}
           helperText={`One term or phrase per line · up to ${limit} · 50 characters and 5 words per entry`} />
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Typography variant="caption" sx={{ color: terms.length > limit ? "error.main" : FAINT }}>{terms.length}/{limit}</Typography>

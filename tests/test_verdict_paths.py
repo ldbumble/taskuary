@@ -63,7 +63,7 @@ def llm_saying(intent, calls=None, kind=None):
 
 def push(i, conv=CHAT, sent_at=None, intent='task', calls=None, about='northwind', kind=None, **over):
     subject, text = ASK[about]
-    body = {'external_id': f'vp-{conv}-{i}', 'channel': 'teams', 'conversation_id': conv, 'from_name': 'Sam Okafor',
+    body = {'external_id': f'vp-{conv}-{i}', 'channel': 'teams', 'conversation_id': conv, 'from_name': 'Marcus Reed',
             'subject': subject, 'body': text, 'sent_at': sent_at or stamp(), **over}
     with mock.patch('taskuary.server._llm', return_value=llm_saying(intent, calls, kind)):
         return c.post('/api/ingest/push', json=body).json()

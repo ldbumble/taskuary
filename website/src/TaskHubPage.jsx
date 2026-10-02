@@ -338,7 +338,11 @@ export default function TaskHubPage() {
             nav bar is chrome; it spans. */}
         {/* id + top z: the Timeline's frozen dock pins itself right below this bar (it measures
             the height by id) - z above the dock so nothing ever slides over the tabs */}
+        {/* ...and on a phone it WRAPS. Logo, view switch, Chat/Task/Game, the set-up ring and three icons are ~540px
+            in one row; at 390 that row set the page's layout width to 493, so every screen drew zoomed out with
+            the right-hand icons off the edge (the 2026-10-02 pane pass, a 390-wide phone on a task with a browser). */}
         <Box id="tqTopNav" sx={{ display: "flex", alignItems: "center", gap: { xs: 0.75, md: 1.25 },
+          flexWrap: { xs: "wrap", md: "nowrap" }, rowGap: 0.5,
           px: { xs: 1.25, md: 2.5 }, py: 1,
           bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 30 }}>
           <Box sx={{ width: 26, height: 26, borderRadius: 1.5, background: GRADIENT, display: "flex",

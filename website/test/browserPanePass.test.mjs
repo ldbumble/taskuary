@@ -37,3 +37,9 @@ test("the viewport is set only by the tab the owner is at", () => {
 test("the split never takes the chat below its minimum width", () => {
   assert.match(term, /splitRatio\(ratio, width\)/);
 });
+
+test("the top bar wraps on a phone instead of widening the page", () => {
+  // one ~540px row at 390 set the layout width to 493: every screen zoomed out, the right-hand icons off the edge
+  const hub = src("TaskHubPage.jsx"), nav = hub.slice(hub.indexOf('<Box id="tqTopNav"'), hub.indexOf('<Box id="tqTopNav"') + 300);
+  assert.match(nav, /flexWrap: \{ xs: "wrap", md: "nowrap" \}/);
+});

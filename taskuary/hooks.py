@@ -432,6 +432,12 @@ def receive(payload: dict, cli: str = 'claude') -> dict:
         t = max(free, key=lambda x: x.last); term.bind_ext(t, sid)
     if cli == 'claude':
         for n in witness.claude_notes(payload): t.witness.note(n)
+        # a page the agent published is its output: keep the link (and a copy) on the task (claude_artifacts)
+        if payload.get('hook_event_name') == 'PostToolUse' and payload.get('tool_name') == 'Artifact':
+            from . import claude_artifacts
+            res = payload.get('tool_response')
+            claude_artifacts.capture(getattr(t, 'store', None), t.task_id, res if isinstance(res, dict) else None,
+                                     res if isinstance(res, str) else '', by=getattr(t, 'agent', '') or 'agent')
     _events(t, payload)
     # Stop is an observation like the rest: the agent finished a RESPONSE, not the task. Nothing closes
     # on it - only `taskuary --done` (selfclose.declare) or the owner ends a task (2026-09-24). The answer

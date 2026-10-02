@@ -65,6 +65,7 @@ import {
   AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
+import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -1531,6 +1532,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 },
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
+                    </Box>
+                    {/* pages the session published with Claude's Artifact tool, under the session that made them */}
+                    <Box sx={{ mt: 0.75, flexShrink: 0, "&:empty": { display: "none" } }}>
+                      <PublishedPages pages={(detail?.artifacts || []).filter(isPublished)} />
                     </Box>
                     {/* the waiting room, right under the session it feeds: type here instead of into the
                         terminal, and it goes in when the agent stops rather than on top of its work */}

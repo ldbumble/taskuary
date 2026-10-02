@@ -203,6 +203,14 @@ def _result_text(c) -> str:
     return re.sub(r'\s*\n\s*', ' ⏎ ', str(v or '').strip())
 
 
+def _published(j, trace):
+    """A page the CLI published with its Artifact tool, said to the caller as its own trace event - the
+    caller knows the task it belongs to (general.send_prompt keeps it there, claude_artifacts)."""
+    from . import claude_artifacts
+    info = claude_artifacts.from_stream(j)
+    if info: trace('artifact', 'claude', info)
+
+
 def _live_line(j):
     """One readable console line per claude stream-json event; None = not worth showing.
     Tool RESULTS stream too (trimmed), so the console reads like the terminal you'd see
@@ -1078,6 +1086,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                     if isinstance(c, dict) and c.get('type') == 'tool_result':
                         trace('tool_result', c.get('tool_use_id') or 'tool', {
                             'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
+                _published(j, trace)
             # Codex `exec --json` speaks item lifecycle events instead of Claude content blocks.
             # Normalize both into one stream so assistant-ui does not care which CLI is logged in.
             if isinstance(j, dict) and j.get('type') == 'thread.started':
@@ -1156,6 +1165,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
             for c in (j.get('message') or {}).get('content') or []:
                 if isinstance(c, dict) and c.get('type') == 'tool_result':
                     trace('tool_result', c.get('tool_use_id') or 'tool', {'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
+            _published(j, trace)
         shown = _live_line(j)
         if shown: trace('live', name, shown)
     try:

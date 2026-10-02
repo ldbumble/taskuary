@@ -2126,6 +2126,9 @@ class OpenReplyBody(BaseModel):
     # "make it shorter": write it AGAIN over the draft that is there. Without this the model
     # claimed the edit and the next approve sent the untouched original (2026-09-03).
     redraft: bool = False
+    # REPLY OPENS AT ONCE (the owner, 2026-10-01: "never waits on the AI"): the box now, the draft owed - the page asks
+    # /api/reviews/{rid}/draft for it behind the card, which reads the provider first as this door would have
+    later: bool = False
 
 @app.post('/api/messages/{mid}/reply')
 def open_reply(mid: int, body: OpenReplyBody = None):
@@ -2145,8 +2148,10 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if no_one_behind(m.get('Channel')):
         raise HTTPException(422, 'nobody sent this, so there is nobody to answer - work it, or write '
                                  'what you found on the task itself')
-    try: _refresh_chat_context(task_id=m.get('TaskId'), message_id=mid)
-    except RuntimeError as e: raise HTTPException(503, str(e))
+    later = body is not None and body.later
+    if not later:                     # the draft behind a box opened at once reads the provider itself (draft_review)
+        try: _refresh_chat_context(task_id=m.get('TaskId'), message_id=mid)
+        except RuntimeError as e: raise HTTPException(503, str(e))
     # The requested row may no longer be the end of the conversation after that sync.  Draft and
     # deliver against the newest inbound line, while keeping the same task/review.
     m = (_latest_context_message(m.get('TaskId'), mid) or store.get_message(mid) or m)
@@ -2167,17 +2172,22 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if rv and rv.get('MessageId') != mid:
         draft = ''                    # a correct old draft is still wrong for a newer conversation
     if body is not None and body.redraft: draft = ''          # write it again over what is there
-    if not draft and (body is None or body.draft):
+    owed = not draft and (body is None or body.draft)
+    if owed and not later:
         try:
-            # the owner's own words on what to say ("tell Ravi it is not owned here") ride into the draft
-            note = f"THE OWNER'S INSTRUCTION FOR THIS REPLY - follow it: {body.instruction.strip()}" if body is not None and (body.instruction or '').strip() else None
-            draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=note) if tid
+            draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction)) if tid
                      else responder.draft_for_message(store, m, rid))
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
     if body is not None and body.redraft and draft: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
     store.audit('review', rid, 'redraft' if (body is not None and body.redraft) else 'open_reply', ACTOR, detail={'message_id': mid})
-    return {'reviewId': rid, 'taskId': tid, 'draft': draft}
+    return {'reviewId': rid, 'taskId': tid, 'draft': draft, 'drafting': bool(owed and later)}
+
+
+def _reply_nudge(instruction) -> str | None:
+    """The owner's own words on what to say ("tell Ravi it is not owned here"), ridden into the draft."""
+    said = (instruction or '').strip()
+    return f"THE OWNER'S INSTRUCTION FOR THIS REPLY - follow it: {said}" if said else None
 
 
 class NotMineBody(BaseModel):
@@ -3998,8 +4008,10 @@ def release_review(rid: int):
     store.audit('review', rid, 'release', ACTOR)
     return {'ok': True}
 
+class DraftBody(BaseModel): instruction: str | None = None     # a reply opened at once with the owner's words (open_reply's later)
+
 @app.post('/api/reviews/{rid}/draft')
-def draft_review(rid: int):
+def draft_review(rid: int, body: DraftBody = None):
     """(Re)generate the AI draft for a pending review inline. The main AI writes replies -
     a coding CLI is the wrong (and expensive) tool for two sentences of email - unless the
     owner deliberately configured an agent named `responder`. On a review a coder closed,
@@ -4014,7 +4026,7 @@ def draft_review(rid: int):
             draft = ob.redraft_review(store, rv)
         elif rv.get('TaskId'):
             _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
-            draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
+            draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction))
         else:
             message = store.get_message(rv.get('MessageId'))
             if not message: raise RuntimeError('the message behind this reply no longer exists')

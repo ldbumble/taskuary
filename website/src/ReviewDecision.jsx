@@ -3,7 +3,7 @@
 // sending you to another tab to make it (2026-09-22). A proposal (a playbook, a setting, an
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
@@ -13,6 +13,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { CcRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { useVerbs } from "./actionRow.js";
+import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 
@@ -84,6 +85,14 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const coRid = closeout?.ReviewId || (proposal?.kind === "closeout" ? r.ReviewId : null);
   const { gh, reload: reloadGh, act } = useCloseoutState(coRid);
   const blocked = !!gh && !gh.ok;
+  // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js, 2026-10-01): "Drafting…" until the model is done,
+  // then the task is read again and the draft is in the box; one that could not be written says why here
+  const job = useDraftJob(r.ReviewId);
+  const drafting = job?.state === "drafting";
+  useEffect(() => {
+    if (job?.state === "done") onChanged?.();
+    if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
+  }, [job]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const decideBoth = async (verb) => {
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
@@ -167,12 +176,12 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       : proposal ? [{ id: no("reject"), label: proposal.rejectLabel, tone: "q", disabled: busy, run: () => decide("reject"), title: rejectTitle }]
       // A REPLY DRAFT IS NEVER REJECTED (the owner, 2026-10-01: "rejected is useless - it should be redraft or close task"): Reject
       // threw the draft away and left the task open, which is neither. Its other choices are Redraft and the task's own Mark done.
-      : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: redraftWord, disabled: busy, run: redraft,
+      : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting, run: redraft,
           title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : []),
         ...(onMarkDone && r.CanSend !== false ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: "Mark done", disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
   ].map((v) => ({ ...v, group: "decide" }));
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
-  useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: redraftWord, disabled: busy, run: redraft,
+  useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting, run: redraft,
     title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])], toRow && moves.length > 0);
 
   if (r.Status === "held") {
@@ -259,7 +268,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       )}
       <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
         value={value} onChange={(e) => setText(e.target.value)}
-        placeholder={proposal?.kind === "closeout" ? proposal.placeholder : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
+        placeholder={proposal?.kind === "closeout" ? proposal.placeholder : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
         inputProps={{ style: { fontSize: 12.5, lineHeight: 1.45 } }} />
       {compare?.reviewId === r.ReviewId && (
         <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
@@ -339,8 +348,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {proposal && <Button size="small" color="error" disabled={busy} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
         </>}
         <Box sx={{ flex: 1 }} />
-        {!toRow && canRedraft && <Button size="small" disabled={busy} onClick={redraft}>
-          {busy ? <CircularProgress size={12} /> : redraftWord}
+        {!toRow && canRedraft && <Button size="small" disabled={busy || drafting} onClick={redraft}>
+          {busy ? <CircularProgress size={12} /> : drafting ? "Drafting…" : redraftWord}
         </Button>}
       </Box>
       {/* what the one word does HERE - the buttons never change, this line does */}

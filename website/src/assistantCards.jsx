@@ -26,6 +26,7 @@ import { says, subState } from "./laneSays.js";
 // the agent card's kicker, per sub-state of the blocked lane (the sentence itself is laneSays)
 const KICK = { asking: "asked", approval: "asks permission", stalled: "is stuck", parked: "is waiting on you" };
 import { sendBlockLine, draftState } from "./sendState.js";
+import { openReply, useDraftJob } from "./replyDraft.js";
 import { progressLine } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
 import { agentCardView } from "./agentCardView.js";
@@ -589,6 +590,14 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     }).catch((e) => live && setErr(errText(e)));
     return () => { live = false; };
   }, [card.rid, card.mid, card.presentation_revision]);
+  // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js): "Drafting…" until it lands, then it fills the box;
+  // a draft that could not be written says why here
+  const job = useDraftJob(card.rid);
+  const drafting = job?.state === "drafting";
+  useEffect(() => {
+    if (job?.state === "done") setRv((r) => (r && !r.gone ? { ...r, DraftText: job.draft, HasDraft: job.draft ? 1 : 0, DraftError: null } : r));
+    if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
+  }, [job]);
   const action = rv?.Kind === "action";
   const co = closeoutOf(rv);
   // THE CARD READS GITHUB FIRST (closeoutState.js): Close out is live only when this repo's rules let it merge now
@@ -661,8 +670,8 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     : rv?.CanSend === false && !card.closeout ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
          hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
-      <Button size="small" variant="contained" disableElevation disabled={!!busy} startIcon={<RefreshRoundedIcon />}
-        onClick={redraft} sx={goSx}>{busy === "redraft" ? "Drafting…" : "Draft with AI"}</Button>
+      <Button size="small" variant="contained" disableElevation disabled={!!busy || drafting} startIcon={<RefreshRoundedIcon />}
+        onClick={redraft} sx={goSx}>{busy === "redraft" || drafting ? "Drafting…" : "Draft with AI"}</Button>
     ) : stale ? (
       /* the road out of the warning, on the card that carries it: a stale draft disabled the
          only button here and named no way forward (the owner, 2026-09-21: "just reprocess it
@@ -698,11 +707,12 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         {rv && (!action || mate) && <div className="tq-move-to">{`Your reply to ${replyTo} ${via} - it goes ${stopped ? "with Close out, once it can merge" : card.tid || co ? "when you Close out" : "when you press Send"}. Edit it here first if you like.`}</div>}
         {rv && (
           <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
-            placeholder={action && !mate ? "" : "Write your answer here"}
+            placeholder={drafting ? "Drafting…" : action && !mate ? "" : "Write your answer here"}
             sx={{ mt: 0.75, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
         )}
         {!action && stale && <div className="tq-card-err">New messages arrived after this draft. Refresh the draft with the latest context before sending.</div>}
-        {!action && rv && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
+        {!action && rv && drafting && !value.trim() && <div className="tq-card-excerpt">Drafting… it fills in here when the AI is done - or write it yourself.</div>}
+        {!action && rv && !drafting && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
         {!action && !card.closeout && sendBlockLine(rv) && <div className="tq-card-excerpt">{sendBlockLine(rv)}</div>}
         {gh && !blocked && gh.note && <div className="tq-card-excerpt">{capital(gh.note)}.</div>}
       </YourMove>
@@ -975,8 +985,8 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
   const reply = async () => {
     setBusy(true); setErr("");
     try {
-      const { data } = await api.post(`/api/messages/${card.mid}/reply`, { draft: true, instruction: null });
-      if (data.reviewId) onSurface?.(`review:${data.reviewId}`, "A draft from the agent's findings - read it below.");
+      const data = await openReply(api, card.mid);          // the card at once, the draft behind it (replyDraft.js)
+      if (data.reviewId) onSurface?.(`review:${data.reviewId}`, "A draft from the agent's findings - it fills in below.");
       else onDone?.("A reply is drafted on the task.");
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
@@ -1082,9 +1092,14 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     }
     setBusy("");
   };
-  // the one immediate road for "asked you": a draft, written now, sent only on your yes (PW-126)
-  const draftReply = () => post("reply", `/api/messages/${card.mid}/reply`, { draft: true }, null,
-    (data) => onSurface?.(data?.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"));
+  // the one immediate road for "asked you": a draft, sent only on your yes (PW-126) - its card at once, "Drafting…" until
+  // the model is done (the owner, 2026-10-01: "never waits on the AI")
+  const draftReply = async () => {
+    setBusy("reply"); setErr("");
+    try { const data = await openReply(api, card.mid); onSurface?.(data?.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"); }
+    catch (e) { setErr(errText(e)); }
+    setBusy("");
+  };
   // A BROKEN CONNECTION is not a message and has no task: its row clears itself on the next good check,
   // so the card's verb is the way to FIX it - the connection's own card - and Next puts it down until the
   // error changes (2026-09-23)
@@ -1279,7 +1294,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   // a reply is the one immediate road (PW-126): the draft is written now, nothing is sent, nothing is marked
   const reply = async (i) => {
     setBusy(i.key); setErr("");
-    try { const { data } = await api.post(`/api/messages/${i.mid}/reply`, { draft: true }); onSurface?.(data.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"); }
+    try { const data = await openReply(api, i.mid); onSurface?.(data.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"); }
     catch (e) { setErr(errText(e)); }
     setBusy("");
   };

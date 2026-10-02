@@ -21,6 +21,7 @@ import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { openReply } from "./replyDraft.js";
 import { runOperation } from "./taskOps.js";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
@@ -600,7 +601,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const id = selected;
     setOpeningReply(generate ? "generate" : "write"); setErr("");
     try {
-      await api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: generate });
+      // the box at once and the AI's draft behind it, "Drafting…" in the decision meanwhile (replyDraft.js, 2026-10-01)
+      await (generate ? openReply(api, replyMessage.MessageId) : api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: false }));
       if (stale(id)) return;
       await loadDetail(id);
       onChanged?.();

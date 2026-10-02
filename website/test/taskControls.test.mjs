@@ -137,7 +137,8 @@ test("complete, reopen, coding start and stop run the shared operations road, ne
 
 test("saving a result never completes the task, drafts never send, a question waits on the task", () => {
   assert.match(tasks, /\/wrap`, \{ close: false \}/);
-  assert.match(tasks, /\/reply`, \{ draft: generate \}/);
+  // the box opens at once and the AI's draft is written behind it (replyDraft.js, 2026-10-01) - neither sends
+  assert.match(tasks, /generate \? openReply\(api, replyMessage\.MessageId\) : api\.post\(`[^`]*\/reply`, \{ draft: false \}\)/);
   assert.match(tasks, /\/clarify`, \{ body: text/);
   assert.doesNotMatch(tasks, /\/send`/);
 });

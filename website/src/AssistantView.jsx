@@ -21,6 +21,7 @@ import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt
 import CloseIcon from "@mui/icons-material/Close";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import api from "./api.js";
+import { openReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
@@ -1208,8 +1209,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         // shows - and the server takes anything else that moved fresh (processing_navigation.reserve)
         deferInChat(() => surfaceRef.current?.(), 300); return;
       }
+      // the reply's card comes up at once and its draft fills in behind it - never a wait on the model (2026-10-01)
       if (verb === "reply" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, instruction: d.text || null });
+        const data = await openReply(api, mid, d.text || null);
         if (data.reviewId && !elsewhere) { setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }
         loadPile(); return;
       }

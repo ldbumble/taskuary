@@ -1311,6 +1311,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
                     </Box>
                   )}
+                  {/* pages a session published, kept even when it ended without a written summary */}
+                  {!report && !wrapped && !sessionView && !isGeneral && (detail?.artifacts || []).some(isPublished) && (
+                    <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
+                      <PublishedPages pages={detail.artifacts.filter(isPublished)} />
+                    </Box>
+                  )}
                   {report && !wrapped && !sessionView && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
                       <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.35,

@@ -39,7 +39,7 @@ import MicIcon from "@mui/icons-material/Mic";
 import StopCircleIcon from "@mui/icons-material/StopCircle";
 import { IconButton as MuiIconButton, Tooltip as MuiTooltip } from "@mui/material";
 import { Logo, hasLogo } from "./logos.jsx";
-import { isPublished } from "./PublishedPages.jsx";
+import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
@@ -560,6 +560,8 @@ const artifactTime = (a) => {
 };
 export const CoderReport = ({ body, artifacts: all = [] }) => {
   const artifacts = all.filter((a) => !isPublished(a));
+  // ...and the pages the session PUBLISHED stay with its summary once the agent is gone - what it made, one click away
+  const pages = <PublishedPages pages={all.filter(isPublished)} />;
   const [reader, setReader] = useState(null);
   const [readerBusy, setReaderBusy] = useState(false);
   const [readerError, setReaderError] = useState("");
@@ -583,7 +585,10 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
   }
   // free prose (a shell session, a note written by hand) - show it as written
   if (!rows.length) {
-    return text ? <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, overflowWrap: "anywhere" }}>{text}</Typography> : null;
+    return text || all.some(isPublished) ? <>
+      {text && <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, overflowWrap: "anywhere" }}>{text}</Typography>}
+      <Box sx={{ mt: text ? 1 : 0 }}>{pages}</Box>
+    </> : null;
   }
   // Lead with one normal paragraph. The supporting fields are evidence, not the main reading
   // experience, so keep them one click away instead of laying them out like a spreadsheet.
@@ -597,6 +602,7 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
             whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{result.text}</Typography>
         </Box>
       )}
+      {all.some(isPublished) && <Box sx={{ px: 1.35, pb: 1.15, pt: result ? 0 : 1.15 }}>{pages}</Box>}
       {!!(detailRows.length || artifacts.length) && (
         <Box component="details" sx={{ borderTop: result ? `1px solid ${BORDER}` : "none",
           "&[open] > summary": { borderBottom: `1px solid ${BORDER}` } }}>

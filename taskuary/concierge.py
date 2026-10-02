@@ -590,6 +590,14 @@ def _agent_holds(store, item) -> bool:
     return str(t.get('Assignee') or item.get('assignee') or '').startswith('agent:')
 
 
+def _live_task(store, item) -> bool:
+    """The item names a task that is still open (with no store to ask, naming one is enough)."""
+    if not item.get('tid'): return False
+    if store is None: return True
+    t = store.get_task(int(item['tid'])) or {}
+    return bool(t) and t.get('Status') not in ('done', 'dropped')
+
+
 # an idea's words and what each does to the idea (assistant.act) - the page's Remind me posts its own day
 IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coder': 'agent', 'not_ours': 'dismiss'}
 
@@ -598,8 +606,11 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     """Why this card cannot carry that verb - '' when it can. Always phrased "nothing to <verb>",
     because the honest line is the only line: no receipt goes out in front of it."""
     if not item: return ''
-    if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     what = f"{item.get('ref') or item.get('title') or 'this one'}"
+    # an idea triage already opened a task for IS that task - Make a task on it made nothing new (the owner, 2026-10-01:
+    # "no Make a task on an item that already is a task"); a closed one is history, and new work may be a task again
+    if verb == 'mine' and item.get('kind') == 'idea' and _live_task(store, item): return f"{what} is already a task on your list."
+    if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     if verb == 'answer_agent' and item.get('kind') != 'agent':
         return f"There is nothing to answer on this one - no agent is parked on {what}. Say stop the agent, or open the Board."
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
@@ -778,6 +789,7 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         need = ('approve the draft below, or redraft it' if item['kind'] == 'review' else
                 f"Close out ({item['closeout']}), or move on" if item.get('closeout') else 'say whether it may run' if item['kind'] == 'action' else
                 'reply, choose a coding or regular agent, or say it is not ours' if item['kind'] in ('asked', 'todo')
+                else 'nothing has to happen - tell me to ignore this sender, or move on' if item.get('tid')     # it IS a task
                 else 'nothing has to happen - make it a task, tell me to ignore this sender, or move on')
         return f"{frm}. Since then: {done}. From you: {need}."
     if item['kind'] == 'agent':
@@ -790,7 +802,7 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
     if item['kind'] == 'wrapup':
         return f"{item.get('ref') or item['title']}: the reply went out" + (f" and the agent finished ({item['summary']})" if item.get('summary') else '') + '. The task is still open - close it?'
     if item['kind'] == 'idea':
-        return f"{item['title']}" + (f" ({item.get('who')})" if item.get('who') else '') + f" - {item.get('why') or 'the assistant raised this'}. Draft the follow-up, make it a task, or let it go."
+        return f"{item['title']}" + (f" ({item.get('who')})" if item.get('who') else '') + f" - {item.get('why') or 'the assistant raised this'}." + (' Draft the follow-up, or let it go.' if item.get('tid') else ' Draft the follow-up, make it a task, or let it go.')
     if item['kind'] == 'meeting': return f"{item['title']} is {item.get('why')}. Prep me, or move on."
     if item['kind'] == 'report':
         return f"{item['title']} landed {funnel_age(item)}" + (' and FAILED - the cause is in it.' if item.get('bad') else '.') + ' It is open below - make it a task, hand it to an agent, or move on.'

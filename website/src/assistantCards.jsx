@@ -1305,13 +1305,14 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
           {open !== i.key && !folded && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}
           {open === i.key && i.mid && <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} />}
           {/* ...and acting on it belongs to the ONE you opened, through the same proposal road the words
-              take (PW-151) - never on the handful, never marking its siblings */}
+              take (PW-151) - never on the handful, never marking its siblings; and an entry already filed under a
+              task is never offered to be made one (the owner, 2026-10-01) */}
           {open === i.key && (
             <div className="tq-card-actions tq-fyi-acts">
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title="Writes a reply here - nothing is sent until you approve it" sx={quiet}>Reply</Button>}
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title="Proposes a task on your own list - nothing is made until you confirm" sx={quiet}>Make task</Button>}
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coder", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Proposes sending it to a regular agent - nothing starts until you confirm" sx={quiet}>Regular agent</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title="Proposes a task on your own list - nothing is made until you confirm" sx={quiet}>Make task</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coder", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Proposes sending it to a regular agent - nothing starts until you confirm" sx={quiet}>Regular agent</Button>}
               <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
             </div>
           )}

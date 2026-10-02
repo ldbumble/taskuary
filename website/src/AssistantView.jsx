@@ -39,7 +39,7 @@ import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
@@ -776,7 +776,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (epoch !== chatEpoch.current) return null;
     // ...keeping what the canvas opened locally meanwhile - a browse card or a task opened before the conversation came
     // back was wiped by it (a sidebar button pressed while the page loads)
-    setState(data); setMsgs((cur) => [...(data.messages || []), ...cur.filter((m) => m.role === "browse" || /^t\d/.test(String(m.id)))]);
+    setState(data); setMsgs((cur) => [...settledHistory(data.messages, data.current?.key || null), ...cur.filter((m) => m.role === "browse" || /^t\d/.test(String(m.id)))]);
     // Current is the server's persisted, validated word (PW-162) - never inferred from the last card in the
     // transcript: a handled item stays readable history and is not revived as live work, and an invalid
     // Current comes back null with nothing chosen in its place.

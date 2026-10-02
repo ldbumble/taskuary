@@ -30,7 +30,10 @@ export function mergeDurableTurns(local = [], durable = []) {
       // was redrawn as the item (the owner, 2026-09-07: "shows it then reshows it")
       // ...and its words: the durable turn is text only, so an answer lost the item's verbs - Next with them -
       // the moment the server's copy came back (2026-09-23: ask a question, and there is no way on)
-      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}),
+      // ...and its `done`: a card put down at the press is the page's own fact, the durable turn never carries it, and
+      // dropping it drew the batch just read live again (the owner, 2026-10-02: "it reopens the same 4 again")
+      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.done ? { done: true } : {}),
+                       ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}),
                        ...(bubble.chips?.length && !turn.chips?.length ? { chips: bubble.chips } : {}),
                        ...(bubble.role === "receipt" ? { role: "receipt", tid: bubble.tid, ref: bubble.ref, chips: bubble.chips } : {}) };
       claimed.add(at);

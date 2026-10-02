@@ -189,6 +189,16 @@ export const interactiveCardIndex = (messages) => {
   }
   return -1;
 };
+// ...and a RELOADED conversation knows only the server's word. The page's `done` mark does not travel in the history, so
+// after "All read, next" on the last batch found nothing next, the reload drew the read batch live again while the server
+// said nothing was on the table (the owner, 2026-10-02: "it reopens the same 4 again before disappearing"). Every item
+// card that is not the server's Current comes back put down; a proposal, the set-up walk and the brief are not items.
+const NOT_ITEMS = new Set(["proposal", "walk", "setup", "brief"]);
+export const settledHistory = (messages, currentKey) => (messages || []).map((m) => {
+  const c = m?.card;
+  if (!c || c.background_event || m.proposal || NOT_ITEMS.has(c.kind)) return m;
+  return currentKey && (c.key === currentKey || (c.aliases || []).includes(currentKey)) ? m : { ...m, done: true };
+});
 
 // A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while a
 // coder has it. The task id is the stable identity across that hand-off.

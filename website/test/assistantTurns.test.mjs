@@ -70,3 +70,15 @@ test("the receipt drawn at the click and the server's recorded line are one turn
   // ...but a line that carries a card (the undo offer) is its own turn
   assert.equal(mergeDurableTurns([{ id: "r2", role: "receipt", text: "Done." }], [{ id: 53, role: "assistant", text: "Done.", card: { kind: "proposal" } }]).messages.length, 2);
 });
+
+test("a card put down on the page stays down when the server's copy of its turn arrives", () => {
+  // the owner, 2026-10-02: "if you click all read next on fyi mail too quickly it reopens the same 4 again before
+  // disappearing" - the freshness read swapped the folded bubble for the durable turn and dropped its `done` mark
+  const card = { key: "fyis:processing:p1,processing:p2", kind: "fyis" };
+  const local = [{ id: "a201", role: "assistant", text: "2 things people told you.", card, done: true }];
+  const durable = [{ id: 1301, role: "assistant", text: "2 things people told you.", card }];
+  const merged = mergeDurableTurns(local, durable).messages;
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].done, true);
+  assert.equal(merged[0].commentId, 1301);
+});

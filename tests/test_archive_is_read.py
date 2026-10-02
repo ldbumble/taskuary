@@ -38,3 +38,19 @@ class ArchiveIsReadTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s):
             server._run_operation({'kind': 'message.archive', 'target': mid, 'params': {}}, None)
         self.assertFalse([i for i in rail(s) if i.get('mid') == mid and (i['unread'] or i['actionable'])])
+
+    # FILE IT on an FYI (the chat's "File it", the timeline's Dismiss once / Nothing to do) is the same "I am done with
+    # this" as Archive: it left the row unread on the walk (owner, 2026-10-01) - it gets the read receipt Archive got
+    def test_file_it_takes_the_fyi_off_the_walk(self):
+        for learn in (False, True):
+            s, mid = self.fyi()
+            with mock.patch.object(server, 'store', s):
+                r = TestClient(server.app).post(f'/api/messages/{mid}/file', json={'learn': learn})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertFalse([i for i in rail(s) if i.get('mid') == mid and (i['unread'] or i['actionable'])], f'still unread after File (learn={learn})')
+
+    def test_the_assistants_file_it_is_the_same_door(self):
+        s, mid = self.fyi()
+        with mock.patch.object(server, 'store', s):
+            server._run_operation({'kind': 'message.file', 'target': mid, 'params': {'learn': False}}, None)
+        self.assertFalse([i for i in rail(s) if i.get('mid') == mid and (i['unread'] or i['actionable'])])

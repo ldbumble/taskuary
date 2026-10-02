@@ -61,4 +61,29 @@ class TypedWordsNeverStartAnAgent(unittest.TestCase):
         self.assertIn('continue', concierge.AUTO)        # the chip under the composer is a press: it runs
 
 
+class OnlyRealButtons(unittest.TestCase):
+    def test_a_question_over_a_report_is_answered_not_filed(self):
+        s = T.store(); item = a_report(s)
+        llm, _ = scripted("It is your AR aging report: 214 open invoices, up from 198.\n" + call('message.file'))
+        out = ask(s, 'what is this about?', item['key'], llm)
+        self.assertIsNone(out.get('proposal'), 'File it is not a button a report has')
+        self.assertIn('214 open invoices', out['say'])
+        self.assertIsNone(concierge.open_proposal(s, concierge.general.dock_task(s, 'owner')[0]['TaskId']))
+
+    def test_a_decision_that_is_not_a_button_falls_back_to_words(self):
+        s = T.store(); item = a_report(s)
+        llm, seen = scripted(call('not_ours'), 'It is the nightly AR aging report - 214 open invoices.')
+        out = ask(s, 'what is this about?', item['key'], llm)
+        self.assertIsNone(out.get('proposal'))
+        self.assertIn('214 open invoices', out['say'])
+        self.assertIn('not one of', seen[-1])
+
+    def test_a_real_button_is_still_offered(self):
+        s, a, b, item = two_tasks()
+        item = dict(item)
+        llm, _ = scripted(call('not_ours'))
+        p = ask(s, 'not ours', item['key'], llm).get('proposal')
+        self.assertIsNotNone(p, 'Not ours is a button on a mail that asks for something')
+
+
 if __name__ == '__main__': unittest.main()

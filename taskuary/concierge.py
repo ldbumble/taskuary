@@ -736,6 +736,47 @@ def table_actions(store, item: dict | None, chips: list = None) -> str:
     return 'ACTIONS FOR THE ITEM ON THE TABLE (the buttons under your line, and the tool each one is):\n' + '\n'.join(rows) if rows else ''
 
 
+# ONLY THE CARD'S OWN BUTTONS ARE ACTIONS ON IT (the owner, 2026-10-01): "what is this about?" over a report came back as a
+# File it card, and a report has no File it. Filing it, making it a task and handing it to an agent, decided about the item on
+# the table, must be one of its buttons - the chips under the line, or its own page's (a task's Send to agent while no agent
+# holds it). Anything else is answered in words. The other verbs carry their own guard (cannot, NEEDS).
+BUTTON_OF = {'not_ours_sender': 'not_ours', 'not_ours_remember': 'not_ours', 'block_sender': 'not_ours', 'archive': 'not_ours',
+             'coder': 'regular_agent'}
+OP_BUTTON = {'message.file': 'not_ours', 'message.archive': 'not_ours', 'preference.exclude_sender': 'not_ours',
+             'preference.sender_rule': 'not_ours'}
+BUTTONED = frozenset({'not_ours', 'mine', 'regular_agent'})
+
+def is_button(store, item: dict | None, verb: str) -> bool:
+    """Whether the owner has a button on this item for what `verb` does."""
+    b = BUTTON_OF.get(verb, verb)
+    if not item or b not in BUTTONED: return True
+    if b in {c['verb'] for c in chips_for(store, item)}: return True
+    return b == 'regular_agent' and bool(item.get('tid')) and not _agent_holds(store, item)
+
+
+def table_op_verb(call: dict | None) -> str | None:
+    """The button a filing or new-task OPERATION aimed at the table would be - None when it names its own target."""
+    kind, p = (call or {}).get('kind') or '', (call or {}).get('params') or {}
+    if any(p.get(f) for f in ('target', 'mid', 'ref', 'on')): return None
+    if kind in OP_BUTTON: return OP_BUTTON[kind]
+    if kind == 'task.create_from_message': return {'coding': 'coder', 'general': 'regular_agent'}.get(str(p.get('kind') or ''), 'mine')
+    return None
+
+
+def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, list]:
+    """The model chose an action the item has no button for: one more round, for the answer in words."""
+    label = CHIP_WORDS.get(BUTTON_OF.get(verb, verb)) or PROPOSALS.get(verb, ('', verb))[1]
+    try:
+        raw = str(llm(system, f'{table}\n\n"{label}" is not one of the actions for the item on the table - the owner has no such '
+                              f"button on it.\nThe owner asked: {text}\nAnswer them in plain words, and CALL nothing.",
+                      max_tokens=MAX_TOKENS) or '').strip()
+    except Exception as e:
+        logger.warning(f'concierge: the answer-in-words pass failed - {e}'); raw = ''
+    raw, _ = parse_call(raw)
+    raw, _ = parse_decision(raw)
+    return parse_options(raw)
+
+
 def table_line(store, item: dict | None) -> str:
     """What a look-up round and a retry carry, so "it" still means the item on the table after the first round."""
     if not item: return ''
@@ -2989,6 +3030,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                 ask = (f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\nThe owner asked: {text}\n"
                        'Now CALL the action again with the exact name you read, or answer them in plain words.')
             else:
+                off = table_op_verb(call) if item else None
+                if off and not is_button(store, item, off):
+                    if not reply: reply, options = _in_words(llm, system, table, text, off)
+                    call = None; break
                 try: return call_turn(store, tid, call, item, text, actor)
                 except CallMiss as e:
                     if miss: break                                   # the second miss: said, below
@@ -3062,6 +3107,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if why:
             rec('assistant', why)
             return {'say': why, 'options': [], 'chips': chips_for(store, target_item), 'decision': None}
+    # a decision the item has no button for is answered in words, never offered as a card (the 2026-10-01 press audit)
+    if decision and verb and target_item and not elsewhere and not is_button(store, target_item, verb):
+        if not reply: reply, options = _in_words(llm, system, table, text, verb)
+        decision = verb = None
     # the two immediate exceptions the owner approved: Next moves the walk (PW-128); a reply DRAFTS (PW-126)
     if decision and verb == 'next' and item:
         move_on(store, item['key'], actor)

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="260" viewBox="0 0 880 260"
      font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif"
-     role="img" aria-label="Daily installs of taskuary from PyPI, mirrors excluded. 256 yesterday   ·   1,334 in the last 7 days   ·   7,654 in 30">
+     role="img" aria-label="Daily installs of taskuary from PyPI, mirrors excluded. 81 yesterday   ·   1,322 in the last 7 days   ·   7,547 in 30">
   <style>
     text { font-size: 11px; }
     .title { font-size: 13px; font-weight: 600; fill: #1f2328; }
@@ -17,11 +17,11 @@
     }
   </style>
   <text x="52" y="22" class="title">taskuary · installs from PyPI</text>
-  <text x="52" y="38" class="dim">256 yesterday   ·   1,334 in the last 7 days   ·   7,654 in 30</text>
+  <text x="52" y="38" class="dim">81 yesterday   ·   1,322 in the last 7 days   ·   7,547 in 30</text>
   <line x1="52" y1="230.0" x2="802" y2="230.0" class="grid"/><text x="42" y="233.5" class="dim" text-anchor="end">0</text><line x1="52" y1="141.0" x2="802" y2="141.0" class="grid"/><text x="42" y="144.5" class="dim" text-anchor="end">375</text><line x1="52" y1="52.0" x2="802" y2="52.0" class="grid"/><text x="42" y="55.5" class="dim" text-anchor="end">750</text>
-  <path d="M52.0,230 L52.0,196.5 L71.2,226.0 L90.5,207.2 L109.7,226.0 L128.9,211.5 L148.2,222.2 L167.4,228.1 L186.6,174.0 L205.8,176.4 L225.1,107.1 L244.3,185.4 L263.5,107.1 L282.8,203.7 L302.0,226.0 L321.2,100.2 L340.5,169.0 L359.7,219.6 L378.9,115.1 L398.2,138.4 L417.4,219.3 L436.6,225.7 L455.8,160.0 L475.1,143.8 L494.3,122.5 L513.5,177.8 L532.8,122.7 L552.0,212.4 L571.2,132.9 L590.5,216.9 L609.7,165.9 L628.9,187.0 L648.2,124.9 L667.4,113.7 L686.6,207.9 L705.8,226.2 L725.1,169.2 L744.3,198.7 L763.5,151.4 L782.8,170.7 L802.0,169.2 L802.0,230 Z" class="area"/>
-  <polyline points="52.0,196.5 71.2,211.3 90.5,209.9 109.7,213.9 128.9,213.4 148.2,214.9 167.4,216.8 186.6,213.6 205.8,206.5 225.1,192.2 244.3,186.4 263.5,171.4 282.8,168.8 302.0,168.5 321.2,158.0 340.5,156.9 359.7,173.0 378.9,162.9 398.2,167.4 417.4,169.6 436.6,169.6 455.8,178.2 475.1,174.6 494.3,160.7 513.5,169.6 532.8,167.4 552.0,166.4 571.2,153.2 590.5,161.3 609.7,164.5 628.9,173.7 648.2,166.1 667.4,164.8 686.6,164.2 705.8,177.5 725.1,170.7 744.3,175.4 763.5,170.3 782.8,176.8 802.0,184.8" class="line"/>
-  <circle cx="802.0" cy="169.2" r="3.5" class="dot"/><text x="811.0" y="172.7" class="key">daily</text><text x="811.0" y="188.3" class="key">7-day mean</text>
-  <text x="52.0" y="250" class="dim" text-anchor="middle">Aug 24</text><text x="205.8" y="250" class="dim" text-anchor="middle">Sep 1</text><text x="359.7" y="250" class="dim" text-anchor="middle">Sep 9</text><text x="494.3" y="250" class="dim" text-anchor="middle">Sep 16</text><text x="648.2" y="250" class="dim" text-anchor="middle">Sep 24</text><text x="802.0" y="250" class="dim" text-anchor="middle">Oct 2</text>
+  <path d="M52.0,230 L52.0,196.5 L70.8,226.0 L89.5,207.2 L108.2,226.0 L127.0,211.5 L145.8,222.2 L164.5,228.1 L183.2,174.0 L202.0,176.4 L220.8,107.1 L239.5,185.4 L258.2,107.1 L277.0,203.7 L295.8,226.0 L314.5,100.2 L333.2,169.0 L352.0,219.6 L370.8,115.1 L389.5,138.4 L408.2,219.3 L427.0,225.7 L445.8,160.0 L464.5,143.8 L483.2,122.5 L502.0,177.8 L520.8,122.7 L539.5,212.4 L558.2,132.9 L577.0,216.9 L595.8,165.9 L614.5,187.0 L633.2,124.9 L652.0,113.7 L670.8,207.9 L689.5,226.2 L708.2,169.2 L727.0,198.7 L745.8,151.4 L764.5,170.7 L783.2,169.2 L802.0,210.8 L802.0,230 Z" class="area"/>
+  <polyline points="52.0,196.5 70.8,211.3 89.5,209.9 108.2,213.9 127.0,213.4 145.8,214.9 164.5,216.8 183.2,213.6 202.0,206.5 220.8,192.2 239.5,186.4 258.2,171.4 277.0,168.8 295.8,168.5 314.5,158.0 333.2,156.9 352.0,173.0 370.8,162.9 389.5,167.4 408.2,169.6 427.0,169.6 445.8,178.2 464.5,174.6 483.2,160.7 502.0,169.6 520.8,167.4 539.5,166.4 558.2,153.2 577.0,161.3 595.8,164.5 614.5,173.7 633.2,166.1 652.0,164.8 670.8,164.2 689.5,177.5 708.2,170.7 727.0,175.4 745.8,170.3 764.5,176.8 783.2,184.8 802.0,185.2" class="line"/>
+  <circle cx="802.0" cy="210.8" r="3.5" class="dot"/><text x="811.0" y="214.3" class="key">daily</text><text x="811.0" y="188.7" class="key">7-day mean</text>
+  <text x="52.0" y="250" class="dim" text-anchor="middle">Aug 24</text><text x="202.0" y="250" class="dim" text-anchor="middle">Sep 1</text><text x="352.0" y="250" class="dim" text-anchor="middle">Sep 9</text><text x="502.0" y="250" class="dim" text-anchor="middle">Sep 17</text><text x="652.0" y="250" class="dim" text-anchor="middle">Sep 25</text><text x="802.0" y="250" class="dim" text-anchor="middle">Oct 3</text>
   <text x="802" y="22" class="dim" text-anchor="end">mirrors excluded</text>
 </svg>

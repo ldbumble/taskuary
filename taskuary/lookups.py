@@ -269,10 +269,14 @@ def rules_list(store, p: dict) -> str:
         out += [f"    {k}{': ' + pat if pat else ''}{' - ' + _cut(x['Reason'], 120) if x.get('Reason') else ''}" for (k, pat), x in list(seen.items())[:40]]
     return NL.join(out)
 
+def asks_list(store, p: dict) -> str:
+    from . import asks
+    return asks.listing(store, p)
+
 READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
         'agents.now': agents_now, 'approvals.list': approvals_list, 'pipe.list': pipe_list, 'calendar.read': calendar_read,
         'activity.list': activity_list, 'errors.list': errors_list,
-        'memory.list': memory_list, 'rules.list': rules_list}
+        'memory.list': memory_list, 'rules.list': rules_list, 'asks.list': asks_list}
 
 def read(store, kind: str, p: dict) -> str:
     f = READ.get(kind)

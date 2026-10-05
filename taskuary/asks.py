@@ -147,3 +147,49 @@ def watch(store):
                 if time.monotonic() - last >= SWEEP: sweep(store); last = time.monotonic()
             except Exception as e: logger.warning(f'asks watcher: {e}')
     threading.Thread(target=loop, daemon=True, name='asks').start()
+
+
+# ── the assistant knows your asks: a short block every turn, the rest on request ─────────
+BLOCK_CAP = 6
+
+
+def _ago(stamp) -> str:
+    try: d = datetime.now() - datetime.fromisoformat(str(stamp)[:19])
+    except (TypeError, ValueError): return ''
+    h = int(d.total_seconds() // 3600)
+    return 'just now' if h < 1 else f'{h}h ago' if h < 24 else 'yesterday' if h < 48 else f'{h // 24}d ago'
+
+
+def _where(via) -> str:
+    return '' if not via or via == 'desktop' else via.split(':', 1)[0].capitalize().replace('Whatsapp', 'WhatsApp')
+
+
+def _line(store, t: dict, says: str) -> str:
+    from .store import task_ref
+    when = ', '.join(x for x in (_ago(t.get('CreatedAt')), _where(of(t))) if x)
+    return f"- {task_ref(t['TaskId'])} {str(t.get('Title') or '').strip()[:70]}" + (f' ({when})' if when else '') + (f' - {says}' if says else '')
+
+
+def _asked(store, open_only: bool, limit: int) -> list:
+    q = 'SELECT * FROM task WHERE AskedVia IS NOT NULL' + (" AND Status NOT IN ('done','dropped')" if open_only else '')
+    return store._rows(q + ' ORDER BY TaskId DESC LIMIT ?', (int(limit),))
+
+
+def block(store) -> str:
+    """YOUR OPEN ASKS - what the owner handed over and where each stands, newest first: enough for "where's the tab
+    check?" and "add Omar to that" to land on the right task. A finished one stays while it is still on the rail (unseen)."""
+    on_rail = {i.get('tid') for i in _rail(store)}
+    lines = []
+    for t in _asked(store, False, 40):
+        if t.get('Status') in ('done', 'dropped') and t['TaskId'] not in on_rail: continue
+        if not agent_touched(store, t['TaskId']): continue
+        lines.append(_line(store, t, state(store, t['TaskId'])[1]))
+        if len(lines) >= BLOCK_CAP: break
+    return '\n'.join(['YOUR OPEN ASKS'] + lines) if lines else ''
+
+
+def listing(store, p: dict) -> str:
+    """The look-up (asks.list): every ask, any age - "what did I ask you last week?". `status`: open (default) | all."""
+    open_only = str(p.get('status') or 'open').strip().lower() != 'all'
+    rows = _asked(store, open_only, max(1, min(int(p.get('limit') or 20), 60)))
+    return '\n'.join(_line(store, t, state(store, t['TaskId'])[1] or t.get('Status') or '') for t in rows) or 'No asks yet.'

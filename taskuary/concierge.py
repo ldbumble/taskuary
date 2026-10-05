@@ -28,7 +28,7 @@ from loguru import logger
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
-from . import operations, workerstate as ws
+from . import asks, operations, workerstate as ws
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
@@ -3075,6 +3075,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         system = _system(store, llm) + '\n\n' + toolcatalog.block(store)
         raw = str(llm(system,
                       f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
+                      # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
+                      + (f"{asks_block}\n\n" if (asks_block := asks.block(store)) else '')
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table

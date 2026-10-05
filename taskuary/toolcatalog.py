@@ -314,6 +314,8 @@ READS = {
     # OPEN WORK, ONE MESSAGE, ONE PERSON, THE DOCS (lookups.py). "What's open", "what did that mail
     # actually say", "what do we have with her", "how do I set up X" had no read at all (2026-09-24).
     'tasks.list':       'the tasks - `status`: open (the default: open, in progress or waiting) | done | all; `contains`: words; `limit`',
+    'asks.list':        ("what the owner asked you to do (the work they handed over in this chat, on the phone or with New) and where "
+                         'each stands - `status`: open (the default) | all; `limit`. YOUR OPEN ASKS in the turn already shows the newest'),
     'message.read':     'one message in full - who, when, its task and the whole text. `mid`: the m-number timeline.search printed',
     'sender.read':      ('one person at a glance - how often they write, their recent messages, their open tasks, when you last '
                          'wrote back and what the owner told you to remember about them. `who`: a name or an address'),
@@ -375,7 +377,7 @@ def valid(kind: str, params: dict) -> str:
         need = {'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': (),
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
-                'knowledge.search': ('query',), 'tasks.list': (), 'message.read': ('mid', 'id'),
+                'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),
                 'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (),
                 'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': (),
                 'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',)}[kind]

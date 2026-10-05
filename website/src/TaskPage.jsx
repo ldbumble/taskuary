@@ -732,6 +732,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     try {
       // the repository chosen in the panel is pinned first - the tag is the override the start obeys
       if (startRepo) await api.put(`/api/tasks/${id}/repo`, { repo: startRepo, agent: run.agent || "coder" });
+      // ANOTHER AGENT WHILE ONE RUNS (Run another agent): the live one is paused first - its handover is filed for the next
+      // session, no report and no reply draft - since the dispatch refuses a second worker on a task (409)
+      if (term?.alive) { await api.post(`/api/tasks/${id}/pause`, {}); if (!stale(id)) setTerm(null); }
       // one shared dispatch for coding too (PW-216): the kind switch, the live-worker check (409), the unknown
       // agent (422) and the repository come from the same road the general button and the assistant use -
       // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
@@ -832,6 +835,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
   const startHere = !liveSession && notDone && !continueHere && (stage !== "agent" || (agentBar && !isGeneral));
   const ranBefore = !!(report || detail?.transcript);
+  // RUN ANOTHER AGENT, on the bar and for any task an agent has worked (the owner, 2026-10-05: "don't see run another agent under
+  // more? it should be not in more"). It was offered only behind More, only on a coding task, only once its session had ended -
+  // so a general task could never be handed to the coding agent from here. It opens the agent step; a live session is paused
+  // (its handover kept for the next) when the new one starts (startCodingAgent).
+  const runAnother = { id: "run-another", group: "agent", label: "Run another agent",
+    run: () => { setOpenStage("agent"); setRestartOpen(true); },
+    title: "Opens the agent step: a different agent, harness, model or repository. A running session is paused and its handover goes to the new one." };
   const rowVerbs = !t ? [] : !notDone
     ? [{ id: "reopen", group: "decide", tone: "s", label: "Reopen task", run: reopen, title: "Reopens the task only. No agent starts until you choose one." }]
     : [
@@ -846,6 +856,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: "Review changes", run: () => setDiffOpen(true), title: "A viewer of the agent's diff. Nothing is approved or committed here." }] : []),
         { id: "save-end", group: "agent", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
           title: "Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it." },
+        ...(notDone ? [runAnother] : []),
       ] : continueHere ? [{ id: "continue", group: "agent", lead: true, label: startingAgent === "resume" ? "Continuing…" : "Continue session", disabled: !!startingAgent,
         run: (e, a) => setContinueAt(a || e?.currentTarget),
         title: isGeneral ? "Reopens the saved provider conversation and continues from its existing context."
@@ -867,8 +878,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // ...the same write-up once the session has ended by itself: one button, one name (the owner, 2026-10-02 - its own name made it look like a second button)
       ...(!liveSession && canSave && agentBar ? [{ id: "save-end", group: "more", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
         title: "Writes up what the session did and files it as the task's result. The task stays open until you press Mark done." }] : []),
-      ...(!liveSession && continueHere && !isGeneral && agentBar ? [{ id: "run-another", group: "more", label: "Run another agent", run: () => setRestartOpen(true),
-        title: "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation." }] : []),
+      ...(!liveSession && continueHere && agentBar ? [runAnother] : []),
     ];
   useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
   return (
@@ -1347,10 +1357,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                     </Box>
                   )}
-                  {!term?.alive && !liveRun && !isGeneral && (restartOpen || (!report && !detail?.transcript)) && (
+                  {(restartOpen || (!term?.alive && !liveRun && !isGeneral && !report && !detail?.transcript)) && (
                     <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 700, mb: 0.75 }}>
-                        {report || detail?.transcript ? "Configure the next run" : "Start an agent"}
+                        {report || detail?.transcript || term?.alive ? "Configure the next run" : "Start an agent"}
                       </Typography>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
                         {/* coding asks ONE question (which CLI); a hand-off asks three - which profile,
@@ -1403,7 +1413,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </Button>}
                         {handOff && <Button size="small" variant="text" disabled={!!startingAgent}
                           onClick={() => { setHandOff(false); setRun({ ...run, agent: "", pick: "", model: "" }); }}>Back to coding</Button>}
-                        {(report || detail?.transcript) && <Button size="small" variant="text"
+                        {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
                           onClick={() => setRestartOpen(false)}>Cancel</Button>}
                         {repoOf(t) && <Typography variant="caption" sx={{ ...mono, color: FAINT }}>repo · {repoOf(t)}</Typography>}
                       </Box>

@@ -191,3 +191,22 @@ test("Mark done on a live session ends it the way Save and end session does", ()
   assert.ok(body.includes("no_reply: true"), "the close dismisses drafts, so none is written");
   assert.ok(body.indexOf("/wrap") < body.indexOf('finish("done")'), "the result is filed before the task closes");
 });
+
+// RUN ANOTHER AGENT (the owner, 2026-10-05: "don't see run another agent under more? it should be not in more"): it was behind
+// More, only on a coding task, only after its session ended - so a general task's live session could never be handed to the
+// coding agent. It stands on the bar for any task an agent has worked, opens the agent step, and pauses a live session first.
+test("run another agent is on the bar, live sessions and general tasks included", () => {
+  assert.match(tasks, /const runAnother = \{ id: "run-another", group: "agent"/);
+  const live = tasks.slice(tasks.indexOf("...(liveSession ? ["), tasks.indexOf("] : continueHere ?"));
+  assert.match(live, /runAnother/, "a live session offers it beside Save and end session");
+  assert.doesNotMatch(tasks, /id: "run-another", group: "more"/);
+});
+
+test("its agent step opens on a general task and beside a live session", () => {
+  assert.match(tasks, /\{\(restartOpen \|\| \(!term\?\.alive && !liveRun && !isGeneral && !report && !detail\?\.transcript\)\) && \(/);
+});
+
+test("starting the new one pauses a live session first - its handover kept, no report, no reply draft", () => {
+  const start = tasks.slice(tasks.indexOf("const startCodingAgent"), tasks.indexOf("const startGeneralAgent"));
+  assert.ok(start.indexOf("/pause") > 0 && start.indexOf("/pause") < start.indexOf('"dispatch.prepare"'));
+});

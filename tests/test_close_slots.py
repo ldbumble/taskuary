@@ -300,3 +300,28 @@ def test_a_triaged_message_that_asks_for_emails_gets_slots():
         tid = next(t['TaskId'] for t in st.list_tasks(active_only=True))
         assert [i['out']['to'] for i in slots.all_(st, tid)] == ['erin@northwind.example', 'Gail Moreno']
     finally: server.store = prev
+
+
+# ── the work rail ────────────────────────────────────────────────────────────────────────
+def test_the_rail_shows_one_row_per_task_with_its_count(s):
+    from taskuary import funnel
+    tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)
+    rows = [r for r in funnel.from_proposals(s, set()) if r.get('tid') == tid]
+    assert len(rows) == 1 and rows[0]['key'] == f'review:{a}' and rows[0]['lane'] == 'approve' and '2 emails' in rows[0]['why']
+    approve(s, a)
+    rows = [r for r in funnel.from_proposals(s, set()) if r.get('tid') == tid]
+    assert len(rows) == 1 and rows[0]['key'] == f'review:{b}' and '1 email ' in rows[0]['why']
+
+
+def test_the_processing_rail_calls_them_emails_not_a_reply():
+    import sys, os; sys.path.insert(0, os.path.dirname(__file__))
+    from taskuary import funnel, processing_unread
+    from test_funnel import ago, store
+    st = store(); tid = typed(st, FOUR[:2]); draft(st, tid, 0); draft(st, tid, 1)
+    def rail():
+        st.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            return processing_unread.build(st, live_state=[])['items']
+    rail(); st.activate_processing_reads(fixed_now=ago(0), live_state=[])
+    rows = [r for r in rail() if r.get('tid') == tid]
+    assert len(rows) == 1 and rows[0]['lane'] == 'approve' and '2 emails' in rows[0]['why'] and 'reply' not in rows[0]['why']

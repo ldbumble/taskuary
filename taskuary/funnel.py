@@ -672,6 +672,17 @@ def from_proposals(store, used_rids: set) -> list:
         out.append(_item(f"review:{rv['ReviewId']}", 'action', 'approve', rv.get('Reason') or 'a change waits for your yes',
                          who='you asked for it', when=rv.get('CreatedAt'), rid=rv['ReviewId'],
                          why='a setting waits for your yes - nothing changes until you approve it'))
+    # a task's emails (slots.py) have no message row to ride on, so they arrive here - ONE row per task, its oldest draft
+    # first: approving it puts the next one up with the count one smaller, never four rows for one ask
+    from . import slots
+    per = {}
+    for rv in store.list_reviews('pending'):
+        if rv.get('Kind') == slots.KIND and rv.get('TaskId') and rv['ReviewId'] not in used_rids: per.setdefault(rv['TaskId'], []).append(rv)
+    for tid, rvs in per.items():
+        first, n = min(rvs, key=lambda r: r['ReviewId']), len(rvs)
+        out.append(_item(f"review:{first['ReviewId']}", 'review', 'approve', (store.get_task(tid) or {}).get('Title') or first.get('Reason') or 'emails wait for your yes',
+                         tid=tid, when=first.get('CreatedAt'), rid=first['ReviewId'], draft=True,
+                         why=f"{n} email{'s' if n != 1 else ''} drafted for you to send"))
     return out
 
 

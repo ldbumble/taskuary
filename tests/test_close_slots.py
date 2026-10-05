@@ -305,10 +305,11 @@ def test_the_rail_shows_one_row_per_task_with_its_count(s):
     from taskuary import funnel
     tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)
     rows = [r for r in funnel.from_proposals(s, set()) if r.get('tid') == tid]
-    assert len(rows) == 1 and rows[0]['key'] == f'review:{a}' and rows[0]['lane'] == 'approve' and '2 emails' in rows[0]['why']
-    approve(s, a)
+    # the NEWEST draft leads, as on the processing rail (processing_unread) - both rails send the same one first
+    assert len(rows) == 1 and rows[0]['key'] == f'review:{b}' and rows[0]['lane'] == 'approve' and '2 emails' in rows[0]['why']
+    approve(s, b)
     rows = [r for r in funnel.from_proposals(s, set()) if r.get('tid') == tid]
-    assert len(rows) == 1 and rows[0]['key'] == f'review:{b}' and '1 email ' in rows[0]['why']
+    assert len(rows) == 1 and rows[0]['key'] == f'review:{a}' and '1 email ' in rows[0]['why']
 
 
 def test_the_processing_rail_calls_them_emails_not_a_reply():

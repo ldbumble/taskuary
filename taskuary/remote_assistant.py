@@ -957,7 +957,7 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
 
 
 def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
-    from . import concierge, funnel, operations
+    from . import asks, concierge, funnel, operations
     t = act.get('t')
     from . import doorway_browse
     try:
@@ -1006,6 +1006,13 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             # ...and a retry that lands settles the table the way the first press would have
             prop = {**op, 'settles': bool(act.get('settles')), 'key': (item or {}).get('key')}
             return _ran(store, prop, concierge.run_proposal(store, op, actor), item, actor)
+        # a report-back's picks (asks.phone_text): send exactly what was shown, or let one email go
+        if t == 'send': return asks.send_picked(store, [[act.get('rid'), act.get('sig')]])
+        if t == 'sendall': return asks.send_picked(store, act.get('sends') or [])
+        if t == 'drop':
+            from . import slots
+            slots.drop(store, int(act['tid']), str(act.get('slot') or ''), actor)
+            return 'Dropped - that email will not go.'
         if t == 'closeout':
             from fastapi import HTTPException
             from .server import closeout_act

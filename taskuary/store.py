@@ -1321,11 +1321,20 @@ class SQLiteStore:
                                      (SELECT ConnectorId FROM connector WHERE Type = ?)
                                    WHERE Channel = ? AND ConnectorId IS NULL''', (typ, ch))
             # data heal: dbs written before review dedupe can hold stacked pending reviews
-            # of the same kind on one task - keep the newest, supersede the rest
+            # of the same kind on one task - keep the newest, supersede the rest. NOT a task's emails (slots.py): several
+            # pending at once is what they are, and every start retired all but the newest (TQ-0957, 2026-10-05)
             self.cx.execute("""UPDATE review SET Status='superseded'
-                               WHERE Status='pending' AND ReviewId NOT IN (
+                               WHERE Status='pending' AND Kind<>'slot' AND ReviewId NOT IN (
                                    SELECT MAX(ReviewId) FROM review WHERE Status='pending'
                                    GROUP BY TaskId, Kind)""")
+            # ...and the email drafts it wrongly retired come back: superseded with nobody deciding, on a task still open,
+            # whose email is still owed (its slot names this draft and is not done)
+            for r in self.cx.execute("""SELECT rv.ReviewId, t.Checklist FROM review rv JOIN task t ON t.TaskId=rv.TaskId
+                                         WHERE rv.Kind='slot' AND rv.Status='superseded' AND rv.DecidedBy IS NULL
+                                         AND t.Status NOT IN ('done','dropped')""").fetchall():
+                try: owed = any(isinstance(i, dict) and i.get('rid') == r[0] and not i.get('done') for i in json.loads(r[1] or '[]'))
+                except (TypeError, ValueError): owed = False
+                if owed: self.cx.execute("UPDATE review SET Status='pending' WHERE ReviewId=?", (r[0],))
             # escalation reviews are gone: they only ever came from the headless report contract
             # ('needs_you'), and a live session asks you IN the terminal. Old pending ones would
             # render as a reply draft with nothing to send, so they resolve on first open - the

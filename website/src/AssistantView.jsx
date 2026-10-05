@@ -724,9 +724,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const openCardRef = useRef(null);
   const browseRef = useRef(null), openTaskRef = useRef(null);
   const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
-  // the table changed: the next item opens un-expanded and unfolded
+  // the table changed: the next item opens un-expanded and unfolded - a NEW item only. advance() empties the table on the way to
+  // the next one, and resetting the fold then drew the task just closed again until the next landed (the owner, 2026-10-05:
+  // "the task stayed open and popped back open before closing")
   const tableKey = currentItem?.key || null;
-  useEffect(() => { setExpanded(false); setFoldedKey(null); }, [tableKey]);
+  useEffect(() => { if (!tableKey) return; setExpanded(false); setFoldedKey(null); }, [tableKey]);
   // the chat body's height is the task view's (CanvasItem): measured, never guessed, and re-measured with the window
   useEffect(() => {
     const el = bodyRef.current;
@@ -1664,7 +1666,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, items,
-    next: () => runChip({ verb: "next" }), advance: () => advance(), reload: () => loadPile(true), changed: onChanged,
+    next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     reopen: (key, onTable) => { if (onTable) setFoldedKey(null); else pull(key); },
@@ -1847,10 +1849,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           )}
           {!old && noteOn && (
             <div className="tq-browse-line" ref={(el) => { if (el && !el.dataset.seen) { el.dataset.seen = "1"; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } }}>
-              <CloseNote inline taskRef={noteOn.ref} onClose={() => setNoteOn(null)}
+              <CloseNote inline taskRef={noteOn.ref} initial={noteOn.note} onClose={() => setNoteOn(null)}
                 onSubmit={async (note) => {
+                  // put down at the press with the task it closes; a close that fails brings the card back with its words
                   const on = noteOn;
-                  await on.close(note);
+                  setNoteOn(null);
+                  try { await on.close(note); } catch (e) { setNoteOn({ ...on, note }); throw e; }
                   setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: on.task.TaskId, ref: on.ref, text: `Closed with your note: ${note}` }]);
                 }} />
             </div>

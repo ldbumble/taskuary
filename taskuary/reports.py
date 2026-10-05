@@ -1689,10 +1689,6 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                                                       'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
                                                       'SourceName': title, 'Subject': subject, 'FromName': title, 'SentAt': stamp,
                                                       'BodyText': text, 'SourceLink': cfg.get('link'), 'Status': 'feed'})
-    if not d['timeline'] and not (store.get_message(mid) or {}).get('TaskId'):
-        from . import funnel
-        funnel.settle(store, f'report:{mid}', 'done', 'report')
-    expire_previous_runs(store, src, cfg, mid)
     # the rows are the report: hand back the spreadsheet to open and the chart to look at
     try:
         from .artifacts import attach_report_output
@@ -1700,6 +1696,12 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     except Exception as e:
         made = []
         logger.warning(f'report artifacts for {title} failed: {e}')
+    # put down only AFTER the files are on it: the read receipt fingerprints the row WITH its attachments, so a
+    # run put down first was a different row by the time it settled and every held-back "all clear" came back unread
+    if not d['timeline'] and not (store.get_message(mid) or {}).get('TaskId'):
+        from . import funnel
+        funnel.settle(store, f'report:{mid}', 'done', 'report')
+    expire_previous_runs(store, src, cfg, mid)
     store.audit('message', mid, 'report', 'report', 'agent', title)
     err = _after(store, src, cfg, d, title, subject, text, mid)
     # the digest report is ALSO what keeps DIGEST.md alive: the Timeline row, and the doc Settings shows

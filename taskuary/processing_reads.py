@@ -24,11 +24,13 @@ def units(view):
     owned = set(view.get('member_ids', ()))
     result = []
 
-    def add(kind, row, id_field, substance):
+    def add(kind, row, id_field, substance, legacy=None):
         local_id = str(row[id_field])
         if f'{kind}:{local_id}' in owned:
-            result.append(dict(entity_kind=kind, local_id=local_id,
-                               fingerprint=fingerprint(substance)))
+            unit = dict(entity_kind=kind, local_id=local_id, fingerprint=fingerprint(substance))
+            also = fingerprint(legacy) if legacy is not None else unit['fingerprint']
+            if also != unit['fingerprint']: unit['also'] = [also]
+            result.append(unit)
 
     for row in view.get('messages', ()):
         # History/context remains available in details, not an independent arrival.
@@ -57,16 +59,19 @@ def units(view):
             for a in view.get('artifacts', ()) if a.get('TaskId') == row['TaskId']]
         add('task', row, 'TaskId', substance)
     for row in view.get('ideas', ()):
-        substance = _pick(row, ('Text', 'Kind', 'ActionJson', 'Sig'))
-        try:
-            action = json.loads(substance['ActionJson'])
-            if isinstance(action, dict) and isinstance(action.get('triage'), dict):
-                action['triage'] = {k: v for k, v in action['triage'].items()
-                                    if k not in ('priority', 'pending', 'error')}
-            substance['ActionJson'] = action
-        except (ValueError, TypeError):
-            pass
-        add('idea', row, 'IdeaId', substance)
+        substance, legacy = _pick(row, ('Text', 'Kind', 'ActionJson', 'Sig')), None
+        try: action = json.loads(substance['ActionJson'])
+        except (ValueError, TypeError): action = None
+        if isinstance(action, dict):
+            # Triage's verdict, and the task it linked, are bookkeeping ABOUT the idea: a failed verdict retried hours
+            # later wrote intent/kind/why/at/linked_task and brought an idea the owner had read back unread, with
+            # nothing new in it to read. Only the idea's own words and facts are news.
+            substance['ActionJson'] = {k: v for k, v in action.items() if k not in ('triage', 'tid')}
+            # ...and a receipt written before this (verdict hashed in, only the failure's own keys out) still counts
+            tri = action.get('triage')
+            legacy = {**substance, 'ActionJson': {**action, 'triage': {k: v for k, v in tri.items() if k not in ('priority', 'pending', 'error')}}
+                      if isinstance(tri, dict) else action}
+        add('idea', row, 'IdeaId', substance, legacy)
     for row in view.get('reviews', ()):
         add('review', row, 'ReviewId', _pick(row, ('Kind', 'CreatedAt', 'RunId')))
     for row in view.get('runs', ()):
@@ -91,9 +96,10 @@ def project(cur, item_id, view):
         # tab once it has been quiet that long, and the receipt is the only record of when it went.
         # ...and when ANY version of it was last read: a finished agent result asks "read since the close?", and
         # a note filed after that read changes the fingerprint without making the result news again (TQ-0740)
-        row = cur.execute('''SELECT MAX(CASE WHEN Fingerprint=? THEN ReadAt END) AS ReadAt, MAX(ReadAt) AS LastReadAt
-            FROM processing_read_receipt WHERE EntityKind=? AND LocalId=?''',
-            (unit['fingerprint'], unit['entity_kind'], unit['local_id'])).fetchone()
+        prints = [unit['fingerprint'], *unit.get('also', ())]
+        row = cur.execute(f'''SELECT MAX(CASE WHEN Fingerprint IN ({','.join('?' * len(prints))}) THEN ReadAt END) AS ReadAt,
+            MAX(ReadAt) AS LastReadAt FROM processing_read_receipt WHERE EntityKind=? AND LocalId=?''',
+            (*prints, unit['entity_kind'], unit['local_id'])).fetchone()
         unit['read_at'],unit['last_read_at'] = (row['ReadAt'] or None, row['LastReadAt'] or None) if row else (None, None)
         unit['read'] = bool(unit['read_at'])
     # Root deferrals survive redirects. Exact legacy entity deferrals follow moves.

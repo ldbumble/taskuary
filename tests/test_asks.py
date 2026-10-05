@@ -7,7 +7,8 @@ from unittest import mock
 
 import pytest
 
-from taskuary import asks, concierge, remote_assistant
+from taskuary import asks, concierge, outbound, remote_assistant, slots
+from tests.test_close_slots import SENT, mail_task
 from taskuary.store import MemoryStore
 
 
@@ -521,3 +522,87 @@ def test_an_ask_closed_reopened_and_closed_again_is_said_again(s):
     s.update_task(tid, {'Status': 'open'}, 'owner'); s.update_task(tid, {'Status': 'done'}, 'coder')
     s._exec("UPDATE task SET ClosedAt=? WHERE TaskId=?", ('2099-01-01 00:00:00', tid))   # closed after it was told
     with rail(): assert asks.check(s, tid)
+
+
+# ── the phone shows what it asks a yes for, and the yes is a pick (2026-10-05) ───────────
+LONG = 'Look at the GitHub issues in northwind/portal for the four tabs we have been working on and draft emails'
+
+
+def three_emails(s):
+    tid = made(s, LONG)
+    slots.add(s, tid, [{'to': 'Ray Colton <ray@northwind.example>', 'about': 'Screening'},
+                       {'to': 'paula@northwind.example', 'about': 'Center Documents'}, {'to': 'Omar Keller', 'about': 'AP Invoices'}], 'owner')
+    a = slots.draft(s, tid, 'Hi Ray - Screening is waiting on the vendor file.', to='ray@northwind.example', subject='Screening')['review_id']
+    b = slots.draft(s, tid, 'Hi Paula - Center Documents are all in.', to='paula@northwind.example', subject='Center Documents')['review_id']
+    c = slots.draft(s, tid, 'Hi Omar - AP Invoices are blocked on two approvals.', to='Omar Keller', subject='AP Invoices')['review_id']
+    return tid, a, b, c
+
+
+def test_the_phone_line_shows_every_email_in_full_with_picks(s):
+    tid, a, b, c = three_emails(s)
+    text, rows = asks.phone_text(s, s.get_task(tid), 'approve', '3 of 3 emails drafted, waiting on your yes')
+    for words in ('Screening is waiting on the vendor file.', 'Center Documents are all in.', 'blocked on two approvals.',
+                  'ray@northwind.example', 'Omar Keller', 'no address yet'):
+        assert words in text
+    labels = [r[0] for r in rows]
+    assert 'Send to Ray Colton' in labels and 'Send to paula@northwind.example' in labels and 'Send both ready ones' in labels
+    assert 'Drop the one to Omar Keller' in labels and not any(l == 'Send to Omar Keller' for l in labels)
+    assert all(f'{n} · ' in text for n in range(1, len(rows) + 1))
+
+
+def test_a_long_title_is_cut_in_the_line(s):
+    tid, *_ = three_emails(s)
+    text, _ = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
+    assert LONG not in text and LONG[:40] in text
+
+
+def test_a_send_pick_sends_that_email_and_only_it(s):
+    tid, a, b, c = three_emails(s)
+    _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
+    act = dict(rows)['Send to Ray Colton']
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
+         mock.patch('taskuary.learn.learn_from'):
+        said = remote_assistant.run_act(s, act, None)
+    assert sent.call_count == 1 and sent.call_args[0][2] == ['ray@northwind.example'] and 'Sent' in said
+    assert s.get_review(a)['Status'] == 'approved' and s.get_review(b)['Status'] == 'pending'
+
+
+def test_send_both_sends_the_ready_ones(s):
+    tid, a, b, c = three_emails(s)
+    _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
+         mock.patch('taskuary.learn.learn_from'):
+        remote_assistant.run_act(s, dict(rows)['Send both ready ones'], None)
+    assert sent.call_count == 2 and s.get_review(c)['Status'] == 'pending'
+
+
+def test_an_email_changed_after_it_was_shown_is_not_sent(s):
+    tid, a, b, c = three_emails(s)
+    _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
+    slots.draft(s, tid, 'Hi Ray - rewritten after you looked.', to='ray@northwind.example')
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent:
+        said = remote_assistant.run_act(s, dict(rows)['Send to Ray Colton'], None)
+    assert not sent.called and 'changed' in said
+
+
+def test_a_drop_pick_drops_that_email(s):
+    tid, a, b, c = three_emails(s)
+    _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
+    remote_assistant.run_act(s, dict(rows)['Drop the one to Omar Keller'], None)
+    assert s.get_review(c)['Status'] == 'rejected' and s.get_review(a)['Status'] == 'pending'
+
+
+def test_a_drafted_reply_is_shown_with_send(s):
+    tid, mid, reply = mail_task(s); s.update_task(tid, {'AskedVia': 'desktop'}, 'owner')
+    text, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'a reply is drafted for you to send')
+    assert 'The export has been repaired and tested.' in text and 'Send the reply' in dict(rows)
+
+
+def test_the_phone_gets_the_full_text_and_its_picks(s):
+    tid, a, b, c = three_emails(s)
+    s.update_task(tid, {'AskedVia': 'whatsapp:c1@example.com'}, 'owner')
+    with at(s, tid, 'approve', '3 of 3'), mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
+         mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, '_offer') as offer, \
+         mock.patch.object(remote_assistant, 'send') as send:
+        asks.check(s, tid)
+    assert 'blocked on two approvals.' in send.call_args[0][3] and offer.called

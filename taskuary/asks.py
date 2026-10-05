@@ -6,7 +6,7 @@ check?" had no answer, and finished work was silent. An ask IS a task, marked wi
 state is its rail lane in the rail's own words; a move into a lane that needs the owner, or its end, is said once. No
 memory store, no model call.
 """
-import json, threading, time
+import hashlib, json, threading, time
 from datetime import datetime, timedelta
 
 from loguru import logger
@@ -79,7 +79,64 @@ def _told(store, tid: int, lane: str):
     store._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', (lane, datetime.now().isoformat(' ', 'seconds'), tid))
 
 
-def _say(store, task: dict, line: str, via: str = None) -> bool:
+TITLE_SAID = 60
+
+
+def _title(t: dict) -> str:
+    s = ' '.join(str((t or {}).get('Title') or '').split())
+    return s if len(s) <= TITLE_SAID else s[:TITLE_SAID - 1].rstrip() + '…'
+
+
+def _sig(text) -> str: return hashlib.sha1(str(text or '').strip().encode()).hexdigest()[:10]
+
+
+def phone_text(store, t: dict, lane: str, says: str) -> tuple:
+    """What the phone is told: the line, and what it asks a yes FOR - every email in full (the owner, 2026-10-05: "this is
+    useless if i don't know what i'm approving"), or the drafted reply - with numbered picks that run the desktop's own
+    send and drop. (text, [(label, act)])."""
+    from . import slots
+    from .store import task_ref
+    tid = t['TaskId']
+    blocks, rows, ready = [f"{task_ref(tid)} {_title(t)} - {says or lane}."], [], []
+    if lane == 'approve':
+        emails = [(i, store.get_review(i['rid'])) for i in slots.open_(store, tid) if i.get('rid')]
+        emails = [(i, rv) for i, rv in emails if rv and rv.get('Status') == 'pending']
+        for n, (i, rv) in enumerate(emails, 1):
+            o = i['out']; addr = o['to'] if '@' in str(o.get('to')) else ''
+            who = o.get('name') or o['to']
+            subject = (json.loads(rv.get('Deliver') or '{}') or {}).get('subject')
+            blocks.append(f"{n}) To {who}" + (f" <{addr}>" if addr and o.get('name') else '')
+                          + ('' if addr else ' - no address yet (reply with it, or drop it)') + (f' - "{subject}"' if subject else '')
+                          + '\n' + str(rv.get('DraftText') or '').strip())
+            if addr:
+                rows.append((f'Send to {who}', {'t': 'send', 'rid': rv['ReviewId'], 'sig': _sig(rv.get('DraftText'))})); ready.append(rv)
+            else: rows.append((f'Drop the one to {who}', {'t': 'drop', 'tid': tid, 'slot': i['id']}))
+        if len(ready) > 1:
+            rows.append((f"Send {'both' if len(ready) == 2 else f'all {len(ready)}'} ready ones",
+                         {'t': 'sendall', 'sends': [[rv['ReviewId'], _sig(rv.get('DraftText'))] for rv in ready]}))
+        reply = None if emails else store.pending_review(tid)
+        if reply and str(reply.get('DraftText') or '').strip():
+            blocks.append(str(reply['DraftText']).strip())
+            rows.append(('Send the reply', {'t': 'send', 'rid': reply['ReviewId'], 'sig': _sig(reply.get('DraftText'))}))
+    rows.append((f'Open {task_ref(tid)}', {'t': 'open', 'key': f'task:{tid}'}))
+    return '\n\n'.join(blocks) + '\n\n' + '\n'.join(f'{n} · {label}' for n, (label, _) in enumerate(rows, 1)), rows
+
+
+def send_picked(store, sends: list) -> str:
+    """A phone pick's send: each email exactly as it was shown - one rewritten since is not sent, but said."""
+    from . import verdicts
+    said = []
+    for rid, sig in sends:
+        rv = store.get_review(int(rid)) or {}
+        to = ', '.join((json.loads(rv.get('Deliver') or '{}') or {}).get('to') or []) or 'the sender'
+        if rv.get('Status') != 'pending': said.append(f'the one to {to} was already {rv.get("Status") or "gone"}'); continue
+        if sig and _sig(rv.get('DraftText')) != sig: said.append(f'the email to {to} changed since I showed it - not sent; open it to see it again'); continue
+        out = verdicts.decide(store, rv, 'approve')
+        said.append(f'Sent to {to}' if out.get('ok') and not out.get('send_error') else f"not sent to {to} - {out.get('send_error') or out.get('status')}")
+    return '. '.join(s[:1].upper() + s[1:] for s in said) + '.'
+
+
+def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: str = '') -> bool:
     """One line at the ask's door. The phone it was asked from - or, failing that, the phone the walk is handed to - only
     in a gap of the conversation (remote_assistant.quiet: never between a card and its answer); False = not now, try
     again. Everywhere else, the desktop Assistant chat. `via`: a door other than the ask's (a reminder's)."""
@@ -90,6 +147,9 @@ def _say(store, task: dict, line: str, via: str = None) -> bool:
         c = remote_assistant.connector_for_chat(store, channel, chat)
         if not c: continue
         if not remote_assistant.quiet(store, channel, chat): return False
+        if lane:                                    # the phone gets what it is asked a yes for, and the picks to give it
+            line, rows = phone_text(store, task, lane, says)
+            remote_assistant._offer(rows)
         remote_assistant.send(store, channel, chat, line, c['ConnectorId'])
         try: concierge.record(store, general.dock_task(store, 'owner')[0]['TaskId'], 'assistant', line, phone=True)
         except Exception as e: logger.warning(f'asks: said on the phone, not kept in the chat - {e}')   # never said twice
@@ -118,8 +178,8 @@ def check(store, tid: int) -> str | None:
     # not said: a lane that needs nobody, or a close the owner made themselves (they know - they pressed it)
     if lane not in lanes or (lane == 'finished' and t.get('UpdatedBy') in OWNER):
         _told(store, tid, lane); return None
-    line = f"{task_ref(tid)} {str(t.get('Title') or '').strip()} - {says or lane}."
-    if not _say(store, t, line): return None
+    line = f"{task_ref(tid)} {_title(t)} - {says or lane}."
+    if not _say(store, t, line, lane=lane, says=says): return None
     _told(store, tid, lane)
     return line
 

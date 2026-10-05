@@ -57,7 +57,16 @@ def message_read(store, p: dict) -> str:
 def sender_read(store, p: dict) -> str:
     who = str(p.get('who') or p.get('sender') or '').strip()
     hits = store.senders_like(who) if who else []
-    if not hits: return f'Nobody by "{who}" has written in.'
+    if not hits:
+        # ...but someone the owner only ever WROTE TO is somebody too (people.resolve): "email Gail" needs Gail's address
+        from . import people
+        found, sent = people.resolve(store, who) if who else {}, None
+        addrs = [found['address']] if found.get('address') else found.get('candidates') or []
+        if addrs:
+            sent = people.written_to(store)
+            return NL.join(f"{a} - you wrote to them {sent.get(a, (0, ''))[0]} time(s), last {_day(sent.get(a, (0, ''))[1])}; "
+                           'they have not written in' for a in addrs)
+        return f'Nobody by "{who}" has written in, and you have not written to anyone by that name.'
     s = next((h for h in hits if h['Email'] == who.lower()), hits[0])
     em, since = s['Email'], (datetime.now() - timedelta(days=3650)).isoformat(' ', 'seconds')
     out = [f"{s['Name'] or em} <{em}> - {s['N']} messages, first {_day(s['First'])}, last {_day(s['Last'])}"]

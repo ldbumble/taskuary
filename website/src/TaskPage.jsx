@@ -32,6 +32,7 @@ import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
 import SlotList from "./SlotList.jsx";
+import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
@@ -483,12 +484,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
   // Closing it is this view's; what comes NEXT is the page around it (TasksView moves to the next live row, the canvas
   // walks on) - `onFinish(status, close)` runs the close itself so the list can pre-record the state it is about to see.
-  const finish = async (status) => {
+  const finish = async (status, note) => {
     setFinishing(true);
     // PUT DOWN AT THE PRESS (the owner, 2026-10-01: "you hit mark done it closes ... why does it take an extra second or 2?"): the
     // walk folds the task now and the close runs behind the "…"; a close that fails hands it back with the reason
     onLeave?.();
-    const close = () => runOperation(api, "task.complete", selected);   // the shared road (PW-215)
+    const close = () => runOperation(api, "task.complete", selected, note ? { note } : {});   // the shared road (PW-215)
     try { await (onFinish ? onFinish(status, close) : close()); }
     catch (e) { const msg = e?.response?.data?.detail || e?.message || "Failed to finish task"; setErr(msg); onStay?.(msg); loadTasks(); return; }
     finally { setFinishing(false); }
@@ -1714,6 +1715,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       Nothing is waiting on you here, and no inbound sender is attached to this task.
                     </Typography>
                   ))}
+                  {stage === "reply" && !term?.alive && !["done", "dropped"].includes(String(t?.Status || "")) &&
+                    <CloseNote busy={finishing} onClose={(note) => finish("done", note)} />}
                 </Box>}
 
                 {!sessionView && <Fold title={`Context & history ·${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>

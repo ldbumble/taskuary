@@ -792,6 +792,9 @@ def _run_operation(op: dict, background: BackgroundTasks):
         # the same close the PATCH road does: the pending draft is dismissed and the agent on it is stopped
         from . import concierge
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
+        # what came of work done off the app - "I called him" - is the close-out itself, so it is written on the task
+        note = str(p.get('note') or '').strip()[:4000]
+        if note: store.add_comment(tid, ACTOR, 'human', f'Closed out: {note}')
         return {'status': 'done', 'already': not concierge.close_task(store, tid, ACTOR)}
     if kind == 'task.reopen':
         if not store.get_task(tid): raise HTTPException(404, 'task not found')

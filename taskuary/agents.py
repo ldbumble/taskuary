@@ -730,16 +730,43 @@ def default_brain(store) -> str:
     return cli_of(profiles(store).get(legacy) or {}, legacy)
 
 
+def brain_ready(store, key: str) -> bool:
+    """Does the CLI brain `key` actually start on this machine - the readiness the pickers already show
+    (cli_agent_options' `ready`), for a worker profile or a bare CLI connection alike."""
+    row = next((o for o in cli_agent_options(store) if o['cli'] == key), None)
+    if row: return bool(row['ready'])
+    conn = dict(connection_brains(store)).get(key)
+    return bool(conn) and runs_here(conn)
+
+
+def ready_connector(store) -> dict | None:
+    """The first AI connector that can answer right now - what llm._build_llm runs for an empty pick."""
+    from .llm import AI_TYPES
+    return next((c for c in store.list_connectors()
+                 if c['Type'] in AI_TYPES and c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')), None)
+
+
 def default_pick(store) -> str:
     """What a BLANK brain setting means - triage, the Assistant, general work: the default brain, as a
     `cli:<worker>` pick on its light gear. It used to mean "the first active AI connector", so which brain
     read the mail depended on which connector happened to be added first (the owner, 2026-09-24: "first
-    connected should not matter"). '' only when no default brain is set - a fresh install's own fallback."""
-    key = str(store.get_setting('default_brain') or '').strip()
-    if not key: return ''
-    row = next((o for o in cli_agent_options(store, preferred=[default_agent(store)]) if o['cli'] == key), None)
-    if row: return f"cli:{row['value']}"
-    return f'cli:{key}' if key in dict(connection_brains(store)) else ''
+    connected should not matter").
+
+    ...but only a brain that RUNS here. A fresh install was pinned to claude whether or not Claude Code was
+    installed, so a Docker image given an Anthropic key per the docs filed every message "AI triage failed
+    ('claude' not found on PATH)" while the checklist said it ran on the key. So: a default brain the OWNER
+    chose is taken at its word even when it does not start (the checklist says so - it is not swapped behind
+    their back); one nobody chose - blank, or written by the startup migration - is used only when it starts,
+    and otherwise gives way to an AI connector that can answer. '' when there is neither: no brain yet."""
+    saved = str(store.get_setting('default_brain') or '').strip()
+    key = saved or default_brain(store)
+    row = next((o for o in cli_agent_options(store, preferred=[default_agent(store)]) if o['cli'] == key), None) if key else None
+    conn = None if row or not key else dict(connection_brains(store)).get(key)
+    pick = f"cli:{row['value']}" if row else f'cli:{key}' if conn else ''
+    if pick and (row['ready'] if row else runs_here(conn)): return pick
+    if pick and saved and store.setting_writer('default_brain') != 'migration': return pick
+    c = ready_connector(store)
+    return f"connector:{c['ConnectorId']}" if c else ''
 
 
 def brain_for(store, role: str) -> str:
@@ -782,7 +809,9 @@ def adopt_brain_setting(store) -> bool:
     layer, and it moves it onto exactly what it ran yesterday. Returns whether it wrote anything."""
     if str(store.get_setting('default_brain') or '').strip(): return False
     key = default_brain(store)
-    if not key: return False
+    # a brain that does not start here is not what it "ran yesterday": persisting one pinned every blank
+    # brain setting to a missing CLI. Left blank, the next start adopts it once it is installed.
+    if not key or not brain_ready(store, key): return False
     store.set_setting('default_brain', key, 'migration')
     return True
 

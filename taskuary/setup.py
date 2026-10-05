@@ -12,7 +12,7 @@ and un-does itself if the connection is removed.
 The first useful result needs your identity, one AI and one source. Model assignments and extra
 agents are available afterwards; opening their settings is not a prerequisite for doing work.
 """
-from .llm import AI_TYPES
+from .llm import AI_TYPES, brain_status
 
 DISMISSED = 'setup_dismissed'      # the owner's "I know, leave me alone" - a setting, so it sticks
 
@@ -30,28 +30,22 @@ SEEN_MODELS = 'setup_seen_models'
 
 
 def _ai(store) -> dict:
-    """Anything that could actually answer a prompt, in the order build_llm would pick it.
+    """The brain triage will actually run, and whether it can - llm.brain_status, the same resolution
+    build_llm makes, so this row cannot tick on one brain while the mail is read by another.
 
     A CLI agent counts. Most people arriving here already pay for Claude Code or Codex and have
     no separate API key at all, so treating "a key exists" as the only definition of a brain told
     them they had none while the thing was sitting on their PATH.
 
-    Ollama is the other exception: a local model carries no key, so 'has a secret' is the wrong
-    test for it too."""
-    from .agents import agent_row, default_pick
-    primary = str(store.get_setting('triage_ai') or '').strip() or default_pick(store)
+    ...and only a brain that STARTS counts. This row used to tick on the first AI connector with a key
+    while a blank triage setting meant the claude CLI - on a machine without Claude Code it said
+    "running on Anthropic" and every message failed triage with "'claude' not found on PATH".
+
+    Backups count too, the way build_llm falls over to them: the first that can answer is the brain."""
+    st = brain_status(store)
+    if st['ready']: return st
     backups = str(store.get_setting('triage_backup_ai') or '').split(',')
-    for pick in dict.fromkeys([primary, *(p.strip() for p in backups if p.strip())]):
-        if pick.startswith('cli:'):
-            row = agent_row(store, pick[4:])
-            if row: return {'Name': f'{row["Name"]} (CLI)', 'Type': 'cli'}
-            continue
-        want = pick[10:] if pick.startswith('connector:') else None
-        for c in store.list_connectors():
-            selected = not want or str(c['ConnectorId']) == want or c['Type'] == want
-            if selected and c['Type'] in AI_TYPES and c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'):
-                return c
-    return {}
+    return next((b for b in (brain_status(store, p.strip()) for p in backups if p.strip()) if b['ready']), st)
 
 
 def _inbound(store, types=INBOUND) -> list:
@@ -112,14 +106,14 @@ def state(store) -> dict:
         {'key': 'ai', 'title': 'Connect one AI',
          'why': 'Use one API provider, a local model, or a coding CLI you already pay for. Test it '
                 'on its connection card. The existing model defaults are enough to begin.',
-         'done': bool(ai), 'detail': f"running on {ai.get('Name')}" if ai.get('Name') else '',
+         'done': ai['ready'], 'detail': f"running on {ai['Name']}" if ai['ready'] else ai['why'],
          # WHERE IT SENDS YOU DEPENDS ON WHAT YOU HAVE. "Open AI CLI agents" is the right door when
          # there is no brain yet, or when the brain IS a CLI. It is the wrong one for a key provider:
          # Azure OpenAI is not a CLI tool and cannot be set up in a terminal, so pointing an install
          # that already runs on Azure at a CLI installer read as "this is how you do it" (the owner,
          # 2026-09-17: "you cant setup azure ai from here. It's not a cli tool").
          'goto': ({'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'}
-                  if not ai or ai.get('Type') == 'cli'
+                  if not ai['Type'] or ai['Type'] == 'cli'
                   else {'tab': 'Connections', 'hash': f"connector={ai.get('Type')}",
                         'label': f"Open the {ai.get('Name') or 'provider'} card"})},
         {'key': 'inbound', 'title': 'Connect one work source',
@@ -134,7 +128,7 @@ def state(store) -> dict:
          # no count: this samples the feed, so any number it printed would be the sample size
          # rather than the truth ("2 read" on an install holding thousands)
          'done': bool(inbox), 'detail': 'your first items are ready to review' if inbox else '',
-         'action': 'sync', 'enabled': bool(who and who != 'the owner' and ai and inbound),
+         'action': 'sync', 'enabled': bool(who and who != 'the owner' and ai['ready'] and inbound),
          'goto': {'tab': 'Assistant', 'hash': '', 'label': 'Open the Assistant'}},
     ]
     done = sum(1 for s in steps if s['done'])

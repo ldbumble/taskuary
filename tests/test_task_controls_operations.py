@@ -113,3 +113,35 @@ class TaskControls(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class ChecklistOperation(unittest.TestCase):
+    """The assistant changes what a task asks for, and the emails that close it (task.checklist, spec 2026-10-05)."""
+    def setUp(self):
+        self.s = MemoryStore()
+        p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
+        self.c = TestClient(server.app)
+        self.tid = self.s.create_task({'Title': 'Tabs', 'Kind': 'general'}, 'owner')
+        self.s.set_task_checklist(self.tid, ['first', 'second'], 'owner')
+
+    run_op = TaskControls.run_op
+    def items(self): return [(i['text'], bool(i.get('out')), i['done']) for i in self.s.task_checklist(self.tid)]
+
+    def test_rewords_the_list_and_adds_an_email(self):
+        _, r = self.run_op('task.checklist', self.tid, {'items': ['first, reworded'], 'emails': [{'to': 'erin@northwind.example', 'about': 'the numbers'}]})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.items(), [('first, reworded', False, False), ('Email erin@northwind.example - the numbers', True, False)])
+
+    def test_rewording_the_list_never_deletes_an_email(self):
+        self.run_op('task.checklist', self.tid, {'emails': [{'to': 'erin@northwind.example', 'about': 'x'}]})
+        self.run_op('task.checklist', self.tid, {'items': ['only this']})
+        self.assertEqual(self.items(), [('only this', False, False), ('Email erin@northwind.example - x', True, False)])
+
+    def test_drop_ticks_that_email_as_no_longer_owed(self):
+        self.run_op('task.checklist', self.tid, {'emails': [{'to': 'erin@northwind.example', 'about': 'x'}]})
+        self.run_op('task.checklist', self.tid, {'drop': ['ERIN@northwind.example']})
+        self.assertEqual(self.items()[-1], ('Email erin@northwind.example - x', True, True))
+
+    def test_an_empty_change_is_refused(self):
+        _, r = self.run_op('task.checklist', self.tid, {})
+        self.assertEqual(r.json()["status"], "error"); self.assertIn("say the new list", r.json()["error"])

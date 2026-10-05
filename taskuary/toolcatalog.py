@@ -53,6 +53,9 @@ PURPOSE = {
     'task.set_kind':            'say what kind of work a task is - `kind`: task (the owner does it) | general (a non-coding agent) | coding; `ref`',
     'task.set_repo':            'put a coding task in the repository it belongs in - `repo` (its name, as the repositories list says it); `ref`',
     'task.check':               'tick a checklist item on a task - `item`: its number (1 is the first) or words from it; `done`: false un-ticks; `ref`',
+    'task.checklist':           ("change what a task's checklist asks for - `items`: the full list of item words in order (one left out "
+                                 'is removed, emails untouched); `emails`: [{to, about}] to add emails that must go out before it closes; '
+                                 '`drop`: recipients whose email is no longer owed; `ref`'),
     'task.comment':             'file a note on a task - `text`; `ref`',
     'task.handoff':             ('hand a task to a PERSON - `who` (a name or address that has written here), `note` optional: '
                                  "writes the forward for the owner's yes, nothing is sent from this card; `ref`"),
@@ -246,7 +249,7 @@ WHERE = (
 BUCKETS = (
     ('table', 'decide about the item on the table', tuple(DECISIONS)),
     ('task', 'change any task - the one on the table or one named with ref',
-     ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
+     ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
       'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'review.approve', 'review.reject')),
     ('agents', 'start, continue, answer or stop the agent on a task, and teach where work belongs',
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember')),
@@ -263,7 +266,7 @@ BUCKETS = (
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?', 'coder': 'text, as?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'clear': 'text', 'task.handoff': 'who, note?',
-         'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?', 'task.defer': 'until'}
+         'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.defer': 'until'}
 
 
 def signature(kind: str) -> str:

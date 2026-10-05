@@ -774,6 +774,8 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
         # is alive right now (the same rule build() uses to put such a task on the shelf)
         if t.get('Status') not in ('open', 'waiting') or tid in busy or t.get('SourceRef') == 'assistant:dock': continue
         if t.get('ReviewStatus') == 'pending' or store.pending_review(tid): continue
+        from . import slots
+        if slots.open_(store, tid): continue           # its emails still wait (slots.py): not a task to wrap up yet
         sent = store.sent_reply(task_id=tid)
         # ...or the owner answered from their own mail client: a reply typed in Outlook ends the work
         # exactly as much as one approved here, and this used to see only Taskuary's own sends

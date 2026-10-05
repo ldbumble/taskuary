@@ -45,6 +45,11 @@ export const agentPhase = ({ session, run, transcript, report, conversation, fin
 const isReply = (review) => review.Kind !== "action" && review.Kind !== "slot";
 export const pendingReplyReview = (reviews = []) =>
   reviews.find((review) => isReply(review) && review.Status === "pending");
+// what closes this task, said under the task bar: the reply, its emails (slots.py), or the triaged work itself
+export const completionLine = (manual, owesEmails) => !manual
+  ? "Automatic task. When its triaged work finishes, Taskuary may close it and prepare the reply."
+  : owesEmails ? "You control completion. Ending an agent run leaves this task open; it closes when its emails are sent or dropped."
+  : "You control completion. Ending an agent run leaves this task open; sending the reply closes it.";
 export const slotReviews = (reviews = []) => (reviews || []).filter((review) => review.Kind === "slot");
 // what one Approve all may send: drafted, addressed, and asked for - never an address the agent added on its own
 export const bulkSendable = (items = [], reviews = []) => {

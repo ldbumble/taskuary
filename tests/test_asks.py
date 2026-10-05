@@ -512,3 +512,12 @@ def test_a_reminder_that_cannot_be_said_never_breaks_the_sync(s):
     with mock.patch.object(asks, 'remind_due', side_effect=RuntimeError('no door')):
         assert remind.due(s, datetime(2026, 10, 9, 8, 0)) == 1
     assert not s.get_task(tid)['RemindAt']
+
+
+def test_an_ask_closed_reopened_and_closed_again_is_said_again(s):
+    tid = made(s)
+    s.update_task(tid, {'Status': 'done'}, 'coder')
+    with rail(): assert asks.check(s, tid)
+    s.update_task(tid, {'Status': 'open'}, 'owner'); s.update_task(tid, {'Status': 'done'}, 'coder')
+    s._exec("UPDATE task SET ClosedAt=? WHERE TaskId=?", ('2099-01-01 00:00:00', tid))   # closed after it was told
+    with rail(): assert asks.check(s, tid)

@@ -452,3 +452,58 @@ def test_an_email_with_no_address_is_never_sent(s):
     with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch('taskuary.learn.learn_from'):
         out = verdicts.decide(s, s.get_review(rid), 'approve')
     assert not out['ok'] and not sent.called and 'address' in out['send_error']
+
+
+# ── cleanup batch (2026-10-05) ───────────────────────────────────────────────────────────
+def test_an_email_already_sent_is_not_owed_again(s):
+    tid = typed(s, FOUR[:1]); a = draft(s, tid, 0); approve(s, a)
+    s.update_task(tid, {'Status': 'open'}, 'owner')
+    assert slots.add(s, tid, [{'to': FOUR[0]['to'], 'about': 'tab 1, said differently'}], 'triage') == []
+
+
+def test_a_name_and_the_address_it_resolves_to_are_one_person(s):
+    import json as _j
+    s.add_message({'ExternalId': 'o1', 'ConversationId': 'o1', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                   'FromName': 'You', 'FromEmail': 'alex@northwind.example', 'Subject': 'x', 'BodyText': 'x', 'SentAt': '2026-10-01 09:00:00',
+                   'Status': 'context', 'Direction': 'out', 'RecipientsJson': _j.dumps({'to': ['gail.moreno@northwind.example'], 'cc': []})})
+    tid = typed(s, [{'to': 'Gail Moreno', 'about': 'tab 3'}])
+    assert slots.add(s, tid, [{'to': 'GAIL.MORENO@northwind.example', 'about': 'tab 3 again'}], 'triage') == []
+
+
+def test_a_sent_or_dropped_email_cannot_be_drafted_again(s):
+    tid = typed(s, FOUR[:2]); sid = slots.all_(s, tid)[0]['id']     # two: dropping the only one would close the task
+    slots.drop(s, tid, sid, 'owner')
+    out = slots.draft(s, tid, 'one more time', slot=sid)
+    assert not out['ok'] and 'already' in out['why']
+
+
+def test_no_email_is_drafted_on_a_closed_task(s):
+    tid = typed(s, FOUR[:1]); s.update_task(tid, {'Status': 'done'}, 'owner')
+    assert not slots.draft(s, tid, 'late', to=FOUR[0]['to'])['ok']
+
+
+def test_triage_never_adds_emails_to_a_list_the_owner_already_wrote(s):
+    from taskuary import ingest
+    tid = s.create_task({'Title': 'Tabs', 'Summary': 'plain'}, 'owner')
+    s.set_task_checklist(tid, ['My own list'], 'owner')
+    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': ['x'], 'outputs': [{'to': 'erin@northwind.example', 'about': 'y'}]})
+    ingest._enrich(s, tid, {'BodyText': 'Tell Erin', 'Subject': 'Tabs'}, 'plain', llm)
+    assert slots.all_(s, tid) == []
+
+
+def test_no_wrap_up_card_while_emails_still_wait(s):
+    from taskuary import funnel
+    tid, mid, first = mail_task(s); s.decide_review(first, 'rejected', None, 'owner', 'redrafted')
+    slots.add(s, tid, FOUR[:1], 'owner'); draft(s, tid, 0)
+    reply = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Done.',
+                          'Deliver': json.dumps({'kind': 'reply', 'to': ['erin@example.com'], 'cc': [], 'mode': 'reply_to'})})
+    send_reply(s, reply)                                   # the reply is the newest review, as when an agent finishes last
+    assert s.get_task(tid)['Status'] != 'done'
+    from datetime import datetime as _dt
+    assert [i for i in funnel.from_wrapped(s, _dt.now(), set()) if i.get('tid') == tid] == []
+
+
+def test_the_slot_card_names_the_recipient_once(s):
+    tid = typed(s, FOUR[:1])
+    rv = s.get_review(slots.draft(s, tid, 'Tab 1 is fine.', to=FOUR[0]['to'], agent='assistant')['review_id'])
+    assert FOUR[0]['to'] not in rv['Reason']

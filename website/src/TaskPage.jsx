@@ -63,7 +63,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
-import {
+import { completionLine,
   AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
@@ -1241,9 +1241,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       )}
                       <Box sx={{ flex: 1, minWidth: 12 }} />
                       <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 340 }}>
-                        {completionIsManual
-                          ? "You control completion. Ending an agent run leaves this task open; sending the reply closes it."
-                          : "Automatic task. When its triaged work finishes, Taskuary may close it and prepare the reply."}
+                        {completionLine(completionIsManual, (detail?.checklist || []).some((i) => i.out && !i.done))}
                       </Typography>
                     </Box>
                     </>}

@@ -118,3 +118,16 @@ class SqlReadIsReadTests(unittest.TestCase):
         with mock.patch('taskuary.mssql._connect', return_value=cx):
             reports.run_mssql({'server': 'db.example', 'database': 'UserDb', 'driver': 'ODBC Driver 18 for SQL Server', 'query': 'SELECT 1 AS n'})
         self.assertEqual(cx.committed, 0)
+
+
+class TheBriefNamesRealToolsTests(unittest.TestCase):
+    def test_each_system_lists_the_tool_types_it_runs_not_its_card_type(self):
+        """A general agent searched the Company Hub with type "handbook" - the card - and got "unknown tool type: handbook":
+        the brief named the card, and the tools on it are handbook_search, handbook_write... (2026-10-05)."""
+        from taskuary import docsync, reports
+        store = MemoryStore()
+        brief = docsync.agent_systems(store)
+        hub = next(l for l in brief.splitlines() if l.startswith('- ') and 'handbook' in l)
+        self.assertIn('handbook_search', hub)
+        for t in [w.strip(' ,)') for w in hub.split('tools:')[1].split(',')]:
+            self.assertIn(t.split()[0], reports.REGISTRY, t)

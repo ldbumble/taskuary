@@ -96,17 +96,21 @@ def agent_systems(store) -> str:
     (2026-10-05). '' when no connection is an agent tool."""
     from .store import roles_of
     from . import scopes
+    from .reports import REGISTRY, card_of
     tools = [c for c in store.list_connectors() if c['Active'] and 'tool' in roles_of(c)]
     if not tools: return ''
-    lines = [f"- {c['Name'] or c['Type']} (type {c['Type']}, connector_id {c['ConnectorId']}) - authority {scopes.scope_of(c)}"
+    # the TOOL types each card runs, by name: a card's own type is not one when its tools are named apart from it - the Hub card
+    # is `handbook` and its tools handbook_search/..., so "type handbook" came back "unknown tool type" (2026-10-05)
+    def kinds(c): return sorted(t for t in REGISTRY if card_of(t) == c['Type'] and not t.startswith('_')) or [c['Type']]
+    lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(kinds(c))}"
              for c in tools]
     return ('YOUR SYSTEMS (the owner\'s connections you may use)\n' + '\n'.join(lines) + '\n'
             'Call one: curl -s -X POST "$TASKUARY_URL/api/tools/run" -H "X-Taskuary-Token: $TASKUARY_TOKEN" '
             '-H "X-Taskuary-Task-Token: $TASKUARY_TASK_TOKEN" -H "Content-Type: application/json" '
-            '-d \'{"type": "<type>", "connector_id": <id>, "query": "..."}\' - saved credentials are filled in for you.\n'
+            '-d \'{"type": "<one of its tools>", "connector_id": <id>, ...}\' - saved credentials are filled in for you.\n'
             'AUTHORITY is the owner\'s ceiling on each one: at read you may look but not change anything (a SQL batch that '
             'writes is rolled back). To change something on a read-level system, PROPOSE it and the owner approves it on the '
-            'task: TASKUARY-PROPOSE {"action": "run_tool", "type": "<type>", "connector_id": <id>, "query": "..."} - say in '
+            'task: TASKUARY-PROPOSE {"action": "run_tool", "type": "<one of its tools>", "connector_id": <id>, ...} - say in '
             'your reply what it will change and why. At write you may make the change yourself; say what you changed.')
 
 

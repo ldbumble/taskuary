@@ -676,12 +676,16 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'asks for, not on who sent it. Unsure, or none of them fits it better than the others? '
                            'Leave the key out and nobody is named.\n' + str(profiles)[:2000])
             # IS IT CODING, FIRST (the owner, 2026-09-25): sixteen look-ups - a pay change to check, materials to
-            # confirm, access to grant - were called coding because their topic fits a repository
-            system += ('\n\nKIND, DECIDED FIRST: does this need CODE CHANGED in a repository - a bug to fix, a feature, a '
-                       'script, a pull request? That is coding. Looking something up, checking or confirming a value, granting '
-                       'a permission or a login, sending or finding materials, answering a question, researching - is not coding, whatever '
+            # confirm, access to grant - were called coding because their topic fits a repository. ...but DATA is coding (the owner,
+            # 2026-10-05): "correct the facility for these people" in the T&E system sat between this rule and the triage document's
+            # "a query against one of their databases" and went to the assistant. The line is whether the work CHANGES something.
+            system += ('\n\nKIND, DECIDED FIRST: does the work CHANGE something inside a system this install holds the code or the '
+                       'credentials for - code changed in a repository (a bug to fix, a feature, a script, a pull request), or data '
+                       'changed in one of those systems (a record corrected, a mapping or setting updated, a role or login granted in '
+                       'a system the owner runs)? That is coding. Looking something up, checking or confirming a value, sending or '
+                       'finding materials, answering a question, researching - work that changes nothing - is not coding, whatever '
                        'system or repository the subject belongs to: kind general (an agent reads, checks and drafts) or task '
-                       '(the owner does it). A repository that fits the topic is never a reason to call it coding.')
+                       '(the owner does it). A repository that fits the topic is never a reason to call it coding; the change is.')
             if repos:
                 system += ('\n\nKNOWN REPOSITORIES are listed in known_repositories (owner/name and what each is). For a task an agent '
                            'could work from a keyboard, add "repository": "<exactly one listed owner/name>" or null, '

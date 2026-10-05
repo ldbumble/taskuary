@@ -62,7 +62,7 @@ export const InvoiceLine = ({ meta }) => (
 // `onRemind`: the task's own Remind me - a close-out's "not now" (the owner, 2026-10-02: Not yet IS remind me later).
 // `onSent`: a send or close-out that went through - the task page reads the task and, when that closed it, walks on.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false }) {
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false, onDrop = null }) {
   const [text, setText] = useState(null);           // the owner's edit; null means "the draft as filed"
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
   const [busy, setBusy] = useState(false);
@@ -370,7 +370,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Button>
         )}
         {/* ...but one email of several can be let go without closing anything: it drops that slot (slots.settled) */}
-        {isSlot && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy} onClick={() => decide("reject")}
+        {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy} onClick={onDrop}
           title="Drop this email - the task closes when the rest are sent">Don't send</Button>}
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
         {proposal?.alt && <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={() => decide(proposal.alt.verb)}

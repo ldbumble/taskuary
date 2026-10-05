@@ -43,7 +43,7 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
               <Typography variant="caption" sx={{ color: FAINT }}>{slotState(i, rv)}{i.out.by === "agent" ? " · added by the agent" : ""}</Typography>
               {!i.done && rv?.Status !== "pending" && <Button size="small" disabled={busy} onClick={() => drop(i)}>Drop</Button>}
             </Box>
-            {rv?.Status === "pending" && <ReviewDecision review={rv} onChanged={onChanged} />}
+            {rv?.Status === "pending" && <ReviewDecision review={rv} onChanged={onChanged} onDrop={() => drop(i)} />}
           </Box>
         );
       })}

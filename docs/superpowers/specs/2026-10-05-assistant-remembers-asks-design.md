@@ -127,16 +127,16 @@ tab 1".
 ## Not in this spec
 
 - Proactive chasing / suggestions (the Advisor's job, later).
-- Wake-ups ("remind me Friday") - an ask with `RemindAt` would ride the same check as a `due` phase; later.
+- Wake-ups ("remind me Friday") - an ask with `RemindAt` would ride the same check as a said lane on its day; later.
 - "Tell me when it's finished" about a mail-born task - setting `AskedVia` by a chat sentence; later.
 - Directory lookups behind Graph consent.
 
 ## Testing
 
-- `tests/test_asks.py`: the mark at each door (chat, phone turn via `asking()`, New); `asks.state` for each phase from
+- `tests/test_asks.py`: the mark at each door (chat, phone turn via `asking()`, New); `asks.state` reads the rail's lane for
   real store rows (a slot task, a parked agent via workerstate, a closed task); the block's cap, order and aging; a
-  phase change speaks once and only into needs_you/stuck/done; restart (fresh process state) does not repeat a told
-  phase; the door rules (asked on phone → phone; desktop ask during a handed walk → phone; else desktop chat); the phone
+  lane change speaks once and only into blocked/approve/stopped/broken/finished; restart does not repeat a told
+  lane; the door rules (asked on phone → phone; desktop ask during a handed walk → phone; else desktop chat); the phone
   waits for `quiet()`; a mail-born task never speaks; a to-do with no agent never speaks.
 - `people.resolve`: a name only the owner wrote to resolves; a unique match fills a slot; two matches keep the name
   and list both; no match keeps `?`; `sender.read` finds a person the owner only wrote to.

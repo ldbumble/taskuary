@@ -88,9 +88,19 @@ An ask leaves the block when it is `done`, has been told, and has been seen (the
 
 ### 5. Finding an address - recipients, not just senders
 
-`sender.read` resolves a name only among people who wrote in (`store.senders_like`). Add the people the owner wrote to
-(the Sent folder is already ingested), so "Gail Moreno" resolves when you have emailed her. The company directory
-(Graph People/Contacts) needs a tenant consent and is a later, separate step.
+`sender.read` resolves a name only among people who wrote in (`store.senders_like`). One shared resolver,
+`people.resolve(store, name) -> {'address'} | {'candidates': [...]} | {}`, searches BOTH the people who wrote in and the
+people the owner wrote to or copied (To/Cc of the owner's sent mail - the Sent folder is already ingested), ranked by
+how recently and how often.
+
+It is used wherever a name has to become an address, so "send an email to Gail" just works:
+- `sender.read` (the assistant's look-up) - finds people you only ever wrote to.
+- `slots.add` / `slots.draft` - a slot named "Gail Moreno" takes her address when exactly ONE person in your own mail
+  matches; with several, the slot keeps the name and the card lists the candidates to pick from; with none, it keeps
+  the `?`. A unique match in the owner's own correspondence is not a guess; anything less is never filled in silently.
+- the hand-off brief - the agent is told the resolved addresses, so it does not have to hunt for them.
+
+The company directory (Graph People/Contacts) needs a tenant consent and is a later, separate step.
 
 ## Not in this spec
 
@@ -106,6 +116,7 @@ An ask leaves the block when it is `done`, has been told, and has been seen (the
   phase change speaks once and only into needs_you/stuck/done; restart (fresh process state) does not repeat a told
   phase; the door rules (asked on phone → phone; desktop ask during a handed walk → phone; else desktop chat); the phone
   waits for `quiet()`; a mail-born task never speaks; a to-do with no agent never speaks.
-- `sender.read` resolves a name only the owner wrote to.
+- `people.resolve`: a name only the owner wrote to resolves; a unique match fills a slot; two matches keep the name
+  and list both; no match keeps `?`; `sender.read` finds a person the owner only wrote to.
 - Prompt size: the block stays under 600 characters with 20 open asks.
 - Whole suite before any push.

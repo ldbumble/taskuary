@@ -22,6 +22,11 @@ def context_moved(store, rv: dict):
     from . import operations
     if rv.get('Kind') == 'action': return False, None
     tid = rv.get('TaskId')
+    if rv.get('Kind') == 'slot' and tid:
+        # one of the task's emails (slots.py) goes stale only on a NEW inbound message: the owner's reply to the sender
+        # moves the thread's state, not what the email to someone else should say
+        latest = store.last_material_inbound_on_task(tid)
+        return bool(rv.get('Stale') or (latest and latest.get('MessageId') != _envelope(rv).get('seen'))), latest
     if tid:
         latest = store.last_material_inbound_on_task(tid)
         if rv.get('ContextRevision'): moved = operations.message_revision(store, tid) != rv['ContextRevision']
@@ -286,6 +291,10 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
 
     kind = rv.get('Kind')
     if kind == 'action': return                        # a proposed action is not a reply
+    if kind == 'slot':                                 # one of the task's emails: it ticks itself, the last one closes
+        from . import slots
+        if was_sent: slots.settled(store, rv, True, actor)
+        return
     # A free-standing draft can be reviewed for learning/editing without having a channel
     # destination. Only a confirmed channel send gets to finish a normal task.
     if not was_sent and task.get('Kind') != 'reply':
@@ -390,7 +399,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             return _delivery_busy(store, rv['ReviewId'])
     # ONE CLOSE OUT, WHICHEVER CARD IT WAS PRESSED ON (the owner, 2026-09-27): the phone and the walk put the task's REPLY
     # on the table, and its yes sent the reply alone - on GitHub with replies off a dead end, and never the merge
-    if (verb_in in ('approve', 'edit') and reply_text is None and rv.get('Kind') not in ('action', 'clarification')
+    if (verb_in in ('approve', 'edit') and reply_text is None and rv.get('Kind') not in ('action', 'clarification', 'slot')
             and rv.get('TaskId') and str(rv.get('Status') or 'pending') == 'pending'
             and rv.get('DeliveryState') not in ('unknown', 'sending')):
         from . import proposals
@@ -400,7 +409,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if reply_text is not None and rv.get('Kind') == 'action' and verb_in in ('approve', 'edit', 'close_pr', 'merge_anyway'):
         out = decide(store, rv, verb_in, final_text, note, actor, learn_async)
         if not out.get('ok') or not rv.get('TaskId'): return out
-        reply = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action' ORDER BY ReviewId DESC LIMIT 1",
+        reply = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action','slot') ORDER BY ReviewId DESC LIMIT 1",
                            (rv['TaskId'],))
         if reply:
             sent = (_post_with_closeout(store, rv, reply, reply_text, actor) if _carried(store, rv, reply)
@@ -431,6 +440,12 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
                     'send_error': 'New messages arrived after this draft was written - nothing was sent. Redraft it with the latest context and approve again.'}
     # Close without sending (PW-145): the owner's own word that no reply will go out - the unsent draft stays,
     # the closure and its reason are recorded, the reply obligation ends, and nothing here ever reads as Sent
+    if verb_in == 'close_unsent' and rv.get('Kind') == 'slot':
+        # one of the task's emails not sent: THAT email is dropped, the task is not closed (slots.settled)
+        if not store.decide_review(rid, 'closed_unsent', rv.get('DraftText'), actor, str(note or '').strip() or 'not sent'): return _delivery_busy(store, rid)
+        from . import slots
+        slots.settled(store, rv, False, actor)
+        return {'ok': True, 'status': 'closed_unsent', 'sent': None, 'send_error': None}
     if verb_in == 'close_unsent':
         why = str(note or '').strip() or (outbound.send_block(store, (store.get_message(rv['MessageId']) or {}).get('Channel')) if rv.get('MessageId') else '') or 'the owner chose not to send a reply'
         if not store.decide_review(rid, 'closed_unsent', rv.get('DraftText'), actor, why): return _delivery_busy(store, rid)
@@ -493,7 +508,10 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if deliver.get('kind') == 'zoho_invoice' and verb in ('reject', 'no_reply') and deliver.get('item_id'):
         from . import invoice_workflow
         invoice_workflow.mark_skipped(store, int(deliver['item_id']))
-    if verb == 'no_reply' and rv.get('TaskId'):
+    if rv.get('Kind') == 'slot' and verb in ('reject', 'no_reply'):
+        from . import slots
+        slots.settled(store, rv, False, actor)
+    elif verb == 'no_reply' and rv.get('TaskId'):
         # the owner's word that nothing goes back IS Mark done - the one close, whoever opened a session on it
         from . import concierge
         concierge.close_task(store, rv['TaskId'], actor)

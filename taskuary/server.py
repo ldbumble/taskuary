@@ -638,6 +638,11 @@ def tick_checklist(task_id: int, item_id: str, body: ChecklistTick):
     into Done while Mark done moved on to the next one - two closes that behaved differently. Mark done is the close."""
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
+    from . import slots
+    # an email that closes the task (slots.py): ticking it lets that email go - its draft is never sent
+    if body.done and any(i['id'] == item_id for i in slots.open_(store, task_id)):
+        closed = slots.drop(store, task_id, item_id, ACTOR)
+        return {'ok': True, 'checklist': store.task_checklist(task_id), 'closed': closed}
     if not store.tick_checklist_item(task_id, item_id, body.done, ACTOR): raise HTTPException(404, 'no such checklist item')
     return {'ok': True, 'checklist': store.task_checklist(task_id), 'closed': False}
 
@@ -820,7 +825,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
         added = slots.add(store, tid, emails, ACTOR) if emails else []
         gone = {str(x).strip().casefold() for x in (drop or [])}
         for i in slots.open_(store, tid):
-            if str(i['out'].get('to')).casefold() in gone: slots.mark(store, tid, i['id'], done=True, actor=ACTOR)
+            if str(i['out'].get('to')).casefold() in gone: slots.drop(store, tid, i['id'], ACTOR)
         return {'taskId': tid, 'checklist': store.task_checklist(tid), 'added': len(added)}
     if kind == 'task.comment':
         comment(tid, TextBody(body=str(p.get('text') or '').strip()))
@@ -4066,6 +4071,8 @@ def draft_review(rid: int, body: DraftBody = None):
     the redraft reads its report, so it reports the work instead of promising it."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
+    # one of the task's emails (slots.py) is the agent's words: every redrafter here writes a reply to the sender
+    if rv.get('Kind') == 'slot': raise HTTPException(422, 'the agent writes this email - ask it again, or edit it here')
     try:
         try: deliver = json.loads(rv.get('Deliver') or '{}') or {}
         except (TypeError, ValueError): deliver = {}

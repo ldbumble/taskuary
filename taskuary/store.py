@@ -1615,7 +1615,7 @@ class SQLiteStore:
         # a slot says where it goes and how to fill it: the seed line is byte-capped, so the command rides here (slots.py)
         def line(i):
             o = i.get('out') if isinstance(i.get('out'), dict) else None
-            tail = (f" -> email to {o.get('to')}, " + ('drafted' if i.get('rid') else f"fill with `taskuary --draft --slot {i['id']} \"<text>\"`")) if o else ''
+            tail = (f" -> email to {o.get('to')}, " + ('drafted' if i.get('rid') else f"fill with `taskuary --slot {i['id']} --draft \"<text>\"`")) if o else ''
             return f"- [{'x' if i.get('done') else ' '}] {i['text']}{tail}"
         return '\n'.join(line(i) for i in self.task_checklist(task_id))
 

@@ -1,18 +1,24 @@
 import { useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import ReviewDecision from "./ReviewDecision.jsx";
-import api from "./api";
 import { ACCENT2, BORDER, FAINT, INK } from "./theme.jsx";
-import { slotReviews, slotState } from "./taskLifecycle.js";
+import api from "./api";
+import { bulkSendable, slotReviews, slotState } from "./taskLifecycle.js";
 
 // The emails that close this task (slots.py, spec 2026-10-05): each one with its own draft, approved on its own; the task
 // closes when the last is sent or dropped. A name with no address yet wears a "?" - it is never guessed into one.
-export default function SlotList({ checklist = [], reviews = [], onChanged }) {
+export default function SlotList({ taskId, checklist = [], reviews = [], onChanged }) {
   const [busy, setBusy] = useState(false);
   const items = (checklist || []).filter((i) => i.out);
   if (!items.length) return null;
   const byRid = Object.fromEntries(slotReviews(reviews).map((r) => [r.ReviewId, r]));
-  const waiting = items.map((i) => byRid[i.rid]).filter((r) => r?.Status === "pending" && String(r.DraftText || "").trim());
+  const waiting = bulkSendable(items, reviews);
+  // letting one email go - its draft (if any) is never sent, and the task closes when nothing else is owed
+  const drop = async (i) => {
+    setBusy(true);
+    try { await api.patch(`/api/tasks/${taskId}/checklist/${i.id}`, { done: true }); } catch { /* the card reloads either way */ }
+    finally { setBusy(false); onChanged?.(); }
+  };
   // one press, the same decide each card's own Approve sends - a refused one stays pending on its card
   const approveAll = async () => {
     setBusy(true);
@@ -34,7 +40,8 @@ export default function SlotList({ checklist = [], reviews = [], onChanged }) {
           <Box key={i.id} sx={{ mb: 1 }}>
             <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8 }}>
               <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, fontWeight: 600 }}>{named}{named.includes("@") ? "" : " ?"}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT }}>{slotState(i, rv)}</Typography>
+              <Typography variant="caption" sx={{ color: FAINT }}>{slotState(i, rv)}{i.out.by === "agent" ? " · added by the agent" : ""}</Typography>
+              {!i.done && rv?.Status !== "pending" && <Button size="small" disabled={busy} onClick={() => drop(i)}>Drop</Button>}
             </Box>
             {rv?.Status === "pending" && <ReviewDecision review={rv} onChanged={onChanged} />}
           </Box>

@@ -1089,7 +1089,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           </Box>
                         )}
                         {/* the emails that close it (slots.py): each with its own draft, never the reply card below */}
-                        <SlotList checklist={detail?.checklist || []} reviews={detail?.reviews || []}
+                        <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
                         {/* the rest of what they said, in order - indented so it reads as the same
                             person continuing rather than as separate business */}

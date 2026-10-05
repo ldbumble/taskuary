@@ -46,6 +46,12 @@ const isReply = (review) => review.Kind !== "action" && review.Kind !== "slot";
 export const pendingReplyReview = (reviews = []) =>
   reviews.find((review) => isReply(review) && review.Status === "pending");
 export const slotReviews = (reviews = []) => (reviews || []).filter((review) => review.Kind === "slot");
+// what one Approve all may send: drafted, addressed, and asked for - never an address the agent added on its own
+export const bulkSendable = (items = [], reviews = []) => {
+  const byRid = Object.fromEntries(slotReviews(reviews).map((r) => [r.ReviewId, r]));
+  return items.filter((i) => i.out?.by !== "agent" && String(i.out?.to || "").includes("@")).map((i) => byRid[i.rid])
+    .filter((r) => r?.Status === "pending" && String(r.DraftText || "").trim());
+};
 export const slotState = (item, rv) => item.done ? (rv && ["approved", "edited", "sent"].includes(rv.Status) ? "sent" : "dropped")
   : rv?.Status === "pending" ? "waits for your yes" : "to draft";
 

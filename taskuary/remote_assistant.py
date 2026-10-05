@@ -1275,6 +1275,11 @@ def _draft_text(store, item: dict | None) -> str:
                         "ORDER BY ReviewId DESC LIMIT 1", (rv['TaskId'],)) or {}
     # 'draft_reply' is the one an agent writes when it finishes - only 'draft' was read, so the reply a finished
     # agent's card asked you to approve never appeared on the phone (2026-09-28)
+    # ...and one of the task's emails (slots.py) says who it goes to - a yes on the phone must show what it sends, and where
+    if rv.get('Kind') == 'slot':
+        try: to = ', '.join((json.loads(rv.get('Deliver') or '{}') or {}).get('to') or [])
+        except (TypeError, ValueError): to = ''
+        return (f'To {to}:\n' if to else '') + str(rv.get('DraftText') or '').strip()
     return str(rv.get('DraftText') or '').strip() if rv.get('Kind') in ('draft', 'draft_reply') else ''
 
 

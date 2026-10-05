@@ -99,7 +99,7 @@ def send_reply(s, rid):
 
 
 def test_four_slots_stay_open_through_three_sends_and_close_on_the_fourth(s):
-    tid = typed(s); rids = [draft(s, tid, n) for n in range(4)]
+    tid = typed(s, [*FOUR[:2], {'to': 'gail@northwind.example', 'about': 'where tab 3 stands'}, FOUR[3]]); rids = [draft(s, tid, n) for n in range(4)]
     for rid in rids[:3]:
         assert approve(s, rid)['ok'] and s.get_task(tid)['Status'] != 'done'
     assert s.get_review(rids[3])['Status'] == 'pending'
@@ -154,12 +154,10 @@ def test_the_closeout_redirect_never_sends_a_slot_as_the_reply(s):
     assert not sent.called and s.get_review(a)['Status'] == 'pending'
 
 
-def test_a_new_inbound_message_makes_a_slot_draft_stale(s):
+def test_a_new_inbound_message_does_not_block_a_slot(s):
     tid, mid, reply = mail_task(s); slots.add(s, tid, FOUR[:1], 'owner'); a = draft(s, tid, 0)
-    s.add_message({'TaskId': tid, 'ExternalId': 'graph:later', 'ConversationId': f'fixture-thread-{tid}', 'Channel': 'email',
-                   'SourceName': 'alex@example.com', 'Subject': 'Repair the export', 'FromEmail': 'erin@example.com',
-                   'BodyText': 'Actually, tab 1 changed.', 'SentAt': '2026-10-01 10:00:00', 'Status': 'routed', 'Direction': 'in'})
-    assert verdicts.context_moved(s, s.get_review(a))[0] is True
+    later_inbound(s, tid)
+    assert verdicts.context_moved(s, s.get_review(a))[0] is False
 
 
 def test_a_finished_run_with_slots_open_waits_instead_of_closing(s):
@@ -325,3 +323,131 @@ def test_the_processing_rail_calls_them_emails_not_a_reply():
     rail(); st.activate_processing_reads(fixed_now=ago(0), live_state=[])
     rows = [r for r in rail() if r.get('tid') == tid]
     assert len(rows) == 1 and rows[0]['lane'] == 'approve' and '2 emails' in rows[0]['why'] and 'reply' not in rows[0]['why']
+
+
+# ── final review: the seams where slots meet older roads ─────────────────────────────────
+def later_inbound(s, tid):
+    s.add_message({'TaskId': tid, 'ExternalId': f'graph:later-{tid}', 'ConversationId': f'fixture-thread-{tid}', 'Channel': 'email',
+                   'SourceName': 'alex@example.com', 'Subject': 'Repair the export', 'FromEmail': 'erin@example.com',
+                   'BodyText': 'Actually, tab 1 changed.', 'SentAt': '2026-10-01 10:00:00', 'Status': 'routed', 'Direction': 'in'})
+
+
+def api(s):
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    return TestClient(server.app), mock.patch.object(server, 'store', s)
+
+
+def test_a_slot_is_never_rewritten_into_a_reply_and_sends_the_words_shown(s):
+    tid, mid, _ = mail_task(s); slots.add(s, tid, FOUR[:1], 'owner')
+    rid = slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example')['review_id']
+    later_inbound(s, tid)
+    c, p = api(s)
+    with p, mock.patch('taskuary.server._refresh_chat_context', return_value={}), mock.patch('taskuary.responder.write_draft') as rewrite, \
+         mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
+         mock.patch('taskuary.learn.learn_from'):
+        out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'}).json()
+    assert out.get('ok') and not rewrite.called and sent.called and s.get_review(rid)['DraftText'] == 'Tab 1 is fine.'
+
+
+def test_the_redraft_door_refuses_a_slot(s):
+    tid = typed(s, FOUR[:1]); rid = slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example')['review_id']
+    c, p = api(s)
+    with p: r = c.post(f'/api/reviews/{rid}/draft', json={})
+    assert r.status_code == 422 and s.get_review(rid)['DraftText'] == 'Tab 1 is fine.'
+
+
+def test_the_last_slot_never_closes_past_a_pending_closeout(s):
+    tid = typed(s, FOUR[:1]); a = draft(s, tid, 0)
+    co = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': 'merge', 'Deliver': json.dumps({'action': 'merge_pr'})})
+    with mock.patch('taskuary.proposals._action', return_value='merge_pr'): approve(s, a)
+    assert s.get_task(tid)['Status'] != 'done' and s.get_review(co)['Status'] == 'pending'
+
+
+def test_the_last_slot_never_closes_while_an_agent_works(s):
+    tid = typed(s, FOUR[:1]); a = draft(s, tid, 0)
+    with mock.patch('taskuary.funnel.working_tids', return_value={tid}): approve(s, a)
+    assert s.get_task(tid)['Status'] != 'done'
+
+
+def test_the_last_slot_never_closes_past_a_held_reply(s):
+    tid, mid, reply = mail_task(s); slots.add(s, tid, FOUR[:1], 'owner'); a = draft(s, tid, 0)
+    s.hold_reviews(tid, 'agent working')
+    approve(s, a)
+    assert s.get_task(tid)['Status'] != 'done' and s.get_review(reply)['Status'] == 'held'
+
+
+def test_a_mail_tasks_slots_show_on_the_processing_rail():
+    import sys, os; sys.path.insert(0, os.path.dirname(__file__))
+    from taskuary import funnel, processing_unread
+    from test_funnel import ago, mail, store
+    st = store(); mid = mail(st, 'Tab updates', who='Marcus Reed', email='marcus@northwind.example', body='Tell Paula and Ray where the tabs stand.')
+    tid = st.create_task({'Title': 'Tab updates', 'Kind': 'task', 'Status': 'open'}, 'triage')
+    st._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, mid))
+    slots.add(st, tid, FOUR[:2], 'triage'); slots.draft(st, tid, 'a', to=FOUR[0]['to']); slots.draft(st, tid, 'b', to=FOUR[1]['to'])
+    def rail():
+        st.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            return processing_unread.build(st, live_state=[])['items']
+    rail(); st.activate_processing_reads(fixed_now=ago(0), live_state=[])
+    rows = [r for r in rail() if r.get('tid') == tid]
+    assert rows and rows[0]['lane'] == 'approve' and '2 emails' in rows[0]['why']
+
+
+def test_ticking_a_drafted_slot_drops_its_draft(s):
+    tid = typed(s, FOUR[:2]); a = draft(s, tid, 0); sid = slots.all_(s, tid)[0]['id']
+    c, p = api(s)
+    with p, mock.patch('taskuary.learn.learn_from'): c.patch(f'/api/tasks/{tid}/checklist/{sid}', json={'done': True})
+    assert s.get_review(a)['Status'] == 'rejected' and slots.all_(s, tid)[0]['done']
+
+
+def test_dropping_the_last_undrafted_slot_closes_a_typed_task(s):
+    tid = typed(s, FOUR[:1]); sid = slots.all_(s, tid)[0]['id']
+    c, p = api(s)
+    with p: c.patch(f'/api/tasks/{tid}/checklist/{sid}', json={'done': True})
+    assert s.get_task(tid)['Status'] == 'done'
+
+
+def test_the_assistants_drop_rejects_the_pending_draft(s):
+    tid = typed(s, FOUR[:2]); a = draft(s, tid, 0)
+    c, p = api(s)
+    with p, mock.patch('taskuary.learn.learn_from'):
+        pr = c.post('/api/operations', json={'kind': 'task.checklist', 'target': tid, 'params': {'drop': [FOUR[0]['to']]}}).json()
+        c.post(f"/api/operations/{pr['id']}/execute", json={'version': pr['version']})
+    assert s.get_review(a)['Status'] == 'rejected'
+
+
+def test_the_printed_command_parses(s):
+    import re, shlex, argparse
+    tid = typed(s, FOUR[:1]); sid = slots.open_(s, tid)[0]['id']
+    cmd = re.search(r'`(taskuary [^`]+)`', s.checklist_markdown(tid)).group(1)
+    ap = argparse.ArgumentParser(); ap.add_argument('--draft'); ap.add_argument('--slot')
+    a = ap.parse_args(shlex.split(cmd)[1:])
+    assert a.slot == sid and a.draft == '<text>'
+
+
+def test_the_phone_shows_a_slot_draft_with_its_recipient(s):
+    from taskuary import remote_assistant
+    tid = typed(s, FOUR[:1]); rid = slots.draft(s, tid, 'Tab 1 is fine.', to=FOUR[0]['to'])['review_id']
+    said = remote_assistant._draft_text(s, {'rid': rid})
+    assert 'Tab 1 is fine.' in said and FOUR[0]['to'] in said
+
+
+def test_an_agent_added_email_is_marked(s):
+    tid = typed(s, FOUR[:1])
+    slots.draft(s, tid, 'x', to='omar@northwind.example')
+    assert [i['out'].get('by') for i in slots.all_(s, tid)] == [None, 'agent']
+
+
+def test_a_named_slot_takes_the_address_the_agent_found(s):
+    tid = typed(s, FOUR[2:3]); sid = slots.open_(s, tid)[0]['id']
+    slots.draft(s, tid, 'Tab 3 is fine.', slot=sid, to='gail@northwind.example')
+    assert [i['out']['to'] for i in slots.all_(s, tid)] == ['gail@northwind.example']
+
+
+def test_an_email_with_no_address_is_never_sent(s):
+    tid = typed(s, FOUR[2:3]); sid = slots.open_(s, tid)[0]['id']
+    rid = slots.draft(s, tid, 'Tab 3 is fine.', slot=sid)['review_id']
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch('taskuary.learn.learn_from'):
+        out = verdicts.decide(s, s.get_review(rid), 'approve')
+    assert not out['ok'] and not sent.called and 'address' in out['send_error']

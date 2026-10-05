@@ -246,7 +246,7 @@
       "flags": {
         "trust_own_domain": {
           "label": "your own domains",
-          "help": "Every connected mailbox's domain, plus the owner address in Settings."
+          "help": "Every connected mailbox's domain, plus the owner address in Settings. Public mail domains such as gmail.com or outlook.com never count - everyone has one - so only your own address on them does."
         },
         "trust_sent_history": {
           "label": "people you have written to",

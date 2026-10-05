@@ -1539,6 +1539,8 @@ def continue_work(task_id: int, body: ContinueBody = None):
     agents? Maybe add a new prompt inside that continue session"). A regular agent resumes its saved conversation; a
     coding agent reopens its own CLI session by the id its CLI gave it, or - where there is none to reopen - a fresh
     one seeded with the handover. The owner's note, when there is one, is the first thing it hears."""
+    from . import asks
+    asks.mark(store, task_id)          # the owner picked it up again: it reports back like an ask
     from . import continuity, general
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
@@ -1634,6 +1636,8 @@ NEEDS_REPO = re.compile(r'could not tell which checkout|no local path|does not e
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import asks
+    asks.mark(store, task_id)          # the owner started it - the button or the assistant: it reports back like an ask
     try:
         return _dispatch_task_to_its_agent(task_id, body, background)
     except HTTPException as e:

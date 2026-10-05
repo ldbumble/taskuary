@@ -81,7 +81,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // a reply to a GitHub PR/issue IS a comment on it, so the close-out carries it whatever the replies switch says
   const carried = !!co && String(r.Channel || "").toLowerCase() === "github";
   const sendable = r.CanSend !== false || carried;
-  const onTask = !proposal && !!r.TaskId && r.Kind !== "clarification";
+  // one of the task's emails (slots.py) is not its close-out: sending it closes nothing until the last one goes
+  const isSlot = r.Kind === "slot";
+  const onTask = !proposal && !!r.TaskId && r.Kind !== "clarification" && !isSlot;
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
     : co ? `${CLOSE_OUT} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}.`
     : onTask && !r.Stale && r.CanSend !== false ? `${CLOSE_OUT} sends this to ${replyContext(r)} and closes the task.` : "";
@@ -163,7 +165,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const remindTitle = "Puts the task away until a day - nothing is merged, closed or sent; it is back on your rail that morning";
   const doneTitle = "Marks the task done without sending - the draft stays on it, to send later if you want";
   // Redraft / Refresh / Draft with AI: the same handler the in-card button has
-  const canRedraft = !proposal && meta.kind !== "zoho_invoice";
+  const canRedraft = !proposal && meta.kind !== "zoho_invoice" && !isSlot;   // the redrafter writes a REPLY to the sender
   const redraftWord = r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI";
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
   const altSends = sendable && !!value.trim();
@@ -367,6 +369,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
               : simulated ? "Simulate approval" : `${onTask ? CLOSE_OUT : "Approve & send"}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
           </Button>
         )}
+        {/* ...but one email of several can be let go without closing anything: it drops that slot (slots.settled) */}
+        {isSlot && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy} onClick={() => decide("reject")}
+          title="Drop this email - the task closes when the rest are sent">Don't send</Button>}
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
         {proposal?.alt && <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={() => decide(proposal.alt.verb)}
           title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}

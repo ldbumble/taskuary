@@ -31,6 +31,7 @@ import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
+import SlotList from "./SlotList.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
@@ -1069,7 +1070,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             like something you were meant to click. */}
                         {(detail?.checklist || []).length > 0 && (
                           <Box sx={{ mt: 0.85, maxWidth: 900 }}>
-                            {detail.checklist.map((i) => (
+                            {detail.checklist.filter((i) => !i.out).map((i) => (
                               <Box key={i.id} onClick={() => tickItem(i)}
                                 sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
                                   borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "#faf8f4" } }}>
@@ -1087,6 +1088,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             </Box>
                           </Box>
                         )}
+                        {/* the emails that close it (slots.py): each with its own draft, never the reply card below */}
+                        <SlotList checklist={detail?.checklist || []} reviews={detail?.reviews || []}
+                          onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
                         {/* the rest of what they said, in order - indented so it reads as the same
                             person continuing rather than as separate business */}
                         {alsoSaid.map((m) => (

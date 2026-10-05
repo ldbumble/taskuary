@@ -425,3 +425,90 @@ def test_a_task_already_asked_keeps_its_door(s):
     with p, mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value={'ok': True}):
         c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding'})
     assert s.get_task(tid)['AskedVia'] == 'whatsapp:c1@example.com'
+
+
+# ── 1a: watching a task nobody is working on ─────────────────────────────────────────────
+def inbound(s, tid, who='Paula Vance', email='paula@northwind.example', body='Tab 3 is sorted now.', n=1):
+    return s.add_message({'TaskId': tid, 'ExternalId': f'w-{tid}-{n}', 'ConversationId': f'wc-{tid}', 'Channel': 'email',
+                          'SourceName': 'alex@northwind.example', 'FromName': who, 'FromEmail': email, 'Subject': 'Tabs',
+                          'BodyText': body, 'SentAt': f'2026-10-05 1{n}:00:00', 'Status': 'routed', 'Direction': 'in'})
+
+
+def test_tell_me_when_someone_replies_on_a_mail_task(s):
+    tid = mail_born(s); inbound(s, tid, body='Can you check tab 3?', n=1)
+    remote_assistant._ASKING.chat = PHONE
+    try: asks.watch_task(s, tid, 'reply')
+    finally: remote_assistant._ASKING.chat = None
+    with rail(): assert asks.check(s, tid) is None                     # what was there before the watch is not news
+    inbound(s, tid, n=2)
+    with rail(), mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
+         mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
+        line = asks.check(s, tid)
+    assert line and 'Paula Vance' in line and 'Tab 3 is sorted now.' in line and send.call_args[0][2] == 'c1@example.com'
+    with rail(): assert asks.check(s, tid) is None                     # said once
+
+
+def test_tell_me_when_it_is_done_speaks_without_an_agent(s):
+    tid = mail_born(s); asks.watch_task(s, tid, 'done')
+    s.update_task(tid, {'Status': 'done'}, 'Gail Moreno')
+    with rail(): line = asks.check(s, tid)
+    assert line and 'done' in line
+
+
+def test_a_done_watch_ignores_replies_and_off_stops_it(s):
+    tid = mail_born(s); asks.watch_task(s, tid, 'done'); inbound(s, tid, n=2)
+    with rail(): assert asks.check(s, tid) is None
+    asks.watch_task(s, tid, 'off'); s.update_task(tid, {'Status': 'done'}, 'Gail Moreno')
+    with rail(): assert asks.check(s, tid) is None
+
+
+def test_the_assistant_can_set_a_watch(s):
+    tid = mail_born(s); c, p = api_on(s)
+    with p:
+        pr = c.post('/api/operations', json={'kind': 'task.watch', 'target': tid, 'params': {'what': 'reply'}}).json()
+        r = c.post(f"/api/operations/{pr['id']}/execute", json={'version': pr['version']}).json()
+    assert r['status'] != 'error' and s.get_task(tid)['AskedWatch'] == 'reply' and s.get_task(tid)['AskedVia'] == 'desktop'
+
+
+# ── 1b: a reminder reaches you ───────────────────────────────────────────────────────────
+def test_a_reminder_set_on_the_phone_is_said_on_the_phone_when_due(s):
+    from taskuary import remind
+    tid = mail_born(s)
+    remote_assistant._ASKING.chat = PHONE
+    try: remind.set_reminder(s, tid, '2026-10-09', 'owner')
+    finally: remote_assistant._ASKING.chat = None
+    with mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
+         mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
+        remind.due(s, datetime(2026, 10, 9, 8, 0))
+    assert send.called and 'Reminder' in send.call_args[0][3] and 'TQ-0001' in send.call_args[0][3]
+
+
+def test_a_reminder_set_on_the_desktop_is_a_chat_line(s):
+    from taskuary import remind
+    tid = mail_born(s); remind.set_reminder(s, tid, '2026-10-09', 'owner')
+    remind.due(s, datetime(2026, 10, 9, 8, 0))
+    assert any('Reminder' in l for l in dock_lines(s))
+
+
+def test_a_reminder_for_a_busy_phone_chat_is_kept_for_the_next_look(s):
+    from taskuary import remind
+    tid = mail_born(s)
+    remote_assistant._ASKING.chat = PHONE
+    try: remind.set_reminder(s, tid, '2026-10-09', 'owner')
+    finally: remote_assistant._ASKING.chat = None
+    with mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
+         mock.patch.object(remote_assistant, 'quiet', return_value=False), mock.patch.object(remote_assistant, 'send') as send:
+        remind.due(s, datetime(2026, 10, 9, 8, 0))
+    assert not send.called and s.get_task(tid)['RemindOwed']
+    with mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
+         mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
+        asks.sweep(s)
+    assert send.called and not s.get_task(tid)['RemindOwed']
+
+
+def test_a_reminder_that_cannot_be_said_never_breaks_the_sync(s):
+    from taskuary import remind
+    tid = mail_born(s); remind.set_reminder(s, tid, '2026-10-09', 'owner')
+    with mock.patch.object(asks, 'remind_due', side_effect=RuntimeError('no door')):
+        assert remind.due(s, datetime(2026, 10, 9, 8, 0)) == 1
+    assert not s.get_task(tid)['RemindAt']

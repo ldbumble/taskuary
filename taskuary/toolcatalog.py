@@ -56,6 +56,8 @@ PURPOSE = {
     'task.checklist':           ("change what a task's checklist asks for - `items`: the full list of item words in order (one left out "
                                  'is removed, emails untouched); `emails`: [{to, about}] to add emails that must go out before it closes; '
                                  '`drop`: recipients whose email is no longer owed; `ref`'),
+    'task.watch':               ("tell the owner here when something happens on a task nobody needs to start - `what`: done (when it is "
+                                 'finished) | reply (when someone writes on it) | any (the default) | off; `ref`'),
     'task.comment':             'file a note on a task - `text`; `ref`',
     'task.handoff':             ('hand a task to a PERSON - `who` (a name or address that has written here), `note` optional: '
                                  "writes the forward for the owner's yes, nothing is sent from this card; `ref`"),
@@ -99,7 +101,7 @@ PURPOSE = {
 # THE TIERS (the spec, 2026-09-18). Reads run at once (READS). These WRITES run at once too, because
 # each can be put back: the receipt carries the undo. Everything else waits for the owner's yes -
 # deleting, sending to a person, spending, stopping an agent mid-run.
-INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer',
+INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer', 'task.watch',
                      'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
 
 
@@ -249,7 +251,7 @@ WHERE = (
 BUCKETS = (
     ('table', 'decide about the item on the table', tuple(DECISIONS)),
     ('task', 'change any task - the one on the table or one named with ref',
-     ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
+     ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
       'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'review.approve', 'review.reject')),
     ('agents', 'start, continue, answer or stop the agent on a task, and teach where work belongs',
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember')),
@@ -266,7 +268,7 @@ BUCKETS = (
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?', 'coder': 'text, as?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'clear': 'text', 'task.handoff': 'who, note?',
-         'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.defer': 'until'}
+         'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 
 
 def signature(kind: str) -> str:

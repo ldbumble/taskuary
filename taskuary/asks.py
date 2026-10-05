@@ -79,12 +79,12 @@ def _told(store, tid: int, lane: str):
     store._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', (lane, datetime.now().isoformat(' ', 'seconds'), tid))
 
 
-def _say(store, task: dict, line: str) -> bool:
+def _say(store, task: dict, line: str, via: str = None) -> bool:
     """One line at the ask's door. The phone it was asked from - or, failing that, the phone the walk is handed to - only
     in a gap of the conversation (remote_assistant.quiet: never between a card and its answer); False = not now, try
-    again. Everywhere else, the desktop Assistant chat."""
+    again. Everywhere else, the desktop Assistant chat. `via`: a door other than the ask's (a reminder's)."""
     from . import concierge, general, live, remote_assistant
-    via, handed = of(task) or 'desktop', remote_assistant.handoff(store)
+    via, handed = via or of(task) or 'desktop', remote_assistant.handoff(store)
     doors = ([tuple(via.split(':', 1))] if ':' in via else []) + ([(handed['channel'], handed['chat'])] if handed else [])
     for channel, chat in doors:
         c = remote_assistant.connector_for_chat(store, channel, chat)
@@ -103,16 +103,72 @@ def check(store, tid: int) -> str | None:
     """Say this ask's move if it moved into a said lane since it was last told. The line said, or None."""
     from .store import task_ref
     t = store.get_task(tid) or {}
-    if not of(t) or not agent_touched(store, tid): return None
+    watched, worked = t.get('AskedWatch'), agent_touched(store, tid)
+    if not of(t) or not (worked or watched): return None
+    if watched in ('reply', 'any'):
+        said = _reply(store, t)
+        if said: return said
+    # which lane moves are said: all of them where an agent works it or the watch is on everything; only its end for a
+    # "tell me when it's done"; none for "tell me when someone replies"
+    lanes = SAID if worked or watched == 'any' else ('finished',) if watched == 'done' else ()
     lane, says = state(store, tid)
     if lane == 'quiet' or lane == t.get('AskedTold'): return None
     # not said: a lane that needs nobody, or a close the owner made themselves (they know - they pressed it)
-    if lane not in SAID or (lane == 'finished' and t.get('UpdatedBy') in OWNER):
+    if lane not in lanes or (lane == 'finished' and t.get('UpdatedBy') in OWNER):
         _told(store, tid, lane); return None
     line = f"{task_ref(tid)} {str(t.get('Title') or '').strip()} - {says or lane}."
     if not _say(store, t, line): return None
     _told(store, tid, lane)
     return line
+
+
+def _reply(store, t: dict) -> str | None:
+    """A watched task's new message, said once: who wrote and the start of what they said."""
+    from .store import task_ref
+    m = store.last_material_inbound_on_task(t['TaskId']) or {}
+    if not m.get('MessageId') or m['MessageId'] == t.get('AskedSeenMid'): return None
+    words = ' '.join(str(m.get('OwnText') or m.get('BodyText') or '').split())[:140]
+    line = f"{task_ref(t['TaskId'])} {str(t.get('Title') or '').strip()} - {m.get('FromName') or m.get('FromEmail') or 'someone'} wrote: {words}"
+    if not _say(store, t, line): return None
+    store._exec('UPDATE task SET AskedSeenMid=? WHERE TaskId=?', (m['MessageId'], t['TaskId']))
+    return line
+
+
+WATCHES = ('done', 'reply', 'any', 'off')
+
+
+def watch_task(store, tid: int, what: str = 'any') -> dict:
+    """"Tell me when it's done / when Paula replies" about any task - here, at the door it was said on. What is already
+    on the task is not news: only a reply after the watch is said. `off` stops the watch (the task stays an ask)."""
+    what = str(what or 'any').strip().lower()
+    if what not in WATCHES: raise ValueError('what: done | reply | any | off')
+    if not store.get_task(tid): raise ValueError('task not found')
+    if what == 'off':
+        store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (tid,)); return {'taskId': tid, 'watch': 'off'}
+    seen = (store.last_material_inbound_on_task(tid) or {}).get('MessageId')
+    store._exec('UPDATE task SET AskedVia=?, AskedWatch=?, AskedSeenMid=? WHERE TaskId=?', (door(), what, seen, tid))
+    return {'taskId': tid, 'watch': what, 'via': door()}
+
+
+# ── a reminder reaches you: said at the door it was set from when it comes due (remind.due) ──
+def reminder_set(store, tid: int):
+    store._exec('UPDATE task SET RemindVia=? WHERE TaskId=?', (door(), tid))
+
+
+def remind_due(store, tid: int):
+    store._exec("UPDATE task SET RemindOwed='1' WHERE TaskId=?", (tid,))
+    _remind(store, tid)
+
+
+def _remind(store, tid: int) -> bool:
+    """The due reminder, said once; a busy phone chat keeps it owed for the next look (sweep)."""
+    from .store import task_ref
+    t = store.get_task(tid) or {}
+    if not t: return False
+    line = f"Reminder: {task_ref(tid)} {str(t.get('Title') or '').strip()} - you asked to be reminded about it today."
+    if not _say(store, t, line, via=t.get('RemindVia') or 'desktop'): return False
+    store._exec('UPDATE task SET RemindOwed=NULL WHERE TaskId=?', (tid,))
+    return True
 
 
 # Event-driven: a task write (store._poke 'task-changed') queues its id; one worker drains the queue a moment later, so a
@@ -136,6 +192,9 @@ def drain():
 
 
 def sweep(store):
+    for r in store._rows("SELECT TaskId FROM task WHERE RemindOwed='1'"):
+        try: _remind(store, r['TaskId'])
+        except Exception as e: logger.warning(f"asks: could not say the reminder on {r['TaskId']} - {e}")
     since = (datetime.now() - timedelta(days=DAYS)).isoformat(' ', 'seconds')
     for r in store._rows("SELECT TaskId FROM task WHERE AskedVia IS NOT NULL AND CreatedAt>=? AND "
                          "(Status NOT IN ('done','dropped') OR IFNULL(AskedTold,'')<>'finished') ORDER BY TaskId", (since,)):

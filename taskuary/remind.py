@@ -7,6 +7,7 @@ road for the task page's picker, the Assistant's tool (task.defer) and the typed
 """
 import re
 from datetime import datetime, timedelta
+from loguru import logger
 
 MORNING = '07:00:00'
 NONE_WORDS = ('', 'none', 'never', 'clear', 'off', 'no')
@@ -74,6 +75,9 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
     # audit, 2026-10-01). The owner: the agent is open - save and end it first. Bringing it back is never refused.
     if at and agent_open(tid): raise AgentOpen(OPEN_SAYS)
     store.update_task(tid, {'RemindAt': at or ''}, actor)
+    if at:
+        from . import asks
+        asks.reminder_set(store, tid)       # said at the door it was set from when it comes due
     store.audit('task', tid, 'remind', actor, detail={'from': prev, 'to': at})
     return {'taskId': tid, 'remindAt': at, 'when': when(at) if at else '',
             'undo': {'kind': 'task.defer', 'target': tid, 'params': {'until': prev[:10] if prev else 'none'},
@@ -91,5 +95,8 @@ def due(store, now: datetime = None) -> int:
     for t in store._rows("SELECT TaskId, Status FROM task WHERE RemindAt IS NOT NULL AND RemindAt != '' AND RemindAt <= ?", (stamp,)):
         if t.get('Status') not in ('done', 'dropped'):
             store.add_comment(t['TaskId'], 'assistant', 'agent', DUE_NOTE); n += 1
+            from . import asks
+            try: asks.remind_due(store, t['TaskId'])      # ...and said where it was set: the phone, or the desktop chat
+            except Exception as e: logger.warning(f"reminder on {t['TaskId']} not said: {e}")
         store.update_task(t['TaskId'], {'RemindAt': ''}, 'assistant')
     return n

@@ -857,6 +857,10 @@ def _run_operation(op: dict, background: BackgroundTasks):
         from . import handbook
         return handbook.post(store, str(p.get('title') or ''), str(p.get('body') or ''), str(p.get('topic') or ''),
                              str(p.get('kind') or 'new_idea'), 'assistant', None, clip=True, why_earned=str(p.get('why_earned') or ''))
+    if kind == 'task.watch':
+        from . import asks
+        try: return asks.watch_task(store, tid, p.get('what') or 'any')
+        except ValueError as e: raise HTTPException(422, str(e))
     if kind == 'task.defer':
         from . import remind
         try: return remind.set_reminder(store, tid, p.get('until'), ACTOR)

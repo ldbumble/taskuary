@@ -535,3 +535,27 @@ def test_drafts_already_stored_with_a_display_name_are_repaired_on_start(tmp_pat
         assert json.loads(b.get_review(rid)['Deliver'])['to'] == ['ray@northwind.example']
         assert slots.all_(b, tid)[0]['out'] == {'kind': 'email', 'to': 'ray@northwind.example', 'subject': '', 'name': 'Ray Colton'}
     finally: b.close()
+
+
+# ── a restart keeps every email draft (2026-10-05, TQ-0957) ──────────────────────────────
+def test_a_restart_keeps_every_pending_email_draft(tmp_path):
+    from taskuary.store import SQLiteStore
+    db = str(tmp_path / 'r.db'); a = SQLiteStore(db)
+    tid = a.create_task({'Title': 'Tabs'}, 'owner'); slots.add(a, tid, FOUR[:2] + FOUR[3:], 'owner')
+    rids = [slots.draft(a, tid, f'email {n}', to=FOUR[n]['to'])['review_id'] for n in (0, 1)]
+    a.close()
+    b = SQLiteStore(db)
+    try: assert [b.get_review(r)['Status'] for r in rids] == ['pending', 'pending']
+    finally: b.close()
+
+
+def test_drafts_a_restart_wrongly_retired_come_back(tmp_path):
+    from taskuary.store import SQLiteStore
+    db = str(tmp_path / 'r2.db'); a = SQLiteStore(db)
+    tid = a.create_task({'Title': 'Tabs'}, 'owner'); slots.add(a, tid, FOUR[:2], 'owner')
+    r1, r2 = [slots.draft(a, tid, f'email {n}', to=FOUR[n]['to'])['review_id'] for n in (0, 1)]
+    a._exec("UPDATE review SET Status='superseded' WHERE ReviewId=?", (r1,))           # what the old heal did
+    a.close()
+    b = SQLiteStore(db)
+    try: assert b.get_review(r1)['Status'] == 'pending'
+    finally: b.close()

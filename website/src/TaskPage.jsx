@@ -838,8 +838,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...(replyMessage && !liveSession && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "decide", tone: "p", label: openingReply ? "Drafting…" : replyPrimary,
         disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)),
         title: pendingReview ? "Opens the drafted reply and its close-out" : "Drafts the reply here, from this task's own context. Nothing is sent until you approve it." }] : []),
-      // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item
-      ...(noteable && !liveSession ? [{ id: "close-note", group: "decide", label: "Close with a note", run: (e, a) => setNoteAt(a || e?.currentTarget),
+      // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item. It is Mark
+      // done with words, so it registers with Mark done and the row stands it beside that (actionRow.rowOf)
+      ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: "Close with a note", run: (e, a) => setNoteAt(a || e?.currentTarget),
         title: "Closes the task with what came of it. The note is kept on the task; nothing is sent." }] : []),
       ...(liveSession ? [
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: "Review changes", run: () => setDiffOpen(true), title: "A viewer of the agent's diff. Nothing is approved or committed here." }] : []),

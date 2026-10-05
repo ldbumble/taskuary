@@ -170,3 +170,28 @@ test("a typed question is about what is OPEN on the table, whatever put it there
   assert.match(view, /const subject = openCardRef\.current \? null : \(tableKey \|\| current\);/);
   assert.match(view, /turn\(\{ mode: "say", text: t, key: subject,/);
 });
+
+// TWO WAYS TO CLOSE, ONE PLACE (the owner, 2026-10-05: "why is close with note not inside the more.. menu but mark done is in the
+// menu?"): Close with a note is Mark done with words, so it stands right after Mark done wherever Mark done stands.
+test("close with a note stands beside Mark done behind More when a decision is waiting", () => {
+  const r = rowOf({ ref: "TQ-1", list: [v("reply", "decide", { tone: "p" }), v("done", "more"), v("close-note", "more"), v("nat", "more"), v("next", "next")] });
+  assert.deepEqual(r.decide.map((x) => x.id), ["reply"]);
+  assert.deepEqual(r.more.map((x) => x.id).slice(0, 2), ["done", "close-note"]);
+});
+
+test("...beside it as the move when nothing else waits, outlined", () => {
+  const r = rowOf({ ref: "", list: [v("close-note", "more"), v("done", "more"), v("nat", "more"), v("next", "next")] });
+  assert.deepEqual(r.decide.map((x) => [x.id, x.tone]), [["done", "p"], ["close-note", "s"]]);
+  assert.deepEqual(r.more.map((x) => x.id), ["nat"]);
+});
+
+test("...and beside it next to the way back into a session", () => {
+  const r = rowOf({ ref: "", list: [v("continue", "agent", { lead: true }), v("done", "more"), v("close-note", "more"), v("next", "next")] });
+  assert.deepEqual(r.agent.map((x) => x.id), ["continue", "done", "close-note"]);
+  assert.ok(!r.more.some((x) => x.id === "close-note"));
+});
+
+test("the task page registers Close with a note with Mark done, not as a decision of its own", () => {
+  const page = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
+  assert.match(page, /id: "close-note", group: "more"/);
+});

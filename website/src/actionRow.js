@@ -79,6 +79,15 @@ export function rowOf({ list, ref }) {
   else if (done && done.promote && lead) { agent = [...agent, done]; more = more.filter((v) => v !== done); }
   // a decision that carries its own close (a reply draft's Mark done, 2026-10-01) is the task's Mark done - never twice in one row
   if (decide.some((v) => v.closes)) more = more.filter((v) => v.id !== "done");
+  // Close with a note IS Mark done, with words: it stands right after Mark done wherever Mark done stands - the bar, beside the way
+  // back into a session, or behind More (the owner, 2026-10-05: "why is close with note not inside the more.. menu but mark done is")
+  const note = more.find((v) => v.id === "close-note");
+  if (note) {
+    more = more.filter((v) => v !== note);
+    const after = (xs) => { const i = xs.findIndex((v) => v.id === "done"); return i < 0 ? null : [...xs.slice(0, i + 1), { ...note, tone: "s" }, ...xs.slice(i + 1)]; };
+    const d = after(decide), a = !d && after(agent);
+    if (d) decide = d; else if (a) agent = a; else more = after(more) || [note, ...more];
+  }
   const next = by("next")[0] || null;
   if (decide.length > 4) { more = [...decide.slice(4), ...more]; decide = decide.slice(0, 4); }   // the row stays a short line of chips; the rest wait behind More
   return { ref, decide, agent, more, primary, next: next && { ...next, tone: primary ? "s" : "p" },

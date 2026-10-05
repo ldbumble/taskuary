@@ -507,3 +507,31 @@ def test_the_slot_card_names_the_recipient_once(s):
     tid = typed(s, FOUR[:1])
     rv = s.get_review(slots.draft(s, tid, 'Tab 1 is fine.', to=FOUR[0]['to'], agent='assistant')['review_id'])
     assert FOUR[0]['to'] not in rv['Reason']
+
+
+# ── "Name <address>" is a name and an address, never a recipient (2026-10-05) ───────────
+def test_a_display_name_and_address_keep_only_the_address_as_the_recipient():
+    got = slots.clean([{'to': 'Paula Vance <paula@northwind.example>', 'about': 'tab 1'}])
+    assert got[0]['out']['to'] == 'paula@northwind.example' and got[0]['out']['name'] == 'Paula Vance'
+
+
+def test_an_agent_draft_to_a_display_name_sends_to_the_address(s):
+    tid = typed(s, [])
+    out = slots.draft(s, tid, 'Tab 1 is fine.', to='Paula Vance <paula@northwind.example>', agent='coder')
+    rv = s.get_review(out['review_id'])
+    assert json.loads(rv['Deliver'])['to'] == ['paula@northwind.example'] and slots.all_(s, tid)[0]['out']['to'] == 'paula@northwind.example'
+
+
+def test_drafts_already_stored_with_a_display_name_are_repaired_on_start(tmp_path):
+    from taskuary.store import SQLiteStore
+    db = str(tmp_path / 't.db'); a = SQLiteStore(db)
+    tid = a.create_task({'Title': 'Tabs'}, 'owner')
+    a._write_checklist(tid, [{'id': 'x1', 'text': 'Email Ray', 'done': False, 'out': {'kind': 'email', 'to': 'Ray Colton <ray@northwind.example>', 'subject': ''}}], 'owner')
+    rid = a.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'hi',
+                        'Deliver': json.dumps({'channel': 'email', 'to': ['Ray Colton <ray@northwind.example>'], 'subject': 's', 'slot': 'x1'})})
+    a.close()
+    b = SQLiteStore(db)
+    try:
+        assert json.loads(b.get_review(rid)['Deliver'])['to'] == ['ray@northwind.example']
+        assert slots.all_(b, tid)[0]['out'] == {'kind': 'email', 'to': 'ray@northwind.example', 'subject': '', 'name': 'Ray Colton'}
+    finally: b.close()

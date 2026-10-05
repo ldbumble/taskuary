@@ -91,8 +91,9 @@ CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server',
                              # folder the owner configured, which is the whole authority of those cards.
                              'share', 'root', 'port', 'hostkey', 'private_key'})
 def query_only(body: dict) -> dict:
-    """The body minus every connection field - what an agent may say about a tool call."""
-    return {k: v for k, v in (body or {}).items() if k not in CONNECTION_KEYS}
+    """The body minus every connection field - what an agent may say about a tool call. `_write` goes too: whether a
+    query may commit is the card's Authority (tools/run) or the owner's approval, never the caller's say-so."""
+    return {k: v for k, v in (body or {}).items() if k not in CONNECTION_KEYS and k != '_write'}
 
 
 def run_sqlite(cfg):

@@ -16,6 +16,9 @@ class FakeConn:
     def cursor(self): return FakeCursor()
     def __enter__(self): return self
     def __exit__(self, *a): pass
+    def commit(self): pass
+    def rollback(self): pass
+    def close(self): pass
 
 
 class ConnStrTests(unittest.TestCase):

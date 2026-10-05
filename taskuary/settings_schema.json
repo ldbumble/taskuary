@@ -19,6 +19,7 @@
     "Assistant on your phone",
     "Advisor",
     "Coder agent",
+    "Agent permissions",
     "Notifications",
     "Attachments & images",
     "Sync & startup",
@@ -175,6 +176,15 @@
       "type": "agent",
       "desc": "The CLI agent that works tasks when nothing names one.",
       "help": "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary."
+    },
+    "general_agent_hands": {
+      "group": "Agent permissions",
+      "label": "General agents can",
+      "type": "select",
+      "options": ["cli", "look"],
+      "optionLabels": {"cli": "do what your CLI agent can", "look": "only look things up"},
+      "desc": "What a general (non-coding) agent on a CLI may do. Same as the CLI agent = a shell, files and the connections below, each up to its Authority. Only look things up = read files and search the web, change nothing.",
+      "help": "A general agent used to be read-only by inheritance from the brain that reads incoming mail - not by a decision (2026-10-05). It now runs with your CLI agent's own permissions, in Taskuary's scratch folder, unless you choose 'only look things up'.\n\nWhat it may change in your other systems is each connection's Authority, in the table below: at read it can look, and any change becomes a proposal you approve on the task; at write it makes the change itself. A SQL query through a read-level connection is rolled back, whatever it contains.\n\nMail from someone you do not know never starts an agent by itself - general or coding - so these permissions are only used on work you or a trusted sender started."
     },
     "answer_to_agent": {
       "group": "Coder agent",

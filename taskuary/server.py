@@ -4835,6 +4835,8 @@ def tool_run(body: dict, request: Request):
         # the body says WHAT to run, never WHERE: a base_url/account/server in it used to override the
         # card's, sending the card's token to a host of the caller's choosing (reports.query_only)
         tool_cfg = {**query_only(body), 'type': t}
+        # SQL commits only on a card the owner raised to write; at read, the batch is rolled back (mssql.run_query)
+        if t in ('mssql', 'database'): tool_cfg['_write'] = scopes.rank(scopes.scope_of(conn)) >= scopes.rank('write')
         if t in hub_tools:
             # The token decides who spoke. A tool payload cannot claim to be the owner or
             # another agent, even though the executor accepts an author for internal calls.

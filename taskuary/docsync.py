@@ -90,6 +90,26 @@ def sync_connections(store, actor='system'):
     if new != doc: store.save_doc('soul', new, actor)
 
 
+def agent_systems(store) -> str:
+    """The owner's systems a WORKING agent may use, each with its Authority, and the call that reaches them. SOUL.md's
+    list is triage's; a general agent never read it, so it was told to use /api/tools/run and shown nothing to use it on
+    (2026-10-05). '' when no connection is an agent tool."""
+    from .store import roles_of
+    from . import scopes
+    tools = [c for c in store.list_connectors() if c['Active'] and 'tool' in roles_of(c)]
+    if not tools: return ''
+    lines = [f"- {c['Name'] or c['Type']} (type {c['Type']}, connector_id {c['ConnectorId']}) - authority {scopes.scope_of(c)}"
+             for c in tools]
+    return ('YOUR SYSTEMS (the owner\'s connections you may use)\n' + '\n'.join(lines) + '\n'
+            'Call one: curl -s -X POST "$TASKUARY_URL/api/tools/run" -H "X-Taskuary-Token: $TASKUARY_TOKEN" '
+            '-H "X-Taskuary-Task-Token: $TASKUARY_TASK_TOKEN" -H "Content-Type: application/json" '
+            '-d \'{"type": "<type>", "connector_id": <id>, "query": "..."}\' - saved credentials are filled in for you.\n'
+            'AUTHORITY is the owner\'s ceiling on each one: at read you may look but not change anything (a SQL batch that '
+            'writes is rolled back). To change something on a read-level system, PROPOSE it and the owner approves it on the '
+            'task: TASKUARY-PROPOSE {"action": "run_tool", "type": "<type>", "connector_id": <id>, "query": "..."} - say in '
+            'your reply what it will change and why. At write you may make the change yourself; say what you changed.')
+
+
 def sync_projects(store, actor='system'):
     """Render structured project links into one replaceable, human-readable SOUL.md block.
 

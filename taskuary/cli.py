@@ -4,6 +4,14 @@ import uvicorn
 from . import __version__, config
 
 
+def _session_headers(srv: dict) -> dict:
+    """The token - a session's TASKUARY_TOKEN overlays it (config._env_server), so inside one this is the
+    agent's - and the session's proof that the task it names is its own (guard.owns_task)."""
+    import os
+    from .guard import TASK_ENV, TASK_HDR
+    return {**({'X-Taskuary-Token': srv['token']} if srv.get('token') else {}),
+            **({TASK_HDR: os.environ[TASK_ENV]} if os.environ.get(TASK_ENV) else {})}
+
 def _port(value):
     try: return config.port_number(value)
     except ValueError as e: raise argparse.ArgumentTypeError(str(e)) from None
@@ -161,7 +169,7 @@ def main():
         srv = config.load()['server']
         host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
         base = f"http://{host}:{srv.get('port') or 7787}"
-        hdr = {'X-Taskuary-Token': srv['token']} if srv.get('token') else {}
+        hdr = _session_headers(srv)
         try:
             r = requests.post(f'{base}/api/agent/reply', timeout=60, headers=hdr,
                               json={'task_id': int(tid), 'text': text, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'})
@@ -182,7 +190,7 @@ def main():
         srv = config.load()['server']
         host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
         base = f"http://{host}:{srv.get('port') or 7787}"
-        hdr = {'X-Taskuary-Token': srv['token']} if srv.get('token') else {}
+        hdr = _session_headers(srv)
         try:
             r = requests.post(f'{base}/api/agent/done', timeout=120, headers=hdr,
                               json={'task_id': int(tid), 'summary': args.done,

@@ -47,3 +47,49 @@ def test_triage_work_is_not_an_ask_and_the_mark_survives_an_update(s):
     assert asks.of(s.get_task(mail)) is None
     tid = made(s); s.update_task(tid, {'Priority': 'high'}, 'owner')
     assert s.get_task(tid)['AskedVia'] == 'desktop'
+
+
+# ── where an ask stands: its rail lane, in the rail's words ──────────────────────────────
+def rail(*items):
+    return mock.patch('taskuary.asks._rail', return_value=list(items))
+
+
+def test_the_state_is_the_rail_lane_and_its_sentence(s):
+    tid = made(s)
+    with rail({'tid': tid, 'lane': 'blocked', 'why': 'the agent asked you: which branch?'}):
+        assert asks.state(s, tid) == ('blocked', 'the agent asked you: which branch?')
+
+
+def test_an_approve_lane_with_emails_says_how_many(s):
+    from taskuary import slots
+    tid = made(s); slots.add(s, tid, [{'to': 'paula@northwind.example'}, {'to': 'ray@northwind.example'}], 'owner')
+    slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example')
+    with rail({'tid': tid, 'lane': 'approve', 'why': '1 email drafted for you to send'}):
+        lane, says = asks.state(s, tid)
+    assert lane == 'approve' and '1 of 2 emails drafted' in says
+
+
+def test_a_closed_ask_is_finished_with_the_agents_summary(s):
+    tid = made(s); s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nSummary: checked all four tabs, two hold items.')
+    s.update_task(tid, {'Status': 'done'}, 'coder')
+    with rail():
+        lane, says = asks.state(s, tid)
+    assert lane == 'finished' and 'two hold items' in says
+
+
+def test_off_the_rail_and_open_is_quiet(s):
+    tid = made(s)
+    with rail(): assert asks.state(s, tid)[0] == 'quiet'
+
+
+def test_an_agent_touched_it_or_not(s):
+    tid = made(s); todo = s.create_task({'Title': 'Call the bank', 'AskedVia': 'desktop'}, 'owner')
+    assert asks.agent_touched(s, tid) and not asks.agent_touched(s, todo)
+
+
+def test_the_real_rail_reads_approve_for_drafted_emails(s):
+    from taskuary import funnel, slots
+    tid = made(s); slots.add(s, tid, [{'to': 'paula@northwind.example'}], 'owner')
+    slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example'); funnel.invalidate()
+    with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+        assert asks.state(s, tid)[0] == 'approve'

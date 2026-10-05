@@ -38,6 +38,7 @@ import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
+import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
@@ -670,10 +671,22 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const pics = usePromptImages();                        // pictures sent with the chat line
   // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
   useEffect(() => {
-    const on = (e) => setContinueOn({ task: e.detail.task, ref: e.detail.ref });
+    const on = (e) => { setNoteOn(null); setContinueOn({ task: e.detail.task, ref: e.detail.ref }); };
     window.addEventListener("tq-continue", on);
     return () => window.removeEventListener("tq-continue", on);
   }, []);
+  // ...and Close with a note, the same card: what came of it, and the task view's own close behind the button
+  const [noteOn, setNoteOn] = useState(null);           // { task, ref, close(note) }
+  useEffect(() => {
+    const on = (e) => { setContinueOn(null); setNoteOn(e.detail); };
+    window.addEventListener("tq-close-note", on);
+    return () => window.removeEventListener("tq-close-note", on);
+  }, []);
+  const noteKey = useRef(undefined);
+  useEffect(() => {
+    if (noteOn && noteKey.current !== undefined && noteKey.current !== current) setNoteOn(null);
+    noteKey.current = noteOn ? (noteKey.current ?? current) : undefined;
+  }, [current, noteOn]);
   // ...and it belongs to ITS task: Next, or anything else put on the table, takes it away (the owner, 2026-09-30: "you left the
   // input box there after hitting next?? it has to be connected to the task")
   const continueKey = useRef(undefined);
@@ -1829,6 +1842,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
                   // ...and the table STAYS on it: you continued it to watch it work, not to be walked past it (the owner,
                   // 2026-09-30: "the session started but then closed and moved on without hitting next"); the view shows the
                   // session when it opens (TaskPage hears task-changed)
+                }} />
+            </div>
+          )}
+          {!old && noteOn && (
+            <div className="tq-browse-line" ref={(el) => { if (el && !el.dataset.seen) { el.dataset.seen = "1"; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } }}>
+              <CloseNote inline taskRef={noteOn.ref} onClose={() => setNoteOn(null)}
+                onSubmit={async (note) => {
+                  const on = noteOn;
+                  await on.close(note);
+                  setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: on.task.TaskId, ref: on.ref, text: `Closed with your note: ${note}` }]);
                 }} />
             </div>
           )}

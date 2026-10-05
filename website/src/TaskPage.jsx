@@ -491,7 +491,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     onLeave?.();
     const close = () => runOperation(api, "task.complete", selected, note ? { note } : {});   // the shared road (PW-215)
     try { await (onFinish ? onFinish(status, close) : close()); }
-    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Failed to finish task"; setErr(msg); onStay?.(msg); loadTasks(); return; }
+    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Failed to finish task"; setErr(msg); onStay?.(msg); loadTasks(); return msg; }
     finally { setFinishing(false); }
     loadTasks(); onChanged?.();
   };
@@ -780,6 +780,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (a && canvas && t) { window.dispatchEvent(new CustomEvent("tq-continue", { detail: { task: t, ref: t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}` } })); return; }
     setContinueAtRaw(a);
   };
+  // CLOSE WITH A NOTE rides the same way: a card in the conversation on the canvas, a popover elsewhere, and the close is
+  // this view's own Mark done (finish), so the walk puts the task down exactly as it does for the button
+  const [noteAt, setNoteAtRaw] = useState(null);
+  const closeWithNote = async (note) => { const failed = await finish("done", note); if (failed) throw new Error(failed); };
+  const setNoteAt = (a) => {
+    if (a && canvas && t) { window.dispatchEvent(new CustomEvent("tq-close-note", { detail: { task: t, ref: t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}`, close: closeWithNote } })); return; }
+    setNoteAtRaw(a);
+  };
+  const noteable = !!t && !term?.alive && !["done", "dropped"].includes(String(t?.Status || ""));
   const continued = () => {
     const id = selected;
     if (!stale(id)) setGeneralRevision((n) => n + 1);
@@ -829,6 +838,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...(replyMessage && !liveSession && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "decide", tone: "p", label: openingReply ? "Drafting…" : replyPrimary,
         disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)),
         title: pendingReview ? "Opens the drafted reply and its close-out" : "Drafts the reply here, from this task's own context. Nothing is sent until you approve it." }] : []),
+      // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item
+      ...(noteable && !liveSession ? [{ id: "close-note", group: "decide", label: "Close with a note", run: (e, a) => setNoteAt(a || e?.currentTarget),
+        title: "Closes the task with what came of it. The note is kept on the task; nothing is sent." }] : []),
       ...(liveSession ? [
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: "Review changes", run: () => setDiffOpen(true), title: "A viewer of the agent's diff. Nothing is approved or committed here." }] : []),
         { id: "save-end", group: "agent", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
@@ -1715,8 +1727,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       Nothing is waiting on you here, and no inbound sender is attached to this task.
                     </Typography>
                   ))}
-                  {stage === "reply" && !term?.alive && !["done", "dropped"].includes(String(t?.Status || "")) &&
-                    <CloseNote busy={finishing} onClose={(note) => finish("done", note)} />}
                 </Box>}
 
                 {!sessionView && <Fold title={`Context & history ·${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
@@ -1898,6 +1908,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         </DialogActions>
       </Dialog>
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
+      {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />}
       <Confirm open={confirmDone} title="Stop the agent and mark done?"
         text="An agent session is still open on this task. Mark done ends it - what it did so far is written up and saved with the task, then the task closes."

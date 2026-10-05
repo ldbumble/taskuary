@@ -3441,7 +3441,7 @@ def funnel_waiting():
 def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 
 # ── the pipe and the concierge (funnel.py, concierge.py): what comes next, said out loud ──────
-class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None; read: bool = False
+class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None; read: bool = False; shown: dict | None = None
 class SurfaceBody(BaseModel):
     key: str | None = None
     only: str | None = None
@@ -3508,7 +3508,8 @@ def funnel_pile(force: bool = False, current: str = None, only: str = None,
 def funnel_settle(body: SettleBody):
     from . import concierge, funnel, general
     # `read` rides only on 'surfaced': the Assistant Game's Next is the chat's Next - shown is read (2026-09-06)
-    try: out = funnel.settle(store, body.key, body.verb, ACTOR, body.hours, read=body.read and body.verb == 'surfaced')
+    # `shown`: the card's {key: view_revision}, so what landed after it was drawn stays unread (funnel.settle)
+    try: out = funnel.settle(store, body.key, body.verb, ACTOR, body.hours, read=body.read and body.verb == 'surfaced', shown=body.shown)
     except ValueError as e: raise HTTPException(422, str(e))
     if body.verb in ('done', 'later', 'skip'):                              # settled: off the table, and nothing chosen in its place
         dock = general.dock_task(store, ACTOR)[0]['TaskId']

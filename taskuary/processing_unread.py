@@ -387,6 +387,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                                                  (active and not away and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] == 'idea' or row.get('Channel') == 'assistant'))
+    from . import processing_reads
+    processing_reads.drawn(store, item['item_id'], item['view_revision'], view.get('processing_read', {}).get('units', ()))
     card.update(key='processing:' + item['item_id'], processing_id=item['item_id'],
                 member_ids=list(item['member_ids']), context_revision=item['context_revision'],
                 view_revision=item['view_revision'], aliases=[a['Value'] for a in item.get('aliases', [])

@@ -7,6 +7,9 @@ activity arrives, until that separate owner policy is changed.
 """
 import hashlib
 import json
+import threading
+import weakref
+from collections import OrderedDict
 from datetime import datetime
 
 
@@ -78,6 +81,37 @@ def units(view):
         add('run', row, 'RunId', _pick(row, ('AgentName', 'Instruction', 'StartedAt',
                                           'Result', 'DiffText', 'LastError')))
     return sorted(result, key=lambda x: (x['entity_kind'], x['local_id']))
+
+
+# WHAT EACH CARD SHOWED, by the revision it was drawn at. A press of Done or Next puts down what the card showed; the
+# receipt used to be written off a fresh projection at the moment of the press, so a mail that landed after the card was
+# drawn was marked read unseen. Kept in memory - a draw is a read and must not write - so after a restart a revision
+# nobody drew since falls back to the item as it stands, which is what every press did before.
+_DRAWN, _DRAWN_LOCK, DRAWN_CAP = weakref.WeakKeyDictionary(), threading.Lock(), 5000
+
+
+def _drawn(store):
+    store = getattr(store, '_store', store)               # a poll worker's writer proxy is the same store
+    if store not in _DRAWN: _DRAWN[store] = {'by': OrderedDict(), 'last': {}}
+    return _DRAWN[store]
+
+
+def drawn(store, item_id, view_revision, current):
+    """A card for `item_id` was drawn at `view_revision`, showing these units."""
+    if not item_id or not view_revision: return
+    keep = [dict(entity_kind=u['entity_kind'], local_id=u['local_id'], fingerprint=u['fingerprint']) for u in current]
+    with _DRAWN_LOCK:
+        d = _drawn(store)
+        d['by'][(item_id, view_revision)] = keep; d['by'].move_to_end((item_id, view_revision))
+        d['last'][item_id] = view_revision
+        while len(d['by']) > DRAWN_CAP: d['by'].popitem(last=False)
+
+
+def shown_units(store, item_id, view_revision=None):
+    """The units the card at `view_revision` showed - or, with none named, the card last drawn. None: never drawn here."""
+    with _DRAWN_LOCK:
+        d = _drawn(store)
+        return d['by'].get((item_id, view_revision)) or d['by'].get((item_id, d['last'].get(item_id)))
 
 
 def active_version(cur):

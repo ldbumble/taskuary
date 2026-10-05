@@ -8,7 +8,7 @@ Presentation lanes remain available for their existing controls and status copy.
 This ordering activation preserves the existing read, age, mute and capacity rules
 until the separate canonical Unread/read-state cutover. All remains chronological.
 """
-import hashlib, json, re, threading, time
+import contextlib, contextvars, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
@@ -1476,10 +1476,27 @@ def _idea_done(store, key: str, by: str):
     for i in ids:
         if (store.get_idea(i) or {}).get('Status') in ('open', 'snoozed'): store.set_idea_status(i, 'done', by)
 
-def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False) -> dict:
+_SHOWING = contextvars.ContextVar('funnel_showing', default=None)
+
+
+@contextlib.contextmanager
+def showing(revisions):
+    """Settles inside this put down what these cards showed ({key: view_revision}) - a phone pick carries the revision of
+    the message it was pressed off, and the proposal it runs reaches settle() several calls down."""
+    tok = _SHOWING.set(revisions or None)
+    try: yield
+    finally: _SHOWING.reset(tok)
+
+
+def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False,
+           shown=None) -> dict:
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
     default). skip: back tomorrow morning. surfaced: shown in this walk - and, with `read`, READ: once
-    it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen."""
+    it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen.
+
+    `shown` ({key: view_revision}) is the card the press was made on: its receipts cover what that card showed, and a
+    message that landed after it was drawn stays unread. Without it, the card the rail last drew."""
+    if shown is None: shown = _SHOWING.get()
     # Handled - or Next - on a broken connection remembers WHICH error it put down (its sig), so a different failure
     # comes back rather than staying hidden (processing_unread compares the two). Next from the page wrote no sig, and
     # the error after it stayed dismissed with the one before (R10, 2026-09-25).
@@ -1491,7 +1508,7 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         # every open Assistant answers with a forced rebuild, so four fyi settled together set four
         # rebuilds of a 60-item pile racing each other in front of the Next that follows.
         with store.one_poke():
-            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read) for k in key[5:].split(',') if k]
+            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read, shown=shown) for k in key[5:].split(',') if k]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
     until = None
     # NEXT ON A MEETING HOLDS IT UNTIL IT STARTS (the owner, 2026-09-28: "i should not have to dismiss invite a
@@ -1505,7 +1522,7 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     if verb == 'skip':
         tomorrow = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=0, second=0)
         until = tomorrow.strftime('%Y-%m-%d %H:%M:%S')
-    kw = {'read': read} if expected_context is None else {'read': read, 'expected_context': expected_context}
+    kw = {'read': read, 'shown': shown} if expected_context is None else {'read': read, 'shown': shown, 'expected_context': expected_context}
     try:
         store.set_funnel_state(key, verb, by, until, note, **kw)
     except ValueError as e:

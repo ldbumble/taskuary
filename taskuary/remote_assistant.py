@@ -805,6 +805,14 @@ def _pinned(store, item: dict | None, verb: str) -> dict:
         logger.debug(f'the phone could not pin the draft it showed: {e}'); return {}
 
 
+def _drawn_at(item: dict | None) -> dict:
+    """The revision each card in this message was drawn at, for the pick to carry: Done and Next put down what THIS message
+    showed (funnel.showing), never a mail that landed on the item before the owner answered."""
+    cards = (item or {}).get('items') if (item or {}).get('kind') == 'fyis' else [item or {}]
+    rev = {c['key']: c['view_revision'] for c in cards or () if c.get('key') and c.get('view_revision')}
+    return {'rev': rev} if rev else {}
+
+
 def _draft_moved(store, act: dict, on: dict) -> str:
     """The draft changed after the phone showed it: nothing is sent, and the new one is shown for its own yes."""
     if not act.get('shown') or act.get('verb') != 'approve' or not on.get('rid'): return ''
@@ -944,6 +952,11 @@ def _settle(store, prop: dict, item: dict | None, actor: str) -> str:
 
 def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     """One numbered pick, run the way the desktop's button runs it - never through the model."""
+    from . import funnel
+    with funnel.showing(act.get('rev')): return _run_act(store, act, item, actor)
+
+
+def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     from . import concierge, funnel, operations
     t = act.get('t')
     from . import doorway_browse
@@ -1710,8 +1723,8 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # ...and a chip that is WORDS (Try again after the AI failed: the owner's own line, sent again) is a pick too - it was
         # dropped for having no verb, and the phone offered nothing where the desktop offered Try again (2026-09-30)
         _offer([(c['label'], {'t': 'ask', 'text': c['ask']} if c.get('ask') and not c.get('verb')
-                 else {'t': 'next'} if c.get('verb') == 'next' else {'t': 'open', 'key': c['key']} if c.get('verb') == 'open'
-                 else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key'), **_pinned(store, item, c['verb'])})
+                 else {'t': 'next', **_drawn_at(item)} if c.get('verb') == 'next' else {'t': 'open', 'key': c['key']} if c.get('verb') == 'open'
+                 else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key'), **_drawn_at(item), **_pinned(store, item, c['verb'])})
                 for c in out.get('chips') or [] if isinstance(c, dict) and c.get('label')
                 and ((c.get('ask') and not c.get('verb')) or (c.get('verb') and (item.get('key') or c.get('verb') in ('next', 'open'))))])
     # THE CARD'S ORDER: the verb, then Next, then More, then the rest - the desktop's two buttons and its
@@ -1737,7 +1750,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # first place.
         if not any('next' in str(w).lower() for w in words):
             words = words + [concierge.CHIP_WORDS['next']]
-            _offer([(concierge.CHIP_WORDS['next'], {'t': 'next'})])
+            _offer([(concierge.CHIP_WORDS['next'], {'t': 'next', **_drawn_at(item)})])
     # ...and what a NUMBER does, said plainly. "Open one" describes a door on a screen that is not
     # here; on a phone the number is the only way to see what the line is actually about.
     # A plain answer with nothing on the table offered "Reply with one of: 1 · Next" under every reply - three

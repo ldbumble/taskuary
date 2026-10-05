@@ -2051,7 +2051,14 @@ class SQLiteStore:
     # ── the pipe (funnel.py): surfaced / done / later, per item key ─────────────────────────
     def funnel_states(self) -> dict:
         return {r['Key']: r for r in self._rows('SELECT * FROM funnel_state')}
-    def set_funnel_state(self, key, status, by='owner', until=None, note=None, *, expected_context=None, read=False):
+    def _units_shown(self, key, iid, picture, shown):
+        """What the card pressed on SHOWED (processing_reads.drawn): the revision the press carried, else the card last
+        drawn - never what landed after it was drawn. A card never drawn here is the item as it stands."""
+        from . import processing_reads
+        rev = shown.get(key) or shown.get('processing:' + iid) if isinstance(shown, dict) else shown
+        got = processing_reads.shown_units(self, iid, rev)
+        return got if got is not None else processing_reads.units(picture['view'])
+    def set_funnel_state(self, key, status, by='owner', until=None, note=None, *, expected_context=None, read=False, shown=None):
         from . import processing_reads
         stamp = _now()
         with self.lock:
@@ -2085,7 +2092,7 @@ class SQLiteStore:
                             else:
                                 from .processing_projection import processing_projection
                                 picture = verified_picture or processing_projection(cur, iid)
-                                current_units = processing_reads.units(picture['view'])
+                                current_units = self._units_shown(key, iid, picture, shown)
                                 deferred_keys = [d['key'] for d in picture['view']['processing_read']['deferrals']]
                             processing_reads.record(cur, current_units,
                                 version=version, at=stamp, by=by, origin='explicit_done')
@@ -2099,7 +2106,7 @@ class SQLiteStore:
                     target = self._processing_read_target(cur, key)
                     if target:
                         from .processing_projection import processing_projection
-                        processing_reads.record(cur, processing_reads.units(processing_projection(cur, target[0])['view']),
+                        processing_reads.record(cur, self._units_shown(key, target[0], processing_projection(cur, target[0]), shown),
                                                 version=version, at=stamp, by=by, origin='surfaced')
                 if version and status == 'surfaced' and note:
                     target = self._processing_read_target(cur, key)

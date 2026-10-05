@@ -45,9 +45,13 @@ def draft_revision(store, rv) -> str:
                            "ORDER BY ReviewId DESC LIMIT 1", (rv['TaskId'],))
         if reply: rows.append(reply)
     def env(r):
-        try: d = json.loads(r.get('Deliver') or '{}') or {}
-        except (TypeError, ValueError): d = {}
-        return {k: v for k, v in d.items() if k not in ('delivery', 'attempted_at')}     # how a send went is not what it says
+        d = {k: v for k, v in _envelope(r).items() if k not in ('delivery', 'attempted_at')}     # how a send went is not what it says
+        # an empty envelope means the reply _deliver_review resolves - and a failed send writes that resolution into
+        # Deliver, so hashing the raw field refused Try again with "the draft changed" when nothing the owner saw had moved
+        if d: return d
+        from . import outbound
+        msg = store.get_message(r.get('MessageId')) if r.get('MessageId') else None
+        return outbound.reply_envelope(store, msg) or {'kind': 'reply'}
     basis = [(r.get('ReviewId'), str(r.get('DraftText') or '').strip(), env(r)) for r in rows]
     return hashlib.sha1(json.dumps(basis, sort_keys=True, default=str).encode()).hexdigest()[:16]
 

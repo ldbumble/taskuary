@@ -101,7 +101,7 @@ class ProviderTests(unittest.TestCase):
     def test_gemini_uploads_transcribes_with_vocabulary_and_deletes_the_clip(self):
         s = _voice_store('gemini_stt'); voice.save_vocabulary(s, ['Taskuary', 'Payworth'])
         replies = [R(200, {}, {'X-Goog-Upload-URL': 'https://upload.example/one'}),
-                   R(200, {'file': {'name': 'files/one', 'alex': 'https://files.example/one', 'state': 'ACTIVE'}}),
+                   R(200, {'file': {'name': 'files/one', 'uri': 'https://files.example/one', 'state': 'ACTIVE'}}),
                    R(200, {'steps': [{'type': 'model_output', 'content': [{'type': 'text', 'text': 'queue TQ-0243'}]}]})]
         with mock.patch.object(voice.requests, 'post', side_effect=replies) as p, mock.patch.object(voice.requests, 'delete') as d:
             out = voice.transcribe(s, b'webm', 'audio/webm', 'clip.webm')
@@ -109,6 +109,7 @@ class ProviderTests(unittest.TestCase):
         payload = p.call_args_list[2].kwargs['json']
         self.assertEqual(payload['generation_config']['transcription_config']['custom_vocabulary'], ['Taskuary', 'Payworth'])
         self.assertEqual(payload['input'][0]['mime_type'], 'audio/webm')
+        self.assertEqual(payload['input'][0]['uri'], 'https://files.example/one')   # Gemini's own field name
         d.assert_called_once_with('https://generativelanguage.googleapis.com/v1beta/files/one', headers={'x-goog-api-key': 'k1'}, timeout=30)
 
     def test_vocabulary_is_normalized_validated_and_persisted_once_for_the_system(self):

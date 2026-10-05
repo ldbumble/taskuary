@@ -176,7 +176,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     tid = task.get('TaskId')
     allowed = set(compact.get('display_message_ids', []))
     pending = [r for r in view.get('reviews', []) if r.get('Status') == 'pending'
-               and (r.get('MessageId') in allowed or (not row.get('MessageId') and not r.get('MessageId')))]
+               and (r.get('MessageId') in allowed or (not row.get('MessageId') and not r.get('MessageId'))
+                    or (r.get('Kind') == 'slot' and tid and r.get('TaskId') == tid))]     # a task's emails have no message
     review = max(pending, key=lambda r: r['ReviewId']) if pending else None
     workers = [w for w in live_state if w.get('taskId') == tid] if tid else []
     worker = workers[-1] if workers else None
@@ -210,7 +211,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     if not tid and not review and not closed and row.get('MessageId') and _noise_hidden(store): closed = _noise(row, view)
     if row.get('MessageId'):
         if review:
-            exact = next(m for m in view['messages'] if m['MessageId'] == review['MessageId'])
+            exact = next(m for m in view['messages'] if m['MessageId'] == (review.get('MessageId') or row['MessageId']))   # a task's email has none
             row = processing_all.message_row(exact, item, processing_all._thread_index([item]), now.strftime('%Y-%m-%d %H:%M:%S'))
             row.update(ReviewId=review['ReviewId'], ReviewStatus='pending', ReviewKind=review.get('Kind'),
                        HasDraft=bool(review.get('DraftText')))
@@ -243,9 +244,6 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
                         why='A proposed action is waiting for your approval' if review.get('Kind') == 'action' else 'A reply is waiting for your approval')
-            if review.get('Kind') == 'slot':       # the task's emails (slots.py), counted - never called its reply
-                n = len([r for r in pending if r.get('Kind') == 'slot'])
-                card['why'] = f"{n} email{'s' if n != 1 else ''} drafted for you to send"
             # WHAT THE AGENT DID, between what triggered the task and what you are approving (the owner, 2026-09-28: "the
             # goal is to see what triggered the task, agent action, and what we are reviewing") - the rail knew it only
             # inside the `why` sentence; the older walk (funnel.from_feed) always carried it as `summary`
@@ -263,6 +261,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                 card.update(closeout=closeout, rides=rides, why=f"{(ev or {}).get('who') or 'The agent'} finished it - Close out {closeout}"
                                                    + (' and posts your reply' if rides else '')
                                                    + (f": {ev['summary']}" if (ev or {}).get('summary') else ''))
+    if review and review.get('Kind') == 'slot':     # the task's emails (slots.py), counted - never called its reply
+        n = len([r for r in pending if r.get('Kind') == 'slot'])
+        card.update(lane='approve', why=f"{n} email{'s' if n != 1 else ''} drafted for you to send")
     # ONE "AGENT FINISHED" (A17, 2026-09-25): a finish that drafted a reply left the task waiting on it, and the owner saw
     # only "reply ready" - never that the agent had finished. The reply is the move, so the card stays the reply to
     # send, and says who finished it.

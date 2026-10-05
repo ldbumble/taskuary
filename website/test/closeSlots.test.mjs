@@ -25,3 +25,10 @@ test("each email says where it stands", async () => {
   assert.equal(slotState({ done: true }, { ...slot, Status: "rejected" }), "dropped");
   assert.equal(slotState({ done: true }, undefined), "dropped");
 });
+
+test("Approve all never sweeps up an email the agent added, or one with no address", async () => {
+  const { bulkSendable } = await import("../src/taskLifecycle.js");
+  const items = [{ rid: 9, out: { to: "a@x.example" } }, { rid: 10, out: { to: "b@x.example", by: "agent" } }, { rid: 11, out: { to: "Gail" } }];
+  const reviews = [slot, { ...slot, ReviewId: 10 }, { ...slot, ReviewId: 11 }];
+  assert.deepEqual(bulkSendable(items, reviews).map((r) => r.ReviewId), [9]);
+});

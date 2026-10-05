@@ -22,11 +22,9 @@ def context_moved(store, rv: dict):
     from . import operations
     if rv.get('Kind') == 'action': return False, None
     tid = rv.get('TaskId')
-    if rv.get('Kind') == 'slot' and tid:
-        # one of the task's emails (slots.py) goes stale only on a NEW inbound message: the owner's reply to the sender
-        # moves the thread's state, not what the email to someone else should say
-        latest = store.last_material_inbound_on_task(tid)
-        return bool(rv.get('Stale') or (latest and latest.get('MessageId') != _envelope(rv).get('seen'))), latest
+    # one of the task's emails (slots.py) never goes stale: the stale road REWRITES the draft as a reply to the sender,
+    # which would put an answer to someone else under this email's address. The owner sends the words they see.
+    if rv.get('Kind') == 'slot': return False, None
     if tid:
         latest = store.last_material_inbound_on_task(tid)
         if rv.get('ContextRevision'): moved = operations.message_revision(store, tid) != rv['ContextRevision']
@@ -425,6 +423,10 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
                 'send_error': f"this one was already {rv.get('Status')}" + (f" by {rv['DecidedBy']}" if rv.get('DecidedBy') else '')}
     # ...and approving an EMPTY draft sent nothing, marked the review approved and closed the task
     # anyway: the person never got an answer and nothing was left in the pipe to say so.
+    # ...and an email to a name nobody has resolved to an address goes nowhere: the provider is never handed a bare name
+    if verb_in in ('approve', 'edit') and rv.get('Kind') == 'slot' and not all('@' in str(x) for x in (_envelope(rv).get('to') or [''])):
+        return {'ok': False, 'status': 'pending', 'sent': None,
+                'send_error': 'this email has no address yet - the agent fills it with --to, or drop it'}
     if verb_in in ('approve', 'edit') and not (final_text or '').strip() and not (rv.get('DraftText') or '').strip():
         return {'ok': False, 'status': 'pending', 'sent': None, 'empty': True,
                 'send_error': 'there is no draft to send - write the reply (or let the AI draft it) and approve that'}

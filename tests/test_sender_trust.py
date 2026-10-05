@@ -80,6 +80,14 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(senders.known(s, msg(frm='sam@northwind.example'))[1], 'your own domain')
         self.assertIn('workspace you control', senders.known(s, msg(channel='teams', frm=None))[1])
 
+    def test_a_public_mail_domain_is_nobodys_own_domain(self):
+        """An owner on gmail.com made every stranger on gmail.com 'your own domain' and let their mail start an agent."""
+        s = store(owner_email='alex.doyle@gmail.com')
+        ok, why = senders.known(s, msg(frm='stranger@gmail.com'))
+        self.assertEqual((ok, why), (False, 'first message from stranger@gmail.com'))
+        self.assertEqual(senders.known(s, msg(frm='Alex.Doyle@gmail.com')), (True, 'your own address'))
+        self.assertEqual(senders.known(store(), msg(frm='sam@northwind.example'))[1], 'your own domain')   # a company domain still is
+
     def test_the_lookup_is_scoped_to_the_receiving_mailbox(self):
         s = store()
         with mock.patch.object(senders, 'wrote_to', return_value=False) as wrote:

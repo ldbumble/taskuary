@@ -21,6 +21,8 @@ into someone the owner deals with.
 import json
 from loguru import logger
 
+from .projects import PUBLIC_MAIL
+
 _SENT_FOLDERS = ('[Gmail]/Sent Mail', 'Sent', 'Sent Items', 'INBOX.Sent', 'Sent Messages')
 
 
@@ -32,6 +34,13 @@ def own_domains(store) -> set:
     ds = {_domain(s.get('Address')) for s in store.list_sources(active_only=False) if s.get('Channel') == 'email'}
     ds.add(_domain((store.owner() or {}).get('owner_email')))
     return ds - {''}
+
+
+def own_addresses(store) -> set:
+    """The owner's exact addresses: every connected mailbox and the owner address in settings/SOUL.md."""
+    xs = {(s.get('Address') or '').strip().lower() for s in store.list_sources(active_only=False) if s.get('Channel') == 'email'}
+    xs.add(((store.owner() or {}).get('owner_email') or '').strip().lower())
+    return {x for x in xs if '@' in x}
 
 
 def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
@@ -50,7 +59,9 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
                (False, 'a chat sender - chat channels are not trusted for unattended starts (Settings)')
     addr = (msg.get('from_email') or '').strip().lower()
     if not addr or '@' not in addr: return False, 'no sender address'
-    if _domain(addr) in own_domains(store):
+    if addr in own_addresses(store): return True, 'your own address'
+    # a public mail domain is everybody's: an owner on gmail.com made every stranger there 'your own domain'
+    if _domain(addr) in own_domains(store) - PUBLIC_MAIL:
         return (True, 'your own domain') if on('trust_own_domain') else \
                (False, f'{addr} is on your own domain, and own-domain trust is switched off (Settings)')
     if not on('trust_sent_history'): return False, f'first message from {addr} - Sent Items evidence is switched off (Settings)'

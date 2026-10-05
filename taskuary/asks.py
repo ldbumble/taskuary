@@ -19,6 +19,13 @@ def door() -> str:
     return f"{at['channel']}:{at['chat']}" if at and at.get('channel') and at.get('chat') else 'desktop'
 
 
+def mark(store, tid: int):
+    """The owner started an agent on a task that was not theirs to begin with (mail, triage): from now on it is their
+    ask, said back at the door they started it from. A task already asked keeps its door. Written quietly."""
+    t = store.get_task(tid) or {}
+    if t and not of(t): store._exec('UPDATE task SET AskedVia=? WHERE TaskId=?', (door(), tid))
+
+
 def of(task) -> str | None:
     """The door a task was asked from, or None for work the owner did not ask for (triage, reports, ...)."""
     return (task or {}).get('AskedVia') or None

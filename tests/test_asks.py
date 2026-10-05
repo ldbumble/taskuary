@@ -382,3 +382,46 @@ def test_told_lines_carry_the_agents_summary(s):
     s.update_task(tid, {'Status': 'done'}, 'coder')
     s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('finished', hours_ago(2), tid))
     assert 'two tabs hold items' in asks.told_lines(s)
+
+
+# ── starting an agent on an existing task makes it your ask (2026-10-05) ─────────────────
+def api_on(s):
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    return TestClient(server.app), mock.patch.object(server, 'store', s)
+
+
+def mail_born(s): return s.create_task({'Title': 'Fix the August export', 'Kind': 'coding', 'Source': 'email'}, 'triage')
+
+
+def test_starting_an_agent_from_the_desktop_marks_the_task(s):
+    tid = mail_born(s); c, p = api_on(s)
+    with p, mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value={'ok': True}):
+        c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding'})
+    assert s.get_task(tid)['AskedVia'] == 'desktop'
+
+
+def test_starting_an_agent_from_the_phone_marks_it_with_that_chat(s):
+    from taskuary import server
+    tid = mail_born(s)
+    remote_assistant._ASKING.chat = PHONE
+    try:
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value={'ok': True}):
+            server.dispatch_task(tid, server.DispatchBody(kind='coding'), mock.Mock())
+    finally: remote_assistant._ASKING.chat = None
+    assert s.get_task(tid)['AskedVia'] == 'whatsapp:c1@example.com'
+
+
+def test_continuing_a_session_marks_it_too(s):
+    tid = mail_born(s); c, p = api_on(s)
+    with p, mock.patch('taskuary.asks.mark', wraps=asks.mark) as mark:
+        try: c.post(f'/api/tasks/{tid}/continue-work', json={})
+        except Exception: pass
+    assert mark.called and s.get_task(tid)['AskedVia'] == 'desktop'
+
+
+def test_a_task_already_asked_keeps_its_door(s):
+    tid = phone_ask(s); c, p = api_on(s)
+    with p, mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value={'ok': True}):
+        c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding'})
+    assert s.get_task(tid)['AskedVia'] == 'whatsapp:c1@example.com'

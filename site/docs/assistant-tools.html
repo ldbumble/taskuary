@@ -111,7 +111,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <tr>
 <td><strong>task</strong></td>
 <td>change any task - the one on the table or one named with ref</td>
-<td>task.update(priority/title/assignee), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject</td>
+<td>task.update(priority/title/assignee), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject</td>
 </tr>
 <tr>
 <td><strong>agents</strong></td>
@@ -242,6 +242,14 @@ except the few that can be undone, which run at once with an undo on the receipt
 <ul>
 <li><code>item</code> - its number (1 is the first) or words from it</li>
 <li><code>done</code> (optional) - false un-ticks</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-checklist"><code>task.checklist</code><a class="anchor" href="#task-checklist" aria-label="Link to this section">#</a></h3>
+<p>Change what a task&#39;s checklist asks for.</p>
+<ul>
+<li><code>items</code> (optional) - the full list of item words in order (one left out is removed, emails untouched)</li>
+<li><code>emails</code> (optional) - [{to, about}] to add emails that must go out before it closes</li>
+<li><code>drop</code> (optional) - recipients whose email is no longer owed</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="task-comment"><code>task.comment</code><a class="anchor" href="#task-comment" aria-label="Link to this section">#</a></h3>

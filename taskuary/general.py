@@ -554,6 +554,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # chat is not told it may make one
     if sources and selfclose.mode(store) != 'off' and not selfclose.stays_open(store, tid): system = system + '\n\n' + selfclose.CHAT_LINE
     if sources: system = system + '\n\n' + selfclose.REPLY_LINE
+    from . import slots
+    if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
     md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
     head = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
             f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n"
@@ -1028,6 +1030,12 @@ class GeneralSession:
                 from . import coder
                 out = coder.agent_reply(self.store, self.task_id, drafted, 'assistant')
                 if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
+            reply, drafts = selfclose.draft_markers(reply)
+            if drafts:
+                from . import slots
+                for attrs, body in drafts:
+                    out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
+                    if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
             reply, closing = selfclose.chat_marker(reply)
             reply, asks = selfclose.ask_markers(reply)
             asked = asks[0][0] if asks else None

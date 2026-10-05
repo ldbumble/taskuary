@@ -64,6 +64,35 @@ def seen(store, tid: int):
     return (store.last_material_inbound_on_task(tid) or {}).get('MessageId')
 
 
+def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent') -> dict:
+    """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
+    else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it."""
+    text = str(text or '').strip()
+    if not text: return {'ok': False, 'why': 'no email text'}
+    want = ' '.join(str(to or '').split()).casefold()
+    hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
+          next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None)
+    added = False
+    if not hit:
+        if not want: return {'ok': False, 'why': 'name the slot (--slot) or who it goes to (--to)'}
+        made = add(store, tid, [{'to': to, 'about': subject}], f'agent:{agent}')
+        if not made: return {'ok': False, 'why': f'could not add an email to {to}'}
+        hit, added = made[0], True
+        store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what closes this task.')
+    o = hit['out']; subj = str(subject or o.get('subject') or (store.get_task(tid) or {}).get('Title') or '')[:200]
+    deliver = json.dumps({'channel': 'email', 'to': [o['to']], 'cc': [], 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid)})
+    rv = store.get_review(hit['rid']) if hit.get('rid') else None
+    if rv and rv.get('Status') == 'pending':
+        rid = rv['ReviewId']
+        if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
+    else:
+        rid = store.add_review({'TaskId': tid, 'Kind': KIND, 'Status': 'pending', 'Deliver': deliver,
+                                'Reason': f"{agent}'s email to {o['to']} - approve to send"})
+        mark(store, tid, hit['id'], rid=rid, actor=f'agent:{agent}')
+    store.update_review_draft(rid, text, None, by=f'agent:{agent}')
+    return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}
+
+
 def mark(store, tid: int, slot_id: str, rid: int = None, done: bool = None, actor: str = 'owner') -> bool:
     items = store.task_checklist(tid)
     hit = next((i for i in items if i.get('id') == slot_id and isinstance(i.get('out'), dict)), None)

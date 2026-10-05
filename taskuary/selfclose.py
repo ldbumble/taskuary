@@ -253,6 +253,21 @@ def reply_marker(text: str) -> tuple:
     return (text[:m.start()] + said + text[m.end():]).strip(), said or None
 
 
+# ...and the emails that close a task (slots.draft): one block per email, its attributes say which slot or who.
+DRAFT_OPEN, DRAFT_CLOSE = '[[TASKUARY-DRAFT', '[[/TASKUARY-DRAFT]]'
+_DRAFT_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?DRAFT\b([^\]]*)\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?DRAFT\s*\]\]', re.I | re.S)
+_ATTR_RE = re.compile(r'(slot|to|subject)\s*=\s*(?:"([^"]*)"|(\S+))', re.I)
+DRAFT_LINE = ('EMAILS THAT CLOSE THIS TASK: the checklist lines marked "-> email to" are emails this task owes. Write each one as '
+              f'{DRAFT_OPEN} slot=<id>]]<the email>{DRAFT_CLOSE} (or to=<address> subject="<subject>" for one that is not listed). '
+              "Each waits for the owner's approval - nothing is sent until they approve it.")
+
+
+def draft_markers(text: str) -> tuple:
+    """(reply with every draft block taken out, [(attrs, body)]) - attrs keyed slot / to / subject."""
+    found = [({k.lower(): (a or b) for k, a, b in _ATTR_RE.findall(m.group(1))}, m.group(2).strip()) for m in _DRAFT_RE.finditer(text or '')]
+    return _DRAFT_RE.sub('', text or '').strip(), [f for f in found if f[1]]
+
+
 def chat_marker(text: str) -> tuple:
     """(cleaned reply, the agent's closing sentence) - or (text, None) when it did not say so."""
     m = _MARK_RE.search(text or '')

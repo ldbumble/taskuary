@@ -109,7 +109,7 @@ DENIED = (
 AGENT_WRITES = (
     (r'POST', r'^/api/hooks/[a-z]+$', 'a CLI hook reporting its own session (hooks.command)'),
     (r'POST', r'^/api/hooks/claude/ask$', 'the ask hook - it shows the question; the owner answers it'),
-    (r'POST', r'^/api/agent/(reply|done)$', "`taskuary --reply/--done` on the session's OWN task (owns_task); nothing leaves"),
+    (r'POST', r'^/api/agent/(reply|done|draft)$', "`taskuary --reply/--done/--draft` on the session's OWN task (owns_task); nothing leaves"),
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),
     (r'POST', r'^/api/(hub|handbook)(/\d+/(comment|vote|retire|restore))?$',
      "the Hub - post, correct, vote, retire what is no longer true; gated again by the card's hub_write scope"),

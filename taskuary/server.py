@@ -3245,6 +3245,16 @@ def agent_reply(body: AgentReplyBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return coder.agent_reply(store, body.task_id, body.text, body.agent)
 
+class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'
+
+@app.post('/api/agent/draft')
+def agent_draft(body: AgentDraftBody, request: Request):
+    """`taskuary --draft` from inside an agent's own shell: one of the emails that closes the task (slots.draft). Nothing is sent."""
+    from . import slots
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    return slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent)
+
 @app.get('/api/tasks/{tid}/diff')
 def task_diff(tid: int, scope: str = 'task'):
     """What THIS task's agent changed in its checkout, per file (scope=checkout: everything a

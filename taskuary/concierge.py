@@ -2024,7 +2024,7 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can
     walk them through it. `kind` is 'general' for a walk-through and 'coding' for a hand-off the owner
     asked for (concierge's `coder` verb), which is the only path that starts an agent in a checkout."""
-    from . import ingest
+    from . import asks, ingest
     text = str(text or '').strip()
     if not text: raise ValueError('say what to set up')
     title = (title or '').strip()[:120] or re.sub(r'^\s*(please )?(set ?up|create|build|make|add|configure|automate)\s+(a |an |me a |me an )?', '', text, flags=re.I).strip(' .')[:120] or text[:120]
@@ -2034,6 +2034,7 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
                              # assistant:setup it read as "Taskuary's own work" and opened in Taskuary's
                              # checkout, whatever it was about (the owner, 2026-09-24: an issue in another repository)
                              'Source': 'assistant', 'SourceRef': 'assistant:agent' if agent_job else HANDOFF_REF if kind == 'coding' else 'assistant:setup',
+                             'AskedVia': asks.door(),       # the owner's own ask, and the door it came from (asks.py)
                              # A walkthrough may have to log into a portal or point at the exact
                              # setting. Its Assistant session owns that browser; a coding handoff
                              # keeps the ordinary task controls instead.

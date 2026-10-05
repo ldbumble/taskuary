@@ -1463,6 +1463,10 @@ class SQLiteStore:
                 funnel.invalidate()
             from . import live
             for k in kinds: live.emit(k, **payload)
+            # an ask the owner made is checked when its task moves (asks.py) - a no-op until the watcher runs
+            if 'task-changed' in kinds and payload.get('task_id'):
+                from . import asks
+                asks.notice(self, payload['task_id'])
         except Exception:
             pass
 

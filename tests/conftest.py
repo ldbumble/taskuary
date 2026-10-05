@@ -195,7 +195,7 @@ _client_defaults()
 def isolated_runtime_boundaries():
     """Deny real integration side effects unless a test supplies a fake or registered port."""
     import httpx, imaplib, requests, smtplib, urllib.request
-    from taskuary import blackboard, browserview, general, hooks, server, spawn, terminal, waitroom, wabridge
+    from taskuary import asks, blackboard, browserview, general, hooks, server, spawn, terminal, waitroom, wabridge
 
     # Auto-dispatch ships on.  In a suite, both coding and general execution stop at the process
     # boundaries below; switching this off also prevents routine ingest tests from trying at all.
@@ -423,7 +423,8 @@ def isolated_runtime_boundaries():
                  mock.patch.object(server, 'quick_forever', stopped('chat poll scheduler')), \
                  mock.patch.object(server, 'doorway_forever', stopped('assistant doorway')), \
                  mock.patch.object(blackboard, 'schedule_due', stopped('dispatch retry scheduler')), \
-                 mock.patch.object(waitroom, 'watch', stopped('waitroom watcher')):
+                 mock.patch.object(waitroom, 'watch', stopped('waitroom watcher')), \
+                 mock.patch.object(asks, 'watch', stopped('asks watcher')):
                 entered = await context.__aenter__()
             try:
                 yield entered

@@ -85,7 +85,8 @@ def units(view):
 
 # WHAT EACH CARD SHOWED, by the revision it was drawn at. A press of Done or Next puts down what the card showed; the
 # receipt used to be written off a fresh projection at the moment of the press, so a mail that landed after the card was
-# drawn was marked read unseen. Kept in memory - a draw is a read and must not write - so after a restart a revision
+# drawn was marked read unseen. Entities, not fingerprints: the owner's own words on the card (the chat's comment on the
+# task) change the task's fingerprint, and Done on it must still put it down. Kept in memory - a draw is a read and must not write - so after a restart a revision
 # nobody drew since falls back to the item as it stands, which is what every press did before.
 _DRAWN, _DRAWN_LOCK, DRAWN_CAP = weakref.WeakKeyDictionary(), threading.Lock(), 5000
 
@@ -99,7 +100,7 @@ def _drawn(store):
 def drawn(store, item_id, view_revision, current):
     """A card for `item_id` was drawn at `view_revision`, showing these units."""
     if not item_id or not view_revision: return
-    keep = [dict(entity_kind=u['entity_kind'], local_id=u['local_id'], fingerprint=u['fingerprint']) for u in current]
+    keep = frozenset((u['entity_kind'], u['local_id']) for u in current)
     with _DRAWN_LOCK:
         d = _drawn(store)
         d['by'][(item_id, view_revision)] = keep; d['by'].move_to_end((item_id, view_revision))
@@ -108,7 +109,8 @@ def drawn(store, item_id, view_revision, current):
 
 
 def shown_units(store, item_id, view_revision=None):
-    """The units the card at `view_revision` showed - or, with none named, the card last drawn. None: never drawn here."""
+    """The (entity_kind, local_id) the card at `view_revision` showed - or, with none named, the card last drawn. None: never
+    drawn here."""
     with _DRAWN_LOCK:
         d = _drawn(store)
         return d['by'].get((item_id, view_revision)) or d['by'].get((item_id, d['last'].get(item_id)))

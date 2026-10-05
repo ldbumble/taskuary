@@ -2056,8 +2056,8 @@ class SQLiteStore:
         drawn - never what landed after it was drawn. A card never drawn here is the item as it stands."""
         from . import processing_reads
         rev = shown.get(key) or shown.get('processing:' + iid) if isinstance(shown, dict) else shown
-        got = processing_reads.shown_units(self, iid, rev)
-        return got if got is not None else processing_reads.units(picture['view'])
+        got, now = processing_reads.shown_units(self, iid, rev), processing_reads.units(picture['view'])
+        return now if got is None else [u for u in now if (u['entity_kind'], u['local_id']) in got]
     def set_funnel_state(self, key, status, by='owner', until=None, note=None, *, expected_context=None, read=False, shown=None):
         from . import processing_reads
         stamp = _now()

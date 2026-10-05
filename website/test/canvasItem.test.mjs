@@ -115,3 +115,12 @@ test("a close the server already answered brings the next item without the half-
   assert.match(view, /onAfter=\{\(\) => actions\.advance\(null, true\)\}/);
   assert.match(view, /advance: \(pile, settled\) => advance\(pile, settled\),/, "the walk's advance passes `settled` on - it dropped it, so every close waited 500 ms");
 });
+
+// ONE ROW OF WORDS (the owner, 2026-10-05: "why is there buttons both places?"): with the item drawn as its task view, the row under
+// the chat holds its words; a bare line under it borrowed the same item's recorded chips - twice, and stale.
+test("a bare line borrows no words while the task view's own row holds them", () => {
+  assert.match(view, /const barHolds = useMemo\(\(\) => \{/);
+  assert.match(view, /showsTask\(c, cardFor\(c\)\) && canvasState\?\.folded !== c\.key && !canvasState\?\.browsing/);
+  assert.match(view, /const chips = barHolds && !m\.card \? \[\]/);
+  assert.match(view, /tableChips=\{tableChips\} barHolds=\{barHolds\}/);
+});

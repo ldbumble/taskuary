@@ -122,7 +122,7 @@ test("the rail says a task's state once, and puts its title first", () => {
 });
 
 test("complete, reopen, coding start and stop run the shared operations road, never a second path", () => {
-  assert.match(tasks, /runOperation\(api, "task\.complete", selected\)/);
+  assert.match(tasks, /runOperation\(api, "task\.complete", selected[,)]/);   // a close with a note rides the same road
   assert.match(tasks, /runOperation\(api, "task\.reopen", selected\)/);
   assert.match(tasks, /runOperation\(api, "dispatch\.prepare", id, \{ kind: "coding"/);
   // there is no stop in this view any more, so there is no second path to guard - a session ends by

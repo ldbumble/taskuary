@@ -93,3 +93,123 @@ def test_the_real_rail_reads_approve_for_drafted_emails(s):
     slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example'); funnel.invalidate()
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
         assert asks.state(s, tid)[0] == 'approve'
+
+
+# ── saying it moved: once, at its door ───────────────────────────────────────────────────
+from taskuary import general
+
+
+def dock_lines(s):
+    dock = general.dock_task(s, 'owner')[0]['TaskId']
+    return [c['Body'] for c in s.list_comments(dock) if 'TQ-' in str(c.get('Body') or '')]
+
+
+def at(s, tid, lane, why='x'):
+    return rail({'tid': tid, 'lane': lane, 'why': why})
+
+
+def test_a_move_into_a_said_lane_is_said_once_on_the_desktop(s):
+    tid = made(s)
+    with at(s, tid, 'blocked', 'the agent asked you: which tab first?'):
+        line = asks.check(s, tid); again = asks.check(s, tid)
+    assert line and 'which tab first?' in line and again is None
+    assert len(dock_lines(s)) == 1 and s.get_task(tid)['AskedTold'] == 'blocked'
+
+
+def test_working_is_never_said_but_is_remembered(s):
+    tid = made(s)
+    with at(s, tid, 'working'): assert asks.check(s, tid) is None
+    assert dock_lines(s) == [] and s.get_task(tid)['AskedTold'] == 'working'
+    with at(s, tid, 'approve', '2 of 4 emails drafted, waiting on your yes'): assert asks.check(s, tid)
+
+
+def test_finishing_is_said_with_the_summary(s):
+    tid = made(s); s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nSummary: all four tabs checked.')
+    s.update_task(tid, {'Status': 'done'}, 'coder')
+    with at(s, tid, 'working'): line = asks.check(s, tid)
+    assert line and 'all four tabs checked' in line
+
+
+def test_a_restart_does_not_repeat_what_was_told(s):
+    tid = made(s)
+    with at(s, tid, 'blocked'): asks.check(s, tid)
+    asks._Q['pending'].clear()                                       # nothing in memory survives a restart...
+    with at(s, tid, 'blocked'): assert asks.check(s, tid) is None    # ...and nothing needed to
+
+
+def test_mail_born_work_and_a_to_do_never_speak(s):
+    mail = s.create_task({'Title': 'From mail', 'Kind': 'task', 'Source': 'email'}, 'triage')
+    todo = s.create_task({'Title': 'Call the bank', 'AskedVia': 'desktop'}, 'owner')
+    with rail({'tid': mail, 'lane': 'blocked', 'why': 'x'}, {'tid': todo, 'lane': 'blocked', 'why': 'x'}):
+        assert asks.check(s, mail) is None and asks.check(s, todo) is None
+
+
+PHONE = {'channel': 'whatsapp', 'chat': 'c1@example.com', 'connector_id': 3}
+
+
+def phone_ask(s):
+    remote_assistant._ASKING.chat = PHONE
+    try: return made(s)
+    finally: remote_assistant._ASKING.chat = None
+
+
+def test_a_phone_ask_answers_on_the_phone_when_the_chat_is_quiet(s):
+    tid = phone_ask(s)
+    with at(s, tid, 'approve', 'a draft waits'), mock.patch.object(remote_assistant, 'quiet', return_value=True), \
+         mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
+         mock.patch.object(remote_assistant, 'send') as send:
+        assert asks.check(s, tid)
+    assert send.call_args[0][1:3] == ('whatsapp', 'c1@example.com') and s.get_task(tid)['AskedTold'] == 'approve'
+
+
+def test_a_busy_phone_chat_is_retried_not_lost(s):
+    tid = phone_ask(s)
+    with at(s, tid, 'approve'), mock.patch.object(remote_assistant, 'quiet', return_value=False), \
+         mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
+         mock.patch.object(remote_assistant, 'send') as send:
+        assert asks.check(s, tid) is None
+    assert not send.called and not s.get_task(tid)['AskedTold']
+
+
+def test_a_desktop_ask_goes_to_the_phone_while_the_walk_is_handed_there(s):
+    tid = made(s)
+    with at(s, tid, 'blocked'), mock.patch.object(remote_assistant, 'handoff', return_value=dict(PHONE, at='now')), \
+         mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
+        asks.check(s, tid)
+    assert send.called and dock_lines(s) and all('TQ-' in l for l in dock_lines(s))
+
+
+def test_notice_is_nothing_until_the_watcher_runs_and_then_dedupes(s):
+    tid = made(s)
+    asks._Q['on'] = False; asks.notice(s, tid)
+    assert not asks._Q['pending']
+    asks._Q['on'] = True
+    try:
+        for _ in range(50): asks.notice(s, tid)
+        with mock.patch.object(asks, 'check') as check: asks.drain()
+        assert check.call_count == 1
+    finally: asks._Q['on'] = False; asks._Q['pending'].clear()
+
+
+def test_a_task_write_queues_the_task_and_the_checks_own_writes_do_not_loop(s):
+    tid = made(s)
+    asks._Q['on'] = True
+    try:
+        s.update_task(tid, {'Priority': 'high'}, 'owner')
+        assert tid in asks._Q['pending']
+        with at(s, tid, 'blocked'): asks.drain()
+        assert tid not in asks._Q['pending']                  # saying it (the dock comment, the told mark) queued nothing
+    finally: asks._Q['on'] = False; asks._Q['pending'].clear()
+
+
+def test_a_phone_ask_whose_connection_is_gone_falls_back_to_the_desktop(s):
+    tid = phone_ask(s)
+    with at(s, tid, 'approve'), mock.patch.object(remote_assistant, 'send') as send:
+        assert asks.check(s, tid)
+    assert not send.called and dock_lines(s)
+
+
+def test_the_sweep_checks_only_open_asks(s):
+    tid, mail = made(s), s.create_task({'Title': 'From mail', 'Source': 'email'}, 'triage')
+    with mock.patch.object(asks, 'check') as check: asks.sweep(s)
+    assert [c[0][1] for c in check.call_args_list] == [tid]

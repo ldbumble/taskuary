@@ -156,6 +156,8 @@ async def _lifespan(_app):
     threading.Thread(target=quick_forever, daemon=True).start()   # the chat clock, never behind a slow sync
     threading.Thread(target=doorway_forever, daemon=True).start()  # the assistant chat, answered as fast as it is typed
     waitroom.watch(store)          # notes queued for a working agent land when it stops
+    from . import asks
+    asks.watch(store)              # what the owner asked for is said back at its door when it moves (asks.py)
     from . import msauth
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
     from . import chatgptauth

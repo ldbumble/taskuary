@@ -213,3 +213,46 @@ def test_the_sweep_checks_only_open_asks(s):
     tid, mail = made(s), s.create_task({'Title': 'From mail', 'Source': 'email'}, 'triage')
     with mock.patch.object(asks, 'check') as check: asks.sweep(s)
     assert [c[0][1] for c in check.call_args_list] == [tid]
+
+
+# ── the assistant knows your asks ────────────────────────────────────────────────────────
+def test_the_block_lists_open_asks_with_ref_door_and_state(s):
+    a = made(s, 'Check the four tabs'); b = phone_ask(s)
+    with rail({'tid': a, 'lane': 'working', 'why': 'the agent is on it'}, {'tid': b, 'lane': 'approve', 'why': 'a draft waits'}):
+        out = asks.block(s)
+    lines = out.splitlines()
+    assert lines[0] == 'YOUR OPEN ASKS' and 'TQ-0002' in lines[1] and 'WhatsApp' in lines[1] and 'a draft waits' in lines[1]
+    assert 'TQ-0001' in lines[2] and 'the agent is on it' in lines[2]
+
+
+def test_the_block_is_capped_and_short(s):
+    tids = [made(s, f'Ask number {n} about the quarterly numbers for the region') for n in range(20)]
+    with rail(*[{'tid': t, 'lane': 'working', 'why': 'the agent is on it'} for t in tids]):
+        out = asks.block(s)
+    assert len(out.splitlines()) == 1 + asks.BLOCK_CAP and len(out) < 900
+
+
+def test_a_finished_ask_leaves_the_block_once_it_is_off_the_rail(s):
+    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coder')
+    with rail({'tid': tid, 'lane': 'saved', 'why': 'finished'}): assert 'TQ-0001' in asks.block(s)
+    with rail(): assert asks.block(s) == ''
+
+
+def test_no_asks_no_block(s):
+    with rail(): assert asks.block(s) == ''
+
+
+def test_the_look_up_lists_older_and_finished_asks(s):
+    from taskuary import lookups
+    a = made(s, 'Check the four tabs'); b = made(s, 'Research vendor pricing'); s.update_task(a, {'Status': 'done'}, 'coder')
+    with rail():
+        both, open_ = lookups.read(s, 'asks.list', {'status': 'all'}), lookups.read(s, 'asks.list', {})
+    assert 'Check the four tabs' in both and 'Research vendor pricing' in both
+    assert 'Check the four tabs' not in open_
+
+
+def test_every_turn_carries_the_block(s):
+    seen = []
+    with mock.patch.object(asks, 'block', return_value='YOUR OPEN ASKS\n- TQ-0009 Check the tabs - a draft waits'):
+        concierge.say(s, "where's the tab check?", llm=lambda sys, user, **k: seen.append(user) or 'Waiting on your yes.')
+    assert seen and 'YOUR OPEN ASKS' in seen[0]

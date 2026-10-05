@@ -112,7 +112,9 @@ def check(store, tid: int) -> str | None:
     # "tell me when it's done"; none for "tell me when someone replies"
     lanes = SAID if worked or watched == 'any' else ('finished',) if watched == 'done' else ()
     lane, says = state(store, tid)
-    if lane == 'quiet' or lane == t.get('AskedTold'): return None
+    # the same lane again is not news - unless it is a NEW close: reopened and closed again after it was told
+    again = lane == 'finished' and str(t.get('ClosedAt') or '') > str(t.get('AskedToldAt') or '')
+    if lane == 'quiet' or (lane == t.get('AskedTold') and not again): return None
     # not said: a lane that needs nobody, or a close the owner made themselves (they know - they pressed it)
     if lane not in lanes or (lane == 'finished' and t.get('UpdatedBy') in OWNER):
         _told(store, tid, lane); return None

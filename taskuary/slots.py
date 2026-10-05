@@ -32,7 +32,9 @@ def add(store, tid: int, outputs, actor: str) -> list:
     addressed, takes their address when exactly one person in the owner's own mail matches (people.resolve); several
     are kept on the slot to pick from; none leaves the name and its '?'."""
     from . import people
-    have = {str(i['out'].get('to')).casefold() for i in open_(store, tid)}
+    # every email the task has owed - sent and dropped ones too: an email already sent is not owed again because a later
+    # message words it differently
+    have = {str(i['out'].get('to')).casefold() for i in all_(store, tid)}
     new = []
     for i in clean(outputs):
         if '@' not in i['out']['to']:
@@ -100,10 +102,12 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it."""
     text = str(text or '').strip()
     if not text: return {'ok': False, 'why': 'no email text'}
+    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
     want = ' '.join(str(to or '').split()).casefold()
     hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
           next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None)
     added = False
+    if hit and hit.get('done'): return {'ok': False, 'why': f"the email to {hit['out'].get('to')} was already sent or dropped"}
     if hit and want and '@' in want and str(hit['out'].get('to')).casefold() != want:
         # a slot that named a person: the address the agent found is where this one goes (never guessed by us)
         items = store.task_checklist(tid)
@@ -124,7 +128,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
     else:
         rid = store.add_review({'TaskId': tid, 'Kind': KIND, 'Status': 'pending', 'Deliver': deliver,
-                                'Reason': f"{agent}'s email to {o['to']} - approve to send"})
+                                'Reason': f"{agent} wrote this email - approve to send"})       # who it goes to is on the card once
         mark(store, tid, hit['id'], rid=rid, actor=f'agent:{agent}')
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}

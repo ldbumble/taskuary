@@ -32,3 +32,10 @@ test("Approve all never sweeps up an email the agent added, or one with no addre
   const reviews = [slot, { ...slot, ReviewId: 10 }, { ...slot, ReviewId: 11 }];
   assert.deepEqual(bulkSendable(items, reviews).map((r) => r.ReviewId), [9]);
 });
+
+test("the footer says what closes the task", async () => {
+  const { completionLine } = await import("../src/taskLifecycle.js");
+  assert.match(completionLine(true, false), /sending the reply closes it/);
+  assert.match(completionLine(true, true), /closes when its emails are sent or dropped/);
+  assert.match(completionLine(false, false), /Automatic task/);
+});

@@ -1613,8 +1613,9 @@ def _enrich(store, tid: int, m: dict, plain: str, llm):
         if not t: return
         if ask['summary'] and ask['summary'] != plain and (t.get('Summary') or '') == plain:
             store.update_task(tid, {'Summary': ask['summary']}, 'triage')
-        if ask['checklist'] and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
-        if ask.get('outputs'):
+        blank = not store.task_checklist(tid)          # a list the owner wrote meanwhile is theirs - emails included
+        if ask['checklist'] and blank: store.set_task_checklist(tid, ask['checklist'], 'triage')
+        if ask.get('outputs') and blank:
             from . import slots
             slots.add(store, tid, ask['outputs'], 'triage')
     except Exception as e: logger.warning(f"the ask on {task_ref(tid)} stays the sender's own words - {e}")

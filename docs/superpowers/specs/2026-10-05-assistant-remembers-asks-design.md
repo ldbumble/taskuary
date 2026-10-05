@@ -41,20 +41,27 @@ One nullable column. Written once, at creation:
 
 `asks.of(task)` = the door, or None. Nothing else marks a task; nothing un-marks one.
 
-### 2. Where an ask stands - `asks.state(store, tid) -> (phase, sentence)`
+### 2. Where an ask stands - its task's own lane, nothing new - `asks.state(store, tid) -> (lane, sentence)`
 
 Derived fresh from what the task page already knows; never stored, so never stale:
 
-| phase | from | sentence (examples) |
-|---|---|---|
-| `idle` | no agent has touched it | - (a to-do: nothing to say) |
-| `working` | live session or running run | "the agent is on it" |
-| `needs_you` | agent asking/parked/approval (workerstate), a pending draft, slot or close-out | "2 of 4 emails drafted, waiting on your yes" |
-| `stuck` | stalled, failed run, browser that never opened | "stopped - it needs your login" |
-| `done` | task closed | "done" + the agent's own summary (`coder.agent_found`) |
+ONE VOCABULARY: an ask has no statuses of its own. Its state is the lane the work rail already gives its task
+(`lanes.json`: `working`, `blocked`, `approve`, `stopped`, `broken`, `queued`, `saved`, ...) with that lane's own
+sentence (`lanes.json` `says`, `workerstate.says`), plus the slot count where it has slots ("2 of 4 emails drafted").
+`asks.state` reads the rail's row for the task - it never re-derives a lane - so the chat line, the phone and the rail
+say the same words about the same task. A closed task reads as finished, with the agent's own summary
+(`coder.agent_found`).
 
-Wording comes from the existing one-sentence-per-state source (`workerstate.says`, `lanes.json`) and the slot counts
-(`slots.open_`/`all_`), so chat, phone and rail say the same thing.
+The only ask-specific rule is WHICH lane changes are said at the ask's door:
+
+| the task moves into | said? |
+|---|---|
+| `blocked`, `approve` | yes - it needs you |
+| `stopped`, `broken` | yes - it is stuck |
+| closed / `saved` (finished) | yes - with the agent's summary |
+| `working`, `queued`, anything else | no |
+
+A task no agent has touched (a to-do) has nothing to say.
 
 ### 3. The assistant knows your asks - light always, deep on demand
 
@@ -67,18 +74,18 @@ Wording comes from the existing one-sentence-per-state source (`workerstate.says
   Open asks newest first, plus finished ones not yet seen. Enough for "where's the tab check?" and for "add Omar to
   that" to land on TQ-0812 through the existing `task.*` operations.
 - **A look-up, `asks.list`,** beside `tasks.list`/`sender.read` in `lookups.READ` and `toolcatalog`: every ask, any
-  age, with phase - "what did I ask you last week?". Costs nothing unless called.
+  age, with its lane - "what did I ask you last week?". Costs nothing unless called.
 
-An ask leaves the block when it is `done`, has been told, and has been seen (the rail's own seen mark).
+An ask leaves the block when it is finished, has been told, and has been seen (the rail's own seen mark).
 
 ### 4. Saying it moved - event-driven, durable
 
 - **Trigger:** `store._poke('task-changed', task_id=...)` and `workerstate.record` (the agent hooks) put the task id
   on a small debounced queue (2 s) - only if the task has `AskedVia`. One worker drains it. No poll on the hot path.
 - **A safety sweep** every 5 minutes over open asks only, for anything an event missed (an agent going quiet).
-- **The check:** `phase = asks.state(...)`; compare with the last phase told, kept as `funnel_state` key `ask:<tid>`
-  (survives restarts - unlike `announce`, which forgets on restart). Speak on a change INTO `needs_you`, `stuck` or
-  `done`; record the new phase either way. `working` and `idle` are never said.
+- **The check:** `lane = asks.state(...)`; compare with the last lane told, kept as `funnel_state` key `ask:<tid>`
+  (survives restarts - unlike `announce`, which forgets on restart). Speak on a change INTO a said lane (section 2);
+  record the new lane either way.
 - **The door:** `whatsapp:<chat>` asks, or any ask while the walk is handed to the phone, go to that chat through
   `remote_assistant.send` - only when `quiet()` (the 90 s gap; never between a card and its answer), else the next
   event or sweep tries again. Everything else is one line in the desktop Assistant chat (`concierge.record` on the dock

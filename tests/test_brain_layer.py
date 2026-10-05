@@ -3,6 +3,7 @@
 Spec: docs/superpowers/specs/2026-09-16-profile-brain-separation-design.md
 """
 import json, unittest
+from unittest import mock
 
 from taskuary import agents as hub_agents, cli_connections as clic, terminal
 from taskuary.store import MemoryStore
@@ -203,6 +204,7 @@ class GearByJobTests(unittest.TestCase):
         self.assertEqual(self.ran_with(model='opus').get('model'), 'opus')
 
 
+@mock.patch.object(hub_agents, 'runs_here', lambda profile: True)     # what it was running is installed
 class SwitchTests(unittest.TestCase):
     """Step 2 left the brain layer opt-in - brain_command acts only on a brain the owner chose, so
     nothing regressed. This is the line that moves an install onto it, naming exactly what it was
@@ -229,6 +231,14 @@ class SwitchTests(unittest.TestCase):
         s = self.store()
         self.assertTrue(hub_agents.adopt_brain_setting(s))
         self.assertFalse(hub_agents.adopt_brain_setting(s))
+
+    def test_a_cli_that_is_not_installed_is_never_written(self):
+        """A fresh install without Claude Code was pinned to claude, and every blank brain setting with it."""
+        s = self.store()
+        with mock.patch.object(hub_agents, 'runs_here', return_value=False):
+            self.assertFalse(hub_agents.adopt_brain_setting(s))
+        self.assertFalse(s.get_setting('default_brain'))
+        self.assertTrue(hub_agents.adopt_brain_setting(s))         # ...and adopted on the first start it runs
 
 
 class GearTests(unittest.TestCase):

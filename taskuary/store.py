@@ -4333,6 +4333,10 @@ class SQLiteStore:
         r = self._one('SELECT Value FROM setting WHERE Name=?', (name,))
         return default if r is None else r['Value']
     def list_settings(self): return self._rows('SELECT * FROM setting ORDER BY Name')
+    def setting_writer(self, name):
+        """Who last wrote one setting ('owner', 'migration', ...) - the line between a choice and a default."""
+        r = self._one('SELECT UpdatedBy FROM setting WHERE Name=?', (name,))
+        return str((r or {}).get('UpdatedBy') or '')
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))

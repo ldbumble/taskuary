@@ -165,6 +165,9 @@ def resolve(store, cfg, slot_key: str) -> dict:
                    default_hint=f"{said} - the {'Assistant' if slot_key == 'concierge_ai' else 'light'} default",
                    owner=owner, owner_link='' if slot_key == 'concierge_ai' else 'agents', cli=cli)
         if not light and not dflt: out['note'] = f'no light model set - this runs on the {cli} coding model, which is the expensive gear'
+        from .agents import runs_here
+        # a brain that does not start is not "what will run": the card said claude while triage failed on it
+        if not runs_here({'cmd': prof.get('cmd') or cli}): out.update(ready=False, note=f"'{cli}' is not installed on this machine")
         return out
 
     c = store.get_connector(int(value[10:])) if value.startswith('connector:') and value[10:].isdigit() else auto_target(store)

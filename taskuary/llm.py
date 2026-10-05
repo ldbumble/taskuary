@@ -201,6 +201,44 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
     return _Scrubbed(brain) if brain else brain
 
 
+def effective_pick(store, pick=None) -> str:
+    """The pick a brain setting resolves to - the slot's own value (`triage_ai` unless `pick` names one), else
+    what blank means (agents.default_pick). '' = no brain: build_llm returns None and mail files untriaged.
+    ONE answer for the brain that runs and for every surface that says which one does (setup.state)."""
+    primary = str(pick if pick is not None else store.get_setting('triage_ai') or '').strip()
+    if primary: return primary
+    from .agents import default_pick
+    return default_pick(store)
+
+
+def brain_status(store, pick=None) -> dict:
+    """What `effective_pick` names and whether it can answer: {pick, Name, Type, ready, why}. A chosen brain that
+    cannot start stays the answer - with `ready` False and `why` saying so - rather than reading as set up."""
+    from . import agents as hub_agents
+    primary = effective_pick(store, pick)
+    out = {'pick': primary, 'Name': '', 'Type': '', 'ready': False, 'why': ''}
+    if not primary:                                    # build_llm reads '' as the first connector that can answer
+        c = hub_agents.ready_connector(store)
+        if not c: return {**out, 'why': 'no CLI agent runs on this machine and no AI connector holds a key'}
+        primary = f"connector:{c['ConnectorId']}"
+    if primary.startswith('cli:'):
+        # the SAME lookup the brain is built with (agents.agent_row): a connected CLI with no worker profile is a
+        # brain too, and store.get_agent alone called it "not set up" while triage ran on it (2026-09-24)
+        row = hub_agents.agent_row(store, primary[4:])
+        if not row: return {**out, 'why': f'{primary[4:]} is chosen, but no CLI agent of that name is set up here'}
+        try: prof = json.loads(row.get('Config') or '{}')
+        except ValueError: prof = {}
+        ok, cli = hub_agents.runs_here(prof), hub_agents.cli_of(prof, row['Name'])
+        return {**out, 'Name': f"{row['Name']} (CLI)", 'Type': 'cli', 'ready': ok,
+                'why': '' if ok else f"{row['Name']} is chosen, but '{cli}' is not installed on this machine"}
+    want = primary[10:] if primary.startswith('connector:') else primary
+    c = next((c for c in store.list_connectors() if c['Type'] in AI_TYPES
+              and (c['ConnectorId'] == int(want) if want.isdigit() else c['Type'] == want)), None)
+    if not c: return {**out, 'why': f'{primary} is chosen, but no such AI connector exists'}
+    ok = bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))
+    return {**out, **c, 'ready': ok, 'why': '' if ok else f"{c['Name'] or c['Type']} is chosen, but it is switched off or has no key"}
+
+
 class _Scrubbed:
     """A brain with the credentials taken out of what it is asked.
 
@@ -227,10 +265,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     backup-brain setting applies to both cases, but a fallback uses its own model and starts a
     fresh conversation - provider-specific model/session identifiers never cross that line."""
     settings = store.get_settings()
-    primary = str(pick if pick is not None else settings.get('triage_ai') or '').strip()
-    if not primary:                                    # blank = the default brain, never "the first connector"
-        from .agents import default_pick
-        primary = default_pick(store)
+    primary = effective_pick(store, pick if pick is not None else settings.get('triage_ai') or '')   # blank = the default brain
     backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
     # This dedupe SURVIVES the role/brain split, unlike its twin in agent_chain. A session's chain
     # is of brains now, so that one went; but `triage_ai` and `triage_backup_ai` still spell a

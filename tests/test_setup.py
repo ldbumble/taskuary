@@ -226,7 +226,8 @@ class ACliCountsAsABrainTests(unittest.TestCase):
         s.upsert_agent('claude', 'coding', 'cli', '{"cmd": "claude"}')
         self.assertFalse(_step(setup.state(s), 'ai')['done'])
         s.set_setting('triage_ai', 'cli:claude', 't')
-        st = _step(setup.state(s), 'ai')
+        with mock.patch('taskuary.agents.runs_here', return_value=True):     # ...one that is installed
+            st = _step(setup.state(s), 'ai')
         self.assertTrue(st['done'])
         self.assertIn('CLI', st['detail'])          # says WHICH kind of brain it is
 
@@ -388,6 +389,7 @@ class OptionalModelReviewCompatibilityTests(unittest.TestCase):
         self.assertEqual(len(server.store.list_audit(limit=200)), before)
 
 
+@mock.patch('taskuary.agents.runs_here', lambda profile: True)    # adopt-brain follows a Test that passed: the CLI runs
 class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
     """The checklist's "Set up an AI" row links to the AI CLI agents page. CliPicker's `asBrain`
     branch was the only thing that ever wrote `triage_ai`, and it lived inside the wizard - so
@@ -505,6 +507,6 @@ def test_a_connected_cli_with_no_worker_profile_is_an_ai_that_is_set_up():
     s = MemoryStore()
     s.set_setting('triage_ai', 'cli:codex', 'test')
     assert s.get_agent('codex') is None                                  # no worker profile of that name
-    with mock.patch.object(config, 'load', return_value={'cli_connections': {'codex': {'cmd': 'codex'}}}):
+    with mock.patch.object(config, 'load', return_value={'cli_connections': {'codex': {'cmd': 'codex'}}}),          mock.patch('taskuary.agents.runs_here', return_value=True):       # ...and installed: only a brain that starts ticks
         ai = setup._ai(s)
     assert ai and ai.get('Type') == 'cli' and 'codex' in ai.get('Name', '')

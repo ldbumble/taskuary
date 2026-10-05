@@ -22,6 +22,7 @@ def _store():
     return s
 
 
+@mock.patch('taskuary.agents.runs_here', lambda profile: True)       # the hints below are for a CLI that starts
 class ResolveTests(unittest.TestCase):
     def test_a_cli_brain_reports_its_LIGHT_gear_not_its_coding_model(self):
         """The whole point of the two gears: triage must not quietly run the coding model."""
@@ -233,6 +234,7 @@ class ApiTests(unittest.TestCase):
 if __name__ == '__main__': unittest.main()
 
 
+@mock.patch('taskuary.agents.runs_here', lambda profile: True)       # the hints below are for a CLI that starts
 class AssistantModelTests(unittest.TestCase):
     def test_the_assistant_card_names_the_model_it_really_runs_on(self):
         """It said "the coding model, the expensive gear" while every turn ran on haiku (2026-09-24)."""
@@ -249,11 +251,14 @@ class DefaultBrainTests(unittest.TestCase):
         from taskuary import agents
         real = agents.default_pick.real
         s = _store()
-        self.assertEqual(real(s), '')                                       # nothing set yet: the install's own fallback
-        s.set_setting('default_brain', 'claude', 'o')
-        self.assertEqual(real(s), 'cli:coder')                              # the worker that runs it
-        s.set_setting('default_brain', 'gemini', 'o')
-        self.assertEqual(real(s), '')                                       # a brain nothing here runs names nobody
+        with mock.patch.object(agents, 'runs_here', return_value=False):
+            self.assertEqual(real(s), '')                                   # nothing set, nothing runs: no brain yet
+        with mock.patch.object(agents, 'runs_here', return_value=True):
+            self.assertEqual(real(s), 'cli:coder')                          # nothing set: the legacy CLI, when it runs
+            s.set_setting('default_brain', 'claude', 'o')
+            self.assertEqual(real(s), 'cli:coder')                          # the worker that runs it
+            s.set_setting('default_brain', 'gemini', 'o')
+            self.assertEqual(real(s), '')                                   # a brain nothing here runs names nobody
 
 
 class AliasTests(unittest.TestCase):

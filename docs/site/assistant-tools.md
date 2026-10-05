@@ -266,7 +266,7 @@ Delete a task and teach triage it was never work.
 
 ### `task.complete`
 
-Mark done - the task is finished.
+Mark done - the task is finished (note: optional, what came of it - kept on the task)
 
 <p class="runs">Waits for your yes on a card.</p>
 

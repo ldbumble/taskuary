@@ -30,7 +30,7 @@ PURPOSE = {
     'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
     'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline',
     'item.settle':              'put the item down - `verb`: done | later | skip (the item on the table is the target)',
-    'task.complete':            'Mark done - the task is finished',
+    'task.complete':            'Mark done - the task is finished (note: optional, what came of it - kept on the task)',
     'task.defer':               ('Remind me: put an open task away until a day and bring it back that morning - `until`: a date '
                                  '(2026-10-09), "2 weeks", "3 days", "monday", or "none" to bring it back now; `ref` names '
                                  'the task (TQ-0123) when it is not the one on the table'),

@@ -97,3 +97,17 @@ def test_the_sent_mail_is_read_once_until_new_mail_arrives(s):
         people.written_to(s)
     sent(s, ['erin@northwind.example'])
     assert 'erin@northwind.example' in people.written_to(s)
+
+
+def test_a_new_store_never_sees_another_stores_sent_mail():
+    """CI 2026-10-05: the cache was keyed by id(store); a closed store's id came back for the next one, and its
+    recipients answered for it."""
+    import gc
+    for _ in range(200):
+        a = MemoryStore(); sent(a, ['gail.moreno@northwind.example']); people.written_to(a); aid = id(a); a.close(); del a; gc.collect()
+        b = MemoryStore(); sent(b, ['murray.jones@vendor.example'])
+        try:
+            if id(b) == aid:
+                assert list(people.written_to(b)) == ['murray.jones@vendor.example']; return
+        finally: b.close()
+    pytest.skip('no id reuse to provoke here')

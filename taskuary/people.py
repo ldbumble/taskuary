@@ -9,7 +9,6 @@ filled. One person is the answer; several are offered; none is nothing - nobody 
 import json, re
 
 SCAN = 3000                  # the owner's sent mail read for recipients, newest first
-_SENT = {}                   # id(store) -> (newest MessageId, {address: (times, last)}): rescanned only when mail arrives
 
 
 def _words(text: str) -> list: return [w for w in re.findall(r'[a-z]+', str(text or '').lower()) if len(w) > 1]
@@ -28,8 +27,10 @@ def _part(words: list, address: str, name: str = '') -> bool:
 
 def written_to(store) -> dict:
     """{address: (times, last sent)} over the To and Cc of the owner's own sent mail - one scan per new message."""
+    # kept ON the store, rescanned only when mail arrives. Keyed by id(store) it outlived its store: a closed store's id
+    # came back for the next one, whose own recipients were then never read (CI, 2026-10-05)
     with store.lock: newest = store.cx.execute('SELECT MAX(MessageId) FROM message').fetchone()[0]
-    held = _SENT.get(id(store))
+    held = getattr(store, '_people_sent', None)
     if held and held[0] == newest: return held[1]
     seen = {}
     for r in store._rows("SELECT RecipientsJson, SentAt FROM message WHERE (Direction='out' OR Status='context') "
@@ -41,7 +42,7 @@ def written_to(store) -> dict:
             if '@' not in a: continue
             n, last = seen.get(a, (0, ''))
             seen[a] = (n + 1, max(last, str(r.get('SentAt') or '')))
-    _SENT[id(store)] = (newest, seen)
+    store._people_sent = (newest, seen)
     return seen
 
 

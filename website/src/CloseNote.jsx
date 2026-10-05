@@ -7,8 +7,8 @@ import { MicButton } from "./ui.jsx";
 // IN LINE, LIKE NEW AND CONTINUE (same day: "inline with new box and then button on bottom like we have for add to session"):
 // on the canvas a card in the conversation, elsewhere a popover - never a box built into the task card.
 // `onSubmit(note)` runs the close (the task view's own Mark done road) and throws if it could not.
-export default function CloseNote({ anchor, onClose, onSubmit, inline = false, taskRef = "" }) {
-  const [note, setNote] = useState("");
+export default function CloseNote({ anchor, onClose, onSubmit, inline = false, taskRef = "", initial = "" }) {
+  const [note, setNote] = useState(initial || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const go = async () => {

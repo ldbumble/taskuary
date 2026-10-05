@@ -97,3 +97,21 @@ test("a task's Next is the row's button: registered by the view, drawn above the
   assert.match(view, /<ActionRow \/>/);
   assert.doesNotMatch(src("TaskPage.jsx"), /data-tq-next/);
 });
+
+// A CLOSE STAYS PUT DOWN (the owner, 2026-10-05: "the task stayed open and popped back open before closing"): Mark done and
+// Close with a note fold the task at the press, then advance() empties the table - and the fold reset on ANY table change, so
+// the closed task drew again for the ~0.6 s until the next item landed. Only a NEW item on the table opens unfolded.
+test("emptying the table on the way to the next item keeps the closed one folded", () => {
+  assert.match(view, /useEffect\(\(\) => \{ if \(!tableKey\) return; setExpanded\(false\); setFoldedKey\(null\); \}, \[tableKey\]\);/);
+});
+
+test("the note card goes at the press, and comes back with its words if the close fails", () => {
+  const card = view.slice(view.indexOf("<CloseNote inline"), view.indexOf("<CloseNote inline") + 700);
+  assert.ok(card.indexOf("setNoteOn(null)") < card.indexOf("await on.close(note)"), "put down before the close runs");
+  assert.match(card, /catch \(e\) \{ setNoteOn\(\{ \.\.\.on, note \}\); throw e; \}/);
+});
+
+test("a close the server already answered brings the next item without the half-second grace", () => {
+  assert.match(view, /onAfter=\{\(\) => actions\.advance\(null, true\)\}/);
+  assert.match(view, /advance: \(pile, settled\) => advance\(pile, settled\),/, "the walk's advance passes `settled` on - it dropped it, so every close waited 500 ms");
+});

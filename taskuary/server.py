@@ -569,7 +569,8 @@ def _rail_tids() -> set:
 @app.post('/api/tasks')
 def create_task(body: TaskBody):
     if not body.Title: raise HTTPException(422, 'Title is required')
-    tid = store.create_task({k: v for k, v in body.model_dump().items() if v is not None}, ACTOR)
+    # made by the owner on the page: an ask from the desktop once an agent works it (asks.py)
+    tid = store.create_task({**{k: v for k, v in body.model_dump().items() if v is not None}, 'AskedVia': 'desktop'}, ACTOR)
     # A task created by the owner is their durable TODO. Agent runs may come and go without
     # silently completing it; only routed/triaged work is eligible for automatic completion.
     from . import selfclose

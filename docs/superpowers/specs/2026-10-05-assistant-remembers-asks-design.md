@@ -102,6 +102,21 @@ It is used wherever a name has to become an address, so "send an email to Gail" 
 
 The company directory (Graph People/Contacts) needs a tenant consent and is a later, separate step.
 
+### 6. The Advisor never repeats what a task just said
+
+The Advisor (the Assistant report, `assistant.py`) reads open tasks (`_open`) and its own past lines with their keys
+(`_said`), so it does not repeat ITSELF. It does not read what tasks told you: an agent's finish summary, an email a
+slot sent, a report-back line. So an hour after TQ-0812 emailed Paula, it could still say "follow up with Paula about
+tab 1".
+
+- **Its read gains `_told(store)`:** the last 7 days of report-back lines (section 4) and agent finish summaries on
+  tasks closed in that window, each with its TQ, thread and the people it reached - beside `_said`, with the same
+  instruction: do not raise what is already here.
+- **And a code rule, not only a prompt:** a candidate whose thread (ConversationId), task, or recipient was touched by
+  a task in the last `assistant_followup_hours` (24 h by default) - a report-back said, a slot email sent, a reply
+  sent, an agent finished - is dropped before the model sees it. A follow-up comes back only once that window has
+  passed and the other side is still quiet - which is exactly the chase the Advisor exists for.
+
 ## Not in this spec
 
 - Proactive chasing / suggestions (the Advisor's job, later).
@@ -119,4 +134,6 @@ The company directory (Graph People/Contacts) needs a tenant consent and is a la
 - `people.resolve`: a name only the owner wrote to resolves; a unique match fills a slot; two matches keep the name
   and list both; no match keeps `?`; `sender.read` finds a person the owner only wrote to.
 - Prompt size: the block stays under 600 characters with 20 open asks.
+- Advisor: a follow-up candidate on a thread a slot email went to an hour ago is dropped; the same candidate 25 h later
+  with no answer comes through; `_told` lists the report-back lines and agent summaries of the last 7 days.
 - Whole suite before any push.

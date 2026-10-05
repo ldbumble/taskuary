@@ -51,7 +51,8 @@ class DenyListTests(unittest.TestCase):
                              ('POST', '/api/reports/3/rerun'),
                              ('GET', '/api/connectors'),                # reading is fine; writing is not
                              ('POST', '/api/agent/reply'),              # drafting its own task's reply
-                             ('POST', '/api/agent/done')):              # closing its own task
+                             ('POST', '/api/agent/done'),               # closing its own task
+                             ('POST', '/api/agent/draft')):             # one of the emails that closes its own task
             self.assertFalse(guard.denied(method, path), f'{method} {path} must be allowed')
 
     def test_the_doors_the_audit_found_open_are_shut(self):
@@ -203,7 +204,7 @@ class AllowListTests(unittest.TestCase):
                          for m in sorted((getattr(r, 'methods', None) or set()) & {'POST', 'PUT', 'PATCH', 'DELETE'})
                          if guard.classify(m, self._fill(r.path))[0] == 'agent')
         self.assertEqual(allowed, sorted([
-            'POST /api/agent/done', 'POST /api/agent/reply', 'POST /api/board/notes',
+            'POST /api/agent/done', 'POST /api/agent/draft', 'POST /api/agent/reply', 'POST /api/board/notes',
             'POST /api/handbook', 'POST /api/handbook/{lid}/comment', 'POST /api/handbook/{lid}/restore',
             'POST /api/handbook/{lid}/retire', 'POST /api/handbook/{lid}/vote',
             'POST /api/hooks/claude/ask', 'POST /api/hooks/{cli}',
@@ -242,7 +243,7 @@ class AllowListTests(unittest.TestCase):
         srv = config.load()['server']
         mine, theirs = 999991, 999992
         body = {'task_id': mine, 'text': 'done, see the PR', 'agent': 'coder'}
-        for door in ('/api/agent/reply', '/api/agent/done'):
+        for door in ('/api/agent/reply', '/api/agent/done', '/api/agent/draft'):
             self.assertEqual(c.post(door, json=body, headers=AGENT).status_code, 403, f'{door} with no proof')
             wrong = {**AGENT, guard.TASK_HDR: guard.task_proof(srv, theirs)}
             self.assertEqual(c.post(door, json=body, headers=wrong).status_code, 403, f'{door} with a neighbour\'s proof')

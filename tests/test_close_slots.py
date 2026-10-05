@@ -169,3 +169,55 @@ def test_a_finished_run_with_slots_open_waits_instead_of_closing(s):
     finally: coder.REFRESH = prev
     assert s.get_task(tid)['Status'] == 'waiting'
     assert [r['Status'] for r in s._rows('SELECT Status FROM review WHERE TaskId=?', (tid,))] == ['pending']
+
+
+# ── the agent fills slots ────────────────────────────────────────────────────────────────
+from taskuary import selfclose
+
+
+def test_the_agent_fills_a_slot_by_id(s):
+    tid = typed(s, FOUR[:2]); sid = slots.open_(s, tid)[1]['id']
+    out = slots.draft(s, tid, 'Tab 2 is short by one feed.', slot=sid, agent='assistant')
+    rv = s.get_review(out['review_id'])
+    assert (rv['Kind'], rv['Status'], rv['DraftBy'], slots.of_review(rv)) == (slots.KIND, 'pending', 'agent:assistant', sid)
+    assert json.loads(rv['Deliver'])['to'] == ['ray@northwind.example'] and slots.all_(s, tid)[1]['rid'] == rv['ReviewId']
+
+
+def test_by_recipient_and_again_rewrites_the_same_draft(s):
+    tid = typed(s, FOUR[:1])
+    a = slots.draft(s, tid, 'first', to='PAULA@northwind.example'); b = slots.draft(s, tid, 'second', to='paula@northwind.example')
+    assert a['review_id'] == b['review_id'] and s.get_review(a['review_id'])['DraftText'] == 'second'
+
+
+def test_an_unmatched_recipient_adds_a_slot_and_says_so(s):
+    tid = typed(s, FOUR[:1])
+    out = slots.draft(s, tid, 'Tab 5 too.', to='omar@northwind.example', subject='Tab 5')
+    assert out['added'] and len(slots.all_(s, tid)) == 2
+    assert any('added' in c['Body'] for c in s.list_comments(tid))
+
+
+def test_empty_text_or_nobody_is_refused(s):
+    tid = typed(s, FOUR[:1])
+    assert not slots.draft(s, tid, '  ', slot=slots.open_(s, tid)[0]['id'])['ok']
+    assert not slots.draft(s, tid, 'hi')['ok']
+
+
+def test_a_drafted_slot_on_a_mail_task_still_sends(s):
+    tid, mid, _ = mail_task(s); slots.add(s, tid, FOUR[:1], 'owner')
+    out = slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example')
+    assert verdicts.context_moved(s, s.get_review(out['review_id']))[0] is False
+    assert approve(s, out['review_id'])['ok']
+
+
+def test_the_chat_block_is_read_and_taken_out():
+    text, found = selfclose.draft_markers('Done.\n[[TASKUARY-DRAFT to=paula@northwind.example subject="Tab 1"]]Tab 1 is fine.[[/TASKUARY-DRAFT]]')
+    assert text == 'Done.' and found == [({'to': 'paula@northwind.example', 'subject': 'Tab 1'}, 'Tab 1 is fine.')]
+
+
+def test_the_endpoint_files_the_draft_on_the_sessions_own_task(s):
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    tid = typed(s, FOUR[:1])
+    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only', return_value=None):
+        r = TestClient(server.app).post('/api/agent/draft', json={'task_id': tid, 'text': 'hi', 'to': 'paula@northwind.example'})
+    assert r.json()['ok'] and slots.all_(s, tid)[0]['rid']

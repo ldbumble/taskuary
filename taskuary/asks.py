@@ -6,7 +6,7 @@ check?" had no answer, and finished work was silent. An ask IS a task, marked wi
 state is its rail lane in the rail's own words; a move into a lane that needs the owner, or its end, is said once. No
 memory store, no model call.
 """
-import threading, time
+import json, threading, time
 from datetime import datetime, timedelta
 
 from loguru import logger
@@ -193,3 +193,41 @@ def listing(store, p: dict) -> str:
     open_only = str(p.get('status') or 'open').strip().lower() != 'all'
     rows = _asked(store, open_only, max(1, min(int(p.get('limit') or 20), 60)))
     return '\n'.join(_line(store, t, state(store, t['TaskId'])[1] or t.get('Status') or '') for t in rows) or 'No asks yet.'
+
+
+# ── the Advisor never repeats what a task just said ──────────────────────────────────────
+def _since(hours: float) -> str: return (datetime.now() - timedelta(hours=hours)).isoformat(' ', 'seconds')
+
+
+def touched(store, hours: float) -> dict:
+    """What tasks moved in the window: tasks told something, sent something, or closed by an agent - their threads, and
+    the people a task's email or reply reached. The Advisor's follow-ups on any of these are not news yet."""
+    cut = _since(hours)
+    tids = {r['TaskId'] for r in store._rows('SELECT TaskId FROM task WHERE AskedToldAt>=? OR ClosedAt>=?', (cut, cut))}
+    people = set()
+    for r in store._rows("SELECT TaskId, Deliver FROM review WHERE DeliveryState='sent' AND DecidedAt>=?", (cut,)):
+        if r.get('TaskId'): tids.add(r['TaskId'])
+        try: people |= {str(a).lower() for a in (json.loads(r.get('Deliver') or '{}') or {}).get('to') or []}
+        except (TypeError, ValueError): pass
+    convs = {r['ConversationId'] for t in tids for r in store._rows('SELECT ConversationId FROM message WHERE TaskId=? AND ConversationId IS NOT NULL', (t,))}
+    return {'tids': tids, 'convs': convs, 'people': people}
+
+
+def not_just_said(store, cands: list, hours: float) -> list:
+    """Drop the Advisor candidates a task already covered in the last `hours` - before the model sees them. Past the
+    window, with the other side still quiet, they come back: that chase is what the Advisor is for."""
+    t = touched(store, hours)
+    def covered(c):
+        a = c.get('action') or {}
+        if a.get('tid') in t['tids'] or str(c.get('key') or '').split(':', 1)[-1] in t['convs']: return True
+        m = store.get_message(a['mid']) if a.get('mid') else None
+        return bool(m and (m.get('TaskId') in t['tids'] or m.get('ConversationId') in t['convs'] or str(m.get('FromEmail') or '').lower() in t['people']))
+    return [c for c in cands if not covered(c)]
+
+
+def told_lines(store, days: float = 7) -> str:
+    """What tasks already told the owner this week - the Advisor reads it beside its own lines, and does not say it again."""
+    from .store import task_ref
+    rows = store._rows("SELECT TaskId, Title, AskedTold, AskedToldAt FROM task WHERE AskedToldAt>=? AND AskedTold IN "
+                       f"({','.join('?' * len(SAID))}) ORDER BY AskedToldAt DESC LIMIT 20", (_since(days * 24), *SAID))
+    return '\n'.join(f"- {task_ref(r['TaskId'])} {str(r.get('Title') or '')[:70]} - {r['AskedTold']} ({_ago(r['AskedToldAt'])})" for r in rows)

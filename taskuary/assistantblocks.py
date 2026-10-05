@@ -95,8 +95,10 @@ def _open(store, o):
     return open_(store, o.get('cap') or 20), []
 
 def _already_said(store, o):
+    from . import asks
     from .assistant import _said
-    return _said(store, o.get('cap') or 40, report_id=o.get('report')), []
+    told = asks.told_lines(store)           # what the owner's tasks already told them this week - not news either
+    return _said(store, o.get('cap') or 40, report_id=o.get('report')) + (f'\n\nYOUR TASKS ALREADY TOLD THE OWNER:\n{told}' if told else ''), []
 
 def _notes(store, o):
     from .assistant import _notes_block

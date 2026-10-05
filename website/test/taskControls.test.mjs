@@ -203,7 +203,16 @@ test("run another agent is on the bar, live sessions and general tasks included"
 });
 
 test("its agent step opens on a general task and beside a live session", () => {
-  assert.match(tasks, /\{\(restartOpen \|\| \(!term\?\.alive && !liveRun && !isGeneral && !report && !detail\?\.transcript\)\) && \(/);
+  assert.match(tasks, /\{\(restartOpen \|\| \(!term\?\.alive && !liveRun && !isGeneral && !report && !detail\?\.transcript\)\)/);
+});
+
+test("on the canvas it is a card under the conversation in Continue's place, one at a time, closed when the agent starts", () => {
+  assert.match(tasks, /nextRunSlot && createPortal\(/);
+  assert.match(tasks, /&& !\(canvas && restartOpen\) && nextRunForm\}/, "not drawn twice");
+  assert.match(tasks, /const setContinueAt = \(a\) => \{\s+if \(a\) setRestartOpen\(false\);/);
+  assert.match(tasks, /window\.dispatchEvent\(new CustomEvent\("tq-next-run"\)\)/);
+  const start = tasks.slice(tasks.indexOf("const startCodingAgent"), tasks.indexOf("const startGeneralAgent"));
+  assert.match(start, /setRestartOpen\(false\)/);
 });
 
 test("starting the new one pauses a live session first - its handover kept, no report, no reply draft", () => {

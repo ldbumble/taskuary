@@ -542,3 +542,20 @@ def test_an_interrupted_agent_task_is_stopped_work_that_a_look_does_not_clear(st
     fresh = store.create_task({'Title': 'Never started', 'Assignee': 'agent:coder', 'Kind': 'coding'}, 'fixture')
     _, more = both(store)
     assert next(i for i in more['items'] if i.get('tid') == fresh)['lane'] == 'queued'
+
+
+def test_a_thank_you_triage_filed_after_the_close_does_not_bring_the_task_back(store):
+    """A task closed in the morning came back under FYI in the afternoon because its sender wrote "thank you!" -
+    triage judged it fyi (no new ask) and filed it, yet any line of theirs after the close counted as new work
+    (the owner, 2026-10-05: "why is task 942 in FYI?? it should never be there, i closed it"). A filed line is not
+    an arrival: only one triage kept as work brings a closed task back."""
+    tid = store.create_task({'Title': 'Adjust a time entry', 'Kind': 'task', 'Status': 'open'}, 'fixture')
+    add(store, 'Time entry', tid=tid, status='routed')
+    both(store)
+    store.update_task(tid, {'Status': 'done'}, 'owner')
+    add(store, 'Time entry', tid=tid, status='filed', sent=(datetime.now() + timedelta(minutes=1)).isoformat(' '))
+    _, after = both(store)
+    assert [i for i in after['items'] if i['tid'] == tid] == [], 'a filed thank-you is not new work'
+    add(store, 'Time entry', tid=tid, status='routed', sent=(datetime.now() + timedelta(minutes=2)).isoformat(' '))
+    _, later = both(store)
+    assert [i for i in later['items'] if i['tid'] == tid], 'a real ask after the close still comes back'

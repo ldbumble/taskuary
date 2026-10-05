@@ -52,8 +52,12 @@ def _arrived_after_close(task, view) -> bool:
     at = processing_all._stamp(task.get('ClosedAt'))
     if not at: return False
     from .autoreply import is_auto
+    # ...nor is a line triage FILED with nothing to do: a "thank you!" after the close brought TQ-0942 back under FYI
+    # (the owner, 2026-10-05: "it should never be there, i closed it") - the same materiality the stale-draft check reads
+    # (store.last_material_inbound_on_task, PW-240). A line still being triaged counts until triage files it.
     return any((processing_all._stamp(m.get('SentAt')) or at) > at
-               for m in view.get('messages') or [] if not is_ours(m) and not is_auto(m))
+               for m in view.get('messages') or []
+               if not is_ours(m) and not is_auto(m) and m.get('Status') not in ('filed', 'skipped', 'ignored'))
 
 
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours

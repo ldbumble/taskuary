@@ -29,7 +29,7 @@ export default function AgentPermissions({ onLoaded }) {
   return (
     <Box sx={{ mb: 2 }} data-tq-agent-permissions>
       <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-        What agents may do in each connected system. Read only: they look, and any change becomes a proposal you approve on
+        What agents may do in each connected system. Every connection starts at full authority; narrow the ones you want. Read only: they look, and any change becomes a proposal you approve on
         the task. Read and write: they make the change themselves. A connection agents cannot use at all is off for them.
       </Typography>
       {live.map((c) => {

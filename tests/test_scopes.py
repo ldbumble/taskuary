@@ -24,14 +24,13 @@ class ScopeTableTests(unittest.TestCase):
         self.assertEqual(scopes.needs('mcp'), 'write')      # an MCP server exposes anything
 
     def test_scope_falls_back_to_the_type_default(self):
-        self.assertEqual(scopes.scope_of({'Type': 'jira'}), 'read')
-        self.assertEqual(scopes.scope_of({'Type': 'winrm'}), 'admin')
-        self.assertEqual(scopes.scope_of({'Type': 'jira', 'Scope': 'admin'}), 'admin')
-        self.assertEqual(scopes.scope_of({'Type': 'nothing-we-ship'}), 'read')
+        self.assertEqual(scopes.scope_of({'Type': 'jira'}), scopes.FULL)  # every connection starts at full; read is the owner's narrowing (2026-10-05)
+        self.assertEqual(scopes.scope_of({'Type': 'jira', 'Scope': 'read'}), 'read')
+        self.assertEqual(scopes.scope_of({'Type': 'nothing-we-ship'}), scopes.FULL)
 
-    def test_new_connectors_start_read_only(self):
+    def test_new_connectors_start_at_full(self):
         for t in ('clickup', 'todoist', 'dropbox'):
-            self.assertEqual(scopes.scope_of({'Type': t}), 'read', t)
+            self.assertEqual(scopes.scope_of({'Type': t}), scopes.FULL, t)
 
     def test_refusal_names_the_dial_and_the_level(self):
         with self.assertRaises(PermissionError) as e:
@@ -51,7 +50,7 @@ class ScopePersistenceTests(unittest.TestCase):
         s = MemoryStore()
         c = s.get_connector_by_type('jira')
         self.assertIsNone(c.get('Scope'))                     # untouched db keeps the default
-        self.assertEqual(scopes.scope_of(c), 'read')
+        self.assertEqual(scopes.scope_of(c), scopes.FULL)
         s.save_connector({'ConnectorId': c['ConnectorId'], 'Scope': 'write'}, 't')
         self.assertEqual(scopes.scope_of(s.get_connector_by_type('jira')), 'write')
 

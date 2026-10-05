@@ -88,7 +88,6 @@ class DiscoveryTests(unittest.TestCase):
 
 class ScopeTests(unittest.TestCase):
     def test_the_card_ships_read_so_an_order_is_only_ever_proposed(self):
-        self.assertEqual(scopes.DEFAULT_SCOPE['robinhood'], 'read')
         self.assertEqual(scopes.ACTIONS['robinhood_order'], 'write')
         self.assertEqual(scopes.ACTIONS['robinhood_read'], 'read')
         self.assertEqual(scopes.ACTIONS['robinhood_tools'], 'read')

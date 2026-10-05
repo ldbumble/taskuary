@@ -39,7 +39,7 @@ class OnByDefault(unittest.TestCase):
         """A handbook only agents may read is a handbook nobody writes - but it stays on the
         ladder, so an owner who wants them hands-off can drop it to read."""
         s = MemoryStore()
-        self.assertEqual(scopes.scope_of(s.get_connector_by_type('handbook')), 'write')
+        self.assertEqual(scopes.scope_of(s.get_connector_by_type('handbook')), scopes.FULL)  # every connection starts at full; read is the owner's narrowing (2026-10-05)
         self.assertTrue(scopes.allows(s.get_connector_by_type('handbook'), 'handbook_write'))
 
 

@@ -518,9 +518,9 @@ class AuthorityTests(unittest.TestCase):
 
     def test_both_cards_ship_read_only_so_the_first_save_is_a_proposal(self):
         for t in ('smb_file', 'sftp'):
-            self.assertEqual(scopes.scope_of({'Type': t}), 'read', t)
-            self.assertTrue(scopes.allows({'Type': t}, 'smb_read' if t == 'smb_file' else 'sftp_list'))
-            self.assertFalse(scopes.allows({'Type': t}, 'smb_write' if t == 'smb_file' else 'sftp_put'))
+            card = {'Type': t, 'Scope': 'read'}  # every connection starts at full; read is the owner's narrowing (2026-10-05)
+            self.assertTrue(scopes.allows(card, 'smb_read' if t == 'smb_file' else 'sftp_list'))
+            self.assertFalse(scopes.allows(card, 'smb_write' if t == 'smb_file' else 'sftp_put'))
 
     def test_raising_the_card_is_what_lets_it_write(self):
         self.assertTrue(scopes.allows({'Type': 'smb_file', 'Scope': 'write'}, 'smb_write'))

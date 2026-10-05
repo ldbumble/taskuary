@@ -53,7 +53,7 @@ class TheDefaultIsTheCliAgentsOwnHandsTests(unittest.TestCase):
 
     def test_it_is_told_which_systems_it_may_use_and_how(self):
         store = MemoryStore(); a_claude(store)
-        store.save_connector({'Type': 'mssql', 'Name': 'SQL Server', 'Active': 1, 'Roles': 'report,tool'}, 'test')
+        store.save_connector({'Type': 'mssql', 'Name': 'SQL Server', 'Active': 1, 'Roles': 'report,tool', 'Scope': 'read'}, 'test')
         prompt = turn(store, task(store))['prompt']
         self.assertIn('SQL Server', prompt); self.assertIn('/api/tools/run', prompt)
         self.assertIn('authority read', prompt)          # so a write is proposed rather than attempted
@@ -101,12 +101,12 @@ class SqlReadIsReadTests(unittest.TestCase):
         return out, cx
 
     def test_at_read_a_batch_that_writes_is_rolled_back(self):
-        out, cx = self.run_tool(MemoryStore(), {'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n'})
+        out, cx = self.run_tool(MemoryStore(), {'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n'}, scope='read')
         self.assertTrue(out['ok'], out); self.assertGreaterEqual(cx.rolled, 1)
         self.assertEqual(cx.committed, 0, 'a read-level connection committed a write')
 
     def test_the_caller_cannot_ask_for_a_commit(self):
-        out, cx = self.run_tool(MemoryStore(), {'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n', '_write': True, 'write': True})
+        out, cx = self.run_tool(MemoryStore(), {'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n', '_write': True, 'write': True}, scope='read')
         self.assertEqual(cx.committed, 0)
 
     def test_at_write_the_owner_raised_it_commits(self):

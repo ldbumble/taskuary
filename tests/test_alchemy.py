@@ -75,7 +75,7 @@ class AlchemyReports(unittest.TestCase):
             self.assertEqual(reports.card_of(kind), 'alchemy')
             self.assertIn(kind, reports.CONNECTION_OF)
             self.assertEqual(scopes.ACTIONS[kind], 'read')
-        self.assertEqual(scopes.DEFAULT_SCOPE['alchemy'], 'read')
+        self.assertEqual(scopes.default_scope('alchemy'), scopes.FULL)  # every connection starts at full; read is the owner's narrowing (2026-10-05)
 
     def test_new_store_seeds_the_finance_card(self):
         store = MemoryStore()

@@ -17,10 +17,9 @@ class TheLadder(unittest.TestCase):
         self.assertEqual(scopes.ACTIONS['treg_tools'], 'read')
         self.assertEqual(scopes.ACTIONS['treg_search'], 'read')
         self.assertEqual(scopes.ACTIONS['treg_call'], 'write')
-        self.assertEqual(scopes.DEFAULT_SCOPE['treg'], 'read')
 
     def test_at_its_default_scope_an_agent_may_search_but_never_call(self):
-        card = {'Type': 'treg', 'Scope': scopes.DEFAULT_SCOPE['treg']}
+        card = {'Type': 'treg', 'Scope': 'read'}  # every connection starts at full; read is the owner's narrowing (2026-10-05)
         scopes.require(card, 'treg_search')          # free, changes nothing
         scopes.require(card, 'treg_tools')
         with self.assertRaises(PermissionError):     # spends money, may publish

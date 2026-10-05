@@ -16,7 +16,7 @@ class EveryOneIsARead(unittest.TestCase):
     def test_all_five_are_reads_on_cards_that_ship_at_read(self):
         for e in databases.ENGINES:
             self.assertEqual(scopes.ACTIONS[e], 'read', e)
-            self.assertEqual(scopes.DEFAULT_SCOPE[e], 'read', e)
+            self.assertEqual(scopes.default_scope(e), scopes.FULL, e)  # every connection starts at full; read is the owner's narrowing (2026-10-05)
 
     def test_all_five_are_registered_and_map_to_their_own_card(self):
         for e in databases.ENGINES:

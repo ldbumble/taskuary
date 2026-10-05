@@ -464,7 +464,7 @@ export const StageMode = ({ mode, onMode, game = false, onGame }) => {
 };
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
-function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null }) {
+function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
       <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />))}</div>}</div></div>;
@@ -515,7 +515,8 @@ function Line({ m, live, last, actions, fresh, tableChips = [], canvas = null })
   // NEVER A DEAD END (the owner, 2026-09-30: "it can write that ... but then should move to next or at least have buttons to
   // navigate"): the newest line with nothing to press - a notice, an answer, a line read back from history - offers Next
   // while the pipe still holds something. Not under an FYI batch: its own "All read, next" IS Next (the owner, 2026-10-02)
-  const chips = said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis" || !(actions.items || []).length
+  const chips = barHolds && !m.card ? []          // the task view's own row under the chat holds its words, Next included
+    : said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis" || !(actions.items || []).length
     ? said : [{ verb: "next", label: "Next" }];
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
@@ -1733,6 +1734,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
   const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
   // a reloaded answer is text only: the item still on the table lends it its verbs, so Next is never gone
+  // ONE ROW OF WORDS (the owner, 2026-10-05: "why is there buttons both places?"): a task on the table is drawn as its task view,
+  // and that view registers its words in the row under the chat (layout B). A bare line under it then borrowed the same item's
+  // chips as recorded when it was surfaced - a second row, and a stale one: a note saying the draft was removed and the task
+  // closed still offered Close out and Redraft it. While the bar holds the item, a line borrows nothing.
+  const barHolds = useMemo(() => {
+    const c = shown[lastCardIdx]?.card;
+    return !old && !!c && showsTask(c, cardFor(c)) && canvasState?.folded !== c.key && !canvasState?.browsing;
+  }, [shown, lastCardIdx, old, canvasState]);
   const tableChips = useMemo(() => {
     const c = shown[lastCardIdx]?.card;
     return c && current && (c.key === current || (c.aliases || []).includes(current)) ? chipsOf(shown[lastCardIdx]) : [];
@@ -1837,7 +1846,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               </div>
             </div></div>
           )}
-          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips}
+          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (

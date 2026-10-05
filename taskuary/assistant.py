@@ -386,7 +386,11 @@ def candidates(store, c: dict) -> list:
                      ('cold', lambda: cold(store, c['cold_d']) if 'cold' in c['producers'] else [])):
         try: out += fn()
         except Exception as e: logger.warning(f'assistant: {name} candidates failed - {e}')
-    return out
+    # ...minus what a task already covered (asks.py): an hour after a task emailed Paula, "follow up with Paula" is not news
+    from . import asks
+    try: return asks.not_just_said(store, out, c.get('followup_h') or 24)
+    except Exception as e:
+        logger.warning(f'assistant: could not check candidates against recent tasks - {e}'); return out
 
 
 # ── the report proposes (the assistant-runs-the-app design, 2026-09-18) ──────────────────────────

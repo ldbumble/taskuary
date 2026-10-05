@@ -256,3 +256,53 @@ def test_every_turn_carries_the_block(s):
     with mock.patch.object(asks, 'block', return_value='YOUR OPEN ASKS\n- TQ-0009 Check the tabs - a draft waits'):
         concierge.say(s, "where's the tab check?", llm=lambda sys, user, **k: seen.append(user) or 'Waiting on your yes.')
     assert seen and 'YOUR OPEN ASKS' in seen[0]
+
+
+# ── the Advisor never repeats what a task just said ──────────────────────────────────────
+import json
+from datetime import datetime, timedelta
+
+
+def hours_ago(h): return (datetime.now() - timedelta(hours=h)).isoformat(' ', 'seconds')
+
+
+def cand(tid=None, mid=None, conv='conv-1', kind='followup'):
+    return {'key': f'{kind}:{conv}', 'kind': kind, 'facts': 'x', 'text': 'follow up?', 'action': {'type': kind, 'mid': mid, 'tid': tid}}
+
+
+def test_a_candidate_on_a_task_told_an_hour_ago_is_dropped_and_25h_later_comes_back(s):
+    tid = made(s)
+    s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('approve', hours_ago(1), tid))
+    assert asks.not_just_said(s, [cand(tid=tid)], 24) == []
+    s._exec('UPDATE task SET AskedToldAt=? WHERE TaskId=?', (hours_ago(25), tid))
+    assert len(asks.not_just_said(s, [cand(tid=tid)], 24)) == 1
+
+
+def test_a_candidate_whose_person_just_got_an_email_from_a_task_is_dropped(s):
+    tid = made(s)
+    mid = s.add_message({'ExternalId': 'in-p', 'ConversationId': 'conv-p', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                         'FromName': 'Paula Vance', 'FromEmail': 'paula@northwind.example', 'Subject': 'Tabs', 'BodyText': 'Any news?',
+                         'SentAt': hours_ago(30), 'Status': 'routed'})
+    rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'approved', 'DraftText': 'Tab 1 is fine.',
+                        'Deliver': json.dumps({'channel': 'email', 'to': ['paula@northwind.example'], 'subject': 'Tab 1'})})
+    s._exec("UPDATE review SET DeliveryState='sent', DecidedAt=? WHERE ReviewId=?", (hours_ago(1), rid))
+    assert asks.not_just_said(s, [cand(mid=mid, conv='conv-p')], 24) == []
+
+
+def test_an_untouched_candidate_comes_through(s):
+    assert len(asks.not_just_said(s, [cand(conv='conv-z')], 24)) == 1
+
+
+def test_the_advisor_drops_them_before_the_model_sees_them(s):
+    from taskuary import assistant
+    tid = made(s); s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('finished', hours_ago(1), tid))
+    with mock.patch.object(assistant, '_asks_and_promises', return_value=[cand(tid=tid), cand(conv='conv-z')]):
+        out = assistant.candidates(s, {'producers': (), 'cold_d': 3, 'followup_h': 24})
+    assert [c['key'] for c in out] == ['followup:conv-z']
+
+
+def test_already_said_carries_what_tasks_told_the_owner(s):
+    from taskuary import assistantblocks
+    tid = made(s, 'Check the four tabs'); s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('approve', hours_ago(2), tid))
+    text, _ = assistantblocks._already_said(s, {})
+    assert 'Check the four tabs' in text and 'TQ-0001' in text

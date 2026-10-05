@@ -62,8 +62,8 @@ test("the Tasks completion path pins the rail to in progress before patching", a
   assert.ok(finish.indexOf("setLeavingId(was)") < finish.indexOf("await close()"));
   assert.match(finish, /catch \(e\) \{ seenState\.current = before; setLeavingId\(null\); onSelect\(was\); throw e; \}/);
   assert.match(source, /\.filter\(\(x\) => x\.TaskId !== leavingId\)/);
-  const page = source.slice(source.indexOf("const finish = async (status)"));
-  assert.match(page.slice(0, 600), /const close = \(\) => runOperation\(api, "task\.complete", selected\)/);
+  const page = source.slice(source.indexOf("const finish = async (status"));
+  assert.match(page.slice(0, 600), /const close = \(\) => runOperation\(api, "task\.complete", selected[,)]/);
   assert.match(page.slice(0, 600), /onFinish \? onFinish\(status, close\) : close\(\)/);
 });
 

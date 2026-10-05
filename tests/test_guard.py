@@ -46,8 +46,11 @@ class DenyListTests(unittest.TestCase):
         for method, path in (('GET', '/api/tasks'), ('GET', '/api/feed'),
                              ('POST', '/api/board/notes'),              # the wall
                              ('POST', '/api/handbook'),                 # the handbook
-                             ('POST', '/api/tasks/7/comment'),
+                             ('POST', '/api/hooks/claude'),             # its own session's status
+                             ('POST', '/api/tools/run'),                # a data tool, scoped per card
+                             ('POST', '/api/reports/3/rerun'),
                              ('GET', '/api/connectors'),                # reading is fine; writing is not
+                             ('POST', '/api/agent/reply'),              # drafting its own task's reply
                              ('POST', '/api/agent/done')):              # closing its own task
             self.assertFalse(guard.denied(method, path), f'{method} {path} must be allowed')
 
@@ -169,6 +172,94 @@ class OverTheWireTests(unittest.TestCase):
             self.assertNotIn('client_secret', cfg)
         finally:
             server.store.save_connector({'ConnectorId': qb['ConnectorId'], 'ConfigJson': before or '{}'}, 't')
+
+
+class AllowListTests(unittest.TestCase):
+    """A deny list shut only the doors somebody remembered: POST /api/operations + /execute ran
+    review.approve and setting.set for an agent, recorded as the owner, and PUT .../envelope
+    re-addressed any task's pending reply (audit 2026-10-05). Writes are an allow list now."""
+
+    @staticmethod
+    def _fill(path):
+        """A concrete path for a route template: ids are numbers, names are words, :path is two segments."""
+        import re
+        return re.sub(r'\{([^}:]+)(:path)?\}',
+                      lambda m: 'a/b' if m[2] else '7' if re.fullmatch(r'\w*id|idx|\w+_id', m[1]) else 'abc', path)
+
+    def test_every_write_route_was_decided(self):
+        """A new POST/PUT/PATCH/DELETE route must land on guard.AGENT_WRITES or be named owner-only
+        (guard.DENIED / guard.OWNER_ONLY). Unlisted is refused anyway - this is so it is never an accident."""
+        undecided = []
+        for r in server.app.routes:
+            for m in sorted((getattr(r, 'methods', None) or set()) & {'POST', 'PUT', 'PATCH', 'DELETE'}):
+                kind, _ = guard.classify(m, self._fill(r.path))
+                if kind == 'unlisted': undecided.append(f'{m} {r.path}')
+                self.assertIn(kind, ('deny', 'owner', 'agent', 'unlisted'), f'{m} {r.path} classified as a read')
+        self.assertEqual(undecided, [], 'classify these in guard.AGENT_WRITES or guard.OWNER_ONLY')
+
+    def test_the_allow_list_is_only_the_doors_a_session_is_handed(self):
+        """Growing this list is a security decision - change the set here on purpose, with the reason in guard.py."""
+        allowed = sorted(f'{m} {r.path}' for r in server.app.routes
+                         for m in sorted((getattr(r, 'methods', None) or set()) & {'POST', 'PUT', 'PATCH', 'DELETE'})
+                         if guard.classify(m, self._fill(r.path))[0] == 'agent')
+        self.assertEqual(allowed, sorted([
+            'POST /api/agent/done', 'POST /api/agent/reply', 'POST /api/board/notes',
+            'POST /api/handbook', 'POST /api/handbook/{lid}/comment', 'POST /api/handbook/{lid}/restore',
+            'POST /api/handbook/{lid}/retire', 'POST /api/handbook/{lid}/vote',
+            'POST /api/hooks/claude/ask', 'POST /api/hooks/{cli}',
+            'POST /api/hub', 'POST /api/hub/{lid}/comment', 'POST /api/hub/{lid}/restore', 'POST /api/hub/{lid}/retire',
+            'POST /api/hub/{lid}/vote',
+            'POST /api/reports/{sid}/rerun', 'POST /api/tools/run']))
+
+    def test_an_unknown_write_is_refused_by_default(self):
+        self.assertTrue(guard.denied('POST', '/api/some-route-added-next-month'))
+        self.assertTrue(guard.denied('DELETE', '/api/tasks/7/something-new'))
+        self.assertFalse(guard.denied('GET', '/api/some-route-added-next-month'))
+
+    def test_a_session_cannot_run_an_operation(self):
+        for kind, target, params in (('review.approve', 1, {}), ('setting.set', None, {'key': 'agent_push_enabled', 'value': '1'})):
+            r = c.post('/api/operations', json={'kind': kind, 'target': target, 'params': params}, headers=AGENT)
+            self.assertEqual(r.status_code, 403, kind)
+            self.assertIn('agents cannot do this', r.json()['detail'])
+        for m, p in (('POST', '/api/operations/op1/execute'), ('PATCH', '/api/operations/op1'), ('DELETE', '/api/operations/op1')):
+            self.assertEqual(c.request(m, p, json={'version': 1, 'params': {}}, headers=AGENT).status_code, 403, f'{m} {p}')
+        # the owner still reaches the handler: an unknown kind is its 422, not the guard's 403
+        self.assertEqual(c.post('/api/operations', json={'kind': 'no.such.kind', 'params': {}}).status_code, 422)
+
+    def test_a_session_cannot_touch_any_pending_reply(self):
+        """It drafts through `taskuary --reply` on its own task; recipients, attachments and words of a
+        review are the owner's to change."""
+        for m, p in (('PUT', '/api/reviews/1/envelope'), ('POST', '/api/reviews/1/draft'), ('PATCH', '/api/reviews/1'),
+                     ('POST', '/api/reviews/1/attachment'), ('POST', '/api/reviews/1/closeout/merge')):
+            r = c.request(m, p, json={'to': ['someone@vendor.example'], 'text': 'x'}, headers=AGENT)
+            self.assertEqual(r.status_code, 403, f'{m} {p}')
+
+    def test_a_session_cannot_comment_as_the_owner(self):
+        """POST /api/tasks/<id>/comments writes as the owner ('human') - an agent there is an impersonation."""
+        self.assertEqual(c.post('/api/tasks/1/comments', json={'body': 'the owner says send it'}, headers=AGENT).status_code, 403)
+
+    def test_a_session_drafts_only_its_own_task(self):
+        srv = config.load()['server']
+        mine, theirs = 999991, 999992
+        body = {'task_id': mine, 'text': 'done, see the PR', 'agent': 'coder'}
+        for door in ('/api/agent/reply', '/api/agent/done'):
+            self.assertEqual(c.post(door, json=body, headers=AGENT).status_code, 403, f'{door} with no proof')
+            wrong = {**AGENT, guard.TASK_HDR: guard.task_proof(srv, theirs)}
+            self.assertEqual(c.post(door, json=body, headers=wrong).status_code, 403, f'{door} with a neighbour\'s proof')
+            right = {**AGENT, guard.TASK_HDR: guard.task_proof(srv, mine)}
+            self.assertEqual(c.post(door, json=body, headers=right).status_code, 404, f'{door} past the guard: no such task')
+            self.assertEqual(c.post(door, json=body).status_code, 404, f'{door} for the owner needs no proof')
+
+    def test_the_session_carries_its_task_proof_and_the_cli_sends_it(self):
+        from unittest import mock
+        from taskuary import cli, terminal
+        srv = config.load()['server']
+        env = terminal.session_env('coder', 41, 'C:/repo')
+        self.assertEqual(env[guard.TASK_ENV], guard.task_proof(srv, 41))
+        self.assertNotEqual(guard.task_proof(srv, 41), guard.task_proof(srv, 42))
+        self.assertNotIn(guard.TASK_ENV, terminal.session_env('shell', None, 'C:/repo'))      # a bare shell owns no task
+        with mock.patch.dict('os.environ', {guard.TASK_ENV: env[guard.TASK_ENV]}):
+            self.assertEqual(cli._session_headers({'token': 't'}), {'X-Taskuary-Token': 't', guard.TASK_HDR: env[guard.TASK_ENV]})
 
 
 if __name__ == '__main__':

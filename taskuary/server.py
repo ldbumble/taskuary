@@ -248,7 +248,8 @@ async def token_gate(request: Request, call_next):
     # hand work to a person, start an outbound message - are refused to it here, in code. Not in
     # SOUL.md, not in a setting: an instruction sitting in the same context as the untrusted mail
     # is not a control, and a model that has been talked into "they want this sent now" would
-    # otherwise find this API and approve its own draft.
+    # otherwise find this API and approve its own draft. Writes are an ALLOW list (guard.AGENT_WRITES):
+    # a deny list left /api/operations running review.approve for it under a path nobody had named.
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         why = guard.denied(request.method, request.url.path)
         if why:
@@ -3211,8 +3212,16 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
 
 class AgentDoneBody(BaseModel): task_id: int; summary: str = ''; agent: str = 'agent'
 
+def _own_task_only(request: Request, tid: int):
+    """One agent token is shared by every session, so the allow list alone let any of them draft or
+    close a NEIGHBOUR's task; the session's task proof (guard.owns_task) narrows it to its own."""
+    if not guard.owns_task(cfg['server'], request.headers, tid):
+        logger.warning(f'agent refused {request.method} {request.url.path} on task {tid} - not its own task')
+        raise HTTPException(403, 'agents cannot do this: a session drafts and finishes its OWN task only. '
+                                 'Run `taskuary --reply/--done` from the session that is working it.')
+
 @app.post('/api/agent/done')
-def agent_done(body: AgentDoneBody):
+def agent_done(body: AgentDoneBody, request: Request):
     """`taskuary --done "..."` from inside an agent's own shell: the session says it has finished.
 
     This is the ending the Done button used to be the only door to - and the button is a person
@@ -3220,17 +3229,19 @@ def agent_done(body: AgentDoneBody):
     same report, same drafted reply waiting on the owner's approval; only the thing that noticed
     the work was over has changed (selfclose.declare)."""
     from . import selfclose
+    _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return selfclose.declare(store, body.task_id, body.summary, body.agent)
 
 class AgentReplyBody(BaseModel): task_id: int; text: str; agent: str = 'agent'
 
 @app.post('/api/agent/reply')
-def agent_reply(body: AgentReplyBody):
+def agent_reply(body: AgentReplyBody, request: Request):
     """`taskuary --reply "..."` from inside an agent's own shell: the agent that did the work writes the
     answer the sender gets, and it becomes the task's pending reply as written (coder.agent_reply).
     Nothing is sent - the owner approves it - and the end of the run keeps it instead of redrafting."""
     from . import coder
+    _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return coder.agent_reply(store, body.task_id, body.text, body.agent)
 

@@ -121,6 +121,8 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None) -
     # instruction: an untrusted message can argue with a paragraph, not with a header.
     tok = srv.get('agent_token')
     if tok: out[guard.AGENT_ENV] = tok
+    # the token is shared by every session; this says which task is THIS one's (guard.owns_task)
+    if tok and str(task_id or '').isdigit(): out[guard.TASK_ENV] = guard.task_proof(srv, task_id)
     return out
 
 

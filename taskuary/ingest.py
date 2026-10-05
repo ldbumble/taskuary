@@ -881,6 +881,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                  **({'Assignee': f'agent:{role}'} if role else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         if intent.get('checklist'): store.set_task_checklist(tid, intent['checklist'], 'triage')
+        if intent.get('outputs'):                  # what closes it beyond the reply: emails to other people (slots.py)
+            from . import slots
+            slots.add(store, tid, intent['outputs'], 'triage')
         # the repository, decided here and written down, so startup uses it instead of guessing again
         # (PW-092); an owner's repo: tag and a GitHub item's own repository still outrank it (terminal.guess_repo)
         if intent.get('repository'):
@@ -1138,6 +1141,9 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
                     verdict=_stored_verdict(intent))
     store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same ask, kept here")
     if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage')
+    if intent.get('outputs'):
+        from . import slots
+        slots.add(store, tid, intent['outputs'], 'triage')
     if intent.get('intent') == 'reply_only' and not store.pending_review(tid):
         from .outbound import send_block
         unsendable = send_block(store, msg.get('channel'))
@@ -1608,6 +1614,9 @@ def _enrich(store, tid: int, m: dict, plain: str, llm):
         if ask['summary'] and ask['summary'] != plain and (t.get('Summary') or '') == plain:
             store.update_task(tid, {'Summary': ask['summary']}, 'triage')
         if ask['checklist'] and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
+        if ask.get('outputs'):
+            from . import slots
+            slots.add(store, tid, ask['outputs'], 'triage')
     except Exception as e: logger.warning(f"the ask on {task_ref(tid)} stays the sender's own words - {e}")
 
 

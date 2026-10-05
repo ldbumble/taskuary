@@ -2317,8 +2317,22 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
                       profile=profile)
     if kind == 'general':
         session = general.start_session(store, made['taskId'], actor=actor)
-        threading.Thread(target=session.send_prompt, args=(brief,), daemon=True).start()
+        def first_turn():
+            _read_outputs(store, made, job, actor)
+            session.send_prompt(brief)
+        threading.Thread(target=first_turn, daemon=True).start()
     return made
+
+
+def _read_outputs(store, made: dict, job: str, actor: str):
+    """What closes a hand-off, read from the owner's words: "draft an email to each" becomes the slots on the card before
+    the agent's first turn, which sees them in its checklist (spec 2026-10-05). Off the chat's thread - the brain may be a
+    CLI that takes seconds to start. A brain that fails leaves the task as it was."""
+    try:
+        from . import slots, triage
+        ask = triage.extract_ask({'body': job}, brain(store, fast=True))
+        if ask.get('outputs'): slots.add(store, made['taskId'], ask['outputs'], actor)
+    except Exception as e: logger.info(f"could not read what closes {made.get('ref')}: {e}")
 
 
 def _resolve_named(store, phrase: str, item: dict | None) -> str | None:

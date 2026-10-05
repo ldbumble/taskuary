@@ -26,7 +26,8 @@ def a_claude(store, name='my-claude'):
 
 
 class AssistantToolsTests(unittest.TestCase):
-    def _argv(self, store, tid, pick):
+    def _argv(self, store, tid, pick, hands=None):
+        if hands: store.set_setting('general_agent_hands', hands, 'test')
         seen = {}
         def run_cli(profile, prompt, trace, resume=None, **kwargs):
             seen.update(profile=profile); return 'ok', None, None
@@ -38,14 +39,15 @@ class AssistantToolsTests(unittest.TestCase):
 
     def test_the_assistant_chat_on_a_cli_may_read_and_look_things_up(self):
         store = MemoryStore(); a_claude(store)
-        args = self._argv(store, general_task(store), 'cli:my-claude')
+        args = self._argv(store, general_task(store), 'cli:my-claude', hands='look')
         self.assertIn('WebSearch', ' '.join(args))
         self.assertIn('WebFetch', ' '.join(args))
         self.assertIn('--allowedTools', args)          # granted, not merely present - a headless run cannot click
 
-    def test_looking_things_up_is_still_not_permission_to_act(self):
+    def test_look_only_is_still_not_permission_to_act(self):
+        # the owner's 'look things up only' setting keeps the research grant (2026-10-05)
         store = MemoryStore(); a_claude(store)
-        args = self._argv(store, general_task(store), 'cli:my-claude')
+        args = self._argv(store, general_task(store), 'cli:my-claude', hands='look')
         self.assertNotIn('--dangerously-skip-permissions', args)
         self.assertIn('mcp__*', args)                  # a connector may expose writes beside reads
         self.assertNotIn('Bash', ' '.join(args))

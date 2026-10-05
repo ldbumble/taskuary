@@ -417,7 +417,8 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
-        head, body = REGISTRY[p['type']](resolve_cfg(store, {k: v for k, v in p.items() if k != 'action'}))
+        # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card
+        head, body = REGISTRY[p['type']](resolve_cfg(store, {**{k: v for k, v in p.items() if k != 'action'}, '_write': True}))
         out = {'headline': str(head)[:200], 'output': (body or '')[:2000]}
     store.add_comment(tid, actor, 'human', f'APPROVED PROPOSAL ({a}): {json.dumps(out)[:600]}')
     store.audit('review', rv['ReviewId'], 'proposal_executed', actor, detail={'action': a, 'result': out})

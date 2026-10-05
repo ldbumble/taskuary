@@ -21,6 +21,7 @@ import PsychologyIcon from "@mui/icons-material/Psychology";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AiDefaults from "./AiDefaults.jsx";
+import AgentPermissions from "./AgentPermissions.jsx";
 import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
@@ -566,6 +567,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const panels = {
     "Triage & agents": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
     "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} />,
+    "Agent permissions": <AgentPermissions />,
   };
   const cfgGroups = GROUPS.filter((g) => panels[g] || rowsOf(g).length);
   const cfgKey = cfgGroups.join("|");

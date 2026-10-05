@@ -100,6 +100,13 @@ Once verified it is frozen into a skill and every later run uses it, so this is 
 properly once rather than approximately every time."""
 
 
+def full_hands(store) -> bool:
+    """May a CLI-backed general agent use the CLI's own permissions - shell, files, the owner's connections? Yes unless
+    the owner chose 'look things up only' (the owner, 2026-10-05: "permissions should be the same as cli agent by default
+    unless edited"). It was born read-only by inheritance from the mail classifier, never by a decision."""
+    return str(store.get_setting('general_agent_hands') or 'cli').strip().lower() != 'look'
+
+
 def handles(task: dict | None) -> bool:
     """Kinds that belong to the conversational agent rather than a coding or reply workflow."""
     return str((task or {}).get('Kind') or 'general').lower() in GENERAL_KINDS
@@ -903,6 +910,12 @@ class GeneralSession:
                 if hub.enabled(self.store): system = f'{system}\n\n{hub.ASSISTANT_LINE}'
             from . import selfclose as _sc
             system = f'{system}\n\n{_sc.ASK_LINE}'                     # a question is an event, not prose (PW-225)
+            hands = self.pick.startswith('cli:') and full_hands(self.store)
+            systems = ''
+            if hands:
+                from . import docsync
+                systems = docsync.agent_systems(self.store)
+                if systems: system = f'{system}\n\n{systems}'
             source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
@@ -944,13 +957,14 @@ class GeneralSession:
             # Read/Glob/Grep/WebFetch/WebSearch, granted so a headless run need not click, and no
             # command, edit, write, or MCP tool. Looking is not acting.
             build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
-                              cancel=cancel, resume=self.cli_sid or None, research=True, fallback_user=user,
+                              cancel=cancel, resume=self.cli_sid or None, research=not hands, fallback_user=user,
                               # the task's CLI stays open between messages instead of starting again (clipool)
                               keep=f'general:{self.task_id}')
             # the NAME always rides (so a browser this session opens is one the pane can find); the
             # shell and the browser brief ride only for a task that asked for a browser
             if browser_env: build_args.update(extra_env=browser_env)
-            if browser_tools: build_args.update(cli_tools=True)
+            # the CLI's own hands, in Taskuary's scratch folder (llm._build_llm), with the session's token in its environment
+            if browser_tools or hands: build_args.update(cli_tools=True)
             # WHICH GEAR: session work takes the MAIN model - a general worker is doing a job, not
             # classifying one message. The dock is the Assistant's own chat and keeps the quick
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
@@ -992,9 +1006,10 @@ class GeneralSession:
                     from . import browserview
                     system = f'{system}\n\n{browserview.brief()}'
                 system = f'{system}\n\n{_sc.ASK_LINE}'
+                if systems: system = f'{system}\n\n{systems}'
                 build_args = dict(pick=self.pick, model=self.model or None,
                                   trace=visible, cancel=cancel)
-                if browser_tools:
+                if browser_tools or hands:
                     build_args.update(cli_tools=True, extra_env=browser_env)
                 build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
                 brain = llm_mod.build_llm(self.store, **build_args)
@@ -1036,6 +1051,13 @@ class GeneralSession:
                 for attrs, body in drafts:
                     out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
                     if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
+            # TASKUARY-PROPOSE: a write it may not make by itself (a read-level connection) waits on the task for the owner,
+            # the way a coding session's proposals do (coder.finish)
+            from . import proposals
+            if proposals.MARK in reply and self.store.get_setting('proposals_enabled', '1') == '1':
+                try: proposals.collect(self.store, self.task_id, reply, 'assistant')
+                except Exception as e: logger.warning(f'proposal collection failed for task {self.task_id}: {e}')
+                reply = proposals.BLOCK.sub('', reply).strip() or 'Proposed - it waits on the task for your yes.'
             reply, closing = selfclose.chat_marker(reply)
             reply, asks = selfclose.ask_markers(reply)
             asked = asks[0][0] if asks else None

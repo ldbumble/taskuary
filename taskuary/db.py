@@ -15,7 +15,7 @@ def conn_str(cfg: dict) -> str:
 def is_url(cs: str) -> bool: return '://' in cs
 
 
-def _rows_sqlalchemy(cs, query, n):
+def _rows_sqlalchemy(cs, query, n, write=False):
     try: import sqlalchemy
     except ImportError:
         # name the package, not the extra: `taskuary[db]` silently no-ops when the install's
@@ -25,22 +25,28 @@ def _rows_sqlalchemy(cs, query, n):
     eng = sqlalchemy.create_engine(cs, pool_pre_ping=True)
     try:
         with eng.connect() as cx:
-            return [dict(r._mapping) for r in cx.execute(sqlalchemy.text(query)).fetchmany(n)]
+            rows = [dict(r._mapping) for r in cx.execute(sqlalchemy.text(query)).fetchmany(n)]
+            cx.commit() if write else cx.rollback()      # read is read (mssql.run_query)
+            return rows
     finally:
         eng.dispose()
 
 
-def _rows_odbc(cs, query, n):
+def _rows_odbc(cs, query, n, write=False):
     import pyodbc
-    with pyodbc.connect(cs, timeout=10) as cx:
+    cx = pyodbc.connect(cs, timeout=10)
+    try:
         cur = cx.cursor().execute(query)
         cols = [c[0] for c in cur.description or []]
-        return [dict(zip(cols, r)) for r in cur.fetchmany(n)]
+        rows = [dict(zip(cols, r)) for r in cur.fetchmany(n)]
+        cx.commit() if write else cx.rollback()          # read is read (mssql.run_query)
+        return rows
+    finally: cx.close()
 
 
 def run_query(cfg: dict, limit: int) -> list:
     cs = conn_str(cfg)
-    return (_rows_sqlalchemy if is_url(cs) else _rows_odbc)(cs, cfg['query'], limit)
+    return (_rows_sqlalchemy if is_url(cs) else _rows_odbc)(cs, cfg['query'], limit, write=bool(cfg.get('_write')))
 
 
 def test(cfg: dict) -> dict:

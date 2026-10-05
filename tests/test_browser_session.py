@@ -67,12 +67,13 @@ class TheChatIsNamedTooTests(unittest.TestCase):
     LAUNCHING Chrome and granting a shell still belong to a task that asked for a browser.
     """
 
-    def _turn(self, tags=''):
+    def _turn(self, tags='', hands=None):
         """One assistant turn on a CLI brain, with everything outside this decision held still."""
         from taskuary import general, llm as llm_mod
         s = MemoryStore()
         tid = s.create_task({'Title': 'Look something up', 'Summary': 'go', 'Kind': 'general',
                              'Status': 'open', 'Tags': tags}, 'owner')
+        if hands: s.set_setting('general_agent_hands', hands, 'test')
         session = general.GeneralSession(s, tid)
         session.pick, session.provider, session.model = 'cli:coder', 'Claude Code (your CLI)', ''
         seen = {}
@@ -86,8 +87,12 @@ class TheChatIsNamedTooTests(unittest.TestCase):
     def test_a_plain_chat_is_bound_without_a_browser_being_started(self):
         seen, started = self._turn()
         self.assertIn('AGENT_BROWSER_SESSION', seen.get('extra_env') or {})
-        self.assertFalse(seen.get('cli_tools'), 'a chat that did not ask for a browser gets no shell')
         started.assert_not_called()
+
+    def test_its_shell_is_the_owners_setting_not_the_browsers(self):
+        # the CLI agent's own hands by default; 'look things up only' takes the shell away (2026-10-05)
+        self.assertTrue(self._turn()[0].get('cli_tools'))
+        self.assertFalse(self._turn(hands='look')[0].get('cli_tools'), 'look only, and no browser asked for: no shell')
 
     def test_a_task_that_asked_for_one_gets_the_browser_and_the_brief(self):
         seen, started = self._turn(tags=bv.WANTS)

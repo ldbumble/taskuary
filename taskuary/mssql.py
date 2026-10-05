@@ -31,13 +31,21 @@ def _connect(cs: str):
 
 
 def run_query(cfg: dict, limit: int = None) -> list:
-    """Execute cfg['query'], return up to `limit` rows as dicts (cfg['max_rows'] wins)."""
+    """Execute cfg['query'], return up to `limit` rows as dicts (cfg['max_rows'] wins).
+
+    READ IS READ: whatever the batch changed is rolled back unless `_write` is set - and only /api/tools/run (a card the
+    owner raised to write) or an approved proposal sets it. pyodbc commits on a clean `with` exit, so an
+    'INSERT ...; SELECT 1' through a read-level card used to land (2026-10-05)."""
     from .reports import row_limit
     limit = limit or row_limit(cfg)[0]
-    with _connect(conn_str(cfg)) as cx:
+    cx = _connect(conn_str(cfg))
+    try:
         cur = cx.cursor().execute(cfg['query'])
         cols = [c[0] for c in cur.description or []]
-        return [dict(zip(cols, r)) for r in cur.fetchmany(limit)]
+        rows = [dict(zip(cols, r)) for r in cur.fetchmany(limit)]
+        cx.commit() if cfg.get('_write') else cx.rollback()
+        return rows
+    finally: cx.close()
 
 
 def test(cfg: dict) -> dict:

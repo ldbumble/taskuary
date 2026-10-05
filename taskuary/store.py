@@ -510,6 +510,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'chat_keep_days': '15',        # archived assistant chats expire after this many days (retention.py, PW-158)
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
+                    'general_agent_hands': 'cli',   # ...with the CLI agent's own permissions unless the owner narrows it (general.full_hands)
                     # who may start a worker UNATTENDED (senders.known, PW-079..081): the owner's own domains, verified
                     # Sent Items evidence that the receiving mailbox wrote to the exact address, chat channels inside a
                     # workspace the owner controls. Prior incoming mail is never a rule here.

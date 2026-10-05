@@ -40,7 +40,8 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
           <Box key={i.id} sx={{ mb: 1 }}>
             <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8 }}>
               <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, fontWeight: 600 }}>{named}{named.includes("@") ? "" : " ?"}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT }}>{slotState(i, rv)}{i.out.by === "agent" ? " · added by the agent" : ""}</Typography>
+              <Typography variant="caption" sx={{ color: FAINT }}>{slotState(i, rv)}{i.out.by === "agent" ? " · added by the agent" : ""}
+                {i.out.candidates?.length ? ` · could be ${i.out.candidates.slice(0, 3).join(" or ")}` : ""}</Typography>
               {!i.done && rv?.Status !== "pending" && <Button size="small" disabled={busy} onClick={() => drop(i)}>Drop</Button>}
             </Box>
             {rv?.Status === "pending" && <ReviewDecision review={rv} onChanged={onChanged} onDrop={() => drop(i)} />}

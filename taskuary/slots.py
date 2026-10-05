@@ -28,9 +28,18 @@ def clean(outputs) -> list:
 
 
 def add(store, tid: int, outputs, actor: str) -> list:
-    """Append these outputs as slots; one already open to the same person is not added twice."""
+    """Append these outputs as slots; one already open to the same person is not added twice. A person named, not
+    addressed, takes their address when exactly one person in the owner's own mail matches (people.resolve); several
+    are kept on the slot to pick from; none leaves the name and its '?'."""
+    from . import people
     have = {str(i['out'].get('to')).casefold() for i in open_(store, tid)}
-    new = [i for i in clean(outputs) if i['out']['to'].casefold() not in have]
+    new = []
+    for i in clean(outputs):
+        if '@' not in i['out']['to']:
+            found = people.resolve(store, i['out']['to'])
+            if found.get('address'): i['out']['to'] = found['address']
+            elif found.get('candidates'): i['out']['candidates'] = found['candidates']
+        if i['out']['to'].casefold() not in have: new.append(i)
     return store.add_checklist_items(tid, new, actor) if new else []
 
 

@@ -677,6 +677,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, []);
   // ...and Close with a note, the same card: what came of it, and the task view's own close behind the button
   const [noteOn, setNoteOn] = useState(null);           // { task, ref, close(note) }
+  // ...and the task view's Configure the next run takes the same place: one card under the conversation at a time
+  useEffect(() => {
+    const on = () => { setContinueOn(null); setNoteOn(null); };
+    window.addEventListener("tq-next-run", on);
+    return () => window.removeEventListener("tq-next-run", on);
+  }, []);
   useEffect(() => {
     const on = (e) => { setContinueOn(null); setNoteOn(e.detail); };
     window.addEventListener("tq-close-note", on);
@@ -1859,6 +1865,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
                 }} />
             </div>
           )}
+          {/* the slot the task view draws Configure the next run into (TaskPage, createPortal) */}
+          {!old && <div className="tq-browse-line" data-tq-run-slot="" style={{ display: "contents" }} />}
           {(busy || phoneBusy || nextComing) && (
             <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>

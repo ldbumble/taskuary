@@ -7,6 +7,7 @@ import { says, subState } from "./laneSays.js";
 import ContinueBox from "./ContinueBox.jsx";
 import QueuedStart from "./QueuedStart.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
   Drawer, IconButton, InputAdornment, Link, MenuItem, Select, TextField, Tooltip, Typography,
@@ -783,6 +784,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [continueAt, setContinueAtRaw] = useState(null);
   // on the canvas Continue is a card IN the conversation (AssistantView listens), not a popover over the view
   const setContinueAt = (a) => {
+    if (a) setRestartOpen(false);                 // one card under the conversation at a time
     if (a && canvas && t) { window.dispatchEvent(new CustomEvent("tq-continue", { detail: { task: t, ref: t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}` } })); return; }
     setContinueAtRaw(a);
   };
@@ -791,6 +793,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [noteAt, setNoteAtRaw] = useState(null);
   const closeWithNote = async (note) => { const failed = await finish("done", note); if (failed) throw new Error(failed); };
   const setNoteAt = (a) => {
+    if (a) setRestartOpen(false);
     if (a && canvas && t) { window.dispatchEvent(new CustomEvent("tq-close-note", { detail: { task: t, ref: t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}`, close: closeWithNote } })); return; }
     setNoteAtRaw(a);
   };
@@ -843,7 +846,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // so a general task could never be handed to the coding agent from here. It opens the agent step; a live session is paused
   // (its handover kept for the next) when the new one starts (startCodingAgent).
   const runAnother = { id: "run-another", group: "agent", label: "Run another agent",
-    run: () => { setOpenStage("agent"); setRestartOpen(true); },
+    run: () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); else setOpenStage("agent"); setRestartOpen(true); },
     title: "Opens the agent step: a different agent, harness, model or repository. A running session is paused and its handover goes to the new one." };
   const rowVerbs = !t ? [] : !notDone
     ? [{ id: "reopen", group: "decide", tone: "s", label: "Reopen task", run: reopen, title: "Reopens the task only. No agent starts until you choose one." }]
@@ -881,9 +884,82 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // ...the same write-up once the session has ended by itself: one button, one name (the owner, 2026-10-02 - its own name made it look like a second button)
       ...(!liveSession && canSave && agentBar ? [{ id: "save-end", group: "more", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
         title: "Writes up what the session did and files it as the task's result. The task stays open until you press Mark done." }] : []),
-      ...(!liveSession && continueHere && agentBar ? [runAnother] : []),
+      // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
+      ...(!liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
     ];
   useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
+  // CONFIGURE THE NEXT RUN, IN LINE (the owner, 2026-10-05: "should be the bottom like continue session and it should replace the
+  // continue session box"): on the canvas the agent step's form is a card under the conversation, in Continue's place - one card at
+  // a time - and it closes when the agent starts (startCodingAgent / startGeneralAgent close restartOpen on success)
+  const nextRunForm = (
+                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 700, mb: 0.75 }}>
+                        {report || detail?.transcript || term?.alive || generalStarted ? "Configure the next run" : "Start an agent"}
+                      </Typography>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                        {/* coding asks ONE question (which CLI); a hand-off asks three - which profile,
+                            which brain, which model - and all three reach the session. */}
+                        <AgentPicker agents={agents} models={models} kinds={kinds} coding={!handOff}
+                          agent={run.agent} model={run.model}
+                          brains={brainList} brainModels={brainModels} brain={run.brain || ""}
+                          generalBrains={generalBrains} pick={run.pick || ""}
+                          onPick={(p) => setRun({ ...run, pick: p })}
+                          onBrain={(b) => setRun({ ...run, brain: b, model: "" })}
+                          onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
+                          onModel={(m) => setRun({ ...run, model: m })} size={28} />
+                        <Typography variant="caption" sx={{ color: FAINT }}>
+                          This run receives the task, messages, attachments, and the latest saved result.
+                        </Typography>
+                      </Box>
+                      <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={run.instruction}
+                        onChange={(e) => setRun({ ...run, instruction: e.target.value })}
+                        placeholder={detail?.transcript ? "What should this new agent do next?" : "Extra instructions for this session (optional)"}
+                        sx={{ mt: 0.85, bgcolor: "#fff" }} />
+                      {!handOff && <RepoSelect taskId={selected} agent={run.agent || "coder"} instruction={run.instruction}
+                        value={startRepo} onChange={setStartRepo} />}
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
+                        {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === ""}
+                          startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
+                          onClick={startCodingAgent}>
+                          {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
+                        </Button>}
+                        {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
+                            the pick resumes this start - the same road a start that ran into the question takes */}
+                        {!handOff && startRepo === "" && <>
+                          <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>Pick a repo first</Typography>
+                          <Button size="small" variant="outlined" sx={chipBtn} disabled={!!startingAgent}
+                            startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
+                            title="Which checkout the session works in - the session starts once you pick"
+                            onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>pick a repo</Button>
+                        </>}
+                        {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
+                          title="Saves the stopped session's result and report. The task stays open."
+                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save and end session</Button>}
+                        {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
+                            become the profile, brain and model, and the next press starts it */}
+                        {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
+                          startIcon={<TaskuaryMark size={13} />}
+                          onClick={() => setHandOff(true)}>Use non-coding agent</Button>}
+                        {handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                          startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
+                          onClick={startGeneralAgent}>
+                          {startingAgent === "general" ? "Starting…" : "Send to non-coding agent"}
+                        </Button>}
+                        {handOff && <Button size="small" variant="text" disabled={!!startingAgent}
+                          onClick={() => { setHandOff(false); setRun({ ...run, agent: "", pick: "", model: "" }); }}>Back to coding</Button>}
+                        {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
+                          onClick={() => setRestartOpen(false)}>Cancel</Button>}
+                        {repoOf(t) && <Typography variant="caption" sx={{ ...mono, color: FAINT }}>repo · {repoOf(t)}</Typography>}
+                      </Box>
+                    </Box>
+  );
+  const [nextRunSlot, setNextRunSlot] = useState(null);
+  useEffect(() => {
+    if (!(canvas && restartOpen)) { setNextRunSlot(null); return; }
+    const el = document.querySelector("[data-tq-run-slot]");
+    setNextRunSlot(el);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [canvas, restartOpen]);
   return (
     <>
       {/* ── detail ────────────────────────────────────────────────────── */}
@@ -1357,68 +1433,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                     </Box>
                   )}
-                  {(restartOpen || (!term?.alive && !liveRun && !isGeneral && !report && !detail?.transcript)) && (
-                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                      <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 700, mb: 0.75 }}>
-                        {report || detail?.transcript || term?.alive ? "Configure the next run" : "Start an agent"}
-                      </Typography>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-                        {/* coding asks ONE question (which CLI); a hand-off asks three - which profile,
-                            which brain, which model - and all three reach the session. */}
-                        <AgentPicker agents={agents} models={models} kinds={kinds} coding={!handOff}
-                          agent={run.agent} model={run.model}
-                          brains={brainList} brainModels={brainModels} brain={run.brain || ""}
-                          generalBrains={generalBrains} pick={run.pick || ""}
-                          onPick={(p) => setRun({ ...run, pick: p })}
-                          onBrain={(b) => setRun({ ...run, brain: b, model: "" })}
-                          onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
-                          onModel={(m) => setRun({ ...run, model: m })} size={28} />
-                        <Typography variant="caption" sx={{ color: FAINT }}>
-                          This run receives the task, messages, attachments, and the latest saved result.
-                        </Typography>
-                      </Box>
-                      <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={run.instruction}
-                        onChange={(e) => setRun({ ...run, instruction: e.target.value })}
-                        placeholder={detail?.transcript ? "What should this new agent do next?" : "Extra instructions for this session (optional)"}
-                        sx={{ mt: 0.85, bgcolor: "#fff" }} />
-                      {!handOff && <RepoSelect taskId={selected} agent={run.agent || "coder"} instruction={run.instruction}
-                        value={startRepo} onChange={setStartRepo} />}
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
-                        {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === ""}
-                          startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
-                          onClick={startCodingAgent}>
-                          {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
-                        </Button>}
-                        {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
-                            the pick resumes this start - the same road a start that ran into the question takes */}
-                        {!handOff && startRepo === "" && <>
-                          <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>Pick a repo first</Typography>
-                          <Button size="small" variant="outlined" sx={chipBtn} disabled={!!startingAgent}
-                            startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                            title="Which checkout the session works in - the session starts once you pick"
-                            onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>pick a repo</Button>
-                        </>}
-                        {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
-                          title="Saves the stopped session's result and report. The task stays open."
-                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save and end session</Button>}
-                        {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
-                            become the profile, brain and model, and the next press starts it */}
-                        {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
-                          startIcon={<TaskuaryMark size={13} />}
-                          onClick={() => setHandOff(true)}>Use non-coding agent</Button>}
-                        {handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
-                          startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
-                          onClick={startGeneralAgent}>
-                          {startingAgent === "general" ? "Starting…" : "Send to non-coding agent"}
-                        </Button>}
-                        {handOff && <Button size="small" variant="text" disabled={!!startingAgent}
-                          onClick={() => { setHandOff(false); setRun({ ...run, agent: "", pick: "", model: "" }); }}>Back to coding</Button>}
-                        {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
-                          onClick={() => setRestartOpen(false)}>Cancel</Button>}
-                        {repoOf(t) && <Typography variant="caption" sx={{ ...mono, color: FAINT }}>repo · {repoOf(t)}</Typography>}
-                      </Box>
-                    </Box>
-                  )}
+                  {(restartOpen || (!term?.alive && !liveRun && !isGeneral && !report && !detail?.transcript))
+                    && !(canvas && restartOpen) && nextRunForm}
                   {isGeneral && !generalStarted && (
                     <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* the same three answers the hand-off asks - this door had none at all */}
@@ -1924,6 +1940,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         </DialogActions>
       </Dialog>
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
+      {nextRunSlot && createPortal(<Box data-tq-run-card sx={{ border: "1px solid #d5d0c7", borderRadius: "12px", bgcolor: "#fffdfb", p: 1.5,
+        "& > div": { mt: 0, pt: 0, borderTop: 0 } }}>{nextRunForm}</Box>, nextRunSlot)}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />}
       <Confirm open={confirmDone} title="Stop the agent and mark done?"

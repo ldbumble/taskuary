@@ -53,7 +53,7 @@ def _fold(value):
     return str(value or '').casefold()
 
 
-REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
+REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver', 'ContextRevision')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 # The reports this app seeds, as (sentinel setting, the Address the seeder writes, the config type).
@@ -1574,7 +1574,8 @@ class SQLiteStore:
                 item_id = next((digest[:n] for n in range(8, len(digest) + 1)
                                 if digest[:n] not in used_ids), digest)
             used_ids.add(item_id)
-            items.append({'id': item_id, 'text': text, 'done': bool(prior.get('done'))})
+            items.append({'id': item_id, 'text': text, 'done': bool(prior.get('done')),
+                          **{k: prior[k] for k in ('out', 'rid') if k in prior}})     # a slot keeps what it sends and its draft
         self._write_checklist(task_id, items, actor)
         return items
     def merge_task_checklist(self, task_id, texts, actor: str) -> list:
@@ -1590,6 +1591,19 @@ class SQLiteStore:
             have.add(text); used_ids.add(item_id)
         if new: self._write_checklist(task_id, items + new, actor)
         return new
+    def add_checklist_items(self, task_id, ready: list, actor: str) -> list:
+        """Append ready-made items ({text, out}) - output slots (slots.add); ids as merge_task_checklist gives them."""
+        items = self.task_checklist(task_id)
+        have, used_ids, new = {i['text'] for i in items}, {i.get('id') for i in items}, []
+        for r in ready:
+            text = str(r.get('text') or '').strip()[:300]
+            if not text or text in have: continue
+            digest = hashlib.sha1(text.encode()).hexdigest()
+            item_id = next((digest[:n] for n in range(8, len(digest) + 1) if digest[:n] not in used_ids), digest)
+            new.append({'id': item_id, 'text': text, 'done': False, **({'out': r['out']} if r.get('out') else {})})
+            have.add(text); used_ids.add(item_id)
+        if new: self._write_checklist(task_id, items + new, actor)
+        return new
     def tick_checklist_item(self, task_id, item_id: str, done: bool, actor: str) -> bool:
         items = self.task_checklist(task_id)
         hit = [i for i in items if i['id'] == item_id]
@@ -1598,7 +1612,12 @@ class SQLiteStore:
         self._write_checklist(task_id, items, actor)
         return True
     def checklist_markdown(self, task_id) -> str:
-        return '\n'.join(f"- [{'x' if i.get('done') else ' '}] {i['text']}" for i in self.task_checklist(task_id))
+        # a slot says where it goes and how to fill it: the seed line is byte-capped, so the command rides here (slots.py)
+        def line(i):
+            o = i.get('out') if isinstance(i.get('out'), dict) else None
+            tail = (f" -> email to {o.get('to')}, " + ('drafted' if i.get('rid') else f"fill with `taskuary --draft --slot {i['id']} \"<text>\"`")) if o else ''
+            return f"- [{'x' if i.get('done') else ' '}] {i['text']}{tail}"
+        return '\n'.join(line(i) for i in self.task_checklist(task_id))
 
     def tag_task(self, task_id, tag, on=True, actor='router'):
         """Add or remove ONE tag, leaving the others alone. Tags is a csv the UI and the router
@@ -4075,6 +4094,7 @@ class SQLiteStore:
         live_only=False only to reach a row deliberately - housekeeping, not the funnel."""
         q = f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending'"
         if kind:      q += ' AND rv.Kind=?'
+        else:         q += " AND rv.Kind<>'slot'"             # a task's emails (slots.py) are never its reply
         if live_only: q += f' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'
         return self._one(q + ' ORDER BY rv.ReviewId DESC LIMIT 1', (task_id, kind) if kind else (task_id,))
     def sent_reply(self, message_id=None, task_id=None):
@@ -4084,7 +4104,7 @@ class SQLiteStore:
         are not necessarily ingested back from the external channel before the Assistant's next
         check, so message history alone can briefly (and falsely) look unanswered.
         """
-        where, values = ["(rv.DeliveryState='sent' OR (rv.DeliveryState IS NULL AND rv.Status IN ('approved','edited','sent')))", "rv.Kind<>'action'",
+        where, values = ["(rv.DeliveryState='sent' OR (rv.DeliveryState IS NULL AND rv.Status IN ('approved','edited','sent')))", "rv.Kind<>'action'", "rv.Kind<>'slot'",
                          "COALESCE(NULLIF(rv.FinalText,''), rv.DraftText, '')<>''"], []
         if message_id is not None:
             where.append('rv.MessageId=?'); values.append(message_id)

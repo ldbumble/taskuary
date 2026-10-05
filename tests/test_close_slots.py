@@ -221,3 +221,82 @@ def test_the_endpoint_files_the_draft_on_the_sessions_own_task(s):
     with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only', return_value=None):
         r = TestClient(server.app).post('/api/agent/draft', json={'task_id': tid, 'text': 'hi', 'to': 'paula@northwind.example'})
     assert r.json()['ok'] and slots.all_(s, tid)[0]['rid']
+
+
+# ── triage and the assistant say what closes a task ──────────────────────────────────────
+from taskuary import concierge, triage
+
+
+def test_triage_reads_outputs_only_on_a_task():
+    j = {'intent': 'task', 'why': 'w', 'title': 't', 'summary': 's', 'kind': 'task', 'checklist': ['a'], 'urgent': False,
+         'outputs': [{'to': 'erin@northwind.example', 'about': 'the numbers'}, {'to': '', 'about': 'x'}]}
+    assert triage.parse_outputs(j) == [{'to': 'erin@northwind.example', 'about': 'the numbers'}]
+    assert triage.parse_outputs({**j, 'intent': 'fyi'}) == [] and triage.parse_outputs({**j, 'outputs': None}) == []
+
+
+def test_the_schema_offers_outputs():
+    p = triage.verdict_schema()['schema']['properties']
+    assert p['outputs']['type'] == ['array', 'null'] and p['outputs']['items']['additionalProperties'] is False
+    assert 'outputs' in triage.verdict_schema()['schema']['required']
+
+
+def test_a_hand_made_ask_returns_its_outputs():
+    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': ['check'], 'outputs': [{'to': 'paula@northwind.example', 'about': 'tab 1'}]})
+    assert triage.extract_ask({'body': 'Check tab 1 and email Paula'}, llm)['outputs'] == [{'to': 'paula@northwind.example', 'about': 'tab 1'}]
+    assert triage.extract_ask({'body': 'x'}, None)['outputs'] == []
+
+
+class Inline:                     # threading.Thread, run where it is started
+    def __init__(self, target=None, args=(), **k): self.go = lambda: target(*args)
+    def start(self): self.go()
+
+
+def handoff(s, brain):
+    session = mock.Mock()
+    with mock.patch('taskuary.concierge.brain', **brain), mock.patch('taskuary.general.start_session', return_value=session), \
+         mock.patch('taskuary.concierge.threading.Thread', Inline):
+        made = concierge.handoff_task(s, 'Check the four tabs and draft an email to each owner', kind='general')
+    return made, session
+
+
+def test_a_chat_handoff_reads_its_slots_before_the_agents_first_turn(s):
+    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': FOUR})
+    made, session = handoff(s, {'return_value': llm})
+    assert len(slots.open_(s, made['taskId'])) == 4 and session.send_prompt.called
+
+
+def test_the_slots_are_there_when_the_agent_is_prompted(s):
+    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': FOUR[:1]})
+    session, seen = mock.Mock(), []
+    session.send_prompt.side_effect = lambda brief: seen.append(len(slots.open_(s, made_box[0])))
+    made_box = []
+    real_start = lambda st, tid, **k: made_box.append(tid) or session
+    with mock.patch('taskuary.concierge.brain', return_value=llm), mock.patch('taskuary.general.start_session', side_effect=real_start), \
+         mock.patch('taskuary.concierge.threading.Thread', Inline):
+        concierge.handoff_task(s, 'Email Paula where tab 1 stands', kind='general')
+    assert seen == [1]
+
+
+def test_a_handoff_whose_brain_fails_is_made_anyway(s):
+    made, session = handoff(s, {'side_effect': RuntimeError('no brain')})
+    assert s.get_task(made['taskId']) and slots.all_(s, made['taskId']) == [] and session.send_prompt.called
+
+
+def test_a_triaged_message_that_asks_for_emails_gets_slots():
+    from datetime import datetime
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    verdict = json.dumps({'intent': 'task', 'kind': 'task', 'why': 'asks for two updates', 'title': 'Send the tab updates',
+                          'summary': 'Marcus Reed wants Erin and Gail told where the tabs stand.', 'checklist': ['Tell Erin and Gail'],
+                          'outputs': [{'to': 'erin@northwind.example', 'about': 'the tabs'}, {'to': 'Gail Moreno', 'about': 'the tabs'}]})
+    st, prev = MemoryStore(), server.store
+    server.store = st; st.set_setting('coder_auto_enabled', '0', 'test')
+    try:
+        body = {'external_id': 'slots-1', 'channel': 'teams', 'conversation_id': 'teams:19:slots@thread.v2', 'from_name': 'Marcus Reed',
+                'subject': 'Tab updates', 'body': 'Could you let Erin and Gail know where each tab stands?',
+                'sent_at': datetime.now().isoformat(sep=' ', timespec='seconds')}
+        with mock.patch('taskuary.server._llm', return_value=lambda sys_, usr_, **kw: verdict):
+            TestClient(server.app).post('/api/ingest/push', json=body)
+        tid = next(t['TaskId'] for t in st.list_tasks(active_only=True))
+        assert [i['out']['to'] for i in slots.all_(st, tid)] == ['erin@northwind.example', 'Gail Moreno']
+    finally: server.store = prev

@@ -109,7 +109,10 @@ TASK_FIELDS = (
     'Every row the owner reads is drawn from those two, and an fyi or a report needs a readable line exactly as much as a task does: '
     '"RE: RE: FW: 0 rows returned for period ending 09/15" is a mail header, not a sentence. '
     'For a task, also answer "checklist": ["<one distinct requested outcome each>"] - drawn only from what the '
-    'message and exchange actually ask for; never invent a requirement, never list anything as already done.')
+    'message and exchange actually ask for; never invent a requirement, never list anything as already done. '
+    'For a task, also answer "outputs": [{"to": "<who>", "about": "<what to tell them>"}] - ONLY messages the sender asks the '
+    'owner to send to OTHER people, the address when the message gives one, else the name as written. A reply to the sender '
+    'is never an output; most tasks have none - answer null.')
 # URGENT IS TRIAGE'S CALL (the owner, 2026-09-25: "we should make urgent a triage decision"). It was only ever an
 # escalate rule on a sender; nothing read the message itself for whether it could wait.
 # ...and only TIME makes it urgent (the owner, 2026-09-25: "urgent should not be every task unless there is a hurry or
@@ -133,7 +136,10 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     p = {'intent': {'type': 'string', 'enum': ['task', 'reply_only', 'fyi']},
          'why': {'type': 'string'}, 'title': {'type': 'string'}, 'summary': {'type': 'string'},
          'kind': {'type': ['string', 'null'], 'enum': ['coding', 'general', 'task', None]},
-         'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}, 'urgent': {'type': 'boolean'}}
+         'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}, 'urgent': {'type': 'boolean'},
+         # what closes it beyond the reply (slots.py): emails to OTHER people the message asks the owner to send
+         'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
+                                                          'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
     if playbooks: p['playbook'] = {'type': ['string', 'null']}
     if profiles: p['profile'] = {'type': ['string', 'null']}
     if repos: p.update(repository={'type': ['string', 'null']}, needs_repo_choice={'type': 'boolean'},
@@ -454,7 +460,9 @@ ASK_SYSTEM = (
     'You are reading one message that the owner has just turned into a task. Answer ONLY with a '
     'JSON object: {"summary": "<two sentences: who wants what from the owner, asker first, then the one '
     'detail that matters>", '
-    '"checklist": ["<one distinct requested outcome each>"]}. The checklist is drawn only from '
+    '"checklist": ["<one distinct requested outcome each>"], '
+    '"outputs": [{"to": "<who>", "about": "<what to tell them>"}]}. Outputs are ONLY messages it asks the owner to send to '
+    'OTHER people, the address when given, else the name as written; [] when none. The checklist is drawn only from '
     'what the message actually asks for; never invent a requirement, never list anything as '
     'already done, and never include the signature, the confidentiality footer or quoted '
     'earlier mail. If the message asks for nothing concrete, return an empty checklist.')
@@ -477,17 +485,24 @@ def extract_ask(msg: dict, llm=None) -> dict:
     body, _cut = sender_body(raw_body, own_text, budget=6000)
     own = (own_text and strip_boilerplate(str(own_text).strip())) or own_words(raw_body)
     subject = str(msg.get('Subject') or msg.get('subject') or '')
-    if not llm: return {'summary': own[:1000], 'checklist': []}
+    if not llm: return {'summary': own[:1000], 'checklist': [], 'outputs': []}
     try:
         raw = llm(ASK_SYSTEM, f'Subject: {subject}\n\n{body[:6000]}')
         j = json.loads(re.sub(r'^```(json)?|```$', '', str(raw or '').strip(), flags=re.M))
         summary = str(j.get('summary') or '').strip()
         items = [x.strip() for x in (j.get('checklist') or []) if isinstance(x, str) and x.strip()]
-        return {'summary': summary or own[:1000], 'checklist': items[:12]}
+        return {'summary': summary or own[:1000], 'checklist': items[:12], 'outputs': parse_outputs({'intent': 'task', **j})}
     except Exception as e:                       # a promote must never fail because a model did
         from loguru import logger
         logger.warning(f'could not extract the ask, keeping the plain body: {e}')
-        return {'summary': own[:1000], 'checklist': []}
+        return {'summary': own[:1000], 'checklist': [], 'outputs': []}
+
+
+def parse_outputs(j: dict) -> list:
+    """The verdict's outputs - only on a task, only with somebody to send to (slots.clean validates the rest)."""
+    if j.get('intent', 'task') != 'task' or not isinstance(j.get('outputs'), list): return []
+    return [{'to': str(o.get('to')).strip(), 'about': str(o.get('about') or '').strip()} for o in j['outputs']
+            if isinstance(o, dict) and str(o.get('to') or '').strip()][:12]
 
 
 def repo_choice_of(j: dict, repos: list) -> dict:
@@ -816,6 +831,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if j.get('urgent') is True and out['intent'] in ('task', 'reply_only'): out['urgent'] = True
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
                     out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
+                if out['intent'] == 'task' and parse_outputs(j): out['outputs'] = parse_outputs(j)
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

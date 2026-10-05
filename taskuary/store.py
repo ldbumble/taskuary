@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
   Kind TEXT DEFAULT 'general', Status TEXT DEFAULT 'open', Priority TEXT DEFAULT 'normal',
   Assignee TEXT, Source TEXT DEFAULT 'manual', SourceRef TEXT, Tags TEXT,
   CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT, ClosedAt TEXT, RemindAt TEXT,
-  AskedVia TEXT, AskedTold TEXT, AskedToldAt TEXT);
+  AskedVia TEXT, AskedTold TEXT, AskedToldAt TEXT, AskedWatch TEXT, AskedSeenMid INTEGER, RemindVia TEXT, RemindOwed TEXT);
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
@@ -822,7 +822,9 @@ class SQLiteStore:
             if 'RemindAt' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN RemindAt TEXT')
             # what the owner asked for, and where (asks.py): the door, and the last lane said there - kept on the task,
             # so a restart never repeats what was already told
-            for col in ('AskedVia', 'AskedTold', 'AskedToldAt'):
+            # ...a watch on a task nobody works (what, and the last reply already seen), and where a reminder was set
+            # and whether it is still owed to a busy phone chat
+            for col in ('AskedVia', 'AskedTold', 'AskedToldAt', 'AskedWatch', 'AskedSeenMid', 'RemindVia', 'RemindOwed'):
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
             # the owner's own replies were stored as INCOMING (X1, 2026-09-25) - everything that counts senders, and the
             # triage accuracy measure, counted the owner as one. 'You' on a context row is the owner, never a bot.

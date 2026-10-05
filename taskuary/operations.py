@@ -54,7 +54,8 @@ KINDS = {
     'task.update':              ('task', (), None),          # priority / title / assignee
     'task.set_repo':            ('task', ('repo',), None),
     'task.check':               ('task', ('item',), None),
-    'task.checklist':           ('task', (), None),          # reword / remove items, and add or drop the emails that close it
+    'task.checklist':           ('task', (), None),
+    'task.watch':               ('task', (), None),          # tell me here when it's done / someone replies (asks.py)          # reword / remove items, and add or drop the emails that close it
     'task.comment':             ('task', ('text',), None),
     'task.handoff':             ('task', ('who',), None),    # a draft for the owner's yes - never sent from the card
     'task.merge':               ('task', ('into',), None),

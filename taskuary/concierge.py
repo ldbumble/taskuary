@@ -2803,7 +2803,7 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'connection.create': label = 'Create the connection'
     if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
     label = {'hub.publish': 'Save it to the Hub', 'task.update': 'Change the task', 'task.set_kind': 'Change what kind of work it is', 'task.set_repo': 'Put it in that repository',
-             'task.check': 'Tick the checklist item', 'task.checklist': 'Change the checklist', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
+             'task.check': 'Tick the checklist item', 'task.checklist': 'Change the checklist', 'task.watch': 'Watch it for you', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
              'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': 'Reopen it',
              'task.not_a_task': 'Delete it - not a task', 'dispatch.prepare': 'Start an agent on it', 'agent.continue': 'Continue the agent',
              'review.reject': 'Reject the draft'}.get(kind, label)
@@ -2849,6 +2849,8 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'setting.set': return f" {o.get('said') or ''}"
     if kind == 'task.update': return ' ' + ', '.join(f"{k.lower()} is now {v}" for k, v in (o.get('changed') or {}).items()) + '.'
     if kind == 'task.check' and o.get('item'): return f" Ticked: {o['item']}."
+    if kind == 'task.watch': return (' Stopped watching it.' if o.get('watch') == 'off' else
+                                     f" I'll tell you {'here ' if o.get('via') else ''}when " + {'done': 'it is done', 'reply': 'someone replies on it'}.get(o.get('watch'), 'anything happens on it') + '.')
     if kind == 'task.checklist': return f" The list has {len(o.get('checklist') or [])} item(s)" + (f", {o['added']} email(s) added." if o.get('added') else '.')
     if kind == 'task.handoff' and o.get('to'): return f" The hand-off to {o['to']} is below for your yes - nothing has gone."
     if kind == 'task.clarify': return ' The question is below for your yes - nothing has gone.'

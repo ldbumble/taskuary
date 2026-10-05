@@ -14,7 +14,7 @@
 
 **一个为你的工作服务的个人 AI 助手。** 邮件、聊天和工单变成任务，由你已经在用的智能体（Claude Code、Codex、Gemini）完成，未经你批准，什么都不会发出。开源，在你的电脑上运行，无需订阅。
 
-与 alfred_、Fyxer 等托管助手相比，Taskuary 免费开源，在你的电脑上运行，并把工作交给你已经在用的智能体。
+与 Fyxer 等托管助手相比，Taskuary 免费开源，在你的电脑上运行，并把工作交给你已经在用的智能体。
 
 ![工作到来时，Taskuary 的工作室逐渐展开，AI 智能体就位。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=workspace)
 

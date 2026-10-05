@@ -243,12 +243,15 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
                         why='A proposed action is waiting for your approval' if review.get('Kind') == 'action' else 'A reply is waiting for your approval')
+            if review.get('Kind') == 'slot':       # the task's emails (slots.py), counted - never called its reply
+                n = len([r for r in pending if r.get('Kind') == 'slot'])
+                card['why'] = f"{n} email{'s' if n != 1 else ''} drafted for you to send"
             # WHAT THE AGENT DID, between what triggered the task and what you are approving (the owner, 2026-09-28: "the
             # goal is to see what triggered the task, agent action, and what we are reviewing") - the rail knew it only
             # inside the `why` sentence; the older walk (funnel.from_feed) always carried it as `summary`
             if not card.get('summary'): card['summary'] = funnel.agent_found(store, tid)
             # a REPLY whose task also waits on a merge: its Close out runs both (verdicts.decide), so its card says so
-            if review.get('Kind') != 'action':
+            if review.get('Kind') not in ('action', 'slot'):
                 other = proposals.closeout_pending(store, tid)
                 if other: card.update(closeout=proposals.CLOSEOUT.get(proposals._action(other)), rides=True)
             # the task's close-out (merge the PR, close the issue): ONE word, Close out - the card's sentence says what it does there
@@ -256,14 +259,14 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             if closeout:
                 ev = finish_evidence(store, tid)
                 # a reply waiting beside it rides WITH it (verdicts reply_text) - the same one button
-                rides = bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (tid,)))
+                rides = bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action','slot')", (tid,)))
                 card.update(closeout=closeout, rides=rides, why=f"{(ev or {}).get('who') or 'The agent'} finished it - Close out {closeout}"
                                                    + (' and posts your reply' if rides else '')
                                                    + (f": {ev['summary']}" if (ev or {}).get('summary') else ''))
     # ONE "AGENT FINISHED" (A17, 2026-09-25): a finish that drafted a reply left the task waiting on it, and the owner saw
     # only "reply ready" - never that the agent had finished. The reply is the move, so the card stays the reply to
     # send, and says who finished it.
-    if review and task.get('Status') == 'waiting' and review.get('Kind') != 'action':
+    if review and task.get('Status') == 'waiting' and review.get('Kind') not in ('action', 'slot'):
         ev = finish_evidence(store, tid)
         if ev: card['why'] = f"{ev['who']} finished it - its reply is ready for your yes" + (f": {ev['summary']}" if ev.get('summary') else '')
     # ...and the row behind it says so too: a mail-backed row read 'asked you' - as if a person were

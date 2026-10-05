@@ -174,6 +174,7 @@ def test_a_busy_phone_chat_is_retried_not_lost(s):
 def test_a_desktop_ask_goes_to_the_phone_while_the_walk_is_handed_there(s):
     tid = made(s)
     with at(s, tid, 'blocked'), mock.patch.object(remote_assistant, 'handoff', return_value=dict(PHONE, at='now')), \
+         mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
          mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
         asks.check(s, tid)
     assert send.called and dock_lines(s) and all('TQ-' in l for l in dock_lines(s))
@@ -218,8 +219,7 @@ def test_the_sweep_checks_only_open_asks(s):
 # ── the assistant knows your asks ────────────────────────────────────────────────────────
 def test_the_block_lists_open_asks_with_ref_door_and_state(s):
     a = made(s, 'Check the four tabs'); b = phone_ask(s)
-    with rail({'tid': a, 'lane': 'working', 'why': 'the agent is on it'}, {'tid': b, 'lane': 'approve', 'why': 'a draft waits'}):
-        out = asks.block(s)
+    out = asks.block(s, [{'tid': a, 'lane': 'working', 'why': 'the agent is on it'}, {'tid': b, 'lane': 'approve', 'why': 'a draft waits'}])
     lines = out.splitlines()
     assert lines[0] == 'YOUR OPEN ASKS' and 'TQ-0002' in lines[1] and 'WhatsApp' in lines[1] and 'a draft waits' in lines[1]
     assert 'TQ-0001' in lines[2] and 'the agent is on it' in lines[2]
@@ -227,19 +227,18 @@ def test_the_block_lists_open_asks_with_ref_door_and_state(s):
 
 def test_the_block_is_capped_and_short(s):
     tids = [made(s, f'Ask number {n} about the quarterly numbers for the region') for n in range(20)]
-    with rail(*[{'tid': t, 'lane': 'working', 'why': 'the agent is on it'} for t in tids]):
-        out = asks.block(s)
+    out = asks.block(s, [{'tid': t, 'lane': 'working', 'why': 'the agent is on it'} for t in tids])
     assert len(out.splitlines()) == 1 + asks.BLOCK_CAP and len(out) < 900
 
 
 def test_a_finished_ask_leaves_the_block_once_it_is_off_the_rail(s):
     tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coder')
-    with rail({'tid': tid, 'lane': 'saved', 'why': 'finished'}): assert 'TQ-0001' in asks.block(s)
-    with rail(): assert asks.block(s) == ''
+    assert 'TQ-0001' in asks.block(s, [{'tid': tid, 'lane': 'saved', 'why': 'finished'}])
+    assert asks.block(s, []) == ''
 
 
 def test_no_asks_no_block(s):
-    with rail(): assert asks.block(s) == ''
+    assert asks.block(s, []) == ''
 
 
 def test_the_look_up_lists_older_and_finished_asks(s):
@@ -271,8 +270,8 @@ def cand(tid=None, mid=None, conv='conv-1', kind='followup'):
 
 
 def test_a_candidate_on_a_task_told_an_hour_ago_is_dropped_and_25h_later_comes_back(s):
-    tid = made(s)
-    s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('approve', hours_ago(1), tid))
+    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coder')       # closed: only the window holds it back now
+    s._exec('UPDATE task SET AskedTold=?, AskedToldAt=?, ClosedAt=? WHERE TaskId=?', ('finished', hours_ago(1), hours_ago(30), tid))
     assert asks.not_just_said(s, [cand(tid=tid)], 24) == []
     s._exec('UPDATE task SET AskedToldAt=? WHERE TaskId=?', (hours_ago(25), tid))
     assert len(asks.not_just_said(s, [cand(tid=tid)], 24)) == 1
@@ -295,7 +294,7 @@ def test_an_untouched_candidate_comes_through(s):
 
 def test_the_advisor_drops_them_before_the_model_sees_them(s):
     from taskuary import assistant
-    tid = made(s); s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('finished', hours_ago(1), tid))
+    tid = made(s)
     with mock.patch.object(assistant, '_asks_and_promises', return_value=[cand(tid=tid), cand(conv='conv-z')]):
         out = assistant.candidates(s, {'producers': (), 'cold_d': 3, 'followup_h': 24})
     assert [c['key'] for c in out] == ['followup:conv-z']
@@ -306,3 +305,80 @@ def test_already_said_carries_what_tasks_told_the_owner(s):
     tid = made(s, 'Check the four tabs'); s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('approve', hours_ago(2), tid))
     text, _ = assistantblocks._already_said(s, {})
     assert 'Check the four tabs' in text and 'TQ-0001' in text
+
+
+# ── final review: the turn stays cheap, the block stays honest ───────────────────────────
+def test_a_turn_with_no_asks_never_builds_the_rail(s):
+    with mock.patch.object(asks, '_rail', side_effect=AssertionError('built the rail')), \
+         mock.patch('taskuary.funnel.pile', side_effect=AssertionError('built the pile')):
+        assert asks.block(s, []) == ''
+
+
+def test_the_block_reads_the_rail_it_is_given_and_never_rebuilds(s):
+    tid = made(s)
+    with mock.patch('taskuary.funnel.pile', side_effect=AssertionError('rebuilt')), \
+         mock.patch('taskuary.funnel.full_items', return_value=None):
+        out = asks.block(s, [{'tid': tid, 'lane': 'working', 'why': 'the agent is on it'}])
+    assert 'the agent is on it' in out
+
+
+def test_a_finished_ask_leaves_the_block_once_seen_even_if_the_full_build_keeps_it(s):
+    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coder')
+    with mock.patch('taskuary.funnel.full_items', return_value=[{'tid': tid, 'lane': 'saved', 'why': 'finished'}]):
+        assert asks.block(s, []) == ''                                   # read: off the unread rail
+        assert 'TQ-0001' in asks.block(s, [{'tid': tid, 'lane': 'saved', 'why': 'finished'}])
+
+
+def test_a_failing_block_never_breaks_the_turn(s):
+    seen = []
+    with mock.patch.object(asks, 'block', side_effect=RuntimeError('boom')):
+        concierge.say(s, 'anything new?', llm=lambda sys, user, **k: seen.append(user) or 'Nothing new.')
+    assert seen and 'YOUR OPEN ASKS' not in seen[0]
+
+
+def test_the_block_stays_under_600_characters(s):
+    tids = [made(s, f'Ask number {n} about the quarterly numbers for the northern region and the budget') for n in range(20)]
+    out = asks.block(s, [{'tid': t, 'lane': 'working', 'why': 'the agent is on it'} for t in tids])
+    assert len(out) < 600
+
+
+def test_a_saved_session_is_said(s):
+    tid = made(s)
+    with at(s, tid, 'saved', 'finished, kept open for you'): assert asks.check(s, tid)
+
+
+def test_the_owners_own_close_is_not_said_back(s):
+    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'owner')
+    with rail(): assert asks.check(s, tid) is None
+    assert s.get_task(tid)['AskedTold'] == 'finished'
+
+
+def test_a_phone_ask_whose_connection_is_gone_goes_to_the_handed_walk(s):
+    tid = phone_ask(s)
+    other = {'channel': 'whatsapp', 'chat': 'c2@example.com', 'connector_id': 4, 'at': 'now'}
+    with at(s, tid, 'approve'), mock.patch.object(remote_assistant, 'handoff', return_value=other), \
+         mock.patch.object(remote_assistant, 'connector_for_chat', side_effect=lambda st, ch, chat, *a: {'ConnectorId': 4} if chat == 'c2@example.com' else None), \
+         mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
+        asks.check(s, tid)
+    assert send.call_args[0][2] == 'c2@example.com'
+
+
+def test_a_desktop_line_wakes_the_chat(s):
+    tid = made(s)
+    with at(s, tid, 'blocked'), mock.patch('taskuary.live.emit') as emit: asks.check(s, tid)
+    assert any(c[0][0] == 'chat-changed' for c in emit.call_args_list)
+
+
+def test_the_advisor_skips_threads_tied_to_an_open_ask(s):
+    tid = made(s)
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'in-o', 'ConversationId': 'conv-o', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                         'FromName': 'Ray Colton', 'FromEmail': 'ray@northwind.example', 'Subject': 'Tabs', 'BodyText': 'x',
+                         'SentAt': hours_ago(72), 'Status': 'routed'})
+    assert asks.not_just_said(s, [cand(mid=mid, conv='conv-o')], 24) == []
+
+
+def test_told_lines_carry_the_agents_summary(s):
+    tid = made(s, 'Check the four tabs'); s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nSummary: two tabs hold items.')
+    s.update_task(tid, {'Status': 'done'}, 'coder')
+    s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('finished', hours_ago(2), tid))
+    assert 'two tabs hold items' in asks.told_lines(s)

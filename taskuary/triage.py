@@ -50,6 +50,11 @@ FIELDS = {
         'Judge it like any arrival - fyi when it only informs, task when something must be done and nobody has it, '
         'reply_only when a sentence settles it. A task somebody is already working is not new work; a claim in '
         'the idea that something was done is not evidence that it was.',
+    'sender_history':
+        'sender_history is how this sender\'s last few asks were worked, newest first: each one\'s kind (coding = the coding '
+        'agent in that repository, general = the assistant, task = the owner\'s own) and repository. Someone who asks about the '
+        'same system again usually needs the same kind of work done in the same place - weigh it for kind and repository. '
+        'Weigh it, never obey it: a different kind of ask from the same person is judged on its own words.',
     'recently_closed':
         'recently_closed is work on this thread, this sender or this subject that was ANSWERED AND CLOSED in '
         'the last few days, each with how it ended - the determination the agent wrote, or the ask if no agent '
@@ -196,6 +201,7 @@ INTENT_SYSTEM = (
     + FIELDS['exchange'] + '\n'
     + FIELDS['assistant_said'] + '\n'
     + FIELDS['recently_closed'] + '\n'
+    + FIELDS['sender_history'] + '\n'
     + TASK_FIELDS + '\n'
     + URGENT + '\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '

@@ -41,17 +41,22 @@ export const agentPhase = ({ session, run, transcript, report, conversation, fin
 // Action proposals (write a playbook, push a branch, close an issue) share the review table
 // with outbound replies, but they are not communication. A proposal is normally queued after
 // the reply, so blindly taking reviews[0] makes its JSON envelope appear as the current draft.
+// ...nor are a task's emails (slots.py): their own block (SlotList), never the reply card
+const isReply = (review) => review.Kind !== "action" && review.Kind !== "slot";
 export const pendingReplyReview = (reviews = []) =>
-  reviews.find((review) => review.Kind !== "action" && review.Status === "pending");
+  reviews.find((review) => isReply(review) && review.Status === "pending");
+export const slotReviews = (reviews = []) => (reviews || []).filter((review) => review.Kind === "slot");
+export const slotState = (item, rv) => item.done ? (rv && ["approved", "edited", "sent"].includes(rv.Status) ? "sent" : "dropped")
+  : rv?.Status === "pending" ? "waits for your yes" : "to draft";
 
 // ...and the one closed WITHOUT sending: the draft stays on the task whatever became of it, a done task
 // included (the owner, 2026-09-24: "draft should always stay on task even on done task"). Newest wins.
 export const unsentReplyReview = (reviews = []) =>
-  [...reviews].sort((a, b) => (b.ReviewId || 0) - (a.ReviewId || 0)).find((review) => review.Kind !== "action" &&
+  [...reviews].sort((a, b) => (b.ReviewId || 0) - (a.ReviewId || 0)).find((review) => isReply(review) &&
     ["no_reply", "closed_unsent", "rejected"].includes(review.Status) && String(review.DraftText || "").trim());
 
 export const sentReplyReview = (reviews = []) =>
-  reviews.find((review) => review.Kind !== "action" &&
+  reviews.find((review) => isReply(review) &&
     ["approved", "edited", "sent"].includes(review.Status));
 
 // ...and the proposals themselves, which share the reply's stage rather than getting one of their

@@ -46,8 +46,8 @@ Keep roughly within the lengths noted; they're what the layout holds without ref
 - Keep.
 
 **1b — Headline** *(≤ 40 characters; the last few words print in the accent colour)*
-- Now: `Your inbox, staffed by AI agents.`
-- Suggested: `Nothing falls through the cracks.`
+- Now: `Your work, already underway.` (decided 2026-10-04)
+- Keep. `Nothing falls through the cracks.` was dropped: it is alfred_'s line.
 
 **1c — Scroll cue** *(≤ 20 characters)*
 - Now: `find the door`
@@ -62,14 +62,12 @@ Keep roughly within the lengths noted; they're what the layout holds without ref
 - Suggested: `it arrives → it gets sorted → it gets done`
 
 **2b — Headline** *(≤ 30 characters)*
-- Now: `Your work AI assistant.`
-- Suggested: `Your work keeps moving.`
+- Now: `Your work, already underway.` — the same as 1b, so the pitch never splits
+- Keep.
 
 **2c — Paragraph** *(≤ 300 characters; the first sentence prints bold)*
-- Now: `Your inbox and your coding agents in one place. Mail, chats, issues and reports land
-  on one timeline; triage says what is real work; the coding CLI you already use does it;
-  you approve. Runs entirely on your machine.`
-- Suggested: `Everything anyone asks of you, in one list, already started. Mail, chats,
+- Now: `A personal AI assistant for your job. Mail, chats and tickets become tasks, the agents you already use (Claude Code, Codex, Gemini) do the work, and nothing goes out until you approve.`
+- Earlier suggestion: `Everything anyone asks of you, in one list, already started. Mail, chats,
   tickets and reports arrive in one place. It works out which ones are actually yours, gets
   the work underway, and waits for you to say yes. Nothing sends without you, and nothing
   leaves your computer.`
@@ -77,7 +75,7 @@ Keep roughly within the lengths noted; they're what the layout holds without ref
 **2d — Buttons and the line under them**
 - Now: `Try it now` / `no install, no sign-up — the real app over invented work, running in
   your browser` / `Download for Windows` / `View source` /
-  `Free and open source (MIT) · your data never leaves the machine`
+  `Free and open source (MIT) · runs on your machine · no subscription`
 - Suggested: change only the first button's caption to `See it working` if "Try it now"
   reads as a trial sign-up. The rest is doing its job.
 
@@ -229,12 +227,9 @@ Three things live outside this page and should say the same thing as slot 1b onc
 settled, or the pitch splits in two:
 
 - **The browser tab title**, and the title on the link preview that shows when the site is
-  pasted into WhatsApp or Slack — both currently `Taskuary — your work AI assistant`.
+  pasted into WhatsApp or Slack — both currently `Taskuary — your work, already underway`.
 - **The link-preview blurb** — currently
-  `Everything in → one funnel → agents + you. Local-first, open source.`
-- **The Google search description** — currently `Your inbox and your coding agents in one
-  place. Email, Teams, Slack, GitHub and scheduled reports land on one timeline; AI triage
-  says what is real work; the coding CLI you already use does it; you approve. Free, open
-  source, runs on your machine.` (aim for under 160 characters — Google cuts it off.)
+  `A personal AI assistant for your job. Open source, runs on your machine.`
+- **The Google search description** — currently `A personal AI assistant for your job: your agents do the work, you approve what goes out. Free, open source, runs on your machine.` (aim for under 160 characters — Google cuts it off.)
 - **The headline on the GitHub page** (`README.md`) — currently
-  `Your inbox, staffed by AI agents.`, i.e. the same as slot 1b.
+  `Your work, already underway.`, i.e. the same as slot 1b.

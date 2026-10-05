@@ -52,7 +52,7 @@ def open_when_ready(url: str, wait, open_it=None):
 
 
 def main():
-    ap = argparse.ArgumentParser(prog='taskuary', description='Your work AI assistant - the local-first agent work hub.')
+    ap = argparse.ArgumentParser(prog='taskuary', description='Your work, already underway - a personal AI assistant for your job.')
     ap.add_argument('--host', help='override [server].host (0.0.0.0 to listen on all interfaces)')
     ap.add_argument('--port', type=_port, help='override [server].port')
     ap.add_argument('--no-browser', action='store_true', help="don't open a browser tab when the server starts")

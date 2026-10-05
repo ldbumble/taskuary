@@ -22,7 +22,7 @@ try {
   }
   await assertWalkingForward();
   assert.equal(await page.$('.intro'),null);
-  assert.equal(await page.$eval('.hero-heading h1',el=>el.textContent),'Your inbox, staffed by AI agents.');
+  assert.equal(await page.$eval('.hero-heading h1',el=>el.textContent),'Your work, already underway.');
   assert.equal(await page.$('nav'),null);
   assert.equal(await page.$$eval('.incoming-card',cards=>cards.length),5);
   assert.equal(await page.$eval('#incoming-draft',el=>el.dataset.stage),'waiting');

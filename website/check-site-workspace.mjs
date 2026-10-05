@@ -18,7 +18,7 @@ try {
   await workspace.waitForFunction(() => window.workspaceMockup?.state.frames > 2);
   assert.equal(await page.$('script[src="/floor.js"]'), null, "the old canvas animation is not loaded");
   assert.ok(await workspace.$("#world canvas"), "the new 3D workspace canvas is rendered");
-  assert.equal(await workspace.$eval(".hero-heading h1", (node) => node.textContent), "Your inbox, staffed by AI agents.");
+  assert.equal(await workspace.$eval(".hero-heading h1", (node) => node.textContent), "Your work, already underway.");
   const hero = await iframe.boundingBox();
   assert.ok(hero.width >= 1500 && hero.height >= 760, `workspace fills the desktop hero: ${JSON.stringify(hero)}`);
   if (process.argv[3]) {

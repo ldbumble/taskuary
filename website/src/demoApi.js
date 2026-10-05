@@ -15,7 +15,7 @@ import { track } from "./demoTrack";
 import { demoTerminalRecording } from "./demoTerminal.js";
 import { DEMO_ASSISTANT_TIMELINE, createDemoAssistantState, installDemoAssistantTimeline } from "./demoAssistantData.js";
 import { fmtStamp, rebase } from "./demoClock.js";
-import { installNumbersWorkflow, finishNumbersWorkflow, NUMBERS_TASK, NUMBERS_REQUEST, NUMBERS_RESULT } from "./demoNumbers.js";
+import { installNumbersWorkflow, finishNumbersWorkflow, isGuidedDemo, NUMBERS_TASK, NUMBERS_MESSAGE, NUMBERS_REVIEW, NUMBERS_REQUEST, NUMBERS_RESULT } from "./demoNumbers.js";
 
 export const DEMO = import.meta.env?.VITE_DEMO === "1";
 
@@ -37,14 +37,15 @@ for (const [id, title, boxes] of [[31, "Renew the building access badges", [["Co
   for (const k of ["/api/tasks", "/api/tasks?active=1"]) (state[k] ||= { data: [] }).data.push(scripted(clone(row)));
 }
 const scriptedAssistant = scripted(createDemoAssistantState(state));
-const numbersWorkflow = typeof location !== "undefined" && new URLSearchParams(location.search).get("workflow") === "numbers";
+const numbersWorkflow = isGuidedDemo(typeof location !== "undefined" ? location.search : "");
+export const DEMO_GUIDED = DEMO && numbersWorkflow;
 if (numbersWorkflow) installNumbersWorkflow(state, scriptedAssistant);
 let numbersStarted = false;
 scriptedAssistant.transcripts[scriptedAssistant.activeTaskId] = scriptedAssistant.messages;
 // The rest of the Assistant Game's office, invented like everything in the demo world: people who wrote on
 // chat (the meeting room's huddle), a meeting coming up for its screen, one more ghost, and a finished
 // agent waiting to be read. Each is a real pile item with a message behind it, so every button answers.
-{
+if (!numbersWorkflow) {
   const soon = new Date(Date.now() + 70 * 60000);
   const at = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:00`;
   const said = {
@@ -72,6 +73,18 @@ scriptedAssistant.transcripts[scriptedAssistant.activeTaskId] = scriptedAssistan
   );
 }
 let nextId = 9000;
+
+const journeyListeners = new Set();
+export const demoJourneySnapshot = () => {
+  const detail = state["/api/tasks/detail"]?.[NUMBERS_TASK];
+  const box = state["/api/tasks/detail"]?.[`${NUMBERS_TASK}:assistant`];
+  const review = state["/api/reviews"]?.data?.find((r) => r.ReviewId === NUMBERS_REVIEW);
+  return clone({ phase: review?.Status === "sent" ? "complete" : review?.Status === "pending" ? "review"
+    : numbersStarted ? "working" : "request", task: detail?.task, review,
+    result: box?.messages?.findLast((m) => m.role === "assistant")?.content?.find((p) => p.type === "text")?.text || "" });
+};
+export const onDemoJourney = (listener) => { journeyListeners.add(listener); return () => journeyListeners.delete(listener); };
+const journeyChanged = () => { for (const listener of journeyListeners) listener(demoJourneySnapshot()); };
 
 const path = (url) => String(url || "").split("?")[0];
 const query = (url) => String(url || "").includes("?") ? String(url).split("?").slice(1).join("?") : "";
@@ -333,10 +346,15 @@ export const startDemoAssistant = (taskId, body, emit = () => {}) => {
         if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) {
           finishNumbersWorkflow(state);
           box.session.waiting = true; box.session.phase = "parked";
+          const item = scriptedAssistant.pile.items.find((i) => i.tid === NUMBERS_TASK);
+          if (item) Object.assign(item, { key: `review:${NUMBERS_REVIEW}`, kind: "review", lane: "approve", rid: NUMBERS_REVIEW,
+            why: "the checked result and reply are ready for your approval", surfaced: false, working: null });
+          scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+          journeyChanged();
         }
         const done = { type: "done", reply: said, payload: clone(box) };
         emit(done); resolve(done);
-      }, numbersWorkflow && Number(taskId) === NUMBERS_TASK ? 8000 : 800);
+      }, numbersWorkflow && Number(taskId) === NUMBERS_TASK ? 2400 : 800);
     }, 500);
   });
 };
@@ -366,6 +384,11 @@ const write = (method, url, body) => {
       const detail = state["/api/tasks/detail"][NUMBERS_TASK];
       detail.comments.push({ ActorType: "assistant_user", Actor: "Ruth Bennett", Body: NUMBERS_REQUEST, CreatedAt: now() });
       startDemoAssistant(NUMBERS_TASK, { text: NUMBERS_REQUEST });
+      const item = scriptedAssistant.pile.items.find((i) => i.tid === NUMBERS_TASK);
+      if (item) Object.assign(item, { kind: "agent", lane: "working", working: "analyst", agent: "analyst",
+        why: "preparing the fictional report and checking its totals" });
+      scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+      journeyChanged();
     }
     return { dispatch: "assistant", started: !existing, existing, taskId: NUMBERS_TASK, ref: "TQ-0018", agent: "analyst", demo: true };
   }
@@ -410,6 +433,18 @@ const write = (method, url, body) => {
       const row = feedRows().find((r) => Number(r.ReviewId) === Number(review.ReviewId));
       if (row) { row.ReviewStatus = review.Status; row.NeedsYou = 0; }
       scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => Number(i.rid) !== Number(review.ReviewId));
+      if (numbersWorkflow && review.TaskId === NUMBERS_TASK && body?.verb === "approve") {
+        for (const key of ["/api/tasks", "/api/tasks?active=1"]) {
+          const task = state[key]?.data?.find((t) => t.TaskId === NUMBERS_TASK);
+          if (task) Object.assign(task, { Status: "done", ClosedAt: now() });
+        }
+        Object.assign(state["/api/tasks/detail"][NUMBERS_TASK].task, { Status: "done", ClosedAt: now() });
+        if (row) row.TaskStatus = "done";
+        const box = state["/api/tasks/detail"][`${NUMBERS_TASK}:assistant`];
+        if (box?.session) Object.assign(box.session, { alive: false, busy: false, waiting: false });
+        scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => i.tid !== NUMBERS_TASK);
+        journeyChanged();
+      }
       scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
     }
     return { ok: true, status: review?.Status || "handled", demo: true };
@@ -444,6 +479,9 @@ const write = (method, url, body) => {
   if (method === "post" && (m = p.match(/^\/api\/messages\/(\d+)\/(reply|dispatch|chat|mine|not-mine)$/))) {
     const messageId = Number(m[1]);
     const verb = m[2];
+    if (numbersWorkflow && messageId === NUMBERS_MESSAGE && verb === "dispatch") {
+      return write("post", `/api/tasks/${NUMBERS_TASK}/dispatch`, body);
+    }
     const row = feedRows().find((item) => Number(item.MessageId) === messageId);
     const item = scriptedAssistant.pile.items.find((candidate) => Number(candidate.mid) === messageId);
     if (verb === "reply") {

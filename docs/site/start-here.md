@@ -87,30 +87,33 @@ else.
 
 ## Your first run
 
-Open **Connections** and do these four things in order. The first two are the minimum that makes
-Taskuary useful; the rest can wait.
+Open **Set up Taskuary** on the Assistant. The first four steps get you to one useful result:
 
-**1 · Give it a brain.** Add a key for Anthropic, OpenAI, Azure OpenAI, OpenRouter or the Meta
-Model API, or point it at Ollama for a local model. Triage reads a lot of short messages and
-returns a one-line verdict, so the cheapest fast model is usually the right one.
+1. **Say who you are.** Add the name that signs your drafts, and your email so Taskuary can
+   recognise your own messages. Detailed preferences can wait.
+2. **Connect one AI.** Use an API provider, Ollama, or a signed-in coding CLI you already pay
+   for. Test its connection. Keep the current model defaults to start; reviewing every model
+   assignment is optional.
+3. **Connect one work source.** Choose one mailbox, chat, or issue tracker in
+   [Connections](connections). Enable it as an input and test it. You do not need a mailbox if
+   your first source is a tracker such as GitHub.
+4. **Press Read first items.** This starts a real source read and shows its progress. Once items
+   arrive, open one of the first five recent results to check its verdict and any draft. Replies
+   still wait for your approval. If nothing arrives, the step explains how to check the source
+   scope or try a new incoming message.
 
-**2 · Connect somewhere work arrives.** Outlook, Gmail or any IMAP mailbox, Teams, Slack,
-Telegram, WhatsApp, Discord, GitHub, Jira — see [Connections](connections). Items start appearing
-on the Timeline within a poll or two.
+The five items are a review sample, not an import limit: each source keeps its normal read scope
+and history settings. Starting with one source makes that first review easier. Setup does not
+overwrite an existing user's model or connection configuration.
 
-**3 · Connect a coding CLI**, if you want code written. Claude Code, Codex, Qwen Code, OpenCode,
-Kimi Code, Gemini, Cursor, Copilot, Muse Code or Devin. If the CLI is not on this machine yet,
-press **Install** on its card and Taskuary runs the vendor's own installer. A GitHub token lets
-it discover your repositories.
+After that first result, add another source, connect a coding CLI if you want code written, or
+add a report for numbers you check by hand. The optional **models and agents** step opens the
+existing settings whenever you want to adjust cost or use different models for different jobs.
+Reports and the Hub can wait until you have a workflow that needs them.
 
-**4 · Add a report**, if there are numbers you check by hand. Describe it in plain English or
-build it from a database, a cloud account, a REST endpoint, an RSS feed or an MCP server, and
-preview it against the live source before scheduling.
-
-Two reports exist from the start: the **Morning digest** — one brief a day covering what slipped,
-today's meetings, what happened and what is in flight — and the **Advisor**, which posts only
-when it notices something between briefs. Both speak in the voice you set in `COUNSEL.md`. Delete
-either to switch it off.
+Two reports exist from the start: the **End of day checkup** and the **Advisor**, which looks for
+useful follow-ups and patterns in your work. You can review or remove either in Reports. The
+Morning digest is available as an optional report.
 
 ## Choosing the AI setup
 

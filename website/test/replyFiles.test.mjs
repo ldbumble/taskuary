@@ -41,7 +41,7 @@ test("the delivery envelope carries the files up to the card", () => {
 test("both surfaces that can approve a reply show what rides with it", () => {
   const feed = read("FeedView.jsx"), review = read("ReviewDecision.jsx");
   assert.match(feed, /<ReplyFiles reviewId=\{reviewId\} files=\{envelope\?\.attachments \|\| \[\]\}/);
-  assert.match(review, /<ReplyFiles reviewId=\{r\.ReviewId\} files=\{deliveryFiles\(r\)\}/);
+  assert.match(review, /<ReplyFiles reviewId=\{r\.ReviewId\} files=\{deliveryFiles\(filedDelivery\)\}/);
   // ...and the button counts them, so the send is never a surprise
   assert.match(feed, /files\.length \? `\$\{files\.length\} file\$\{files\.length === 1 \? "" : "s"\}` : ""/);
 });

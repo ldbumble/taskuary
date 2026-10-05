@@ -23,6 +23,7 @@ import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import api from "./api.js";
 import { openReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
+import DemoJourney from "./DemoJourney.jsx";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
@@ -1410,6 +1411,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [walking, setWalking] = useState(false);        // guards the chip against a double-click
   const setup = async () => {
     if (walking) return;
+    if (DEMO) {
+      setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "assistant", text:
+        "## Set up Taskuary on your own machine\n\nThis browser demo uses fictional data and cannot connect an inbox. "
+        + "[Download Taskuary for Windows](https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe) or "
+        + "[follow the installation guide](https://taskuary.com/docs/).\n\n"
+        + "In your installed app: enter your name, choose an AI, connect one mailbox or chat, and sync your first messages. "
+        + "The setup guide helps you through each step. Hosted AI receives the context needed for the task; a local model keeps those prompts on your machine." }]);
+      return;
+    }
     setWalking(true);
     try { pushStop((await api.get("/api/setup/walk")).data); }
     catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", text: "The walk could not be loaded." }]); }
@@ -1904,6 +1914,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   );
 
   return (
+    <>
+    {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={({ openByMid, openByItem }) => <Pile pile={railPile} current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
@@ -1913,5 +1925,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r) => pull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} />
+    </>
   );
 }

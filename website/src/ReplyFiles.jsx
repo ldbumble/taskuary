@@ -16,13 +16,14 @@ import { ALERT_INK, DIM } from "./theme.jsx";
 import { promisesFiles, sizeText } from "./replyFiles.js";
 import { useVerbs } from "./actionRow.js";
 
-export default function ReplyFiles({ reviewId, files = [], text = "", channel = "email", onChanged, toRow = false }) {
+export default function ReplyFiles({ reviewId, files = [], text = "", channel = "email", onChanged, toRow = false, disabled = false }) {
   const pick = useRef(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const mail = String(channel || "email").toLowerCase() === "email";
 
   const add = async (chosen) => {
+    if (disabled) return;
     const list = [...(chosen || [])];
     if (!list.length) return;
     setErr(""); setBusy("adding");
@@ -36,6 +37,7 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
     finally { setBusy(""); if (pick.current) pick.current.value = ""; }
   };
   const drop = async (name) => {
+    if (disabled) return;
     setErr(""); setBusy(name);
     try {
       await api.delete(`/api/reviews/${reviewId}/attachment`, { params: { name } });
@@ -46,18 +48,18 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
 
   const missing = !files.length && promisesFiles(text);
   // in the row above the chat line the button is one of its More verbs: the same hidden file input opens
-  useVerbs(`attach:${reviewId}`, [{ id: "attach", group: "more", tone: "s", label: files.length ? "Attach another" : "Attach a file", disabled: busy === "adding",
+  useVerbs(`attach:${reviewId}`, [{ id: "attach", group: "more", tone: "s", label: files.length ? "Attach another" : "Attach a file", disabled: disabled || busy === "adding",
     run: () => pick.current?.click(), title: "Adds a file to the reply; nothing is sent until you approve it" }], toRow && mail);
   return (
     <Box sx={{ mb: 0.75 }}>
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75 }}>
         {files.map((f) => (
           <Chip key={f.name} size="small" icon={<AttachFileIcon sx={{ fontSize: 14 }} />}
-            label={`${f.name} · ${sizeText(f.size)}`} disabled={busy === f.name}
+            label={`${f.name} · ${sizeText(f.size)}`} disabled={disabled || busy === f.name}
             onDelete={() => drop(f.name)} sx={{ maxWidth: 320 }} />
         ))}
         {mail && toRow ? null : mail ? (
-          <Button size="small" onClick={() => pick.current?.click()} disabled={busy === "adding"}
+          <Button size="small" onClick={() => pick.current?.click()} disabled={disabled || busy === "adding"}
             startIcon={busy === "adding" ? <CircularProgress size={11} /> : <AttachFileIcon sx={{ fontSize: 14 }} />}
             sx={{ color: DIM, textTransform: "none", fontSize: 11.5 }}>
             {busy === "adding" ? "Attaching…" : files.length ? "Attach another" : "Attach a file"}
@@ -67,7 +69,7 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
             A {channel} message cannot carry a file — answer by email to attach one.
           </Typography>
         )}
-        <input ref={pick} hidden type="file" multiple onChange={(e) => add(e.target.files)} />
+        <input ref={pick} hidden type="file" multiple disabled={disabled} onChange={(e) => add(e.target.files)} />
       </Box>
       {missing && mail && (
         <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: ALERT_INK }}>

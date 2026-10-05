@@ -24,26 +24,28 @@ def _fresh():
 
 
 class TheStopsTests(unittest.TestCase):
-    def test_the_first_five_stops_are_the_checklist_itself(self):
+    def test_the_first_four_stops_are_the_checklist_itself(self):
         """Two surfaces, one source. A walk that listed its own five would be a second list to keep
         in step, and the second one loses."""
         s = _fresh()
         st = walk.state(s)
         keys = [x['key'] for x in st['stops']]
-        self.assertEqual(keys[:5], [x['key'] for x in setup.state(s)['steps']])
+        self.assertEqual(keys[:4], [x['key'] for x in setup.state(s)['steps']])
+        self.assertEqual(keys[4], 'models')
+        self.assertNotIn('done', st['stops'][4], 'model settings are optional')
         self.assertEqual(st['total'], len(walk.STOPS))
         self.assertGreaterEqual(st['total'], 13)
 
-    def test_the_first_five_stops_land_where_the_checklist_lands(self):
+    def test_the_first_four_stops_land_where_the_checklist_lands(self):
         """`goto` is the fifth field the checklist owns. It was the one copied into STOPS by hand,
         which made the button on a stop and the button on its own checklist row two answers to the
         same question - identical that day, and nothing keeping them so."""
         s = _fresh()
         rows = {x['key']: x['goto'] for x in setup.state(s)['steps']}
-        for stop in walk.state(s)['stops'][:5]:
+        for stop in walk.state(s)['stops'][:4]:
             self.assertEqual(stop['goto'], rows[stop['key']], stop['key'])
         # and STOPS does not carry its own copy to drift back to
-        for stop in walk.STOPS[:5]:
+        for stop in walk.STOPS[:4]:
             self.assertNotIn('goto', stop, stop['key'])
 
     def test_every_stop_says_what_you_can_do_there(self):
@@ -86,7 +88,7 @@ class TheStopsTests(unittest.TestCase):
         """A picture of a form you are filling in below it is noise. A picture of a tab you have
         never opened is the whole reason the tour exists."""
         by = {x['key']: x for x in walk.state(_fresh())['stops']}
-        for key in ('owner', 'ai', 'models', 'inbound', 'sync'):
+        for key in ('owner', 'ai', 'inbound', 'sync'):
             self.assertIsNone(by[key].get('image'), key)
         for key in ('connections', 'docs', 'settings', 'board', 'tasks', 'reports',
                     'assistant', 'hub'):

@@ -66,12 +66,11 @@
   .starchip:hover{text-decoration:none;border-color:var(--gold);background:#fff}
   .starchip .n{font-family:var(--mono);color:var(--faint)}
 
-  /* hero: the whole first screen is the room. The words sit on top of it, top-left, small
-     enough to leave the floor alone; the inbox rail on the right feeds it; the door is the way
-     in. Everything else scrolls in underneath. */
-  .hero{position:relative;height:100vh;min-height:560px;overflow:hidden;background:var(--bg);
-        background:radial-gradient(70% 60% at 50% 48%,#fbf9f6 0%,var(--bg) 70%);border-bottom:1px solid var(--bd)}
-  .workspace-hero{display:block;width:100%;height:100%;min-height:760px;border:0;background:var(--bg)}
+  /* The guided task is the first action; the Studio remains available after the workflow. */
+  .studio-preview{margin-top:28px;border:1px solid var(--bd);border-radius:12px;overflow:hidden;background:var(--panel)}
+  .studio-preview summary{padding:18px 22px;cursor:pointer;font-weight:600;color:var(--accent)}
+  .studio-preview summary:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+  .workspace-hero{display:block;width:100%;height:620px;border:0;background:var(--bg)}
   header{padding:0}
   .intro{padding-top:64px;text-align:center}
   .intro h1{font-size:clamp(40px,6vw,66px);margin:14px 0 16px}
@@ -150,8 +149,7 @@
 
   @media (max-width:860px){
     nav .links a.hide{display:none}
-    .hero{height:100svh;min-height:760px;display:block}
-    .workspace-hero{height:100%;min-height:760px}
+    .workspace-hero{height:560px}
     .intro{padding-top:40px}
     .intro h1{font-size:40px}
     .flow{grid-template-columns:1fr}
@@ -173,10 +171,7 @@
 
 
 
-<header>
-  <div class="hero" id="top">
-    <iframe class="workspace-hero" src="/workspace/" title="The interactive Taskuary Studio: work arrives and AI agents take it on"></iframe>
-  </div>
+<header id="top">
 
 <nav>
   <div class="wrap">
@@ -195,18 +190,18 @@
   </div>
 </nav>
   <div class="wrap intro" id="how">
-    <div class="eyebrow">everything in → one funnel → agents + you</div>
+    <div class="eyebrow">request → checked result → your approval</div>
     <h1>Your work, <span class="accent">already underway.</span></h1>
-    <p class="sub"><b>A personal AI assistant for your job.</b> Mail, chats and tickets become tasks, the agents you already use
-      (Claude Code, Codex, Gemini) do the work, and nothing goes out until you approve.</p>
+    <p class="sub"><b>Bring a request all the way to a reviewed result.</b> Taskuary keeps the original message,
+      your agent's work, the evidence and the reply together. Runs on your machine with the AI tools you choose.</p>
     <!-- One thing to do, then three ways to get it. Four buttons in a row asked the visitor to
          choose an install method before they had any reason to install anything; trying it costs
          them nothing and answers the only question they actually have. -->
     <div class="cta">
-      <a class="btn primary big" href="/demo/">Try it now
+      <a class="btn primary big" href="/demo/">Try one task
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="m12 5 7 7-7 7"/></svg></a>
     </div>
-    <div class="trynote">no install, no sign-up — the real app over invented work, running in your browser</div>
+    <div class="trynote">Follow one email request through checked figures and a simulated approval.<br>Fictional data and scripted agent work. No install, sign-up or email sending.</div>
     <div class="trynote"><a href="/docs/">Read the documentation</a> — the first run, what to connect, and what every setting does</div>
     <!-- three ways to get it, across: they are alternatives to each other, not steps -->
     <div class="cta ways">
@@ -228,6 +223,10 @@
       <div><div class="n">02 · FUNNEL</div><h3>Triage says what is real work</h3><p>It reads the thread, not just the message: who was addressed, whether a colleague already answered, what you ruled before. A question becomes a drafted reply; work becomes a task.</p><span class="arrow">→</span></div>
       <div><div class="n">03 · AGENTS + YOU</div><h3>Your agents do it, you approve</h3><p>Claude Code, Codex or Gemini open a live session on the task in your own checkout. Replies wait in a review queue. Nothing sends without you.</p></div>
     </div>
+    <details class="studio-preview">
+      <summary>Explore the optional Studio view</summary>
+      <iframe class="workspace-hero" src="/workspace/" loading="lazy" title="The interactive Taskuary Studio: work arrives and AI agents take it on"></iframe>
+    </details>
   </div>
 </header>
 

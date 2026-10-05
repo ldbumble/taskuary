@@ -19,7 +19,28 @@ export function replyEnvelope(review) {
 }
 
 export function replySendFailure(data) {
-  return data?.send_error ? { message: data.send_error, unknown: data.delivery === "unknown" } : null;
+  const message = data?.send_error || data?.reply?.send_error;
+  const unknown = [data?.delivery, data?.reply?.delivery].some(state => state === "unknown" || state === "sending");
+  return message ? { message, unknown } : null;
+}
+
+// An uncertain send keeps the exact attempted payload. Checking it is a different
+// action from authorizing a new send, and a live claim never offers another one.
+export function reviewDeliveryState(review) {
+  const parse = (value) => {
+    try { return typeof value === "string" ? JSON.parse(value) : value; } catch { return null; }
+  };
+  const saved = parse(review?.DeliveryEnvelope);
+  const envelope = parse(review?.Deliver);
+  const state = review?.DeliveryState || envelope?.delivery || "";
+  const active = !!review?.DeliveryClaim || state === "sending";
+  const frozen = active || state === "unknown";
+  return { state, active, frozen, canCheck: state === "unknown" && !active,
+    body: frozen ? saved?.body ?? review?.FinalText ?? review?.DraftText ?? "" : null,
+    envelope: frozen ? saved?.envelope || envelope || {} : null,
+    label: active ? state === "unknown" ? "Checking delivery…" : "Sending…" : "Check delivery",
+    line: active ? "Delivery is in progress. The attempted text, recipients and attachments are kept unchanged while the provider responds."
+      : state === "unknown" ? "The provider has not confirmed this attempt. Check delivery to look for the original reply. A missing receipt will not send it again. The attempted text, recipients and attachments stay unchanged." : "" };
 }
 
 export function sendBlockLine(rv) {

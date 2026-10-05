@@ -2,6 +2,7 @@
 // endpoints need to run before the static asset layer. The handlers remain shared with Pages so
 // a fork can deploy either way without maintaining two versions of the analytics code.
 import { onRequestGet as readEvents, onRequestPost as recordEvents } from "./functions/api/ev.js";
+import { hasStatsSession } from "./functions/lib/statsAuth.js";
 import {
   onRequestDelete as signOut,
   onRequestGet as readSession,
@@ -20,9 +21,10 @@ class Statement {
 }
 
 // A tiny D1-shaped adapter lets the same audited event handlers run against a built-in,
-// SQLite-backed Durable Object. No database id, token, variable, or dashboard binding is needed.
+// SQLite-backed Durable Object. Its binding is automatic; reader credentials are deployment secrets.
 export class StatsStore {
-  constructor(ctx) {
+  constructor(ctx, env = {}) {
+    this.env = env;
     this.sql = ctx.storage.sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS ev (
       Id INTEGER PRIMARY KEY, At TEXT NOT NULL, Sid TEXT NOT NULL, Kind TEXT NOT NULL,
@@ -37,20 +39,21 @@ export class StatsStore {
 
   fetch(request) {
     const handler = request.method === "POST" ? recordEvents : request.method === "GET" ? readEvents : null;
-    return handler ? handler({ request, env: { DEMO_EVENTS: this.db } })
+    return handler ? handler({ request, env: { ...this.env, DEMO_EVENTS: this.db } })
       : new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
   }
 }
 
-const analytics = (request, env) => {
+const analytics = async (request, env) => {
+  const handler = request.method === "POST" ? recordEvents : request.method === "GET" ? readEvents : null;
+  if (!handler) return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+  // Reject before forwarding so an anonymous request never reaches the Durable Object reader.
+  if (request.method === "GET" && !(await hasStatsSession(request, env)))
+    return Response.json({ error: "Sign in to view analytics." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   // Keep compatibility with the original D1 deployment when a fork already has that binding.
-  if (env.DEMO_EVENTS) {
-    const handler = request.method === "POST" ? recordEvents : request.method === "GET" ? readEvents : null;
-    return handler ? handler({ request, env })
-      : new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
-  }
+  if (env.DEMO_EVENTS) return handler({ request, env });
   const namespace = env.ANALYTICS_STORE;
-  if (!namespace) return (request.method === "POST" ? recordEvents : readEvents)({ request, env });
+  if (!namespace) return handler({ request, env });
   return namespace.get(namespace.idFromName("taskuary.com")).fetch(request);
 };
 

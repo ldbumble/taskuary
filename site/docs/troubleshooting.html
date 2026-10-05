@@ -82,7 +82,7 @@
 <div class="entry on">
       <a class="page" href="./troubleshooting" aria-current="page">When something is wrong</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide When something is wrong's sections"></button>
-      <div class="secs"><a class="sec" href="#it-will-not-start" data-sec="it-will-not-start">It will not start</a><a class="sec" href="#a-connection-stopped" data-sec="a-connection-stopped">A connection stopped</a><a class="sec" href="#triage-got-it-wrong" data-sec="triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="#an-agent-is-stuck" data-sec="an-agent-is-stuck">An agent is stuck</a><a class="sec" href="#a-report-returned-nothing" data-sec="a-report-returned-nothing">A report returned nothing</a><a class="sec" href="#reading-the-audit-log" data-sec="reading-the-audit-log">Reading the audit log</a><a class="sec" href="#where-the-logs-are" data-sec="where-the-logs-are">Where the logs are</a><a class="sec" href="#still-wrong" data-sec="still-wrong">Still wrong</a></div>
+      <div class="secs"><a class="sec" href="#it-will-not-start" data-sec="it-will-not-start">It will not start</a><a class="sec" href="#a-connection-stopped" data-sec="a-connection-stopped">A connection stopped</a><a class="sec" href="#triage-got-it-wrong" data-sec="triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="#a-reply-has-no-confirmed-delivery" data-sec="a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="#an-agent-is-stuck" data-sec="an-agent-is-stuck">An agent is stuck</a><a class="sec" href="#a-report-returned-nothing" data-sec="a-report-returned-nothing">A report returned nothing</a><a class="sec" href="#reading-the-audit-log" data-sec="reading-the-audit-log">Reading the audit log</a><a class="sec" href="#where-the-logs-are" data-sec="where-the-logs-are">Where the logs are</a><a class="sec" href="#still-wrong" data-sec="still-wrong">Still wrong</a></div>
     </div>
     </nav>
     <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
@@ -162,7 +162,16 @@ than assumed to be work; the row keeps the error.</li>
 </ul>
 <div class="callout note"><p class="eyebrow">A verdict you disagree with is not a bug</p><p>Triage is supposed to be argued with. The correction loop exists because the right general rule
 is rarely knowable from one message — and a correction teaches the class, not the sender.</p>
-</div><h2 id="an-agent-is-stuck">An agent is stuck<a class="anchor" href="#an-agent-is-stuck" aria-label="Link to this section">#</a></h2>
+</div><h2 id="a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery<a class="anchor" href="#a-reply-has-no-confirmed-delivery" aria-label="Link to this section">#</a></h2>
+<p>Approval stays pending while Taskuary sends the reply. Repeated clicks do not start another
+send, and a task closes only after the provider confirms delivery.</p>
+<p><strong>Delivery unknown</strong> means the provider timed out, the process stopped during sending, or a
+receipt could not be verified. Check the provider&#39;s sent messages before taking any further
+action. Approving again checks the original attempt; it does not resend just because a receipt
+is missing. Providers that cannot verify the attempt leave it pending for you to investigate.</p>
+<p><strong>Sending failed</strong> means the attempt was rejected or blocked. Fix the connection or send
+permission, then review and approve the draft again.</p>
+<h2 id="an-agent-is-stuck">An agent is stuck<a class="anchor" href="#an-agent-is-stuck" aria-label="Link to this section">#</a></h2>
 <p><strong>It is waiting on you.</strong> A raised hand on the Studio floor, or a 👋 <strong>agent waiting on you</strong> row
 on the Board or the work rail, all mean the same thing: the session asked something. Open the task
 and answer it.</p>
@@ -171,6 +180,9 @@ prompt that cannot be answered. The connector presets set the flag; a custom CLI
 The card&#39;s <strong>Test</strong> action reproduces it in ten seconds.</p>
 <p><strong>It hit a limit.</strong> The saved result says so. <strong>Start new coding session</strong> picks a different
 harness and keeps the checkout and the history.</p>
+<p><strong>It says there is no local path for the repository.</strong> Map that repository to its checkout on
+the AI CLI agent card, or make the checkout discoverable. A task naming a repository cannot
+fall back to an unrelated default working folder.</p>
 <p><strong>It is gone.</strong> If the process died, the row reads ⏹ <strong>agent stopped</strong> and is forced unread, so
 it comes back to you rather than disappearing. Only <strong>Later</strong> holds it.</p>
 <p><strong>Stop session</strong> ends the process and deliberately changes nothing else — not the task state, not

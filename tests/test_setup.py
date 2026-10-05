@@ -41,11 +41,11 @@ def _step(st, key):
 
 
 class WhatCountsAsSetUpTests(unittest.TestCase):
-    def test_a_fresh_install_has_nothing_done_and_says_which_five(self):
+    def test_a_fresh_install_has_four_steps_before_its_first_result(self):
         st = setup.state(_fresh())
-        self.assertEqual((st['done'], st['total'], st['complete']), (0, 5, False))
+        self.assertEqual((st['done'], st['total'], st['complete']), (0, 4, False))
         self.assertEqual([x['key'] for x in st['steps']],
-                         ['owner', 'ai', 'models', 'inbound', 'sync'])
+                         ['owner', 'ai', 'inbound', 'sync'])
         # every step explains ITSELF - "go to Connections" is navigation, not a reason
         for x in st['steps']:
             self.assertGreater(len(x['why']), 40, f"{x['key']} has no reason to exist")
@@ -69,8 +69,8 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         by = {x['key']: x['goto'] for x in setup.state(_fresh())['steps']}
         self.assertEqual(by['owner'], {'tab': 'Settings', 'hash': 'settings=about', 'label': 'Open About you'})
         self.assertEqual(by['ai'], {'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'})
-        self.assertEqual(by['models'], {'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents',
-                                        'label': 'Open Triage & agents'})
+        self.assertNotIn('models', by)
+        self.assertEqual(_step(setup.state(_fresh()), 'sync')['action'], 'sync')
 
     def test_no_two_rows_wear_the_same_button(self):
         """The button says what it OPENS. Labelled by tab, rows 2 and 4 both read "Connections" and
@@ -110,6 +110,23 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         s.save_connector({'ConnectorId': cid, 'Active': 1}, 't')
         self.assertTrue(_step(setup.state(s), 'ai')['done'])
 
+    def test_an_unrelated_working_key_does_not_hide_a_missing_selected_brain(self):
+        s = _fresh()
+        _with_ai(s)
+        s.set_setting('triage_ai', 'connector:missing-provider', 't')
+        self.assertFalse(_step(setup.state(s), 'ai')['done'])
+        s.set_setting('triage_backup_ai', 'connector:anthropic', 't')
+        self.assertTrue(_step(setup.state(s), 'ai')['done'])
+
+    def test_inspecting_first_run_preserves_existing_settings_and_model_assignments(self):
+        s = _fresh()
+        s.set_setting('triage_ai', 'cli:existing-agent', 't')
+        s.set_setting('triage_model', 'existing-model', 't')
+        s.set_setting('feed_days', '37', 't')
+        before = s.get_settings()
+        setup.state(s)
+        self.assertEqual(s.get_settings(), before)
+
     def test_a_connector_with_no_source_behind_it_is_only_half_connected(self):
         """It looks done on the Connections tab and delivers nothing. That is exactly the state a
         checklist exists to catch."""
@@ -129,15 +146,14 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         s.save_source({'Channel': 'aws', 'Address': 's3://b', 'ConnectorId': cid, 'Active': 1}, 't')
         self.assertFalse(_step(setup.state(s), 'inbound')['done'])
 
-    def test_a_tracker_alone_is_not_somewhere_work_arrives(self):
-        """GitHub brings issues in and it is a real source, but an install with GitHub and no
-        mailbox has a Timeline with no mail in it - and the row said it was done (2026-09-17)."""
+    def test_one_tracker_input_is_enough_without_a_mailbox(self):
+        """One enabled tracker input is a useful first source; a tool-only card is not."""
         s = _fresh()
         cid = s.get_connector_by_type('github')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Secret': 'ghp_x', 'Active': 1}, 't')
         s.save_source({'Channel': 'github', 'Address': 'ours/repo', 'ConnectorId': cid, 'Active': 1}, 't')
         self.assertFalse(_step(setup.state(s), 'inbound')['done'])
-        _with_mailbox(s)
+        s.save_connector({'ConnectorId': cid, 'Roles': 'trigger,tool'}, 't')
         self.assertTrue(_step(setup.state(s), 'inbound')['done'])
 
     def test_the_seeded_reports_are_not_your_first_messages(self):
@@ -159,17 +175,37 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         for i in range(9):
             s.add_message({'ExternalId': f'm{i}', 'Channel': 'email', 'Subject': 's',
                            'FromEmail': 'a@b.com', 'BodyText': 'x', 'Status': 'filed'})
-        self.assertEqual(_step(setup.state(s), 'sync')['detail'], 'messages are arriving')
+        self.assertEqual(_step(setup.state(s), 'sync')['detail'], 'your first items are ready to review')
+        self.assertEqual(len(setup.state(s)['first_items']), 5)
 
-    def test_five_of_five_is_complete_and_the_counter_is_finished(self):
+    def test_first_result_completes_setup_without_model_review(self):
         s = _fresh()
         s.set_setting('owner_name', 'Dana Example', 't')
-        s.set_setting(setup.SEEN_MODELS, '1', 't')
         _with_ai(s); _with_mailbox(s)
         s.add_message({'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'hello',
                        'FromEmail': 'a@b.com', 'BodyText': 'x', 'Status': 'filed'})
         st = setup.state(s)
-        self.assertEqual((st['done'], st['total'], st['complete']), (5, 5, True))
+        self.assertEqual((st['done'], st['total'], st['complete']), (4, 4, True))
+        self.assertNotEqual(s.get_setting(setup.SEEN_MODELS), '1')
+
+    def test_another_connectors_mailbox_cannot_complete_a_half_connected_card(self):
+        s = _fresh()
+        outlook = s.get_connector_by_type('outlook')['ConnectorId']
+        gmail = s.get_connector_by_type('gmail')['ConnectorId']
+        s.save_connector({'ConnectorId': outlook, 'Secret': 'fake', 'Active': 1}, 't')
+        s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': gmail, 'Active': 1}, 't')
+        self.assertFalse(_step(setup.state(s), 'inbound')['done'])
+
+    def test_reports_cannot_hide_the_first_result_and_untriaged_rows_do_not_complete_it(self):
+        s = _fresh()
+        mid = s.add_message({'ExternalId': 'first', 'Channel': 'email', 'Subject': 'Invented first request',
+                             'FromEmail': 'erin@northwind.example', 'BodyText': 'Check the sample.', 'Status': 'triaging'})
+        self.assertFalse(_step(setup.state(s), 'sync')['done'])
+        s.set_message_status(mid, 'filed')
+        for n in range(8):
+            s.add_message({'ExternalId': f'report-{n}', 'Channel': 'report', 'Subject': 'Seeded report', 'Status': 'report'})
+        self.assertTrue(_step(setup.state(s), 'sync')['done'])
+        self.assertEqual(setup.state(s)['first_items'][0]['MessageId'], mid)
 
     def test_it_un_does_itself_when_a_connection_is_removed(self):
         """The whole reason it is derived rather than stored."""
@@ -317,19 +353,19 @@ class TheWizardActuallySetsUpTests(unittest.TestCase):
         self._reset()
 
 
-class TheOneStoredStepTests(unittest.TestCase):
-    """Every other row reads real state. This one cannot: the defaults already work, so there is
-    nothing to detect. Opening the page is what it asks for and what it records."""
+class OptionalModelReviewCompatibilityTests(unittest.TestCase):
+    """Older clients can record a settings visit, but the first-run counter does not depend on it."""
     def _clear(self):
         server.store.set_setting(setup.SEEN_MODELS, '0', 't')
 
-    def test_looking_at_the_page_is_what_ticks_it(self):
+    def test_looking_at_models_does_not_add_a_completion_requirement(self):
         self._clear()
-        self.assertFalse(_step(c.get('/api/setup').json(), 'models')['done'])
+        before = c.get('/api/setup').json()
         out = c.post('/api/setup/seen', json={'step': 'models'})
         self.assertEqual(out.status_code, 200)
-        self.assertTrue(_step(out.json(), 'models')['done'])
-        self.assertTrue(_step(c.get('/api/setup').json(), 'models')['done'])   # survives the next read
+        self.assertEqual(server.store.get_setting(setup.SEEN_MODELS), '1')
+        self.assertEqual((out.json()['done'], out.json()['total']), (before['done'], before['total']))
+        self.assertNotIn('models', [step['key'] for step in out.json()['steps']])
 
     def test_a_step_nobody_defined_is_refused_rather_than_silently_stored(self):
         """A typo'd step name that returns 200 is a row that can never tick and a setting nobody

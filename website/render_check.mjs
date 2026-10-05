@@ -1,13 +1,15 @@
 // Headless render smoke test: loads the built UI in Edge/Chrome, fails on console
-// errors or a blank root, walks every tab, and screenshots the result.
-import puppeteer from "puppeteer-core";
+// errors or a blank root, walks the current canvas navigation, and screenshots it.
+import { launch } from "./browser.mjs";
+import { clickNav } from "./browser/harness.mjs";
 
-const EDGE = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-const TABS = ["Board", "Tasks", "Review", "Reports", "Assistant", "Hub", "Connections", "Docs", "Settings"];
+const VIEWS = ["Board", "Assistant", "Reports", "Hub", "Connections", "Settings"];
 
 (async () => {
   const url = process.argv[2];
-  const browser = await puppeteer.launch({ executablePath: EDGE, headless: "new" });
+  if (!url) throw new Error("Pass the URL of an isolated demo or test instance.");
+  const browser = await launch();
+  try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
   const errors = [];
@@ -17,18 +19,14 @@ const TABS = ["Board", "Tasks", "Review", "Reports", "Assistant", "Hub", "Connec
   await new Promise((r) => setTimeout(r, 1200));
   const text = await page.evaluate(() => document.body.innerText);
   if (!text.includes("Taskuary")) throw new Error("top bar missing - root did not render:\n" + text.slice(0, 300));
-  for (const t of TABS) {
-    if (!text.includes(t)) throw new Error(`tab '${t}' missing from the top bar`);
-    await page.evaluate((label) => {
-      const el = [...document.querySelectorAll("div")].find((d) => d.childElementCount === 0 && d.textContent === label);
-      if (el) el.click();
-    }, t);
+  for (const t of VIEWS) {
+    await clickNav(page, t);
     await new Promise((r) => setTimeout(r, 900));
-    console.log(`tab ${t}: clicked, errors so far: ${errors.length}`);
+    console.log(`view ${t}: opened, errors so far: ${errors.length}`);
   }
   await page.screenshot({ path: process.argv[3] || "ui.png" });
-  await browser.close();
   const fatal = errors.filter((e) => !e.includes("favicon") && !e.includes("net::ERR") && !e.includes("inter.css"));
-  if (fatal.length) { console.error("ERRORS:\n" + fatal.join("\n")); process.exit(1); }
-  console.log("render OK - no runtime errors across all 7 tabs");
+  if (fatal.length) throw new Error("ERRORS:\n" + fatal.join("\n"));
+  console.log("render OK - no runtime errors across all canvas views");
+  } finally { await browser.close(); }
 })().catch((e) => { console.error(e.message); process.exit(1); });

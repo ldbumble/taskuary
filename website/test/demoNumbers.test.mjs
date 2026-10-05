@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { installNumbersWorkflow, finishNumbersWorkflow, NUMBERS_TASK, NUMBERS_MESSAGE, NUMBERS_REVIEW, NUMBERS_DRAFT, NUMBERS_RESULT } from '../src/demoNumbers.js';
+import { installNumbersWorkflow, finishNumbersWorkflow, isGuidedDemo, NUMBERS_TASK, NUMBERS_MESSAGE, NUMBERS_REVIEW, NUMBERS_DRAFT, NUMBERS_RESULT } from '../src/demoNumbers.js';
 import { createDemoAssistantState } from '../src/demoAssistantData.js';
+import { parseStamp } from '../src/demoClock.js';
 
 test('numbers walkthrough keeps the request, general workspace and review on the same task', async () => {
   const state = JSON.parse(await readFile(new URL('../src/demoFixtures.json', import.meta.url), 'utf8'));
@@ -28,4 +29,28 @@ test('numbers walkthrough keeps the request, general workspace and review on the
   assert.equal(amounts.length, 3);
   assert.equal(amounts.reduce((a,b)=>a+b,0), total, 'the reply total matches the result categories');
   assert.match(NUMBERS_DRAFT, /Open purchase orders are excluded/i);
+});
+
+test('a fresh public demo is one current request, without unrelated tasks, meetings or agent sessions', async () => {
+  const state = JSON.parse(await readFile(new URL('../src/demoFixtures.json', import.meta.url), 'utf8'));
+  const assistant = createDemoAssistantState(state);
+  const at = parseStamp('2027-02-10 09:30:00');
+  installNumbersWorkflow(state, assistant, at);
+  assert.deepEqual(state['/api/tasks'].data.map(t => t.TaskId), [NUMBERS_TASK]);
+  assert.deepEqual(state['/api/tasks?active=1'].data.map(t => t.TaskId), [NUMBERS_TASK]);
+  assert.deepEqual(state['/api/feed'].data.map(m => m.MessageId), [NUMBERS_MESSAGE]);
+  assert.equal(assistant.pile.items.length, 1);
+  assert.equal(assistant.chats.length, 1);
+  assert.equal(assistant.pile.items[0].when, '2027-02-10 09:29:00');
+  assert.equal(state['/api/tasks/detail'][NUMBERS_TASK].task.CreatedAt, '2027-02-10 09:29:00');
+  assert.deepEqual(state['/api/calendar/today'].events, []);
+  assert.deepEqual(state['/api/terminals'].data, []);
+  assert.deepEqual(state['/api/runs/live'].data, []);
+  assert.equal(finishNumbersWorkflow(state, at + 3000).CreatedAt, '2027-02-10 09:30:03');
+});
+
+test('the full office remains an explicit exploration option', () => {
+  assert.equal(isGuidedDemo(''), true);
+  assert.equal(isGuidedDemo('?workflow=numbers'), true);
+  assert.equal(isGuidedDemo('?demo=explore'), false);
 });

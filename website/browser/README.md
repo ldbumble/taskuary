@@ -1,5 +1,11 @@
 # Phase 0 rendered-browser harness
 
+The public static demo has its own end-to-end check, without a backend or mailbox:
+`node --test browser/demo-journey.test.mjs`. It starts an isolated Vite demo, prepares
+one fictional request, checks the result's source, edits and approves the reply,
+verifies the completed task and clear rail, checks reload and setup guidance, and
+blocks outside requests. The broad office is available through `?demo=explore`.
+
 Use Node 22 for all frontend gates (`npm test`, `npm run build`, and browser tests).
 The explicit recursive test glob retains every existing frontend test under Node 22.
 

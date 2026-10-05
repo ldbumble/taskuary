@@ -205,7 +205,8 @@ class TheSourceRowHealsItself(unittest.TestCase):
     def test_the_poller_heals_it_and_the_checklist_then_agrees(self):
         from taskuary import channels, setup
         s = MemoryStore()
-        s.save_connector({'Type': 'imap', 'Name': 'Work', 'Active': 1,
+        # Setup counts an input the poller can read, so this mailbox needs its input role.
+        s.save_connector({'Type': 'imap', 'Name': 'Work', 'Active': 1, 'Roles': 'trigger',
                           'ConfigJson': CARD['ConfigJson'], 'Secret': 'pw'}, 'test')
         self.assertEqual(setup._inbound(s), [])             # half-connected: looks done, delivers nothing
         with mock.patch.object(channels, 'wants_read', return_value=False), \

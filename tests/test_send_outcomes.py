@@ -86,7 +86,7 @@ class OutcomeTests(unittest.TestCase):
              mock.patch.object(outbound, 'reconcile_sent', return_value=None):
             verdicts.decide(s2, s2.get_review(rid2), 'approve')
         with mock.patch.object(outbound, 'reply_to_message', return_value=SENT) as send2, \
-             mock.patch.object(outbound, 'reconcile_sent', return_value=None):
+             mock.patch.object(outbound, 'reconcile_sent', return_value={'state': 'absent'}):
             out2 = verdicts.decide(s2, s2.get_review(rid2), 'approve')
         send2.assert_called_once(); self.assertTrue(out2['ok'])                                          # nothing there: the retry is safe
 

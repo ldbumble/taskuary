@@ -82,7 +82,7 @@
 <div class="entry">
       <a class="page" href="./troubleshooting">When something is wrong</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show When something is wrong's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./troubleshooting#it-will-not-start">It will not start</a><a class="sec" href="./troubleshooting#a-connection-stopped">A connection stopped</a><a class="sec" href="./troubleshooting#triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="./troubleshooting#an-agent-is-stuck">An agent is stuck</a><a class="sec" href="./troubleshooting#a-report-returned-nothing">A report returned nothing</a><a class="sec" href="./troubleshooting#reading-the-audit-log">Reading the audit log</a><a class="sec" href="./troubleshooting#where-the-logs-are">Where the logs are</a><a class="sec" href="./troubleshooting#still-wrong">Still wrong</a></div>
+      <div class="secs" hidden><a class="sec" href="./troubleshooting#it-will-not-start">It will not start</a><a class="sec" href="./troubleshooting#a-connection-stopped">A connection stopped</a><a class="sec" href="./troubleshooting#triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="./troubleshooting#a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="./troubleshooting#an-agent-is-stuck">An agent is stuck</a><a class="sec" href="./troubleshooting#a-report-returned-nothing">A report returned nothing</a><a class="sec" href="./troubleshooting#reading-the-audit-log">Reading the audit log</a><a class="sec" href="./troubleshooting#where-the-logs-are">Where the logs are</a><a class="sec" href="./troubleshooting#still-wrong">Still wrong</a></div>
     </div>
     </nav>
     <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
@@ -167,25 +167,31 @@ host programs, because both need a machine of their own.</p>
 <p>The compose file binds to localhost. Set <code>TASKUARY_TOKEN</code> before publishing the port anywhere
 else.</p>
 <h2 id="your-first-run">Your first run<a class="anchor" href="#your-first-run" aria-label="Link to this section">#</a></h2>
-<p>Open <strong>Connections</strong> and do these four things in order. The first two are the minimum that makes
-Taskuary useful; the rest can wait.</p>
-<p><strong>1 · Give it a brain.</strong> Add a key for Anthropic, OpenAI, Azure OpenAI, OpenRouter or the Meta
-Model API, or point it at Ollama for a local model. Triage reads a lot of short messages and
-returns a one-line verdict, so the cheapest fast model is usually the right one.</p>
-<p><strong>2 · Connect somewhere work arrives.</strong> Outlook, Gmail or any IMAP mailbox, Teams, Slack,
-Telegram, WhatsApp, Discord, GitHub, Jira — see <a href="connections">Connections</a>. Items start appearing
-on the Timeline within a poll or two.</p>
-<p><strong>3 · Connect a coding CLI</strong>, if you want code written. Claude Code, Codex, Qwen Code, OpenCode,
-Kimi Code, Gemini, Cursor, Copilot, Muse Code or Devin. If the CLI is not on this machine yet,
-press <strong>Install</strong> on its card and Taskuary runs the vendor&#39;s own installer. A GitHub token lets
-it discover your repositories.</p>
-<p><strong>4 · Add a report</strong>, if there are numbers you check by hand. Describe it in plain English or
-build it from a database, a cloud account, a REST endpoint, an RSS feed or an MCP server, and
-preview it against the live source before scheduling.</p>
-<p>Two reports exist from the start: the <strong>Morning digest</strong> — one brief a day covering what slipped,
-today&#39;s meetings, what happened and what is in flight — and the <strong>Advisor</strong>, which posts only
-when it notices something between briefs. Both speak in the voice you set in <code>COUNSEL.md</code>. Delete
-either to switch it off.</p>
+<p>Open <strong>Set up Taskuary</strong> on the Assistant. The first four steps get you to one useful result:</p>
+<ol>
+<li><strong>Say who you are.</strong> Add the name that signs your drafts, and your email so Taskuary can
+recognise your own messages. Detailed preferences can wait.</li>
+<li><strong>Connect one AI.</strong> Use an API provider, Ollama, or a signed-in coding CLI you already pay
+for. Test its connection. Keep the current model defaults to start; reviewing every model
+assignment is optional.</li>
+<li><strong>Connect one work source.</strong> Choose one mailbox, chat, or issue tracker in
+<a href="connections">Connections</a>. Enable it as an input and test it. You do not need a mailbox if
+your first source is a tracker such as GitHub.</li>
+<li><strong>Press Read first items.</strong> This starts a real source read and shows its progress. Once items
+arrive, open one of the first five recent results to check its verdict and any draft. Replies
+still wait for your approval. If nothing arrives, the step explains how to check the source
+scope or try a new incoming message.</li>
+</ol>
+<p>The five items are a review sample, not an import limit: each source keeps its normal read scope
+and history settings. Starting with one source makes that first review easier. Setup does not
+overwrite an existing user&#39;s model or connection configuration.</p>
+<p>After that first result, add another source, connect a coding CLI if you want code written, or
+add a report for numbers you check by hand. The optional <strong>models and agents</strong> step opens the
+existing settings whenever you want to adjust cost or use different models for different jobs.
+Reports and the Hub can wait until you have a workflow that needs them.</p>
+<p>Two reports exist from the start: the <strong>End of day checkup</strong> and the <strong>Advisor</strong>, which looks for
+useful follow-ups and patterns in your work. You can review or remove either in Reports. The
+Morning digest is available as an optional report.</p>
 <h2 id="choosing-the-ai-setup">Choosing the AI setup<a class="anchor" href="#choosing-the-ai-setup" aria-label="Link to this section">#</a></h2>
 <p>Triage reads many messages cheaply; coding changes a repository rarely and wants a strong model.
 Taskuary lets those be different brains, and the choice is mostly about what you already pay for.</p>

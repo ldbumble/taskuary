@@ -243,7 +243,6 @@ class ReportExecutorTests(unittest.TestCase):
     def test_it_is_a_read_only_connection(self):
         """Nothing here posts a journal entry, and the authority says so."""
         from taskuary import scopes
-        self.assertEqual(scopes.default_scope('intacct'), 'read')
         self.assertEqual(scopes.ACTIONS['intacct'], 'read')
         from taskuary.store import DEFAULT_ROLES
         self.assertNotIn('trigger', DEFAULT_ROLES['intacct'])
@@ -323,7 +322,6 @@ class TheWriteIsGatedTests(unittest.TestCase):
     def test_the_card_ships_read_and_the_writes_need_write(self):
         from taskuary import scopes
         from taskuary.reports import CARD_OF, CONNECTION_OF, REGISTRY
-        self.assertEqual(scopes.default_scope('intacct'), 'read')
         for t in ('intacct_create', 'intacct_update'):
             self.assertIn(t, REGISTRY)
             self.assertEqual(scopes.needs(t), 'write')

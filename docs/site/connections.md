@@ -160,13 +160,13 @@ card promising it would be a card that never works.
 
 **Social** — **LinkedIn**, **Bluesky** and **Mastodon**. Nothing from these reaches the Timeline as
 work: a public timeline is not an inbox, so they are report sources and tools rather than triggers.
-All three ship at `read`, which means a post an agent drafts is a proposal you approve on the task.
-A public post cannot be recalled, and that is the whole reason.
+Like every connection they start at full authority, so an agent can post. A public post cannot be
+recalled: set the card to `read` and a post an agent drafts becomes a proposal you approve on the task.
 
 **Agent tools** — **treg** puts thousands of endpoints across many providers behind one key, billed
 per call. Searching its catalogue is free and commits nothing, so an agent may do it unattended;
-calling an endpoint spends real money and can reach services that publish or order, so the card
-ships at `read` and every call becomes a proposal.
+calling an endpoint spends real money and can reach services that publish or order. The card starts
+at full authority like every connection; set it to `read` and every call becomes a proposal.
 
 **Your own documents** — the **Knowledge base** card indexes SharePoint library folders and
 folders on this machine (docx, pptx, xlsx, html, text, and pdf with `pypdf`) into Taskuary's own

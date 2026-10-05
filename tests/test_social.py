@@ -224,10 +224,9 @@ class WiredInTests(unittest.TestCase):
         from taskuary.scopes import allows, default_scope
         s = MemoryStore()
         for card in ('bluesky', 'mastodon'):
-            self.assertEqual(default_scope(card), 'read')
-            self.assertFalse(allows(s.get_connector_by_type(card), f'{card}_post'),
-                             f'an agent could post to {card} unattended')
-            self.assertTrue(allows(s.get_connector_by_type(card), f'{card}_timeline'))
+            row = {**s.get_connector_by_type(card), 'Scope': 'read'}  # every connection starts at full; read is the owner's narrowing (2026-10-05)
+            self.assertFalse(allows(row, f'{card}_post'), f'an agent could post to {card} unattended at read')
+            self.assertTrue(allows(row, f'{card}_timeline'))
 
     def test_the_credential_reaches_the_executor(self):
         s = MemoryStore()

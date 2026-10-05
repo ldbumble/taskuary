@@ -229,8 +229,7 @@ def test_the_metric_tools_are_reachable_on_a_read_only_intacct_card():
     /api/tools/run. Unclassified, both types would have needed 'write' (UNKNOWN_NEEDS) and every
     one of those calls would have been refused."""
     from taskuary import scopes
-    card = {'Type': 'intacct'}
-    assert scopes.scope_of(card) == 'read'
+    card = {'Type': 'intacct', 'Scope': 'read'}  # every connection starts at full; read is the owner's narrowing (2026-10-05)
     assert scopes.allows(card, 'metric') and scopes.allows(card, 'metric_check')
 
 

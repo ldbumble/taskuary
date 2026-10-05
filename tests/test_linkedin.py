@@ -15,10 +15,9 @@ class TheLadder(unittest.TestCase):
     def test_a_post_is_a_write_on_a_card_that_ships_at_read(self):
         self.assertEqual(scopes.ACTIONS['linkedin_post'], 'write')
         self.assertEqual(scopes.ACTIONS['linkedin_me'], 'read')
-        self.assertEqual(scopes.DEFAULT_SCOPE['linkedin'], 'read')
 
     def test_the_card_at_its_default_scope_refuses_to_publish(self):
-        card = {'Type': 'linkedin', 'Scope': scopes.DEFAULT_SCOPE['linkedin']}
+        card = {'Type': 'linkedin', 'Scope': 'read'}  # every connection starts at full; read is the owner's narrowing (2026-10-05)
         scopes.require(card, 'linkedin_me')                      # reading is fine
         with self.assertRaises(PermissionError):
             scopes.require(card, 'linkedin_post')                # publishing is not

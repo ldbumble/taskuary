@@ -36,10 +36,11 @@ class TheCard(unittest.TestCase):
         card = s.get_connector_by_type('quickbooks')
         self.assertEqual(card['Name'], 'QuickBooks Online')
         self.assertEqual(sorted(card['Roles'].split(',')), ['report', 'tool'])
-        self.assertEqual(scopes.scope_of(card), 'read')
+        self.assertEqual(scopes.scope_of(card), scopes.FULL)  # every connection starts at full; read is the owner's narrowing (2026-10-05)
+        card = {**card, 'Scope': 'read'}
         self.assertTrue(scopes.allows(card, 'quickbooks'))
         self.assertTrue(scopes.allows(card, 'quickbooks_vendors'))
-        self.assertFalse(scopes.allows(card, 'quickbooks_bill'), 'posting a bill is a write; the card ships at read')
+        self.assertFalse(scopes.allows(card, 'quickbooks_bill'), 'posting a bill is a write; at read it is refused')
 
     def test_the_rotated_refresh_token_goes_back_on_the_card(self):
         """Intuit hands out a NEW refresh token on every refresh and kills the old one. A connector
@@ -115,6 +116,7 @@ class TheLadder(unittest.TestCase):
 
     def test_reads_pass_and_writes_are_refused_at_the_default_scope(self):
         s = server.store; _card(s); qb._TOK['123'] = ('at', 9e12)
+        s.save_connector({'ConnectorId': s.get_connector_by_type('quickbooks')['ConnectorId'], 'Scope': 'read'}, 't')  # every connection starts at full; read is the owner's narrowing (2026-10-05)
         body = {'QueryResponse': {'Vendor': [{'Id': '1', 'DisplayName': 'Acme'}]}}
         with mock.patch.object(qb.requests, 'request', return_value=_resp(200, body)):
             r = c.post('/api/tools/run', json={'type': 'quickbooks_vendors', 'name': 'ac'}, headers=AGENT)

@@ -340,12 +340,12 @@ form. That runs over CDP through a real browser session and cannot be reached fr
 card promising it would be a card that never works.</p>
 <p><strong>Social</strong> — <strong>LinkedIn</strong>, <strong>Bluesky</strong> and <strong>Mastodon</strong>. Nothing from these reaches the Timeline as
 work: a public timeline is not an inbox, so they are report sources and tools rather than triggers.
-All three ship at <code>read</code>, which means a post an agent drafts is a proposal you approve on the task.
-A public post cannot be recalled, and that is the whole reason.</p>
+Like every connection they start at full authority, so an agent can post. A public post cannot be
+recalled: set the card to <code>read</code> and a post an agent drafts becomes a proposal you approve on the task.</p>
 <p><strong>Agent tools</strong> — <strong>treg</strong> puts thousands of endpoints across many providers behind one key, billed
 per call. Searching its catalogue is free and commits nothing, so an agent may do it unattended;
-calling an endpoint spends real money and can reach services that publish or order, so the card
-ships at <code>read</code> and every call becomes a proposal.</p>
+calling an endpoint spends real money and can reach services that publish or order. The card starts
+at full authority like every connection; set it to <code>read</code> and every call becomes a proposal.</p>
 <p><strong>Your own documents</strong> — the <strong>Knowledge base</strong> card indexes SharePoint library folders and
 folders on this machine (docx, pptx, xlsx, html, text, and pdf with <code>pypdf</code>) into Taskuary&#39;s own
 SQLite. Once anything is indexed, a <code>kb_search</code> report answers questions from it on a schedule,

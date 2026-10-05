@@ -252,9 +252,9 @@ class WiredInTests(unittest.TestCase):
             self.assertIn(t, chatservers.SENDS)
 
     def test_posting_back_into_a_room_needs_write_authority(self):
-        from taskuary.scopes import default_scope
+        from taskuary.scopes import default_scope, rank
         for t in FOUR:
-            self.assertEqual(default_scope(t), 'write', f'{t} could not post a reply')
+            self.assertGreaterEqual(rank(default_scope(t)), rank('write'), f'{t} could not post a reply')
 
 
 if __name__ == '__main__':

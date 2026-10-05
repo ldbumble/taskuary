@@ -117,48 +117,20 @@ ACTIONS = {
     'winrm': 'admin',        # Invoke-Command on a remote box is the sharpest edge we ship
 }
 
-# Where each connection starts. These match what it could already do, so nothing regresses
-# on upgrade; the read-only trackers start at 'read' because that is all they have ever
-# done, and the new connectors start at 'read' because nothing depends on them yet.
-DEFAULT_SCOPE = {
-    'winrm': 'admin',                                        # its one executor needs admin
-    'github': 'write', 'outlook': 'write', 'teams': 'write', 'slack': 'write',
-    'telegram': 'write', 'whatsapp': 'write', 'imessage': 'write', 'discord': 'write',
-    'gmail': 'write', 'imap': 'write',
-    'mattermost': 'write', 'rocketchat': 'write', 'matrix': 'write', 'google_chat': 'write',
-    'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
-    'intacct': 'read', 'quickbooks': 'read', 'teller': 'read', 'simplefin': 'read',
-    'coingecko': 'read', 'alchemy': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
-    'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
-    'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read', 'fmp': 'read', 'alpaca': 'read',
-    'postgresql': 'read', 'mysql': 'read', 'clickhouse': 'read', 'snowflake': 'read', 'bigquery': 'read',
-    'treg': 'read',                                          # a catalogue is a window; spending is the owner's call
-    'linkedin': 'read',                                      # publishing under your own name is never unattended
-    'bluesky': 'read', 'mastodon': 'read',                   # ...and a public post cannot be recalled
-    'robinhood': 'read',                                     # a broker starts as a window; raising it is the owner's call
-    'screen': 'read',
-    'zoho_invoice': 'write',
-    'aws': 'read', 'azure': 'read',
-    # Both file cards ship at read, so the first save is a PROPOSAL the owner approves - the road a
-    # QuickBooks bill takes, and for the same asymmetry: read-first costs a click, write-first can
-    # cost a document mis-filed onto a share other people read, and only one of those is recoverable.
-    # Raising the card, or a routing policy for the narrow case, is how it stops asking.
-    'smb_file': 'read', 'sftp': 'read',
-    'jira': 'read', 'asana': 'read', 'monday': 'read', 'gitlab': 'read', 'azdo': 'read',
-    'linear': 'read', 'trello': 'read', 'notion': 'read', 'sentry': 'read', 'pagerduty': 'read',
-    'clickup': 'read', 'todoist': 'read', 'dropbox': 'read',
-    # Taskuary's OWN stores, and the point of both is that agents fill them: a handbook only
-    # agents may read is a handbook nobody writes. It stays on the ladder so an owner who wants
-    # the agents hands-off can drop it to read - the default is not the absence of a choice.
-    'handbook': 'write', 'knowledge': 'write',
-}
+# Where each connection starts: FULL, the way a CLI agent with full permissions can already do anything its credentials
+# reach (the owner, 2026-10-05: "default should be permission of agents are the same as cli tools full permissions. you can
+# limit if you want"). The owner narrows a connection on its card or under Settings -> Agent permissions; the read-first
+# per-type table this replaced was a guess at caution nobody had asked for. Mail from an unknown sender never starts an
+# agent at all (ingest.auto_start_ok), so these permissions ride on work the owner or a trusted sender began.
+FULL = 'admin'
+DEFAULT_SCOPE = {}                     # no per-type exceptions; kept as the /api/scopes shape
 
 
 def rank(scope) -> int: return _RANK.get((scope or '').strip().lower(), 0)
 
 def needs(action) -> str: return ACTIONS.get((action or '').strip().lower(), UNKNOWN_NEEDS)
 
-def default_scope(ctype) -> str: return DEFAULT_SCOPE.get((ctype or '').strip().lower(), 'read')
+def default_scope(ctype) -> str: return DEFAULT_SCOPE.get((ctype or '').strip().lower(), FULL)
 
 def scope_of(c) -> str:
     """The ceiling on a connector row - the owner's setting, or the type's default."""

@@ -1144,10 +1144,10 @@ const DATA_META = {
       "Leave username and password blank on a domain-joined machine: Taskuary runs as you, and it reaches whatever you can open in Explorer. Fill them in only for a share your own account cannot reach — Test says which of the two happened.",
       "Test reaches the root and counts what is in it. \"not reachable as a folder\" means the path or the credentials, and the error says which.",
       "REPORTS tab: 'Network share' reads a file, a folder listing (newest first — \"did today's export arrive?\") or a glob like exports/sales-*.csv, which reads the newest match.",
-      "Writing is an AGENT tool, not a report. At authority 'read' an agent proposes the save and you approve it on the task with the destination and size in front of you; raise Authority to 'write' once you are happy for it to file documents unattended."],
+      "Writing is an AGENT tool, not a report. The card starts at full authority, so an agent files documents itself; set Authority to 'read' and each save becomes a proposal you approve on the task with the destination and size in front of you."],
     agent: ["Ask for the share root and save it as `share` in ConfigJson. Ask whether their own Windows login reaches it (usually yes on a work machine) - if so leave username and Secret empty and say why.",
       "Test (POST {base}/api/connectors/{cid}/test{hdr}). A failure naming the folder is the path; one naming the account is the credentials. Do not retry the same values.",
-      "Turn the connector on. Leave Authority at read unless the owner ASKS for unattended filing - explain that at read they approve each save on the task, which is how the first few should go anyway. SETUP DONE."] },
+      "Turn the connector on. Authority starts at full, so agents file documents themselves - ask whether the owner would rather approve each save, and if so set Authority to read. SETUP DONE."] },
   sftp: { title: "SFTP", types: ["sftp_list", "sftp_get", "sftp_put", "sftp_move"],
     fields: [["host", "host"], ["port (blank = 22)", "port"], ["username", "username"],
       ["base folder (optional — blank = wherever the login lands)", "root"],
@@ -1161,7 +1161,7 @@ const DATA_META = {
       "Fetching stages the file under ~/.taskuary and answers with its local path, which the Network file share card accepts as a source: that is pull-from-SFTP, rename, save-to-the-share, with a receipt at every step. Uploads and remote renames are writes and follow the same approve-then-raise path as the share."],
     agent: ["Ask for host, username, port if not 22, and the folder the work happens in (`root`). Ask whether they authenticate with a password or a key; either goes in Secret and you never echo it back.",
       "Test with `hostkey` empty ON PURPOSE (POST {base}/api/connectors/{cid}/test{hdr}): it fails with the fingerprint the server presented. Show the owner that fingerprint, ask them to confirm it against their own records or the vendor's, save it as `hostkey`, and Test again. Never invent or auto-accept a fingerprint.",
-      "Turn the connector on, leave Authority at read, SETUP DONE."] },
+      "Turn the connector on. Authority starts at full - set it to read if the owner wants to approve every upload. SETUP DONE."] },
   azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"], discovers: true,
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"]],
     secretLabel: "client secret (write-only; blank = reuse the Outlook connector's app)",
@@ -2922,9 +2922,9 @@ const RoleRow = ({ on, onToggle, label, desc }) => (
    Read is the safe floor and the default for every tracker - a connection only gains a verb
    when the owner hands it over. */
 const SCOPE_META = {
-  read: ["Read only", "Look, never touch: list, fetch, search, query. Nothing upstream changes. The safe default."],
+  read: ["Read only", "Look, never touch: list, fetch, search, query. Nothing upstream changes; any change an agent wants becomes a proposal you approve on the task."],
   write: ["Read and write", "The everyday work as well: create, update, comment, assign, complete, send. No deleting, no closing, no running code."],
-  admin: ["Full authority", "Everything, including the destructive and the structural: delete, close, archive, manage access, run scripts on a box. Hand this over deliberately."],
+  admin: ["Full authority", "Everything, including the destructive and the structural: delete, close, archive, manage access, run scripts on a box - what a CLI agent with full permissions can already do. Every connection starts here; narrow it when you want to."],
 };
 const SCOPE_KEYS = ["read", "write", "admin"];
 

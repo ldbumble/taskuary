@@ -621,8 +621,7 @@ class ApiTests(unittest.TestCase):
         j = c.get('/api/scopes').json()
         self.assertEqual([d['value'] for d in j['data']], ['read', 'write', 'admin'])
         self.assertIn('winrm', j['data'][2]['gains'])          # remote code shows up under admin
-        self.assertEqual(j['defaults']['winrm'], 'admin')
-        self.assertEqual(j['defaults']['clickup'], 'read')
+        self.assertEqual(j['defaults'], {})  # every connection starts at full; read is the owner's narrowing (2026-10-05)
 
     def test_tool_run_needs_the_tool_role(self):
         """An agent using a connected system: allowed for tool-role connections that are ON,

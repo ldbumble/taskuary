@@ -507,6 +507,9 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
         # ...and the OPEN work it touches, so a repeat can be named as the task it repeats (same_as, 2026-09-25)
         still = taskcontext.recent_open(store, msg)
         if still: thread = {**thread, 'open_work': still}
+        # ...and how this sender's last asks were worked, further back than three days (TQ-0955, 2026-10-05)
+        theirs = taskcontext.sender_history(store, msg)
+        if theirs: thread = {**thread, 'sender_history': theirs}
     except Exception as e: logger.debug(f'recent closures skipped: {e}')
     # an assistant idea carries where it came from and what it is about (PW-199): the report, the task
     # it names and whether a worker has that task - facts the model needs to judge a generated line

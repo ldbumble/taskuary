@@ -2023,6 +2023,12 @@ class SQLiteStore:
         if not s: return []
         return self._rows(f"SELECT DISTINCT t.TaskId FROM task t JOIN message m ON m.TaskId=t.TaskId WHERE t.Status='done' "
                           f"AND lower(m.FromEmail) IN ({','.join('?' * len(s))}) ORDER BY t.TaskId DESC LIMIT ?", [*s, limit])
+    def tasks_from_sender(self, sender, since, limit=3):
+        """This sender's newest asks since `since`, dropped ones aside - how their work has been handled (context.sender_history)."""
+        if not sender: return []
+        return self._rows("SELECT t.TaskId, t.Title, t.Kind, t.Status, t.Tags, t.CreatedAt FROM task t WHERE t.CreatedAt >= ? "
+                          "AND t.Status <> 'dropped' AND EXISTS (SELECT 1 FROM message m WHERE m.TaskId=t.TaskId AND lower(m.FromEmail)=?) "
+                          "ORDER BY t.CreatedAt DESC, t.TaskId DESC LIMIT ?", (since, sender.lower(), limit))
     def tasks_open_linked(self, limit=80):
         """The OPEN tasks, newest activity first, each with the senders and conversations it carried - the
         open half of what triage is shown (context.recent_open) beside what closed lately."""

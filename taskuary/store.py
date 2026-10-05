@@ -826,6 +826,22 @@ class SQLiteStore:
             # and whether it is still owed to a busy phone chat
             for col in ('AskedVia', 'AskedTold', 'AskedToldAt', 'AskedWatch', 'AskedSeenMid', 'RemindVia', 'RemindOwed'):
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
+            # an email slot an agent addressed as "Name <address>" handed the provider the whole string (TQ-0957): the
+            # recipient is the address, the name rides beside it (slots.split) - repaired once, on start
+            from .slots import split
+            for r in self.cx.execute("SELECT ReviewId, Deliver FROM review WHERE Kind='slot' AND Deliver LIKE '%<%' "
+                                     "AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')").fetchall():
+                env = json.loads(r[1] or '{}') or {}
+                env['to'] = [split(a)[1] for a in env.get('to') or []]
+                self.cx.execute('UPDATE review SET Deliver=? WHERE ReviewId=?', (json.dumps(env), r[0]))
+            for r in self.cx.execute("SELECT TaskId, Checklist FROM task WHERE Checklist LIKE '%\"out\"%<%'").fetchall():
+                items = json.loads(r[1] or '[]') or []
+                for i in items:
+                    o = i.get('out') if isinstance(i, dict) else None
+                    if isinstance(o, dict) and '<' in str(o.get('to') or ''):
+                        name, o['to'] = split(o['to'])
+                        if name: o['name'] = name
+                self.cx.execute('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps(items), r[0]))
             # the owner's own replies were stored as INCOMING (X1, 2026-09-25) - everything that counts senders, and the
             # triage accuracy measure, counted the owner as one. 'You' on a context row is the owner, never a bot.
             self.cx.execute("UPDATE message SET Direction='out' WHERE Status='context' AND FromName='You' AND IFNULL(Direction,'in')='in'")

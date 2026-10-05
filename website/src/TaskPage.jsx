@@ -63,7 +63,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
-import { completionLine,
+import { completionLine, waitingEmails,
   AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
@@ -716,11 +716,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and stepping back from a live session (peek) opens the TASK stage: the point of the step was
   // to read what the task is and where it came from, and that lives on the task card, not folded
   // to a strip under a heading that says the agent is working.
+  const emailsWaiting = waitingEmails(detail?.checklist, detail?.reviews);
+  const owesEmails = (detail?.checklist || []).some((i) => i.out && !i.done);
   const stage = sessionView ? "agent" : (openStage || (peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null,
+    emails: emailsWaiting,
   })));
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
@@ -1112,9 +1115,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             </Box>
                           </Box>
                         )}
-                        {/* the emails that close it (slots.py): each with its own draft, never the reply card below */}
-                        <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
-                          onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
                         {/* the rest of what they said, in order - indented so it reads as the same
                             person continuing rather than as separate business */}
                         {alsoSaid.map((m) => (
@@ -1598,9 +1598,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : closeoutRv
                         ? (replyMessage ? "Your reply to the sender and the last act on GitHub - approving them closes the task." : "The last act on GitHub - approving it closes the task.")
                       : replyMessage
-                        ? "What goes back to the sender. Sending it closes the task."
+                        ? (owesEmails ? "What goes back to the sender, and the emails this task owes. It closes when they are all sent or dropped."
+                          : "What goes back to the sender. Sending it closes the task.")
+                      : owesEmails
+                        ? "The emails this task owes - each waits for your yes. It closes when the last is sent or dropped."
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
-                    chip={<LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
+                    chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact />
+                      : <LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
                     tone="#8a3646" {...stageProps("reply")}
                     action={!inRow && stage !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
@@ -1615,8 +1619,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           </Tooltip>
                         </Box>
                       : null} />
-                  {stage === "reply" && ((pendingReview || proposals.length || replyMessage) ? (
+                  {stage === "reply" && ((pendingReview || proposals.length || replyMessage || owesEmails) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
+                      <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
+                        onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
                       {/* the bar comes FIRST, above the letter it acts on. What it no longer holds is
                           that jump to another tab: the draft is right here, and a button whose whole job
                           was sending you to another tab to do this card's own job is gone. */}

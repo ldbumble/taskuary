@@ -8,6 +8,7 @@ Its draft is a review of kind `slot`, never `draft_reply`: every "the task's rep
 agent_reply, the close-out redirect) reads draft kinds, so a slot can never be mistaken for the reply or overwritten by it.
 """
 import json
+from email.utils import parseaddr
 
 KINDS = ('email',)            # what a slot can be - a new kind is a new entry here, never a branch elsewhere
 KIND = 'slot'                 # the review kind of a slot's draft
@@ -20,11 +21,20 @@ def clean(outputs) -> list:
         if not isinstance(o, dict): continue
         to, about, kind = ' '.join(str(o.get('to') or '').split())[:200], ' '.join(str(o.get('about') or '').split())[:200], o.get('kind') or 'email'
         if not to or kind not in KINDS: continue
+        name, to = split(to)
         # `by: agent` - an address the agent added on its own: never swept up by Approve all (a prompt-injected agent
         # must not get an email out under one bulk press)
-        out.append({'text': f'Email {to}' + (f' - {about}' if about else ''),
-                    'out': {'kind': kind, 'to': to, 'subject': str(o.get('subject') or '')[:200], **({'by': 'agent'} if o.get('by') == 'agent' else {})}})
+        out.append({'text': f'Email {name or to}' + (f' - {about}' if about else ''),
+                    'out': {'kind': kind, 'to': to, 'subject': str(o.get('subject') or '')[:200], **({'name': name} if name else {}),
+                            **({'by': 'agent'} if o.get('by') == 'agent' else {})}})
     return out
+
+
+def split(to: str) -> tuple:
+    """('JD Hancock', 'jd@x.example') out of 'JD Hancock <jd@x.example>' - the recipient is the ADDRESS: the provider was
+    handed the whole string as one and an agent writes them that way (TQ-0957). A bare name or address: ('', it)."""
+    name, addr = parseaddr(str(to or ''))
+    return (name.strip(), addr.strip()) if '@' in addr and '<' in str(to) else ('', ' '.join(str(to or '').split()))
 
 
 def add(store, tid: int, outputs, actor: str) -> list:
@@ -103,6 +113,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     text = str(text or '').strip()
     if not text: return {'ok': False, 'why': 'no email text'}
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
+    to = split(to)[1]
     want = ' '.join(str(to or '').split()).casefold()
     hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
           next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None)

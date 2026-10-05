@@ -68,7 +68,7 @@ try {
     #end h1{font-size:66px;max-width:1100px;line-height:1.1;margin:0 0 35px}#end p{font-size:30px;color:#d1ded3}#end small{font-size:20px;color:#a6c9aa}
     </style></head><body><header><strong>Taskuary</strong><div id="title"></div><div id="label">PRODUCT WALKTHROUGH · FICTIONAL WORKDAY</div></header>
     <iframe src="${origin}/demo/?workflow=numbers"></iframe><footer><span id="step"></span><span id="caption"></span><span id="note">Scripted demo · nothing sends or runs</span></footer><div id="progress"></div><div id="cursor"></div>
-    <div id="end"><small>YOUR INBOX, STAFFED BY AI AGENTS</small><h1>Keep the work moving.<br>Keep the decisions yours.</h1><p>Request → Context → Agent work → Your review</p><small>Explore Taskuary at taskuary.com/demo/</small></div></body></html>`);
+    <div id="end"><small>YOUR WORK, ALREADY UNDERWAY</small><h1>Keep the work moving.<br>Keep the decisions yours.</h1><p>Request → Context → Agent work → Your review</p><small>Explore Taskuary at taskuary.com/demo/</small></div></body></html>`);
   await page.waitForFunction(() => document.querySelector('iframe')?.contentDocument?.body.innerText.includes('Latest vendor spend numbers'));
   const frame = page.frames().find(f => f.parentFrame());
   await Promise.race([frame.evaluate(() => document.fonts.ready), delay(5000)]);

@@ -10,11 +10,11 @@
 
 <p align="center"><b>⭐ 如果 Taskuary 对你有帮助，请给它一个 Star</b> —— 这是别人发现它的方式。</p>
 
-## 让 AI 智能体帮你处理收件箱里的工作
+## 你的工作，已经在推进
 
-Taskuary 在本机运行，把收到的消息整理成任务，交给智能体处理，再把结果带回给你审核。
-它帮你分清哪些消息需要行动、哪些可以归档，以及哪些事情正在等待你的决定。
-对外发送和交付由你批准。
+**一个为你的工作服务的个人 AI 助手。** 邮件、聊天和工单变成任务，由你已经在用的智能体（Claude Code、Codex、Gemini）完成，未经你批准，什么都不会发出。开源，在你的电脑上运行，无需订阅。
+
+与 alfred_、Fyxer 等托管助手相比，Taskuary 免费开源，在你的电脑上运行，并把工作交给你已经在用的智能体。
 
 ![工作到来时，Taskuary 的工作室逐渐展开，AI 智能体就位。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=workspace)
 

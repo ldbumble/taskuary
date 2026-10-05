@@ -1,6 +1,6 @@
 # Contributing to Taskuary
 
-Thanks for helping build the local-first way to automate your job. Small, focused PRs
+Thanks for helping build a personal AI assistant for your job. Small, focused PRs
 are the fastest path to merge — a new report connector is ~15 lines and the single best
 first contribution.
 

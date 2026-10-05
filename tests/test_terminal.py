@@ -1204,6 +1204,15 @@ class RepoRoutingTests(unittest.TestCase):
         self.assertIn('Pick the repository', str(e.exception))    # the fix is ON the task now
         self.assertIn('wrong tree', str(e.exception))
 
+    def test_a_named_repo_without_any_path_mapping_never_uses_the_default_folder(self):
+        server.store.upsert_agent('coder', 'coding', 'cli',
+                                  json.dumps({'cmd': 'claude', 'cwd': os.getcwd(), 'cwd_map': {}}))
+        with mock.patch.object(terminal, 'find_checkout', return_value=None), \
+             mock.patch.object(terminal, 'Term') as worker, \
+             self.assertRaisesRegex(ValueError, 'no local path for northwind/portal'):
+            terminal.open_session(server.store, 'coder', self._task('Prepare portal fix'), 'northwind/portal')
+        worker.assert_not_called()
+
     def test_the_api_lists_every_repo_with_whether_it_can_be_opened(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')
         out = c.get(f'/api/tasks/{tid}/repos').json()

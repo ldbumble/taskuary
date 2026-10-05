@@ -7,7 +7,7 @@ mail nobody connects), a chat answers in the chat.
 
 Nothing sends itself. Every call here is behind a human verdict or an explicit hand-off.
 """
-import base64, json, mimetypes
+import base64, json, mimetypes, re, smtplib
 from pathlib import Path
 
 import requests
@@ -16,6 +16,10 @@ from loguru import logger
 from . import redact
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
+
+
+class UncertainDelivery(RuntimeError):
+    """The provider did not establish whether the send was accepted."""
 
 
 def _source_connector_id(store, channel, address):
@@ -139,7 +143,9 @@ def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body
     if not did: raise RuntimeError('graph composed no draft to attach to')
     for f in files: _attach_to_draft(hdr, box, did, f)
     r = requests.post(f'{GRAPH}/users/{box}/messages/{did}/send', headers=hdr, timeout=120)
-    if r.status_code >= 300: raise RuntimeError(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
+    if r.status_code >= 300:
+        error = UncertainDelivery if r.status_code >= 500 else RuntimeError
+        raise error(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
     return {'channel': 'email', 'to': to, 'cc': cc, 'mailbox': box, 'threaded': bool(reply_to_graph_id),
             'attached': [f['name'] for f in files]}
 
@@ -180,7 +186,8 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
                                                        **({'ccRecipients': [{'emailAddress': {'address': a}} for a in cc]} if cc else {})},
                                            'saveToSentItems': True}))
     if r.status_code >= 300:
-        raise RuntimeError(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
+        error = UncertainDelivery if r.status_code >= 500 else RuntimeError
+        raise error(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
     return {'channel': 'email', 'to': to, 'cc': cc, 'mailbox': box, 'threaded': bool(reply_to_graph_id)}
 
 
@@ -529,35 +536,110 @@ def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
     return {'kind': 'reply', 'mode': 'reply_all' if mode == 'reply_all' else 'reply_to', 'to': to, 'cc': cc}
 
 
-UNKNOWN_ERRORS = (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError, TimeoutError)
+UNKNOWN_ERRORS = (requests.exceptions.Timeout, requests.exceptions.ConnectionError, TimeoutError,
+                  smtplib.SMTPServerDisconnected, requests.exceptions.JSONDecodeError, UncertainDelivery)
+
+
+def delivery_uncertain(error):
+    """Transport loss, server errors and partial sends do not establish non-delivery."""
+    if isinstance(error, UNKNOWN_ERRORS): return True
+    response = getattr(error, 'response', None)
+    code = getattr(response, 'status_code', None) if response is not None else getattr(error, 'status', None)
+    try:
+        if int(code or 0) >= 500: return True
+    except (TypeError, ValueError): pass
+    text = str(error)
+    if getattr(error, 'smtp_code', None) is not None: return False  # SMTP 550 is an explicit rejection
+    return bool(re.search(r'\(5\d\d\)', text)
+                or 'Messages.app did not answer within' in text
+                or re.search(r'\b\d+ of \d+ parts were sent before it failed\b', text))
+
+
+def _send_parts(send, pieces):
+    """A later rejected chunk must not make the already-sent prefix retryable."""
+    sent = []
+    for piece in pieces:
+        try: sent.append(send(piece))
+        except Exception as e:
+            if sent: raise UncertainDelivery(f'{len(sent)} message part(s) were sent before a later part failed: {e}') from e
+            raise
+    return sent[0]
 
 
 def _rcpts(rows) -> list: return [str((r.get('emailAddress') or {}).get('address') or '').lower() for r in (rows or []) if isinstance(r, dict)]
 
 
-def reconcile_sent(store, msg: dict, body: str, since: str = None):
-    """Did an uncertain send actually go out? Asked of the provider (PW-144): for a Graph mailbox, the Sent Items of
-    the conversation since the attempt; the first mail whose text carries the reply's opening words is the receipt.
-    None when nothing is found or the provider cannot be asked - which is NOT proof of not sent."""
-    if str((msg or {}).get('Channel') or '').lower() != 'email': return None
-    ext = str(msg.get('ExternalId') or '')
-    if not ext.startswith('graph:'): return None
+def reconciliation_result(result):
+    """Normalise receipts and explicit outcomes; an old None is always unverifiable.
+
+    Providers may return absent only when they can establish that an attempt was not
+    accepted. Missing a message in an eventually consistent Sent folder is not that.
+    """
+    if isinstance(result, dict):
+        if result.get('state') == 'sent':
+            receipt = result.get('sent')
+            if isinstance(receipt, dict) and receipt.get('channel'): return result
+        if result.get('state') in ('absent', 'unknown'): return result
+        if result.get('channel'): return {'state': 'sent', 'sent': result}
+    return {'state': 'unknown', 'reason': 'the provider could not verify the earlier delivery'}
+
+
+def _reconcile_graph(store, box, body, since=None, conv=None, to=None, cc=None, subject=None):
+    unknown = lambda why: {'state': 'unknown', 'reason': why}
+    expected = ' '.join(str(body or '').split())
+    if not expected: return unknown('the earlier attempted text is unavailable')
     try:
-        box = msg.get('SourceName') or _mailbox(store)
         tok = _graph_token(store, connector_id=_source_connector_id(store, 'email', box))
-        conv = msg.get('ConversationId')
-        params = {'$top': 10, '$orderby': 'sentDateTime desc', '$select': 'id,sentDateTime,bodyPreview,toRecipients,ccRecipients'}
-        if conv: params['$filter'] = f"conversationId eq '{conv}'"
-        r = requests.get(f'{GRAPH}/users/{box}/mailFolders/sentitems/messages', headers={'Authorization': f'Bearer {tok}'}, timeout=20, params=params)
-        if r.status_code >= 300: return None
-        head = ' '.join(str(body or '').split())[:60].lower()
-        for m in (r.json() or {}).get('value') or []:
+        params = {'$top': 100, '$orderby': 'sentDateTime desc',
+                  '$select': 'id,sentDateTime,body,toRecipients,ccRecipients,subject'}
+        filters = []
+        if conv: filters.append("conversationId eq '" + str(conv).replace("'", "''") + "'")
+        if since: filters.append(f'sentDateTime ge {since}')
+        if filters: params['$filter'] = ' and '.join(filters)
+        hdr = {'Authorization': f'Bearer {tok}', 'Prefer': 'outlook.body-content-type="text"'}
+        r = requests.get(f'{GRAPH}/users/{box}/mailFolders/sentitems/messages', headers=hdr, timeout=20, params=params)
+        if r.status_code >= 300: return unknown(f'the provider refused the delivery check ({r.status_code})')
+        data = r.json() or {}
+        for m in data.get('value') or []:
             if since and str(m.get('sentDateTime') or '') < since: continue
-            if head and head[:40] in ' '.join(str(m.get('bodyPreview') or '').split()).lower():
-                return {'channel': 'email', 'id': m.get('id'), 'to': _rcpts(m.get('toRecipients')), 'cc': _rcpts(m.get('ccRecipients')), 'reconciled': True}
+            if to is not None and set(_rcpts(m.get('toRecipients'))) != {a.lower() for a in addrs(to)}: continue
+            if cc is not None and set(_rcpts(m.get('ccRecipients'))) != {a.lower() for a in addrs(cc)}: continue
+            if subject and str(m.get('subject') or '') != subject: continue
+            raw = (m.get('body') or {}).get('content') or ''
+            if str((m.get('body') or {}).get('contentType') or '').lower() == 'html':
+                from .channels import _clean
+                raw = _clean(raw)
+            text = ' '.join(str(raw).split())
+            # Replies may carry the quoted original, but the WHOLE attempted text
+            # must lead the message. A shared greeting is not a delivery receipt.
+            if text == expected or text.startswith(expected + ' '):
+                sent = {'channel': 'email', 'id': m.get('id'), 'to': _rcpts(m.get('toRecipients')),
+                        'cc': _rcpts(m.get('ccRecipients')), 'reconciled': True}
+                return {'state': 'sent', 'sent': sent}
+        return unknown('the Sent folder does not show a matching receipt yet; this does not confirm that it was not sent')
     except Exception as e:
         logger.warning(f'could not reconcile an uncertain send: {e}')
-    return None
+        return unknown(f'the provider could not verify delivery ({str(e)[:160]})')
+
+
+def reconcile_sent(store, msg: dict, body: str, since: str = None, to=None, cc=None):
+    """Check an uncertain reply without treating lack of a receipt as safe to resend."""
+    if str((msg or {}).get('Channel') or '').lower() != 'email' or not str(msg.get('ExternalId') or '').startswith('graph:'):
+        return {'state': 'unknown', 'reason': 'this provider cannot verify an uncertain reply'}
+    return _reconcile_graph(store, msg.get('SourceName') or _mailbox(store), body, since,
+                            conv=msg.get('ConversationId'), to=to, cc=cc)
+
+
+def reconcile_outbound(store, envelope: dict, body: str, since: str = None):
+    """New messages use the same conservative receipt check as replies."""
+    if str(envelope.get('channel') or '').lower() != 'email' or envelope.get('kind') == 'zoho_invoice':
+        return {'state': 'unknown', 'reason': 'this provider cannot verify an uncertain outbound message'}
+    c = store.get_connector_by_type('outlook')
+    if not c or not c.get('Active'):
+        return {'state': 'unknown', 'reason': 'the sending mailbox cannot verify an uncertain outbound message'}
+    try: box = _mailbox(store)
+    except Exception as e: return {'state': 'unknown', 'reason': str(e)[:160]}
+    return _reconcile_graph(store, box, body, since, to=envelope.get('to'), cc=envelope.get('cc'), subject=envelope.get('subject'))
 
 
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None, attachments: list = None) -> dict:
@@ -608,8 +690,7 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         # as punctuation and folds a long bubble behind "Read more". Spell it for the channel and
         # send it whole; the first piece is the reply, so its receipt is the one that answers.
         said = [p for p in chatformat.split(chatformat.render(body, ch)) if p.strip()] or [body]
-        out = [send(store, chat, p, connector_id) if connector_id else send(store, chat, p) for p in said]
-        return out[0]
+        return _send_parts(lambda p: send(store, chat, p, connector_id) if connector_id else send(store, chat, p), said)
     if ch == 'imessage':
         from .imessage import send_text
         chat = str(msg.get('ConversationId') or '')[9:]                 # 'imessage:<chat guid>'
@@ -625,9 +706,7 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         pieces = chatformat.split(body, 1900)
         if not pieces:
             raise RuntimeError("nothing to send")
-        sent = [discord_send(store, chat, piece, connector_id) if connector_id else
-                discord_send(store, chat, piece) for piece in pieces]
-        return sent[0]
+        return _send_parts(lambda p: discord_send(store, chat, p, connector_id) if connector_id else discord_send(store, chat, p), pieces)
     if ch in CHAT_SERVERS:
         from . import chatservers
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # '<type>:<room id>'

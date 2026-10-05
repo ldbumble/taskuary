@@ -2,12 +2,44 @@
 default) and in-memory (tests/demo). Every mutation is meant to be paired with .audit();
 the audit log is a Buzz-style tamper-evident hash chain (each row hashes the previous).
 """
-import contextlib, copy, hashlib, json, re, sqlite3, threading, uuid
+import contextlib, copy, hashlib, json, os, re, sqlite3, threading, uuid
 from datetime import datetime, timedelta
 from loguru import logger
 
 _LIVE_UNSET = object()
 _POLL_UNSET = object()
+# A durable claim also names its process. A second connection must not mistake a live
+# sender for an interrupted one; after a restart, an abandoned claim becomes unknown.
+_DELIVERY_PROCESS = f'{os.getpid()}:{uuid.uuid4().hex}:'
+_DELIVERY_LOCK = threading.RLock()
+_DELIVERY_CLAIMS = set()
+
+
+def _delivery_claim_alive(claim):
+    if not claim: return False
+    if claim.startswith(_DELIVERY_PROCESS): return claim in _DELIVERY_CLAIMS
+    try: pid = int(claim.split(':', 1)[0])
+    except (TypeError, ValueError): return True  # an unrecognised owner is not permission to retry
+    if pid == os.getpid(): return False         # a prior process whose pid was reused
+    if os.name == 'nt':
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        handle = kernel.OpenProcess(0x1000, False, pid)
+        if not handle: return ctypes.get_last_error() != 87
+        try:
+            code = wintypes.DWORD()
+            return not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value == 259
+        finally: kernel.CloseHandle(handle)
+    try: os.kill(pid, 0)
+    except ProcessLookupError: return False
+    except PermissionError: return True
+    except OSError: return True
+    return True
 GENESIS = '0' * 64
 # the channels Taskuary writes itself - its reports and the Advisor's ideas - which carry no sender address
 OWN_CHANNELS = ('report', 'assistant')
@@ -703,7 +735,7 @@ class SQLiteStore:
         if path != ':memory:':
             self._rail_cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
             self._rail_cx.row_factory = sqlite3.Row
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.idlock = threading.Lock()     # create_task: allocate-and-insert as one step (self.lock is per statement)
         if path != ':memory:':
             self.cx.execute('PRAGMA journal_mode=WAL')
@@ -776,6 +808,10 @@ class SQLiteStore:
             # who wrote the draft: 'agent:<name>' when the agent that did the work wrote it itself
             # (coder.agent_reply), NULL when the responder did - the end of the run keeps the former
             if 'DraftBy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftBy TEXT')
+            # Approval is not a provider receipt. Keep the in-flight claim and the exact
+            # attempted payload separate from the UI's pending/approved review status.
+            for col in ('DeliveryState', 'DeliveryClaim', 'DeliveryAttemptedAt', 'DeliveryEnvelope', 'DeliveryReceipt'):
+                if col not in rvcols: self.cx.execute(f'ALTER TABLE review ADD COLUMN {col} TEXT')
             # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
@@ -1272,6 +1308,8 @@ class SQLiteStore:
             # task keeps its 'waiting' status, so nothing quietly stops needing you.
             self.cx.execute("UPDATE review SET Status='superseded' WHERE Status='pending' AND Kind='escalation'")
             self.cx.commit()
+
+        self.recover_review_deliveries()
 
     def _heal_seeded_report_owner(self):
         """OWNERSHIP HEAL. `POST /api/sources` used to stamp Owner on every save, and Owner is in
@@ -3889,14 +3927,141 @@ class SQLiteStore:
                        m.Channel, m.SourceName, m.ConversationId, substr(m.BodyText, 1, 1500) Preview {_REVIEW_FROM}
                 WHERE {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'''
         return self._rows(q + (' AND rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
+    @contextlib.contextmanager
+    def review_delivery_edit(self, rid):
+        """Exclude send claims while attachment bytes/envelopes change, even in another process."""
+        with _DELIVERY_LOCK, self.lock:
+            self.cx.execute('BEGIN IMMEDIATE')
+            try:
+                row = self.get_review(rid) or {}
+                if row.get('DeliveryClaim') or row.get('DeliveryState') in ('sending', 'unknown', 'sent'):
+                    raise ValueError('the attempted attachments must be kept while delivery is in progress or unknown')
+                yield
+                self.cx.commit()
+            except BaseException:
+                self.cx.rollback(); raise
     def set_review_deliver(self, rid, deliver: str):
         """The delivery envelope - who it goes to, and now WHAT RIDES WITH IT (verdicts.attach)."""
-        self._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (deliver, rid))
+        with _DELIVERY_LOCK, self.lock:
+            cur = self.cx.execute("UPDATE review SET Deliver=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (deliver, rid))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
+    def recover_review_deliveries(self, rid=None):
+        """An interrupted attempt is unknown, never a sent receipt or a fresh draft.
+
+        Check ownership before clearing a claim: another SQLite connection or server
+        process may still be waiting on the provider. A claim has no expiry that could
+        allow a slow send and its retry to overlap.
+        """
+        changed = []
+        with _DELIVERY_LOCK, self.lock:
+            query = 'SELECT * FROM review WHERE (DeliveryClaim IS NOT NULL OR (DeliveryState IS NULL AND Deliver IS NOT NULL))'
+            rows = self.cx.execute(query + (' AND ReviewId=?' if rid is not None else ''), (rid,) if rid is not None else ()).fetchall()
+            for raw in rows:
+                row = dict(raw)
+                try: env = json.loads(row.get('Deliver') or '{}') or {}
+                except (TypeError, ValueError): env = {}
+                if not isinstance(env, dict): env = {}
+                state = row.get('DeliveryState') or env.get('delivery')
+                claim = row.get('DeliveryClaim')
+                if claim and _delivery_claim_alive(claim): continue
+                if claim:
+                    state = 'unknown'; env['delivery'] = state
+                    reason = 'Delivery unknown after an interrupted attempt; check with the provider before any retry.'
+                    self.cx.execute("UPDATE review SET DeliveryState=?, DeliveryClaim=NULL, Deliver=?, Reason=? WHERE ReviewId=? AND DeliveryClaim=?",
+                                    (state, json.dumps(env), reason, row['ReviewId'], claim))
+                elif state in ('sent', 'failed', 'unknown'):
+                    self.cx.execute('UPDATE review SET DeliveryState=? WHERE ReviewId=? AND DeliveryState IS NULL', (state, row['ReviewId']))
+                else: continue
+                changed.append(row['ReviewId'])
+            if changed:
+                self.cx.commit(); self._writes += 1
+        for review_id in changed: self._review_changed(review_id)
+        return len(changed)
+    def claim_review_delivery(self, rid, snapshot, expected):
+        """Atomically claim one pending review across threads and SQLite connections.
+
+        The payload is durable before sending. Unknown attempts keep their original
+        payload for reconciliation, even if the owner has since edited the draft.
+        """
+        self.recover_review_deliveries(rid)
+        token = _DELIVERY_PROCESS + uuid.uuid4().hex
+        claimed = None
+        with _DELIVERY_LOCK, self.lock:
+            self.cx.execute('BEGIN IMMEDIATE')
+            try:
+                raw = self.cx.execute('SELECT * FROM review WHERE ReviewId=?', (rid,)).fetchone()
+                row = dict(raw) if raw else {}
+                fields = ('Status', 'DraftText', 'Deliver', 'ContextRevision', 'Stale', 'TaskId', 'MessageId', 'Kind')
+                if (not row or row.get('Status') != 'pending' or row.get('DeliveryClaim')
+                        or row.get('DeliveryState') == 'sent'
+                        or any(row.get(k) != expected.get(k) for k in fields)):
+                    self.cx.rollback(); return None
+                previous = row.get('DeliveryState') or ''
+                uncertain = previous in ('unknown', 'sending')
+                state = 'unknown' if uncertain else 'sending'
+                saved = row.get('DeliveryEnvelope') if uncertain else json.dumps(snapshot)
+                # Older unknown envelopes predate the durable payload. Their approved
+                # FinalText is the best record available; never reconcile a new edit.
+                if uncertain and not saved:
+                    saved_snapshot = copy.deepcopy(snapshot)
+                    saved_snapshot['body'] = row.get('FinalText') or row.get('DraftText') or snapshot['body']
+                    saved_snapshot['attempted_at'] = row.get('DeliveryAttemptedAt') or snapshot['envelope'].get('attempted_at')
+                    saved = json.dumps(saved_snapshot)
+                attempted = (row.get('DeliveryAttemptedAt') or snapshot['envelope'].get('attempted_at')) if uncertain else snapshot['attempted_at']
+                env = copy.deepcopy(snapshot['envelope'])
+                if uncertain:
+                    try: env = json.loads(saved)['envelope']
+                    except (TypeError, ValueError, KeyError): pass
+                env['delivery'] = state
+                if attempted: env['attempted_at'] = attempted
+                self.cx.execute('UPDATE review SET DeliveryState=?, DeliveryClaim=?, DeliveryEnvelope=?, DeliveryAttemptedAt=?, Deliver=? WHERE ReviewId=? AND Status=\'pending\' AND DeliveryClaim IS NULL',
+                                (state, token, saved, attempted, json.dumps(env), rid))
+                self.cx.commit(); self._writes += 1
+                _DELIVERY_CLAIMS.add(token)
+                claimed = {'token': token, 'previous': previous, 'snapshot': json.loads(saved)}
+            except BaseException:
+                self.cx.rollback(); raise
         self._review_changed(rid)
+        return claimed
+    def start_review_delivery(self, rid, token, snapshot):
+        """Record a fresh attempt after the previous one was confirmed absent."""
+        env = copy.deepcopy(snapshot['envelope'])
+        env.update(delivery='sending', attempted_at=snapshot['attempted_at'])
+        with _DELIVERY_LOCK, self.lock:
+            cur = self.cx.execute("UPDATE review SET DeliveryState='sending', DeliveryEnvelope=?, DeliveryAttemptedAt=?, Deliver=? WHERE ReviewId=? AND DeliveryClaim=?",
+                                  (json.dumps(snapshot), snapshot['attempted_at'], json.dumps(env), rid, token))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
+    def finish_review_delivery(self, rid, token, state, receipt=None, reason=None):
+        """Commit a provider outcome before any task lifecycle bookkeeping."""
+        changed = False
+        with _DELIVERY_LOCK, self.lock:
+            raw = self.cx.execute('SELECT * FROM review WHERE ReviewId=? AND DeliveryClaim=?', (rid, token)).fetchone()
+            if raw:
+                row = dict(raw); snapshot = json.loads(row['DeliveryEnvelope'])
+                env = copy.deepcopy(snapshot['envelope'])
+                env.update(delivery=state, attempted_at=row.get('DeliveryAttemptedAt'))
+                status = snapshot['status'] if state == 'sent' else 'pending'
+                cur = self.cx.execute('UPDATE review SET Status=CASE WHEN Status=\'pending\' THEN ? ELSE Status END, FinalText=?, DraftText=CASE WHEN ?=\'sent\' THEN DraftText ELSE ? END, '
+                                      'DecidedBy=?, DecidedAt=?, DecideNote=?, DeliveryState=?, DeliveryClaim=NULL, DeliveryReceipt=?, Deliver=?, Reason=COALESCE(?,Reason) '
+                                      'WHERE ReviewId=? AND DeliveryClaim=?',
+                                      (status, snapshot['body'], state, snapshot['body'], snapshot['actor'], _now(), snapshot.get('note'), state,
+                                       json.dumps(receipt) if receipt is not None else None, json.dumps(env), reason, rid, token))
+                self.cx.commit(); self._writes += 1; changed = bool(cur.rowcount)
+            _DELIVERY_CLAIMS.discard(token)
+        if changed: self._review_changed(rid)
+        return changed
     def decide_review(self, rid, status, final, by, note=None):
-        self._exec('UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=?',
-                   (status, final, by, _now(), note, rid))
-        self._review_changed(rid)
+        with self.lock:
+            cur = self.cx.execute("UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=? "
+                                  "AND Status IN ('pending','held') AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'')<>'sent'",
+                                  (status, final, by, _now(), note, rid))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
     def pending_review(self, task_id, kind=None, live_only=True):
         """The task's live pending review, by the SAME visibility rule the queue uses: a draft the
         owner can no longer see is not one to re-draft into or treat as already-answered. Pass
@@ -3912,7 +4077,7 @@ class SQLiteStore:
         are not necessarily ingested back from the external channel before the Assistant's next
         check, so message history alone can briefly (and falsely) look unanswered.
         """
-        where, values = ["rv.Status IN ('approved','edited','sent')", "rv.Kind<>'action'",
+        where, values = ["(rv.DeliveryState='sent' OR (rv.DeliveryState IS NULL AND rv.Status IN ('approved','edited','sent')))", "rv.Kind<>'action'",
                          "COALESCE(NULLIF(rv.FinalText,''), rv.DraftText, '')<>''"], []
         if message_id is not None:
             where.append('rv.MessageId=?'); values.append(message_id)
@@ -3928,7 +4093,8 @@ class SQLiteStore:
         were ready to send. Held leaves the queue; the wrap-up brings it back, rewritten."""
         with self.lock:
             cur = self.cx.execute("UPDATE review SET Status='held', Reason=COALESCE(?, Reason) "
-                                  "WHERE TaskId=? AND Status='pending' AND Kind IN ('draft','draft_reply')",
+                                  "WHERE TaskId=? AND Status='pending' AND Kind IN ('draft','draft_reply') "
+                                  "AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
                                   (reason, task_id))
             self.cx.commit()
             self._writes += 1
@@ -3939,13 +4105,13 @@ class SQLiteStore:
         q = "SELECT * FROM review WHERE TaskId=? AND Status='held'" + (' AND MessageId=?' if mid else '') + ' ORDER BY ReviewId DESC LIMIT 1'
         return self._one(q, (task_id, mid) if mid else (task_id,))
     def unhold_review(self, rid, reason=None):
-        self._exec("UPDATE review SET Status='pending', Reason=COALESCE(?, Reason) WHERE ReviewId=?", (reason, rid))
+        self._exec("UPDATE review SET Status='pending', Reason=COALESCE(?, Reason) WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','sent')", (reason, rid))
         self._review_changed(rid)
     def update_review_reason(self, rid, reason, run_id=None):
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
         self._review_changed(rid)
     def update_review_draft(self, rid, draft, run_id, by=None):
-        self._exec('UPDATE review SET DraftText=?, RunId=?, DraftError=NULL, DraftBy=? WHERE ReviewId=?', (draft, run_id, by, rid))
+        self._exec("UPDATE review SET DraftText=?, RunId=?, DraftError=NULL, DraftBy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (draft, run_id, by, rid))
         self._review_changed(rid)
     def set_review_draft_error(self, rid, error: str):
         """The draft could not be written: keep the review pending and say why (PW-046)."""
@@ -3962,13 +4128,11 @@ class SQLiteStore:
         try: existing = json.loads(cur or '{}') or {}
         except (TypeError, ValueError): existing = {}
         if existing and existing.get('kind') != 'reply': return False
-        self._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (json.dumps(env), rid))
-        self._review_changed(rid)
-        return True
+        return self.set_review_deliver(rid, json.dumps(env))
     def pin_review_context(self, rid, mid, revision: str):
         """The exact inbound message and message-set revision this draft answered - captured BEFORE the
         model ran, so a line landing during generation is not called seen (PW-048)."""
-        self._exec('UPDATE review SET MessageId=?, ContextRevision=?, Stale=0 WHERE ReviewId=?', (mid, revision, rid))
+        self._exec("UPDATE review SET MessageId=?, ContextRevision=?, Stale=0 WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (mid, revision, rid))
         self._review_changed(rid)
     def mark_review_stale(self, rid, on: bool = True):
         self._exec('UPDATE review SET Stale=? WHERE ReviewId=?', (1 if on else 0, rid))
@@ -3980,11 +4144,11 @@ class SQLiteStore:
         freshness marker: if another line lands on the task after this one, approval can see that
         the draft predates the conversation and refuse to send it unchanged.
         """
-        self._exec('UPDATE review SET MessageId=? WHERE ReviewId=?', (mid, rid))
+        self._exec("UPDATE review SET MessageId=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (mid, rid))
         self._review_changed(rid)
     def save_review_draft(self, rid, draft):
         """Persist the owner's editor without erasing which agent run originally produced it."""
-        self._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (draft, rid))
+        self._exec("UPDATE review SET DraftText=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (draft, rid))
         self._review_changed(rid)
 
     # policies / sources / settings / memory / docs

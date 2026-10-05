@@ -2142,7 +2142,9 @@ def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict
     Either way it lands on the timeline as an outbound row, so the funnel shows both directions.
     """
     d = cfg.get('deliver') or {}
-    gate = str(d.get('gate') or 'review').lower()
+    gate = str(d.get('gate') or 'review').strip().lower()
+    if gate not in ('review', 'auto'):
+        raise ValueError("invalid report delivery gate: choose 'review' or 'auto'")
     to = d.get('to') if isinstance(d.get('to'), list) else [x.strip() for x in str(d.get('to') or '').split(',') if x.strip()]
     subj = (d.get('subject') or subject or cfg.get('title') or 'Report').strip()
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -2150,7 +2152,7 @@ def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict
         'ExternalId': f'out:{src["SourceId"]}:{stamp}', 'ConversationId': f'report:{src["SourceId"]}',
         'Channel': d.get('channel') or 'email', 'SourceName': cfg.get('title') or src['Address'],
         'Subject': subj, 'FromName': 'Taskuary', 'SentAt': stamp, 'BodyText': body,
-        'Direction': 'out', 'Status': 'draft' if gate == 'review' else 'sent'})
+        'Direction': 'out', 'Status': 'draft'})
     who = ', '.join(to) or 'nobody yet'
     if gate == 'review':
         store.add_review({'MessageId': mid, 'Kind': 'outbound', 'Status': 'pending', 'DraftText': body,
@@ -2163,6 +2165,9 @@ def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict
         return {'gate': 'review', 'message_id': mid, 'to': to}
     from . import outbound
     sent = outbound.send_out(store, d.get('channel') or 'email', to, subj, body)
+    if not isinstance(sent, dict) or not sent.get('channel'):
+        raise outbound.UncertainDelivery('the provider returned no delivery receipt for the report')
+    store.set_message_status(mid, 'sent')
     store.add_route(mid, None, 'send', None,
                     f'sent automatically to {who} - this report is set to send without review', [], 'report')
     store.audit('message', mid, 'outbound_sent', 'report', 'agent', {'to': to, 'channel': sent.get('channel')})

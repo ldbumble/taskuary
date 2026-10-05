@@ -14,8 +14,9 @@ makes it.
 
 `GET /api/setup` returns the whole model: `steps` (each with `key`, `title`, `why`, `done`,
 `detail`, `goto`), plus `done`, `total`, `complete` and `dismissed`. The step keys are
-`owner`, `ai`, `models`, `inbound`, `sync`. Each `goto` is `{tab, hash}` - the tab to send them to
-and the position within it.
+`owner`, `ai`, `inbound`, `sync`. Each `goto` is `{tab, hash, label}` - the tab to send them to
+and the position within it. `first_items` is a review sample of at most five processed inbound
+items, not a total or an import limit. `pending` says whether items still await triage.
 
 Every `done` is computed from real state, never from anything anyone said. A step un-ticks itself
 when the connection behind it is removed. So: read it at the start of the walk, read it again after
@@ -28,24 +29,24 @@ read; the Reports screen (report sources) lists scheduled work.
 ## Prerequisites, in order
 
 1. **The owner's name** (`owner`). It signs every reply and fills `{{owner}}` in the operator
-   documents. Docs screen.
+   documents. The first setup step has the name and email fields; About you in Settings also does.
 2. **One AI** (`ai`). Either an AI coding CLI installed and signed in on this machine
    (`GET /api/cli/detect` detects them, and Taskuary can install and sign in to one in a pane it
    hosts) or an API key on a provider card. Without it nothing is triaged: the app runs and does
    nothing. A CLI they already pay for is the cheaper answer; say so.
-3. **A look at the models** (`models`). Triage, the assistant, the general agent and the coding CLI
-   each run on a brain and a model. Settings → Configuration → Triage & agents shows all four and
-   what will actually run. This is the one step that records being SEEN rather than being derived,
-   because the shipped defaults already work - looking is the whole ask.
-4. **Somewhere work arrives** (`inbound`). A mailbox or a chat. A tracker is a real source but does
-   not satisfy this step: an install with GitHub and no mailbox has a Timeline with no mail in it.
-   Connections screen.
-5. **The first messages** (`sync`). One sync pulls their mail in and triage reads it.
+3. **One work source** (`inbound`). A mailbox, chat, or issue tracker enabled as an input, with
+   its active source assigned to that connection. Start with one account or project. Connections
+   screen. A tool-only card does not satisfy the step.
+4. **The first result** (`sync`). Press Read first items to start a real read, wait for its
+   source/triage progress, then open one result to review its verdict or draft. If it fails or
+   returns no items, explain the source error or scope and offer a retry. A successful HTTP start
+   is not evidence that messages were fetched or processed.
 
-All five are what `complete` means. There is no second tier and no optional row: personalising
-SOUL.md, generating STYLE.md and TRIAGE.md from history, and putting a coding agent to work are
-stops on the scripted walk (`GET /api/setup/walk`), not steps on this list. Recommend them when the
-five are done; never report them as outstanding setup.
+All four are what `complete` means. Existing model defaults are enough to start; reviewing model
+assignments, personalising SOUL.md, generating STYLE.md and TRIAGE.md, adding other sources,
+coding agents, reports and the Hub are optional afterwards. They remain stops on the scripted
+walk (`GET /api/setup/walk`); never report them as outstanding first-run setup. Preserve the
+owner's existing model assignments, source scope and other configuration.
 
 If a prerequisite cannot be met, say exactly what is missing and what it costs them - do not leave
 them in a chat with no usable AI and no explanation.
@@ -78,7 +79,7 @@ document or a task, and tell them to rotate it. A secret in a transcript is a le
   messages, not a sample count).
 - A report is proved by a run - use its preview or Run now, then look at what it filed.
 
-State readiness as the numbers: how many of the five are done, and which remain.
+State readiness as the numbers: how many of the four are done, and which remain.
 
 ## Resuming, and never doing it twice
 

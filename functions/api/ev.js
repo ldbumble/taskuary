@@ -43,7 +43,7 @@ export async function onRequestPost({ request, env }) {
 // remains anonymous and public; a login must never get in the way of a sendBeacon from the demo.
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
-  if (!(await hasStatsSession(request)))
+  if (!(await hasStatsSession(request, env)))
     return statsJson({ error: "Sign in to view analytics." }, 401);
   if (!env.DEMO_EVENTS) return statsJson({ visits: 0, note: "no D1 binding" });
   const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days")) || 14));

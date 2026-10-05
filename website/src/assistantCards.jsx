@@ -30,6 +30,7 @@ import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
+import { FirstSync } from "./SetupWizard.jsx";
 import { refOf, summarize, stateOf, whoOf } from "./walkSummary.js";
 import { CLOSE_OUT, closeoutOf, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
@@ -1191,6 +1192,8 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
           right here" - a card that then offered only a button to Docs was making a promise it did not
           keep (the owner, 2026-09-17). Saving refreshes the stop, so its tick appears where you are. */}
       {card.key === "owner" && <OwnerForm onDone={async () => { await onSaved?.(); }} />}
+      {card.action === "sync" && <FirstSync enabled={card.enabled} ready={card.done}
+        firstItems={card.first_items || []} onSaved={onSaved} onNavigate={onNavigate} />}
       {/* ...and this one because what it opens is a terminal, and a terminal has no page of its own
           to visit. */}
       {/* ...and NOT when a brain already answers. Offering to install a coding CLI to an install
@@ -1214,9 +1217,10 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
         ...(!first ? [{ verb: "back", label: "‹ Back", onClick: onBack }] : []),
         ...(!first ? [{ verb: "restart", label: "Start over", title: "back to the first stop", onClick: onRestart }] : []),
         { verb: "finish", label: "Finish", onClick: onFinish }] }}>
-        <Foot inline verb={card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
+        <Foot inline verb={card.action !== "sync" && card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
             sx={primary}>{card.goto.label || `Open ${card.goto.tab}`}</Button>}
-          then={card.goto ? <><b>{card.goto.label || `Open ${card.goto.tab}`}</b> takes you there. Questions? Ask below in your own words - the walk keeps your place.</>
+          then={card.action === "sync" ? "Review one result before continuing to the optional settings."
+            : card.goto ? <><b>{card.goto.label || `Open ${card.goto.tab}`}</b> takes you there. Questions? Ask below in your own words - the walk keeps your place.</>
             : "Questions? Ask below in your own words - the walk keeps your place."} />
       </CardNav.Provider>
     </CardShell>

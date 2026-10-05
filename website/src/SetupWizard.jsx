@@ -12,8 +12,8 @@
 // group inside Settings where the models are chosen, the name field inside Docs. One form survives,
 // because two text boxes have nowhere better to be. And the whole thing is gone once it is done:
 // the counter is finished, not hidden. The walk on the Assistant header is the way back.
-import React, { useCallback, useEffect, useState } from "react";
-import { Box, Button, CircularProgress, Dialog, DialogContent, Tooltip, Typography } from "@mui/material";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, Box, Button, CircularProgress, Dialog, DialogContent, Tooltip, Typography } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import CloseIcon from "@mui/icons-material/Close";
@@ -21,6 +21,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import OwnerForm from "./OwnerForm.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2, ROLES } from "./theme.jsx";
+import { firstSyncProgress, startFirstSync } from "./setupSync.js";
 
 const COUNT = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 const spell = (n) => COUNT[n] || String(n);
@@ -28,13 +29,13 @@ const spell = (n) => COUNT[n] || String(n);
 export const useSetup = (tick) => {
   const [state, setState] = useState(null);
   const load = useCallback(() => {
-    api.get("/api/setup").then(({ data }) => setState(data)).catch(() => {});
+    return api.get("/api/setup").then(({ data }) => setState(data)).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load, tick]);
   return [state, load];
 };
 
-/* Gone for good once the five are done - there is no "show it again", because the walk on the
+/* Gone once the four are done; the optional walk remains available afterwards.
    Assistant header is always there and covers more than this ever did. */
 export const SetupChip = ({ state, onOpen }) => {
   if (!state || state.complete) return null;
@@ -68,10 +69,64 @@ export const SetupChip = ({ state, onOpen }) => {
 
 const FORMS = { owner: OwnerForm };
 
+export const FirstSync = ({ enabled, ready, firstItems = [], onSaved, onNavigate }) => {
+  const [starting, setStarting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const saved = useRef(onSaved); saved.current = onSaved;
+  useEffect(() => {
+    if (!busy) return undefined;
+    let cancelled = false, timer;
+    const read = async () => {
+      try {
+        const progress = await firstSyncProgress(api);
+        if (cancelled) return;
+        setResult(progress);
+        if (progress.phase === "reading") timer = setTimeout(read, 1500);
+        else { setBusy(false); await saved.current?.(); }
+      } catch (e) {
+        if (!cancelled) { setError(e?.response?.data?.detail || e.message || "Could not read progress. Try again."); setBusy(false); }
+      }
+    };
+    timer = setTimeout(read, 1500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [busy]);
+  const start = async () => {
+    setError(""); setResult(null); setStarting(true);
+    try { await startFirstSync(api); setBusy(true); }
+    catch (e) { setError(e?.response?.data?.detail || e.message || "Could not start the source read."); }
+    finally { setStarting(false); }
+  };
+  const items = (result?.state?.first_items || firstItems).slice(0, 5);
+  const openItem = (item) => {
+    window.location.hash = item.TaskId ? `task=${item.TaskId}` : `msg=${item.MessageId}`;
+    onNavigate?.("Assistant");
+  };
+  return <Box sx={{ mt: 1 }}>
+    {!ready && !enabled && <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
+      Add your name, one AI and one work source first.
+    </Typography>}
+    <Button size="small" variant="contained" disableElevation disabled={starting || busy || !enabled} onClick={start}
+      startIcon={starting || busy ? <CircularProgress size={12} color="inherit" /> : null}>
+      {starting || busy ? "Reading…" : ready || result?.phase === "ready" ? "Read again" : "Read first items"}
+    </Button>
+    <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }} aria-live="polite">
+      {result?.message || (ready ? "Open one of your first items to review its verdict or draft." : "We will show up to five recent results here; sources keep their normal import scope.")}
+    </Typography>
+    {(error || result?.phase === "failed") && <Alert severity="error" sx={{ mt: 1 }}>{error || result.message}</Alert>}
+    {items.length > 0 && <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", mt: 1 }}>
+      {items.map((item) => <Button key={item.MessageId} size="small" onClick={() => openItem(item)} sx={{ textAlign: "left", justifyContent: "flex-start" }}>
+        {item.Subject || "Open this item"}
+      </Button>)}
+    </Box>}
+  </Box>;
+};
+
 /* A done step collapses to ONE line. Its reason mattered while you were deciding whether to do it;
    afterwards it is six lines of history pushing the thing you are actually working on below the
    fold. Only the open step carries its full text, and only one is ever open. */
-const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
+const Step = ({ s, n, open, onOpen, onGo, onDone, firstItems }) => {
   const Form = FORMS[s.key];
   const active = open && !s.done;
   return (
@@ -102,18 +157,20 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
             </Typography>
           )}
           {active && Form && <Form onDone={onDone} />}
+          {s.action === "sync" && <FirstSync enabled={s.enabled} ready={s.done} firstItems={firstItems}
+            onSaved={onDone} onNavigate={() => onGo(s.goto)} />}
         </Box>
         {!s.done && !open && Form && (
           <Button size="small" variant="outlined" onClick={onOpen}
             sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>Set up</Button>
         )}
-        {!s.done && !Form && (
+        {!s.done && !Form && s.action !== "sync" && (
           /* what it OPENS, not which tab it lives on: two rows both read "Connections" and went to
              the AI CLI agents page and the connector list (setup.state owns the words) */
           <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => onGo(s.goto)}
             sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.goto?.label || s.goto?.tab}</Button>
         )}
-        {s.done && (Form
+        {s.done && s.action !== "sync" && (Form
           ? <Typography variant="caption" onClick={onOpen}
               sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>change</Typography>
           : <Typography variant="caption" onClick={() => onGo(s.goto)}
@@ -157,9 +214,8 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
             </Typography>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5 }}>
               {state.complete
-                ? "This list is finished and will not come back. “Set up Taskuary” on the Assistant walks the rest of the app whenever you want it."
-                : "Each one opens the page that actually does it. They tick themselves from what is really connected, "
-                  + "so anything you set up anywhere shows up here."}
+                ? "Your first result is ready. Open an item below to review it; add more sources, agents or reports when you need them."
+                : "Start with your name, one AI and one work source. Review the first result before adding anything else; model settings can wait."}
             </Typography>
           </Box>
           <CloseIcon onClick={onClose} sx={{ fontSize: 18, color: FAINT, cursor: "pointer", mt: 0.5 }} />
@@ -168,9 +224,13 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
         <Box sx={{ mt: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 2 }}>
           {steps.map((s, i) => (
             <Step key={s.key} s={s} n={i} open={openKey === s.key} onOpen={() => setOpenKey(s.key)}
-              onGo={go} onDone={done} />
+              onGo={go} onDone={done} firstItems={state.first_items || []} />
           ))}
         </Box>
+
+        <Button size="small" sx={{ mt: 1, color: DIM }} onClick={() => go({ tab: "Settings", hash: "settings=config&group=Triage%20%26%20agents" })}>
+          Optional: review models and agents
+        </Button>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 2 }}>
           <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>

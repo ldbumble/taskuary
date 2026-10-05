@@ -4,8 +4,10 @@ The landing page. Static — `index.html`, the interactive Three.js Studio hero 
 the icon, and a social card. No build step, no framework, nothing to install.
 
 The interactive demo is built to `site/demo/` with `npm --prefix website run build:demo`
-and is served at `https://taskuary.com/demo/`. It opens in Assistant by default;
-visitors can switch to Game, and their choice is remembered in their browser.
+and is served at `https://taskuary.com/demo/`. Each visit starts with a guided request:
+watch it become a task, review the proposed answer, and see the simulated result.
+The full sample app is optional through the Explore control or `/demo/?demo=explore`.
+The landing page's optional Studio starts collapsed.
 
 ## Deploy (Cloudflare Workers)
 
@@ -47,11 +49,28 @@ pieces, no third-party script and no cookie:
 
 Both POST to `functions/api/ev.js`, routed by `worker.mjs`. The Worker keeps the events in its own
 SQLite-backed `StatsStore`; `wrangler.jsonc` creates and binds it automatically on deployment.
-There is no database id, analytics token, environment variable, or dashboard setup. A fork that
-already has the old `DEMO_EVENTS` D1 binding can keep using it.
+There is no database id or manual database binding to configure. Anonymous event collection
+works independently of the admin login. A fork that already has the old `DEMO_EVENTS` D1
+binding can keep using it.
 
-The small admin login is intentionally hardcoded in `functions/lib/statsAuth.js`; edit
-`STATS_USERNAME` and `STATS_PASSWORD` there and redeploy when you want to change it.
+The admin login requires deployment secrets. Set a fresh password and an independently
+generated random session secret of at least 32 UTF-8 bytes through Cloudflare's secret prompts:
+
+```sh
+npx wrangler secret put STATS_PASSWORD
+npx wrangler secret put STATS_SESSION_SECRET
+```
+
+Use a password manager to create and keep these values; do not put them in source, build
+variables printed in logs, or command arguments. The default username is `admin`; an optional
+`STATS_USERNAME` Worker variable changes it. For Pages deployments, configure the same two
+secrets and optional variable in the project's production environment. Local tests use only
+invented credentials.
+
+Without both secrets, login returns 503 and analytics readers return 401. Changing either
+secret invalidates existing sessions. The previous public password must be retired; removing
+it from the current source does not remove it from repository history. These source changes
+take effect after deployment with fresh secrets configured.
 
 Read it at **`https://taskuary.com/stats.html`**. It has a normal username/password sign-in and
 keeps a signed, secure, HttpOnly session for 12 hours. Credentials never appear in the URL or

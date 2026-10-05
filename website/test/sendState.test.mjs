@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "../src/sendState.js";
+import { sendBlockLine, draftState, replyEnvelope, replySendFailure, reviewDeliveryState } from "../src/sendState.js";
 
 test("reply envelopes preserve exact saved To and CC and distinguish other delivery kinds", () => {
   const env = { kind: "reply", to: ["a@example.test", "b@example.test"], cc: ["c@example.test"], delivery: "unknown" };
@@ -20,6 +20,40 @@ test("a delivery timeout is unknown, while an explicit failed send remains a fai
   assert.deepEqual(replySendFailure({ send_error: "rejected", delivery: "failed" }),
     { message: "rejected", unknown: false });
   assert.equal(replySendFailure({ sent: { id: "sent-once" } }), null);
+});
+
+test("a close-out's uncertain nested reply and a busy send never claim the reply was not sent", () => {
+  for (const delivery of ["unknown", "sending"]) {
+    assert.deepEqual(replySendFailure({ ok: true, send_error: "Done on GitHub; reply delivery is unconfirmed.",
+      reply: { ok: false, delivery, send_error: "Original reply is unconfirmed." } }),
+    { message: "Done on GitHub; reply delivery is unconfirmed.", unknown: true });
+    assert.deepEqual(replySendFailure({ send_error: "A send is already in progress.", delivery }),
+      { message: "A send is already in progress.", unknown: true });
+  }
+  assert.deepEqual(replySendFailure({ reply: { delivery: "unknown", send_error: "Nested receipt is missing." } }),
+    { message: "Nested receipt is missing.", unknown: true });
+  assert.deepEqual(replySendFailure({ send_error: "Replies are disabled for this channel.", delivery: "failed" }),
+    { message: "Replies are disabled for this channel.", unknown: false });
+});
+
+test("unknown delivery keeps the attempted text and envelope and offers only a check", () => {
+  const attempted = { body: "Owner-approved edited reply.", envelope: { kind: "reply", to: ["erin@example.com"], cc: ["gail@example.com"], attachments: [{ name: "report.txt" }] } };
+  const state = reviewDeliveryState({ DeliveryState: "unknown", DraftText: "A newer draft.", FinalText: null,
+    Deliver: JSON.stringify({ kind: "reply", to: ["new@example.com"] }), DeliveryEnvelope: JSON.stringify(attempted) });
+  assert.equal(state.frozen, true); assert.equal(state.active, false); assert.equal(state.canCheck, true);
+  assert.equal(state.body, attempted.body); assert.deepEqual(state.envelope, attempted.envelope);
+  assert.equal(state.label, "Check delivery"); assert.match(state.line, /missing receipt will not send it again/);
+});
+
+test("a live claim disables another check and failed sends keep normal editing", () => {
+  for (const review of [{ DeliveryState: "sending" }, { DeliveryState: "unknown", DeliveryClaim: "fixture-claim" }]) {
+    const state = reviewDeliveryState(review);
+    assert.equal(state.frozen, true); assert.equal(state.active, true); assert.equal(state.canCheck, false);
+  }
+  const failed = reviewDeliveryState({ DeliveryState: "failed", DraftText: "A draft." });
+  assert.equal(failed.frozen, false); assert.equal(failed.body, null);
+  const legacy = reviewDeliveryState({ Deliver: JSON.stringify({ delivery: "unknown", cc: ["gail@example.com"] }), FinalText: "Legacy attempt." });
+  assert.equal(legacy.body, "Legacy attempt."); assert.equal(legacy.canCheck, true);
 });
 
 // PW-044/PW-046: a draft is always there to read and edit; whether it can be SENT is a separate

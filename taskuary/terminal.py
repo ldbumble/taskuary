@@ -935,7 +935,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                 cwd = found
                 if agent: remember_path(store, agent, repo, found)
                 logger.info(f'found {repo} at {found} - remembered on {agent or label}')
-        if not cwd and paths:
+        if not cwd:
             raise ValueError(f'no local path for {repo}, and a search of your code folders found no '
                              f'checkout with that git remote. Pick the repository on the task - the repo '
                              f'chip beside its agent, or the chooser this refusal opens - choose {repo} and '

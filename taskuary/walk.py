@@ -27,7 +27,7 @@ def _goto(tab, hash_=''): return {'tab': tab, 'hash': hash_}
 def _can(text, tab=None, hash_=''): return {'text': text, 'goto': _goto(tab, hash_) if tab else None}
 
 
-# The five the checklist also shows, then every part of the app. The first five carry no `title`,
+# The four the checklist also shows, then optional settings and every part of the app. The first four carry no `title`,
 # `blurb` or `goto` of their own - `setup.state` owns their words AND where the button lands, and
 # repeating either here is the drift this avoids.
 STOPS = [
@@ -44,21 +44,24 @@ STOPS = [
              'Connections', 'cli-agents'),
         _can('either one is enough; triage reads your mail on whichever you pick', 'Settings',
              'settings=config&group=Triage%20%26%20agents')]},
-    {'key': 'models', 'can': [
-        _can('choose the brain that triages your mail', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
-        _can('choose what the assistant here speaks on', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
-        _can('choose the general agent and the coding CLI', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
-        _can('name a model, or leave it on the provider default')]},
     {'key': 'inbound', 'can': [
         _can('connect a mailbox - Outlook, Gmail, or any IMAP host', 'Connections'),
-        _can('connect a chat - Teams, Slack, WhatsApp, Telegram', 'Connections'),
+        _can('or use one chat or issue tracker as your first source', 'Connections'),
         _can('test a card before waiting on a schedule', 'Connections')]},
     {'key': 'sync', 'can': [
         # Sync now lives on the Assistant tab as well as on each connection card, and this stop's
         # own goto is the checklist's - so sending the first line anywhere else was a stop arguing
         # with the button above it
-        _can('pull your mail in and let triage read it', 'Assistant'),
-        _can('watch it land on the Timeline', 'Assistant')]},
+        _can('read your connected sources with the button below'),
+        _can('open one of the first five results to check its verdict or draft')]},
+
+    {'key': 'models', 'title': 'Optional: models and agents',
+     'blurb': 'The existing model defaults are enough to start. Adjust costs, add a coding agent, '
+              'or choose separate models after you have reviewed your first result.',
+     'goto': _goto('Settings', 'settings=config&group=Triage%20%26%20agents'), 'can': [
+        _can('choose a model for routine triage', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
+        _can('choose another brain for the assistant or agent', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
+        _can('keep the current defaults and continue')]},
 
     {'key': 'connections', 'title': 'Connections', 'image': '/walk/connections.png',
      'blurb': 'Every mailbox, chat, tracker and report source Taskuary reads lives here. One card '
@@ -248,10 +251,11 @@ FACTS = {'ai': _fact_ai, 'models': _fact_models, 'sync': _fact_sync,
 
 
 def state(store, at=None) -> dict:
-    """The whole walk: every stop, with the checklist's own done-ness on the first five and this
+    """The whole walk: every stop, with the checklist's own done-ness on the first four and this
     install's facts wherever a fact beats a sentence."""
     if at is None: at = _at(store)
-    steps = {x['key']: x for x in setup.state(store)['steps']}
+    checklist = setup.state(store)
+    steps = {x['key']: x for x in checklist['steps']}
     stops = []
     for n, stop in enumerate(STOPS):
         o = dict(stop, n=n)
@@ -260,6 +264,8 @@ def state(store, at=None) -> dict:
         # `goto` is here too: a hand-written copy beside the checklist's is the one field of the
         # five that could drift without a word of the stop changing
         if row: o.update(done=row['done'], detail=row['detail'], blurb=row['why'], title=row['title'], goto=row['goto'])
+        if row and row.get('action') == 'sync':
+            o.update(action='sync', enabled=row['enabled'], first_items=checklist['first_items'])
         fact = FACTS.get(stop['key'])
         # A COUNTER MUST NEVER TAKE THE WALK DOWN. These read a dozen different tables, and the one
         # install that most needs the walk is the half-configured one where some of those reads

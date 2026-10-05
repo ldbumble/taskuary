@@ -65,6 +65,19 @@ Triage is supposed to be argued with. The correction loop exists because the rig
 is rarely knowable from one message — and a correction teaches the class, not the sender.
 :::
 
+## A reply has no confirmed delivery
+
+Approval stays pending while Taskuary sends the reply. Repeated clicks do not start another
+send, and a task closes only after the provider confirms delivery.
+
+**Delivery unknown** means the provider timed out, the process stopped during sending, or a
+receipt could not be verified. Check the provider's sent messages before taking any further
+action. Approving again checks the original attempt; it does not resend just because a receipt
+is missing. Providers that cannot verify the attempt leave it pending for you to investigate.
+
+**Sending failed** means the attempt was rejected or blocked. Fix the connection or send
+permission, then review and approve the draft again.
+
 ## An agent is stuck
 
 **It is waiting on you.** A raised hand on the Studio floor, or a 👋 **agent waiting on you** row
@@ -77,6 +90,10 @@ The card's **Test** action reproduces it in ten seconds.
 
 **It hit a limit.** The saved result says so. **Start new coding session** picks a different
 harness and keeps the checkout and the history.
+
+**It says there is no local path for the repository.** Map that repository to its checkout on
+the AI CLI agent card, or make the checkout discoverable. A task naming a repository cannot
+fall back to an unrelated default working folder.
 
 **It is gone.** If the process died, the row reads ⏹ **agent stopped** and is forced unread, so
 it comes back to you rather than disappearing. Only **Later** holds it.

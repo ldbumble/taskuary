@@ -1,5 +1,8 @@
-// A fictional, repeatable general-assistant walkthrough, selected with ?workflow=numbers.
+// The public demo's first visit: one fictional request, checked result, and approval.
 // These are authored sample records, never figures read from a connected account.
+import { fmtStamp } from './demoClock.js';
+
+export const isGuidedDemo = (search = '') => new URLSearchParams(search).get('demo') !== 'explore';
 export const NUMBERS_TASK = 18;
 export const NUMBERS_MESSAGE = 938;
 export const NUMBERS_REVIEW = 903;
@@ -24,22 +27,22 @@ I prepared the reply to Ruth on its task. Nothing has been sent.
 
 *Fictional demo records and scripted analysis; no database or AI was called.*`;
 
-export function installNumbersWorkflow(state, assistant) {
-  const created = '2026-09-03 10:22:00';
+export function installNumbersWorkflow(state, assistant, at = Date.now()) {
+  const created = fmtStamp(at - 60000);
   const task = { TaskId: NUMBERS_TASK, ref: 'TQ-0018', Title: 'Prepare the latest vendor spend numbers', Summary: NUMBERS_REQUEST,
     Kind: 'general', Status: 'open', Priority: 'normal', Assignee: 'agent:analyst', Source: 'email', SourceRef: 'demo:vendor-numbers', CreatedBy: 'triage', CreatedAt: created };
   const message = { MessageId: NUMBERS_MESSAGE, TaskId: NUMBERS_TASK, ExternalId: 'demo-vendor-numbers', ConversationId: 'demo:vendor-numbers',
     Channel: 'email', SourceName: 'Outlook mail', Subject: 'Latest vendor spend numbers?', FromName: 'Ruth Bennett', FromEmail: 'rbennett@northwind.example',
     SentAt: created, CreatedAt: created, BodyText: NUMBERS_REQUEST, Brief: NUMBERS_REQUEST, Direction: 'in', Status: 'routed' };
-  state['/api/tasks'].data.unshift(task);
-  state['/api/tasks?active=1'].data.unshift(structuredClone(task));
+  state['/api/tasks'].data = [task];
+  state['/api/tasks?active=1'].data = [structuredClone(task)];
   state['/api/tasks/detail'][NUMBERS_TASK] = { task, ref: task.ref, messages: [message], attachments: [], artifacts: [],
     routes: [{ MessageId: NUMBERS_MESSAGE, TaskId: NUMBERS_TASK, Decision: 'create', Reason: 'A request for current internal numbers: prepare the analysis and draft a reply for review.', RoutedBy: 'triage', CreatedAt: created }],
     comments: [], runs: [], audit: [], reviews: [], session: null, transcript: null };
   state['/api/messages/one'][NUMBERS_MESSAGE] = message;
-  state['/api/feed'].data.unshift({ ...message, Preview: NUMBERS_REQUEST, Title: task.Title, TaskKind: 'general', TaskStatus: 'open', MsgStatus: 'routed',
+  state['/api/feed'].data = [{ ...message, Preview: NUMBERS_REQUEST, Title: task.Title, TaskKind: 'general', TaskStatus: 'open', MsgStatus: 'routed',
     Decision: 'create', RouteDecision: 'create', RouteReason: 'Current internal figures → general assistant with the analyst profile', Category: 'task', NeedsYou: 1,
-    ChainSize: 1, CanSend: true, ReviewId: null, ReviewStatus: null, HasDraft: 0 });
+    ChainSize: 1, CanSend: true, ReviewId: null, ReviewStatus: null, HasDraft: 0 }];
   state['/api/tasks/detail'][`${NUMBERS_TASK}:assistant`] = { messages: [], session: null, defaultPick: 'cli:analyst', providers: [
     { id: 'cli:analyst', pick: 'cli:analyst', type: 'cli', label: 'Claude Code · general assistant', model: '' },
     { id: 'cli:codex', pick: 'cli:codex', type: 'cli', label: 'Codex · general assistant', model: '' },
@@ -52,15 +55,20 @@ export function installNumbersWorkflow(state, assistant) {
   // Start at the real welcome screen. The owner's Walk me through action surfaces the request.
   assistant.messages = [];
   assistant.transcripts[assistant.activeTaskId] = assistant.messages;
+  assistant.chats = [{ taskId: assistant.activeTaskId, title: 'Try one request', at: created, started: created, turns: 0, seen: 0, mail: 0, minutes: 0, open: true }];
+  if (state['/api/calendar/today']) state['/api/calendar/today'].events = [];
+  for (const key of ['/api/terminals', '/api/runs/live', '/api/board/notes']) {
+    if (state[key]) state[key].data = [];
+  }
   state['/api/reviews'].data = [];
   return state;
 }
 
-export function finishNumbersWorkflow(state) {
+export function finishNumbersWorkflow(state, at = Date.now()) {
   let review = state['/api/reviews'].data.find(r => r.ReviewId === NUMBERS_REVIEW);
   if (review) return review;
   review = { ReviewId: NUMBERS_REVIEW, TaskId: NUMBERS_TASK, MessageId: NUMBERS_MESSAGE, Kind:'draft', Status:'pending',
-    DraftText:NUMBERS_DRAFT, FinalText:null, Reason:'Vendor spend summary prepared for your review', CreatedAt:'2026-09-03 10:24:00',
+    DraftText:NUMBERS_DRAFT, FinalText:null, Reason:'Vendor spend summary prepared for your review', CreatedAt:fmtStamp(at),
     Title:'Prepare the latest vendor spend numbers', Subject:'Latest vendor spend numbers?', FromName:'Ruth Bennett', FromEmail:'rbennett@northwind.example',
     Channel:'email', SourceName:'Outlook mail', Preview:NUMBERS_REQUEST, CanSend:true };
   state['/api/reviews'].data.unshift(review);

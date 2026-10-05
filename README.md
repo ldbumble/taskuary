@@ -27,7 +27,7 @@ Taskuary is early—currently **v0.3.7.6**—so breaking changes are still possi
     alt="Try Taskuary now, in your browser"></a>
 </p>
 
-<p align="center"><sub>The real app with invented data. Nothing connects, sends, or runs.</sub></p>
+<p align="center"><sub>One guided task: an email request, checked figures, and your simulated approval. Fictional data and scripted agent work; nothing connects or sends.</sub></p>
 
 <p align="center"><b><a href="https://taskuary.com/docs/">Read the documentation</a></b> — installation, the first run, what to connect, and every setting.</p>
 

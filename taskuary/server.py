@@ -811,6 +811,17 @@ def _run_operation(op: dict, background: BackgroundTasks):
         if not hit: raise HTTPException(422, f"no checklist item {want!r} on {task_ref(tid)} - it has: " + '; '.join(f"{n}. {i['text']}" for n, i in enumerate(items, 1)))
         out = tick_checklist(tid, hit['id'], ChecklistTick(done=str(p.get('done', True)).lower() not in ('false', '0', 'no')))
         return {**(out if isinstance(out, dict) else {}), 'item': hit['text']}
+    if kind == 'task.checklist':
+        from . import slots
+        items, emails, drop = p.get('items'), p.get('emails'), p.get('drop')
+        if not isinstance(items, list) and not emails and not drop: raise HTTPException(422, 'say the new list (items), emails to add or emails to drop')
+        # plain items and emails are edited apart: a reworded list never deletes an email by leaving it out
+        if isinstance(items, list): store.set_task_checklist(tid, [str(x) for x in items] + [i['text'] for i in slots.all_(store, tid)], ACTOR)
+        added = slots.add(store, tid, emails, ACTOR) if emails else []
+        gone = {str(x).strip().casefold() for x in (drop or [])}
+        for i in slots.open_(store, tid):
+            if str(i['out'].get('to')).casefold() in gone: slots.mark(store, tid, i['id'], done=True, actor=ACTOR)
+        return {'taskId': tid, 'checklist': store.task_checklist(tid), 'added': len(added)}
     if kind == 'task.comment':
         comment(tid, TextBody(body=str(p.get('text') or '').strip()))
         return {'taskId': tid}

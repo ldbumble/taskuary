@@ -3021,6 +3021,13 @@ def _chat_proposed(store, dock_tid: int, oid: str) -> bool:
     return False
 
 
+def _asks_block(store, p: dict) -> str:
+    """YOUR OPEN ASKS for this turn (asks.py), from the pile the turn already has - and never the reason a turn fails."""
+    try: return asks.block(store, p.get('items') or [])
+    except Exception as e:
+        logger.warning(f'concierge: the open asks were left out of this turn - {e}'); return ''
+
+
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
         open_card: str | None = None, images: list | None = None) -> dict:
     token = _TURN.set({})
@@ -3076,7 +3083,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         raw = str(llm(system,
                       f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
-                      + (f"{asks_block}\n\n" if (asks_block := asks.block(store)) else '')
+                      + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table

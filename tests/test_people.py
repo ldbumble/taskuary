@@ -1,6 +1,7 @@
 """A name becomes an address from the owner's own mail - the people who wrote in AND the people the owner wrote to
 (spec 2026-10-05-assistant-remembers-asks-design.md, section 5). One match fills it; several are offered; none is a '?'."""
 import json
+from unittest import mock
 
 import pytest
 
@@ -74,3 +75,25 @@ def test_sender_read_finds_someone_the_owner_only_wrote_to(s):
     sent(s, ['gail.moreno@northwind.example'], n=2)
     said = lookups.read(s, 'sender.read', {'who': 'Gail Moreno'})
     assert 'gail.moreno@northwind.example' in said and 'wrote to' in said
+
+
+# ── final review: a part of a name is never enough to fill an address ───────────────────
+def test_a_name_inside_another_name_is_offered_never_filled(s):
+    sent(s, ['murray.jones@vendor.example'])
+    assert people.resolve(s, 'Ray') == {'candidates': ['murray.jones@vendor.example']}
+    wrote_in(s, 'Murray Jones', 'mj@vendor.example')
+    assert 'address' not in people.resolve(s, 'Ray')
+
+
+def test_a_whole_name_still_fills(s):
+    sent(s, ['murray.jones@vendor.example'], n=2); sent(s, ['ray@northwind.example'])
+    assert people.resolve(s, 'Ray') == {'address': 'ray@northwind.example'}
+
+
+def test_the_sent_mail_is_read_once_until_new_mail_arrives(s):
+    sent(s, ['gail.moreno@northwind.example'])
+    people.resolve(s, 'Gail Moreno')
+    with mock.patch.object(s, '_rows', side_effect=AssertionError('scanned again')):
+        people.written_to(s)
+    sent(s, ['erin@northwind.example'])
+    assert 'erin@northwind.example' in people.written_to(s)

@@ -75,7 +75,8 @@ Keep roughly within the lengths noted; they're what the layout holds without ref
 **2d — Buttons and the line under them**
 - Now: `Try it now` / `no install, no sign-up — the real app over invented work, running in
   your browser` / `Download for Windows` / `View source` /
-  `Free and open source (MIT) · runs on your machine · no subscription`
+  `Free and open source (MIT) · runs on your machine · no subscription` /
+  `Compared with hosted assistants like alfred_ or Fyxer: no account, no monthly fee, and the work goes to agents you already use.` (the README says the same, at more length)
 - Suggested: change only the first button's caption to `See it working` if "Try it now"
   reads as a trial sign-up. The rest is doing its job.
 

@@ -795,6 +795,25 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
 ALT_QUESTION = {'not_ours': 'How far?', 'agent': 'Which agent?'}
 
 
+def _pinned(store, item: dict | None, verb: str) -> dict:
+    """What a pick must still find when it lands: the draft this message showed (verdicts.draft_revision). The yes is
+    pressed off THIS message, and an agent's `taskuary --reply` can rewrite the draft before the owner answers."""
+    if verb != 'approve' or store is None or not (item or {}).get('rid'): return {}
+    from . import verdicts
+    try: return {'shown': verdicts.draft_revision(store, int(item['rid']))}
+    except Exception as e:
+        logger.debug(f'the phone could not pin the draft it showed: {e}'); return {}
+
+
+def _draft_moved(store, act: dict, on: dict) -> str:
+    """The draft changed after the phone showed it: nothing is sent, and the new one is shown for its own yes."""
+    if not act.get('shown') or act.get('verb') != 'approve' or not on.get('rid'): return ''
+    from . import concierge, verdicts
+    if verdicts.draft_revision(store, int(on['rid'])) == act['shown']: return ''
+    nxt = concierge.surface(store, act.get('key'), actor='owner')
+    return turn_text(nxt, 'The draft changed after I showed it - nothing was sent. This is the one waiting now:', store=store)
+
+
 def _picking_repo(prop: dict) -> bool:
     """proposalCard.pickingRepo: a coding hand-off whose checkout nobody named asks for one before it starts."""
     p = prop.get('params') or {}
@@ -901,6 +920,8 @@ def _on(store, actor: str, said: list, extra=None, **kw) -> str:
 def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
     """After the run: the receipt, an Undo when it offered one, and the next item when the table was settled."""
     from . import concierge
+    if done.get('draft_changed') and prop.get('key'):           # operations.execute refused it: show what waits now
+        return turn_text(concierge.surface(store, prop['key'], actor=actor), concierge.receipt_turn(store, done, actor)['say'], store=store)
     if done.get('status') != 'done': return receipt_text(store, done, actor)
     said = concierge.receipt(store, done, actor)
     undo = [('Undo', {'t': 'undo'})] if ' Undo: ' in said else []
@@ -1014,6 +1035,8 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             rid = _draft(store, on, verb, '')
             if not rid: return 'I could not write that draft here - it is waiting on the task page.'
             return turn_text(concierge.surface(store, f'review:{rid}', actor=actor), store=store)
+        moved = _draft_moved(store, act, on)
+        if moved: return moved
         prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(item and item.get('key') == key))
         return _settle(store, prop, item, actor)
     except ValueError as e: return stuck(store, f'Not done - {e}. Nothing moved.')
@@ -1688,7 +1711,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # dropped for having no verb, and the phone offered nothing where the desktop offered Try again (2026-09-30)
         _offer([(c['label'], {'t': 'ask', 'text': c['ask']} if c.get('ask') and not c.get('verb')
                  else {'t': 'next'} if c.get('verb') == 'next' else {'t': 'open', 'key': c['key']} if c.get('verb') == 'open'
-                 else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key')})
+                 else {'t': 'verb', 'verb': c['verb'], 'key': item.get('key'), **_pinned(store, item, c['verb'])})
                 for c in out.get('chips') or [] if isinstance(c, dict) and c.get('label')
                 and ((c.get('ask') and not c.get('verb')) or (c.get('verb') and (item.get('key') or c.get('verb') in ('next', 'open'))))])
     # THE CARD'S ORDER: the verb, then Next, then More, then the rest - the desktop's two buttons and its

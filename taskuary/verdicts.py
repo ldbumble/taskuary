@@ -33,6 +33,25 @@ def context_moved(store, rv: dict):
     return bool(rv.get('Stale') or moved), latest
 
 
+def draft_revision(store, rv) -> str:
+    """What a yes on this review would send: its words, where they go and the files riding with them - and, on a close-out,
+    the reply that goes with the merge. A card pins this when it is SHOWN: the session's `taskuary --reply` rewrote a draft
+    between the phone showing it and the owner's "1", and the new words went out under the old yes."""
+    rv = rv if isinstance(rv, dict) else store.get_review(int(rv)) if rv else None
+    if not rv: return ''
+    rows = [rv]
+    if rv.get('Kind') == 'action' and rv.get('TaskId'):
+        reply = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft','draft_reply') "
+                           "ORDER BY ReviewId DESC LIMIT 1", (rv['TaskId'],))
+        if reply: rows.append(reply)
+    def env(r):
+        try: d = json.loads(r.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        return {k: v for k, v in d.items() if k not in ('delivery', 'attempted_at')}     # how a send went is not what it says
+    basis = [(r.get('ReviewId'), str(r.get('DraftText') or '').strip(), env(r)) for r in rows]
+    return hashlib.sha1(json.dumps(basis, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
 def _now_iso() -> str:
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')

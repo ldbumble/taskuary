@@ -139,8 +139,11 @@ def context_revision(store, target_kind: str, target_id: int) -> str:
         rows = store.thread_messages(m.get('ConversationId'), m.get('Subject'), limit=500) if m.get('ConversationId') else [m]
         basis = [(r.get('MessageId'), r.get('Status'), r.get('TaskId')) for r in rows]
     elif target_kind == 'review':
+        # ...and what the yes would SEND (verdicts.draft_revision), after a colon so execute can say which half moved: the
+        # thread alone was pinned, and an agent's new draft on the same thread went out under the yes given to the old one
+        from .verdicts import draft_revision
         rv = store.get_review(target_id) or {}
-        return context_revision(store, 'task', rv['TaskId']) if rv.get('TaskId') else ''
+        return f"{context_revision(store, 'task', rv['TaskId']) if rv.get('TaskId') else ''}:{draft_revision(store, rv)}"
     elif target_kind != 'task': return ''              # a memory, a sweep, a report rerun: nothing to go stale against
     else:
         t = store.get_task(target_id) or {}
@@ -267,7 +270,10 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
     if op['Kind'] == 'item.settle' and store.processing_reads_active():
         if 'processing_context' not in params or _processing_context(store, params) != params['processing_context']:
             return _stale(op, 'The item changed since this was proposed. Review it again before confirming.')
-    if op.get('ContextRevision') and context_revision(store, op['TargetKind'], op['TargetId']) != op['ContextRevision']:
+    now = context_revision(store, op['TargetKind'], op['TargetId']) if op.get('ContextRevision') else None
+    if now is not None and now != op['ContextRevision']:
+        if op['TargetKind'] == 'review' and now.split(':')[0] == op['ContextRevision'].split(':')[0]:
+            return {**_stale(op, 'the draft changed after you saw it - nothing was sent. Read the new one and approve that'), 'draft_changed': True}
         return _stale(op, 'the context changed since this was proposed - review it again before confirming')
     # one winner per confirmation (PW-129): the row is claimed before the handler runs, so a second confirm
     # arriving in the same instant gets the receipt shape and runs nothing

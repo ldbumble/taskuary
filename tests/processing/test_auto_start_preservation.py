@@ -3,7 +3,7 @@ import asyncio
 from contextlib import ExitStack, asynccontextmanager, contextmanager
 from unittest import mock
 
-from taskuary import blackboard, processing_all, server, wabridge
+from taskuary import asks, blackboard, processing_all, server, wabridge
 from taskuary.store import SQLiteStore
 
 
@@ -44,6 +44,7 @@ def _lifespan_boundaries(store):
         'refresh_soul': (server, '_refresh_soul_connections', {}),
         'learn': (server.learn, 'note_verdicts', {}),
         'watch': (server.waitroom, 'watch', {}),
+        'asks_watch': (asks, 'watch', {}),
         'threads': (server.threading, 'Thread', {}),
         'schedule_due': (blackboard, 'schedule_due', {}),
         'triage_upgrade': (store, 'upgrade_triage_failures', {'return_value': 0}),

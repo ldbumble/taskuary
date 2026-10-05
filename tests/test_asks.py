@@ -181,7 +181,7 @@ def test_a_desktop_ask_goes_to_the_phone_while_the_walk_is_handed_there(s):
 
 def test_notice_is_nothing_until_the_watcher_runs_and_then_dedupes(s):
     tid = made(s)
-    asks._Q['on'] = False; asks.notice(s, tid)
+    asks._Q['on'] = False; asks._Q['pending'].clear(); asks.notice(s, tid)
     assert not asks._Q['pending']
     asks._Q['on'] = True
     try:

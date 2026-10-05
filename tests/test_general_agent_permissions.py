@@ -93,7 +93,7 @@ class FakeCx:
 class SqlReadIsReadTests(unittest.TestCase):
     def run_tool(self, store, body, scope=None):
         cid = store.save_connector({'Type': 'mssql', 'Name': 'SQL Server', 'Active': 1, 'Roles': 'report,tool',
-                                    'ConfigJson': json.dumps({'server': 'db.example', 'database': 'UserDb'}),
+                                    'ConfigJson': json.dumps({'server': 'db.example', 'database': 'UserDb', 'driver': 'ODBC Driver 18 for SQL Server'}),
                                     **({'Scope': scope} if scope else {})}, 'test')
         cx = FakeCx()
         with mock.patch.object(server, 'store', store), mock.patch('taskuary.mssql._connect', return_value=cx):
@@ -116,5 +116,5 @@ class SqlReadIsReadTests(unittest.TestCase):
     def test_a_report_never_writes(self):
         cx = FakeCx()
         with mock.patch('taskuary.mssql._connect', return_value=cx):
-            reports.run_mssql({'server': 'db.example', 'database': 'UserDb', 'query': 'SELECT 1 AS n'})
+            reports.run_mssql({'server': 'db.example', 'database': 'UserDb', 'driver': 'ODBC Driver 18 for SQL Server', 'query': 'SELECT 1 AS n'})
         self.assertEqual(cx.committed, 0)

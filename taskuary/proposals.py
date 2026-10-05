@@ -201,6 +201,15 @@ def owed(store, tid: int) -> bool:
 def closed_out(store, tid: int, actor: str, said: str) -> bool:
     """The close-out is done. The task closes now - unless its playbook still waits, when it stays open on the owner with
     that one decision left, marked so that deciding it closes the task. True when it closed."""
+    from . import slots
+    left = slots.open_(store, tid)
+    # ...and while its emails wait (2026-10-05): four were drafted, and the first send closed the task and superseded
+    # the other three. It closes when the last one is sent or dropped (slots.settled) - same pattern as the playbook.
+    if left:
+        store.audit('task', tid, 'closed_out', actor)
+        store.add_comment(tid, actor, 'human', f"{said} The task closes when its {len(left)} remaining email{'s' if len(left) != 1 else ''} "
+                                               f"{'are' if len(left) != 1 else 'is'} sent or dropped.")
+        return False
     if playbook_pending(store, tid):
         store.audit('task', tid, 'closed_out', actor)
         store.add_comment(tid, actor, 'human', f'{said} The task closes when you approve or dismiss its playbook.')

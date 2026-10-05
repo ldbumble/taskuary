@@ -42,6 +42,28 @@ def of_review(rv) -> str | None:
     except (TypeError, ValueError): return None
 
 
+def settled(store, rv: dict, sent: bool, actor: str) -> bool:
+    """A slot's draft was sent (or dropped): tick the slot, then close the task if nothing else of it waits.
+    The same gate the reply goes through (proposals.closed_out) - whichever lands last closes it."""
+    sid, tid = of_review(rv), rv.get('TaskId')
+    if not (sid and tid): return False
+    mark(store, tid, sid, done=True, actor=actor)
+    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
+    left = len(open_(store, tid))
+    reply = store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action', ?) LIMIT 1", (tid, KIND))
+    said = f"{'Sent' if sent else 'Dropped'}: {rv.get('Reason') or 'one of its emails'}."
+    if left or reply:
+        store.add_comment(tid, actor, 'human', f"{said} {left} email{'s' if left != 1 else ''} still to go" + (' and the reply' if reply else '') + '.')
+        return False
+    from . import proposals
+    return proposals.closed_out(store, tid, actor, said)
+
+
+def seen(store, tid: int):
+    """The newest inbound message a slot draft was written against - a newer one makes it stale (verdicts.context_moved)."""
+    return (store.last_material_inbound_on_task(tid) or {}).get('MessageId')
+
+
 def mark(store, tid: int, slot_id: str, rid: int = None, done: bool = None, actor: str = 'owner') -> bool:
     items = store.task_checklist(tid)
     hit = next((i for i in items if i.get('id') == slot_id and isinstance(i.get('out'), dict)), None)

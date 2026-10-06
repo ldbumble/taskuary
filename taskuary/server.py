@@ -67,15 +67,9 @@ try:
 except Exception as _e:
     from loguru import logger as _log
     _log.warning(f'could not correct routed roles: {_e}')
-try:
-    _adopted = cli_connections.adopt_installed(cfg, store)
-    if _adopted:
-        config.save(cfg)
-        from loguru import logger as _log
-        _log.info(f"every installed CLI can be started: added {', '.join(_adopted)}")
-except Exception as _e:
-    from loguru import logger as _log
-    _log.warning(f'could not adopt the installed CLIs: {_e}')
+# AN INSTALLED CLI IS NOT A CONNECTED ONE: startup used to connect every known CLI it found on the machine (adopt_installed),
+# so a CLI the owner never chose showed up connected and in the pickers (the owner, 2026-10-06: "don't assume if cli
+# installed to be used.. don't automatically connect them"). Set it up on its card connects it.
 try:
     # one coding role, one CODER.md: the per-CLI coding clones an older setup minted go
     _dropped = hub_agents.drop_cli_clones(cfg, store)
@@ -5473,7 +5467,9 @@ def list_cli_connections():
         row = {**known.get(base, {}), **known.get(name, {}), 'name': name,
                'label': known.get(name, {}).get('label') or name,
                'config': command, 'configured': name in configured,
-               'models': climodels.catalog(base)}
+               'models': climodels.catalog(base),
+               # the profiles on it - Remove names them before it leaves them with no CLI
+               'used_by': [n for n, p in cfg.get('agents', {}).items() if p.get('provider') == f'cli:{name}']}
         if name in configured: row['installed'] = hub_agents.runs_here(command)
         rows.append(row)
     return {'data': rows}
@@ -5502,14 +5498,22 @@ def put_cli_connection(name: str, body: dict):
 
 
 @app.delete('/api/cli/connections/{name}')
-def delete_cli_connection(name: str):
+def delete_cli_connection(name: str, detach: bool = False):
+    """Remove a CLI connection. Profiles still on it are named first (409); `detach` removes it anyway and leaves those
+    profiles with NO CLI - never quietly moved onto another one - until the owner picks one (the owner, 2026-10-06:
+    "can't remove the claude cli install", with every shipped profile on it)."""
     users = [n for n, p in cfg.get('agents', {}).items() if p.get('provider') == f'cli:{name}']
-    if users: raise HTTPException(409, f'Choose another provider for these profiles first: {", ".join(users)}')
+    if users and not detach: raise HTTPException(409, f'Choose another provider for these profiles first: {", ".join(users)}')
     if name not in cfg.get('cli_connections', {}): raise HTTPException(404, 'Connection not found')
+    for n in users:
+        prof = cfg['agents'][n]
+        prof.pop('provider', None)
+        for f in cli_connections.COMMAND_FIELDS: prof.pop(f, None)
     cfg['cli_connections'].pop(name)
     config.save(cfg)
-    store.audit('cli_connection', 0, 'delete', ACTOR, detail=name)
-    return {'ok': True}
+    cli_connections.sync(cfg, store)
+    store.audit('cli_connection', 0, 'delete', ACTOR, detail={'name': name, 'detached': users})
+    return {'ok': True, 'detached': users}
 
 
 @app.post('/api/cli/connections/{name}/test')

@@ -226,11 +226,12 @@ export default function TaskHubPage() {
     })();
   }, []);
   useHandRaise(onRaise);
-  // a first run opens it once, unprompted: somebody who has just installed this should not have
-  // to find the checklist. Once put away (or once required steps are done) it never opens itself.
+  // it opens itself on load while required steps are left: somebody who has just installed this should not have to find
+  // the checklist. It used to wait for done === 0, and a coding CLI already on the PATH ticks "Connect one AI" before
+  // anyone looks, so a fresh install never saw it (the owner, 2026-10-06). Once put away it never opens itself.
   useEffect(() => {
     if (DEMO || demo || greeted || !setup || setup.complete || setup.dismissed) return;
-    if (setup.done === 0) setSetupOpen(true);
+    setSetupOpen(true);
     setGreeted(true);
   }, [setup, greeted, demo]);
   const dismissSetup = async (d) => {

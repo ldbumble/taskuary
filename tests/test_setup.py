@@ -354,6 +354,41 @@ class TheWizardActuallySetsUpTests(unittest.TestCase):
         self._reset()
 
 
+class AMailboxTriedBeforeStillCountsTests(unittest.TestCase):
+    """A Gmail card connected and tested, and the checklist still said "Connect one work source" (the owner, 2026-10-06,
+    on another machine). The test registers the mailbox only when NO source has its address - and a source the
+    address already had (a plain IMAP card tried first, a card since removed) can be off or bound to another card,
+    so it was kept as it was and the step never counted the card that now works."""
+
+    def _mailbox(self, s, cid, address):
+        conn = {**s.get_connector(cid, with_secret=True)}
+        box = mock.MagicMock(); box.select.return_value = ('OK', [b'3'])
+        with mock.patch('taskuary.imapmail._login', return_value=(box, address)):
+            from taskuary import imapmail
+            return imapmail.test_imap(s, conn)
+
+    def test_testing_the_card_takes_over_a_source_its_address_already_had(self):
+        s = _fresh()
+        imap, gmail = s.get_connector_by_type('imap')['ConnectorId'], s.get_connector_by_type('gmail')['ConnectorId']
+        s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': imap, 'Active': 0}, 't')
+        s.save_connector({'ConnectorId': gmail, 'Secret': 'app-password', 'Active': 1,
+                          'ConfigJson': json.dumps({'address': 'alex@northwind.example'})}, 't')
+        self.assertIn('logged in', self._mailbox(s, gmail, 'alex@northwind.example'))
+        self.assertTrue(_step(setup.state(s), 'inbound')['done'])
+        # ...and it is one source still, not a second row for the same mailbox
+        self.assertEqual(sum(1 for x in s.list_sources(active_only=False) if x['Address'] == 'alex@northwind.example'), 1)
+
+    def test_the_pollers_heal_does_the_same(self):
+        s = _fresh()
+        imap, gmail = s.get_connector_by_type('imap')['ConnectorId'], s.get_connector_by_type('gmail')['ConnectorId']
+        s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': imap, 'Active': 0}, 't')
+        s.save_connector({'ConnectorId': gmail, 'Secret': 'app-password', 'Active': 1,
+                          'ConfigJson': json.dumps({'address': 'alex@northwind.example'})}, 't')
+        from taskuary import imapmail
+        imapmail.ensure_source(s, s.get_connector(gmail))
+        self.assertTrue(_step(setup.state(s), 'inbound')['done'])
+
+
 class OptionalModelReviewCompatibilityTests(unittest.TestCase):
     """Older clients can record a settings visit, but the first-run counter does not depend on it."""
     def _clear(self):

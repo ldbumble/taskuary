@@ -89,9 +89,13 @@ test("uncertain delivery checks the original attempt and live claims freeze ever
     view = await snapshot();
     assert.ok(view.buttons.filter(button => button.label).every(button => button.disabled)); assert.equal(view.readonly, true); assert.equal(view.fileDisabled, true);
     await page.evaluate(() => window.renderDelivery({ DeliveryState: "unknown", DeliveryClaim: "fixture-live-claim" }, true));
-    await page.waitForFunction(() => JSON.parse(document.querySelector("#delivery-verbs").innerText).some(verb => verb.id === "999:approve" && verb.label === "Checking delivery…"));
+    // on a task page the draft's own buttons are drawn UNDER THE DRAFT, never on the task's bar (the owner, 2026-10-06) - and frozen alike
+    await page.waitForFunction(() => [...document.querySelectorAll("#delivery-fixture button")].some(b => b.textContent.trim() === "Checking delivery…"));
     const verbs = await page.$eval("#delivery-verbs", node => JSON.parse(node.innerText));
-    assert.ok(verbs.filter(verb => verb.id.startsWith("999:") || verb.id === "attach").every(verb => verb.disabled));
+    assert.ok(!verbs.some(verb => verb.id.startsWith("999:")), "nothing of the draft's rides the bar");
+    assert.ok(verbs.filter(verb => verb.id === "attach").every(verb => verb.disabled));
+    view = await snapshot();
+    assert.ok(view.buttons.filter(button => button.label).every(button => button.disabled));
     assert.equal((await page.evaluate(() => window.deliveryCalls)).length, 1);
     assert.deepEqual(apiRequests, []); assert.deepEqual(errors, []);
   } finally {

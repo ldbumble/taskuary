@@ -300,6 +300,39 @@ def test_a_triaged_message_that_asks_for_emails_gets_slots():
     finally: server.store = prev
 
 
+def test_an_output_to_the_sender_is_their_reply_never_an_email(s):
+    # The prompt says "a reply to the sender is never an output" and the model wrote one anyway - on a chat message, so
+    # the close-out showed the reply twice: once for the thread, once as an email opening "Hi Erin," (2026-10-06).
+    # The sender is matched as a person: "Last, First at Company" is the same Erin as "Erin Blake".
+    tid = s.create_task({'Title': 'Fix the logins', 'Kind': 'general', 'Status': 'open', 'Source': 'teams'}, 'router')
+    got = slots.add(s, tid, [{'to': 'Erin Blake', 'about': 'it is fixed'}, {'to': 'erin@northwind.example', 'about': 'again'},
+                             {'to': 'Gail Moreno', 'about': 'the cause'}], 'triage',
+                    sender={'name': 'Blake, Erin at Northwind', 'address': 'erin@northwind.example'})
+    assert [i['out']['to'] for i in got] == ['Gail Moreno']
+    # ...and somebody who only shares a first name is not the sender
+    assert [i['out']['to'] for i in slots.add(s, tid, [{'to': 'Erin Vance', 'about': 'x'}], 'triage', sender={'name': 'Erin Blake'})] == ['Erin Vance']
+
+
+def test_a_triaged_chat_message_never_owes_its_sender_an_email():
+    from datetime import datetime
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    verdict = json.dumps({'intent': 'task', 'kind': 'task', 'why': 'asks for a fix', 'title': 'Fix the logins',
+                          'summary': 'Erin Blake wants the logins fixed.', 'checklist': ['Fix the logins'],
+                          'outputs': [{'to': 'Erin Blake', 'about': 'status on the logins'}]})
+    st, prev = MemoryStore(), server.store
+    server.store = st; st.set_setting('coder_auto_enabled', '0', 'test')
+    try:
+        body = {'external_id': 'slots-sender-1', 'channel': 'teams', 'conversation_id': 'teams:19:sender@thread.v2',
+                'from_name': 'Blake, Erin at Northwind', 'subject': 'Logins', 'body': 'His logins are blank - can you look?',
+                'sent_at': datetime.now().isoformat(sep=' ', timespec='seconds')}
+        with mock.patch('taskuary.server._llm', return_value=lambda sys_, usr_, **kw: verdict):
+            TestClient(server.app).post('/api/ingest/push', json=body)
+        tid = next(t['TaskId'] for t in st.list_tasks(active_only=True))
+        assert slots.all_(st, tid) == []
+    finally: server.store = prev
+
+
 # ── the work rail ────────────────────────────────────────────────────────────────────────
 def test_the_rail_shows_one_row_per_task_with_its_count(s):
     from taskuary import funnel
@@ -310,6 +343,17 @@ def test_the_rail_shows_one_row_per_task_with_its_count(s):
     approve(s, b)
     rows = [r for r in funnel.from_proposals(s, set()) if r.get('tid') == tid]
     assert len(rows) == 1 and rows[0]['key'] == f'review:{a}' and '1 email ' in rows[0]['why']
+
+
+def test_a_task_already_on_the_rail_is_not_listed_again_for_its_emails(s):
+    # A task with a reply drafted AND an email drafted sat on the rail twice - its reply row and an email row - and so
+    # did a task whose own row was its message (2026-10-06). The task's card lists its emails; the rail lists the task.
+    from taskuary import funnel
+    tid, mid, reply = mail_task(s); slots.add(s, tid, FOUR[:1], 'owner'); draft(s, tid, 0)
+    assert len([i for i in funnel.build(s)['items'] if i.get('tid') == tid]) == 1
+    # ...and a task with nothing else on the rail still gets its one email row
+    other = typed(s, FOUR[1:2]); draft(s, other, 0)
+    assert len([i for i in funnel.build(s)['items'] if i.get('tid') == other]) == 1
 
 
 def test_the_processing_rail_calls_them_emails_not_a_reply():

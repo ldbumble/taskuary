@@ -662,7 +662,7 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
     return out
 
 
-def from_proposals(store, used_rids: set) -> list:
+def from_proposals(store, used_rids: set, used_tids: set = frozenset()) -> list:
     """A pending proposal with no mail and no task behind it - a switch the owner asked for in the
     chat, waiting for their yes. Every other review reaches the pile through its message row, so a
     task-less one could only be approved from the chat line that proposed it, and that scrolls away."""
@@ -673,11 +673,14 @@ def from_proposals(store, used_rids: set) -> list:
                          who='you asked for it', when=rv.get('CreatedAt'), rid=rv['ReviewId'],
                          why='a setting waits for your yes - nothing changes until you approve it'))
     # a task's emails (slots.py) have no message row to ride on, so they arrive here - ONE row per task, its NEWEST draft
-    # first (as the processing rail leads): approving it puts the next one up with the count one smaller
+    # first (as the processing rail leads): approving it puts the next one up with the count one smaller. A task already
+    # on the rail (`used_tids`: its message, its reply) is not listed again - its card holds the emails (2026-10-06: a
+    # reply row and an email row for one task)
     from . import slots
     per = {}
     for rv in store.list_reviews('pending'):
-        if rv.get('Kind') == slots.KIND and rv.get('TaskId') and rv['ReviewId'] not in used_rids: per.setdefault(rv['TaskId'], []).append(rv)
+        if rv.get('Kind') == slots.KIND and rv.get('TaskId') and rv['ReviewId'] not in used_rids and rv['TaskId'] not in used_tids:
+            per.setdefault(rv['TaskId'], []).append(rv)
     for tid, rvs in per.items():
         first, n = max(rvs, key=lambda r: r['ReviewId']), len(rvs)
         out.append(_item(f"review:{first['ReviewId']}", 'review', 'approve', (store.get_task(tid) or {}).get('Title') or first.get('Reason') or 'emails wait for your yes',
@@ -995,7 +998,7 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     # agent's question is the thing to answer, and answering it is answering the mail
     parked = {i['tid'] for i in items if i['kind'] == 'agent'}
     items = [i for i in items if not (i['kind'] in ('asked', 'todo', 'fyi') and i.get('tid') in parked)]
-    items += from_proposals(store, {i['rid'] for i in items if i.get('rid')})
+    items += from_proposals(store, {i['rid'] for i in items if i.get('rid')}, {i['tid'] for i in items if i.get('tid')})
     items += from_calendar(store, now)
     # A CONDITION, not a letter: it is here while the connection is broken and gone when it is
     # fixed, so it carries no read receipt and cannot be marked read. Marking a dead repo "read"

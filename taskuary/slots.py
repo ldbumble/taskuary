@@ -8,6 +8,7 @@ Its draft is a review of kind `slot`, never `draft_reply`: every "the task's rep
 agent_reply, the close-out redirect) reads draft kinds, so a slot can never be mistaken for the reply or overwritten by it.
 """
 import json
+import re
 from email.utils import parseaddr
 
 KINDS = ('email',)            # what a slot can be - a new kind is a new entry here, never a branch elsewhere
@@ -37,20 +38,36 @@ def split(to: str) -> tuple:
     return (name.strip(), addr.strip()) if '@' in addr and '<' in str(to) else ('', ' '.join(str(to or '').split()))
 
 
-def add(store, tid: int, outputs, actor: str) -> list:
-    """Append these outputs as slots; one already open to the same person is not added twice. A person named, not
-    addressed, takes their address when exactly one person in the owner's own mail matches (people.resolve); several
-    are kept on the slot to pick from; none leaves the name and its '?'."""
+def is_sender(sender, to: str, name: str = '') -> bool:
+    """An output to the person who wrote IS the task's reply, never an email of its own. The triage prompt says so and a
+    model wrote one anyway - on a chat message, so the close-out held the reply twice, the second as an email opening
+    "Hi ..," (2026-10-06; both triage slots ever made were this). Matched as a person: the same address, or every word of
+    the name inside the sender's ("Last, First at Company" is the same person as "First Last")."""
+    if not sender: return False
+    addr, who = str(sender.get('address') or '').casefold(), str(sender.get('name') or '')
+    if addr and str(to).casefold() == addr: return True
+    words = lambda x: set(re.findall(r'[a-z]{2,}', str(x).casefold()))
+    want = words(name or ('' if '@' in str(to) else to))
+    return bool(want) and want <= words(who)
+
+
+def add(store, tid: int, outputs, actor: str, sender: dict = None) -> list:
+    """Append these outputs as slots; one already open to the same person is not added twice, and one to `sender` (the
+    message's own {name, address}) is never added - that is the reply (is_sender). A person named, not addressed, takes
+    their address when exactly one person in the owner's own mail matches (people.resolve); several are kept on the slot
+    to pick from; none leaves the name and its '?'."""
     from . import people
     # every email the task has owed - sent and dropped ones too: an email already sent is not owed again because a later
     # message words it differently
     have = {str(i['out'].get('to')).casefold() for i in all_(store, tid)}
     new = []
     for i in clean(outputs):
+        if is_sender(sender, i['out']['to'], i['out'].get('name', '')): continue
         if '@' not in i['out']['to']:
             found = people.resolve(store, i['out']['to'])
             if found.get('address'): i['out']['to'] = found['address']
             elif found.get('candidates'): i['out']['candidates'] = found['candidates']
+            if is_sender(sender, i['out']['to']): continue        # the name resolved to the sender's own address
         if i['out']['to'].casefold() not in have: new.append(i)
     return store.add_checklist_items(tid, new, actor) if new else []
 

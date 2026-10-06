@@ -222,7 +222,9 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(view, /dispatch`, \{ kind: "coding"/);                       // no verb is carried out from the chat itself
   assert.doesNotMatch(view, /tq-quick/);                  // nothing sits over the composer any more
   assert.doesNotMatch(view, /SUGGESTIONS/);               // ...and the page invents no vocabulary of its own
-  assert.match(view, /className="tq-verbs"/);             // the action words are IN the assistant's line
+  // the action words go to the row by the prompt, never under a chat line (the owner, 2026-10-06: "no button in line ever")
+  assert.match(view, /<BarVerbs owner=\{`line:\$\{m\.id\}`\}/);
+  assert.doesNotMatch(view, /className="tq-verbs"/);
   assert.match(view, /chipsOf\(m\)/);                       // from the durable turn: a poll must not erase them
   assert.match(view, /chip: runChip/);                    // one road for every one of them
   assert.match(view, /triage moved it up/);                // the rail shows promotions

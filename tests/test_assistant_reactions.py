@@ -455,7 +455,7 @@ class ResponseTests(unittest.TestCase):
     def test_approve_is_confirmed_then_sends_the_drafted_reply_and_the_task_settles(self):
         s, tid, rid, item = self._drafted()
         p = decide(s, 'approve', 'approve', key=item['key'])['proposal']
-        self.assertEqual((p['kind'], p['target'], p['label']), ('review.approve', rid, 'Close out'))       # one word, every system
+        self.assertEqual((p['kind'], p['target'], p['label']), ('review.approve', rid, 'Send & close'))    # says what it does (2026-10-06)
         self.assertEqual(s.get_review(rid)['Status'], 'pending')       # nothing sent on the words
         sent = {'ok': True, 'to': 'craig@vendor.com', 'subject': 'RE:', 'provider': 'test', 'channel': 'email'}
         with mock.patch('taskuary.outbound.reply_to_message', return_value=sent):

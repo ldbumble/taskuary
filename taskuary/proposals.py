@@ -169,6 +169,9 @@ def queue(store, task_id: int, p: dict, actor='coder') -> dict | None:
 # - "Close out" - and per action only the sentence saying what it does there. A new connector adds a line here, never a word.
 CLOSE_WORD = 'Close out'
 CLOSEOUT = {'merge_pr': 'merges the pull request on GitHub', 'close_issue': 'closes the issue on GitHub'}
+# ...and its BUTTON says what it does (the owner, 2026-10-06: "send & close", "merge & close" under what they act on) - the step is
+# still the close-out; the word on the button is its act
+CLOSE_WORDS = {'merge_pr': 'Merge & close', 'close_issue': 'Close issue & task'}
 _ISSUE = re.compile(r'github\.com/([^/]+/[^/]+)/issues/(\d+)')
 _PULL = re.compile(r'github\.com/([^/]+/[^/]+)/pull/(\d+)')
 

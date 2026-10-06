@@ -14,10 +14,10 @@ export const proposalFrom = (review) => {
 // endless"): Close out / Decline / Remind me (the task's own - 2026-10-02: "not yet is really remind me later"). Only `then` - what it does THERE - differs; a new connector adds a line.
 export const CLOSE_OUT = "Close out";
 export const CLOSEOUT = {
-  merge_pr: { label: CLOSE_OUT, busy: "closing out…", then: "merges the pull request on GitHub", reject: null,
+  merge_pr: { label: "Merge & close", busy: "merging…", then: "merges the pull request on GitHub", reject: null,
     // the other answer, where the system has one: the work is not wanted - the PR closes unmerged
     alt: { verb: "close_pr", label: "Decline", busy: "declining…", then: "closes the pull request without merging it" } },
-  close_issue: { label: CLOSE_OUT, busy: "closing out…", then: "closes the issue on GitHub", reject: null },
+  close_issue: { label: "Close issue & task", busy: "closing…", then: "closes the issue on GitHub", reject: null },
 };
 export const closeoutOf = (review) => CLOSEOUT[proposalFrom(review)?.action] || null;
 

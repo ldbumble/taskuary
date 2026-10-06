@@ -60,7 +60,9 @@ test("the card's buttons leave the card on the canvas and come back on the Tasks
   const task = read("TaskPage.jsx");
   assert.match(task, /const inRow = !!canvas/);
   assert.match(task, /useVerbs\("task"/);
-  assert.match(read("ReviewDecision.jsx"), /\{!toRow && <>/, "the decision's own buttons are drawn only when it is not in the row");
+  // ...but a decision's own buttons stay UNDER ITS DRAFT on every surface (the owner, 2026-10-06): none of them ride the row
+  assert.doesNotMatch(read("ReviewDecision.jsx"), /\{!toRow && <>/);
+  assert.match(read("ReviewDecision.jsx"), /\], false\);   \/\/ the draft's own buttons are drawn under it/);
   assert.doesNotMatch(read("CanvasItem.jsx"), /data-tq-next/, "Next is the row's now; the view carries none of its own");
   assert.match(read("ActionRow.jsx"), /data-tq-next/);
 });
@@ -105,11 +107,12 @@ test("a card's own <Button> is read into a row verb: its label, handler, disable
   assert.deepEqual(calls, ["a", "b"], "the card's own handler runs; nothing is re-implemented");
 });
 
-test("every card's move and foot ride in the row: YourMove and Foot register, the card draws none of them", () => {
+test("a card's own move stays on the card; its other words and Next ride in the row (2026-10-06)", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "src", "assistantCards.jsx"), "utf8");
-  assert.match(src, /useVerbs\("move", rowed \? movesOf\(go\) : null/);
-  assert.match(src, /\.\.\.movesOf\(verb, "decide", "v"\)/);
-  assert.match(src, /\{!rowed && \(verb \|\|/, "the foot's own move is not drawn twice");
+  assert.match(src, /const rowed = false;/, "YourMove draws its button where it acts");
+  assert.doesNotMatch(src, /\.\.\.movesOf\(verb, "decide", "v"\)/, "the foot's own move is not read into the row");
+  assert.match(src, /\{verb \|\| \(!rowed && lifted/, "the foot's own move is drawn on the card, rowed or not");
+  assert.match(src, /i < 3 \|\| a\.verb === "close" \? "decide" : "more"/, "Mark done is never behind More");
   assert.match(src, /row: outer\.row/, "the walk's foot rides in the row as well");
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReplyFiles.jsx"), "utf8"), /toRow && mail/, "Attach a file is a More verb in the row");
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8"), /id: "ask-sender", group: "more"/, "Ask sender is a More verb in the row");

@@ -227,5 +227,5 @@ test("an unstarted general task's Send to agent is the row's lead, not a button 
 });
 
 test("a live session's Mark done asks for a place on the bar", () => {
-  assert.match(tasks, /promote: !liveSession, beside: liveSession \}/);
+  assert.match(tasks, /promote: !liveSession && !pendingReview, beside: liveSession \}/);   // ...and a waiting draft's send is the move (2026-10-06)
 });

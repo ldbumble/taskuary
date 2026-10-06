@@ -4,10 +4,10 @@
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
 import React, { useEffect, useState } from "react";
-import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, TextField, Typography } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
-import { CLOSE_OUT, proposalPresentation, reviewText } from "./reviewProposal.js";
+import { proposalPresentation, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
@@ -84,9 +84,14 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // one of the task's emails (slots.py) is not its close-out: sending it closes nothing until the last one goes
   const isSlot = r.Kind === "slot";
   const onTask = !proposal && !!r.TaskId && r.Kind !== "clarification" && !isSlot;
+  // THE BUTTONS THAT ACT ON THE DRAFT ARE UNDER THE DRAFT (the owner, 2026-10-06: "any button that relates to a piece of a task ... put
+  // the button right there, if related to task in general then put button on bottom"): Send & close where sending finishes the task,
+  // Send where it does not (one of several emails), Copy & close where this channel cannot carry it - and Redraft beside them.
+  const sendWord = isSlot || !onTask ? "Send" : "Send & close";
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
-    : co ? `${CLOSE_OUT} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}.`
-    : onTask && !r.Stale && r.CanSend !== false ? `${CLOSE_OUT} sends this to ${replyContext(r)} and closes the task.` : "";
+    : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}.`
+    : onTask && !r.Stale && r.CanSend !== false ? `${sendWord} sends this to ${replyContext(r)} and closes the task.`
+    : onTask && !r.Stale && r.CanSend === false ? "Copy & close copies the draft for you to paste and send yourself, and closes the task." : "";
   const [coFail, setCoFail] = useState(null);       // the close-out itself refused: nothing was sent ({offers} = what fits instead)
   const [said, setSaid] = useState("");              // what Update branch / Re-run checks just did
   // THE CARD READS GITHUB FIRST (closeoutState.js): Close out is live only when this repo's rules let it merge now
@@ -120,6 +125,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
 
   // Approving IS sending, so a send that failed has to say so HERE, the moment you click - it
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
+  const copyClose = async () => { try { await navigator.clipboard.writeText(value); } catch { /* the draft stays on the task to copy by hand */ } return decide("close_unsent"); };
   const decide = async (verb) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
     setBusy(true); setErr(""); setSendErr("");
@@ -189,7 +195,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     ] : r.Stale ? [
       { id: no("approve"), label: busy ? "refreshing…" : "Refresh the draft", tone: "p", disabled: busy, run: redraft, title: "Rewrites the draft from the newest message, then you approve it" },
     ] : [
-      { id: no("approve"), label: busy ? (simulated ? "Simulating…" : "sending…") : simulated ? "Simulate approval" : `${onTask ? CLOSE_OUT : "Approve & send"}${ccNow.length ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? (simulated ? "Simulating…" : "sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}` },
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
@@ -204,7 +210,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && v.id !== no("approve")) }));
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
   useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting || delivery.frozen, run: redraft,
-    title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])], toRow && moves.length > 0);
+    title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])], false);   // the draft's own buttons are drawn under it, never on the task's bar (2026-10-06)
 
   if (r.Status === "held") {
     return (
@@ -320,7 +326,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             asked you to declare something the text already shows. */}
         {/* a channel that cannot carry the reply must SAY so: github with replies
             off gets 'No response required' as THE action, not a send that bounces */}
-        {!toRow && <>
+        <>
         {delivery.frozen ? (
           <Button size="small" variant="contained" disableElevation disabled={busy || !delivery.canCheck}
             onClick={() => decide("approve")} title={delivery.line}>
@@ -351,8 +357,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           <Button size="small" variant="contained" disableElevation disabled={busy}
             sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
             title={`No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).`}
-            onClick={() => decide("close_unsent")}>
-            {busy ? "closing…" : "Mark done"}
+            onClick={copyClose}>
+            {busy ? "closing…" : "Copy & close"}
           </Button>
         ) : r.Stale ? (
           /* THE ROAD OUT OF THE WARNING. A stale draft disabled the only button on the card
@@ -371,9 +377,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
             {/* on a task the one word is Close out, as everywhere; a draft with no task behind it is just sent */}
             {busy ? (simulated ? "Simulating…" : "sending…")
-              : simulated ? "Simulate approval" : `${onTask ? CLOSE_OUT : "Approve & send"}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
+              : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
           </Button>
         )}
+        {/* Redraft beside the send, under the draft it rewrites - not at the far end of the row, and not on the task's bar */}
+        {canRedraft && !r.Stale && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy || drafting} onClick={redraft}
+          title="Writes the draft again from the thread as it is now; your edit is kept beside it until you choose">
+          {drafting ? "Drafting…" : redraftWord}</Button>}
         {/* ...but one email of several can be let go without closing anything: it drops that slot (slots.settled) */}
         {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy} onClick={onDrop}
           title="Drop this email - the task closes when the rest are sent">Don't send</Button>}
@@ -385,11 +395,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart;
             and a plain draft is Close out, Redraft (at the row's end) or the task bar's own Mark done (2026-10-01) */}
         {proposal && proposal.kind !== "closeout" && <Button size="small" color="error" disabled={busy || delivery.frozen} onClick={() => decide("reject")} title={rejectTitle}>{proposal.rejectLabel}</Button>}
-        </>}
-        <Box sx={{ flex: 1 }} />
-        {!toRow && canRedraft && <Button size="small" disabled={busy || drafting || delivery.frozen} onClick={redraft}>
-          {busy ? <CircularProgress size={12} /> : drafting ? "Drafting…" : redraftWord}
-        </Button>}
+        </>
       </Box>
       {/* what the one word does HERE - the buttons never change, this line does */}
       {thenLine && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>{thenLine}</Typography>}

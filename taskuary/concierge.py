@@ -64,7 +64,7 @@ VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'rem
 # that map to actions"); only which of them fits the thing on the table is decided per item, from its kind.
 # The model still reads free text - it just never invents a button. Every word here maps to a verb the cards
 # and the typed sentence already run, so a chip, a button and a sentence are one road.
-CHIP_WORDS = {'approve': 'Close out', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Send to a coding agent',
+CHIP_WORDS = {'approve': 'Send & close', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Send to a coding agent',
               'regular_agent': 'Send to agent', 'mine': 'Make a task', 'not_ours': 'Not ours',
               'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
               'not_ours_kind': 'No more ideas like this', 'archive': 'Archive it', 'close': 'Mark done',
@@ -710,8 +710,10 @@ def walk_chips(left) -> list:
 def closeout_label(item: dict) -> str:
     """The ONE button of a task's close-out: "Close out", whatever the system (the owner, 2026-09-27: "we can't have a
     bunch of them"). What it does there is the card's sentence (proposals.CLOSEOUT), never a new word."""
-    from .proposals import CLOSE_WORD
-    return CLOSE_WORD if (item or {}).get('closeout') else ''
+    from .proposals import CLOSE_WORD, CLOSE_WORDS, CLOSEOUT
+    then = (item or {}).get('closeout')
+    if not then: return ''
+    return next((CLOSE_WORDS[a] for a, t in CLOSEOUT.items() if t in str(then) and a in CLOSE_WORDS), CLOSE_WORD)
 
 
 def chips_for(store, item: dict | None, first: str = None) -> list:
@@ -2320,7 +2322,7 @@ PROPOSALS = {
     'archive': ('message.archive', 'Archive it', True),
     'close': ('task.complete', 'Mark done', True), 'done': ('item.settle', 'Mark it handled', True),
     'later': ('item.settle', 'Push it back', True), 'skip': ('item.settle', 'Skip until tomorrow', True),
-    'approve': ('review.approve', 'Close out', True), 'answer_agent': ('agent.answer', 'Send the answer to the agent', True),
+    'approve': ('review.approve', 'Send & close', True), 'answer_agent': ('agent.answer', 'Send the answer to the agent', True),
     # ...ending the session SETTLES the table, as AUTO below already says it does: it stayed False, so the walk held the same
     # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
     'stop_agent': ('agent.stop', 'Save and end session', True), 'rerun': ('report.rerun', 'Run the report again', True),

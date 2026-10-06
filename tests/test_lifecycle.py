@@ -146,7 +146,7 @@ class LifecycleTests(unittest.TestCase):
             with mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Sending it.\nCALL: {"kind": "approve", "params": {}}'):
                 said = c.post('/api/concierge/say', json={'text': 'looks good, send it', 'key': f'review:{r}'}).json()
             self.assertIsNone(said['decision']); prop = said['proposal']
-            self.assertEqual((prop['kind'], prop['target'], prop['label']), ('review.approve', r, 'Close out'))
+            self.assertEqual((prop['kind'], prop['target'], prop['label']), ('review.approve', r, 'Send & close'))
             self.assertEqual(s.get_review(r)['Status'], 'pending')                                            # nothing sent on the words
             ran = c.post(f"/api/operations/{prop['id']}/execute", json={'version': prop['version']}).json()
             self.assertEqual(ran['status'], 'done')

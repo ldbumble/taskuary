@@ -17,7 +17,7 @@ import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen, agentRuns } from "./taskFilter.js";
 import { cardFor, laneMeta } from "./funnelPile.js";
 import { afterExecute, proposalOf } from "./proposalCard.js";
-import { CLOSE_OUT, closeoutOf } from "./reviewProposal.js";
+import { closeoutOf } from "./reviewProposal.js";
 import { needsYou, matchFor, CHIP_MOVE } from "./assistantGame.js";
 
 export const G = { bg: "rgba(20,24,30,.9)", line: "rgba(255,255,255,.1)", ink: "#f3f1ec", dim: "#aeb6bf", faint: "#7c8590",
@@ -149,7 +149,7 @@ function Draft({ item, busy, play }) {
       {!!(rv.Stale ?? item.stale) && <Typography sx={{ fontSize: 11.5, color: G.gold, mt: 0.4 }}>New messages came in after this draft - rewrite it before sending.</Typography>}
       <Row>
         <Btn kind="gold" disabled={!!busy || (!action && !value.trim())} onClick={send} title={co ? `${co.label} - ${co.then}` : action ? "Runs what the agent proposed" : `Sends it to ${who}`}>
-          {co ? `✔ ${co.label} · +40` : action ? "▶ Run it · +40" : item.tid ? `✔ ${CLOSE_OUT} · +40` : "📨 Send it · +40"}</Btn>
+          {co ? `✔ ${co.label} · +40` : action ? "▶ Run it · +40" : item.tid ? "✔ Send & close · +40" : "📨 Send it · +40"}</Btn>
         {/* scored as answering the card - the game has one move for "you decided it" */}
         {co?.alt && <Btn disabled={!!busy} title={`${co.alt.label} - ${co.alt.then}`} onClick={() => play("approve", item.key, async () => {
           const { data } = await api.post(`/api/reviews/${item.rid}/decide`, { verb: co.alt.verb, final_text: null, note: null });

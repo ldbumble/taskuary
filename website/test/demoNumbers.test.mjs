@@ -49,8 +49,11 @@ test('a fresh public demo is one current request, without unrelated tasks, meeti
   assert.equal(finishNumbersWorkflow(state, at + 3000).CreatedAt, '2027-02-10 09:30:03');
 });
 
-test('the full office remains an explicit exploration option', () => {
-  assert.equal(isGuidedDemo(''), true);
-  assert.equal(isGuidedDemo('?workflow=numbers'), true);
+// THE DEMO IS THE APP (the owner, 2026-10-06: "who made this ugly thing on top? ... website should be the same. show many
+// tasks in demo"): a plain /demo/ opens the full invented office; the one-request walkthrough is only asked for by link
+test('the demo opens on the full office; the guided request is an explicit link', () => {
+  assert.equal(isGuidedDemo(''), false);
   assert.equal(isGuidedDemo('?demo=explore'), false);
+  assert.equal(isGuidedDemo('?demo=guided'), true);
+  assert.equal(isGuidedDemo('?workflow=numbers'), true);
 });

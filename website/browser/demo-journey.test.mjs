@@ -39,7 +39,7 @@ test("the default static demo completes one reviewed request and never calls a l
       else request.continue();
     });
     await page.setViewport({ width: 1440, height: 950 });
-    await page.goto(origin, { waitUntil: "networkidle0" });
+    await page.goto(`${origin}/?demo=guided`, { waitUntil: "networkidle0" });
     await page.waitForSelector('[data-tq-demo-journey="request"]');
     const start = await page.$('[data-tq-demo-journey] button');
     assert.ok((await start.boundingBox()).y < 950, "the first action is visible without scrolling");

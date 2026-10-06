@@ -974,7 +974,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           and borders sat OUTSIDE a height of 100% (14px over), and that 100% was of a box with only a max-height - which a percentage
           cannot resolve against - so a long task grew to its whole content (34px over) and the next line of the chat landed on it.
           On the canvas the chain is flex columns that SHRINK to the box instead, and the task's own scroller takes what is left. */}
-      <Box data-tq-task-page={selected || ""} sx={{ ...frame, flex: 1, minWidth: 0, height: canvas ? "auto" : "calc(100vh - 118px)", minHeight: canvas ? 0 : 420,
+      <Box data-tq-task-page={selected || ""} sx={{ ...frame, ...(canvas ? { p: 0, bgcolor: "transparent", border: 0, boxShadow: "none" } : {}), flex: 1, minWidth: 0, height: canvas ? "auto" : "calc(100vh - 118px)", minHeight: canvas ? 0 : 420,
         ...(canvas ? { boxSizing: "border-box", flex: "1 1 auto", display: "flex", flexDirection: "column" }
                    : { display: { xs: selected ? "block" : "none", md: "block" } }) }}>
         <Box sx={{ ...frameInner, display: "flex", flexDirection: "column",
@@ -1074,7 +1074,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* In the agent view the task card (and its "Where this came from") is not drawn, and a report task's
                     whole substance is the report - so it is one click away here (the owner, 2026-09-30) */}
                 {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
-                  <Box sx={{ ...card, mb: 1.25, px: 1.5, py: 0.85, bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #55697a" }}>
+                  <Box sx={{ ...card, mb: 1.25, px: 1.5, py: 0.85, bgcolor: "#fff", flexShrink: 0 }}>
                     <Box onClick={() => setReportOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
                       <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 750, letterSpacing: 1.35 }}>THE REPORT</Typography>
                       <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
@@ -1091,7 +1091,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 )}
                 {!sessionView && (
                   <Box sx={{ ...card, mb: 1.25, px: 1.5, py: stage === "task" ? 1.5 : 0.85,
-                    bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #55697a" }}>
+                    bgcolor: "#fff", flexShrink: 0 }}>
                     {/* FOLDED - the same controls the open card has, in the same order, with their
                         labels dropped. The left half carries what the header cannot: how far the
                         checklist got, and what the task is. The whole strip reopens the task. */}
@@ -1352,7 +1352,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 </Box>}
                 <Box sx={{ ...card, mb: liveSession ? 0.55 : 1.25,
                   px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
-                  bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #6f8a6e",
+                  bgcolor: "#fff", flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
                   <Box sx={{ minWidth: 0, flex: liveSession ? "0 1 auto" : "initial" }}>
@@ -1612,8 +1612,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 ) : null}
 
                 {!sessionView && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
-                  bgcolor: "#fff", flexShrink: 0,
-                  borderLeft: "4px solid #8a3646" }}>
+                  bgcolor: "#fff", flexShrink: 0 }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"
@@ -2007,8 +2006,7 @@ const CommentRow = ({ c }) => {
 // Reference material about the task: present, but never competing with the session.
 const Fold = ({ title, children }) => (
   <Box component="details" sx={{ mt: 1 }}>
-    <Box component="summary" sx={{ cursor: "pointer", color: ACCENT2, fontSize: 10.5, letterSpacing: 1.5,
-      textTransform: "uppercase", fontWeight: 700, py: 0.6, "&:hover": { color: INK } }}>{title}</Box>
+    <Box component="summary" sx={{ cursor: "pointer", color: FAINT, fontSize: 12, fontWeight: 600, py: 0.6, "&:hover": { color: INK } }}>{title}</Box>
     <Box sx={{ mt: 0.5 }}>{children}</Box>
   </Box>
 );

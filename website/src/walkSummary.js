@@ -26,6 +26,13 @@ export const refOf = (i) => i?.ref || (i?.tid ? `TQ-${String(i.tid).padStart(4, 
 export const stateOf = (i, laneWord) => i?.lane === "approve"
   ? (i.kind === "action" && !i.closeout ? "wants a yes" : laneWord) : laneWord;   // a reply and a close-out: the lane's one word
 
+// a band's card says who it is from, never what each one said - the rail beside it has the rows (the owner, 2026-10-06)
+// ...a report has no "who" but its own name, so it says that
+export const gistOf = (g, max = 2) => {
+  const ws = [...new Set(g.rows.map((i) => whoOf(i) === "Report" ? String(i.title || "").split(/ [-—] /)[0] : whoOf(i)))].filter(Boolean);
+  return ws.slice(0, max).join(", ") + (ws.length > max ? ` +${ws.length - max}` : "");
+};
+
 export function summarize(items) {
   // the same sender saying the same thing twice is one row with a count - two identical lines read as a glitch
   const fold = (rows) => rows.reduce((out, i) => {

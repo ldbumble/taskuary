@@ -54,8 +54,9 @@ export const StarMark = ({ size = 14 }) => (
   </svg>
 );
 
+// the product mark - recoloured purple to Taskuary green in the image itself, the glyph unchanged (the owner, 2026-10-06)
 export const TaskuaryMark = ({ size = 18, sx }) => (
-  <Box component="img" src={`${import.meta.env.BASE_URL}favicon.png`} alt="" aria-hidden
+  <Box component="img" src={`${import.meta.env.BASE_URL}favicon.png?v=3`} alt="" aria-hidden
     sx={{ width: size, height: size, display: "block", flexShrink: 0, borderRadius: "27%", ...sx }} />
 );
 

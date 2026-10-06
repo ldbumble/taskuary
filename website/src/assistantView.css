@@ -38,9 +38,12 @@
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 /* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance, and only urgent is loud */
 .tq-pile-head span.lvl-urgent, .tq-sum-head span.lvl-urgent { color: #7a2f3c; background: #f4e3e6; border-color: #e3c1c7; }
-.tq-pile-head span.lvl-task, .tq-sum-head span.lvl-task { color: #86505b; background: #f8eff0; border-color: #ecdade; }
-.tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #6b5f45; background: #f3eee2; border-color: #e3d9c3; }
-.tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #6e685f; background: #f3efe8; border-color: #e2dbcf; }
+/* On you is the work, not an alarm: Taskuary green, not red - only Urgent shouts (the owner, 2026-10-06) */
+.tq-pile-head span.lvl-task, .tq-sum-head span.lvl-task { color: #4a6347; background: #e5ebe1; border-color: #c9d5c4; }   /* sage */
+/* ...and the three are ONE palette (the owner, 2026-10-06: "these 3 colors don't go together"): sage, ochre, stone -
+   earth tones off the oat paper, the same lightness and quiet, told apart by hue alone */
+.tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #7d6127; background: #f1e8d4; border-color: #dfcfa9; }   /* ochre */
+.tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #6a6358; background: #ebe6de; border-color: #d8d0c3; }   /* stone */
 .tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later { color: #8a847a; background: #faf8f4; border: 1px dashed #d8d0c3; }
 .tq-pile-head span.lvl-agents, .tq-sum-head span.lvl-agents { color: #41525f; background: #edf1f4; border-color: #d3dbe2; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
@@ -150,7 +153,7 @@
 .tq-chat-inner { width: min(980px, 100%); margin: 0 auto; }
 .tq-msg { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; margin-bottom: 16px; }
 .tq-msg .avatar { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box;
-  border: 1.5px solid #7d9a7c; background: #fffdf9; color: #526b53; }
+  border: 0; background: #5f7a5f; color: #fff; }   /* Taskuary green, the chat header's own circle (2026-10-06) */
 /* ...once per run: a line that follows another of Taskuary's keeps its place, not the mark */
 .tq-msg:not(.you):not(.receipt) + .tq-msg:not(.you):not(.receipt) .avatar { visibility: hidden; }
 .tq-msg .body { min-width: 0; font-size: 13.5px; line-height: 1.55; color: #262521; padding-top: 3px; overflow-wrap: break-word; }
@@ -177,16 +180,28 @@
 .tq-welcome span { font-size: 12.5px; line-height: 1.5; }
 /* the start of the walk on the empty chat: the rows read left to right, whatever the welcome centres */
 .tq-welcome-sum { margin: 6px 0 4px; text-align: left; }
-.tq-welcome .tq-sum-group { margin-top: 6px; }
-.tq-welcome .tq-sum-row { min-height: 27px; }
-.tq-welcome .tq-sum-row b { display: inline; font-size: 12.5px; margin: 0; }
-.tq-welcome .tq-sum-row span { font-size: 12.5px; }
-.tq-welcome .tq-sum-row .st { font-size: 11px; }
+/* the day's opener: a card per band, paper and a hairline; the band is the label's DOT, never a tinted card */
+.tq-day-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px auto 2px; }
+.tq-day-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 12px 14px 13px; text-align: left; cursor: pointer;
+  border: 1px solid #e4ded3; border-radius: 11px; background: #fffdf9; font: inherit; color: #262521; transition: border-color .15s, box-shadow .15s; }
+.tq-day-card:hover { border-color: #b9c2c9; box-shadow: 0 4px 14px rgba(51,45,35,.07); }
+.tq-day-card:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
+.tq-welcome .tq-day-card .lbl { display: flex; align-items: center; gap: 6px; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .04em; color: #6e685f; }
+.tq-day-card .dot { width: 7px; height: 7px; border-radius: 50%; background: #b8afa1; }
+.tq-day-card > b { font: 600 26px/1.1 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
+.tq-welcome .tq-day-card .who { width: 100%; font-size: 12px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-day-card.lvl-urgent .dot { background: #9b3b4a; }
+.tq-day-card.lvl-task .dot { background: #5f7a5f; }
+.tq-day-card.lvl-agents .dot { background: #7d9a7c; }
+.tq-day-card.lvl-reports .dot, .tq-day-card.lvl-ideas .dot { background: #b08a3e; }
+.tq-day-card.lvl-fyi .dot { background: #a09787; }
+.tq-day-card.lvl-later .dot { background: transparent; border: 1px dashed #a9a294; }
 .tq-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 .tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #41525f; border-radius: 99px; padding: 5px 12px; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
 .tq-chip:hover { border-color: #55697a; background: #f4f6f8; }
 .tq-chip:disabled { opacity: .5; cursor: default; }
-.tq-chip.primary { background: linear-gradient(90deg, #55697a, #7d9a7c); color: #fff; border-color: transparent; }
+.tq-chip.primary { background: #5f7a5f; color: #fff; border-color: transparent; }
+.tq-chip.primary:hover:not(:disabled) { background: #4c654c; }
 /* the proposal card's own Confirm/Cancel row (ProposalCard.jsx) - not the chat's verbs */
 .tq-options { display: flex; gap: 6px; flex-wrap: wrap; }
 .tq-verbs { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin: 9px 0 1px; }
@@ -487,8 +502,8 @@
 .tq-arow-why { font-size: 11px; line-height: 1.25; color: #8a6d1f; text-align: center; }
 .tq-ab { font: 600 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; min-height: 26px; border-radius: 99px; padding: 0 12px; border: 1px solid #d8d1c5; background: #fff; color: #262521; white-space: nowrap; cursor: pointer; }
 .tq-ab:hover:not(:disabled) { border-color: #55697a; }
-.tq-ab.p { background: #55697a; color: #fff; border-color: #55697a; }
-.tq-ab.p:hover:not(:disabled) { background: #41525f; border-color: #41525f; }
+.tq-ab.p { background: #5f7a5f; color: #fff; border-color: #5f7a5f; }   /* the primary is Taskuary green, like the walk's way in */
+.tq-ab.p:hover:not(:disabled) { background: #4c654c; border-color: #4c654c; }
 .tq-ab.q { border-color: transparent; background: transparent; color: #6e685f; padding-inline: 8px; }
 .tq-ab.q:hover:not(:disabled) { background: #f1eee8; border-color: transparent; }
 .tq-ab:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }

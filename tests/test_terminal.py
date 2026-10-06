@@ -1078,8 +1078,9 @@ class DurableWrapTests(unittest.TestCase):
         try:
             self.assertTrue(_wait(lambda: not t.alive))
             self.assertTrue(_wait(lambda: server.store.get_task(tid)['Status'] == 'open'))
-            self.assertTrue(any('task is open again' in (row.get('Body') or '')
-                                for row in server.store.list_comments(tid)))
+            # the status flips before the handoff comment is written, so wait for both
+            self.assertTrue(_wait(lambda: any('task is open again' in (row.get('Body') or '')
+                                              for row in server.store.list_comments(tid))))
         finally:
             terminal.SESSIONS.pop(t.sid, None)
 

@@ -123,7 +123,8 @@
    rule, and the whole point of theme.jsx is that nothing invents its own. */
 /* the narrowed sidebar (2026-09-29): the TITLE keeps at least half the row and the lane word gives way first, down to its
    mark - "did t..." beside a whole "ready to close out" had it backwards; the word is in the row's tooltip */
-.tq-pile-row .t b { flex: 1 1 auto; min-width: 50%; font-size: 13.5px; font-weight: 400; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the sidebar buttons' size (12.5px), so more of a row's subject shows (the owner, 2026-10-06: "if they were a little smaller you could see more") */
+.tq-pile-row .t b { flex: 1 1 auto; min-width: 50%; font-size: 12.5px; font-weight: 400; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* which task a row is. Sans, not mono - the rail carries no mono anywhere - and quiet enough that
    the subject still leads the line. */
 .tq-pile-ref { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; font-variant-numeric: tabular-nums; }

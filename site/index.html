@@ -354,16 +354,18 @@ docker compose up -d</div>
 
 <script>
   /* The mobile scene grows to show its stacked inbox without creating a second scrollbar inside
-     the page. Desktop stays exactly one viewport tall. Both documents are served from this site. */
+     the page. Desktop stays exactly one viewport tall. Both documents are served from this site.
+     Only the frame is sized: the header holds the hero copy and the flow strip above it, and
+     pinning the header to the frame's height let the next section draw over them on phones. */
   (function(){
-    var frame = document.querySelector('.workspace-hero'), hero = document.getElementById('top'), observer;
+    var frame = document.querySelector('.workspace-hero'), observer;
     function fitWorkspace(){
       if (!frame || !frame.contentDocument) return;
       if (matchMedia('(max-width: 860px)').matches) {
         var height = Math.max(760, frame.contentDocument.documentElement.scrollHeight);
-        frame.style.height = height + 'px'; hero.style.height = height + 'px';
+        frame.style.height = height + 'px';
       } else {
-        frame.style.height = ''; hero.style.height = '';
+        frame.style.height = '';
       }
     }
     frame.addEventListener('load', function(){

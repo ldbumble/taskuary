@@ -107,11 +107,11 @@ test("a card's own <Button> is read into a row verb: its label, handler, disable
   assert.deepEqual(calls, ["a", "b"], "the card's own handler runs; nothing is re-implemented");
 });
 
-test("a card's own move stays on the card; its other words and Next ride in the row (2026-10-06)", () => {
+test("a move on a PIECE stays on it; a move on the whole item rides the row (2026-10-06)", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "src", "assistantCards.jsx"), "utf8");
-  assert.match(src, /const rowed = false;/, "YourMove draws its button where it acts");
-  assert.doesNotMatch(src, /\.\.\.movesOf\(verb, "decide", "v"\)/, "the foot's own move is not read into the row");
-  assert.match(src, /\{verb \|\| \(!rowed && lifted/, "the foot's own move is drawn on the card, rowed or not");
+  assert.match(src, /const rowed = false;/, "YourMove - a draft's send, an agent's answer - draws its button where it acts");
+  assert.match(src, /\.\.\.movesOf\(verb, "decide", "v"\)/, "a Foot's move (All read, next on a batch) acts on the whole item: the row");
+  assert.match(src, /\{!rowed && \(verb \|\|/, "...and is not drawn twice");
   assert.match(src, /i < 3 \|\| a\.verb === "close" \? "decide" : "more"/, "Mark done is never behind More");
   assert.match(src, /row: outer\.row/, "the walk's foot rides in the row as well");
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReplyFiles.jsx"), "utf8"), /toRow && mail/, "Attach a file is a More verb in the row");

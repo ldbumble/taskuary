@@ -349,7 +349,10 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
     run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
   useVerbs("foot", rowed ? [
     ...(nav.onNext ? [{ id: "next", group: "next", label: "Next", disabled: nav.busy, run: () => nav.onNext(), title: "Puts this one down, still yours, and brings the next" }] : []),
-    // ...the card's own move (`verb`) stays ON the card, under what it acts on (the owner, 2026-10-06), and Mark done is never behind More
+    // a Foot's move acts on the WHOLE item on the table - a batch's "All read, next", a report's, a message's - so it rides the row with
+    // the task's verbs (the owner, 2026-10-06: "all read next should be on bottom no as it relates to the whole lot?"); what acts on a
+    // PIECE of it (a draft under a task, YourMove's send) stays on the piece. Mark done is never behind More.
+    ...movesOf(verb, "decide", "v"),
     ...(lifted ? [{ ...asVerb(lifted, "decide"), tone: "p" }] : []),
     ...words.map((a, i) => asVerb(a, i < 3 || a.verb === "close" ? "decide" : "more")),
   ] : null, rowed, nav.ref);
@@ -357,7 +360,7 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
     <>
       {then && <div className="tq-card-then">{then}</div>}
       <div className="tq-card-actions">
-        {verb || (!rowed && lifted && <Button size="small" variant="contained" disableElevation disabled={lifted.disabled} onClick={lifted.onClick} title={lifted.title} sx={primary}>{lifted.label}</Button>)}
+        {!rowed && (verb || (lifted && <Button size="small" variant="contained" disableElevation disabled={lifted.disabled} onClick={lifted.onClick} title={lifted.title} sx={primary}>{lifted.label}</Button>))}
         {nav.onNext && !rowed && <Button size="small" variant="outlined" disabled={nav.busy} onClick={nav.onNext} sx={quiet}>Next</Button>}
         {more}
         {!inline && !rowed && !!words.length && (

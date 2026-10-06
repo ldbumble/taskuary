@@ -248,7 +248,23 @@ def _query(text: str, most: int = 40) -> str:
 def search(store, text: str, limit: int = 8, connector_id=None) -> list:
     """Ranked passages for a question or a thread: [{'name','path','source','modified','snippet','score'}]."""
     q = _query(text)
-    return store.kb_search(q, limit, connector_id) if q else []
+    hits = store.kb_search(q, limit, connector_id) if q else []
+    return [{**h, 'snippet': passage(h.pop('text', '') or '', h.get('snippet') or '')} for h in hits]
+
+
+def passage(text: str, snip: str = '', size: int = HIT_CHARS * 2) -> str:
+    """What a hit quotes: the whole chunk when it is short, else the sentences around the match. FTS5's 48-token snippet
+    cut "anything over $2,500 needs the CFO's approval" to "anything over …", and the model could not say what the
+    limit was for (2026-10-06). Never mid-sentence: the window widens to the line or sentence it starts and ends in."""
+    t = (text or '').strip()
+    if not t: return ' '.join((snip or '').split())
+    if len(t) <= size: return ' '.join(t.split())
+    core = max(re.findall(r'\[([^\]]+)\]', snip or ''), key=len, default='')
+    at = max(t.lower().find(core.lower()), 0) if core else 0
+    lo, hi = max(0, at - size // 2), min(len(t), at + size // 2)
+    b = max(t.rfind('\n', 0, lo), t.rfind('. ', 0, lo)); lo = b + 1 if b >= 0 else 0
+    ends = [i for i in (t.find('\n', hi), t.find('. ', hi)) if 0 <= i <= hi + 300]; hi = min(ends) + 1 if ends else min(len(t), hi + 300)
+    return ('… ' if lo else '') + ' '.join(t[lo:hi].split()) + (' …' if hi < len(t) else '')
 
 
 # ── what the callers get ──────────────────────────────────────────────────────────────────────

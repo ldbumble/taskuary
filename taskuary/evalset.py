@@ -175,7 +175,7 @@ def anonymise(cases: list) -> list:
         s = _CAP.sub(lambda m: m.group(0) if m.group(0) in _KEEP else '[x]', _TAIL.sub(' - [x]', s or ''))
         for n in names:
             for part in re.split(r'[\s,]+', n or ''):
-                if len(part) >= 3 and part.isalpha(): s = re.sub(rf'{re.escape(part)}', '[x]', s, flags=re.I)
+                if len(part) >= 3 and part.isalpha(): s = re.sub(rf'\b{re.escape(part)}\b', '[x]', s, flags=re.I)
         s = re.sub(r'(\[x\]\s*)+', '[x] ', re.sub(r'\d', '#', s))
         return norm_subject(s)
     out = []

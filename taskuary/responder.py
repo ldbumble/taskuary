@@ -94,7 +94,7 @@ COMPLETE_REPLY_TOKENS = 1200  # completed multi-item work must have room to answ
 
 # SOUL.md tells the model how to sign off, and it obeys - in a chat window too, where it reads
 # like a form letter. Belt and braces: the prompt says not to, and this takes it off anyway.
-_SIGNOFF = re.compile(r'^(best|thanks|thank you|regards|cheers|kind regards|best regards|sincerely)[\s,!.]*$', re.I)
+_SIGNOFF = re.compile(r'^(best|thanks|thank you|regards|cheers|kind regards|best regards|sincerely)\b[\s,!.]*$', re.I)
 _COMMENT = re.compile(r'<!--.*?-->', re.S)
 _TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).*$', re.M)
 
@@ -194,7 +194,10 @@ def strip_signoff(text: str) -> str:
     while lines:
         last = lines[-1].strip()
         # a closing word, or a bare name/initials on its own line at the end
-        if not last or _SIGNOFF.match(last) or (len(last.split()) <= 3 and len(last) <= 28
+        # ...but a short SENTENCE is the reply: "Friday works." read as a name and was cut, with everything above it gone
+        # too when it was the whole answer (2026-10-06)
+        sentence = ' ' in last and last[-1:] in '.!?'
+        if not last or _SIGNOFF.match(last) or (len(last.split()) <= 3 and len(last) <= 28 and not sentence
                                                 and last.rstrip('.').replace('-', ' ').replace(',', '').replace(' ', '').isalpha()):
             lines.pop(); continue
         break

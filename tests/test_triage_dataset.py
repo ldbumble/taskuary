@@ -224,6 +224,13 @@ class DatasetTests(unittest.TestCase):
             self.assertTrue(c['from'] is None or c['from'].endswith('.example'))
             self.assertEqual(c['body_signals'], evalset.body_signals(next(x for x in evalset.build(s) if x['id'] == c['id'])['body']))
 
+    def test_a_name_in_lowercase_is_masked_too(self):
+        # the per-name pass held a backspace where its word boundaries were, so it masked nothing: only the capitalised-word
+        # pass caught names, and "fw: gwen asked about the close" left the machine with its name in it (2026-10-06)
+        [c] = evalset.anonymise([{'subject': 'fw: gwen asked about the q3 close', 'from_name': 'Gwen Whitfield', 'from': 'gw@corp.example',
+                                  'from_kind': 'internal', 'conv': None, 'thread_before': []}])
+        self.assertNotIn('gwen', c['subject'].lower()); self.assertIn('close', c['subject'])
+
     def test_the_shared_set_if_present_is_anonymous(self):
         """The file the owner may commit: every address a pseudonym, every body gone."""
         for c in evalset.read(DATA / 'triage_cases.jsonl'):

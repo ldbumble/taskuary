@@ -106,7 +106,7 @@ def adopt_installed(cfg, store) -> list:
     ran it; those clones are what put `copilot` on triage's menu and sent TQ-0588's coding work to
     it. A connection the owner edited stays edited. Returns nothing it made, which is nothing."""
     # cliinstall.find, not shutil.which: a vendor's installer writes the USER path and this process
-    # keeps whatever environment it was launched with, so devin's own %LOCALAPPDATA%\devin\cliin
+    # keeps whatever environment it was launched with, so devin's own %LOCALAPPDATA%\devin\cli\bin
     # is invisible to a plain PATH lookup - which is exactly the CLI this exists for.
     from . import clis
     from .cliinstall import find as find_cli

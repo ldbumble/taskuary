@@ -74,16 +74,17 @@ export function rowOf({ list, ref }) {
   // no decision waiting: the session's way back in (Continue session / Start an agent) is the move, else Mark done
   const lead = !primary && agent.find((v) => v.lead);
   if (lead) { agent = agent.map((v) => (v === lead ? { ...v, tone: "p" } : v)); primary = lead; }
+  // MARK DONE IS ALWAYS ON THE BAR, beside Next - never behind More (the owner, 2026-10-06: "mark done should show next to next on every
+  // single task not inside the more button"; before that it went behind More whenever a decision waited, or a live session left no room).
+  // The move when nothing else is (filled); otherwise outlined, so the row keeps one filled button.
   const done = more.find((v) => v.id === "done");
-  if (done && done.promote && !primary) { primary = { ...done, tone: "p" }; decide = [primary, ...decide]; more = more.filter((v) => v !== done); }
-  // ...and beside the way back in, not behind More: a closed session is as often finished as continued (the owner, 2026-10-01: "mark done
-  // should not be inside the more"). Outlined, so the row still has one filled button. A waiting decision still sends it behind More.
-  else if (done && done.promote && lead) { agent = [...agent, done]; more = more.filter((v) => v !== done); }
-  // ...and a live session's, outlined, when the bar has room (the owner, 2026-10-05: "mark done if there is space promote to bar") - a
-  // live session keeps Next as its one filled button, so Mark done is not the primary there
-  else if (done && done.beside && !primary && decide.length + agent.length < ROOM) { agent = [...agent, { ...done, tone: "s" }]; more = more.filter((v) => v !== done); }
+  if (done) {
+    more = more.filter((v) => v !== done);
+    if (done.promote && !primary) { primary = { ...done, tone: "p" }; decide = [primary, ...decide]; }
+    else agent = [...agent, { ...done, tone: "s" }];
+  }
   // a decision that carries its own close (a reply draft's Mark done, 2026-10-01) is the task's Mark done - never twice in one row
-  if (decide.some((v) => v.closes)) more = more.filter((v) => v.id !== "done");
+  if (decide.some((v) => v.closes)) { more = more.filter((v) => v.id !== "done"); agent = agent.filter((v) => v.id !== "done"); }
   // Close with a note IS Mark done, with words: it stands right after Mark done wherever Mark done stands - the bar, beside the way
   // back into a session, or behind More (the owner, 2026-10-05: "why is close with note not inside the more.. menu but mark done is")
   const note = more.find((v) => v.id === "close-note");

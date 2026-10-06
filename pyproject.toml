@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taskuary"
-version = "0.3.7.8"
+version = "0.3.7.9"
 description = "Your work, already underway - a personal AI assistant for your job: your agents do the work, you approve. Runs on your machine."
 readme = "README.md"
 license = { text = "MIT" }

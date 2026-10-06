@@ -475,6 +475,33 @@ function BarVerbs({ owner, chips, busy, onChip }) {
   return null;
 }
 
+// A ROW TRIAGE FAILED ON can be judged again from the row by the prompt - this one, or every one that failed (the owner,
+// 2026-10-06: "i refreshed the app but it did not retriage??" - a day the brain failed on every call, past the automatic
+// sweep's day, with only a per-row Retry on the Timeline). The server works them off the request, oldest first.
+function RetryVerbs({ item, failed, onSaid, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const on = item?.lane === "unjudged" && !!item?.mid;
+  const go = async (all) => {
+    setBusy(true);
+    try {
+      if (all) {
+        const { data } = await api.post("/api/messages/retriage-failed");
+        onSaid(data?.count ? `Retrying triage on ${data.count} message${data.count === 1 ? "" : "s"} - each moves to its place as it is judged.` : "Nothing is waiting on triage any more.");
+      } else {
+        await api.post(`/api/messages/${item.mid}/retriage`);
+        onSaid("Triaged again.");
+      }
+    } catch (e) { onSaid(`Could not retry triage - ${e?.response?.data?.detail || e?.message || "the server did not answer"}.`, "error"); }
+    setBusy(false); onDone?.();
+  };
+  useVerbs("retriage", [
+    { id: "retriage", label: "Retry triage", group: "decide", tone: "p", disabled: busy, run: () => go(false), title: "Ask the AI to judge this one again" },
+    ...(failed > 1 ? [{ id: "retriage-all", label: `Retry all that failed (${failed})`, group: "decide", tone: "s", disabled: busy, run: () => go(true),
+      title: "Every message triage failed on, oldest first - whatever its age" }] : []),
+  ], on);
+  return null;
+}
+
 function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
@@ -1909,6 +1936,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       )}
       {!old && !handoff && !walk && (
         <div className="tq-compose" {...pics.drop}>
+          <RetryVerbs item={currentItem} failed={(pile?.items || []).filter((i) => i.lane === "unjudged").length}
+            onSaid={(text, status) => setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: status || "done", text }])}
+            onDone={() => loadPile(true)} />
           <ActionRow />
           <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
           <div className="tq-compose-box">

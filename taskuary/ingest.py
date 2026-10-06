@@ -1923,7 +1923,7 @@ RETRY_TRIES = 4
 RETRY_HOURS = 24
 
 
-def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = RETRY_HOURS) -> int:
+def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = RETRY_HOURS, tries: int = RETRY_TRIES) -> int:
     """Run the rows nothing ever judged through triage again, now that there is a brain to ask.
 
     Retry existed only as a button on one opened row, so an outage stranded everything it touched:
@@ -1936,13 +1936,16 @@ def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = 
     one call a cycle rather than one per stranded row. Oldest first, because that is the order the
     Timeline reads and the order the owner would have clicked. claim_retriage is the same
     compare-and-set the button uses, so a sweep and a click cannot both triage one message.
+
+    `hours=0, tries=0` is the owner's RETRY ALL (/api/messages/retriage-failed): a decision, not a side effect, so it reaches
+    what the automatic sweep deliberately leaves - a day of mail a broken brain failed on, past the day and past its tries.
     """
     if llm is None: return 0
     since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S') if hours else None
     stranded = store.stranded_triage_failures(limit, since=since)
     done = 0
     for row in stranded:
-        if (row.get('Tries') or 0) >= RETRY_TRIES:
+        if tries and (row.get('Tries') or 0) >= tries:
             logger.debug(f"retry sweep: message {row['MessageId']} has failed {row['Tries']}x - left for the owner")
             continue
         mid = row['MessageId']

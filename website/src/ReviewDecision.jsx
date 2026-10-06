@@ -10,7 +10,7 @@ import ReplyFiles from "./ReplyFiles.jsx";
 import { CLOSE_OUT, proposalPresentation, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK } from "./theme.jsx";
-import { CcRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
+import { CcRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { useVerbs } from "./actionRow.js";
 import { useDraftJob } from "./replyDraft.js";
@@ -262,6 +262,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>Latest: {r.LatestPreview}</Box>}
       </Alert>}
       {!proposal && <Inbound r={r} />}
+      {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not */}
+      {!proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
+        <ToRow to={replyContext(filedDelivery)} disabled={busy || delivery.frozen}
+          onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
+      ) : (
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
         <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600,
           letterSpacing: "1.5px", flexShrink: 0 }}>{proposal?.destinationLabel || "TO"}</Typography>
@@ -269,6 +274,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           {proposal?.destination || replyContext(filedDelivery)}
         </Typography>
       </Box>
+      )}
       {co && (
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
           <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>{co.destinationLabel}</Typography>

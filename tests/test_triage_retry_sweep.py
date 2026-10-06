@@ -227,3 +227,14 @@ class RecoveryTests(unittest.TestCase):
         for _ in range(ingest.RETRY_TRIES + 3):
             ingest.retry_failed_triage(self.s, picky)
         self.assertLessEqual(len(calls), ingest.RETRY_TRIES, 'it gets its tries again, not tries for ever')
+
+    def test_a_brain_that_came_back_before_this_version_still_counts(self):
+        """The machine that hit the bug recovered under 0.3.7.9 - the error was cleared before anything recorded WHEN - so the
+        recovery mark never existed and the spent rows stayed spent (the owner, 2026-10-06: "hitting sync now ... is not
+        retriaging old ones"). With no mark and a working brain, its last successful triage IS the mark, once."""
+        mid = self._exhausted('a')
+        self.s.set_setting('triage_last_error', '', 't')               # 0.3.7.9 cleared it - and stamped nothing
+        ingest.ingest_message(self.s, {**MSG, 'external_id': 'fresh', 'conversation_id': 'fresh', 'sent_at': ago(minutes=1)}, llm=FYI)
+        self.s.set_setting('triage_recovered_route', '', 't')
+        self.assertEqual(ingest.retry_failed_triage(self.s, FYI), 1)
+        self.assertEqual(self.s.get_message(mid)['Status'], 'filed')

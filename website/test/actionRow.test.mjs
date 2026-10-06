@@ -195,3 +195,34 @@ test("the task page registers Close with a note with Mark done, not as a decisio
   const page = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
   assert.match(page, /id: "close-note", group: "more"/);
 });
+
+// THE ROW INVENTORY (the owner, 2026-10-05): every Mark done has Close with a note beside it, no word stands twice, and a live
+// session's Mark done is on the bar when there is room.
+test("close with a note follows a draft's own Mark done too", () => {
+  const r = rowOf({ ref: "", list: [v("812:approve", "decide", { tone: "p", label: "Close out" }), v("812:redraft", "decide", { label: "Redraft" }),
+    v("812:done", "decide", { label: "Mark done", closes: true }), v("done", "more", { label: "Mark done" }), v("close-note", "more", { label: "Close with a note" }),
+    v("nat", "more"), v("next", "next")] });
+  assert.deepEqual(r.decide.map((x) => x.id), ["812:approve", "812:redraft", "812:done", "close-note"]);
+  assert.ok(!r.more.some((x) => x.id === "close-note"));
+});
+
+test("no word stands twice: a word on the bar is not repeated, nor behind More", () => {
+  const r = rowOf({ ref: "", list: [v("812:approve", "decide", { tone: "p", label: "Close out" }), v("812:remind", "decide", { label: "Remind me" }),
+    v("m:Mark done", "decide", { label: "Mark done" }), v("w:close", "decide", { label: "Mark done" }),
+    v("remind", "more", { label: "Remind me" }), v("nat", "more", { label: "Not a task" }), v("next", "next")] });
+  const labels = [...r.decide, ...r.agent].map((x) => x.label);
+  assert.equal(labels.filter((l) => l === "Mark done").length, 1);
+  assert.ok(!r.more.some((x) => x.label === "Remind me"), "Remind me is on the bar already");
+  assert.deepEqual(r.more.map((x) => x.label), ["Not a task"]);
+});
+
+test("a live session's Mark done stands on the bar when there is room, outlined, and Next stays the filled one", () => {
+  const live = [v("diff", "agent", { label: "Review changes" }), v("save-end", "agent", { label: "Save and end session" }),
+    v("run-another", "agent", { label: "Run another agent" }), v("done", "more", { label: "Mark done", promote: false, beside: true }), v("next", "next")];
+  const r = rowOf({ ref: "", list: live });
+  assert.deepEqual(r.agent.map((x) => x.id), ["diff", "save-end", "run-another", "done"]);
+  assert.equal(r.agent.find((x) => x.id === "done").tone, "s");
+  assert.equal(r.next.tone, "p");
+  const full = rowOf({ ref: "", list: [v("a1", "agent"), v("a2", "agent"), v("a3", "agent"), v("a4", "agent"), ...live.slice(3)] });
+  assert.ok(full.more.some((x) => x.id === "done"), "no room: it waits behind More");
+});

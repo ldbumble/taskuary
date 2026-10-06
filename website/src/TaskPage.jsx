@@ -839,7 +839,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [remindAt, setRemindAt] = useState(null);
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
-  const startHere = !liveSession && notDone && !continueHere && (stage !== "agent" || (agentBar && !isGeneral));
+  const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
+  const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
   const ranBefore = !!(report || detail?.transcript);
   // RUN ANOTHER AGENT, on the bar and for any task an agent has worked (the owner, 2026-10-05: "don't see run another agent under
   // more? it should be not in more"). It was offered only behind More, only on a coding task, only once its session had ended -
@@ -867,6 +868,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         run: (e, a) => setContinueAt(a || e?.currentTarget),
         title: isGeneral ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.` }]
+      : sendGeneral ? [{ id: "send-general", group: "agent", lead: true, label: startingAgent === "general" ? "Starting…" : "Send to agent",
+        disabled: !!startingAgent, run: startGeneralAgent,
+        // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
+        // the profile, brain and model pickers stay in that card for whoever wants to change them first
+        title: "Starts the regular assistant with this task and its messages - profile, brain and model as set in Agent work." }]
       : startHere ? [{ id: "start-agent", group: "agent", lead: true, label: ranBefore ? "Run another agent" : "Start an agent",
         run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")),
         // it OPENS the step where the harness, model and prompt are chosen - nothing starts until that step's own Start button
@@ -874,7 +880,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           : "Opens the agent step so you can choose a harness, a model and a prompt. Nothing starts until you press Start there." }] : []),
       ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: "Ask sender", run: () => setAskSenderOpen(true),
         title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
-      { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession },   // a live session has no primary
+      { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession, beside: liveSession },   // a live session has no primary
       { id: "nat", group: "more", label: "Not a task", run: () => setConfirmNAT(true), title: "Delete it and teach triage why — the sender keeps writing to you." },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "Remind me", run: (e, a) => setRemindAt(a || e?.currentTarget),
         title: "Put it away until a day; it is back on your work rail that morning" },
@@ -1445,13 +1451,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
                           onModel={(m) => setRun({ ...run, model: m })} size={28} />
                       </Box>
-                      <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                      {/* on the canvas the button is the row's (rowVerbs: send-general); the pickers above are what it uses */}
+                      {!inRow && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
                         startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                         onClick={startGeneralAgent}>
                         {startingAgent === "general" ? "Starting…" : "Send to agent"}
-                      </Button>
-                      <Typography variant="caption" sx={{ color: FAINT, ml: 1 }}>
-                        Starts the regular assistant with this task and its messages.
+                      </Button>}
+                      <Typography variant="caption" sx={{ color: FAINT, ml: inRow ? 0 : 1 }}>
+                        {inRow ? "Send to agent (below) starts the regular assistant with these choices, this task and its messages."
+                          : "Starts the regular assistant with this task and its messages."}
                       </Typography>
                     </Box>
                   )}

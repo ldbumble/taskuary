@@ -9,7 +9,7 @@ import React, { useEffect, useSyncExternalStore } from "react";
 const live = new Map();          // id -> the latest verb (its run closes over the freshest state)
 const owners = new Map();        // owner -> { verbs, ref }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.beside ? { beside: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 
 export function put(owner, verbs, ref = "") {
@@ -65,6 +65,8 @@ export function movesOf(node, group = "decide", prefix = "m") {
 // A task with no decision waiting has Mark done as its decision (unless a live session holds the page: that has no primary) - or, when
 // the session's way back in leads, Mark done stands outlined beside it.
 // ONE FILLED BUTTON AT MOST: Next is the filled one only when nothing else on the row is a move of its own.
+const ROOM = 4;                                            // how many chips the row holds before the rest wait behind More
+const isDone = (v) => v.id === "done" || /:done$/.test(String(v.id));
 export function rowOf({ list, ref }) {
   const by = (g) => list.filter((v) => v.group === g);
   let decide = by("decide"), more = by("more"), agent = by("agent");
@@ -77,6 +79,9 @@ export function rowOf({ list, ref }) {
   // ...and beside the way back in, not behind More: a closed session is as often finished as continued (the owner, 2026-10-01: "mark done
   // should not be inside the more"). Outlined, so the row still has one filled button. A waiting decision still sends it behind More.
   else if (done && done.promote && lead) { agent = [...agent, done]; more = more.filter((v) => v !== done); }
+  // ...and a live session's, outlined, when the bar has room (the owner, 2026-10-05: "mark done if there is space promote to bar") - a
+  // live session keeps Next as its one filled button, so Mark done is not the primary there
+  else if (done && done.beside && !primary && decide.length + agent.length < ROOM) { agent = [...agent, { ...done, tone: "s" }]; more = more.filter((v) => v !== done); }
   // a decision that carries its own close (a reply draft's Mark done, 2026-10-01) is the task's Mark done - never twice in one row
   if (decide.some((v) => v.closes)) more = more.filter((v) => v.id !== "done");
   // Close with a note IS Mark done, with words: it stands right after Mark done wherever Mark done stands - the bar, beside the way
@@ -84,12 +89,19 @@ export function rowOf({ list, ref }) {
   const note = more.find((v) => v.id === "close-note");
   if (note) {
     more = more.filter((v) => v !== note);
-    const after = (xs) => { const i = xs.findIndex((v) => v.id === "done"); return i < 0 ? null : [...xs.slice(0, i + 1), { ...note, tone: "s" }, ...xs.slice(i + 1)]; };
+    // ...ANY Mark done: a reply draft's own registers as `<rid>:done`, and the task's then steps aside (above) - matching only
+    // "done" left Close with a note at the top of More while Mark done stood on the bar (the row inventory, 2026-10-05)
+    const after = (xs) => { const i = xs.findIndex(isDone); return i < 0 ? null : [...xs.slice(0, i + 1), { ...note, tone: "s" }, ...xs.slice(i + 1)]; };
     const d = after(decide), a = !d && after(agent);
     if (d) decide = d; else if (a) agent = a; else more = after(more) || [note, ...more];
   }
+  // NO WORD TWICE: a card's decision and the task's own verbs can name the same act (a close-out's Remind me beside the task's, a
+  // message card's Mark done beside the walk's). The first one placed stands; the bar outranks More.
+  const seen = new Set();
+  const once = (xs) => xs.filter((v) => (seen.has(v.label) ? false : (seen.add(v.label), true)));
+  decide = once(decide); agent = once(agent); more = once(more);
   const next = by("next")[0] || null;
-  if (decide.length > 4) { more = [...decide.slice(4), ...more]; decide = decide.slice(0, 4); }   // the row stays a short line of chips; the rest wait behind More
+  if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
   return { ref, decide, agent, more, primary, next: next && { ...next, tone: primary ? "s" : "p" },
     why: primary?.disabled && primary.why ? `${primary.label} is off - ${primary.why}` : "" };
 }

@@ -58,7 +58,8 @@ export default function TodayMeetingsStrip() {
         })}
         {nowHour >= H0 && nowHour <= H1 && (
           <Box sx={{ position: "absolute", left: pct(nowHour), top: -4, bottom: -4, width: 2, bgcolor: "#8a3646", borderRadius: 1 }}>
-            <Box sx={{ position: "absolute", top: -5, left: -4, width: 10, height: 10, borderRadius: "50%", bgcolor: "#8a3646", animation: "tqPulse 1.6s ease-out infinite" }} />
+            <Box sx={{ position: "absolute", top: -5, left: -4, width: 10, height: 10, borderRadius: "50%", bgcolor: "#8a3646", animation: "tqPulse 1.6s ease-out infinite",
+              "@media (prefers-reduced-motion: reduce)": { animation: "none" } }} />
           </Box>
         )}
       </Box>

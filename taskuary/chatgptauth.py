@@ -238,7 +238,11 @@ def complete(token: str, model: str, system: str, user: str, max_tokens: int, wa
     with r:
         if r.status_code != 200: raise RuntimeError(f'ChatGPT plan call failed ({r.status_code}): {_err(r)}')
         out, done = [], False
+        # requests decodes only when the response names a charset, and the plan's text/event-stream names none: every
+        # line came back as bytes and "startswith first arg must be bytes" failed every triage (2026-10-06)
+        r.encoding = getattr(r, 'encoding', None) or 'utf-8'
         for line in r.iter_lines(decode_unicode=True):
+            if isinstance(line, bytes): line = line.decode('utf-8', 'replace')
             if not line or not line.startswith('data:'): continue
             data = line[5:].strip()
             if data == '[DONE]': break

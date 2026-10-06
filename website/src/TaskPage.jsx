@@ -880,7 +880,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           : "Opens the agent step so you can choose a harness, a model and a prompt. Nothing starts until you press Start there." }] : []),
       ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: "Ask sender", run: () => setAskSenderOpen(true),
         title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
-      { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession, beside: liveSession },   // a live session has no primary
+      { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession },   // a live session has no primary;
+      // ...nor a waiting draft: its Send & close, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next
       { id: "nat", group: "more", label: "Not a task", run: () => setConfirmNAT(true), title: "Delete it and teach triage why — the sender keeps writing to you." },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "Remind me", run: (e, a) => setRemindAt(a || e?.currentTarget),
         title: "Put it away until a day; it is back on your work rail that morning" },

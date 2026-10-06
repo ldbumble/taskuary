@@ -1671,7 +1671,7 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
                     else 'Pick below, or tell me what to do with it.')
     elif draft:
         via = _VIA.get(str(it.get('channel') or '').lower(), 'by email')
-        body.append('Your draft - it goes when you pick Close out:' if is_own(it) else f'Your reply to {story_who(it)} {via} - it goes when you pick Close out:')
+        body.append('Your draft - it goes when you send it:' if is_own(it) else f'Your reply to {story_who(it)} {via} - it goes when you send it:')
         body.append(_quote(draft))
     elif it.get('lane') == 'queued' and (it.get('why_idle') or it.get('why')):
         body.append(f"Why it has not started: {' '.join(str(it.get('why_idle') or it['why']).split())}")
@@ -1773,6 +1773,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         rest = [w for w in words if w not in nxt]
         lead_word = (primary(out) or {}).get('label')
         first_ = [w for w in rest if w == lead_word][:1] or rest[:1]
+        # ...and the draft's own other word rides with it, ahead of Next - the screen draws Redraft beside the send, under the draft
+        # (the owner, 2026-10-06: "on whatsapp" the same order)
+        from . import concierge as _c
+        first_ += [w for w in rest if w == _c.CHIP_WORDS['redraft'] and w not in first_]
         more = [MORE] if store is not None and not (full and story) and more_text(store, item) else []
         words = first_ + nxt + more + [w for w in rest if w not in first_]
     if item.get('kind') == 'fyis':

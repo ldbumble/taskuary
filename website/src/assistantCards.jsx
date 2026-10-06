@@ -32,7 +32,7 @@ import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
 import { FirstSync } from "./SetupWizard.jsx";
 import { gistOf, refOf, summarize, stateOf, whoOf } from "./walkSummary.js";
-import { CLOSE_OUT, closeoutOf, reviewText } from "./reviewProposal.js";
+import { closeoutOf, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { READY } from "./taskLifecycle.js";
 
@@ -254,10 +254,11 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
 // out that much ... the logo for your move should stand out"): your avatar on the same line, lit because the turn is
 // yours, the header like every step's ("You · start it"), then what to decide and the button
 export function YourMove({ title, tone, go, then, children }) {
-  // THE MOVE RIDES IN THE ROW above the chat line (2026-09-30: "everything should be on the bottom"): the same button, read once into
-  // a row verb; the block keeps what there is to read and the sentence saying what the move does
-  const nav = React.useContext(CardNav), rowed = !!nav.row;
-  useVerbs("move", rowed ? movesOf(go) : null, rowed, nav.ref);
+  // THE MOVE STAYS ON THE PIECE IT ACTS ON (the owner, 2026-10-06: "any button that relates to a piece of a task ... put the button
+  // right there, if related to task in general then put button on bottom"): sending this draft, closing out this pull request,
+  // answering this agent are drawn here, under what they act on; the row under the chat keeps the task's own verbs. It used to be
+  // read into the row (2026-09-30: "everything should be on the bottom").
+  const rowed = false;
   return (
     <div className={`tq-thr tq-move${tone === "alert" ? " alert" : ""}`}>
       <span className="tq-av tq-av-you on">You</span>
@@ -348,15 +349,15 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
     run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
   useVerbs("foot", rowed ? [
     ...(nav.onNext ? [{ id: "next", group: "next", label: "Next", disabled: nav.busy, run: () => nav.onNext(), title: "Puts this one down, still yours, and brings the next" }] : []),
-    ...movesOf(verb, "decide", "v"),
+    // ...the card's own move (`verb`) stays ON the card, under what it acts on (the owner, 2026-10-06), and Mark done is never behind More
     ...(lifted ? [{ ...asVerb(lifted, "decide"), tone: "p" }] : []),
-    ...words.map((a, i) => asVerb(a, i < 3 ? "decide" : "more")),
+    ...words.map((a, i) => asVerb(a, i < 3 || a.verb === "close" ? "decide" : "more")),
   ] : null, rowed, nav.ref);
   return (
     <>
       {then && <div className="tq-card-then">{then}</div>}
       <div className="tq-card-actions">
-        {!rowed && (verb || (lifted && <Button size="small" variant="contained" disableElevation disabled={lifted.disabled} onClick={lifted.onClick} title={lifted.title} sx={primary}>{lifted.label}</Button>))}
+        {verb || (!rowed && lifted && <Button size="small" variant="contained" disableElevation disabled={lifted.disabled} onClick={lifted.onClick} title={lifted.title} sx={primary}>{lifted.label}</Button>)}
         {nav.onNext && !rowed && <Button size="small" variant="outlined" disabled={nav.busy} onClick={nav.onNext} sx={quiet}>Next</Button>}
         {more}
         {!inline && !rowed && !!words.length && (
@@ -678,7 +679,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         {busy === "redraft" ? "Refreshing…" : "Refresh the draft"}</Button>
     ) : (
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || blocked} title={blocked ? gh.reason : undefined} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>
-        {busy === "approve" ? "Sending…" : card.tid ? CLOSE_OUT : "Send reply"}</Button>
+        {busy === "approve" ? "Sending…" : card.tid ? "Send & close" : "Send reply"}</Button>
     );
   const then = conflict ? <>tells it to resolve the conflicts and push; this card comes back when it stops, and nothing is merged or sent until then.</>
     : co ? <>{co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>

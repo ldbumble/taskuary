@@ -56,7 +56,8 @@ class ShowWhatYouAreApprovingTests(unittest.TestCase):
         self.assertLess(text.index('🟤 **You**'), text.index('Reply with one of:'))   # read it, then choose
         self.assertNotIn('THEY WROTE', text)
         self.assertIn('Send the reply: sends the draft above, in your name.', text)
-        self.assertIn('Reply with one of:\n1 · Send the reply\n2 · Next\n3 · More\n4 · Redraft it', text)
+        # the draft's own words first, as the screen draws them under the draft (2026-10-06), then Next and More
+        self.assertIn('Reply with one of:\n1 · Send the reply\n2 · Redraft it\n3 · Next\n4 · More', text)
         folded = remote_assistant.more_text(s, item)
         self.assertIn('THEY WROTE', folded); self.assertIn('did the refund land?', folded)
 

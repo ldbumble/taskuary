@@ -480,9 +480,9 @@ class WordsTests(unittest.TestCase):
     def test_the_walk_offers_merge_not_run_it_and_never_not_ours(self):
         item = {'kind': 'action', 'lane': 'approve', 'rid': 1, 'tid': 1, 'mid': 1, 'closeout': proposals.CLOSEOUT['merge_pr'], 'title': 'Fix the nightly export'}
         labels = [c['label'] for c in concierge.chips_for(MemoryStore(), item)]
-        self.assertIn('Close out', labels)
-        # ONE word whatever the system and whether a reply rides along - only the sentence under it says what it does
-        self.assertIn('Close out', [c['label'] for c in concierge.chips_for(MemoryStore(), {**item, 'rides': True})])
+        self.assertIn('Merge & close', labels)                  # the button says its act (2026-10-06)
+        # the same word whether a reply rides along - the sentence under it says the reply goes too
+        self.assertIn('Merge & close', [c['label'] for c in concierge.chips_for(MemoryStore(), {**item, 'rides': True})])
         from taskuary import remote_assistant
         line = remote_assistant.then_line({'chips': [{'verb': 'approve', 'label': 'Close out'}], 'item': {**item, 'rides': True}}, MemoryStore())
         self.assertEqual(line, 'Close out: merges the pull request on GitHub, then posts the reply above as its comment.')

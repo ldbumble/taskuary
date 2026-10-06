@@ -197,7 +197,7 @@ class ExecutionTests(unittest.TestCase):
         rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Attached - sorry for the wait.')
         item = pile(s)[0]
         p = say(s, 'approve', key=item['key'], model='Sending it.\nCALL: {"kind": "approve", "params": {}}')['proposal']
-        self.assertEqual((p['kind'], p['target'], p['label']), ('review.approve', rv['ReviewId'], 'Close out'))
+        self.assertEqual((p['kind'], p['target'], p['label']), ('review.approve', rv['ReviewId'], 'Send & close'))
         self.assertEqual(s.get_review(rv['ReviewId'])['Status'], 'pending')
         with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['craig@vendor.com'], 'cc': []}):
             self.assertEqual(run(s, p).json()['status'], 'done')

@@ -31,7 +31,7 @@ export default function CloseNote({ anchor, onClose, onSubmit, inline = false, t
         sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7", alignItems: "flex-start" } }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
         <Button size="small" variant="contained" disableElevation disabled={busy || !note.trim()} onClick={go}>
-          {busy ? "Closing…" : "Close out"}</Button>
+          {busy ? "Closing…" : "Close task"}</Button>
         <Button size="small" disabled={busy} onClick={onClose}>Cancel</Button>
         <Typography variant="caption" sx={{ color: "#8b857b", ml: "auto" }}>Kept on the task. Nothing is sent.</Typography>
       </Box>

@@ -30,10 +30,11 @@ def store_with_a_draft():
 
 
 class PlainAnswerTests(unittest.TestCase):
-    def test_a_plain_answer_carries_no_menu_of_just_next(self):
-        """"Reply with one of: 1 · Next" rode under every plain answer (2026-09-24 audit); "next" is always typeable."""
-        text = remote_assistant.turn_text({'say': 'One reply is waiting on you.', 'chips': [{'label': 'Next'}]}, store=MemoryStore())
-        self.assertNotIn('Reply with', text); self.assertIn('One reply is waiting on you.', text)
+    def test_a_plain_answer_always_offers_the_way_on(self):
+        """"walk me through my tasks" ended on "Shall we begin with the rejected refund form?" and nothing to tap: the lone
+        Next had been dropped as noise (2026-09-24 audit), which left the owner stuck (2026-10-06: "we should never get stuck")."""
+        text = remote_assistant.turn_text({'say': 'One reply is waiting on you.', 'chips': [{'label': 'Next', 'verb': 'next'}]}, store=MemoryStore())
+        self.assertIn('One reply is waiting on you.', text); self.assertIn('1 · Next', text)
 
     def test_a_proposal_still_numbers_its_yes_and_no(self):
         text = remote_assistant.turn_text({'say': 'Put it on my list: Friday: renew the domain.', 'proposal': {'id': 'op1'},

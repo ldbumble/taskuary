@@ -33,7 +33,7 @@ import { ChannelIcon, MicButton, StarMark, TaskuaryMark, fmtDateTime, fmtTime12 
 // taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
 // the avatars on its cards - the bright tile repeated on every line shouted over the card it introduced
 const AssistantMark = () => <StarMark />;
-import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
+import { BORDER, BRAND, DIM, FAINT, INK, LEVEL_COLOR, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
@@ -375,9 +375,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${agoText(backAt(i))}` : undefined}>
                       {level === "later" ? railBack(backAt(i)) : railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
-                    {/* the dot is WHERE IT CAME FROM. The logo says the same at reading size; the
-                        dot says it at scanning size, down a column you can run an eye along. */}
-                    <span className="rail"><i style={{ background: sourceColor(i) }} /></span>
+                    {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
+                        came from is the logo inside the row */}
+                    <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
                     {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it */}
                     <div className="card" onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key, `Show me “${i.title}”`))}
                       title={[i.who, meta.word, i.ref, i.promoted ? 'triage moved it up' : '', i.why].filter(Boolean).join(" · ")}>
@@ -1754,7 +1754,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
-        <Box sx={{ width: 22, height: 22, borderRadius: "50%", background: "#5f7a5f", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}><AssistantMark /></Box>
+        <Box sx={{ width: 22, height: 22, borderRadius: "50%", background: BRAND.solid, color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}><AssistantMark /></Box>
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>

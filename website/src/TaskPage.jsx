@@ -36,7 +36,7 @@ import SlotList from "./SlotList.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
@@ -1366,7 +1366,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
-                    chip={agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null} tone="#6f8a6e" {...stageProps("agent")}
+                    chip={agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null} tone={PALETTE.sage} {...stageProps("agent")}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
@@ -1628,7 +1628,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
                     chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact />
                       : <LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
-                    tone="#8a3646" {...stageProps("reply")}
+                    tone={PALETTE.oxblood} {...stageProps("reply")}
                     action={!inRow && stage !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}

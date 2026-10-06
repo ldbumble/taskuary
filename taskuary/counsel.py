@@ -163,6 +163,10 @@ def check_budget(store, name: str, text: str) -> str:
 
 MARKER = '<!-- counsel:deciding -->'
 MATCH_MARKER = '<!-- counsel:match-first -->'     # the deciding section's first bullet, added 2026-10-01
+_CODING_WAS = ('Anything with a system to type at - a repository, a server, a database, a query, a file, an error: the coding '
+               'agent.')
+_CODING_NOW = ('READING a system (a query, a report) goes to a regular agent; a CHANGE to a system - code, data, a server, an '
+               'error to fix - to the coding agent.')
 
 def _squash(s): return ' '.join(str(s or '').split())
 
@@ -186,11 +190,21 @@ def migrate(store) -> str:
     tdir = Path(__file__).parent / 'templates'
     new = tdir.joinpath('counsel.md').read_text(encoding='utf-8')
     cur = store.get_doc('counsel')
-    if cur and MARKER in cur and MATCH_MARKER in cur: return 'unchanged'
     row = store.get_doc_row('counsel')
     stock = {_squash(p.read_text(encoding='utf-8')) for p in tdir.glob('history/counsel-*.md')}
+    # a STOCK document first: one that had both markers returned 'unchanged' before this test, so no template change after
+    # 0.3.7.4 ever reached an install that never edited it (2026-10-06)
     if not (cur or '').strip() or (row and row.get('UpdatedBy') == 'template') or _squash(cur) in stock:
+        if cur and _squash(cur) == _squash(new): return 'unchanged'
         store.save_doc('counsel', new, 'template'); return 'replaced'
+    if MARKER in cur and MATCH_MARKER in cur:
+        # ...and an owner's own copy keeps every word but the one sentence that sent READING a database to the coding agent
+        # (the owner, 2026-10-05: data is coding when it CHANGES; "open AP over 90 days" went to the coder, 2026-10-06)
+        if _CODING_WAS not in _squash(cur): return 'unchanged'
+        fixed = re.sub(r'\s+'.join(map(re.escape, _CODING_WAS.split())), _CODING_NOW, cur, count=1)
+        store.save_doc('counsel', check_budget(store, 'counsel', fixed), 'migration')
+        store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': 'reading-is-not-coding'})
+        return 'appended'
     new_lines, lines, added = new.splitlines(), cur.rstrip('\n').splitlines(), []
     if MARKER not in cur:
         start = new_lines.index(f'## {DECIDING_HEAD}')

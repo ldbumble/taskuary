@@ -842,6 +842,25 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
             self.assertEqual(run(s2, p, live=live).json()['status'], 'done')
         self.assertTrue(any('remove them' in str(x) for x in s2.waitroom(tid2)))   # queued for the agent, on the click
 
+    def test_words_to_an_agent_that_asked_are_its_answer_whatever_verb_the_model_named(self):
+        """"reply to Marcus: yes, Thursday works" and "send Omar the answer" landed on agents asking exactly that, and were refused
+        "nothing to reply to" / "nothing to approve" with the agent's question glued into the sentence (2026-10-06)."""
+        for verb, words in (('approve', 'send it as drafted'),):
+            s, tid, mid, item = ResponseTests()._asked()
+            live = session(tid, idle=200, waiting=True, tail=['Send it as drafted, or hold it? (y/n)'])
+            s.update_task(tid, {'Status': 'in_progress'}, 'router')
+            agent = next(i for i in pile(s, live) if i['kind'] == 'agent')
+            self.assertTrue(concierge.cannot(agent, verb, s), verb)       # the card itself has nothing to approve
+            p = decide(s, words, verb, key=agent['key'], live=live, text_arg=words)['proposal']
+            self.assertEqual((p['kind'], p['target']), ('agent.answer', tid), verb)
+            self.assertIn(words.split(',')[0], p['params']['text'], verb)
+
+    def test_a_dispatch_named_by_its_verb_is_the_kind_it_names(self):
+        """"Start an agent on it" carried kind "coder" and failed at the press: kind must be general or coding (2026-10-06)."""
+        s, tid, mid, item = ResponseTests()._asked()
+        out = say(s, 'get it fixed', key=item['key'], model=f'CALL: {{"kind": "dispatch.prepare", "params": {{"kind": "coder", "ref": "TQ-{tid:04d}"}}}}')
+        self.assertEqual((out['proposal']['kind'], out['proposal']['params']['kind']), ('dispatch.prepare', 'coding'))
+
     def test_a_yes_with_nothing_to_say_yes_to_asks_rather_than_guesses(self):
         s, tid, mid, item = ResponseTests()._asked()
         out = say(s, 'yes', key=item['key'], model='Yes to what, exactly? Nothing on this one is waiting on a yes.')
@@ -916,6 +935,32 @@ class WalkFromWordsTests(unittest.TestCase):
             out = decide(s, words, verb, key=None)
             self.assertIsNone(out.get('decision'), words); self.assertIsNone(out.get('proposal'), words)
             self.assertIn('Nothing is on the table', out['say'], words)
+
+    def test_a_verb_that_names_its_item_lands_there_with_nothing_on_the_table(self):
+        """"reply to Marcus: yes" came back as reply ON TQ-0004 and was answered "Nothing is on the table ... name the one you
+        mean" - the owner had named it, and so had the model (2026-10-06)."""
+        s = self._three()
+        tid = next(t['TaskId'] for t in s.list_tasks() if 'export' in (t.get('Title') or '').lower())
+        ref = f'TQ-{tid:04d}'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            closed = concierge.say(s, 'the export one is sorted, close it', llm=lambda *a, **k: f'CALL: {{"kind": "close", "params": {{"on": "{ref}"}}}}')
+            replied = concierge.say(s, 'reply on the export: fixed', llm=lambda *a, **k: f'CALL: {{"kind": "reply", "params": {{"on": "{ref}", "text": "Fixed."}}}}')
+            lost = concierge.say(s, 'close the payroll one', llm=lambda *a, **k: 'CALL: {"kind": "close", "params": {"on": "TQ-9999"}}')
+        self.assertNotIn('Nothing is on the table', closed['say'])
+        self.assertEqual((closed['proposal']['targetKind'], closed['proposal']['target']), ('task', tid))
+        self.assertNotIn('not the one on the table', closed['say'])            # there is no other one to leave untouched
+        self.assertEqual((replied['decision']['verb'], replied['decision']['target']['tid']), ('reply', tid))
+        self.assertIsNone(lost.get('proposal')); self.assertIn('could not find', lost['say'])
+
+    def test_a_watch_in_free_words_goes_back_to_the_model_before_anything_is_proposed(self):
+        """`what` was "a new reply from Gail Moreno": proposed, said "Doing it now", then failed at the run (2026-10-06)."""
+        s = self._three()
+        tid = next(t['TaskId'] for t in s.list_tasks() if 'export' in (t.get('Title') or '').lower())
+        turns = iter([f'CALL: {{"kind": "task.watch", "params": {{"ref": "TQ-{tid:04d}", "what": "a reply from Erin"}}}}',
+                      f'CALL: {{"kind": "task.watch", "params": {{"ref": "TQ-{tid:04d}", "what": "reply"}}}}'])
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'tell me when Erin replies', llm=lambda *a, **k: next(turns))
+        self.assertEqual((out['proposal']['kind'], out['proposal']['params']['what']), ('task.watch', 'reply'))
 
     def test_an_answer_it_looked_up_survives_a_stray_decision_on_the_end(self):
         """"What happened with TQ-0731" was read and answered, then "CALL: {\"kind\": \"reply\", \"params\": {}}" - and the owner got

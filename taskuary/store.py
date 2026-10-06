@@ -174,6 +174,8 @@ _SUMMARY_NOW = ('"summary": "<two sentences. The first says who wants what from 
 # data so the swap is exact; test_kind_dispatch.py holds the template to the "now" side.
 with open(__file__[:__file__.replace('\\', '/').rfind('/') + 1] + 'triage_kind_rules.json', encoding='utf-8') as _f:
     _KIND_RULES = [tuple(p) for p in json.load(_f)]
+_CODING_WAS = "`coding` is for work INSIDE a system this install holds the code or the credentials for: a change to one of the owner's repositories, a query against one of their databases, a file or report produced from them, an account on a system they run."
+_CODING_NOW = "`coding` is for a CHANGE inside a system this install holds the code or the credentials for: code changed in one of the owner's repositories, data changed in one of their systems, an account created or granted on a system they run. Reading from those systems - a query, a report, a look-up - changes nothing and is `general`."
 _SHAPE_WAS = ('Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", '
               '"kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
               'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.')
@@ -1172,6 +1174,15 @@ class SQLiteStore:
                     logger.info('triage: coding is no longer the default kind; unsure is a task')
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('triage_coding_not_default', '1', 'migration')")
+            # ...and READING IS NOT CODING (the owner, 2026-10-05: "data is coding" - a CHANGE): the coding sentence still
+            # said "a query against one of their databases, a file or report produced from them", so a request for open AP
+            # by vendor went to the coding agent (2026-10-06). Swapped where it still reads as shipped, once.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_reading_not_coding'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='triage'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                if _CODING_WAS in body:
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'", (body.replace(_CODING_WAS, _CODING_NOW), _now()))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_reading_not_coding', '1', 'migration')")
             # THE WHATSAPP CATCH-ALL IS GONE, so the row for it goes too. '*' admitted every direct
             # chat on an account that is the owner's own phone; nothing honours it now (messengers
             # .poll_whatsapp skips it, the door refuses a new one), and a dead row with a live-looking
@@ -4373,7 +4384,8 @@ class SQLiteStore:
         cid = fields.get('ConnectorId')
         cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope') if c in fields and fields[c] is not None]
         if cid:
-            self._exec(f"UPDATE connector SET {','.join(f'{c}=?' for c in cols)} WHERE ConnectorId=?", [fields[c] for c in cols] + [cid])
+            # nothing to change is not "UPDATE connector SET  WHERE" - a syntax error that failed the chat's Create (2026-10-06)
+            if cols: self._exec(f"UPDATE connector SET {','.join(f'{c}=?' for c in cols)} WHERE ConnectorId=?", [fields[c] for c in cols] + [cid])
             return cid
         return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope'))
     def reset_connector(self, cid):

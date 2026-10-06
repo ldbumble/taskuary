@@ -38,7 +38,7 @@ test("the sidebar posts a browse card; only the newest is live, so one detail is
   assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/);
   assert.match(src("CanvasBrowse.jsx"), /if \(!live\) return frame\(\{ title: AREA_TITLES\[area\] \}\);/);
   // ...and the item on the table folds to its line while a browse card is open below it
-  assert.match(view, /const foldedNow = !!canvas && live && !!m\.card && \(canvas\.folded === m\.card\.key \|\| !!canvas\.browsing\);/);
+  assert.match(view, /const foldedNow = !!canvas && live && !!m\.card && \(foldsAs\(canvas\.folded, m\.card\.key\) \|\| !!canvas\.browsing\);/);
 });
 
 test("the card open in the canvas rides the next turn as its subject", () => {

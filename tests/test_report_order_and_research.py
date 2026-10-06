@@ -104,7 +104,7 @@ class ResearchIsAWalkThroughTests(unittest.TestCase):
         # 2026-09-24: research is a HAND-OFF to a regular agent - it was sent to the set-up walk, which the contract's
         # own WORKERS list contradicted (regular_agent[researcher]), and the model split the difference by asking
         self.assertIn('Research is never a set-up - it is a hand-off to a regular agent', system)
-        self.assertIn('Anything with a system to type at', system)
+        self.assertIn('A CHANGE to a system - code, data, a server, an error to fix: the coding agent.', system)   # reading one is not (2026-10-06)
         self.assertIn('A polite request is not a question', system)
 
     def test_a_walk_through_opens_a_general_task_and_starts_no_agent(self):

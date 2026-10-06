@@ -183,6 +183,10 @@ export const chipsOf = (message) => {
 // A card whose verb was pressed is put down at once (`done`), not when the next card arrives: the
 // settle and the next pick take a second, and a card still standing there gets pressed twice (the
 // owner, 2026-09-25, on "All read, next"). It stays the newest card, so nothing older comes back to life.
+// The card folded on the table is the one whose key the canvas folded - and NOTHING folded is not a key. A proposal made with
+// nothing on the table has no key, so `null === null` folded every one of them as it was drawn: "confirm below" over a title
+// line with no Confirm under it, and a click on the line put some other task on the table (2026-10-06).
+export const foldsAs = (folded, key) => folded != null && key != null && folded === key;
 export const interactiveCardIndex = (messages) => {
   for (let index = (messages || []).length - 1; index >= 0; index -= 1) {
     if (messages[index]?.card && !messages[index].card.background_event) return messages[index].done ? -1 : index;

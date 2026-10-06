@@ -7,8 +7,8 @@ import remarkGfm from "remark-gfm";
 import { Box } from "@mui/material";
 import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 
-// what an emoji-sectioned digest does NOT have: markdown headings, tables, bold, list markers
-export const looksMd = (s) => /^#{1,6} |^\s*\|.*\|\s*$|\*\*[^*]+\*\*|^\s*[-*] |^\s*\d+\. /m.test(String(s || ""));
+import { looksMd, refParts } from "./mdText.js";
+export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
 const A = ({ href, children }) => {
@@ -22,7 +22,8 @@ const A = ({ href, children }) => {
 };
 
 const sx = {
-  textAlign: "left", color: INK, fontSize: 13.5, lineHeight: 1.55,
+  // a URL or a path longer than the column breaks where it must; it ran past the chat's edge and was cut (2026-10-06)
+  textAlign: "left", color: INK, fontSize: 13.5, lineHeight: 1.55, overflowWrap: "break-word",
   "& h1, & h2, & h3, & h4": { fontWeight: 700, color: INK, lineHeight: 1.3, mt: 1.4, mb: 0.5 },
   "& h1": { fontSize: 17 }, "& h2": { fontSize: 15, pb: 0.35, borderBottom: `1px solid ${BORDER}` }, "& h3, & h4": { fontSize: 13.5 },
   "& p": { m: 0, mb: 0.75 }, "& ul, & ol": { m: 0, mb: 0.75, pl: 2.5 }, "& li": { mb: 0.25 },
@@ -39,14 +40,19 @@ const sx = {
   // break-word still breaks a word too long for any line; the table scrolls sideways in .tbl before that.
   "& th, & td": { border: `1px solid ${BORDER}`, px: 0.9, py: 0.45, textAlign: "left", verticalAlign: "top",
     overflowWrap: "break-word", wordBreak: "normal" },
+  "& .ref": { whiteSpace: "nowrap" },
   "& th": { bgcolor: PANEL, fontWeight: 700, whiteSpace: "nowrap" },
   "& > :first-of-type": { mt: 0 }, "& > :last-child": { mb: 0 },
 };
 
+const keepRefs = (kids) => React.Children.map(kids, (k) => typeof k !== "string" ? k
+  : refParts(k).map((p, i) => i % 2 ? <span key={i} className="ref">{p}</span> : p));
+const Td = ({ children, node, ...rest }) => <td {...rest}>{keepRefs(children)}</td>;
+
 export const Md = ({ text }) => (
   <Box sx={sx}>
     <ReactMarkdown remarkPlugins={[remarkGfm]}
-      components={{ a: A, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
+      components={{ a: A, td: Td, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
       {String(text || "")}
     </ReactMarkdown>
   </Box>

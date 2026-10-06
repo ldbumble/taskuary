@@ -153,7 +153,7 @@
   border: 1.5px solid #7d9a7c; background: #fffdf9; color: #526b53; }
 /* ...once per run: a line that follows another of Taskuary's keeps its place, not the mark */
 .tq-msg:not(.you):not(.receipt) + .tq-msg:not(.you):not(.receipt) .avatar { visibility: hidden; }
-.tq-msg .body { min-width: 0; font-size: 13.5px; line-height: 1.55; color: #262521; padding-top: 3px; }
+.tq-msg .body { min-width: 0; font-size: 13.5px; line-height: 1.55; color: #262521; padding-top: 3px; overflow-wrap: break-word; }
 .tq-msg .body p { margin: 0 0 6px; }
 .tq-msg .body p:last-child { margin-bottom: 0; }
 .tq-msg.you { grid-template-columns: minmax(0, 1fr); }

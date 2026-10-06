@@ -1923,6 +1923,40 @@ export const ContactPicker = ({ value, onChange, onPick, placeholder = "name or 
 // Who else gets this answer. Held by the caller and passed on the send, never stored: the copy
 // list you can SEE is the one that goes, and a reloaded page starts empty rather than quietly
 // copying somebody you added an hour ago (verdicts.decide).
+// WHO AN EMAIL DRAFT GOES TO, corrected at the card: the TO line was text, so a wrong name or one with no address ("Devorah
+// Cohn ?") could only be dropped (the owner, 2026-10-06: "i should be able to edit the email address"). Saves on pick.
+export const ToRow = ({ to, onSave, disabled }) => {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [err, setErr] = useState("");
+  const people = useContacts();
+  const save = async (a) => {
+    const v = String(a || "").trim();
+    if (!v.includes("@")) { setErr("pick a person or type their email address"); return; }
+    try { await onSave([v]); setText(""); setErr(""); setOpen(false); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not change who it goes to"); }
+  };
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
+      <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
+      {open ? (
+        <ContactPicker people={people} value={text} onChange={setText} onPick={save} autoFocus
+          placeholder="name or email address" sx={{ width: 300 }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(text); }
+                              if (e.key === "Escape") { setOpen(false); setErr(""); } }} />
+      ) : (
+        <>
+          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{to || "nobody yet"}</Typography>
+          {!disabled && <Typography onClick={() => setOpen(true)} data-tq-to-change
+            sx={{ fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
+            change</Typography>}
+        </>
+      )}
+      {!!err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
+    </Box>
+  );
+};
+
 export const CcRow = ({ cc, setCc, channel }) => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");

@@ -162,6 +162,24 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}
 
 
+def readdress(store, rv: dict, to: list, actor: str = 'owner') -> dict:
+    """The owner corrects who one of the task's emails goes to: the slot's `to` and its draft's Deliver, both - the card
+    said "Devorah Cohn ?" with no way to give the address the agent never found (2026-10-06)."""
+    to = [a for a in (' '.join(str(x or '').split()).lower() for x in to or []) if '@' in a]
+    if not to: raise ValueError('give at least one email address')
+    try: d = json.loads(rv.get('Deliver') or '{}') or {}
+    except ValueError: d = {}
+    d['to'] = to
+    if not store.set_review_deliver(rv['ReviewId'], json.dumps(d)): raise ValueError('that email is already being sent')
+    tid, sid = rv.get('TaskId'), d.get('slot') or of_review(rv)
+    if tid and sid:
+        items = store.task_checklist(tid)
+        for i in items:
+            if i.get('id') == sid and isinstance(i.get('out'), dict): i['out'] = {**i['out'], 'to': ', '.join(to)}
+        store._write_checklist(tid, items, actor)
+    return {'kind': 'slot', 'to': to, 'cc': d.get('cc') or []}
+
+
 def mark(store, tid: int, slot_id: str, rid: int = None, done: bool = None, actor: str = 'owner') -> bool:
     items = store.task_checklist(tid)
     hit = next((i for i in items if i.get('id') == slot_id and isinstance(i.get('out'), dict)), None)

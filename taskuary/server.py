@@ -4119,6 +4119,14 @@ def set_review_envelope(rid: int, body: EnvelopeBody):
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
     if rv.get('Status') not in ('pending', 'held'): raise HTTPException(409, 'this reply has already been decided')
+    # one of the TASK's emails (slots.py) has no message to answer: its recipient is the slot's own, corrected here
+    if rv.get('Kind') == 'slot':
+        if body.to is None: raise HTTPException(422, 'give the address this email goes to')
+        from . import slots
+        try: env = slots.readdress(store, rv, body.to, ACTOR)
+        except ValueError as e: raise HTTPException(422, str(e))
+        store.audit('review', rid, 'envelope', ACTOR, detail={'to': env['to']})
+        return env
     m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
     if not m or str(m.get('Channel') or '').lower() != 'email': raise HTTPException(422, 'only an email reply has a recipient envelope')
     env = store.review_envelope(rid) or outbound.reply_envelope(store, m) or {}

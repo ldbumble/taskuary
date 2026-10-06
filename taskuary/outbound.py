@@ -528,7 +528,10 @@ def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
             a = str(a or '').strip().lower()
             if a and '@' in a and a not in own and a not in skip and a not in out: out.append(a)
         return out
-    to = [sender] if sender else []
+    # ...and when the newest line is the owner's OWN mail, the answer goes on to whom they wrote - never back to themselves:
+    # the sender was the one address this never checked against the mailbox's own (2026-10-06)
+    if sender in own: sender = ''
+    to = [sender] if sender else clean(rec.get('to'), set())[:1]
     if mode == 'reply_all':
         to += clean(rec.get('to'), set(to))
         cc = clean(rec.get('cc'), set(to))

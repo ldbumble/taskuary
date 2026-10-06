@@ -58,11 +58,12 @@ NOT_YET = ('If the request cannot be answered by a reply alone - it needs work d
            'line that you will pick it up, and stop. Not who will do it, not how, and never that '
            'you are unable to.')
 # the coder has already closed the thread: this reply reports an outcome, never promises one
-# the assistant's chase: you wrote last, heard nothing, and are nudging - never a reproach
-NUDGE = ('This reply is a FOLLOW-UP: you wrote last on this thread, asked for or promised something, and have '
-         'heard nothing since. Nudge in one or two sentences: restate in a line what you need or are waiting on, '
-         'make it easy to answer, and assume they are busy rather than ignoring you. No reproach, no "just '
-         'checking in", no recap of the whole thread.\n')
+# the owner said what this reply says. Every caller that passes one passes THEIR words - the chase that wrote follow-ups is
+# gone - and framing them as a follow-up ("nudge in one or two sentences") under "why you are writing again" made "thanks,
+# I'll go through it tonight" come back as the report mailed again (2026-10-06)
+OWNER_SAYS = ('The owner has told you what this reply must say - it is below, marked as theirs. Write THAT, in their voice: it '
+              'outranks the thread and any finished result, which are only there so you get the facts right if they asked '
+              'for them. Never add what they did not ask to send.\n')
 DONE = ('The work this thread asked for is FINISHED - the complete result below says what was done. '
         'Answer EVERY distinct question, request, and issue in the sender\'s thread that the result '
         'addresses. Check them one by one before writing: never omit an item merely to make the reply '
@@ -230,7 +231,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
     length_rule = '' if resolution else BREVITY
     system = (SYSTEM.format(owner=owner) + length_rule + (CHAT if chat else EMAIL) + '\n'
-              + (NUDGE if nudge else DONE if resolution else NOT_YET)
+              + (OWNER_SAYS if nudge else DONE if resolution else NOT_YET)
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -258,7 +259,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
         seen['saw'], seen['revision'] = store.last_inbound_on_task(task_id), operations.message_revision(store, task_id)
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
-    if nudge: user += f'\n\n--- WHY YOU ARE WRITING AGAIN (the assistant\'s note to you, not for the reader)\n{nudge}'
+    if nudge: user += f'\n\n--- WHAT THE OWNER WANTS THIS REPLY TO SAY (it outranks everything above)\n{nudge}'
     from . import calendar as cal
     calendar = cal.context_for(store, f"{last.get('Subject') or ''} {thread}")     # "Tuesday at 1 works" only if Tuesday at 1 is free
     from . import knowledge
@@ -344,7 +345,7 @@ def write_draft(store, task_id: int, review_id: int, resolution: str = None, act
     return draft_for_review(store, task_id, review_id, llm, resolution, nudge)
 
 
-def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
+def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str = None) -> str:
     """A reply for a message with NO task behind it - chatter that just deserves an answer.
     Same voice, same rules, same channel-awareness; the context is the message itself."""
     from .llm import build_llm
@@ -373,6 +374,9 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     calendar = cal.context_for(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
     from . import knowledge
     system += calendar + history_block(store, m) + knowledge.block(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
+    # the owner's words on what to say: "ask whether the office reopens Tuesday" reached this road and was dropped, so the
+    # draft answered the FYI instead ("Noted on Monday's closure", 2026-10-06)
+    if instruction: user += '\n\n--- ' + instruction
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     out = (strip_signoff(out) or out) if chat else with_signature(out, signature_for(store))

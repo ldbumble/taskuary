@@ -41,7 +41,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
@@ -541,7 +541,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false
   const passed = !live && kind === "walk" && !!m.card;
   // THE TASK VIEW ON THE TABLE (the canvas redesign, 2026-09-29): the Tasks tab's own view, not a walk card
   // ...folded to its title line by its X, or while a browse card is open below it (the mockup's Browse board)
-  const foldedNow = !!canvas && live && !!m.card && (canvas.folded === m.card.key || !!canvas.browsing);
+  const foldedNow = !!canvas && live && !!m.card && (foldsAs(canvas.folded, m.card.key) || !!canvas.browsing);
   if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
@@ -581,12 +581,14 @@ function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false
           )}
           {/* AN EARLIER ITEM FOLDS TO ITS TITLE LINE, and clicking it puts it back on the table (the canvas redesign) */}
           {!passed && (!live || foldedNow) && m.card && kind && kind !== "setup" && kind !== "brief" && (
-            <button type="button" className="tq-fold" data-tq-folded={m.card.key} title="Put it back on the table"
-              disabled={actions.busy} onClick={() => actions.reopen(m.card.key, live && !canvas?.browsing)}>
+            // ...when it HAS a key to come back by: a keyless proposal's "open again" reopened null, which pulled the next item
+            // in the pipe onto the table - an unrelated task (2026-10-06)
+            <button type="button" className="tq-fold" data-tq-folded={m.card.key} title={m.card.key ? "Put it back on the table" : undefined}
+              disabled={actions.busy || !m.card.key} onClick={() => m.card.key && actions.reopen(m.card.key, live && !canvas?.browsing)}>
               <SourceMark item={m.card} size={12} />
               {!!m.card.ref && <span className="ref">{m.card.ref}</span>}
               <b>{m.card.title}</b>
-              <span className="grow" /><span className="again">open again</span>
+              <span className="grow" />{!!m.card.key && <span className="again">open again</span>}
             </button>
           )}
           {card && !foldedNow && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
@@ -1231,7 +1233,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // the reply's card comes up at once and its draft fills in behind it - never a wait on the model (2026-10-01)
       if (verb === "reply" && mid) {
         const data = await openReply(api, mid, d.text || null);
-        if (data.reviewId && !elsewhere) { setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }
+        // ...wherever it was asked about: "send Omar the answer" with nothing on the table was told "it lands below for your
+        // yes", and the draft went onto his task with nothing landing here (2026-10-06)
+        if (data.reviewId) { if (!elsewhere) setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }
         loadPile(); return;
       }
       if (verb === "redraft" && cur?.rid && mid) {
@@ -1740,7 +1744,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // closed still offered Close out and Redraft it. While the bar holds the item, a line borrows nothing.
   const barHolds = useMemo(() => {
     const c = shown[lastCardIdx]?.card;
-    return !old && !!c && showsTask(c, cardFor(c)) && canvasState?.folded !== c.key && !canvasState?.browsing;
+    return !old && !!c && showsTask(c, cardFor(c)) && !foldsAs(canvasState?.folded, c.key) && !canvasState?.browsing;
   }, [shown, lastCardIdx, old, canvasState]);
   const tableChips = useMemo(() => {
     const c = shown[lastCardIdx]?.card;

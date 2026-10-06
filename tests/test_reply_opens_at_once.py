@@ -54,5 +54,12 @@ class ReplyOpensAtOnceTests(unittest.TestCase):
         self.assertEqual((out['reviewId'], out['draft'], out['drafting']), (rid, 'Already written.', False))
 
 
+    def test_the_owners_words_for_it_owe_a_new_draft_over_the_old_one(self):
+        # "reply to Marcus: yes, Thursday at 2 works" found the draft written before and showed it unchanged (2026-10-06)
+        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
+        self.s.update_review_draft(rid, 'I will check my calendar.', None)
+        out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'instruction': 'yes, Tuesday works'}).json()
+        self.assertEqual((out['reviewId'], out['draft'], out['drafting']), (rid, '', True))
+
 if __name__ == '__main__':
     unittest.main()

@@ -66,6 +66,22 @@ class VoiceTests(unittest.TestCase):
         responder.draft_for_message(s, m, rid, llm=llm)
         self.assertVoice(seen); self.assertIn('quetzal', seen['user'])
 
+    def test_the_owners_words_on_a_task_draft_are_theirs_not_a_follow_up(self):
+        # framed "This reply is a FOLLOW-UP ... nudge" under "why you are writing again", "thanks, I'll go through it tonight"
+        # came back as the finished report mailed again (2026-10-06)
+        s = store(); tid, mid, rid = thread(s); seen, llm = capture()
+        responder.draft_for_review(s, tid, rid, llm=llm, nudge="say thanks, I'll read it tonight")
+        self.assertIn('The owner has told you what this reply must say', seen['system'])
+        self.assertNotIn('FOLLOW-UP', seen['system'])
+        self.assertIn("say thanks, I'll read it tonight", seen['user'])
+
+    def test_a_message_only_draft_follows_the_owners_instruction(self):
+        # "ask whether the office reopens Tuesday" was dropped on this road; the draft answered the FYI instead (2026-10-06)
+        s = store(); tid, mid, rid = thread(s)
+        m = s.get_message(mid); seen, llm = capture()
+        responder.draft_for_message(s, m, rid, llm=llm, instruction="THE OWNER'S INSTRUCTION FOR THIS REPLY - follow it: ask about Tuesday")
+        self.assertIn('ask about Tuesday', seen['user'])
+
     def test_a_new_outbound_message(self):
         s = store(); seen, llm = capture()
         outbox.draft_message(s, 'email', ['dana@vendor.example'], 'tell Dana the export ships Friday', llm=llm)

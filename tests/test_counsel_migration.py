@@ -80,6 +80,23 @@ class MatchFirst(unittest.TestCase):
         self.assertEqual(counsel.migrate(st), 'replaced')
         self.assertIn(self.RULE, st.get_doc('counsel'))
 
+    def test_a_stock_document_with_both_markers_is_still_replaced(self):
+        # one with both markers returned 'unchanged' before the stock test, so no template change after 0.3.7.4 landed (2026-10-06)
+        st = MemoryStore()
+        st.save_doc('counsel', (TEMPLATES / 'history' / 'counsel-0.3.7.7.md').read_text(encoding='utf-8'), 'owner')
+        self.assertEqual(counsel.migrate(st), 'replaced')
+        self.assertIn('READING a system', st.get_doc('counsel'))
+        self.assertEqual(counsel.migrate(st), 'unchanged')
+
+    def test_an_owner_copy_learns_that_reading_is_not_coding_and_keeps_its_own_words(self):
+        old = (TEMPLATES / 'history' / 'counsel-0.3.7.7.md').read_text(encoding='utf-8').replace('## My goal', "## My goal\n- Alex's own goal.", 1)
+        st = MemoryStore(); st.save_doc('counsel', old, 'owner')
+        self.assertEqual(counsel.migrate(st), 'appended')
+        after = st.get_doc('counsel')
+        self.assertIn(counsel._CODING_NOW, after); self.assertNotIn('a database, a query, a file', after)
+        self.assertIn("- Alex's own goal.", after)
+        self.assertEqual(counsel.migrate(st), 'unchanged'); self.assertEqual(st.get_doc('counsel'), after)
+
     def test_an_owner_edited_document_with_the_deciding_section_gains_only_the_bullet(self):
         mine = ("# Mine\n\nAlex's rule: never touch Friday.\n\n## When the owner decides\n<!-- counsel:deciding -->\n\n"
                 "- Erin's mail always waits a day.\n\n## My goal\n- Finish.\n")

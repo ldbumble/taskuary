@@ -2211,11 +2211,14 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if rv and rv.get('MessageId') != mid:
         draft = ''                    # a correct old draft is still wrong for a newer conversation
     if body is not None and body.redraft: draft = ''          # write it again over what is there
+    # ...and so do the owner's own words for it: "reply to Marcus: yes, Thursday at 2 works" found the draft written before
+    # and showed it unchanged - it said to check the calendar (2026-10-06)
+    if body is not None and (body.instruction or '').strip(): draft = ''
     owed = not draft and (body is None or body.draft)
     if owed and not later:
         try:
             draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction)) if tid
-                     else responder.draft_for_message(store, m, rid))
+                     else responder.draft_for_message(store, m, rid, instruction=_reply_nudge(body and body.instruction)))
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
     if body is not None and body.redraft and draft: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
@@ -4101,7 +4104,7 @@ def draft_review(rid: int, body: DraftBody = None):
             if not message: raise RuntimeError('the message behind this reply no longer exists')
             _refresh_chat_context(message_id=message['MessageId'])
             message = _latest_context_message(None, message['MessageId']) or message
-            draft = responder.draft_for_message(store, message, rid)
+            draft = responder.draft_for_message(store, message, rid, instruction=_reply_nudge(body and body.instruction))
     except Exception as e:
         store.set_review_draft_error(rid, str(e)[:300])     # visible beside the draft box, with Retry (PW-046)
         raise HTTPException(422, str(e)[:300])

@@ -120,7 +120,7 @@ test("a close the server already answered brings the next item without the half-
 // the chat holds its words; a bare line under it borrowed the same item's recorded chips - twice, and stale.
 test("a bare line borrows no words while the task view's own row holds them", () => {
   assert.match(view, /const barHolds = useMemo\(\(\) => \{/);
-  assert.match(view, /showsTask\(c, cardFor\(c\)\) && canvasState\?\.folded !== c\.key && !canvasState\?\.browsing/);
+  assert.match(view, /showsTask\(c, cardFor\(c\)\) && !foldsAs\(canvasState\?\.folded, c\.key\) && !canvasState\?\.browsing/);
   assert.match(view, /const chips = barHolds && !m\.card \? \[\]/);
   assert.match(view, /tableChips=\{tableChips\} barHolds=\{barHolds\}/);
 });

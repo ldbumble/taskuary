@@ -17,7 +17,7 @@ task = someone must DO something beyond writing back: change a system, fix or bu
 
 `kind` ROUTES the task to one of three places, so answer it as its own question.
 
-`coding` is for work INSIDE a system this install holds the code or the credentials for: a change to one of the owner's repositories, a query against one of their databases, a file or report produced from them, an account on a system they run. The test is where the work happens, not what it is about - a repository whose SUBJECT matches the message (a bank-feed repository, for a mail about a bank feed) is not a reason. Chasing a person, asking a vendor, following up by email is never coding. Coding is not the default; say it only when the work is typed into one of those systems.
+`coding` is for a CHANGE inside a system this install holds the code or the credentials for: code changed in one of the owner's repositories, data changed in one of their systems, an account created or granted on a system they run. Reading from those systems - a query, a report, a look-up - changes nothing and is `general`. The test is where the work happens, not what it is about - a repository whose SUBJECT matches the message (a bank-feed repository, for a mail about a bank feed) is not a reason. Chasing a person, asking a vendor, following up by email is never coding. Coding is not the default; say it only when the work is typed into one of those systems.
 
 Do not downgrade an under-specified system request. "Add the distribution spreadsheet to my dashboard" is still a coding task even when it omits which spreadsheet or dashboard. The coding agent must stop and ask for the missing fact rather than guess; missing detail changes what happens inside the task, not whether the task exists or where it is routed.
 

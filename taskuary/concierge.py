@@ -667,8 +667,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb == 'defer' and item.get('closed'): return f"{what} is closed - there is nothing to put away."
     need = NEEDS.get(verb)
     if need and not item.get(need):
-        return (f"There is nothing to {SAYS_VERB.get(verb, verb)} on this one - {what} is "
-                f"{item.get('why') or funnel.LANE_WORDS.get(item.get('lane'), ('waiting',))[0]}. Open it if you want its own buttons.")
+        # the item's own line, not "TQ-0006 is assistant asked you: Should I…?." glued into a sentence (2026-10-06)
+        state = str(item.get('why') or funnel.LANE_WORDS.get(item.get('lane'), ('waiting',))[0]).strip().rstrip('.')
+        return f"There is nothing to {SAYS_VERB.get(verb, verb)} on {what} - {state}. Open it if you want its own buttons."
     return ''
 
 
@@ -1708,6 +1709,17 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         params['kind'] = {'coder': 'coding', 'regular_agent': 'general'}.get(k, k)
         if params['kind'] not in ('task', 'coding', 'general'):
             raise CallMiss(f"task.create_from_text kind is task, coding or general - not {k or 'nothing'}. Nothing was started.")
+    # ...and so is a dispatch's: "Start an agent on it" carried kind "coder" and failed at the press with "kind must be general
+    # or coding" - the verb's name is the kind it names, as it is on task.create_from_text (2026-10-06)
+    if kind == 'dispatch.prepare' and params.get('kind') is not None:
+        k = str(params.get('kind') or '').strip().lower()
+        params['kind'] = {'coder': 'coding', 'regular_agent': 'general', 'regular': 'general'}.get(k, k)
+        if params['kind'] not in ('general', 'coding'):
+            raise CallMiss(f"dispatch.prepare kind is coding or general - not {k or 'nothing'}. Nothing was started.")
+    # ...and a watch's `what` is one of four words: "a new reply from Gail Moreno" was proposed, said "Doing it now", and then
+    # failed at the run with "what: done | reply | any | off" (2026-10-06). The model fixes it before anything is proposed.
+    if kind == 'task.watch' and str(params.get('what') or 'any').strip().lower() not in asks.WATCHES:
+        raise CallMiss(f"task.watch what is one of done, reply, any, off - not {str(params.get('what'))[:60]!r}. Nothing was set.")
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
         verb = 'coder' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
@@ -1807,6 +1819,15 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             c = appfacts.find_connection(store, name, cid)
             if not c: return _miss('No connection by that name. Connected: ' + ', '.join(x['name'] for x in appfacts.connections(store) if x['active']) + '.')
             params['target'], named = c['connector_id'], c['name']
+        elif kind == 'connection.create':
+            # the card OF THAT TYPE, never the item on the table: "connect my Jira" over TQ-0001 fell through to the target line
+            # below and its id was saved as a ConnectorId (2026-10-06)
+            typ = str(params.get('type') or '').strip().lower()
+            if typ not in store_mod.DEFAULT_ROLES: return _miss('No connection of that type. The types: ' + ', '.join(sorted(store_mod.DEFAULT_ROLES)) + '.')
+            ex = store.get_connector_by_type(typ)
+            if ex and ex.get('Active'): return _miss(f"{ex.get('Name') or typ} is already connected - nothing to create. Say test it, or open Connections.")
+            params.update(type=typ, name=str(params.get('name') or (ex or {}).get('Name') or typ.title()).strip())
+            params['target'], named = (int(ex['ConnectorId']) if ex else None), f"{params['name']} ({typ})"
         elif tk == 'setting':
             rows = appfacts.settings(store)
             key, label_ = str(params.get('setting') or params.get('key') or '').strip(), str(params.get('label') or '').strip().lower()
@@ -1818,7 +1839,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             hit = next((n for n, _ in appfacts.SCRIPTS if want and (want in n.lower() or n.lower() in want)), None)
             if not hit: return _miss('The scripts are: ' + '; '.join(n for n, _ in appfacts.SCRIPTS) + '.')
             params['name'], named = hit, hit; params['target'] = 0
-    target = params.pop('target', None) or it.get('mid') or it.get('tid') or it.get('rid') or 0
+    target = params.pop('target', None)
+    # ...and a connection is never the item on the table: its id is a message's or a task's, not a ConnectorId
+    if not target and tk != 'connector': target = it.get('mid') or it.get('tid') or it.get('rid')
+    target = target or 0
     label = op_label(kind, params)
     # a brief has no row behind it: what it is about is its own words, never the item on the table
     if tk == 'text': named = named or str(params.get('title') or params.get('text') or '').strip()[:120]
@@ -2533,7 +2557,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     # repeated the label ("Remember it: Gail approves POs → remember it")
     summary = f"{where} → {label[0].lower() + label[1:]}" if it else where
     lead = (f"That is {where}, not the one on the table - so I am proposing it there; {(table or {}).get('ref') or 'the one on the table'} is untouched. "
-            if elsewhere else '')
+            if elsewhere and table else '')                      # nothing on the table: there is no other one to leave untouched
     # the card's line is a title and may be cut; the sentence is all a phone gets, so it carries the whole ask -
     # "...then tell me what setting or…" was the phone's only account of what the agent would do (2026-09-24 audit)
     said = summary if it else _title_cut(params.get('text') or params.get('note') or where, 400).rstrip('.')
@@ -3148,7 +3172,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                     call = None; break
                 try: return call_turn(store, tid, call, item, text, actor)
                 except CallMiss as e:
-                    if miss: break                                   # the second miss: said, below
+                    if miss: miss = str(e); break                    # the second miss: said, below - its OWN words, not the first's
                     miss = str(e)
                 except ValueError as e:
                     say_ = f"I could not put that in front of you - {e}."
@@ -3181,8 +3205,21 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # a batch of fyi is one thing on the table: "not ours" about a handful of fyi is what "read" means
     if decision and item and item.get('kind') == 'fyis' and not decision.get('on') and verb in ('not_ours', 'not_ours_remember', 'archive', 'close'):
         decision, verb = {**decision, 'verb': 'done'}, 'done'
+    # NOTHING ON THE TABLE, BUT THE WORDS NAME IT: "reply to Marcus: yes" came back as reply ON TQ-0004 and was answered
+    # "Nothing is on the table ... name the one you mean" - the owner had named it, and so had the model (2026-10-06). The
+    # named item is the target, exactly as it is when something else is on the table.
+    target_item, elsewhere = item, False
+    if decision and not item and decision.get('on') and decision.get('verb') not in ('next', 'done', 'skip', 'later'):
+        other = _resolve_named(store, decision['on'], None)
+        it2 = None if other == '?' else (funnel.next_item(store, other) or funnel.item_for_key(store, other))
+        if not it2:
+            say_ = (f"I could not find {str(decision['on']).strip()!r} - say it again with the sender or the TQ ref and I will do "
+                    'it there; nothing has been touched.')
+            rec('assistant', say_)
+            return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
+        target_item, elsewhere = it2, True
     # NOTHING ON THE TABLE: next / done / later move the WALK; a verb that needs something to act on says so
-    if decision and not item:
+    if decision and not item and not target_item:
         if verb in ('next', 'done', 'skip', 'later'):
             return surface(store, None, llm, actor, None, trace, cancel)
         # "remind me to renew the contract" read as `mine` - theirs to do - with nothing on the table to be
@@ -3201,7 +3238,6 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     # a switch is already a proposal on the task (proposals.py); a hand-off to a person is a DRAFT for approval
     # the words name ANOTHER subject: resolve it and propose THERE, or ask - never on what happens to be open
-    target_item, elsewhere = item, False
     if decision and item and decision.get('on'):
         other = _resolve_named(store, decision['on'], item)
         if other == '?':
@@ -3214,6 +3250,12 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         it2 = members.get(other) or funnel.next_item(store, other) or funnel.item_for_key(store, other)
         if it2 and it2.get('key') != item.get('key'): target_item, elsewhere = it2, True
     if elsewhere: turn['aside'] = True
+    # WORDS TO AN AGENT THAT ASKED are its answer: "reply to Marcus: yes, Thursday at 2 works" landed on the agent parked on
+    # Marcus's task with "are you free Thursday at 2?", and was refused as "nothing to reply to" (2026-10-06)
+    # ...and so is "send Omar the answer" (approve) over an agent asking "send it as drafted, or hold it?"
+    # Only when the card cannot carry the verb itself: a reply to the person who wrote is still a reply.
+    if decision and verb in ('reply', 'approve') and target_item and target_item.get('kind') == 'agent' and cannot(target_item, verb, store):
+        decision, verb = {**decision, 'verb': 'answer_agent', 'text': decision.get('text') or text}, 'answer_agent'
     if decision and verb and target_item:
         why = cannot(target_item, verb, store)
         if why:

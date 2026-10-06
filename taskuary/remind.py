@@ -20,6 +20,16 @@ def parse(until, now: datetime = None) -> str | None:
     s = str(until or '').strip().lower()
     if s in NONE_WORDS: return None
     unreadable = f'"{until}" is not a day I can read - say a date (2026-10-09) or "in 2 weeks"'
+    # a time on the end keeps its hour: "tomorrow 9am" was the whole phrase and nothing matched it (2026-10-06)
+    at = MORNING
+    if t := re.fullmatch(r'(.+?)\s*(?:,|\bat\b)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)|(.+?)\s*(?:,|\bat\b)?\s*(\d{1,2}):(\d{2})', s):
+        g = t.groups()
+        s, h, mi, half = (g[0], int(g[1]), int(g[2] or 0), g[3]) if g[0] else (g[4], int(g[5]), int(g[6]), None)
+        if half and not 1 <= h <= 12: raise ValueError(unreadable)
+        if half: h = h % 12 + (12 if half.startswith('p') else 0)
+        if not (0 <= h < 24 and 0 <= mi < 60): raise ValueError(unreadable)
+        at = f'{h:02d}:{mi:02d}:00'
+    s = re.sub(r'\s+(morning|in the morning)$', '', s.strip())
     m = re.fullmatch(r'(\d{4}-\d{2}-\d{2})(?:[ t].*)?', s)
     if m:
         try: day = datetime.strptime(m.group(1), '%Y-%m-%d')
@@ -33,7 +43,7 @@ def parse(until, now: datetime = None) -> str | None:
         day = now + timedelta(days=ahead)
     else: raise ValueError(unreadable)
     if day.date() <= now.date(): raise ValueError('pick a day after today')
-    return f"{day:%Y-%m-%d} {MORNING}"
+    return f"{day:%Y-%m-%d} {at}"
 
 DAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 

@@ -214,6 +214,21 @@ class CodingIsNotTheDefaultMigrationTests(unittest.TestCase):
             if was not in now: self.assertNotIn(was, after)                 # the general rule only grows a sentence
         self.assertIn('MY OWN RULE: Erin is always urgent.', after); self.assertIn('My last line.', after)
 
+    def test_an_already_migrated_doc_learns_that_reading_is_not_coding_once(self):
+        # the coding sentence still said "a query against one of their databases, a file or report produced from them", and
+        # a request for open AP by vendor went to the coding agent (2026-10-06)
+        import os, tempfile
+        from taskuary import store as store_mod
+        from taskuary.store import SQLiteStore
+        p = os.path.join(tempfile.mkdtemp(), 't.db')
+        s = SQLiteStore(p); s.save_doc('triage', 'Mine first. ' + store_mod._CODING_WAS + ' The test is where.', 'owner')
+        s.cx.execute("DELETE FROM setting WHERE Name='triage_reading_not_coding'"); s.cx.commit(); s.cx.close()
+        after = SQLiteStore(p).doc('triage')
+        self.assertIn(store_mod._CODING_NOW, after); self.assertNotIn('a query against one of their databases', after)
+        self.assertIn('Mine first.', after); self.assertIn('The test is where.', after)
+        tmpl = open(os.path.join(os.path.dirname(store_mod.__file__), 'templates', 'triage.md'), encoding='utf-8').read()
+        self.assertIn(store_mod._CODING_NOW, tmpl)
+
     def test_an_unnamed_kind_is_the_owners_list(self):
         from taskuary.routing import draft_task_fields
         self.assertEqual(draft_task_fields({'subject': 'Valley BAI feed', 'body': 'Kevin still has not started the feed.'})['kind'], 'task')

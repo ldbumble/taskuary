@@ -36,6 +36,15 @@ class ParseTests(unittest.TestCase):
                           ('tomorrow', '2026-09-26'), ('a month', '2026-10-25'), ('monday', '2026-09-28'), ('friday', '2026-10-02')):
             self.assertEqual(remind.parse(said, self.NOW), f'{day} 07:00:00', said)
 
+    def test_a_time_on_the_end_keeps_its_hour(self):
+        # "remind me tomorrow at 9am" reached the parser as "tomorrow 9am" and was refused whole (2026-10-06)
+        for said, at in (('tomorrow 9am', '2026-09-26 09:00:00'), ('tomorrow at 9:30', '2026-09-26 09:30:00'),
+                         ('monday 2pm', '2026-09-28 14:00:00'), ('friday at 4 pm', '2026-10-02 16:00:00'),
+                         ('tomorrow morning', '2026-09-26 07:00:00'), ('2026-10-09 15:00', '2026-10-09 15:00:00')):
+            self.assertEqual(remind.parse(said, self.NOW), at, said)
+        for bad in ('tomorrow 25pm', 'tomorrow 13pm', 'tomorrow 9:75'):
+            with self.assertRaisesRegex(ValueError, 'is not a day I can read'): remind.parse(bad, self.NOW)
+
     def test_none_clears_and_nonsense_or_the_past_is_refused(self):
         self.assertIsNone(remind.parse('none', self.NOW)); self.assertIsNone(remind.parse('', self.NOW))
         for bad in ('whenever', '2026-09-25', '2026-01-01', '2026-02-30'):

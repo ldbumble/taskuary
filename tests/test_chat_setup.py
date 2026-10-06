@@ -141,6 +141,25 @@ class ReportSetupTests(unittest.TestCase):
 
 
 class ConnectionSetupTests(unittest.TestCase):
+    def test_a_called_connection_is_the_card_of_its_type_never_the_item_on_the_table(self):
+        # "connect my Jira" over TQ-0001 saved the task's id as a ConnectorId: an empty UPDATE failed with a syntax error, and a
+        # scoped one would have rewritten whichever card had that number (2026-10-06)
+        import tempfile, os
+        from taskuary.store import SQLiteStore
+        s = store(); tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding'}, 'o')
+        jira = s.get_connector_by_type('jira')['ConnectorId']                        # the catalogue's card, off
+        before = {c['ConnectorId']: c['Name'] for c in s.list_connectors()}
+        self.assertNotEqual(jira, tid)
+        line = 'CALL: ' + json.dumps({'kind': 'connection.create', 'params': {'type': 'jira', 'name': 'Jira'}})
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            p = concierge.say(s, 'connect my Jira', key=f'task:{tid}', llm=lambda *a, **k: line)['proposal']
+        self.assertEqual((p['targetKind'], p['target']), ('connector', jira))
+        r = run(s, p).json()
+        self.assertEqual((r['status'], r['outcome']['connectorId']), ('done', jira))
+        self.assertEqual({c['ConnectorId']: c['Name'] for c in s.list_connectors()}, before)       # no card renamed, none added
+        q = SQLiteStore(os.path.join(tempfile.mkdtemp(), 't.db')); cid = q.save_connector({'Type': 'jira', 'Name': 'Jira'}, 't')
+        self.assertEqual(q.save_connector({'ConnectorId': cid}, 't'), cid)          # nothing to change is not a syntax error
+
     def test_a_connection_is_confirmed_with_its_authority_and_created_off_and_without_a_secret(self):
         s = store()
         out = say(s, 'connect our Slack workspace', composer(sort={'kind': 'connection', 'provider': 'slack', 'why': 'a chat system'}))

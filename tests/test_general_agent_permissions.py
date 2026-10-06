@@ -119,6 +119,7 @@ class SqlReadIsReadTests(unittest.TestCase):
             reports.run_mssql({'server': 'db.example', 'database': 'UserDb', 'driver': 'ODBC Driver 18 for SQL Server', 'query': 'SELECT 1 AS n'})
         self.assertEqual(cx.committed, 0)
 
+    @unittest.skipUnless(__import__('importlib.util').util.find_spec('sqlalchemy'), 'sqlalchemy is the db extra, not installed here')
     def test_a_url_card_reads_and_rolls_back_on_a_real_engine(self):
         # a real SQLAlchemy engine, not a fake: the read road called Connection.rollback(), which 1.4 does not have
         import os, sqlite3, tempfile

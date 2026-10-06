@@ -109,12 +109,13 @@ def at(s, tid, lane, why='x'):
     return rail({'tid': tid, 'lane': lane, 'why': why})
 
 
-def test_a_move_into_a_said_lane_is_said_once_on_the_desktop(s):
+def test_a_lane_move_is_told_once_and_never_piled_into_the_desktop_chat(s):
+    # the rail and the task's card say it; the lines piled under the task being worked (the owner, 2026-10-06)
     tid = made(s)
     with at(s, tid, 'blocked', 'the agent asked you: which tab first?'):
         line = asks.check(s, tid); again = asks.check(s, tid)
     assert line and 'which tab first?' in line and again is None
-    assert len(dock_lines(s)) == 1 and s.get_task(tid)['AskedTold'] == 'blocked'
+    assert dock_lines(s) == [] and s.get_task(tid)['AskedTold'] == 'blocked'
 
 
 def test_working_is_never_said_but_is_remembered(s):
@@ -208,7 +209,7 @@ def test_a_phone_ask_whose_connection_is_gone_falls_back_to_the_desktop(s):
     tid = phone_ask(s)
     with at(s, tid, 'approve'), mock.patch.object(remote_assistant, 'send') as send:
         assert asks.check(s, tid)
-    assert not send.called and dock_lines(s)
+    assert not send.called and dock_lines(s) == []          # the desktop has the rail and the card - no line piled under them
 
 
 def test_the_sweep_checks_only_open_asks(s):
@@ -365,8 +366,9 @@ def test_a_phone_ask_whose_connection_is_gone_goes_to_the_handed_walk(s):
 
 
 def test_a_desktop_line_wakes_the_chat(s):
+    # what the owner asked to hear still comes to the desktop chat, at once: a reminder coming due
     tid = made(s)
-    with at(s, tid, 'blocked'), mock.patch('taskuary.live.emit') as emit: asks.check(s, tid)
+    with mock.patch('taskuary.live.emit') as emit: asks._say(s, s.get_task(tid), 'TQ-0001 is back on your rail.', via='desktop')
     assert any(c[0][0] == 'chat-changed' for c in emit.call_args_list)
 
 

@@ -772,10 +772,12 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
     # ...said in the Assistant's conversation - and never as a dead end: the page offers Next under the newest line that has
     # nothing to press (the owner, 2026-09-30: "it can write that and close task ... but then should move to next or at least
     # have buttons to navigate")
-    from . import concierge, funnel, general
-    concierge.record(store, general.dock_task(store)[0]['TaskId'], 'assistant',
-                     f'You replied {place} on {where}{excerpt}. '
-                     f'I removed the unused draft; the reply was taken care of.{state}')
+    # ...on the TASK it settled, not in the Assistant's conversation: there it was background news about some other task,
+    # piled under the one being worked (the owner, 2026-10-06: "Task they are working on should be the main thing, nothing
+    # else"). The rail drops the row by itself; the task keeps the record.
+    from . import funnel
+    if tid: store.add_comment(tid, 'assistant', 'assistant_agent', f'You replied {place} on {where}{excerpt}. '
+                                                                   f'I removed the unused draft; the reply was taken care of.{state}')
     funnel.invalidate()
     # The review transition already wakes the UI, but this final wake happens after the durable
     # Assistant line was written, avoiding a race where an open chat fetched one write too early.

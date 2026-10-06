@@ -886,7 +886,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if intent.get('checklist'): store.set_task_checklist(tid, intent['checklist'], 'triage')
         if intent.get('outputs'):                  # what closes it beyond the reply: emails to other people (slots.py)
             from . import slots
-            slots.add(store, tid, intent['outputs'], 'triage')
+            slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))
         # the repository, decided here and written down, so startup uses it instead of guessing again
         # (PW-092); an owner's repo: tag and a GitHub item's own repository still outrank it (terminal.guess_repo)
         if intent.get('repository'):
@@ -1146,7 +1146,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
     if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage')
     if intent.get('outputs'):
         from . import slots
-        slots.add(store, tid, intent['outputs'], 'triage')
+        slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))
     if intent.get('intent') == 'reply_only' and not store.pending_review(tid):
         from .outbound import send_block
         unsendable = send_block(store, msg.get('channel'))
@@ -1203,6 +1203,11 @@ ECHO_KEY = 160          # a notification quotes the start of a long line, so the
 _INVISIBLE = re.compile('[­​-‏⁠﻿]')
 
 def _plain(t) -> str: return ' '.join(_INVISIBLE.sub(' ', str(t or '')).lower().split())
+
+def _sender(msg: dict) -> dict:
+    """Who wrote `msg`, as slots.add reads it - an output to them is the reply, never an email (slots.is_sender)."""
+    return {'name': msg.get('from_name'), 'address': msg.get('from_email')}
+
 
 def _same_person(a, b) -> bool:
     a, b = sorted((_plain(a), _plain(b)), key=len)
@@ -1620,7 +1625,7 @@ def _enrich(store, tid: int, m: dict, plain: str, llm):
         if ask['checklist'] and blank: store.set_task_checklist(tid, ask['checklist'], 'triage')
         if ask.get('outputs') and blank:
             from . import slots
-            slots.add(store, tid, ask['outputs'], 'triage')
+            slots.add(store, tid, ask['outputs'], 'triage', sender={'name': m.get('FromName'), 'address': m.get('FromEmail')})
     except Exception as e: logger.warning(f"the ask on {task_ref(tid)} stays the sender's own words - {e}")
 
 

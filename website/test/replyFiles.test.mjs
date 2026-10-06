@@ -25,6 +25,12 @@ test("the card can tell when the words promise a file", () => {
   assert.equal(promisesFiles("Please find enclosed the summary."), true);
   assert.equal(promisesFiles("Thanks - the numbers are in the body below."), false);
   assert.equal(promisesFiles(""), false);
+  // "attached to" is joined-to, not a file in the envelope (a draft explaining a fix said his logins were "attached to
+  // an old leftover record" and the card warned that nothing was attached, 2026-10-06)
+  assert.equal(promisesFiles("His logins were attached to an old leftover record."), false);
+  assert.equal(promisesFiles("The account stays attached to her profile."), false);
+  assert.equal(promisesFiles("See attached."), true);
+  assert.equal(promisesFiles("I've attached the file to this email."), true);
 });
 
 test("the delivery envelope carries the files up to the card", () => {

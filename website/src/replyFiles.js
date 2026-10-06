@@ -10,4 +10,5 @@ export const sizeText = (n) => {
 // a line on the card - the standing rule against word-matching governs what gets ROUTED, and
 // nothing is routed here. It exists because a draft said "Attached are the PTO accrual files" while
 // the envelope carried none, and the card looked identical either way (2026-09-14).
-export const promisesFiles = (text) => /\b(attach(ed|ing|ment|ments)?|enclosed)\b/i.test(String(text || ""));
+// "attached TO something" is joined-to, not a file in this envelope ("his logins were attached to an old record", 2026-10-06)
+export const promisesFiles = (text) => /\b(attach(ing|ment|ments)?|enclosed)\b|\battached\b(?!\s+to\b)/i.test(String(text || ""));

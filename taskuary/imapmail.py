@@ -173,8 +173,7 @@ def test_imap(store, c) -> str:
         typ, data = M.select('INBOX', readonly=True)
         if typ != 'OK': raise RuntimeError(f'could not open INBOX: {data}')
         n = int((data[0] or b'0').decode() or 0)
-        if not any(s['Channel'] == 'email' and s['Address'] == user for s in store.list_sources(active_only=False)):
-            store.save_source({'Channel': 'email', 'Address': user, 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
+        claim_source(store, c, user, 'connector-test', take=True)
         return f'logged in as {user} - INBOX holds {n} messages; new mail flows in on the next sync'
     finally:
         M.logout()
@@ -579,17 +578,35 @@ def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None)
     return n, (done if done is not None else last_uid)
 
 
-def ensure_source(store, c) -> bool:
-    """Give an IMAP/Gmail card the source row the poller reads it through, if it has none. True
-    when one was just made. The mailbox address IS the source name and it is already saved on the
-    card, so there is nothing to ask the owner and nothing to guess."""
-    user = (_cfg(c).get('address') or '').strip()
+def claim_source(store, c, user: str, actor: str, take: bool = False) -> bool:
+    """The mailbox's source row, on THIS card and switched on. A source its address already had - a plain IMAP card
+    tried first, a card since removed - used to be left as it was, off or bound to another card, so the card that now
+    works was never polled and the checklist never counted it (the owner, 2026-10-06). `take`: the owner's own Test
+    takes it over whatever held it; the poller's heal (take=False) only takes one whose card is off or gone, so two live
+    cards on one address never trade it back and forth and a mailbox switched off on a live card stays off.
+    True when anything changed."""
+    user = (user or '').strip()
     if not user: return False
-    if any(s['Channel'] == 'email' and (s.get('Address') or '').lower() == user.lower()
-           for s in store.list_sources(active_only=False)): return False
-    store.save_source({'Channel': 'email', 'Address': user, 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'self-heal')
-    logger.info(f'imap: {user} had no source row - added one so it is actually polled')
+    mine = c['ConnectorId']
+    have = next((s for s in store.list_sources(active_only=False)
+                 if s['Channel'] == 'email' and (s.get('Address') or '').lower() == user.lower()), None)
+    if not have:
+        store.save_source({'Channel': 'email', 'Address': user, 'ConnectorId': mine, 'Active': 1}, actor)
+        logger.info(f'imap: {user} had no source row - added one so it is actually polled')
+        return True
+    if have.get('ConnectorId') == mine and have.get('Active'): return False
+    holder = store.get_connector(have['ConnectorId']) if have.get('ConnectorId') else None
+    if not take and have.get('ConnectorId') == mine: return False              # switched off on this card: the owner's
+    if not take and holder and holder.get('Active') and holder['ConnectorId'] != mine: return False
+    store.save_source({'SourceId': have['SourceId'], 'ConnectorId': mine, 'Active': 1}, actor)
+    logger.info(f"imap: {user}'s source moved onto {c.get('Name') or c.get('Type')} and switched on")
     return True
+
+
+def ensure_source(store, c) -> bool:
+    """Give an IMAP/Gmail card the source row the poller reads it through. The mailbox address IS the source name and it
+    is already saved on the card, so there is nothing to ask the owner and nothing to guess (claim_source)."""
+    return claim_source(store, c, _cfg(c).get('address') or '', 'self-heal')
 
 
 def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days: int = 0) -> int:

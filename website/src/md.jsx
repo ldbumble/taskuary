@@ -24,7 +24,7 @@ const A = ({ href, children }) => {
 const sx = {
   // a URL or a path longer than the column breaks where it must; it ran past the chat's edge and was cut (2026-10-06)
   textAlign: "left", color: INK, fontSize: 13.5, lineHeight: 1.55, overflowWrap: "break-word",
-  "& h1, & h2, & h3, & h4": { fontWeight: 700, color: INK, lineHeight: 1.3, mt: 1.4, mb: 0.5 },
+  "& h1, & h2, & h3, & h4": { fontWeight: 600, color: INK, lineHeight: 1.3, mt: 1.4, mb: 0.5 },
   "& h1": { fontSize: 17 }, "& h2": { fontSize: 15, pb: 0.35, borderBottom: `1px solid ${BORDER}` }, "& h3, & h4": { fontSize: 13.5 },
   "& p": { m: 0, mb: 0.75 }, "& ul, & ol": { m: 0, mb: 0.75, pl: 2.5 }, "& li": { mb: 0.25 },
   "& code": { ...mono, fontSize: 12, bgcolor: PANEL, px: 0.5, borderRadius: 0.5 },
@@ -41,7 +41,7 @@ const sx = {
   "& th, & td": { border: `1px solid ${BORDER}`, px: 0.9, py: 0.45, textAlign: "left", verticalAlign: "top",
     overflowWrap: "break-word", wordBreak: "normal" },
   "& .ref": { whiteSpace: "nowrap" },
-  "& th": { bgcolor: PANEL, fontWeight: 700, whiteSpace: "nowrap" },
+  "& th": { bgcolor: PANEL, fontWeight: 600, whiteSpace: "nowrap" },
   "& > :first-of-type": { mt: 0 }, "& > :last-child": { mb: 0 },
 };
 

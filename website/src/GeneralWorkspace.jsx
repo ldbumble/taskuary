@@ -782,7 +782,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         <Box role="group" aria-label="Confirm new chat" sx={{ display: "flex", alignItems: "center", gap: 0.75,
           px: 1.15, py: 0.8, flexWrap: "wrap", bgcolor: "#f8f5ee", borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ flex: 1, minWidth: 210 }}>
-            <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 700 }}>Start a new chat?</Typography>
+            <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>Start a new chat?</Typography>
             <Typography sx={{ color: DIM, fontSize: 10.5 }}>
               This conversation is archived. Tasks, reviews, and action cards stay.
             </Typography>

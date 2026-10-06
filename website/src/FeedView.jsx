@@ -160,7 +160,7 @@ function TaskSearch({ onOpen }) {
   const groups = hits ? [["Open tasks", hits.filter((t) => !CLOSED.includes(t.Status))], ["Done tasks", hits.filter((t) => CLOSED.includes(t.Status)).sort(byNew)]] : [];
   return (
     <>
-      <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Tasks</Typography>
+      <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Tasks</Typography>
       <TextField fullWidth autoFocus placeholder="search tasks, closed ones too…" value={q} onChange={(e) => setQ(e.target.value)}
         data-tq-task-search="true" sx={{ bgcolor: "#fff", mb: 0.5 }} inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
       {hits && (
@@ -208,7 +208,7 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
         transformOrigin={{ vertical: "top", horizontal: "left" }}
         slotProps={{ paper: { sx: { width: 320, maxHeight: 560, p: 1.25 } } }}>
         {onOpenTask && <TaskSearch onOpen={(tid) => { close(); onOpenTask(tid); }} />}
-        <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Kind</Typography>
+        <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Kind</Typography>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6, mb: 1.25 }}>
           {CATEGORIES.map((o) => (
             <Chip key={o.key} size="small" label={o.label} data-tq-kind={o.key || "all"}
@@ -218,7 +218,7 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
                 border: `1px solid ${cat === o.key ? "#cbd4dc" : BORDER}` }} />
           ))}
         </Box>
-        <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Source</Typography>
+        <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Source</Typography>
         <TextField fullWidth placeholder="search sources…" value={srcQ} onChange={(e) => setSrcQ(e.target.value)}
           sx={{ bgcolor: "#fff", mb: 0.5 }} inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
         <Box sx={{ maxHeight: 220, overflowY: "auto", mx: -0.5 }}>
@@ -353,18 +353,18 @@ const FunnelBar = ({ onOpenTask, active = true }) => {
     <Box sx={{ gridColumn: "1 / -1", justifySelf: "center", width: "100%", maxWidth: 900, mt: 0.5 }}>
       <Box onClick={() => setOpen((o) => !o)} sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 1.5, py: 0.6, cursor: "pointer",
         bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: open ? "10px 10px 0 0" : 99 }}>
-        <Typography variant="caption" sx={{ fontWeight: 700, color: "#47654a", fontSize: 11 }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: "#47654a", fontSize: 11 }}>
           In the funnel {f.working.length}/{f.width}
         </Typography>
         <Box sx={{ width: "1px", height: 14, bgcolor: BORDER }} />
-        <Typography variant="caption" sx={{ fontWeight: 700, color: ROLES.working.ink, fontSize: 11 }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: ROLES.working.ink, fontSize: 11 }}>
           Next up {f.queued.length} {open ? "▾" : "▸"}
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
           {f.working.slice(0, 4).map((w) => (
             <Box key={w.tid} sx={{ display: "inline-flex", alignItems: "center", gap: 0.4 }}>
-              <Typography variant="caption" onClick={() => onOpenTask && onOpenTask(w.tid)} sx={{ ...mono, color: "#47654a", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }} title={w.title}>{w.ref}</Typography>
+              <Typography variant="caption" onClick={() => onOpenTask && onOpenTask(w.tid)} sx={{ ...mono, color: "#47654a", fontSize: 10.5, fontWeight: 600, cursor: "pointer" }} title={w.title}>{w.ref}</Typography>
               <TellAgentButton taskId={w.tid} taskRef={w.ref} small />
             </Box>
           ))}
@@ -375,7 +375,7 @@ const FunnelBar = ({ onOpenTask, active = true }) => {
           {f.queued.length === 0 && <Typography variant="caption" sx={{ color: FAINT, display: "block", py: 1 }}>Nothing waiting — every task from a rank-mode connector is being worked.</Typography>}
           {f.queued.map((q, i) => (
             <Box key={q.tid} sx={{ display: "flex", alignItems: "center", gap: 1.25, py: 0.6, borderTop: i ? `1px solid ${BORDER}` : "none" }}>
-              <Typography variant="caption" sx={{ ...mono, color: ROLES.working.ink, fontWeight: 700, width: 18, fontSize: 11 }}>{i + 1}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: ROLES.working.ink, fontWeight: 600, width: 18, fontSize: 11 }}>{i + 1}</Typography>
               <Typography variant="body2" onClick={() => onOpenTask && onOpenTask(q.tid)} sx={{ fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                 flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={q.title}>{q.title}</Typography>
               <Typography variant="caption" sx={{ color: DIM, fontSize: 10.5, whiteSpace: "nowrap", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" }}
@@ -565,10 +565,10 @@ const EventPanel = ({ e, onClose, onOpenTask }) => {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${BORDER}`, bgcolor: "#f5f0e4" }}>
         <EventIcon sx={{ fontSize: 18, color: "#8a7a5c" }} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 700, color: INK, fontSize: 14.5, lineHeight: 1.25 }} noWrap>{e.subject}</Typography>
+          <Typography sx={{ fontWeight: 600, color: INK, fontSize: 14.5, lineHeight: 1.25 }} noWrap>{e.subject}</Typography>
           <Typography variant="caption" sx={{ color: DIM }}>{when}{e.where ? ` · ${e.where}` : ""}{e.status === "tentative" ? " · tentative" : ""}</Typography>
         </Box>
-        <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap",
+        <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
           color: u.hot ? "#fffdfb" : "#6b5f45", bgcolor: u.hot ? "#8a3646" : "#eee7d6", px: 0.8, py: 0.15, borderRadius: 99 }}>{u.text}</Typography>
         <IconButton aria-label="Close meeting detail" size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
       </Box>
@@ -584,7 +584,7 @@ const EventPanel = ({ e, onClose, onOpenTask }) => {
             <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap" }}>
               {e.who.map((w) => (
                 <Box key={w} sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, px: 1, py: 0.35, borderRadius: 99, bgcolor: "#eee7d6", border: "1px solid #ddd2b9", fontSize: 12, color: INK }}>
-                  <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#8a7a5c", color: "#fffdfb", fontSize: 9.5, fontWeight: 800, display: "grid", placeItems: "center" }}>
+                  <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#8a7a5c", color: "#fffdfb", fontSize: 9.5, fontWeight: 600, display: "grid", placeItems: "center" }}>
                     {w.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
                   </Box>
                   {w}{e.organizer === w ? <Typography component="span" variant="caption" sx={{ color: FAINT }}>· organizer</Typography> : null}
@@ -1576,7 +1576,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 title={stats.map((x) => `${x.n} ${x.label}`).join(" · ")}
                 sx={{ display: "flex", alignItems: "baseline", gap: 0.4, flexShrink: 0, cursor: s2.f ? "pointer" : "default",
                   ...(s2.f ? { "&:hover .thubStatLbl": { color: ALERT_INK } } : {}) }}>
-                <Typography sx={{ fontWeight: 700, fontSize: 11.5,
+                <Typography sx={{ fontWeight: 600, fontSize: 11.5,
                   color: s2.hot && s2.n ? ALERT_INK : INK }}>{s2.n}</Typography>
                 <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, fontSize: 10.5, transition: "color .15s" }}>{s2.label}</Typography>
               </Box>
@@ -1609,7 +1609,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           {/* a brain that errors on every call used to look like slow triage: rows parked on
               "triaging…" and nothing saying why. The last error stays until it answers again. */}
           {triageErr && (
-            <Typography variant="caption" noWrap title={triageErr} sx={{ color: ALERT_INK, fontWeight: 700, fontSize: 10.5 }}>
+            <Typography variant="caption" noWrap title={triageErr} sx={{ color: ALERT_INK, fontWeight: 600, fontSize: 10.5 }}>
               triage brain failing — {triageErr}
             </Typography>
           )}
@@ -1638,7 +1638,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             IconComponent={(props) => <ChevronRightIcon {...props} sx={{ ...props.sx, fontSize: 14,
               transform: "rotate(90deg)", color: `${FAINT} !important`, right: 1 }} />}
             renderValue={(value) => fmtDay(value)}
-            sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
+            sx={{ ...mono, color: INK, fontWeight: 600, fontSize: 11.5, letterSpacing: 0.3,
               minWidth: 0, maxWidth: "100%", height: 22, textAlign: "center", cursor: "pointer",
               "& .MuiSelect-select": { py: 0, pl: 2, pr: "22px !important", textAlign: "center" },
               "&:hover": { color: ACCENT } }}>
@@ -1947,7 +1947,7 @@ const CanonicalDetail = ({ sel, detail, onOpenTask, onOpenMessage, onClose }) =>
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, p: 1.5, borderBottom: `1px solid ${BORDER}` }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="caption" sx={{ ...mono, color: FAINT, textTransform: "uppercase" }}>{target.kind || "item"}</Typography>
-          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16 }}>{detail.title || sel.Subject || "Untitled item"}</Typography>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16 }}>{detail.title || sel.Subject || "Untitled item"}</Typography>
           {(detail.status || sel.MsgStatus) && <Typography variant="caption" sx={{ color: DIM }}>{detail.status || sel.MsgStatus}</Typography>}
         </Box>
         <IconButton aria-label="Close detail" size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -2059,20 +2059,20 @@ const TrayBtn = ({ tone = "plain", icon, children, teaches, ...rest }) => (
         that it meant this verdict changes later routing. */}
     {teaches && <Box component="span" aria-hidden
       sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8, bgcolor: "rgba(90,62,131,.1)",
-        fontSize: 8.5, fontWeight: 800, letterSpacing: 0.7, lineHeight: 1.5 }}>MEMORY</Box>}
+        fontSize: 8.5, fontWeight: 600, letterSpacing: 0.7, lineHeight: 1.5 }}>MEMORY</Box>}
   </Button>
 );
 
 const TrayGroupLabel = ({ children, note }) => (
   <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, mb: 0.7 }}>
     <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.35, fontSize: 9.5,
-      fontWeight: 800, lineHeight: 1 }}>{children}</Typography>
+      fontWeight: 600, lineHeight: 1 }}>{children}</Typography>
     {note && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5, lineHeight: 1 }}>{note}</Typography>}
   </Box>
 );
 
 const PanelLabel = ({ children }) => (
-  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.8, fontSize: 10, fontWeight: 700,
+  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.8, fontSize: 10, fontWeight: 600,
     display: "block", mt: 1.75, mb: 0.25 }}>
     {children}
   </Typography>
@@ -2108,10 +2108,10 @@ const StoryTimelineStep = ({ title, status, summary, bullets, lines = 2, onOpen,
         "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
       <Box sx={{ minWidth: 0, py: 0.65, pr: 1 }}>
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0, mb: 0.15 }}>
-          <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 700, fontSize: 11.5,
+          <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 600, fontSize: 11.5,
             transition: "color .15s", whiteSpace: "nowrap" }}>{title}</Typography>
           <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
-            fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
+            fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
         </Box>
         {/* two lines is right for a step that only has a verdict to report. The MESSAGE step is the
             one you actually read - at two lines it showed a sentence and a half of a mail and stopped,
@@ -2166,10 +2166,10 @@ const StoryTimelineStep = ({ title, status, summary, bullets, lines = 2, onOpen,
       </Box>
       <Box sx={{ minWidth: 0, py: 0.65, pr: 1 }}>
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0, mb: 0.15 }}>
-          <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 700, fontSize: 11.5,
+          <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 600, fontSize: 11.5,
             transition: "color .15s", whiteSpace: "nowrap" }}>{title}</Typography>
           <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
-            fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
+            fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
         </Box>
         <Typography sx={{ color: DIM, fontSize: 11.5, lineHeight: 1.38, overflow: "hidden",
           display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{summary}</Typography>
@@ -2446,7 +2446,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, pt: 1.5, pb: 1.25, flexShrink: 0 }}>
           <ChannelIcon channel={sel.Channel} sx={{ fontSize: 19 }} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 15, lineHeight: 1.3, letterSpacing: "-.25px" }} noWrap>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, lineHeight: 1.3, letterSpacing: "-.25px" }} noWrap>
               {sel.Subject || `${sel.FromName || sel.FromEmail} in ${sel.SourceName || "chat"}`}
             </Typography>
             <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
@@ -2487,13 +2487,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               onClick={() => setTab(item.key)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setTab(item.key); }}
               sx={{ display: "flex", alignItems: "center", gap: 0.55, px: 1.35, py: 1, mb: "-1px",
-                cursor: "pointer", color: tab === item.key ? INK : FAINT, fontSize: 12.5, fontWeight: 650,
+                cursor: "pointer", color: tab === item.key ? INK : FAINT, fontSize: 12.5, fontWeight: 600,
                 whiteSpace: "nowrap", borderBottom: `2px solid ${tab === item.key ? ACCENT : "transparent"}`,
                 transition: "color .15s", "&:hover": { color: INK } }}>
               {item.label}
               {item.mark && (
                 <Box component="span" sx={{ ...mono, px: 0.55, py: 0.12, borderRadius: 2, bgcolor: PANEL2,
-                  color: item.key === "agent" && onIt ? ACCENT2 : FAINT, fontSize: 8.5, fontWeight: 700 }}>
+                  color: item.key === "agent" && onIt ? ACCENT2 : FAINT, fontSize: 8.5, fontWeight: 600 }}>
                   {item.mark}
                 </Box>
               )}
@@ -2516,7 +2516,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                 bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, mb: 1.25 }}>
                 <CircularProgress size={18} thickness={5} />
                 <Box>
-                  <Typography sx={{ color: INK, fontWeight: 700, fontSize: 12.5 }}>Triaging this message…</Typography>
+                  <Typography sx={{ color: INK, fontWeight: 600, fontSize: 12.5 }}>Triaging this message…</Typography>
                   <Typography variant="caption" sx={{ color: FAINT }}>
                     It is safely on the Timeline. The task, agent, and reply steps will appear when the decision lands.
                   </Typography>
@@ -2829,7 +2829,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
                 <ForwardToInboxIcon sx={{ fontSize: 18, color: ACCENT }} />
-                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
+                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
                 <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
               </Box>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
@@ -2843,7 +2843,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
                 <CallSplitIcon sx={{ fontSize: 18, color: ACCENT2 }} />
-                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
+                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
                 <IconButton aria-label="Close split or merge" size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
               </Box>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
@@ -2877,7 +2877,7 @@ const TriageSummary = ({ sel, detail }) => {
   return (
     <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.2, py: 0.85 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0 }}>
-        <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: INK, flexShrink: 0 }}>
+        <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: INK, flexShrink: 0 }}>
           {meta?.label || (watch ? "your note" : failed ? "needs your choice" : "not routed")}
         </Typography>
         <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
@@ -3013,9 +3013,9 @@ const TriageFact = ({ label, value, tone = "intent" }) => {
     <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.7, minHeight: 31,
       border: `1px solid ${c.bd}`, borderRadius: 99, bgcolor: c.bg, px: 1.05, py: 0.35 }}>
       <Box aria-hidden sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: c.dot, flexShrink: 0 }} />
-      <Typography component="span" sx={{ fontSize: 9, fontWeight: 700, letterSpacing: ".09em",
+      <Typography component="span" sx={{ fontSize: 9, fontWeight: 600, letterSpacing: ".09em",
         textTransform: "uppercase", color: FAINT }}>{label}</Typography>
-      <Typography component="span" sx={{ fontSize: 11.5, fontWeight: 700, color: INK }}>{value}</Typography>
+      <Typography component="span" sx={{ fontSize: 11.5, fontWeight: 600, color: INK }}>{value}</Typography>
     </Box>
   );
 };
@@ -3038,7 +3038,7 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
       <Box sx={{ px: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}`,
         background: "linear-gradient(135deg, #fbfaf6 0%, #f4f6f2 100%)" }}>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 0.85 }}>
-          <Typography sx={{ fontSize: 12.5, fontWeight: 750, color: INK }}>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>
             {exact ? "Triage's structured response" : "Saved triage result"}
           </Typography>
           {!exact && <Typography variant="caption" sx={{ fontSize: 9.5, color: FAINT }}>limited saved response · reconstructed</Typography>}
@@ -3058,7 +3058,7 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
             <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}>
               Work it pulled out
             </Typography>
-            {verdict.title && <Typography sx={{ mt: 0.35, fontSize: 14, fontWeight: 750, color: INK, lineHeight: 1.35 }}>
+            {verdict.title && <Typography sx={{ mt: 0.35, fontSize: 14, fontWeight: 600, color: INK, lineHeight: 1.35 }}>
               {verdict.title}
             </Typography>}
             {verdict.summary && <Typography sx={{ mt: 0.35, fontSize: 12.25, color: DIM, lineHeight: 1.6 }}>
@@ -3075,7 +3075,7 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
               <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".07em", textTransform: "uppercase" }}>
                 Repository
               </Typography>
-              <Typography sx={{ fontSize: 12, fontWeight: 750, color: INK }}>{repo || "None selected"}</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK }}>{repo || "None selected"}</Typography>
             </Box>
             {(verdict.repo_reason || repo === "Not applicable") && <Typography sx={{ mt: 0.45, ml: 1.7, fontSize: 11.5, color: DIM, lineHeight: 1.5 }}>
               {verdict.repo_reason || (isFyi ? "No task was created from this item." : "This route does not use a code repository.")}
@@ -3095,7 +3095,7 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
                     gap: 0.8, alignItems: "start" }}>
                     <Box aria-hidden sx={{ width: 21, height: 21, borderRadius: "50%", border: "1px solid #c9d2c8",
                       bgcolor: "#f4f7f2", color: "#536b58", display: "grid", placeItems: "center",
-                      ...mono, fontSize: 9.5, fontWeight: 700 }}>{i + 1}</Box>
+                      ...mono, fontSize: 9.5, fontWeight: 600 }}>{i + 1}</Box>
                     <Typography sx={{ pt: 0.15, fontSize: 12.25, color: INK, lineHeight: 1.55 }}>{item}</Typography>
                   </Box>
                 ))}
@@ -3294,7 +3294,7 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
               return (
                 <Box key={r.RouteId || i} sx={{ display: "flex", alignItems: "baseline", gap: 1, py: 0.65,
                   borderTop: i ? `1px solid ${BORDER}` : "none" }}>
-                  <Typography variant="caption" sx={{ fontWeight: 700, flexShrink: 0,
+                  <Typography variant="caption" sx={{ fontWeight: 600, flexShrink: 0,
                     color: mine ? ALERT_INK : DIM }}>
                     {mine ? "You said: not ours" : `triage · ${r.Decision}`}
                   </Typography>
@@ -3342,7 +3342,7 @@ const Linkify = ({ text }) => {
 const SectionedText = ({ text }) => (
   <Box sx={{ textAlign: "left" }}>
     {text.split("\n").map((l, i) => (HDR.test(l)
-      ? <Typography key={i} variant="body2" sx={{ fontWeight: 700, color: INK, mt: i ? 1.1 : 0,
+      ? <Typography key={i} variant="body2" sx={{ fontWeight: 600, color: INK, mt: i ? 1.1 : 0,
           pb: 0.35, mb: 0.35, borderBottom: `1px solid ${BORDER}` }}>{l.trim()}</Typography>
       : l.trim()
         ? <Typography key={i} variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, lineHeight: 1.55 }}><Linkify text={l} /></Typography>
@@ -3435,7 +3435,7 @@ const Bubble = ({ m, fallback, context }) => {
       {m && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6, flexWrap: "wrap" }}>
           <Chip size="small" label={you ? "↩ your reply" : own ? "your note" : "inbound"}
-            sx={{ height: 17, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3,
+            sx={{ height: 17, fontSize: 9.5, fontWeight: 600, letterSpacing: 0.3,
               bgcolor: you || own ? ROLES.working.tint : ROLES.muted.tint,
               color: you || own ? ROLES.working.ink : ROLES.muted.ink }} />
           <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
@@ -3609,7 +3609,7 @@ const SECTIONS = [
 const SectionHead = ({ mark, label, n }) => (
   <Box sx={{ display: "flex", alignItems: "center", gap: 0.85, mt: 1.75, mb: 0.85 }}>
     <Box component="span" aria-hidden sx={{ fontSize: 14, lineHeight: 1 }}>{mark}</Box>
-    <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK, letterSpacing: "-.1px" }}>{label}</Typography>
+    <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, letterSpacing: "-.1px" }}>{label}</Typography>
     <Box sx={{ flex: 1, height: "1px", bgcolor: BORDER }} />
     {n != null && <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>{n}</Typography>}
   </Box>
@@ -3643,7 +3643,7 @@ const DayStats = ({ rows }) => !rows?.length ? null : (
     border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fcfaf7" }}>
     {rows.map((s) => (
       <Box key={s.label} sx={{ display: "flex", alignItems: "baseline", gap: 0.6 }}>
-        <Typography sx={{ fontSize: 17, fontWeight: 700, lineHeight: 1,
+        <Typography sx={{ fontSize: 17, fontWeight: 600, lineHeight: 1,
           color: s.hot && s.n ? ALERT : s.n ? INK : FAINT }}>{s.n}</Typography>
         <Typography variant="caption" sx={{ color: FAINT }}>{s.label}</Typography>
       </Box>
@@ -3683,7 +3683,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
         return (
           <Box key={i.id} sx={{ px: 1.25, py: 0.85, mb: 0.6, borderRadius: 1.5, border: `1px solid ${ASSISTANT.bd}`, bgcolor: open ? ASSISTANT.tint : "#f4f3ef", opacity: open ? 1 : 0.72 }}>
             <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
-              <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 700, flexShrink: 0 }}>{answered ? "answered" : IDEA_KIND[i.kind] || i.kind}</Typography>
+              <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 600, flexShrink: 0 }}>{answered ? "answered" : IDEA_KIND[i.kind] || i.kind}</Typography>
               <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45, flex: 1 }}>
                 {answered ? "You had already replied to this." : i.text}
               </Typography>
@@ -3742,7 +3742,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
     <Box sx={{ mb: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
         <TaskuaryMark size={15} />
-        <Typography sx={{ color: ASSISTANT.ink, fontWeight: 700, fontSize: 13 }}>Your assistant</Typography>
+        <Typography sx={{ color: ASSISTANT.ink, fontWeight: 600, fontSize: 13 }}>Your assistant</Typography>
         <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>{fmtDateTime(sel.SentAt)}</Typography>
         {err && <Typography variant="caption" sx={{ color: ALERT_INK }}>{err}</Typography>}
       </Box>
@@ -3786,7 +3786,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
       {rv && (
         <Box sx={{ mt: 1.5, px: 1.25, py: 0.7, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
           <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45 }}>
-            <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it reviewed · </Box>
+            <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it reviewed · </Box>
             {rv.scope === "sources" ? `${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only` : <>
               {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KIND[k] || k}`).join(", ") || "no candidates"}
               {rv.people != null ? ` · ${rv.people} thread${rv.people === 1 ? "" : "s"} of what people said` : ""}
@@ -3799,7 +3799,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
           {/* what it left for its next check - so you can see what it will NOT research again */}
           {rv.notes && (
             <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45, mt: 0.3 }}>
-              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
+              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
             </Typography>
           )}
           {!!rv.skipped?.length && (
@@ -3809,7 +3809,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
                 {showSkipped ? "hide" : "show"} what it looked at and let go — {rv.skipped.length} {showSkipped ? "↑" : "↓"}</Typography>
               {showSkipped && rv.skipped.map((c) => (
                 <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, mt: 0.3, pl: 1, borderLeft: `2px solid ${BORDER}`, whiteSpace: "pre-wrap" }}>
-                  <Box component="span" sx={{ fontWeight: 700 }}>{IDEA_KIND[c.kind] || c.kind} · </Box>{c.facts}</Typography>
+                  <Box component="span" sx={{ fontWeight: 600 }}>{IDEA_KIND[c.kind] || c.kind} · </Box>{c.facts}</Typography>
               ))}
             </>
           )}
@@ -3936,7 +3936,7 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
     {draftErr && <Alert severity="error" sx={{ mt: 1 }} onClose={() => setDraftErr("")}>{draftErr}</Alert>}
     {compare?.reviewId === reviewId && (
       <Box sx={{ mt: 1, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
-        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, display: "block" }}>
+        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
           Refreshed draft - written after the new message. Your edit stays in the box above.
         </Typography>
         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>

@@ -34,7 +34,7 @@
 .tq-pile-head.folds:hover span { border-color: #b9c3cb; }
 .tq-pile-head .fold { font-style: normal; font-size: 13px; line-height: 1; color: #6e685f; margin-left: -4px; padding: 2px 4px; cursor: pointer; border-radius: 4px; }
 .tq-pile-head .fold:hover { background: #ece7e0; }
-.tq-pile-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
+.tq-pile-head span { font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 /* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance, and only urgent is loud */
 /* SOLID PILLS, WHITE WORDS, FIVE COLOURS (the owner, 2026-10-06: variant C, "the pill should be dark and text white like the
@@ -47,7 +47,7 @@
 .tq-pile-head span.lvl-agents, .tq-sum-head span.lvl-agents { color: #fff; background: #55697a; border: 1px solid #55697a; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
-.tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; font-variant-numeric: tabular-nums; }
+.tq-pile-head em { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; font-variant-numeric: tabular-nums; }
 /* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
 /* A BUTTON IS ONE LINE. Every pill-shaped button in the rail and on a card - none of them said so,
    so "Hand it to a coding agent" folded the moment its card got narrow (the owner, 2026-09-18: "i
@@ -72,32 +72,36 @@
 .tq-pile-row.landing { opacity: 0; transform: translateY(-6px) scale(.98); }
 /* HOW LONG IT HAS WAITED, not what o'clock it arrived: the rail is ranked, not dated. No mono -
    at 10px its figures were the hardest thing on the rail to read (the owner, 2026-09-16). */
-.tq-pile-row .when { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; text-align: right; padding: 8px 6px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tq-pile-row .when { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; text-align: right; padding: 8px 6px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tq-pile-row .rail { position: relative; }
 .tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: #e1dcd5; }
 /* the dot is the SOURCE (assistantCards.sourceColor) - one size for every row, because importance
    is not a per-row fact in this product */
 .tq-pile-row .rail i { position: absolute; left: 2.5px; top: 10px; width: 8px; height: 8px; border-radius: 50%; background: #d3ccc1; box-shadow: 0 0 0 3px #fffdfb; }
-.tq-pile-row .card { margin-left: 8px; min-width: 0; overflow: hidden; border: 1px solid #dcd5cb; border-radius: 8px; padding: 4px 10px 5px; background: #fffdfb; cursor: pointer; transition: box-shadow .18s, border-color .18s; }
-.tq-pile-row .card:hover { border-color: #b9c3cb; box-shadow: 0 2px 8px rgba(47,107,79,.10); }
+/* NO BOX PER ROW (the cleanup, 2026-10-06): a flat row on the rail's paper, a neutral tint under the pointer; the line and
+   the dots beside it still run down the band */
+.tq-pile-row .card { margin-left: 8px; min-width: 0; overflow: hidden; border: 1px solid transparent; border-radius: 8px; padding: 4px 10px 5px; background: transparent; cursor: pointer; transition: background .15s; }
+.tq-pile-row .card:hover { background: #efebe4; }
 .tq-pile-row.settling .card { border-style: dashed; }
 /* NEXT wears nothing: the ring is what is ON THE TABLE, and the row after it is a row like any other (the owner,
    2026-10-01: "the next one needs nothing"). The class stays - the walk and its tests find the next row by it. */
 .tq-pile-row.current { height: 54px; }
 /* ON THE TABLE in Taskuary's sage (the owner, 2026-09-28: "on the table circle color should be the more green color") */
-.tq-pile-row.current .card { border-color: #6f8a6e; background: #f3f6f1; box-shadow: inset 0 0 0 1px #6f8a6e, 0 2px 10px rgba(69,79,70,.14); cursor: default; }
-.tq-pile-row.current .rail i { background: #6f8a6e !important; }
-.tq-pile-row.current .tq-pile-now { color: #4c6450; border-color: #b9c9b6; }
+/* ...and the row ON THE TABLE takes its BAND's tint - green in On you, brass in Reports (the owner, 2026-10-06); --band and
+   --tint are set on .tq-pile-band from theme.jsx LEVEL_COLOR / LEVEL_TINT */
+.tq-pile-row.current .card { background: var(--tint, #e5ece2); cursor: default; }
+.tq-pile-row.current .t b { font-weight: 500; }
+.tq-pile-row.current .rail i { background: var(--band, #5f7a5f) !important; }
+.tq-pile-row.current .tq-pile-now { color: var(--band, #5f7a5f); background: var(--tint, #e5ece2); }
 /* ONE BRACKET for a batch on the table. It is drawn behind its rows and spans them where they
    already sit: no row moves, no height changes, and ten fyi read as the one thing the assistant is
    holding rather than as ten separate rings or as a single condensed line. */
 /* ...in the same sage as one item on the table: a batch kept the old slate after 2026-09-28, so the rail drew what was ON
    the table in blue and the row after it in green (the owner, 2026-10-01: "the current 4 should be surrounded by green") */
-.tq-pile-batch { position: absolute; left: 66px; right: 0; z-index: 0; border: 1px solid #6f8a6e; border-radius: 10px;
-  background: #f3f6f1; box-shadow: inset 0 0 0 1px #6f8a6e, 0 2px 12px rgba(69,79,70,.14); }
-.tq-pile-stack .tq-pile-batch b { color: #4c6450; }               /* the single item's pill says it in the same green */
+.tq-pile-batch { position: absolute; left: 66px; right: 0; z-index: 0; border-radius: 10px; background: var(--tint, #e5ece2); }
+.tq-pile-stack .tq-pile-batch b { color: var(--band, #5f7a5f); background: var(--tint, #e5ece2); }               /* the single item's pill says it in the same green */
 .tq-pile-batch b, .tq-pile-now { position: absolute; top: -8px; right: 10px; background: #fffdfb; padding: 0 6px; border-radius: 99px;
-  font: 800 8.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #41525f; white-space: nowrap; }
+  font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #41525f; white-space: nowrap; }
 /* ...and both pills sit on the ring's BOTTOM edge: the band heading above is sticky and opaque
    (z-index 3), and it sliced a top-edge pill in half whenever the ring started its band, which it
    usually does - first the single item's, then the batch's (the owner, 2026-09-17: "you can't see
@@ -106,7 +110,7 @@
 .tq-pile-row.inbatch { z-index: 1; }
 .tq-pile-row.inbatch .card { border-color: transparent; background: transparent; box-shadow: none; }
 .tq-pile-row.inbatch .rail i { box-shadow: 0 0 0 3px #f5f8f9; }
-.tq-pile-row.inbatch .card:hover { border-color: #b9c3cb; background: #fffdfb; }
+.tq-pile-row.inbatch .card:hover { background: rgba(255,253,251,.6); }
 /* ONE LINE: where it came from, and what it is. The sender, the ref, the lane word, the road word
    and the promoted arrow are all on the row you open (the owner, 2026-09-16: "maybe just subject
    should be there to clean it up"). */
@@ -119,28 +123,28 @@
    rule, and the whole point of theme.jsx is that nothing invents its own. */
 /* the narrowed sidebar (2026-09-29): the TITLE keeps at least half the row and the lane word gives way first, down to its
    mark - "did t..." beside a whole "ready to close out" had it backwards; the word is in the row's tooltip */
-.tq-pile-row .t b { flex: 1 1 auto; min-width: 50%; font-size: 11.5px; font-weight: 500; color: #262521; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-row .t b { flex: 1 1 auto; min-width: 50%; font-size: 13.5px; font-weight: 400; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* which task a row is. Sans, not mono - the rail carries no mono anywhere - and quiet enough that
    the subject still leads the line. */
-.tq-pile-ref { flex: 0 0 auto; font: 600 9.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; letter-spacing: .02em; }
+.tq-pile-ref { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; font-variant-numeric: tabular-nums; }
 /* ...and, in YOUR TASK only, what is holding it up: "waiting to start", "asked you". A right-aligned
    column you can read down, not a pill - a pill on every row is what made the old rail a wall. */
-.tq-pile-word { flex: 0 0 auto; font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; white-space: nowrap; }
+.tq-pile-word { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; white-space: nowrap; }
 /* the lane's own mark, at the size it is READ at rather than the size the loud pill shouts at */
 .tq-pile-word i { font-style: normal; font-size: 11px; line-height: 1; margin-right: 4px; filter: saturate(.9); }
 .tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
 /* the waving agent and the draft waiting for a yes: the two lanes where work has STOPPED until the
    owner answers, and the only rows left carrying colour of their own */
-.tq-pile-tag.loud { padding: 1px 9px; font-size: 11px; line-height: 17px; font-weight: 700; letter-spacing: .005em; }
+.tq-pile-tag.loud { padding: 1px 9px; font-size: 11px; line-height: 17px; font-weight: 600; letter-spacing: .005em; }
 /* the current one opens up: the second line says why it is here */
-.tq-pile-row .sub { font-size: 10.5px; line-height: 1.5; padding: 2px 0 0 25px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-row .sub { font-size: 11.5px; line-height: 1.5; padding: 2px 0 0 25px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-pile-empty { padding: 56px 24px 24px; text-align: center; color: #6e685f; font-size: 11.5px; line-height: 1.5; }
 .tq-pile-empty .mark { display: block; font-size: 30px; line-height: 1; color: #3c5740; }
 .tq-pile-empty b { display: block; color: #3c5740; font-size: 15px; margin: 6px 0 4px; }
 
 /* ── the chat ─────────────────────────────────────────────────────────────────────────────── */
 .tq-chat-head { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-bottom: 1px solid #e1dcd5; background: #fffdfb; }
-.tq-chat-head .who b { display: inline; font-size: 13px; color: #262521; font-weight: 800; letter-spacing: .2px; }
+.tq-chat-head .who b { display: inline; font-size: 13px; color: #262521; font-weight: 600; letter-spacing: .2px; }
 .tq-chat-head .who { min-width: 0; }
 .tq-chat-head .who span { display: inline; font-size: 10.5px; color: #6e685f; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-chat-head .grow { flex: 1; }
@@ -170,25 +174,26 @@
 @keyframes tqTyping { 0%, 100% { opacity: .35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
 /* the day's opener is a LINE of the chat: the avatar column is the speaker, the body is left-aligned */
 .tq-welcome-msg { margin: 4px 0 16px; }   /* full width: the mark sits at the left edge, like every line of the chat */
-.tq-welcome > :not(b) { max-width: 860px; margin-left: auto; margin-right: auto; }   /* ...and the summary and the way in are centred under it */
 .tq-welcome > span { display: block; }
 .tq-welcome { color: #6e685f; padding-top: 2px; }
-.tq-welcome > b { display: block; font-size: 17px; color: #262521; margin: 0 0 8px; line-height: 1.3; }
+.tq-welcome > b { display: block; font-size: 20px; font-weight: 600; color: #262521; margin: 0 0 4px; line-height: 1.3; }
 .tq-welcome .tq-modes { justify-content: center; flex-wrap: wrap; }        /* the way in, centred under the summary */
 @media (max-width: 760px) { .tq-welcome .tq-modes { flex-wrap: wrap; } }
 .tq-welcome span { font-size: 12.5px; line-height: 1.5; }
 /* the start of the walk on the empty chat: the rows read left to right, whatever the welcome centres */
 .tq-welcome-sum { margin: 6px 0 4px; text-align: left; }
 /* the day's opener: a card per band, paper and a hairline; the band is the label's DOT, never a tinted card */
-.tq-day-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px auto 2px; }
-.tq-day-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 12px 14px 13px; text-align: left; cursor: pointer;
-  border: 1px solid #e4ded3; border-radius: 11px; background: #fffdf9; font: inherit; color: #262521; transition: border-color .15s, box-shadow .15s; }
-.tq-day-card:hover { border-color: #b9c2c9; box-shadow: 0 4px 14px rgba(51,45,35,.07); }
+.tq-day-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 16px 0 2px; }
+.tq-day-card { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; padding: 12px 14px; text-align: left; cursor: pointer;
+  border: 1px solid #e6e1d8; border-radius: 10px; background: #fffdfb; font: inherit; color: #262521; transition: border-color .15s, background .15s; }
+.tq-day-card:hover { border-color: #d3ccc1; background: #fbf9f6; }
+/* the count sits BESIDE its label (the cleanup, 2026-10-06): one line says what and how many, the next says who */
+.tq-day-card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .tq-day-card:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
-.tq-welcome .tq-day-card .lbl { display: flex; align-items: center; gap: 6px; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .04em; color: #6e685f; }
+.tq-welcome .tq-day-card .lbl { display: flex; align-items: center; gap: 7px; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; color: #4d4a43; }
 .tq-day-card .dot { width: 7px; height: 7px; border-radius: 50%; background: #b8afa1; }
-.tq-day-card > b { font: 600 26px/1.1 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
-.tq-welcome .tq-day-card .who { width: 100%; font-size: 12px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-day-card .top b { font: 600 22px/1 'IBM Plex Sans', system-ui, sans-serif; color: #262521; font-variant-numeric: tabular-nums; }
+.tq-welcome .tq-day-card .who { width: 100%; font-size: 12.5px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-day-card.lvl-urgent .dot { background: #8a3646; }
 .tq-day-card.lvl-task .dot { background: #5f7a5f; }
 .tq-day-card.lvl-agents .dot { background: #55697a; }
@@ -196,7 +201,7 @@
 .tq-day-card.lvl-fyi .dot { background: #7b7366; }
 .tq-day-card.lvl-later .dot { background: transparent; border: 1px dashed #7b7366; }
 .tq-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
-.tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #41525f; border-radius: 99px; padding: 5px 12px; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
+.tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #262521; border-radius: 99px; padding: 7px 14px; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
 .tq-chip:hover { border-color: #55697a; background: #f4f6f8; }
 .tq-chip:disabled { opacity: .5; cursor: default; }
 .tq-chip:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
@@ -217,10 +222,10 @@
 .tq-card { margin: 8px 0 4px; border: 1px solid #ddd8cf; border-radius: 11px; background: #fffdf9; padding: 12px 14px 11px; box-shadow: 0 4px 16px rgba(51,45,35,.06); }
 /* part 2, who wants what: one sentence, the asker in bold */
 .tq-card-lead { margin-top: 7px; font-size: 14.5px; line-height: 1.42; color: #262521; overflow-wrap: anywhere; }
-.tq-card-lead b { font-weight: 650; }
+.tq-card-lead b { font-weight: 600; }
 /* part 4, what the verb does - said before it is pressed */
 .tq-card-then { margin-top: 9px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }
-.tq-card-then b { font-weight: 650; color: #262521; }
+.tq-card-then b { font-weight: 600; color: #262521; }
 /* every other word, one quiet line - no second row of buttons */
 .tq-card-also { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px; font-size: 10.5px; color: #746e64; }
 .tq-card-also button { font: inherit; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
@@ -237,14 +242,14 @@
 .tq-sum-group { margin-top: 10px; }
 /* the group's name as the rail band's pill (.tq-pile-head span), its count beside it */
 .tq-sum-head { display: flex; align-items: center; gap: 7px; margin: 0 0 4px 4px; }
-.tq-sum-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
+.tq-sum-head span { font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 .tq-sum-head em { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; }
 .tq-sum-row { display: grid; grid-template-columns: 8px 58px minmax(0, 140px) minmax(0, 1fr) 132px; align-items: center; gap: 9px; width: 100%;
   min-height: 32px; padding: 0 6px; border: 0; border-top: 1px solid #efeae2; background: none; font: inherit; font-size: 12.5px; color: #262521; text-align: left; cursor: pointer; border-radius: 6px; }
 .tq-sum-row:hover { background: #f4f1ec; }
 .tq-sum-row .dot { width: 7px; height: 7px; border-radius: 50%; }
-.tq-sum-row b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-sum-row b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-sum-row .what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #4d4a43; }
 .tq-sum-row .st { font-size: 11px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 /* the task number: a fixed column, so every row's name and title start at the same x */
@@ -252,7 +257,7 @@
 .tq-sum-row .what .n { font-style: normal; color: #746e64; font-size: 11px; }
 .tq-sum-more { font-size: 11px; color: #746e64; padding: 4px 6px 0 23px; }
 @media (max-width: 520px) { .tq-sum-row { grid-template-columns: 8px minmax(0, 90px) minmax(0, 1fr); } .tq-sum-row .st, .tq-sum-row .ref { display: none; } }
-.tq-card-kicker { display: flex; align-items: center; gap: 7px; font: 750 9px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #6e685f; }
+.tq-card-kicker { display: flex; align-items: center; gap: 7px; font: 600 9px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #6e685f; }
 .tq-card-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: #d3ccc1; }
 .tq-card-kicker .src { display: inline-flex; align-items: center; margin-right: 2px; }
 /* the fyi handful: one box, one line per message, the line itself opens it (2026-09-23) */
@@ -283,11 +288,11 @@
 .tq-task-focus { margin-top: 9px; padding: 12px 14px 13px; border: 1px solid #b9c8bb; border-radius: 9px; background: #fff;
   box-shadow: 0 2px 8px rgba(63,89,67,.08); color: #252923; }
 .tq-task-focus-label { display: flex; align-items: center; gap: 8px; color: #58705c;
-  font: 750 10px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
+  font: 600 10px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
 .tq-task-focus-label em { margin-left: auto; color: #747b73; font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none; }
 .tq-task-box { width: 17px; height: 17px; flex: 0 0 17px; display: inline-grid; place-items: center; border: 2px solid #718b75;
-  border-radius: 4px; color: #fff; background: #fff; font: 750 12px/1 'IBM Plex Sans', system-ui, sans-serif; }
-.tq-task-focus-text { margin: 8px 0 0 0; font-size: 16px; line-height: 1.42; font-weight: 700; color: #20231f; overflow-wrap: anywhere; }
+  border-radius: 4px; color: #fff; background: #fff; font: 600 12px/1 'IBM Plex Sans', system-ui, sans-serif; }
+.tq-task-focus-text { margin: 8px 0 0 0; font-size: 16px; line-height: 1.42; font-weight: 600; color: #20231f; overflow-wrap: anywhere; }
 .tq-task-focus-list { margin: 11px 0 0 0; padding-top: 9px; border-top: 1px solid #e0e7e1; display: grid; gap: 7px; }
 .tq-task-focus-item { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.4; color: #30332e; }
 .tq-task-focus-item .tq-task-box { margin-top: 1px; width: 16px; height: 16px; flex-basis: 16px; }
@@ -295,7 +300,7 @@
 .tq-task-focus-item.done .tq-task-box { background: #718b75; }
 .tq-card-context { margin-top: 8px; }
 .tq-card-kicker em { margin-left: auto; font-style: normal; letter-spacing: .04em; text-transform: none; color: #989188; }
-.tq-card-title { margin-top: 5px; font-size: 13px; font-weight: 700; color: #262521; line-height: 1.35; overflow-wrap: anywhere; }
+.tq-card-title { margin-top: 5px; font-size: 13px; font-weight: 600; color: #262521; line-height: 1.35; overflow-wrap: anywhere; }
 .tq-card-sub { font-size: 11px; color: #6e685f; margin-top: 2px; overflow-wrap: anywhere; }
 .tq-card-excerpt { margin-top: 7px; padding: 8px 10px; border-radius: 8px; background: #f6f4f1; border: 1px solid #ebe6de; font-size: 12px; line-height: 1.5; color: #4d4a43; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow: auto; }
 .tq-card-tail { margin-top: 7px; padding: 8px 10px; border-radius: 8px; background: #22231f; color: #e8e4dc; font: 11px/1.5 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow: auto; }
@@ -320,7 +325,7 @@
    one whose turn it is wears a ring; the others step back. */
 .tq-av { --c: #55697a; background: var(--c); color: #fff; box-sizing: border-box;
   width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font: 700 9.5px/1 'IBM Plex Sans', sans-serif; text-align: center; position: relative; z-index: 1; }
+  font: 600 9.5px/1 'IBM Plex Sans', sans-serif; text-align: center; position: relative; z-index: 1; }
 .tq-thr-h { font-size: 11.5px; color: #746e64; padding-top: 1px; }
 .tq-thr-h b { color: #4d4a43; font-weight: 600; }
 .tq-thr-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
@@ -351,7 +356,7 @@
 .tq-move-q { margin-top: 7px; }
 .tq-move-qt { font-size: 14px; font-weight: 600; line-height: 1.4; color: #1d1c19; margin-bottom: 6px; }
 .tq-move-q + .tq-move-q { margin-top: 12px; padding-top: 11px; border-top: 1px dashed #e0d6c8; }
-.tq-move-qn { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #a0643a; margin-bottom: 3px; }
+.tq-move-qn { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #a0643a; margin-bottom: 3px; }
 .tq-move-go { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .tq-move-go.first { margin-top: -1px; }
 .tq-move .tq-thr-body > :first-child { margin-top: 3px; }
@@ -398,7 +403,7 @@
   border-radius: 99px; border: 1px solid #ddd8cf; background: #fffdf9; color: #41525f; cursor: pointer; }
 .tq-pile-retry:hover { border-color: #b9c3cb; background: #f6f4f1; }
 .tq-walk-can { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
-.tq-walk-can .lbl { font: 750 9.5px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: #867f74; margin-right: 2px; }
+.tq-walk-can .lbl { font: 600 9.5px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: #867f74; margin-right: 2px; }
 .tq-walk-can button, .tq-walk-can .plain { font: 500 11.5px/1.3 'IBM Plex Sans', system-ui, sans-serif; padding: 4px 10px; border-radius: 99px;
   border: 1px solid #ddd8cf; background: #fffdf9; color: #41525f; text-align: left; }
 .tq-walk-can button { cursor: pointer; transition: border-color .15s, background .15s; }
@@ -417,7 +422,7 @@
 .tq-compose-box > span { width: 34px; height: 34px; flex: 0 0 34px; display: flex; align-items: center; justify-content: center; }
 .tq-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-send:disabled { opacity: .4; cursor: default; }
-.tq-compose-hint { margin: 5px auto 0; text-align: center; color: #a09b92; font: 9px/1.2 'IBM Plex Mono', Consolas, monospace; }
+.tq-compose-hint { margin: 6px auto 0; text-align: center; color: #746e64; font: 400 11.5px/1.3 'IBM Plex Sans', system-ui, sans-serif; }
 /* the walk is on the phone: the composer is replaced by the way back, never sat beside it */
 .tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid #d5d0c7; border-top-width: 1px; border-radius: 12px; background: #fffdfb; display: flex; align-items: center; gap: 10px; color: #4a5d4f; }
 .tq-handed .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -430,7 +435,7 @@
 
 /* past chats, slid over the thread */
 .tq-chats { position: absolute; inset: 0; background: #fffdfbf2; backdrop-filter: blur(2px); z-index: 5; display: flex; flex-direction: column; }
-.tq-chats-head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid #e1dcd5; font-size: 12.5px; font-weight: 700; color: #262521; }
+.tq-chats-head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid #e1dcd5; font-size: 12.5px; font-weight: 600; color: #262521; }
 .tq-chats-list { overflow-y: auto; padding: 6px 10px; }
 .tq-chats-list .c { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; }
 .tq-chats-list .c:hover { background: #f4f1ec; }

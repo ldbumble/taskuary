@@ -331,27 +331,27 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
           <Box sx={{ width: 40, height: 40, borderRadius: "50%", display: "grid", placeItems: "center", flexShrink: 0,
             background: `conic-gradient(${G.gold} ${lv.pct * 360}deg, rgba(255,255,255,.12) 0deg)` }}>
             <Box sx={{ width: 32, height: 32, borderRadius: "50%", bgcolor: "#171b21", display: "grid", placeItems: "center",
-              fontWeight: 900, fontSize: 14, color: G.gold }}>{lv.level}</Box>
+              fontWeight: 600, fontSize: 14, color: G.gold }}>{lv.level}</Box>
           </Box>
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: 10, letterSpacing: 1.4, color: G.faint, fontWeight: 800, textTransform: "uppercase" }}>Assistant game</Typography>
-            <Typography noWrap sx={{ fontSize: 14, fontWeight: 800, color: G.ink }}>{lv.title}</Typography>
+            <Typography sx={{ fontSize: 10, letterSpacing: 1.4, color: G.faint, fontWeight: 600, textTransform: "uppercase" }}>Assistant game</Typography>
+            <Typography noWrap sx={{ fontSize: 14, fontWeight: 600, color: G.ink }}>{lv.title}</Typography>
             <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim }}>{game.xp} XP · {lv.span - lv.into} to Lv {lv.level + 1}</Typography>
           </Box>
         </Box>
 
         <Box sx={{ minWidth: 92, textAlign: "center" }}>
-          <Typography sx={{ fontSize: 22, fontWeight: 900, lineHeight: 1, color: combo > 1 ? G.gold : G.faint,
+          <Typography sx={{ fontSize: 22, fontWeight: 600, lineHeight: 1, color: combo > 1 ? G.gold : G.faint,
             transform: combo > 1 ? `scale(${1 + Math.min(combo, 6) * 0.04})` : "none", transition: "transform .2s" }}>x{comboMult(Math.max(combo, 1))}</Typography>
           <Box sx={{ height: 3, mt: 0.5, borderRadius: 2, bgcolor: "rgba(255,255,255,.1)", overflow: "hidden" }}>
             <Box sx={{ height: "100%", width: `${comboLeft * 100}%`, bgcolor: G.gold, transition: "width 1s linear" }} />
           </Box>
-          <Typography sx={{ fontSize: 9.5, color: G.faint, letterSpacing: 1, fontWeight: 700, mt: 0.25 }}>{combo > 1 ? `${combo} COMBO` : "COMBO"}</Typography>
+          <Typography sx={{ fontSize: 9.5, color: G.faint, letterSpacing: 1, fontWeight: 600, mt: 0.25 }}>{combo > 1 ? `${combo} COMBO` : "COMBO"}</Typography>
         </Box>
 
         <Box sx={{ flex: "1 1 220px", minWidth: 180 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-            <Typography sx={{ fontSize: 10, letterSpacing: 1.3, fontWeight: 800, color: G.red }}>INBOX BOSS</Typography>
+            <Typography sx={{ fontSize: 10, letterSpacing: 1.3, fontWeight: 600, color: G.red }}>INBOX BOSS</Typography>
             <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim, ml: "auto" }}>{hp ? `${hp} to the bottom` : "defeated ✦ you're at the bottom"}</Typography>
           </Box>
           <Box sx={{ height: 9, mt: 0.5, borderRadius: 5, bgcolor: "rgba(255,255,255,.08)", overflow: "hidden", border: `1px solid ${G.line}` }}>
@@ -366,7 +366,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
             return (
               <Box key={q.key} title={`+${q.xp} XP when done today`} sx={{ px: 1, py: 0.5, borderRadius: "9px", bgcolor: done ? "rgba(143,207,143,.15)" : G.card,
                 border: `1px solid ${done ? "rgba(143,207,143,.5)" : G.line}`, minWidth: 118 }}>
-                <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 700, color: done ? G.green : G.ink }}>{done ? "✓ " : ""}{q.label}</Typography>
+                <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 600, color: done ? G.green : G.ink }}>{done ? "✓ " : ""}{q.label}</Typography>
                 <Box sx={{ height: 3, mt: 0.4, borderRadius: 2, bgcolor: "rgba(255,255,255,.1)" }}>
                   <Box sx={{ height: "100%", width: `${q.n ? (n / q.n) * 100 : 100}%`, borderRadius: 2, bgcolor: done ? G.green : G.mint }} />
                 </Box>
@@ -398,10 +398,10 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
         maxHeight: folded ? "none" : "calc(100% - 100px)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <Box onClick={() => setFolded((v) => !v)} title={folded ? "Open the panel" : "Fold the panel"}
           sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.4, py: 0.9, cursor: "pointer", borderBottom: folded ? "none" : `1px solid ${G.line}` }}>
-          <Box sx={{ ...mono, px: 0.6, borderRadius: "5px", fontSize: 10, fontWeight: 800, bgcolor: "rgba(240,192,90,.15)", color: G.gold }}>
+          <Box sx={{ ...mono, px: 0.6, borderRadius: "5px", fontSize: 10, fontWeight: 600, bgcolor: "rgba(240,192,90,.15)", color: G.gold }}>
             {focus === "all" ? "Esc" : zoneMeta(focus)?.hotkey}</Box>
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 900 }}>{focus === "all" ? "Briefing" : zoneMeta(focus)?.name}</Typography>
+            <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 600 }}>{focus === "all" ? "Briefing" : zoneMeta(focus)?.name}</Typography>
             {!folded && <Typography noWrap sx={{ fontSize: 10.5, color: G.faint }}>{focus === "all" ? "who should take what" : zoneMeta(focus)?.blurb}</Typography>}
           </Box>
           <Typography sx={{ fontSize: 14, color: G.dim }}>{folded ? "▾" : "▴"}</Typography>
@@ -426,7 +426,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
           <Box key={t.id} sx={{ ...glass, px: 1.6, py: 0.8, display: "flex", alignItems: "baseline", gap: 1, animation: "sgPop .35s cubic-bezier(.2,.9,.3,1.4)",
             borderColor: t.kind === "err" ? G.red : t.kind === "quest" ? G.green : t.kind === "xp" ? G.gold : G.line,
             "@keyframes sgPop": { from: { opacity: 0, transform: "translateY(-10px) scale(.9)" }, to: { opacity: 1, transform: "none" } } }}>
-            <Typography sx={{ fontWeight: 900, fontSize: t.kind === "xp" ? 18 : 14, color: t.kind === "err" ? G.red : t.kind === "quest" ? G.green : G.gold }}>{t.text}</Typography>
+            <Typography sx={{ fontWeight: 600, fontSize: t.kind === "xp" ? 18 : 14, color: t.kind === "err" ? G.red : t.kind === "quest" ? G.green : G.gold }}>{t.text}</Typography>
             <Typography sx={{ fontSize: 12, color: G.dim, maxWidth: 360 }} noWrap>{t.sub}</Typography>
           </Box>
         ))}
@@ -437,8 +437,8 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
           background: "radial-gradient(circle, rgba(20,24,30,.35), rgba(20,24,30,0) 60%)" }}>
           <Box sx={{ ...glass, px: 5, py: 3, textAlign: "center", borderColor: G.gold, animation: "sgBoom .5s cubic-bezier(.2,.9,.3,1.5)",
             "@keyframes sgBoom": { from: { opacity: 0, transform: "scale(.6) rotate(-3deg)" }, to: { opacity: 1, transform: "none" } } }}>
-            <Typography sx={{ fontSize: 11, letterSpacing: 3, color: G.gold, fontWeight: 900 }}>{banner.kind === "level" ? "LEVEL UP" : banner.kind === "bottom" ? "BOTTOM OF THE PILE" : banner.kind === "gymclear" ? "EVERY SET DONE" : "TROPHY UNLOCKED"}</Typography>
-            <Typography sx={{ fontSize: 34, fontWeight: 900 }}>{banner.kind === "level" ? "⬆ " : banner.kind === "bottom" ? "⚔ " : banner.kind === "gymclear" ? "💪 " : "🏆 "}{banner.title}</Typography>
+            <Typography sx={{ fontSize: 11, letterSpacing: 3, color: G.gold, fontWeight: 600 }}>{banner.kind === "level" ? "LEVEL UP" : banner.kind === "bottom" ? "BOTTOM OF THE PILE" : banner.kind === "gymclear" ? "EVERY SET DONE" : "TROPHY UNLOCKED"}</Typography>
+            <Typography sx={{ fontSize: 34, fontWeight: 600 }}>{banner.kind === "level" ? "⬆ " : banner.kind === "bottom" ? "⚔ " : banner.kind === "gymclear" ? "💪 " : "🏆 "}{banner.title}</Typography>
             <Typography sx={{ fontSize: 14, color: G.dim }}>{banner.sub}</Typography>
           </Box>
         </Box>
@@ -446,7 +446,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
       {trophies && (
         <Box sx={{ ...glass, position: "absolute", zIndex: 9, top: 84, left: { xs: 12, md: 180 }, width: 300, maxHeight: "calc(100% - 110px)", overflowY: "auto", p: 1.5 }}>
           <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-            <Typography sx={{ fontWeight: 900, flex: 1 }}>Trophies</Typography>
+            <Typography sx={{ fontWeight: 600, flex: 1 }}>Trophies</Typography>
             <HudButton onClick={() => setTrophies(false)}>Close</HudButton>
           </Box>
           {ACHIEVEMENTS.map((a) => {
@@ -454,7 +454,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
             return (
               <Box key={a.key} sx={{ display: "flex", gap: 1, alignItems: "center", py: 0.7, opacity: got ? 1 : 0.45 }}>
                 <Box sx={{ fontSize: 20, filter: got ? "none" : "grayscale(1)" }}>🏆</Box>
-                <Box><Typography sx={{ fontSize: 12.5, fontWeight: 800 }}>{a.name}</Typography>
+                <Box><Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{a.name}</Typography>
                   <Typography sx={{ fontSize: 11, color: G.dim }}>{a.says}</Typography></Box>
               </Box>
             );
@@ -470,7 +470,7 @@ function HudButton({ children, onClick, title, gold }) {
   return (
     <Box component="button" type="button" onClick={onClick} title={title}
       sx={{ border: `1px solid ${gold ? G.gold : G.line}`, bgcolor: gold ? G.gold : G.card, color: gold ? "#1c1f24" : G.ink,
-        borderRadius: "9px", px: 1.1, py: 0.55, fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+        borderRadius: "9px", px: 1.1, py: 0.55, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
         "&:hover": { filter: "brightness(1.15)" } }}>{children}</Box>
   );
 }
@@ -481,10 +481,10 @@ function MapButton({ on, onClick, k, name, n }) {
       sx={{ ...glass, display: "flex", alignItems: "center", gap: 0.8, px: 0.8, py: 0.5, cursor: "pointer", textAlign: "left", borderRadius: "10px",
         bgcolor: on ? G.gold : G.bg, color: on ? "#1c1f24" : G.ink, borderColor: on ? G.gold : G.line, transition: "transform .12s",
         "&:hover": { transform: "translateX(3px)" } }}>
-      <Box sx={{ ...mono, minWidth: 26, height: 22, borderRadius: "6px", display: "grid", placeItems: "center", fontSize: 10.5, fontWeight: 800,
+      <Box sx={{ ...mono, minWidth: 26, height: 22, borderRadius: "6px", display: "grid", placeItems: "center", fontSize: 10.5, fontWeight: 600,
         bgcolor: on ? "rgba(0,0,0,.15)" : "rgba(255,255,255,.08)" }}>{k}</Box>
-      <Typography noWrap sx={{ display: { xs: "none", md: "block" }, fontSize: 12, fontWeight: 800, flex: 1 }}>{name}</Typography>
-      {!!n && <Box sx={{ display: { xs: "none", md: "block" }, px: 0.7, borderRadius: 99, bgcolor: "#b04a5c", color: "#fff", fontSize: 10.5, fontWeight: 800 }}>{n}</Box>}
+      <Typography noWrap sx={{ display: { xs: "none", md: "block" }, fontSize: 12, fontWeight: 600, flex: 1 }}>{name}</Typography>
+      {!!n && <Box sx={{ display: { xs: "none", md: "block" }, px: 0.7, borderRadius: 99, bgcolor: "#b04a5c", color: "#fff", fontSize: 10.5, fontWeight: 600 }}>{n}</Box>}
     </Box>
   );
 }
@@ -515,7 +515,7 @@ function ItemList({ items, picked, setPicked, agents, busy, play, onOpenTask, on
     return (
       <Card key={i.key} on={on} onClick={() => setPicked(on ? null : i.key)} accent={accent?.(i) || (needsYou(i) ? G.red : null)}>
         <Who item={i} />
-        <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, mt: 0.3 }}>{i.title}</Typography>
         {!on && (i.preview || i.why) && <Typography noWrap sx={{ fontSize: 11.5, color: G.faint, mt: 0.2 }}>{i.preview || i.why}</Typography>}
         {on && <><Match item={i} agents={agents} />
           <ItemInspector item={i} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} onNext={onNext} /></>}
@@ -535,12 +535,12 @@ function Briefing({ pile, agents, onGo, hp, passed }) {
     return (
       <Card key={i.key} onClick={() => onGo(i)} accent={accent}>
         <Who item={i} />
-        <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, mt: 0.3 }}>{i.title}</Typography>
         <Typography sx={{ fontSize: 11, color: G.mint, mt: 0.4 }}>✦ {m.who} · {m.why}</Typography>
       </Card>
     );
   };
-  const head = (text, color) => <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color, px: 0.5, mb: 0.6, mt: 0.4 }}>{text}</Typography>;
+  const head = (text, color) => <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color, px: 0.5, mb: 0.6, mt: 0.4 }}>{text}</Typography>;
   return <>
     {hp > 0 ? <>
       {head(`⚔ NOT SEEN YET · ${hp} TO THE BOTTOM`, G.red)}
@@ -548,7 +548,7 @@ function Briefing({ pile, agents, onGo, hp, passed }) {
       {fresh.length > 4 && <Typography sx={{ fontSize: 11.5, color: G.faint, px: 0.5, mb: 1 }}>+{fresh.length - 4} more - press N on any of them to walk the lot</Typography>}
     </> : (
       <Box sx={{ mb: 1, p: 1.1, borderRadius: "11px", bgcolor: "rgba(143,207,143,.1)", border: "1px solid rgba(143,207,143,.4)" }}>
-        <Typography sx={{ fontSize: 13, fontWeight: 900, color: G.green }}>⚔ You're at the bottom</Typography>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, color: G.green }}>⚔ You're at the bottom</Typography>
         <Typography sx={{ fontSize: 11.5, color: G.dim }}>Everything has been seen. {onYou.length ? "What is left is still yours to settle:" : "Nothing is left on you."}</Typography>
       </Box>
     )}
@@ -567,10 +567,10 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
   const byTid = Object.fromEntries(items.filter((i) => i.tid).map((i) => [i.tid, i]));
   return <>
     {calls.length > 0 && <>
-      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.red, px: 0.5, mb: 0.6 }}>ON THE FLOOR FOR YOU · {calls.length}</Typography>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.red, px: 0.5, mb: 0.6 }}>ON THE FLOOR FOR YOU · {calls.length}</Typography>
       <ItemList items={calls} picked={picked} setPicked={setPicked} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} onNext={onNext} />
     </>}
-    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6, mt: calls.length ? 1.2 : 0 }}>AT THE DESKS · {seated.length}</Typography>
+    <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6, mt: calls.length ? 1.2 : 0 }}>AT THE DESKS · {seated.length}</Typography>
     {seated.map((task) => {
       const liveRow = live[task.TaskId];
       const state = studioTaskState(task, liveRow, agents, clock);
@@ -578,12 +578,12 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
       return (
         <Card key={task.TaskId} on={selected} onClick={() => setPick(selected ? null : task.TaskId)} accent={state.tone === "waiting" ? G.red : G.green}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
-            <Typography noWrap sx={{ fontSize: 11, fontWeight: 800, color: state.tone === "waiting" ? G.red : G.green }}>{state.agent}</Typography>
+            <Typography noWrap sx={{ fontSize: 11, fontWeight: 600, color: state.tone === "waiting" ? G.red : G.green }}>{state.agent}</Typography>
             <Typography sx={{ ...mono, fontSize: 10, color: G.faint, ml: "auto" }}>{task.ref}</Typography>
-            {task.Waiting > 0 && <Typography sx={{ ...mono, fontSize: 10, color: G.gold, fontWeight: 700 }}
+            {task.Waiting > 0 && <Typography sx={{ ...mono, fontSize: 10, color: G.gold, fontWeight: 600 }}
               title={`${task.Waiting} queued prompt${task.Waiting === 1 ? "" : "s"} waiting in the funnel`}>✎ {task.Waiting}</Typography>}
           </Box>
-          <Typography noWrap sx={{ fontSize: 13, fontWeight: 700, pt: 0.3 }}>{task.Title}</Typography>
+          <Typography noWrap sx={{ fontSize: 13, fontWeight: 600, pt: 0.3 }}>{task.Title}</Typography>
           <Typography sx={{ fontSize: 11, color: G.dim, pt: 0.2 }}>{state.label}</Typography>
           {(liveRow?.work || liveRow?.promptPending) && (
             <Box sx={{ pt: 0.5, bgcolor: "#f6f2ea", borderRadius: "6px", px: 0.75, pb: 0.5, mt: 0.5 }}>
@@ -599,7 +599,7 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
       );
     })}
     {!seated.length && <Empty text="The desks are quiet. New work will bring an agent to one." />}
-    {queue.length > 0 && <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.faint, px: 0.5, mt: 1.2, mb: 0.6 }}>WAITING FOR A DESK · {queue.length}</Typography>}
+    {queue.length > 0 && <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mt: 1.2, mb: 0.6 }}>WAITING FOR A DESK · {queue.length}</Typography>}
     {queue.slice(0, 6).map((task) => (
       <Card key={task.TaskId} onClick={() => onJump(task.TaskId)}>
         <Typography sx={{ ...mono, fontSize: 10.5, color: G.faint }}>{task.ref}{task.Waiting > 0 ? ` · ✎ ${task.Waiting}` : ""}</Typography>
@@ -610,7 +610,7 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
     <Box sx={{ mt: 1.5, px: 0.5 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75 }}>
         <Typography sx={{ fontSize: 11.5, color: G.dim, flex: 1 }}>Desks (agents at once)</Typography>
-        <Typography sx={{ ...mono, fontSize: 13, fontWeight: 800 }}>{cap ?? "—"}</Typography>
+        <Typography sx={{ ...mono, fontSize: 13, fontWeight: 600 }}>{cap ?? "—"}</Typography>
         <Typography sx={{ fontSize: 11, color: G.faint }}>{free} free of {desks.length}</Typography>
       </Box>
       <Slider size="small" min={1} max={8} step={1} marks value={cap ?? 4} onChange={(_, value) => setCap(value)}
@@ -637,7 +637,7 @@ function MeetingSpace({ items, ...room }) {
   ].filter(([, list]) => list.length);
   return groups.map(([label, list, color], n) => (
     <Box key={label} sx={{ mt: n ? 1.2 : 0 }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color, px: 0.5, mb: 0.6 }}>{label} · {list.length}</Typography>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color, px: 0.5, mb: 0.6 }}>{label} · {list.length}</Typography>
       <ItemList {...room} items={list} />
     </Box>
   ));
@@ -660,10 +660,10 @@ function GymSpace({ gym, picked, setPicked, busy, play, reload, onOpenTask, onNe
     return (
       <Card key={g.key} on={on} onClick={() => setPicked(on ? null : g.key)} accent={g.item && needsYou(g.item) ? G.red : G.gold}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 800, color: G.gold }}>🏋 {ref}</Typography>
+          <Typography sx={{ fontSize: 11, fontWeight: 600, color: G.gold }}>🏋 {ref}</Typography>
           {list.length > 0 && <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim, ml: "auto" }}>{done}/{list.length} reps</Typography>}
         </Box>
-        <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{title}</Typography>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, mt: 0.3 }}>{title}</Typography>
         {list.length > 0 && (
           <Box sx={{ height: 5, mt: 0.6, borderRadius: 3, bgcolor: "rgba(255,255,255,.08)", overflow: "hidden" }}>
             <Box sx={{ height: "100%", width: `${(done / list.length) * 100}%`, bgcolor: done === list.length ? G.green : G.gold, transition: "width .4s" }} />
@@ -676,10 +676,10 @@ function GymSpace({ gym, picked, setPicked, busy, play, reload, onOpenTask, onNe
               <Box key={c.id || c.text} component="button" type="button" disabled={!!busy || !c.id} onClick={() => tick(g.task, c)}
                 sx={{ display: "flex", alignItems: "center", gap: 0.8, width: "100%", textAlign: "left", border: 0, bgcolor: "transparent", color: G.ink,
                   px: 0.4, py: 0.45, borderRadius: "6px", cursor: "pointer", "&:hover": { bgcolor: G.card } }}>
-                <Box sx={{ width: 16, height: 16, borderRadius: "4px", flexShrink: 0, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 900,
+                <Box sx={{ width: 16, height: 16, borderRadius: "4px", flexShrink: 0, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 600,
                   border: `2px solid ${c.done ? G.green : G.faint}`, bgcolor: c.done ? G.green : "transparent", color: "#1c1f24" }}>{c.done ? "✓" : ""}</Box>
                 <Typography sx={{ fontSize: 12.5, color: c.done ? G.faint : G.ink, textDecoration: c.done ? "line-through" : "none", flex: 1 }}>{c.text}</Typography>
-                {!c.done && <Typography sx={{ fontSize: 10.5, color: G.gold, fontWeight: 800 }}>+5</Typography>}
+                {!c.done && <Typography sx={{ fontSize: 10.5, color: G.gold, fontWeight: 600 }}>+5</Typography>}
               </Box>
             ))}
           </Box>}
@@ -734,11 +734,11 @@ function ArchiveSpace({ ghosts, hub, picked, setPicked, busy, play, reload, ...r
     p: 0.9, fontSize: 12.5, fontFamily: "inherit", mb: 0.6 };
   return <>
     {ghosts.length > 0 && <>
-      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: "#b9c3ff", px: 0.5, mb: 0.6 }}>👻 GHOSTS · THREADS THAT SLIPPED · {ghosts.length}</Typography>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: "#b9c3ff", px: 0.5, mb: 0.6 }}>👻 GHOSTS · THREADS THAT SLIPPED · {ghosts.length}</Typography>
       <ItemList {...room} items={ghosts} picked={picked} setPicked={setPicked} busy={busy} play={play} accent={() => "#b9c3ff"} />
     </>}
     <Box sx={{ display: "flex", alignItems: "center", px: 0.5, mt: ghosts.length ? 1.4 : 0, mb: 0.6 }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.faint, flex: 1 }}>🗄 FILING CABINETS · THE HUB · {hub.topics.length}</Typography>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, flex: 1 }}>🗄 FILING CABINETS · THE HUB · {hub.topics.length}</Typography>
       <Btn kind="mint" onClick={() => setForm({ title: "", body: "", topic: topic || "" })}>+ File a lesson</Btn>
     </Box>
     {form && (
@@ -763,10 +763,10 @@ function ArchiveSpace({ ghosts, hub, picked, setPicked, busy, play, reload, ...r
     {topic && (files || []).map((f) => (
       <Card key={f.LoreId} onClick={() => pull(f)}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
-          <Typography sx={{ fontSize: 10.5, fontWeight: 800, color: G.dim }}>{f.Author}</Typography>
+          <Typography sx={{ fontSize: 10.5, fontWeight: 600, color: G.dim }}>{f.Author}</Typography>
           <Typography sx={{ ...mono, fontSize: 10, color: G.faint, ml: "auto" }}>▲ {f.Score + (voted.current.has(f.LoreId) ? 1 : 0)}</Typography>
         </Box>
-        <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{f.Title}</Typography>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, mt: 0.3 }}>{f.Title}</Typography>
         <Typography sx={{ fontSize: 12, color: G.dim, mt: 0.4 }}>{f.Body}</Typography>
         <Box sx={{ mt: 0.7 }}>
           <Btn disabled={voted.current.has(f.LoreId) || !!busy} onClick={() => vote(f)}>👍 Useful · +10</Btn>
@@ -816,14 +816,14 @@ function CoreSpace({ chat, onAsk, busy, play, pile, agents, picked, onGo }) {
         sx={{ flex: 1, bgcolor: "rgba(0,0,0,.25)", color: G.ink, border: `1px solid ${G.line}`, borderRadius: "9px", px: 1, py: 0.7, fontSize: 12.5, fontFamily: "inherit" }} />
       <Btn kind="mint" disabled={!!busy || !text.trim()} onClick={() => send(text)}>Ask</Btn>
     </Box>
-    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6 }}>✦ MATCHMAKER · WHO SHOULD TAKE WHAT</Typography>
+    <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6 }}>✦ MATCHMAKER · WHO SHOULD TAKE WHAT</Typography>
     {board.map((i) => {
       const m = matchFor(i, agents);
       return (
         <Card key={i.key} onClick={() => onGo(i)}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
-            <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>{i.title}</Typography>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, color: m.who === "you" ? G.gold : G.mint, whiteSpace: "nowrap" }}>→ {m.who}</Typography>
+            <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{i.title}</Typography>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, color: m.who === "you" ? G.gold : G.mint, whiteSpace: "nowrap" }}>→ {m.who}</Typography>
           </Box>
           <Typography sx={{ fontSize: 11, color: G.faint }}>{i.who} · {m.why}</Typography>
         </Card>

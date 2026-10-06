@@ -435,7 +435,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
               bgcolor: "#eae4d8", border: "1px solid #d8cfbe" }}>
               <AutoAwesomeIcon sx={{ fontSize: 12, color: "#55697a" }} />
-              <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, fontSize: 10 }}>AI summary</Typography>
+              <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 10 }}>AI summary</Typography>
             </Box>}
             <Button size="small" disabled={running === s.SourceId}
               startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
@@ -510,7 +510,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         wizard(() => { setBucket(invoiceOpen ? "workflows" : backTo); setDraft(null); load(); }, (sid) => { setDraft(null); setBucket(sid); })
       ) : (<>
       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
           {q ? `Matches for “${q}”` : workflowOverview ? "Scheduled workflows" : "Scheduled reports"}
         </Typography>
         <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing} sx={{ mr: 1 }}
@@ -635,7 +635,7 @@ function SavedReportSummary({ source, workflow = false }) {
       bgcolor: source.Active ? "#f2f7f1" : PANEL2, borderColor: source.Active ? "#cfdcc9" : BORDER }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.65 }}>
         <StatusDot ok={!!source.Active} />
-        <Typography sx={{ color: INK, fontWeight: 750, fontSize: 13.5 }}>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>
           {source.Active ? `Enabled ${workflow ? "workflow" : "report"}` : `Disabled ${workflow ? "workflow" : "report"}`}
         </Typography>
       </Box>
@@ -720,7 +720,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
       <Crumb section="Workflows" onBack={onBack} title={cur ? cfg.title : "New monthly invoice workflow"} />
       <Box sx={{ ...card, p: 2, mb: 2 }}>
         <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>WORKFLOW SETUP</Typography>
-        <Typography sx={{ color: INK, fontWeight: 750, fontSize: 15, mb: 0.4 }}>Monthly invoices → Zoho drafts → Review</Typography>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, mb: 0.4 }}>Monthly invoices → Zoho drafts → Review</Typography>
         <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>The schedule starts a monthly checklist. You confirm amounts; Prepare creates drafts; approving each Review card sends it.</Typography>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(240px,1fr) 250px 220px" }, gap: 1 }}>
           <TextField size="small" label="workflow title" value={cfg.title || ""} onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
@@ -748,13 +748,13 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
       {cur && <Box sx={{ ...card, p: 2 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1.5 }}>
           <Box sx={{ flex: 1 }}><Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>MONTHLY BATCH</Typography>
-            <Typography sx={{ fontWeight: 750, color: INK }}>{batch ? `${batch.Period} · ${String(batch.Status).replaceAll("_", " ")}` : "No batch opened yet"}</Typography></Box>
+            <Typography sx={{ fontWeight: 600, color: INK }}>{batch ? `${batch.Period} · ${String(batch.Status).replaceAll("_", " ")}` : "No batch opened yet"}</Typography></Box>
           {batches.length > 1 && <Select size="small" value={batch?.BatchId || ""} onChange={async (e) => setBatch((await api.get(`/api/invoice-batches/${e.target.value}`)).data)}>
             {batches.map((b) => <MenuItem key={b.BatchId} value={b.BatchId}>{b.Period} · {String(b.Status).replaceAll("_", " ")}</MenuItem>)}</Select>}
           <Button variant="outlined" disabled={!!busy} onClick={openMonth}>{busy === "open" ? "Opening…" : `Open ${period}`}</Button>
         </Box>
         {batch?.items?.map((item) => <Box key={item.ItemId} sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(170px,1fr) 110px 130px minmax(180px,1fr) 140px" }, gap: 1, alignItems: "center", py: 1, borderTop: `1px solid ${BORDER}` }}>
-          <Box><Typography sx={{ fontWeight: 650, fontSize: 13, color: INK }}>{item.CustomerName}</Typography>
+          <Box><Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{item.CustomerName}</Typography>
             <Typography variant="caption" sx={{ color: item.Error ? "#6b2733" : FAINT }}>{item.Error || "copied from the latest prior invoice"}</Typography></Box>
           <Typography variant="caption" sx={{ color: DIM }}>last: {item.PreviousAmount == null ? "—" : `${item.Currency} ${Number(item.PreviousAmount).toFixed(2)}`}</Typography>
           <TextField size="small" type="number" label="this month" value={item.Amount ?? ""} disabled={["review_ready", "sent"].includes(item.Status)}
@@ -763,7 +763,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
           <TextField size="small" label="send to" value={item.Recipient || ""} disabled={["review_ready", "sent"].includes(item.Status)}
             onChange={(e) => setBatch({ ...batch, items: batch.items.map((x) => x.ItemId === item.ItemId ? { ...x, Recipient: e.target.value } : x) })}
             onBlur={(e) => patchItem(item, { Recipient: e.target.value })} />
-          <Typography variant="caption" sx={{ color: item.Status === "sent" ? "#47654a" : DIM, fontWeight: 700 }}>{String(item.Status || "").replaceAll("_", " ")}{item.InvoiceNumber ? ` · ${item.InvoiceNumber}` : ""}</Typography>
+          <Typography variant="caption" sx={{ color: item.Status === "sent" ? "#47654a" : DIM, fontWeight: 600 }}>{String(item.Status || "").replaceAll("_", " ")}{item.InvoiceNumber ? ` · ${item.InvoiceNumber}` : ""}</Typography>
         </Box>)}
         {batch?.items?.length > 0 && <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Button variant="contained" disableElevation disabled={!!busy || batch.Status === "done"} onClick={prepare}>{busy === "prepare" ? "Preparing…" : "Prepare Zoho drafts"}</Button>
@@ -837,7 +837,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
     <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
         <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
-        <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
+        <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
       </Box>
       {/* WHETHER A RUN IS WORK IS TRIAGE'S CALL, on every run that worked (the owner, 2026-09-28): the work
           line is gone, and its sentence is the brief triage reads the run against (reports.work_brief) */}
@@ -1173,7 +1173,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
 
             {isAssistant && (
               <Box sx={{ ...card, p: 1.5, mb: 1.5, maxWidth: 720, bgcolor: PANEL2 }}>
-                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, mb: 0.4 }}>What it reads</Typography>
+                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, mb: 0.4 }}>What it reads</Typography>
                 <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
                   Taskuary's own tables (the Taskuary cards) and anything a report can read — Intacct queries, databases, REST or MCP tools, cloud systems, files, agent skills. Every card has a Test that shows its data; the prompt can place a card where it talks about it (Insert source, under the prompt). This check reads only the sources below.
                 </Typography>
@@ -1238,7 +1238,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     )}
                   </Box>
                 )}
-                <Typography variant="caption" sx={{ color: INK, fontWeight: 700, display: "block", mb: 0.5 }}>
+                <Typography variant="caption" sx={{ color: INK, fontWeight: 600, display: "block", mb: 0.5 }}>
                   …and pull these saved data views too (optional)
                 </Typography>
                 <Autocomplete multiple options={watchChoices} value={watchChoices.filter((o) => watchedIds.includes(o.id))}
@@ -1292,7 +1292,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             <Box sx={{ ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
                 <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
-                <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700 }}>
+                <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600 }}>
                   {isAssistant ? "WHAT SHOULD THE ADVISOR SURFACE?" : `ONE PROMPT OVER ALL ${srcs.length > 1 ? `${srcs.length} SOURCES` : "THE ROWS"}`}
                 </Typography>
               </Box>
@@ -1622,7 +1622,7 @@ function Composer({ onDraft, kind = "report" }) {
     <Box sx={{ ...card, p: 1.5, mb: 2, bgcolor: PANEL2 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.9 }}>
         <AutoAwesomeIcon sx={{ fontSize: 15, color: ACCENT2 }} />
-        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>
           {kind === "workflow" ? "Describe the workflow you want" : "Describe the report you want"}
         </Typography>
       </Box>
@@ -1708,7 +1708,7 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
       : { ...card, p: 1.5, mb: 1.25, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.7 }}>
         <AutoAwesomeIcon sx={{ fontSize: 14, color: ACCENT2 }} />
-        <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: INK, flex: 1 }}>{hint}</Typography>
+        <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: INK, flex: 1 }}>{hint}</Typography>
         {one && <CloseIcon onClick={() => { setOpen(false); setOut(null); }} titleAccess="Fill it in by hand instead"
           sx={{ fontSize: 14, color: FAINT, cursor: "pointer" }} />}
       </Box>
@@ -1767,7 +1767,7 @@ function IntacctFields({ object, connectorId, onPick }) {
         {obj ? "What fields does " + obj + " have?" : "Name an object to see its fields"}
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>
+        <DialogTitle sx={{ fontSize: 15, fontWeight: 600 }}>
           {obj}{rows ? " — " + rows.length + " fields in this company" : ""}
         </DialogTitle>
         <DialogContent>
@@ -1785,7 +1785,7 @@ function IntacctFields({ object, connectorId, onPick }) {
                   <Box key={f.ID} onClick={() => onPick?.(f.ID)}
                     sx={{ display: "flex", gap: 1, alignItems: "baseline", py: 0.4, borderBottom: "1px solid " + BORDER,
                       cursor: onPick ? "pointer" : "default", "&:hover": onPick ? { bgcolor: "#faf8f4" } : {} }}>
-                    <Typography sx={{ ...mono, fontSize: 11.5, color: INK, fontWeight: 700, minWidth: 170 }}>{f.ID}</Typography>
+                    <Typography sx={{ ...mono, fontSize: 11.5, color: INK, fontWeight: 600, minWidth: 170 }}>{f.ID}</Typography>
                     <Typography sx={{ fontSize: 11.5, color: DIM, flex: 1 }} noWrap>{f.LABEL}</Typography>
                     <Typography variant="caption" sx={{ ...mono, color: FAINT }}>{f.DATATYPE}</Typography>
                   </Box>
@@ -1820,7 +1820,7 @@ function SourceTest({ src }) {
       <Button size="small" onClick={run} disabled={busy} startIcon={busy ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
         sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>{busy ? "calling…" : "Test — show me the data"}</Button>
       <Dialog open={!!out} onClose={() => setOut(null)} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>
+        <DialogTitle sx={{ fontSize: 15, fontWeight: 600 }}>
           {out?.ok ? out.headline || "it returned nothing" : "that call did not work"}
         </DialogTitle>
         <DialogContent>
@@ -1905,7 +1905,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         })()}
       </Select>
       {src.type === "agent" && (
-        <Typography variant="caption" sx={{ fontWeight: 650, color: writeEnabled ? "#8a3646" : "#47654a" }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: writeEnabled ? "#8a3646" : "#47654a" }}>
           {writeEnabled ? "Workflow · write access — this agent may change data"
             : "Report · read-only — this agent can retrieve data but cannot change it"}
         </Typography>
@@ -2039,7 +2039,7 @@ function LastRun({ r, sid, embedded }) {
     <Box sx={{ pl: embedded ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded ? 0 : 1.25, mt: embedded ? 0 : -0.5 }}>
       {!embedded && (
       <Typography variant="caption" sx={{ color: r.failed ? "#8a3646" : FAINT, display: "block", lineHeight: 1.5 }}>
-        <Box component="span" sx={{ fontWeight: 700, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
+        <Box component="span" sx={{ fontWeight: 600, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
         {` · ${timeAgo(r.at)}${r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""} · ${outcome}`}
         {rv && ` · read ${read.slice(0, 2).join(", ")}`}
         <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
@@ -2056,14 +2056,14 @@ function LastRun({ r, sid, embedded }) {
       {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)} />}
       {open && !!r.lines?.length && (
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5 }}>
-          <Typography variant="caption" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>what it said, and why</Typography>
+          <Typography variant="caption" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>what it said, and why</Typography>
           {r.lines.map((l) => (
             <Box key={l.id ?? l.key} sx={{ mt: 0.35, px: 1, py: 0.5, borderRadius: 1, border: `1px solid ${ASSISTANT.bd}`, bgcolor: ASSISTANT.tint }}>
               <Typography variant="caption" sx={{ display: "block", color: INK, lineHeight: 1.45 }}>
-                <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>{IDEA_KINDS[l.kind] || l.kind} · </Box>{l.text}
+                <Box component="span" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>{IDEA_KINDS[l.kind] || l.kind} · </Box>{l.text}
               </Typography>
               {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
-                <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>why · </Box>{l.why}</Typography>}
+                <Box component="span" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>why · </Box>{l.why}</Typography>}
             </Box>
           ))}
         </Box>
@@ -2072,28 +2072,28 @@ function LastRun({ r, sid, embedded }) {
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
           {rv && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>
-              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it reviewed · </Box>{read.join(" · ")}
+              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it reviewed · </Box>{read.join(" · ")}
               {rv.model === false ? " · no model — the facts in the hub's own words" : ""}
             </Typography>
           )}
           {rv?.notes && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mt: 0.4 }}>
-              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
+              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
             </Typography>
           )}
           {!!rv?.skipped?.length && (
             <Box sx={{ mt: 0.4 }}>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: "#6b5f45" }}>looked at and let go · {rv.skipped.length}</Typography>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: "#6b5f45" }}>looked at and let go · {rv.skipped.length}</Typography>
               {rv.skipped.map((c) => (
                 <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, pl: 1, borderLeft: `2px solid ${BORDER}`, mt: 0.3, whiteSpace: "pre-wrap" }}>
-                  <Box component="span" sx={{ fontWeight: 700 }}>{IDEA_KINDS[c.kind] || c.kind} · </Box>{c.facts}
+                  <Box component="span" sx={{ fontWeight: 600 }}>{IDEA_KINDS[c.kind] || c.kind} · </Box>{c.facts}
                 </Typography>
               ))}
             </Box>
           )}
           {r.summary && r.type !== "assistant" && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", whiteSpace: "pre-wrap", mt: 0.4, maxHeight: 220, overflowY: "auto" }}>
-              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it filed · </Box>{r.summary}
+              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it filed · </Box>{r.summary}
             </Typography>
           )}
           {r.inputs && (

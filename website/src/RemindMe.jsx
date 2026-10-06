@@ -38,7 +38,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
   return (
     <Popover open={!!anchor} anchorEl={anchor} onClose={onClose} anchorOrigin={{ vertical: "bottom", horizontal: "left" }}>
       <Box sx={{ p: 1.5, display: "grid", gap: 1, width: 240 }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#41525f" }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>
           {away ? `Away until ${remindDay(task.RemindAt)}` : "Bring it back on…"}</Typography>
         {live && !away ? (
           <Typography sx={{ fontSize: 12, color: "#7a2f3c" }}>

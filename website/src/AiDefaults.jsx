@@ -58,14 +58,14 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
     <Box sx={{ ...card, p: 2, mb: 1.5, bgcolor: "#fff" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.25 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: ACCENT2, flexShrink: 0 }} />
-        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 14 }}>{slot.label}</Typography>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>{slot.label}</Typography>
       </Box>
       <Typography variant="body2" sx={{ color: DIM, mb: 0.25 }}>{slot.desc}</Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>{slot.why}</Typography>
 
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Box>
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 700 }}>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>
             {isAgent ? "which CLI" : isJudge ? "what decides" : "which brain"}
           </Typography>
           <Select size="small" displayEmpty value={picked ? slot.value : ""}
@@ -84,7 +84,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
             to write one to - a box that saved nowhere would be worse than no box */}
         {!isJudge && (
           <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 700 }}>model</Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>model</Typography>
             <Model slot={slot} onSave={onSave} />
           </Box>
         )}
@@ -92,7 +92,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
             the CLIs whose flag we cannot spell, and a dead dropdown would imply otherwise */}
         {!!(slot.efforts || []).length && (
           <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 700 }}>effort</Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>effort</Typography>
             <Select size="small" displayEmpty value={slot.effort || ""} onChange={(e) => onSave({ effort: e.target.value })}
               sx={{ minWidth: 150, fontSize: 12.5, bgcolor: "#fff" }}>
               <MenuItem value="" sx={{ fontSize: 12.5 }}>default</MenuItem>
@@ -104,8 +104,8 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
 
       <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1,
         alignItems: "baseline", flexWrap: "wrap" }}>
-        <Typography variant="caption" sx={{ color: FAINT, fontWeight: 700 }}>RUNS</Typography>
-        <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 700 }}>
+        <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600 }}>RUNS</Typography>
+        <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 600 }}>
           {picked ? picked.label : "—"}{slot.ready && runs ? ` · ${runs}` : ""}{slot.ready && slot.resolved ? ` → ${slot.resolved}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
         </Typography>
         {slot.owner && (
@@ -127,7 +127,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
           one is the sentence on the report's own card, which is why it is not repeated here. */}
       {isJudge && !!(slot.decides || []).length && (
         <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 700, display: "block", mb: 0.5 }}>
+          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>
             ASKED OF IT, ONCE PER RUN
           </Typography>
           {slot.decides.map((d) => (
@@ -186,7 +186,7 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
       </Typography>
       {err && (
         <Alert severity={stale ? "error" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }}>
-          {stale && <AlertTitle sx={{ fontSize: 13, fontWeight: 800 }}>Restart Taskuary to finish this update</AlertTitle>}
+          {stale && <AlertTitle sx={{ fontSize: 13, fontWeight: 600 }}>Restart Taskuary to finish this update</AlertTitle>}
           {err}
           {stale && " — until then the rows below are the older, plainer controls, and the model and effort pickers are not available."}
         </Alert>

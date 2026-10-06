@@ -72,11 +72,11 @@ export const CliConnectionsPage = ({ onBack }) => {
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
       {(clis || []).map((cli) => <Box key={cli.name} data-connection={cli.name} sx={{ ...card, p: 2 }}>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 1 }}>
-          <TaskuaryMark size={19} /><Typography sx={{ fontWeight: 700, flex: 1 }}>{cli.label}</Typography>
+          <TaskuaryMark size={19} /><Typography sx={{ fontWeight: 600, flex: 1 }}>{cli.label}</Typography>
           <Chip size="small" label={cli.installed ? "Installed" : cli.installable ? "Not installed" : "Cannot install here"}
             icon={cli.installed ? <CheckCircleOutlineIcon /> : undefined}
             sx={cli.installed ? { bgcolor: ROLES.done.tint, color: ROLES.done.ink, border: `1px solid ${ROLES.done.bd}`,
-              fontWeight: 700, "& .MuiChip-icon": { color: "inherit" } } : undefined} />
+              fontWeight: 600, "& .MuiChip-icon": { color: "inherit" } } : undefined} />
           {cli.configured && <Chip size="small" label="Configured" />}
         </Box>
         {cli.description && <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>{cli.description}</Typography>}
@@ -96,7 +96,7 @@ export const CliConnectionsPage = ({ onBack }) => {
     {[note, setupNote].filter(Boolean).map((message, i) => <Alert key={i} severity={message.bad ? "error" : "success"} sx={{ mt: 2 }}>{message.text}</Alert>)}
     {installPane && <Box ref={installerRef} sx={{ mt: 2, ...card, p: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-        <Typography sx={{ flex: 1, fontWeight: 700 }}>{installPane.verb === "update" ? "Update" : "Install"} {installPane.name} — terminal</Typography>
+        <Typography sx={{ flex: 1, fontWeight: 600 }}>{installPane.verb === "update" ? "Update" : "Install"} {installPane.name} — terminal</Typography>
         <Button size="small" onClick={async () => {
           try { await api.post(`/api/terminals/${encodeURIComponent(installPane.sid)}/wrap`, { task_id: installPane.taskId, close: true }); setInstallPane(null); await load(); }
           catch (e) { setErr(failure(e)); }

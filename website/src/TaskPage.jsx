@@ -143,7 +143,7 @@ const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
 // the app uses for every control: the colour says pressable, the border says where it ends.
 // Not filled - filled is Mark done's, one strip up, and a live session has no primary.
 // ...and SMALL, because every row this bar spends is a row the terminal does not get.
-const liveCtl = { fontSize: 10.5, fontWeight: 650, height: 23, minHeight: 23, py: 0, px: 0.9,
+const liveCtl = { fontSize: 10.5, fontWeight: 600, height: 23, minHeight: 23, py: 0, px: 0.9,
   borderRadius: 11.5, color: ACCENT, bgcolor: "#f1f4f7", borderColor: "#c7d2dc", whiteSpace: "nowrap",
   "& .MuiButton-startIcon": { mr: 0.5, ml: 0 },
   "&:hover": { borderColor: ACCENT, bgcolor: "#e7eef4" } };
@@ -899,7 +899,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // a time - and it closes when the agent starts (startCodingAgent / startGeneralAgent close restartOpen on success)
   const nextRunForm = (
                     <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                      <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 700, mb: 0.75 }}>
+                      <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 600, mb: 0.75 }}>
                         {report || detail?.transcript || term?.alive || generalStarted ? "Configure the next run" : "Start an agent"}
                       </Typography>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
@@ -998,10 +998,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     pushed Next, Expand and the X off the right edge (the canvas redesign's phone pass, 2026-09-29) */}
                 <Box sx={{ display: "flex", gap: 0.9, rowGap: 0.5, alignItems: "center", flexWrap: { xs: "wrap", sm: "nowrap" } }}>
                   <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
-                    display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 800 }}>1</Box>
+                    display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 600 }}>1</Box>
                   <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
-                    letterSpacing: ".015em", fontWeight: 750, fontSize: 11.5 }}>{detail.ref}</Typography>
-                  <Typography sx={{ color: INK, flex: 1, fontWeight: 650,
+                    letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5 }}>{detail.ref}</Typography>
+                  <Typography sx={{ color: INK, flex: 1, fontWeight: 600,
                     fontSize: liveSession ? 12.5 : 13,
                     minWidth: { xs: 90, sm: 180 }, flexBasis: { xs: "calc(100% - 90px)", sm: "auto" }, letterSpacing: "-.005em" }} noWrap>
                     {t.Title}
@@ -1056,7 +1056,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </Tooltip>
                 </Box>
                 {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block",
-                  mt: 0.15, ml: 3.4, fontWeight: 650, fontSize: 10 }}>
+                  mt: 0.15, ml: 3.4, fontWeight: 600, fontSize: 10 }}>
                   {workContext}
                 </Typography>}
               </Box>
@@ -1076,7 +1076,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
                   <Box sx={{ ...card, mb: 1.25, px: 1.5, py: 0.85, bgcolor: "#fff", flexShrink: 0 }}>
                     <Box onClick={() => setReportOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
-                      <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 750, letterSpacing: 1.35 }}>THE REPORT</Typography>
+                      <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 600, letterSpacing: 1.35 }}>THE REPORT</Typography>
                       <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
                         {sourceMessage.SourceName || sourceMessage.Subject} · {fmtDateTime(sourceMessage.SentAt)}</Typography>
                       <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: reportOpen ? "rotate(180deg)" : "none" }} />
@@ -1098,7 +1098,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {stage !== "task" && (
                       <Box onClick={() => setOpenStage("task")}
                         sx={{ display: "flex", alignItems: "center", gap: 0.85, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" } }}>
-                        <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 750, letterSpacing: 1.35, flexShrink: 0 }}>TASK</Typography>
+                        <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 600, letterSpacing: 1.35, flexShrink: 0 }}>TASK</Typography>
                         <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
                         {!inRow && !["done", "dropped"].includes(t.Status) && (
                           <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
@@ -1160,7 +1160,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         the same words twice, an inch apart. */}
                     <Box sx={{ minWidth: 0 }}>
                         <Typography variant="overline" sx={{ color: FAINT, fontSize: 9,
-                          fontWeight: 750, letterSpacing: 1.35, lineHeight: 1.2, display: "block" }}>What needs doing</Typography>
+                          fontWeight: 600, letterSpacing: 1.35, lineHeight: 1.2, display: "block" }}>What needs doing</Typography>
                         {taskAsk && (
                           <Typography variant="body2" sx={{ color: DIM, mt: 0.45, lineHeight: 1.55,
                             whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxWidth: 900,
@@ -1239,7 +1239,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 <ChannelIcon channel={m.Channel} sx={{ color: "#55697a", mt: 0.25 }} />
                                 <Box sx={{ minWidth: 0, flex: 1 }}>
                                   <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
-                                    <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 650 }}>
+                                    <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>
                                       {m.FromName || m.FromEmail || m.Channel}
                                     </Typography>
                                     <Typography variant="caption" sx={{ color: FAINT }}>
@@ -1269,9 +1269,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 <Box sx={{ minWidth: 0, flex: 1 }}>
                                   <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
                                     <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
-                                      fontWeight: 750, letterSpacing: 1.25 }}>Triage</Typography>
+                                      fontWeight: 600, letterSpacing: 1.25 }}>Triage</Typography>
                                     <Chip size="small" label={sourceRoute.Decision}
-                                      sx={{ height: 17, fontSize: 9.5, fontWeight: 700, bgcolor: "#e4e9ee", color: "#41525f" }} />
+                                      sx={{ height: 17, fontSize: 9.5, fontWeight: 600, bgcolor: "#e4e9ee", color: "#41525f" }} />
                                   </Box>
                                   {sourceRoute.Reason && <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55 }}>
                                     {sourceRoute.Reason}</Typography>}
@@ -1428,7 +1428,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {report && !wrapped && !sessionView && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
                       <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.35,
-                        fontSize: 9, fontWeight: 750 }}>Latest saved result</Typography>
+                        fontSize: 9, fontWeight: 600 }}>Latest saved result</Typography>
                       <Box sx={{ mt: 0.35, bgcolor: PANEL2, border: `1px solid ${BORDER}`,
                         borderRadius: 1.5, overflow: "hidden" }}>
                         <CoderReport body={report.Body} artifacts={detail?.artifacts || []} />
@@ -1490,7 +1490,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
                       <AccountTreeIcon sx={{ fontSize: 16, color: "#55697a" }} />
-                      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1 }}>
+                      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1 }}>
                         Which repository is this about?
                       </Typography>
                       <IconButton aria-label="Close repository picker" size="small" onClick={() => { setRepoPick(false); setResumeAfterRepo(null); }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
@@ -1523,7 +1523,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <Box sx={{ ...card, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <CircularProgress size={15} />
-                      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
+                      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>
                         {wrapping === "stop" ? "Stopping this session…" : wrapping === "done" ? "Writing up this session, then marking it done…" : "Writing up this session…"}
                       </Typography>
                     </Box>
@@ -1538,7 +1538,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <Box sx={{ ...card, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
                       <DoneAllIcon sx={{ fontSize: 17, color: "#47654a" }} />
-                      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, flex: 1 }}>
+                      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, flex: 1 }}>
                         Session closed — here is what it did
                       </Typography>
                       <Button size="small" sx={{ fontSize: 11 }} onClick={() => setWrapped(null)}>dismiss</Button>
@@ -1689,14 +1689,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {/* THE ENVELOPE over what was sent, read from the same Deliver blob
                               (replyDelivery.js). Read-only: this one is history, not a decision. */}
                           <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
-                            <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
-                            <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 650 }}>
+                            <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
+                            <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>
                               {replyContext(sentReview || sourceMessage)}
                             </Typography>
                           </Box>
                           {replyCc.length > 0 && (
                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mt: 0.6, flexWrap: "wrap", minWidth: 0 }}>
-                              <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
+                              <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
                               {replyCc.map((a) => (
                                 <Box key={a} sx={{ px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>
                                   <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
@@ -1717,7 +1717,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
                               px: 1.1, py: 0.85, mt: 0.9 }}>
                               <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
-                                fontWeight: 750, letterSpacing: 1.25 }}>What was sent</Typography>
+                                fontWeight: 600, letterSpacing: 1.25 }}>What was sent</Typography>
                               <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap",
                                 overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
                                 WebkitBoxOrient: "vertical", overflow: "hidden" }}>
@@ -1729,7 +1729,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             <Box sx={{ bgcolor: PANEL2, border: `1px dashed ${BORDER}`, borderRadius: 1.25,
                               px: 1.1, py: 0.85, mt: 0.9 }}>
                               <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
-                                fontWeight: 750, letterSpacing: 1.25 }}>Not sent - closed without sending</Typography>
+                                fontWeight: 600, letterSpacing: 1.25 }}>Not sent - closed without sending</Typography>
                               <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                                 {unsentReview.DraftText}</Typography>
                               {/* ...and it can still go: the draft comes back to send, the task done or not (T11) */}
@@ -1751,7 +1751,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {proposals.length > 0 && (
                         <Box sx={{ mt: 1.4, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
                           <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
-                            fontSize: 9, fontWeight: 750, display: "block", mb: 0.5 }}>
+                            fontSize: 9, fontWeight: 600, display: "block", mb: 0.5 }}>
                             {proposals.length === 1 ? "Also waiting on you" : `Also waiting on you · ${proposals.length}`}
                           </Typography>
                           {proposals.map((p) => (
@@ -1770,7 +1770,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
                 {!sessionView && <Fold title={`Context & history ·${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
                   <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
-                    fontSize: 9, fontWeight: 750, display: "block", mb: 0.65 }}>Messages</Typography>
+                    fontSize: 9, fontWeight: 600, display: "block", mb: 0.65 }}>Messages</Typography>
                   {taskMessages.map((m) => {
                     const route = detail.routes.find((r) => r.MessageId === m.MessageId);
                     const mine = m.Status === "context" || m.Direction === "out";
@@ -1783,7 +1783,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
                           <ChannelIcon channel={m.Channel} sx={{ color: FAINT }} />
                           <Chip size="small" label={m.ReviewSent ? "sent reply" : mine ? "your reply" : "inbound"}
-                            sx={{ height: 17, fontSize: 9.5, fontWeight: 700,
+                            sx={{ height: 17, fontSize: 9.5, fontWeight: 600,
                               bgcolor: mine ? "#f1ead9" : "#edf3ea", color: mine ? "#6b5f45" : "#47654a" }} />
                           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{mine ? "you" : m.FromName || m.FromEmail}</Typography>
                           {m.SourceName && <Typography variant="caption" sx={{ color: FAINT }}>· {m.SourceName}</Typography>}
@@ -1811,7 +1811,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {!taskMessages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
                   <Divider sx={{ my: 1.2, borderColor: BORDER }} />
                   <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
-                    fontSize: 9, fontWeight: 750, display: "block", mb: 0.35 }}>Notes & activity</Typography>
+                    fontSize: 9, fontWeight: 600, display: "block", mb: 0.35 }}>Notes & activity</Typography>
                   <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
                     <tbody>{detail.comments.map((c) => <CommentRow key={c.CommentId} c={c} />)}</tbody>
                   </Box>
@@ -1854,7 +1854,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         PaperProps={{ sx: { width: { xs: "100%", sm: 760 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <DifferenceIcon sx={{ fontSize: 18, color: "#6f8a6e" }} />
-          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>What has it changed?</Typography>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>What has it changed?</Typography>
           {diff && !!diff.files?.length && (
             <Typography sx={{ ...mono, fontSize: 11.5, color: DIM }}>
               {diff.files.length} file{diff.files.length === 1 ? "" : "s"}
@@ -1897,7 +1897,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <ForwardToInboxIcon sx={{ fontSize: 18, color: "#55697a" }} />
-          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
           <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
@@ -1914,7 +1914,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <CallSplitIcon sx={{ fontSize: 18, color: "#6f8a6e" }} />
-          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
           <IconButton aria-label="Close split or merge" size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
@@ -1980,7 +1980,7 @@ const CommentRow = ({ c }) => {
     <Box component="tr" sx={{ borderTop: `1px solid ${BORDER}`, verticalAlign: "top",
       "&:hover": { bgcolor: open ? "transparent" : PANEL2 } }}>
       <Box component="td" sx={{ py: 0.6, pr: 1, whiteSpace: "nowrap" }}>
-        <Typography variant="caption" sx={{ ...mono, fontWeight: 700, fontSize: 10.5,
+        <Typography variant="caption" sx={{ ...mono, fontWeight: 600, fontSize: 10.5,
           color: c.ActorType === "agent" ? "#6f8a6e" : "#55697a" }}>{c.Actor}</Typography>
       </Box>
       <Box component="td" sx={{ py: 0.6, pr: 1.25, whiteSpace: "nowrap" }}>
@@ -2018,11 +2018,11 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
     cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
     "&:hover": onToggle ? { opacity: 1 } : undefined }}>
     <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: tone, color: "#fff",
-      display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 800 }}>
+      display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>
       {number}
     </Box>
     <Box sx={{ minWidth: 0, flex: 1 }}>
-      <Typography sx={{ color: INK, fontSize: 13.5, fontWeight: 750, lineHeight: 1.25 }}>{title}</Typography>
+      <Typography sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.25 }}>{title}</Typography>
       {description && !folded && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
     </Box>
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}

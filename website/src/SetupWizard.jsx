@@ -59,7 +59,7 @@ export const SetupChip = ({ state, onOpen }) => {
             sx={{ color: ROLES.muted.solid, position: "absolute" }} />
           <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: ROLES.done.solid }} />
         </Box>
-        <Typography variant="caption" sx={{ fontWeight: 700, color: state.dismissed ? DIM : "#55697a" }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "#55697a" }}>
           {left} left
         </Typography>
       </Box>
@@ -209,7 +209,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
       <DialogContent sx={{ p: 3 }}>
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
           <Box sx={{ flex: 1 }}>
-            <Typography sx={{ fontWeight: 800, fontSize: 17, color: INK }}>
+            <Typography sx={{ fontWeight: 600, fontSize: 17, color: INK }}>
               {state.complete ? "Taskuary is yours" : `${spell(left)} ${left === 1 ? "thing" : "things"} left`}
             </Typography>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5 }}>

@@ -111,7 +111,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
       )}
       {files.length > 0 && (
         <Box sx={{ mt: imgs.length || clips.length ? 0.75 : 0, pt: 0.75, borderTop: `1px dashed ${BORDER}` }}>
-          <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "flex", alignItems: "center", gap: 0.3 }}>
+          <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.3 }}>
             <AttachFileIcon sx={{ fontSize: 12 }} /> Attached · {files.length}
           </Typography>
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
@@ -122,7 +122,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
                 border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: 260,
                 cursor: a.url ? "pointer" : "default", opacity: a.url ? 1 : 0.6,
                 "&:hover": { borderColor: a.url ? "#d8cfbe" : BORDER } }}>
-              <Typography variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 700, color: "#55697a" }}>{kindOf(a)}</Typography>
+              <Typography variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "#55697a" }}>{kindOf(a)}</Typography>
               <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>{a.name}</Typography>
               <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{kb(a.size)}</Typography>
             </Box>
@@ -136,7 +136,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
         {big && (
           <>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-              <Typography variant="caption" sx={{ color: INK, fontWeight: 700, flex: 1 }}>{big.name}</Typography>
+              <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flex: 1 }}>{big.name}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>{kb(big.size)}</Typography>
               <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 15 }} />} href={attUrl(big, true)}>Save</Button>
             </Box>

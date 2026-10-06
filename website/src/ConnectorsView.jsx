@@ -60,7 +60,7 @@ const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], 
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
         <TerminalIcon sx={{ fontSize: 18, color: DIM }} />
         <Box sx={{ flex: 1, minWidth: 240 }}>
-          <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Get AI to set it up</Typography>
+          <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Get AI to set it up</Typography>
           <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
             Your coding agent takes the Guide as its prompt, asks you here for anything only you can fetch, saves it onto this
             card and runs Test until it passes. It sits on the Board as a task while it works.
@@ -1222,7 +1222,7 @@ function KbSearch({ conn }) {
   };
   return (
     <Box sx={{ mt: 2, maxWidth: 560 }}>
-      <Typography variant="body2" sx={{ fontWeight: 700, color: INK, mb: 0.75 }}>Ask the knowledge base</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: INK, mb: 0.75 }}>Ask the knowledge base</Typography>
       <Box sx={{ display: "flex", gap: 1 }}>
         <TextField size="small" fullWidth placeholder="e.g. what is our resident refund policy" value={q} sx={{ bgcolor: "#fff" }}
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
@@ -1321,9 +1321,9 @@ const ConnCard = ({ c }) => {
           {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#55697a" }} />
             : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
         </Box>
-        <Typography noWrap sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
+        <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
         {connState(c) === "on" && (
-          <Box component="span" data-tq-conn-pill sx={{ flexShrink: 0, px: 0.75, py: 0.1, borderRadius: 99, fontSize: 10, fontWeight: 700,
+          <Box component="span" data-tq-conn-pill sx={{ flexShrink: 0, px: 0.75, py: 0.1, borderRadius: 99, fontSize: 10, fontWeight: 600,
             lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>{c.channel === "cli" ? "Installed" : "Connected"}</Box>
         )}
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: connDot(c), flexShrink: 0 }} />
@@ -1479,7 +1479,7 @@ function AlchemyWalletGuide({ onBack, onData }) {
     {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
     {sid && <Box sx={{ mt: 2, mb: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", mb: 0.7 }}>
-        <Typography sx={{ fontWeight: 700, flex: 1 }}>Alchemy setup terminal</Typography>
+        <Typography sx={{ fontWeight: 600, flex: 1 }}>Alchemy setup terminal</Typography>
         <Button size="small" onClick={close}>Close terminal</Button>
       </Box>
       <TerminalPane sid={sid} height={420} />
@@ -1487,16 +1487,16 @@ function AlchemyWalletGuide({ onBack, onData }) {
     <Typography variant="body2" sx={{ color: DIM, mt: 2, mb: 1 }}>
       Run these commands in the terminal above. Installation and wallet creation start only when you enter their commands.
     </Typography>
-    <Typography sx={{ fontWeight: 700, color: INK }}>1. Install the CLI (Node.js 22 or newer)</Typography>
+    <Typography sx={{ fontWeight: 600, color: INK }}>1. Install the CLI (Node.js 22 or newer)</Typography>
     {command("npm i -g @alchemy/cli@latest")}
-    <Typography sx={{ fontWeight: 700, color: INK }}>2. Sign in to Alchemy</Typography>
+    <Typography sx={{ fontWeight: 600, color: INK }}>2. Sign in to Alchemy</Typography>
     {command("alchemy auth login --device-code")}
-    <Typography sx={{ fontWeight: 700, color: INK }}>3. Create an Agent Wallet and approve this computer</Typography>
+    <Typography sx={{ fontWeight: 600, color: INK }}>3. Create an Agent Wallet and approve this computer</Typography>
     <Typography variant="body2" sx={{ color: DIM }}>
       Create the wallet in the <a href="https://dashboard.alchemy.com/products/agent-wallet/evm-wallet" target="_blank" rel="noreferrer">Alchemy Agent Wallets Dashboard</a>, then run:
     </Typography>
     {command("alchemy wallet connect --mode session --instance-name taskuary")}
-    <Typography sx={{ fontWeight: 700, color: INK }}>4. Check the session and wallet address</Typography>
+    <Typography sx={{ fontWeight: 600, color: INK }}>4. Check the session and wallet address</Typography>
     {command("alchemy --json --no-interactive wallet status --verify\nalchemy --json --no-interactive wallet address")}
     <Typography variant="body2" sx={{ color: DIM, mt: 1 }}>
       To create local EVM and Solana key files instead, run <code>alchemy wallet connect --mode local</code>. Keep the generated key files private and backed up; this path stores signing keys on this computer.
@@ -1753,7 +1753,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       note="Keys and connection settings are stored locally, in the same SQLite file as your tasks.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2 }}>
-        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
           {q ? `Matches for “${q}”` : shown.title}
         </Typography>
         <Button size="small" variant="contained" disableElevation onClick={syncNow} disabled={syncing}
@@ -1855,7 +1855,7 @@ function CardPlaybooks({ type }) {
   const go = (slug) => { window.location.hash = `playbook=${slug}`; };
   return (
     <Box sx={{ mt: 3, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL }}>
-      <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.75 }}>
+      <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.75 }}>
         PLAYBOOKS — WHAT THIS CONNECTION DOES FOR US
       </Typography>
       {books.length === 0 && (
@@ -1939,7 +1939,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
     <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.5, bgcolor: PANEL2, flex: 1, minWidth: 280 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
         <StatusDot ok={!!ok} />
-        <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: INK }}>{title}</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: INK }}>{title}</Typography>
         <Typography variant="caption" sx={{ color: FAINT }}>{subtitle}</Typography>
       </Box>
       {children}
@@ -2445,7 +2445,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
   };
   return (
     <Box sx={{ mt: 3, maxWidth: 760 }}>
-      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>
         What you have access to — and what each one does
       </Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 1 }}>
@@ -2488,7 +2488,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
                 {CLOUD_MODES.map(([v, label]) => (
                   <Box key={v} component="span" title={label}
                     onClick={() => !bulk && setAllShown(v)}
-                    sx={{ fontSize: 11, fontWeight: 700, color: bulk ? FAINT : "#55697a", cursor: bulk ? "default" : "pointer",
+                    sx={{ fontSize: 11, fontWeight: 600, color: bulk ? FAINT : "#55697a", cursor: bulk ? "default" : "pointer",
                       "&:hover": { textDecoration: bulk ? "none" : "underline" } }}>
                     {bulk === v ? `${v}…` : v}
                   </Box>
@@ -2684,7 +2684,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 560, mt: 1 }}>
           {canReuse && (
             <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: INK }}>{meta.reuse.title}</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>{meta.reuse.title}</Typography>
               <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mb: 0.75 }}>{meta.reuse.text}</Typography>
               <Button size="small" variant="outlined" disabled={!!busy} onClick={useShared}>Use it — save and test</Button>
             </Box>
@@ -2769,7 +2769,7 @@ const GithubPerms = ({ conn, reload }) => {
         <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
           <Switch checked={!!cfg[key]} onChange={() => toggle(key)} sx={{ mt: -0.5 }} />
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{label}</Typography>
             <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
           </Box>
         </Box>
@@ -2839,7 +2839,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
       {CLOSEOUT_PICKS.map(([key, label, options, hint]) => (
         <Box key={key} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{label}</Typography>
             {hint && <Typography variant="body2" sx={{ color: DIM }}>{hint}</Typography>}
           </Box>
           {pick(co[key], (v) => save({ [key]: v }), options)}
@@ -2849,7 +2849,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
         <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
           <Switch checked={!!co[key]} onChange={() => save({ [key]: !co[key] })} sx={{ mt: -0.5 }} />
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{label}</Typography>
             <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
           </Box>
         </Box>
@@ -2877,7 +2877,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
       </Box>
       {check && check.map((row) => (
         <Box key={row.repo || "err"} sx={{ mt: 1, px: 1.25, py: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-          <Typography sx={{ ...mono, fontSize: 12, color: INK, fontWeight: 700 }}>
+          <Typography sx={{ ...mono, fontSize: 12, color: INK, fontWeight: 600 }}>
             {row.repo}{row.role ? ` · your role: ${row.role}` : ""}{row.methods ? ` · merges by ${row.method}` : ""}
           </Typography>
           {row.error && <Typography variant="body2" sx={{ color: "#8a2f3a" }}>{row.error}</Typography>}
@@ -2911,7 +2911,7 @@ const RoleRow = ({ on, onToggle, label, desc }) => (
   <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
     <Switch checked={on} onChange={onToggle} sx={{ mt: -0.5 }} />
     <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{label}</Typography>
       <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
     </Box>
   </Box>
@@ -2940,7 +2940,7 @@ const AuthorityRow = ({ conn, reload }) => {
   };
   return (
     <Box sx={{ pt: 1.5 }}>
-      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>Authority — how far the agents may reach</Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>Authority — how far the agents may reach</Typography>
       <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
         Only bites when this is an agent tool. An action nobody has classified counts as write,
         so a read-only connection stays read-only even for a verb we have never seen.
@@ -2949,7 +2949,7 @@ const AuthorityRow = ({ conn, reload }) => {
         <Box key={s} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
           <Radio checked={(current || fallback) === s} disabled={busy} onChange={() => set(s)} sx={{ mt: -0.75 }} />
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>
               {SCOPE_META[s][0]}{!current && fallback === s ? " — default" : ""}
             </Typography>
             <Typography variant="body2" sx={{ color: DIM }}>{SCOPE_META[s][1]}</Typography>
@@ -3016,7 +3016,7 @@ const inboundDone = (conn, mine) => {
 // the whole idea is a paragraph, and a paragraph belongs next to the switch it explains.
 const BULK_HELP = (
   <Box sx={{ p: 1.75, maxWidth: 380 }}>
-    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.75 }}>Bulk processing</Typography>
+    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>Bulk processing</Typography>
     <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55, mb: 1 }}>
       <b>clear</b> — every task from here is worked in arrival order until the queue is empty. Right when the
       inbox <i>is</i> the job.
@@ -3121,7 +3121,7 @@ const WaPair = ({ conn, reload }) => {
   const stepNo = st.connected ? 4 : st.bridge === false ? (st.node ? 2 : 1) : 3;
   const StepLine = ({ n, label, state }) => (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
-      <Box sx={{ width: 18, height: 18, borderRadius: "50%", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center",
+      <Box sx={{ width: 18, height: 18, borderRadius: "50%", fontSize: 11, fontWeight: 600, display: "grid", placeItems: "center",
         bgcolor: state === "done" ? "#47654a" : state === "now" ? "#55697a" : "#e6e2dc", color: state === "todo" ? DIM : "#fff" }}>{state === "done" ? "✓" : n}</Box>
       <Typography variant="body2" sx={{ fontSize: 13, fontWeight: state === "now" ? 700 : 500, color: state === "todo" ? DIM : INK }}>{label}</Typography>
       {state === "now" && busy && <CircularProgress size={11} sx={{ color: DIM }} />}
@@ -3131,7 +3131,7 @@ const WaPair = ({ conn, reload }) => {
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", gap: 2, alignItems: "flex-start", flexWrap: "wrap" }}>
       <Box sx={{ flex: 1, minWidth: 240 }}>
-        <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Pair with your phone</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Pair with your phone</Typography>
         {!st.connected && (
           <Box sx={{ mb: 1 }}>
             <StepLine n={1} label="Node 18+ on this machine" state={stateOf(1)} />
@@ -3185,7 +3185,7 @@ const WaPair = ({ conn, reload }) => {
         ) : st.pairing_code ? (
           <Typography variant="body2" sx={{ color: INK, mt: 0.5 }}>
             Enter this code on your phone — WhatsApp → Linked devices → Link a device → Link with phone number:
-            <Box component="span" sx={{ ...mono, fontSize: 22, fontWeight: 800, letterSpacing: 3, display: "block", mt: 0.5 }}>{st.pairing_code}</Box>
+            <Box component="span" sx={{ ...mono, fontSize: 22, fontWeight: 600, letterSpacing: 3, display: "block", mt: 0.5 }}>{st.pairing_code}</Box>
           </Typography>
         ) : (
           <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mt: 0.5 }}>
@@ -3270,7 +3270,7 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
           genuinely the connector's: the pairing, and what comes in (the owner, 2026-09-17). */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25, py: 0.6, px: 0.8, flexWrap: "wrap",
         border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Assistant chat</Typography>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Assistant chat</Typography>
         <Typography variant="caption" sx={{ ...mono, color: guideJid ? INK : FAINT, flex: 1, minWidth: 180, fontSize: 10.5 }} noWrap>
           {guideJid || "not connected"}
         </Typography>
@@ -3279,7 +3279,7 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
           onNavigate?.("Settings");
         }}>Settings → Assistant on your phone</Button>
       </Box>
-      <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 700, display: "block" }}>
+      <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 600, display: "block" }}>
         WHAT COMES IN
       </Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
@@ -3296,12 +3296,12 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
           {/* the help text above promises "the row marked Myself" - it used to say "group", because
               that is the shape of the jid WhatsApp gives your own thread */}
           <Chip size="small" label={r.self ? "Myself" : r.group ? "group" : "chat"}
-            sx={{ height: 18, fontSize: 10, ...(r.self ? { bgcolor: "#dfe9e0", fontWeight: 700 } : {}) }} />
+            sx={{ height: 18, fontSize: 10, ...(r.self ? { bgcolor: "#dfe9e0", fontWeight: 600 } : {}) }} />
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
           </Box>
-          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 700 }}>✓ assistant chat</Typography>}
+          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ assistant chat</Typography>}
           {have.has(r.jid) ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ source</Typography>
             : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>Add as source</Button>}
         </Box>
@@ -3354,7 +3354,7 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
   const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signout`); setState(""); setDetail(""); reload(); };
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
-      <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Sign in with ChatGPT</Typography>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with ChatGPT</Typography>
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         Your own ChatGPT account and plan - no API key. Calls count against your ChatGPT allowance, under a weekly cap you set in ChatGPT.
       </Typography>
@@ -3420,7 +3420,7 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
   };
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
-      <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
         work and personal (Outlook.com) accounts both work. Teams chat reading still needs the tenant app.
@@ -3436,7 +3436,7 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
             1. Open <a href={flow.verification_uri} target="_blank" rel="noreferrer">{String(flow.verification_uri).replace("https://", "")}</a> and enter this code:
           </Typography>
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-            <Typography sx={{ ...mono, fontSize: 26, fontWeight: 800, letterSpacing: 3, color: INK, px: 1.5, py: 0.5,
+            <Typography sx={{ ...mono, fontSize: 26, fontWeight: 600, letterSpacing: 3, color: INK, px: 1.5, py: 0.5,
               bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>{flow.user_code}</Typography>
             <IconButton size="small" onClick={() => copy(flow.user_code)} title="copy the code"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
             <Button size="small" variant="contained" disableElevation component="a" href={flow.verification_uri} target="_blank" rel="noreferrer"
@@ -3464,7 +3464,7 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
       {adminUrl && !signedIn && (
         <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", display: "flex", flexDirection: "column", gap: 0.5 }}>
-          <Typography variant="body2" sx={{ fontWeight: 700, color: INK }}>Approval link for your Microsoft 365 admin</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>Approval link for your Microsoft 365 admin</Typography>
           <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
             Forward this to whoever runs your Microsoft 365. They sign in, click Accept once, and everyone in your organisation can
             sign in above. It is a consent grant, not an app registration - nothing to build on their side. Then click Sign in with Microsoft again.
@@ -3525,7 +3525,7 @@ const ProcessingStep = ({ conn, reload, n }) => {
               "&:hover": { borderColor: "#6f8a6e" } }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
               <Radio size="small" checked={mode === v} sx={{ p: 0 }} />
-              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{title}</Typography>
+              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{title}</Typography>
               {v === "clear" && <Typography variant="caption" sx={{ color: FAINT }}>default</Typography>}
             </Box>
             <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5, lineHeight: 1.5 }}>{desc}</Typography>
@@ -3660,7 +3660,7 @@ const Steps = ({ steps }) => (
     {steps.map((step, i) => (
       <Box key={i} sx={{ display: "flex", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
         <Box sx={{ ...mono, width: 24, height: 24, borderRadius: "50%", bgcolor: "#eae4d8", color: "#55697a",
-          fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</Box>
+          fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</Box>
         <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{step}</Typography>
       </Box>
     ))}

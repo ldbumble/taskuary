@@ -38,7 +38,7 @@ export default function AgentPermissions({ onLoaded }) {
         return (
           <Box key={c.ConnectorId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.1, borderBottom: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
             <Box sx={{ flex: 1, minWidth: 180 }}>
-              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{c.Name || c.Type}</Typography>
+              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{c.Name || c.Type}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>{c.Type}</Typography>
             </Box>
             {tool ? (

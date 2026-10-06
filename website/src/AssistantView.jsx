@@ -33,7 +33,7 @@ import { ChannelIcon, MicButton, StarMark, TaskuaryMark, fmtDateTime, fmtTime12 
 // taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
 // the avatars on its cards - the bright tile repeated on every line shouted over the card it introduced
 const AssistantMark = () => <StarMark />;
-import { BORDER, BRAND, DIM, FAINT, INK, LEVEL_COLOR, ROLES } from "./theme.jsx";
+import { BORDER, BRAND, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
@@ -324,7 +324,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
           ? { top: Math.max(0, mem[0].top - 4),
               height: mem[mem.length - 1].top + ROW_H + 1 - Math.max(0, mem[0].top - 4) } : null;
         return (
-          <div className="tq-pile-band" key={level} data-tq-run={level}>
+          <div className="tq-pile-band" key={level} data-tq-run={level} style={{ "--band": LEVEL_COLOR[level], "--tint": LEVEL_TINT[level] }}>
             {/* the category, said once, in the one place importance exists in this product - and
                 the reason the dock above the rail no longer carries a level dropdown saying it.
                 A band that can be opened is also the way to shut it again: opening one had no way
@@ -1771,7 +1771,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         }} />}
       <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { p: 1.5, width: 320 } } }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>
         <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.45 }}>{state?.scripted
           ? "Every thread, Timeline post, and reply here is invented and runs locally in this page. No AI, agent, mailbox, or outside system is connected."
           : "Your CLI agent is the default, on its quick gear (haiku, low effort, flash) - it can read, rerun reports and run tools. An API model answers faster but cannot act. The agents doing the actual work are chosen elsewhere."}</Typography>
@@ -1929,7 +1929,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}
             slotProps={{ paper: { sx: { p: 1.1, borderRadius: 2.5 } } }}>
-            <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: INK, px: 0.4, pb: 0.75 }}>Send a quick response</Typography>
+            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: INK, px: 0.4, pb: 0.75 }}>Send a quick response</Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6, 36px)", gap: 0.4 }}>
               {EMOJI_REPLIES.map(([emoji, label]) => (
                 <Box key={emoji} component="button" type="button" aria-label={`Send ${label}`} title={label}

@@ -28,7 +28,7 @@ class Boundary extends React.Component {
     return (
       <div style={{ maxWidth: 720, margin: "80px auto", padding: 24, fontFamily: "'IBM Plex Sans', 'Segoe UI', sans-serif",
         background: "#fff", border: "1px solid #f3d1d1", borderRadius: 12 }}>
-        <div style={{ fontWeight: 800, fontSize: 16, color: "#6b2733", marginBottom: 8 }}>
+        <div style={{ fontWeight: 600, fontSize: 16, color: "#6b2733", marginBottom: 8 }}>
           Something in this view failed to draw
         </div>
         <div style={{ fontSize: 13, color: "#1f2430", marginBottom: 12 }}>
@@ -40,7 +40,7 @@ class Boundary extends React.Component {
         </pre>
         <button onClick={() => this.setState({ err: null })}
           style={{ padding: "6px 16px", borderRadius: 8, border: "1px solid #d8cfbe", background: "#eae4d8",
-            color: "#55697a", fontWeight: 700, cursor: "pointer" }}>
+            color: "#55697a", fontWeight: 600, cursor: "pointer" }}>
           Try again
         </button>
         <button onClick={() => location.reload()}

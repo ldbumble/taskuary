@@ -595,7 +595,7 @@ export default function StudioScene({ seats, selectedId, onSelect }) {
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
               <Box sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
                 bgcolor: descriptor.state.tone === "waiting" ? ROLES.you.solid : ROLES.working.solid }} />
-              <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 700, color: INK }}>{descriptor.state.agent}</Typography>
+              <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 600, color: INK }}>{descriptor.state.agent}</Typography>
               <Typography sx={{ ...mono, ml: "auto", fontSize: 9.5, color: FAINT }}>{descriptor.task.ref}</Typography>
             </Box>
             <Typography noWrap sx={{ fontSize: 10.5, color: descriptor.state.tone === "waiting" ? ROLES.you.solid : FAINT,
@@ -608,7 +608,7 @@ export default function StudioScene({ seats, selectedId, onSelect }) {
         bgcolor: "rgba(255,253,249,.86)", border: `1px solid ${BORDER}`, backdropFilter: "blur(7px)" }}>
         <Typography sx={{ fontSize: 10.5, color: FAINT }}>drag to turn · scroll to zoom · click an agent</Typography>
         <Box component="button" type="button" onClick={() => sceneApi.current?.reset()}
-          sx={{ border: 0, bgcolor: "transparent", color: "#536b59", fontSize: 10.5, fontWeight: 700,
+          sx={{ border: 0, bgcolor: "transparent", color: "#536b59", fontSize: 10.5, fontWeight: 600,
             cursor: "pointer", p: 0, "&:hover": { textDecoration: "underline" } }}>Reset</Box>
       </Box>
     </Box>

@@ -73,10 +73,10 @@ export default function SoulInterview({ open, onClose, onWritten }) {
           </Box>
         ) : question && (
           <>
-            <Typography variant="caption" sx={{ color: FAINT, fontWeight: 700, letterSpacing: ".06em" }}>
+            <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, letterSpacing: ".06em" }}>
               QUESTION {number} OF {total}
             </Typography>
-            <Typography sx={{ fontSize: 19, lineHeight: 1.35, fontWeight: 700, color: INK, mt: 0.75, mb: 1 }}>
+            <Typography sx={{ fontSize: 19, lineHeight: 1.35, fontWeight: 600, color: INK, mt: 0.75, mb: 1 }}>
               {question.q}
             </Typography>
             <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>{question.why}</Typography>

@@ -48,7 +48,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
       bgcolor: general ? "#eae4d8" : PANEL, px: 1.1, py: 0.7, mb: 0.6 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
         <AccountTreeIcon sx={{ fontSize: 14, color: general ? "#55697a" : FAINT }} />
-        <Typography variant="caption" sx={{ fontWeight: 700, color: general ? "#55697a" : INK, flex: 1, minWidth: 0 }} noWrap>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: general ? "#55697a" : INK, flex: 1, minWidth: 0 }} noWrap>
           General — no repository
         </Typography>
         {general ? <CheckIcon sx={{ fontSize: 15, color: "#47654a" }} />
@@ -83,7 +83,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
             bgcolor: on ? "#eae4d8" : PANEL, px: 1.1, py: 0.7, mb: 0.6 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
               <AccountTreeIcon sx={{ fontSize: 14, color: on ? "#55697a" : FAINT }} />
-              <Typography variant="caption" sx={{ ...mono, fontWeight: 700, color: on ? "#55697a" : INK,
+              <Typography variant="caption" sx={{ ...mono, fontWeight: 600, color: on ? "#55697a" : INK,
                 flex: 1, minWidth: 0 }} noWrap>{r.repo}</Typography>
               {r.tagged && <Chip size="small" label="pinned" sx={{ height: 16, fontSize: 9, bgcolor: "#eae4d8", color: "#55697a" }} />}
               {!r.has_path && (
@@ -168,7 +168,7 @@ export const RepoSelect = ({ taskId, agent = "coder", instruction = "", value, o
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.75 }}>
       <AccountTreeIcon sx={{ fontSize: 15, color: DIM }} />
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>repository</Typography>
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>repository</Typography>
       <select className="tq-start-repo" aria-label="repository" value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
         style={{ fontSize: 12.5, padding: "4px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fff", color: INK, minWidth: 220 }}>
         {!value && <option value="">choose a repository…</option>}

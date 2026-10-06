@@ -71,7 +71,7 @@ export default function UpdateCard() {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
           <SystemUpdateAltIcon sx={{ fontSize: 22, color: "#55697a" }} />
           <Box sx={{ flex: 1, minWidth: 220 }}>
-            <Typography sx={{ fontWeight: 700, color: INK, fontSize: 13.5 }}>
+            <Typography sx={{ fontWeight: 600, color: INK, fontSize: 13.5 }}>
               Running <Box component="span" sx={{ ...mono }}>v{info?.current || "…"}</Box>
               {info?.latest && (
                 <Box component="span" sx={{ color: info.newer ? "#6b2733" : "#47654a", fontWeight: 600, ml: 1, fontSize: 12.5 }}>

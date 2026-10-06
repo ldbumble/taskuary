@@ -170,7 +170,7 @@ export default function SkillImport({ onClose, onImported }) {
               {found?.length === 0 && <Typography variant="body2" sx={{ color: FAINT }}>No skills found under ~/.claude on this machine.</Typography>}
               {groups.map((g) => (
                 <Box key={g.key} sx={{ mb: 1.25 }}>
-                  <Typography variant="caption" sx={{ color: FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{g.key}</Typography>
+                  <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{g.key}</Typography>
                   {g.rows.map((r) => (
                     <Box key={r.path} onClick={() => setPath(r.path)}
                       sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.6, px: 0.75, borderRadius: 1, cursor: "pointer",

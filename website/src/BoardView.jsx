@@ -142,7 +142,7 @@ const NoteChip = ({ onOpen }) => (
       sx={{ display: "inline-flex", alignItems: "center", gap: 0.3, px: 0.6, height: 16,
         borderRadius: 0.75, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", cursor: "pointer",
         "&:hover": { bgcolor: "#d2d6cf" } }}>
-      <Typography sx={{ color: ROLES.working.ink, fontWeight: 800, fontSize: 8.5, letterSpacing: ".05em" }}>
+      <Typography sx={{ color: ROLES.working.ink, fontWeight: 600, fontSize: 8.5, letterSpacing: ".05em" }}>
         ✎ NOTE
       </Typography>
     </Box>
@@ -178,8 +178,8 @@ const NoteDialog = ({ open, task, onClose }) => {
       PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ fontSize: 14.5, pb: 0.5 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography sx={{ ...mono, color: "#55697a", fontWeight: 700, fontSize: 12 }}>{task?.ref}</Typography>
-          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14 }}>the handover note</Typography>
+          <Typography sx={{ ...mono, color: "#55697a", fontWeight: 600, fontSize: 12 }}>{task?.ref}</Typography>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>the handover note</Typography>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
           Written when this session paused — and this is the same text the next agent is seeded
@@ -191,7 +191,7 @@ const NoteDialog = ({ open, task, onClose }) => {
         {secs.length ? secs.map(([k, v]) => (
           <Box key={k} sx={{ mb: 1, px: 1.25, py: 0.9, bgcolor: SECTION[k].bg,
             border: `1px solid ${SECTION[k].bd}`, borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ color: SECTION[k].fg, fontWeight: 800, fontSize: 9.5,
+            <Typography variant="caption" sx={{ color: SECTION[k].fg, fontWeight: 600, fontSize: 9.5,
               letterSpacing: ".08em", display: "block", mb: 0.35 }}>
               {SECTION[k].icon} {SECTION[k].title}
             </Typography>
@@ -203,7 +203,7 @@ const NoteDialog = ({ open, task, onClose }) => {
         {/* the note is the agent's account of itself; this is git's */}
         {files.length > 0 && (
           <Box sx={{ mt: 1.5 }}>
-            <Typography variant="caption" sx={{ color: ROLES.working.ink, fontWeight: 800, fontSize: 9.5,
+            <Typography variant="caption" sx={{ color: ROLES.working.ink, fontWeight: 600, fontSize: 9.5,
               letterSpacing: ".08em", display: "block", mb: 0.5 }}>
               ✎ FILES IT TOUCHED — {files.length}, per git
             </Typography>
@@ -364,7 +364,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
       {/* four things on one line is a laptop's worth of room; below that they wrap rather than
           push the page sideways */}
       <Box sx={{ display: "flex", alignItems: "center", mb: 1.25, gap: 1.5, flexWrap: "wrap" }}>
-        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: "1 1 auto" }}>Agent board</Typography>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: "1 1 auto" }}>Agent board</Typography>
         {view === "notes" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
           Short-lived task and checkout coordination — agents read it before starting; hard-earned reusable discoveries belong in the Hub.
         </Typography>}
@@ -451,7 +451,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 minHeight: { xs: cards.length ? 200 : 0, md: "calc(100vh - 190px)" }, alignSelf: "stretch" }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.4, pb: 0.85 }}>
                 <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: col.dot }} />
-                <Typography variant="body2" sx={{ color: INK, fontWeight: 700, flex: 1, fontSize: 11.5 }}>{col.title}</Typography>
+                <Typography variant="body2" sx={{ color: INK, fontWeight: 600, flex: 1, fontSize: 11.5 }}>{col.title}</Typography>
                 <Chip size="small" label={cards.length} sx={{ height: 16, fontSize: 9.5, bgcolor: PANEL,
                   border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />
               </Box>
@@ -476,14 +476,14 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                     ...(badge ? { mt: 1.1, borderColor: `${badge.color}55` } : {}) }}>
                   {badge && (
                     <Typography variant="caption" title={`${badge.word} · ${badge.cli}`} sx={{ ...mono, position: "absolute", top: -8, left: 10,
-                      px: 0.6, fontSize: 9, fontWeight: 700, lineHeight: "13px", letterSpacing: ".06em",
+                      px: 0.6, fontSize: 9, fontWeight: 600, lineHeight: "13px", letterSpacing: ".06em",
                       color: badge.color, bgcolor: PANEL, border: `1px solid ${badge.color}55`,
                       borderRadius: 1 }}>
                       {badge.word}
                     </Typography>
                   )}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
-                    <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700, fontSize: 10,
+                    <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 600, fontSize: 10,
                       whiteSpace: "nowrap", flexShrink: 0 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 12 }} />
                     {assignedAgent(t.Assignee) && !badge && <Chip size="small" icon={<TaskuaryMark size={10} />}
@@ -495,7 +495,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                     {t.RunStatus && (
                       <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.State === "blocked" ? AGENT.waiting : RUN_WORD[t.RunStatus] || t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
-                        sx={{ height: 15, fontSize: 8.5, fontWeight: 700, "& .MuiChip-label": { px: 0.7 },
+                        sx={{ height: 15, fontSize: 8.5, fontWeight: 600, "& .MuiChip-label": { px: 0.7 },
                           bgcolor: t.RunStatus === "running" ? "#eae4d8" : t.RunStatus === "error" ? "#f0e2e4" : "#dfeade",
                           color: t.RunStatus === "running" ? "#55697a" : t.RunStatus === "error" ? "#6b2733" : "#47654a" }} />
                     )}
@@ -509,7 +509,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                   </Typography>
                   {t.Playbook && (
                     <Typography variant="caption" title={t.Playbook.uses?.length ? `uses ${t.Playbook.uses.join(", ")}` : ""}
-                      sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontSize: 9.5, fontWeight: 650,
+                      sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontSize: 9.5, fontWeight: 600,
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       Playbook · {t.Playbook.title}
                     </Typography>
@@ -535,7 +535,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                       <Chip size="small" onClick={(e) => { e.stopPropagation(); setFeedTask(t.TaskId); setFeedOpen(true); }}
                         label={`✎ ${t.Waiting} queued prompt${t.Waiting === 1 ? "" : "s"}`}
                         title="waiting in the funnel - lands at the agent's next stop; click to add more"
-                        sx={{ height: 15, fontSize: 8.5, bgcolor: "#f1ead9", border: "1px solid #d8cfbe", color: "#6b5f45", fontWeight: 700,
+                        sx={{ height: 15, fontSize: 8.5, bgcolor: "#f1ead9", border: "1px solid #d8cfbe", color: "#6b5f45", fontWeight: 600,
                           cursor: "pointer", "& .MuiChip-label": { px: 0.7 } }} />
                     )}
                     <Box sx={{ flex: 1 }} />

@@ -386,7 +386,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     header carried. */}
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 0.4, minWidth: 0 }}>
                   <Typography noWrap sx={{ color: FAINT, fontSize: 10.5, flex: 1, minWidth: 0 }}>
-                    <Box component="span" data-tq-task-ref="" sx={{ color: "#55697a", fontWeight: 750,
+                    <Box component="span" data-tq-task-ref="" sx={{ color: "#55697a", fontWeight: 600,
                       fontVariantNumeric: "tabular-nums", letterSpacing: ".015em" }}>{task.ref}</Box>
                     {` · ${shortKind(task.Kind)}`}{worker ? ` · ${worker}` : ""}
                   </Typography>

@@ -20,7 +20,7 @@ export default function CloseNote({ anchor, onClose, onSubmit, inline = false, t
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 340 }) }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#41525f" }}>Close out with a note{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>Close out with a note{taskRef ? ` · ${taskRef}` : ""}</Typography>
       <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder="What came of it - a call, a fix, a decision"
         value={note} onChange={(e) => setNote(e.target.value)} disabled={busy}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) go(); }}

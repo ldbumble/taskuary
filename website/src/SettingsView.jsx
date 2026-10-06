@@ -105,7 +105,7 @@ const PhoneDoorways = ({ onLoaded }) => {
         return (
           <Box key={`${r.channel}-${r.connectorId}`} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, minWidth: 92, textTransform: "capitalize" }}>
+              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, minWidth: 92, textTransform: "capitalize" }}>
                 {r.channel}
               </Typography>
               {!r.live ? (
@@ -298,7 +298,7 @@ const SECTIONS = { about: ABOUT_SECTIONS, config: GROUPS, audit: AUDIT_SECTIONS 
 // The heading a rail entry scrolls to. scrollMarginTop is the belt to the offset's braces: a
 // keyboard "find in page" or a browser restoring the anchor does not go through scrollToSection.
 const SectionHead = ({ page, name }) => (
-  <Typography id={secId(page, name)} sx={{ color: INK, fontWeight: 800, fontSize: 14.5, pt: 0.5, pb: 0.75, mb: 1.75,
+  <Typography id={secId(page, name)} sx={{ color: INK, fontWeight: 600, fontSize: 14.5, pt: 0.5, pb: 0.75, mb: 1.75,
     borderBottom: `1px solid ${BORDER}`, scrollMarginTop: `${SCROLL_TOP}px` }}>{name}</Typography>
 );
 
@@ -312,7 +312,7 @@ const PageHead = ({ page, first }) => (
   <Box sx={{ mt: first ? 0 : 7, pt: first ? 0 : 5, borderTop: first ? "none" : `1px solid ${BORDER}` }}>
     <Box id={pageId(page)} sx={{ display: "flex", alignItems: "center", gap: 1, scrollMarginTop: `${SCROLL_TOP}px` }}>
       {React.createElement(PAGES[page].icon, { sx: { fontSize: 17, color: FAINT } })}
-      <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>{PAGES[page].title}</Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15 }}>{PAGES[page].title}</Typography>
     </Box>
     <Typography variant="body2" sx={{ color: DIM, mt: 0.25, mb: 2 }}>{PAGES[page].desc}</Typography>
   </Box>
@@ -600,7 +600,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
               onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
-              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
+              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
                 {m.label}
                 {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
               </Typography>
@@ -650,7 +650,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
           </Box>
           {!(policies || []).length && !draft && (
             <Box sx={{ ...card, bgcolor: PANEL2, p: 2.25, mt: 2, maxWidth: 680 }}>
-              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>No routing rules yet</Typography>
+              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>No routing rules yet</Typography>
               <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5, maxWidth: 560 }}>
                 Rules are optional. Add one when a sender, domain, or message type should always be drafted,
                 filed, made into a task, or sent to you for a decision.
@@ -678,7 +678,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             onClose={() => setDelPolicy(null)} onConfirm={() => deletePolicy(delPolicy)} />
           {draft && (
             <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-              <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 700 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
+              <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 600 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
               <TextField label="Name" value={draft.Name} onChange={(e) => setDraft({ ...draft, Name: e.target.value })} />
               <Box sx={{ display: "flex", gap: 1 }}>
                 <Select fullWidth value={draft.Kind} onChange={(e) => setDraft({ ...draft, Kind: e.target.value })}>
@@ -779,7 +779,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
           <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
           {verify && (
             <Box sx={{ mt: 2 }}>
-              {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#47654a" }}>
+              {verify.ok && <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: "#47654a" }}>
                 ✓ Intact — {verify.rows} rows verified
               </Typography>}
               {/* two different findings, and calling both "BROKEN" cried wolf about a bug in
@@ -826,7 +826,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
               <Box key={r.key} onClick={r.go}
                 sx={{ ...card, p: 1.5, cursor: "pointer", transition: "border-color .15s, box-shadow .15s",
                   "&:hover": { borderColor: "#c8c0b3", boxShadow: "0 2px 8px rgba(47,56,64,.08)" } }}>
-                <Typography sx={{ color: "#55697a", fontWeight: 650, fontSize: 13.5 }}>{r.label}</Typography>
+                <Typography sx={{ color: "#55697a", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
                 <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.35 }}>{r.crumb}</Typography>
               </Box>
             ))}
@@ -1065,7 +1065,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: `${RAIL}px minmax(0,1fr)` },
       gap: 3, alignItems: "start", mx: "auto", maxWidth: RAIL + GUTTER + PAGE }}>
       <Box sx={{ position: { md: "sticky" }, top: { md: 62 }, maxHeight: { md: "calc(100vh - 74px)" }, overflowY: { md: "auto" } }}>
-        <Typography id="tqSettingsRail" sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Settings</Typography>
+        <Typography id="tqSettingsRail" sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 1.5 }}>Settings</Typography>
         <TextField fullWidth placeholder="Search settings…" value={q}
           onChange={(e) => setQ(e.target.value)} sx={{ mb: 1.5, bgcolor: "#fff", borderRadius: 2 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }} />
@@ -1169,7 +1169,7 @@ const AssistantChanges = () => {
   return (
     <Box sx={{ ...card, mb: 2, px: 1.5, py: 1.1, borderLeft: "4px solid #6f8a6e" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <Typography sx={{ ...mono, fontSize: 10, fontWeight: 750, letterSpacing: 1.2, color: ACCENT2, flex: 1, textTransform: "uppercase" }}>What the assistant changed</Typography>
+        <Typography sx={{ ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: ACCENT2, flex: 1, textTransform: "uppercase" }}>What the assistant changed</Typography>
         {undo && <Button size="small" variant="outlined" disabled={busy} onClick={revert} sx={{ fontSize: 11, minHeight: 26, py: 0 }}>{busy ? "Undoing…" : "Undo the last change"}</Button>}
       </Box>
       {rows.map((r, i) => (
@@ -1202,7 +1202,7 @@ const AuditHistory = () => {
         <Box key={r.Id} sx={{ display: "grid", gridTemplateColumns: "150px 110px 150px minmax(0, 1fr) 70px", gap: 1.5, alignItems: "baseline", py: 0.75, borderBottom: `1px solid ${BORDER}` }}>
           <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }}>{String(r.CreatedAt || "").slice(0, 16)}</Typography>
           <Typography variant="caption" sx={{ color: r.ActorType === "human" ? "#47654a" : DIM, fontWeight: 600 }}>{who(r)}</Typography>
-          <Typography variant="caption" sx={{ color: INK, fontWeight: 700 }}>{String(r.Action || "").replace(/_/g, " ")}</Typography>
+          <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>{String(r.Action || "").replace(/_/g, " ")}</Typography>
           <Typography variant="caption" sx={{ color: DIM, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.Detail || ""}>
             {r.EntityType}{r.EntityId ? ` ${r.EntityType === "task" ? `TQ-${String(r.EntityId).padStart(4, "0")}` : `#${r.EntityId}`}` : ""}
             {r.Detail ? ` — ${typeof r.Detail === "string" ? r.Detail : JSON.stringify(r.Detail)}` : ""}

@@ -24,6 +24,7 @@ import api from "./api.js";
 import { openReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import DemoJourney from "./DemoJourney.jsx";
+import { useVerbs } from "./actionRow.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
@@ -466,6 +467,14 @@ export const StageMode = ({ mode, onMode, game = false, onGame }) => {
 };
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
+// THE WORDS LIVE IN THE ROW BY THE PROMPT, never as buttons under a chat line (the owner, 2026-10-06: "no button in line ever
+// anyway. it should on bottom by the prompt"). A line hands its words to the same row the task view fills (actionRow.js).
+function BarVerbs({ owner, chips, busy, onChip }) {
+  useVerbs(owner, chips.map((c, i) => ({ id: `chat:${c.verb || c.label}`, label: c.label, group: c.verb === "next" ? "next" : "decide",
+    tone: i === 0 && c.verb !== "next" ? "p" : "s", title: c.hint || "", disabled: busy, run: () => onChip(c) })), chips.length > 0);
+  return null;
+}
+
 function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
@@ -483,14 +492,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false
       {!!m.tid && <button type="button" className="tq-chip" style={{ marginLeft: 8 }} onClick={() => actions.openTask?.(m.tid)}>Open {m.ref || "the task"}</button>}
       {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
           than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons. */}
-      {last && !!chipsOf(m).length && (
-        <div className="tq-verbs">
-          {chipsOf(m).map((c, i) => (
-            <button key={c.verb || c.label} type="button" className={i === 0 ? "tq-verb primary" : "tq-verb"}
-              disabled={actions.busy} onClick={() => actions.chip(c)}>{c.label}</button>
-          ))}
-        </div>
-      )}
+      {last && <BarVerbs owner={`line:${m.id}`} chips={chipsOf(m)} busy={actions.busy} onChip={actions.chip} />}
     </div></div>);
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
   // the task identity across that rename; matching only the old key left a live coder displayed as
@@ -556,7 +558,11 @@ function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false
   // quiet Also line. Only answer chips (a model's own options) and a card-less line keep the strip.
   const inCard = !!card && kind !== "walk" && kind !== "setup";
   const verbs = inCard ? chips.filter((c) => c.verb) : [];
-  const strip = inCard ? chips.filter((c) => !c.verb) : chips;
+  // a card that has FOLDED or been walked past is not the item any more - its recorded words (Save and end session, Remind me)
+  // were still offered while it closed (the owner, 2026-10-06: "why do we still have these buttons while it's closing a task?");
+  // all it keeps is the way on
+  const moved = !!m.card && (!live || foldedNow);
+  const strip = moved ? chips.filter((c) => c.verb === "next") : inCard ? chips.filter((c) => !c.verb) : chips;
   const nextChip = verbs.find((c) => c.verb === "next");
   const nav = { busy: actions.busy, items: actions.items, surface: actions.surface, row: live && last && !!canvas && !actions.handedTo, ref: c?.ref || "",   // Next and the words ride in the row above the chat line
 
@@ -603,14 +609,7 @@ function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false
               the item's kind and already filtered to what this one can carry (concierge.chips_for). A
               strip over the composer and a second row under the bubble said the same things twice and
               neither was where the sentence was (the owner, 2026-09-07). */}
-          {last && !!strip.length && (
-            <div className="tq-verbs">
-              {strip.map((c, i) => (
-                <button key={c.verb || c.label} type="button" className={i === 0 ? "tq-verb primary" : "tq-verb"}
-                  title={c.hint || undefined} disabled={actions.busy} onClick={() => actions.chip(c)}>{c.label}</button>
-              ))}
-            </div>
-          )}
+          {last && <BarVerbs owner={`line:${m.id}`} chips={strip} busy={actions.busy} onChip={actions.chip} />}
         </div>
       </div>
     </>

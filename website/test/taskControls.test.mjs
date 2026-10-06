@@ -219,3 +219,13 @@ test("starting the new one pauses a live session first - its handover kept, no r
   const start = tasks.slice(tasks.indexOf("const startCodingAgent"), tasks.indexOf("const startGeneralAgent"));
   assert.ok(start.indexOf("/pause") > 0 && start.indexOf("/pause") < start.indexOf('"dispatch.prepare"'));
 });
+
+test("an unstarted general task's Send to agent is the row's lead, not a button inside the card", () => {
+  assert.match(tasks, /const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;/);
+  assert.match(tasks, /sendGeneral \? \[\{ id: "send-general", group: "agent", lead: true/);
+  assert.match(tasks, /\{!inRow && <Button size="small" variant="contained" disableElevation disabled=\{!!startingAgent\}\s+startIcon=\{startingAgent === "general"/);
+});
+
+test("a live session's Mark done asks for a place on the bar", () => {
+  assert.match(tasks, /promote: !liveSession, beside: liveSession \}/);
+});

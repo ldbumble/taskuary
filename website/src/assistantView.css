@@ -11,7 +11,7 @@
 .tq-pile { position: relative; padding: 0 0 8px; }
 /* how close the pipe is to empty - said once the count is small enough to be encouraging */
 .tq-pile-cheer { text-align: center; color: #6e685f; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 10px 0 2px; }
-.tq-pile-note { text-align: center; color: #8a847a; font: 500 10px 'IBM Plex Sans', system-ui, sans-serif; padding: 3px 0; }
+.tq-pile-note { text-align: center; color: #746e64; font: 500 10px 'IBM Plex Sans', system-ui, sans-serif; padding: 3px 0; }
 
 /* ── the categories ───────────────────────────────────────────────────────────────────────────
    Each band is its own block with its own stack, so the heading can FREEZE at the top of the rail
@@ -44,11 +44,11 @@
    earth tones off the oat paper, the same lightness and quiet, told apart by hue alone */
 .tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #7d6127; background: #f1e8d4; border-color: #dfcfa9; }   /* ochre */
 .tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #6a6358; background: #ebe6de; border-color: #d8d0c3; }   /* stone */
-.tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later { color: #8a847a; background: #faf8f4; border: 1px dashed #d8d0c3; }
+.tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later { color: #746e64; background: #faf8f4; border: 1px dashed #d8d0c3; }
 .tq-pile-head span.lvl-agents, .tq-sum-head span.lvl-agents { color: #41525f; background: #edf1f4; border-color: #d3dbe2; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
-.tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #a09889; font-variant-numeric: tabular-nums; }
+.tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; font-variant-numeric: tabular-nums; }
 /* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
 /* A BUTTON IS ONE LINE. Every pill-shaped button in the rail and on a card - none of them said so,
    so "Hand it to a coding agent" folded the moment its card got narrow (the owner, 2026-09-18: "i
@@ -123,7 +123,7 @@
 .tq-pile-row .t b { flex: 1 1 auto; min-width: 50%; font-size: 11.5px; font-weight: 500; color: #262521; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* which task a row is. Sans, not mono - the rail carries no mono anywhere - and quiet enough that
    the subject still leads the line. */
-.tq-pile-ref { flex: 0 0 auto; font: 600 9.5px 'IBM Plex Sans', system-ui, sans-serif; color: #a09889; letter-spacing: .02em; }
+.tq-pile-ref { flex: 0 0 auto; font: 600 9.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; letter-spacing: .02em; }
 /* ...and, in YOUR TASK only, what is holding it up: "waiting to start", "asked you". A right-aligned
    column you can read down, not a pill - a pill on every row is what made the old rail a wall. */
 .tq-pile-word { flex: 0 0 auto; font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; white-space: nowrap; }
@@ -200,6 +200,7 @@
 .tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #41525f; border-radius: 99px; padding: 5px 12px; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
 .tq-chip:hover { border-color: #55697a; background: #f4f6f8; }
 .tq-chip:disabled { opacity: .5; cursor: default; }
+.tq-chip:focus-visible { outline: 2px solid #5f7a5f; outline-offset: 2px; }
 .tq-chip.primary { background: #5f7a5f; color: #fff; border-color: transparent; }
 .tq-chip.primary:hover:not(:disabled) { background: #4c654c; }
 /* the proposal card's own Confirm/Cancel row (ProposalCard.jsx) - not the chat's verbs */
@@ -222,7 +223,7 @@
 .tq-card-then { margin-top: 9px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }
 .tq-card-then b { font-weight: 650; color: #262521; }
 /* every other word, one quiet line - no second row of buttons */
-.tq-card-also { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px; font-size: 10.5px; color: #8a847a; }
+.tq-card-also { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px; font-size: 10.5px; color: #746e64; }
 .tq-card-also button { font: inherit; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .tq-card-also button:disabled { opacity: .45; cursor: default; }
 .tq-card-more-actions { margin-top: 6px; padding-top: 7px; border-top: 1px solid #ebe6de; }
@@ -239,7 +240,7 @@
 .tq-sum-head { display: flex; align-items: center; gap: 7px; margin: 0 0 4px 4px; }
 .tq-sum-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
-.tq-sum-head em { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #8a847a; }
+.tq-sum-head em { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; }
 .tq-sum-row { display: grid; grid-template-columns: 8px 58px minmax(0, 140px) minmax(0, 1fr) 132px; align-items: center; gap: 9px; width: 100%;
   min-height: 32px; padding: 0 6px; border: 0; border-top: 1px solid #efeae2; background: none; font: inherit; font-size: 12.5px; color: #262521; text-align: left; cursor: pointer; border-radius: 6px; }
 .tq-sum-row:hover { background: #f4f1ec; }
@@ -248,9 +249,9 @@
 .tq-sum-row .what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #4d4a43; }
 .tq-sum-row .st { font-size: 11px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 /* the task number: a fixed column, so every row's name and title start at the same x */
-.tq-sum-row .ref { font: 500 10.5px 'IBM Plex Mono', ui-monospace, monospace; color: #8a847a; white-space: nowrap; }
-.tq-sum-row .what .n { font-style: normal; color: #8a847a; font-size: 11px; }
-.tq-sum-more { font-size: 11px; color: #8a847a; padding: 4px 6px 0 23px; }
+.tq-sum-row .ref { font: 500 10.5px 'IBM Plex Mono', ui-monospace, monospace; color: #746e64; white-space: nowrap; }
+.tq-sum-row .what .n { font-style: normal; color: #746e64; font-size: 11px; }
+.tq-sum-more { font-size: 11px; color: #746e64; padding: 4px 6px 0 23px; }
 @media (max-width: 520px) { .tq-sum-row { grid-template-columns: 8px minmax(0, 90px) minmax(0, 1fr); } .tq-sum-row .st, .tq-sum-row .ref { display: none; } }
 .tq-card-kicker { display: flex; align-items: center; gap: 7px; font: 750 9px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #6e685f; }
 .tq-card-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: #d3ccc1; }
@@ -265,7 +266,7 @@
 .tq-fyi-line b { flex: 0 0 auto; font-size: 12.5px; color: #262521; }
 .tq-fyi-line .t { flex: 1 1 auto; min-width: 0; font-size: 12.5px; line-height: 1.45; color: #262521;
   overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
-.tq-fyi-line .chev { flex: 0 0 auto; color: #a09889; font-size: 10px; }
+.tq-fyi-line .chev { flex: 0 0 auto; color: #746e64; font-size: 10px; }
 .tq-fyi-gist { margin: 0 8px 7px 28px; font-size: 11.5px; color: #6e685f; line-height: 1.45;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-fyi.open .tq-fyi-line { padding-bottom: 6px; }
@@ -302,7 +303,7 @@
 .tq-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
 .tq-card-actions button { text-transform: none; font-size: 11px; min-height: 28px; }
 .tq-card-actions .sp { flex: 1; }
-.tq-card-note { font-size: 10.5px; color: #8a847a; margin-top: 6px; }
+.tq-card-note { font-size: 10.5px; color: #746e64; margin-top: 6px; }
 /* THE STORY IS QUIET (assistantCards Story): who asked, then the agent, as a thread of the people in it - avatars
    joined by one rule, muted ink. Colour sits on the avatars only. */
 .tq-story { margin-top: 9px; display: flex; flex-direction: column; gap: 11px; }
@@ -321,14 +322,14 @@
 .tq-av { --c: #55697a; background: var(--c); color: #fff; box-sizing: border-box;
   width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font: 700 9.5px/1 'IBM Plex Sans', sans-serif; text-align: center; position: relative; z-index: 1; }
-.tq-thr-h { font-size: 11.5px; color: #8a847a; padding-top: 1px; }
+.tq-thr-h { font-size: 11.5px; color: #746e64; padding-top: 1px; }
 .tq-thr-h b { color: #4d4a43; font-weight: 600; }
 .tq-thr-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
 .tq-thr-subject { margin-top: 3px; font-size: 13px; line-height: 1.4; color: #3d3b36; overflow-wrap: anywhere; }
 .tq-thr-rest { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .tq-thr-did { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: #4d4a43; overflow-wrap: anywhere; }
-.tq-thr-did.muted { color: #8a847a; font-style: italic; }
+.tq-thr-did.muted { color: #746e64; font-style: italic; }
 .tq-thr-more { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px; font-size: 12px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere; }
 .tq-thr-more b { color: #4d4a43; font-weight: 600; }
 .tq-thr-words { margin-top: 6px; }
@@ -362,7 +363,7 @@
    (generalWorkspace.css .tq-aui-asking), because it is the same event: an agent has stopped and
    named what it needs. The options stack rather than truncate - a chooser's options are sentences,
    and half of one is not a thing anybody can pick. */
-.tq-card-ask { margin-top: 8px; padding: 8px 10px; border: 1px solid #d8c9a8; border-left: 3px solid #b08b4f;
+.tq-card-ask { margin-top: 8px; padding: 8px 10px; border: 1px solid #d8c9a8;
   border-radius: 9px; background: #fbf7ee; }
 .tq-card-ask > span { display: block; font-size: 11.5px; line-height: 1.5; color: #4d4a43; margin-bottom: 7px; }
 .tq-card-picks { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
@@ -372,7 +373,7 @@
    only colour and it is the checklist's own done-green - it identifies a finished step. */
 .tq-msg.tq-step { grid-template-columns: minmax(0, 1fr); margin-bottom: 7px; }
 .tq-msg.tq-step .body { padding-top: 0; }
-.tq-step-done { display: flex; align-items: baseline; gap: 5px; font-size: 11.5px; color: #8a847a; }
+.tq-step-done { display: flex; align-items: baseline; gap: 5px; font-size: 11.5px; color: #746e64; }
 .tq-step-done i { font-style: normal; color: #47654a; }
 .tq-step-done b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tq-card-err { font-size: 11px; color: #7a2f3c; margin-top: 6px; }
@@ -380,7 +381,7 @@
 /* THE WALK'S STOP: a picture of the tab, whole, and three things to try. The picture used to be a
    130px crop of a page corner - a search box and half a heading - under five bullets of text. */
 .tq-walk-progress { height: 3px; margin: 7px 0 8px; border-radius: 2px; background: #ebe6de; overflow: hidden; }
-.tq-walk-progress i { display: block; height: 100%; border-radius: 2px; background: #718b75; transition: width .3s ease; }
+.tq-walk-progress i { display: block; height: 100%; border-radius: 2px; background: #718b75; transform-origin: left; transition: transform .3s ease; }
 /* THE WHOLE TAB, AS BIG AS THE CARD. 540px of whole page made its words texture (2026-09-18), and the
    fix - a 540px window onto a 2x zoom of the top-left corner - showed a search box and half a heading
    (the owner, 2026-09-23: "looks like a joke and does not take up the whole page"). Big instead of
@@ -435,7 +436,7 @@
 .tq-chats-list .c { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; }
 .tq-chats-list .c:hover { background: #f4f1ec; }
 .tq-chats-list .c b { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-chats-list .c span { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #8a847a; white-space: nowrap; }
+.tq-chats-list .c span { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #746e64; white-space: nowrap; }
 .tq-chats-list .c i { width: 7px; height: 7px; border-radius: 50%; background: #55697a; }
 .tq-old-banner { padding: 6px 14px; background: #eee7d6; border-bottom: 1px solid #ddd2b9; color: #6b5f45; font-size: 11.5px; display: flex; align-items: center; gap: 10px; }
 
@@ -466,7 +467,7 @@
   border: 1px solid #e1dcd5; border-radius: 10px; background: #fffdfb; font: 400 12px 'IBM Plex Sans', system-ui, sans-serif;
   color: #6e685f; text-align: left; cursor: pointer; }
 .tq-fold:hover { border-color: #cbd4dc; }
-.tq-fold .ref { flex-shrink: 0; font-size: 9.5px; font-weight: 600; color: #a09889; letter-spacing: .02em; }
+.tq-fold .ref { flex-shrink: 0; font-size: 9.5px; font-weight: 600; color: #746e64; letter-spacing: .02em; }
 .tq-fold b { min-width: 0; font-weight: 600; color: #2f3a42; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-fold .grow { flex: 1; }
 .tq-fold .again { flex-shrink: 0; font-size: 11px; }
@@ -512,3 +513,12 @@
 .tq-ab.next::after { content: "\2192"; margin-left: 6px; }   /* the arrow is drawn, so the button's text stays exactly "Next" */
 .tq-arow.inline { width: 100%; margin: 0; padding: 6px 4px 2px; }   /* a phone's task view carries its own row: the dock is behind the pinned view */
 @media (min-width: 1100px) { .tq-arow { width: 100%; } }
+
+/* the impeccable audit, 2026-10-06: small text held to 4.5:1 (#746e64 above), a finger-sized target on a touch
+   screen, and motion that stops for a reader who asked it to - the state still changes, only the travel goes */
+@media (pointer: coarse) { .tq-chip, .tq-ab { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) {
+  .tq-typing i { animation: none; opacity: .7; }
+  .tq-chat-body { scroll-behavior: auto; }
+  .tq-walk-progress i, .tq-day-card, .tq-chip { transition: none; }
+}

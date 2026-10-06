@@ -1165,7 +1165,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
         {card.title}
       </>} sub={card.blurb}>
       {/* how far along: one thin bar, no numbers to read twice */}
-      <div className="tq-walk-progress" aria-hidden="true"><i style={{ width: `${((at + 1) / Math.max(1, total)) * 100}%` }} /></div>
+      <div className="tq-walk-progress" aria-hidden="true"><i style={{ transform: `scaleX(${(at + 1) / Math.max(1, total)})` }} /></div>
       {/* THE PICTURE IS THE CARD. It used to be squeezed to the card's width and then cropped to a
           130px strip of its top-left corner, which showed a search box and half a heading and read as
           a smear (the owner, 2026-09-18: "the images look unclear"). Whole, at the shot's own shape,

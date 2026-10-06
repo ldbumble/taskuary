@@ -1779,8 +1779,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Box sx={{ width: "fit-content", maxWidth: { xs: "96%", md: "84%" }, p: 1.15,
                         bgcolor: mine ? "#e9e3d8" : "#fff",
                         borderRadius: mine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                        border: `1px solid ${mine ? "#d8d0c4" : BORDER}`,
-                        borderLeft: `3px solid ${mine ? "#8a7a5c" : "#6f8a6e"}` }}>
+                        border: `1px solid ${mine ? "#d8d0c4" : BORDER}` }}>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
                           <ChannelIcon channel={m.Channel} sx={{ color: FAINT }} />
                           <Chip size="small" label={m.ReviewSent ? "sent reply" : mine ? "your reply" : "inbound"}

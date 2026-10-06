@@ -24,9 +24,11 @@ def _rows_sqlalchemy(cs, query, n, write=False):
                            'driver (psycopg2-binary for postgres, pymysql for mysql, snowflake-sqlalchemy…)')
     eng = sqlalchemy.create_engine(cs, pool_pre_ping=True)
     try:
-        with eng.connect() as cx:
+        # an explicit transaction: a 1.4 Connection has no commit()/rollback() of its own, so every query on an
+        # install that still had 1.4 failed with "'Connection' object has no attribute 'rollback'" (2026-10-06)
+        with eng.connect() as cx, cx.begin() as tx:
             rows = [dict(r._mapping) for r in cx.execute(sqlalchemy.text(query)).fetchmany(n)]
-            cx.commit() if write else cx.rollback()      # read is read (mssql.run_query)
+            tx.commit() if write else tx.rollback()      # read is read (mssql.run_query)
             return rows
     finally:
         eng.dispose()

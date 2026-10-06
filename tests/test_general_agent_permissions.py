@@ -119,6 +119,20 @@ class SqlReadIsReadTests(unittest.TestCase):
             reports.run_mssql({'server': 'db.example', 'database': 'UserDb', 'driver': 'ODBC Driver 18 for SQL Server', 'query': 'SELECT 1 AS n'})
         self.assertEqual(cx.committed, 0)
 
+    def test_a_url_card_reads_and_rolls_back_on_a_real_engine(self):
+        # a real SQLAlchemy engine, not a fake: the read road called Connection.rollback(), which 1.4 does not have
+        import os, sqlite3, tempfile
+        from taskuary import db
+        d = tempfile.mkdtemp(); fn = os.path.join(d, 'ap.db')
+        with sqlite3.connect(fn) as c: c.executescript('create table t(n int); insert into t values (1);')
+        url = 'sqlite:///' + fn.replace(os.sep, '/')
+        self.assertEqual(db.run_query({'conn_str': url, 'query': 'SELECT n FROM t'}, 5), [{'n': 1}])
+        self.assertTrue(db.test({'conn_str': url})['ok'])
+        db._rows_sqlalchemy(url, 'DELETE FROM t RETURNING n', 5)
+        self.assertEqual(db.run_query({'conn_str': url, 'query': 'SELECT count(*) AS c FROM t'}, 5), [{'c': 1}], 'a read committed a write')
+        db._rows_sqlalchemy(url, 'DELETE FROM t RETURNING n', 5, write=True)
+        self.assertEqual(db.run_query({'conn_str': url, 'query': 'SELECT count(*) AS c FROM t'}, 5), [{'c': 0}])
+
 
 class TheBriefNamesRealToolsTests(unittest.TestCase):
     def test_each_system_lists_the_tool_types_it_runs_not_its_card_type(self):

@@ -31,7 +31,7 @@ import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
 import { FirstSync } from "./SetupWizard.jsx";
-import { refOf, summarize, stateOf, whoOf } from "./walkSummary.js";
+import { gistOf, refOf, summarize, stateOf, whoOf } from "./walkSummary.js";
 import { CLOSE_OUT, closeoutOf, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { READY } from "./taskLifecycle.js";
@@ -970,6 +970,21 @@ export function WhoWantsWhat({ groups, onRow, max = ROWS_PER_GROUP, quiet = [] }
       {n > 0 && (g.n ?? g.rows.length) > n && <div className="tq-sum-more">and {(g.n ?? g.rows.length) - Math.min(n, g.rows.length)} more</div>}
     </div>
   ));
+}
+// the day's opener: one card per band - its name, how many, and who from. A card walks that band (the owner, 2026-10-06:
+// "it should be cards with summary info not list of details, we have that on the left side")
+export function DayCards({ groups, onSection }) {
+  return (
+    <div className="tq-day-cards">
+      {(groups || []).map((g) => (
+        <button key={g.key} type="button" className={`tq-day-card lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
+          <span className="lbl"><i className="dot" />{g.word}</span>
+          <b>{g.n ?? g.rows.length}</b>
+          <span className="who">{gistOf(g)}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 export function BriefCard({ card, onStart }) {
   const nav = React.useContext(CardNav);

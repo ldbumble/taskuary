@@ -13,7 +13,7 @@ import GridViewIcon from "@mui/icons-material/GridViewOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import api from "./api";
 import { track } from "./demoTrack";
-import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } from "./theme.jsx";
+import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
 import BoardView from "./BoardView.jsx";
 import { canvasRequestFromHash } from "./canvasLinks.js";
 import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
@@ -345,10 +345,7 @@ export default function TaskHubPage() {
           flexWrap: { xs: "wrap", md: "nowrap" }, rowGap: 0.5,
           px: { xs: 1.25, md: 2.5 }, py: 1,
           bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 30 }}>
-          <Box sx={{ width: 26, height: 26, borderRadius: 1.5, background: GRADIENT, display: "flex",
-            alignItems: "center", justifyContent: "center" }}>
-            <TaskuaryMark size={22} />
-          </Box>
+          <TaskuaryMark size={26} sx={{ borderRadius: 1.5 }} />
           <Typography sx={{ fontWeight: 800, fontSize: 14.5, color: INK, letterSpacing: 0.2 }}>Taskuary</Typography>
           {/* the tagline waits for xl. Below that its width is what pushed the tab strip off true
               centre, and the tabs are the thing people aim at all day - a strapline is not. */}
@@ -365,8 +362,8 @@ export default function TaskHubPage() {
             title={tab === "Board" ? "Back to the Assistant" : "The Board - every agent and its session, full screen"}
             sx={{ display: "flex", alignItems: "center", gap: 0.75, height: 30, px: 1.4, ml: { xs: 0.25, md: 1 }, borderRadius: 99, cursor: "pointer",
               fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap",
-              color: tab === "Board" ? "#fff" : "#41525f", background: tab === "Board" ? GRADIENT : "#e4e9ee",
-              border: `1px solid ${tab === "Board" ? "transparent" : "#cbd4dc"}` }}>
+              color: tab === "Board" ? "#fff" : INK, background: tab === "Board" ? BRAND.solid : PANEL,
+              border: `1px solid ${tab === "Board" ? "transparent" : "#d8d1c5"}`, "&:hover": { borderColor: tab === "Board" ? "transparent" : BRAND.solid } }}>
             {tab === "Board" ? <><StarMark size={14} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}
           </Box>
           {tab === "Assistant" && <Box sx={{ ml: { xs: 0.25, md: 1 } }}><StageMode mode={stageMode} onMode={setStageMode} game={asstGame} onGame={pickAsstGame} /></Box>}

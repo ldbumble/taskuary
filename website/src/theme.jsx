@@ -23,6 +23,9 @@ export const GRADIENT = `linear-gradient(90deg, ${ACCENT}, #7d9a7c)`;
 // cards read as a warning rather than as a voice (the owner, 2026-08-30 - "make it more subtle
 // like the rest of the colors"). Identity comes from the dot, the icon and the label, which stay
 // sage; the surfaces stay quiet. Timeline rows take no assistant tint at all.
+// TASKUARY GREEN - the mark, the assistant and the one primary button wear it (the owner, 2026-10-06: "it should be
+// the dark green of taskuary on the assistant and walk me through my tasks"); the chat header's circle was already it
+export const BRAND = { solid: "#5f7a5f", deep: "#4c654c", ink: "#3f5943", tint: "#e8eee6", bd: "#cfdacb" };
 export const ASSISTANT = {
   solid: "#7d9a7c", ink: "#526b53", tint: "#f3f5f0", bd: "#dde1d6", gradient: GRADIENT,
 };

@@ -38,14 +38,15 @@
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
 /* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance, and only urgent is loud */
 .tq-pile-head span.lvl-urgent, .tq-sum-head span.lvl-urgent { color: #7a2f3c; background: #f4e3e6; border-color: #e3c1c7; }
-/* On you is the work, not an alarm: Taskuary green, not red - only Urgent shouts (the owner, 2026-10-06) */
-.tq-pile-head span.lvl-task, .tq-sum-head span.lvl-task { color: #4a6347; background: #e5ebe1; border-color: #c9d5c4; }   /* sage */
-/* ...and the three are ONE palette (the owner, 2026-10-06: "these 3 colors don't go together"): sage, ochre, stone -
-   earth tones off the oat paper, the same lightness and quiet, told apart by hue alone */
-.tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #7d6127; background: #f1e8d4; border-color: #dfcfa9; }   /* ochre */
-.tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #6a6358; background: #ebe6de; border-color: #d8d0c3; }   /* stone */
+/* TWO COLOURS, FROM THE RAIL ITSELF (the owner, 2026-10-06: "a color scheme that matches the light green and gray of
+   background of timeline and work"): the on-the-table sage for work that moves - On you deeper, Agents lighter - and the
+   Work/Timeline switch's oat for what is only read - Reports the oat itself, FYI a step paler, Later just a dashed edge.
+   Only Urgent leaves the two families. */
+.tq-pile-head span.lvl-task, .tq-sum-head span.lvl-task { color: #3f5943; background: #e3eadf; border: 1px solid #b9c9b6; }
+.tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #5e574c; background: #e9e3d8; border: 1px solid #d9d1c3; }
+.tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #6a6358; background: #f3efe8; border: 1px solid #e2dbcf; }
 .tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later { color: #746e64; background: #faf8f4; border: 1px dashed #d8d0c3; }
-.tq-pile-head span.lvl-agents, .tq-sum-head span.lvl-agents { color: #41525f; background: #edf1f4; border-color: #d3dbe2; }
+.tq-pile-head span.lvl-agents, .tq-sum-head span.lvl-agents { color: #4c6450; background: #f3f6f1; border: 1px solid #d3ddd0; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
 .tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; font-variant-numeric: tabular-nums; }
@@ -191,10 +192,10 @@
 .tq-day-card > b { font: 600 26px/1.1 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
 .tq-welcome .tq-day-card .who { width: 100%; font-size: 12px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-day-card.lvl-urgent .dot { background: #9b3b4a; }
-.tq-day-card.lvl-task .dot { background: #5f7a5f; }
-.tq-day-card.lvl-agents .dot { background: #7d9a7c; }
-.tq-day-card.lvl-reports .dot, .tq-day-card.lvl-ideas .dot { background: #b08a3e; }
-.tq-day-card.lvl-fyi .dot { background: #a09787; }
+.tq-day-card.lvl-task .dot { background: #6f8a6e; }
+.tq-day-card.lvl-agents .dot { background: #a3b8a1; }
+.tq-day-card.lvl-reports .dot, .tq-day-card.lvl-ideas .dot { background: #a69c8a; }
+.tq-day-card.lvl-fyi .dot { background: #c9c0b0; }
 .tq-day-card.lvl-later .dot { background: transparent; border: 1px dashed #a9a294; }
 .tq-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 .tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #41525f; border-radius: 99px; padding: 5px 12px; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }

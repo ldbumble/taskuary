@@ -2,7 +2,12 @@
 // These are authored sample records, never figures read from a connected account.
 import { fmtStamp } from './demoClock.js';
 
-export const isGuidedDemo = (search = '') => new URLSearchParams(search).get('demo') !== 'explore';
+// the demo IS the app with an invented office in it; the one-request walkthrough is a link someone asks for, never what
+// /demo/ opens on (the owner, 2026-10-06: "who made this ugly thing on top? ... website should be the same")
+export const isGuidedDemo = (search = '') => {
+  const q = new URLSearchParams(search);
+  return q.get('demo') === 'guided' || q.get('workflow') === 'numbers';
+};
 export const NUMBERS_TASK = 18;
 export const NUMBERS_MESSAGE = 938;
 export const NUMBERS_REVIEW = 903;

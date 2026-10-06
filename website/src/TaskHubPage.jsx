@@ -347,7 +347,8 @@ export default function TaskHubPage() {
           px: { xs: 1.25, md: 2.5 }, py: 1,
           bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 30 }}>
           <TaskuaryMark size={26} sx={{ borderRadius: 1.5 }} />
-          <Typography sx={{ fontWeight: 600, fontSize: 14.5, color: INK, letterSpacing: 0.2 }}>Taskuary</Typography>
+          {/* the word gives way on a phone: with it the bar wrapped, and the bell and refresh sat alone on a second row (2026-10-06) */}
+          <Typography sx={{ fontWeight: 600, fontSize: 14.5, color: INK, letterSpacing: 0.2, display: { xs: "none", sm: "block" } }}>Taskuary</Typography>
           {/* no tagline here (the cleanup, 2026-10-06): the top bar is the logo, the views and three icons */}
           <ServerVersion />
           <DemoBadge demo={demo} />

@@ -4,7 +4,7 @@ The public static demo has its own end-to-end check, without a backend or mailbo
 `node --test browser/demo-journey.test.mjs`. It starts an isolated Vite demo, prepares
 one fictional request, checks the result's source, edits and approves the reply,
 verifies the completed task and clear rail, checks reload and setup guidance, and
-blocks outside requests. The broad office is available through `?demo=explore`.
+blocks outside requests. The demo opens on the broad office; the guided request is `?demo=guided`.
 
 Use Node 22 for all frontend gates (`npm test`, `npm run build`, and browser tests).
 The explicit recursive test glob retains every existing frontend test under Node 22.

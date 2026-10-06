@@ -194,3 +194,36 @@ class RetryAllTests(unittest.TestCase):
             self.assertEqual(out['count'], 1)
             th.return_value.start.assert_called_once()
         finally: server.store = prev
+
+
+class RecoveryTests(unittest.TestCase):
+    """A BRAIN THAT WAS BROKEN FOR EVERYONE IS NOT A ROW THAT FAILS FOR ITS OWN REASONS. The sweep tries the oldest row once a
+    cycle and stops at the first failure, so a day of a brain failing every call (the ChatGPT-plan stream read as bytes)
+    spent every row's tries one cycle at a time - and when the fix landed, the rows were already "left for the owner",
+    inside the day (the owner, 2026-10-06: "those messages were within 24 hours"). Tries now count from the moment the
+    brain last came back: what failed before it gets its tries again; a row that still fails after it stops as before."""
+    def setUp(self): self.s = MemoryStore()
+
+    def _exhausted(self, ext):
+        mid = ingest.ingest_message(self.s, {**MSG, 'external_id': ext, 'conversation_id': ext, 'sent_at': ago(hours=3)}, llm=boom)['message_id']
+        for _ in range(ingest.RETRY_TRIES + 1):
+            ingest.retry_failed_triage(self.s, boom)
+        self.assertEqual(ingest.retry_failed_triage(self.s, FYI), 0, 'its tries are spent while the brain is down')
+        return mid
+
+    def test_the_brain_coming_back_gives_the_outages_rows_their_tries_again(self):
+        mid = self._exhausted('a')
+        # new mail is judged: the brain answered, so it is back
+        ingest.ingest_message(self.s, {**MSG, 'external_id': 'fresh', 'conversation_id': 'fresh', 'sent_at': ago(minutes=1)}, llm=FYI)
+        self.assertEqual(ingest.retry_failed_triage(self.s, FYI), 1)
+        self.assertEqual(self.s.get_message(mid)['Status'], 'filed')
+
+    def test_a_row_still_failing_after_the_brain_came_back_stops_again(self):
+        self._exhausted('a')
+        ingest.ingest_message(self.s, {**MSG, 'external_id': 'fresh', 'conversation_id': 'fresh', 'sent_at': ago(minutes=1)}, llm=FYI)
+        calls = []
+        def picky(*a, **k):
+            calls.append(1); raise RuntimeError('this one body cannot be read')
+        for _ in range(ingest.RETRY_TRIES + 3):
+            ingest.retry_failed_triage(self.s, picky)
+        self.assertLessEqual(len(calls), ingest.RETRY_TRIES, 'it gets its tries again, not tries for ever')

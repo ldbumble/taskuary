@@ -3614,7 +3614,10 @@ class SQLiteStore:
         for mid in ids: self._exec("UPDATE message SET Status='error' WHERE MessageId=? AND Status='filed'", (mid,))
         if ids: self._poke('feed-changed')
         return len(ids)
-    def stranded_triage_failures(self, limit=25, since=None) -> list:
+    def last_route_id(self) -> int:
+        r = self._rows('SELECT MAX(RouteId) m FROM route')
+        return int((r[0]['m'] if r else 0) or 0)
+    def stranded_triage_failures(self, limit=25, since=None, tries_after=0) -> list:
         """Rows the AI never judged, oldest first, with how many times it has already been tried.
 
         A triage failure was only ever retried by hand, one row at a time, from the opened row - so
@@ -3633,14 +3636,15 @@ class SQLiteStore:
         is this? don't see them in the task list?"). Anything older stays in `error` with the
         Retry button it always had - reopening it is then somebody's decision, not a side effect.
         Same clock both sides: SentAt is local 'YYYY-MM-DD HH:MM:SS' (norm_stamp), and so is _now().
+        `tries_after`: count only failures on routes after this one - the brain's last recovery (ingest.retry_failed_triage).
         """
         rows = self._rows(f"""SELECT m.MessageId, m.SentAt, r.Reason,
                                (SELECT COUNT(*) FROM route x WHERE x.MessageId=m.MessageId
-                                AND x.ParseError IS NOT NULL) Tries
+                                AND x.ParseError IS NOT NULL AND x.RouteId > ?) Tries
                              FROM message m JOIN route r
                                ON r.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
                              WHERE m.Status='error'{' AND m.SentAt >= ?' if since else ''}
-                             ORDER BY m.MessageId LIMIT ?""", ((since, limit) if since else (limit,)))
+                             ORDER BY m.MessageId LIMIT ?""", (int(tries_after or 0),) + ((since,) if since else ()) + (limit,))
         return [dict(r) for r in rows if re.match(self.TRIAGE_UNJUDGED, r['Reason'] or '')]
     def live_tasks_from_sender(self, email: str) -> list:
         """Open tasks carrying a message from this address - what a skip rule leaves behind.

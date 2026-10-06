@@ -6,6 +6,7 @@ runners, refreshed whenever a connection or profile changes.
 import copy
 import json
 import re
+from loguru import logger
 
 COMMAND_FIELDS = ('cmd', 'args', 'resume', 'resume_args', 'timeout', 'model_arg', 'acp', 'model', 'light_model')
 # The two GEARS, which are the half of COMMAND_FIELDS clis.KNOWN ships no preset for: what a brain
@@ -123,7 +124,11 @@ def adopt_installed(cfg, store) -> list:
 def sync(cfg, store, name=None):
     for worker, profile in cfg.get('agents', {}).items():
         if name is not None and worker != name: continue
-        resolved = resolve(cfg, profile)
+        # a profile naming a CLI that is gone is that profile's problem, never the app's: it stopped every start with
+        # "CLI connection 'claude' is not configured" (2026-10-06). It keeps its last row until a CLI is picked for it.
+        try: resolved = resolve(cfg, profile)
+        except ValueError as e:
+            logger.warning(f'{worker}: {e} - pick a CLI for it under Settings'); continue
         old = json.loads((store.get_agent(worker) or {}).get('Config') or '{}')
         resolved['cwd_map'] = {**(old.get('cwd_map') or {}), **(resolved.get('cwd_map') or {})}
         store.upsert_agent(worker, profile.get('kind', 'coding'), 'cli', json.dumps(resolved))

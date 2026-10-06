@@ -122,8 +122,13 @@ export const CliConnectionsPage = ({ onBack }) => {
         <Box><Button variant="contained" disabled={saving || !draft.name.trim() || !draft.cmd.trim() || !(Number(draft.timeout) > 0)} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
       </Box></DialogContent>
     </Dialog>}
-    <ConfirmDelete open={!!confirmDel} what={`the CLI connection "${confirmDel}"`} consequence="Choose another provider for any profiles using it first. The CLI stays installed."
-      onClose={() => setConfirmDel(null)} onConfirm={async () => { try { await api.delete(`/api/cli/connections/${encodeURIComponent(confirmDel)}`); await load(); } catch (e) { setErr(failure(e)); } }} />
+    {/* REMOVE REMOVES (the owner, 2026-10-06: "can't remove the claude cli install"): the profiles on it are named here and
+        left with no CLI until one is picked for them - never moved onto another CLI behind the owner's back */}
+    <ConfirmDelete open={!!confirmDel} what={`the CLI connection "${confirmDel}"`}
+      consequence={(() => { const used = (clis || []).find((c) => c.name === confirmDel)?.used_by || [];
+        return (used.length ? `${used.join(", ")} ${used.length === 1 ? "uses" : "use"} it and will have no CLI until you pick one for ${used.length === 1 ? "it" : "them"}. ` : "")
+          + "The CLI stays installed; Set it up connects it again."; })()}
+      onClose={() => setConfirmDel(null)} onConfirm={async () => { try { await api.delete(`/api/cli/connections/${encodeURIComponent(confirmDel)}?detach=1`); await load(); } catch (e) { setErr(failure(e)); } }} />
   </Box>;
 };
 

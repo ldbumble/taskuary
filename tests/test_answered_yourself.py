@@ -161,9 +161,11 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['Status'], 'superseded')
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         self.assertEqual(_row(s, mid)['NeedsYou'], 0)
+        # ...said on the task it settled, never in the Assistant's conversation (the owner, 2026-10-06: the task being
+        # worked is the main thing there, nothing else)
+        self.assertTrue(any('replied in WhatsApp' in c['Body'] and 'reply was taken care of' in c['Body'] for c in s.list_comments(tid)))
         dock, _ = general.dock_task(s)
-        said = [m['text'] for m in concierge.history(s, dock['TaskId'])]
-        self.assertTrue(any('replied in WhatsApp' in x and 'reply was taken care of' in x for x in said))
+        self.assertFalse([m for m in concierge.history(s, dock['TaskId']) if 'replied in WhatsApp' in (m.get('text') or '')])
 
     def test_an_earlier_owner_line_does_not_retire_a_later_ask(self):
         from taskuary.channels import ingest_own_message

@@ -154,6 +154,11 @@ def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: 
         try: concierge.record(store, general.dock_task(store, 'owner')[0]['TaskId'], 'assistant', line, phone=True)
         except Exception as e: logger.warning(f'asks: said on the phone, not kept in the chat - {e}')   # never said twice
         return True
+    # ON THE DESKTOP A LANE MOVE IS NOT A LINE: the rail row and the task's own card already say it, and the lines piled
+    # under the task being worked - "asked you", "left without finishing", the same ask twice in two wordings (the owner,
+    # 2026-10-06: "Task they are working on should be the main thing, nothing else"). What the owner ASKED to hear - a
+    # reply on a watched task, a reminder coming due - still comes here; a phone, which has no card, still hears it all.
+    if lane: return True
     concierge.record(store, general.dock_task(store, 'owner')[0]['TaskId'], 'assistant', line)
     live.emit(live.CHAT)                     # the open Assistant tab shows it now, not on its next tick
     return True

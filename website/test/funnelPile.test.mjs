@@ -153,7 +153,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(page, /useState\("Assistant"\)/);           // the default, always
   assert.doesNotMatch(page, /<FloatingAssistant/);
   // ...and the way back from the Board wears Taskuary's star, drawn in the pill's own ink
-  assert.match(page, /<StarMark size=\{14\} \/>Assistant/);
+  assert.match(page, /<TaskuaryMark size=\{16\} \/>Assistant/);   // the real logo, not a second drawing of it (2026-10-06)
   const view = read("AssistantView.jsx");
   assert.match(view, /\/api\/funnel\/pile/);
   assert.match(view, /\/api\/concierge\/next/);

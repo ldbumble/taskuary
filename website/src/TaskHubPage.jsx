@@ -21,7 +21,7 @@ import { DEMO } from "./demoApi.js";
 import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
-import { StarMark, TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
+import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
 import AssistantView, { StageMode } from "./AssistantView.jsx";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
@@ -360,7 +360,7 @@ export default function TaskHubPage() {
               fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
               color: tab === "Board" ? "#fff" : INK, background: tab === "Board" ? BRAND.solid : PANEL,
               border: `1px solid ${tab === "Board" ? "transparent" : "#d8d1c5"}`, "&:hover": { borderColor: tab === "Board" ? "transparent" : BRAND.solid } }}>
-            {tab === "Board" ? <><StarMark size={14} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}
+            {tab === "Board" ? <><TaskuaryMark size={16} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}
           </Box>
           {tab === "Assistant" && <Box sx={{ ml: { xs: 0.25, md: 1 } }}><StageMode mode={stageMode} onMode={setStageMode} game={asstGame} onGame={pickAsstGame} /></Box>}
           <Box sx={{ flex: 1 }} />

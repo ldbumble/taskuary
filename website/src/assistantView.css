@@ -155,10 +155,13 @@
 .tq-chat-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px 8px; scroll-behavior: smooth; container-type: size; }
 .tq-chat-inner { width: min(980px, 100%); margin: 0 auto; }
 .tq-msg { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; margin-bottom: 16px; }
-.tq-msg .avatar { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box;
-  border: 0; background: #55697a; color: #fff; }   /* the brand slate, the chat header's own circle (2026-10-06) */
+.tq-msg .avatar { width: 26px; height: 26px; display: grid; place-items: center; box-sizing: border-box; }   /* the logo itself, no disc */
 /* ...once per run: a line that follows another of Taskuary's keeps its place, not the mark */
-.tq-msg:not(.you):not(.receipt) + .tq-msg:not(.you):not(.receipt) .avatar { visibility: hidden; }
+/* ONCE PER TURN (the owner, 2026-10-06: "don't like the logo so many places"): the mark opens what Taskuary says after you
+   speak - the first line of the chat, the welcome, and the line after one of yours - and the rest of its turn keeps the
+   column without it, receipts and cards included */
+.tq-msg:not(.you) > .avatar { visibility: hidden; }
+.tq-msg.you + .tq-msg > .avatar, .tq-chat-inner > .tq-msg:first-child > .avatar, .tq-welcome-msg > .avatar { visibility: visible; }
 .tq-msg .body { min-width: 0; font-size: 13.5px; line-height: 1.55; color: #262521; padding-top: 3px; overflow-wrap: break-word; }
 .tq-msg .body p { margin: 0 0 6px; }
 .tq-msg .body p:last-child { margin-bottom: 0; }

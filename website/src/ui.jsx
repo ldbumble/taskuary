@@ -41,7 +41,7 @@ import { IconButton as MuiIconButton, Tooltip as MuiTooltip } from "@mui/materia
 import { Logo, hasLogo } from "./logos.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
-import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
+import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 
 // Taskuary actions wear Taskuary's actual product mark. The generic robot glyph suggested a
 // third-party bot and, on a quiet text button, did not make the dispatch action read as a button.
@@ -1088,11 +1088,11 @@ export const TaskStatusChip = ({ status }) => (
 const LC = {
   neutral: { bg: "#f4f1ec", fg: "#55697a", bd: "#d8cfbe" },
   working: { bg: "#e3e6e1", fg: "#526b55", bd: "#cbd5c9" },
-  you: { bg: "#f3e7e9", fg: "#8a3646", bd: "#dfc7cc" },
+  you: { bg: "#e3eadf", fg: "#3f5943", bd: "#c4d2c0" },          // on you is sage, the palette's (2026-10-06), not oxblood
   // theme.jsx has always called ALERT "the needs-you pill" and this wore the tint instead - the
   // same weight as four calmer phases, so the one state where work has STOPPED until the owner
   // answers read like the rest (the owner, 2026-09-11: "make the needs you a little redder").
-  needsYou: { bg: ALERT, fg: "#fffdfb", bd: ALERT },
+  needsYou: { bg: "#5f7a5f", fg: "#fffdfb", bd: "#5f7a5f" },  // ...solid, as the On you pill is
   done: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" },
   reply: { bg: "#f1ead9", fg: "#765f38", bd: "#ded0ad" },
 };
@@ -1114,7 +1114,7 @@ export const LifecycleChip = ({ kind, phase, compact = false, sx = {} }) => {
   // ...unless the phase names it already: "agent · agent working" says it twice
   return <Chip size="small" label={String(phase || "").startsWith(kind) ? phase : `${kind} · ${phase}`}
     sx={{ bgcolor: c.bg, color: c.fg, border: `1px solid ${c.bd}`, height: compact ? 17 : 20,
-      fontSize: compact ? 9.5 : 10.5, fontWeight: 600, "& .MuiChip-label": { px: compact ? 0.7 : 0.9 }, ...sx }} />;
+      fontSize: compact ? 11 : 11.5, fontWeight: 500, "& .MuiChip-label": { px: compact ? 0.7 : 0.9 }, ...sx }} />;
 };
 
 export const timeAgo = (s) => {
@@ -1938,7 +1938,7 @@ export const ToRow = ({ to, onSave, disabled }) => {
   };
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
-      <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
+      <Typography sx={{ ...label, flexShrink: 0 }}>To</Typography>
       {open ? (
         <ContactPicker people={people} value={text} onChange={setText} onPick={save} autoFocus
           placeholder="name or email address" sx={{ width: 300 }}

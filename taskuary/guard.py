@@ -135,6 +135,7 @@ OWNER_ONLY = (
     (r'POST|DELETE', r'^/api/tasks/\d+/waitroom(/bulk|/image|/\d+)?$', 'the waiting room is what the owner tells the agent'),
     (r'POST', r'^/api/messages/\d+/(attachments/fetch|chat|discussion|dispatch|file|ignore-sender|mine|not-mine|reclassify'
               r'|retriage|split|transcribe)$', "what a message is and where it goes is the owner's call"),
+    (r'POST', r'^/api/messages/retriage-failed$', "re-judging every message triage failed on is the owner's call, as one is"),
     (r'POST|DELETE', r'^/api/funnel/(\d+/(later|pin)|mutes/\d+|rerank|settle)$', "the owner's pile"),
     (r'POST', r'^/api/board/notes/\d+/read$', "the owner's read mark"),
     (r'POST|PATCH', r'^/api/memory(/\d+)?$', 'memory notes steer triage - an agent proposes one, it does not write it'),

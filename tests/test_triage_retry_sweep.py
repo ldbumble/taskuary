@@ -151,3 +151,46 @@ class PollWiringTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RetryAllTests(unittest.TestCase):
+    """THE OWNER'S "RETRY ALL". A brain that failed on every call for a day - a decoding bug, not an outage - left a day of
+    mail as "AI triage failed", past the sweep's day and past its tries, and only one row at a time could be retried by
+    hand (the owner, 2026-10-06: "i refreshed the app but it did not retriage??"). Asking for all of them is a decision,
+    so it reaches what the automatic sweep deliberately does not; it still stops at the first failure."""
+    def setUp(self): self.s = MemoryStore()
+
+    def _worn_out(self, ext, days):
+        mid = ingest.ingest_message(self.s, {**MSG, 'external_id': ext, 'conversation_id': ext,
+                                             'sent_at': ago(days=days)}, llm=boom)['message_id']
+        for _ in range(ingest.RETRY_TRIES + 1):
+            self.s.claim_retriage(mid)
+            ingest.ingest_message(self.s, {**ingest._from_row(self.s.get_message(mid), self.s), '_mid': mid}, llm=boom)
+        return mid
+
+    def test_retry_all_reaches_old_rows_whose_tries_ran_out(self):
+        a, b = self._worn_out('a', 2), self._worn_out('b', 3)
+        self.assertEqual(ingest.retry_failed_triage(self.s, FYI), 0, 'the automatic sweep still leaves them')
+        self.assertEqual(ingest.retry_failed_triage(self.s, FYI, limit=500, hours=0, tries=0), 2)
+        self.assertEqual({self.s.get_message(a)['Status'], self.s.get_message(b)['Status']}, {'filed'})
+
+    def test_retry_all_still_stops_at_the_first_failure(self):
+        self._worn_out('a', 2); self._worn_out('b', 3)
+        calls = []
+        def counted(*a, **k): calls.append(1); raise RuntimeError('still down')
+        self.assertEqual(ingest.retry_failed_triage(self.s, counted, limit=500, hours=0, tries=0), 0)
+        self.assertEqual(len(calls), 1)
+
+    def test_the_endpoint_starts_it_and_says_how_many(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        prev, server.store = server.store, self.s
+        try:
+            self._worn_out('a', 2)
+            with mock.patch('taskuary.server._llm', return_value=None):
+                self.assertEqual(TestClient(server.app).post('/api/messages/retriage-failed').status_code, 422)
+            with mock.patch('taskuary.server._llm', return_value=FYI), mock.patch('taskuary.server.threading.Thread') as th:
+                out = TestClient(server.app).post('/api/messages/retriage-failed').json()
+            self.assertEqual(out['count'], 1)
+            th.return_value.start.assert_called_once()
+        finally: server.store = prev

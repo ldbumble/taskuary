@@ -4170,6 +4170,22 @@ def push(body: MsgBody):
     out = ingest_message(store, m, llm=_llm())
     return {**out, 'ref': task_ref(out['task_id']) if out.get('task_id') else None}
 
+@app.post('/api/messages/retriage-failed')
+def retriage_failed():
+    """RETRY ALL: every message whose triage failed, oldest first, whatever its age and however often it was tried. The
+    automatic sweep reaches one day back and four tries, so a brain that failed on every call for a day (the ChatGPT-plan
+    stream read as bytes) left that day as "AI triage failed" for good, and only one row at a time could be retried (the
+    owner, 2026-10-06: "i refreshed the app but it did not retriage??"). Off the request - a day of mail is minutes of
+    calls - and it stops at the first failure, as the sweep does, so a brain still down costs one call."""
+    brain = _llm()
+    if not brain: raise HTTPException(422, 'no triage AI is available - check Connections and Settings')
+    n = len(store.stranded_triage_failures(500))
+    from . import ingest as ingest_mod
+    if n: threading.Thread(target=ingest_mod.retry_failed_triage, args=(store, brain), kwargs={'limit': 500, 'hours': 0, 'tries': 0},
+                           daemon=True, name='retriage-all').start()
+    return {'count': n}
+
+
 @app.post('/api/messages/{mid}/retriage')
 def retriage_message(mid: int):
     """Run a safely-filed triage failure through the current brain again.

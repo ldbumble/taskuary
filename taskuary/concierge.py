@@ -543,6 +543,7 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     d = {'verb': verb, 'text': str(p.get('text') or '').strip()}
     if str(p.get('as') or '').strip(): d['as'] = str(p['as']).strip().lower()       # the worker or repository - checked, never trusted
     if str(p.get('on') or '').strip(): d['on'] = str(p['on']).strip()               # the decision is about ANOTHER item, named (PW-121)
+    if p.get('new') is True or str(p.get('new')).lower() == 'true': d['new'] = True  # a job of its own, not the item's hand-off
     return text[:m.start()].strip(), d
 
 
@@ -1688,6 +1689,10 @@ class CallMiss(Exception):
     """A CALL whose target could not be found - "no report by that name". Written for the model, which gets it back."""
 
 
+# the passes a turn gets to fix a missed call (a look-up for the right name, then the action again)
+LOOKUP_ROUNDS = 2
+
+
 def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:
     """The model named an operation out of the registry. Turn it into the same proposal card a verb
     makes - NOTHING runs here (PW-123/124); the owner's confirmation is still what executes it.
@@ -1709,6 +1714,14 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         params['kind'] = {'coder': 'coding', 'regular_agent': 'general'}.get(k, k)
         if params['kind'] not in ('task', 'coding', 'general'):
             raise CallMiss(f"task.create_from_text kind is task, coding or general - not {k or 'nothing'}. Nothing was started.")
+    # ...and a new to-do never names a task that is already open: "Remind me about the Payworth invoice (TQ-0005) tomorrow at
+    # 9am" was proposed as a NEW task about TQ-0005 instead of putting TQ-0005 away until then (2026-10-06)
+    if kind == 'task.create_from_text' and str(params.get('kind') or '') == 'task':
+        for n in re.findall(r'\bTQ-?0*(\d+)\b', str(params.get('text') or ''), re.I):
+            t = store.get_task(int(n))
+            if t and t.get('Status') not in ('done', 'dropped'):
+                raise CallMiss(f"{task_ref(t['TaskId'])} is already an open task - a reminder about it is task.defer on it (ref, until), "
+                               "anything else is that task's own action. Nothing was made.")
     # ...and so is a dispatch's: "Start an agent on it" carried kind "coder" and failed at the press with "kind must be general
     # or coding" - the verb's name is the kind it names, as it is on task.create_from_text (2026-10-06)
     if kind == 'dispatch.prepare' and params.get('kind') is not None:
@@ -2543,7 +2556,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     # would have rewritten the undo of the first. The next act closes the old undo (it no longer applies).
     if prev and (prev.get('params') or {}).get('_undo'):
         operations.cancel(store, prev['id'], actor); store.set_setting(LAST_UNDO, '', actor); prev = None
-    same = bool(prev and prev['kind'] == kind and int(prev['target']) == int(target))
+    same = _same_proposal(prev, kind, target, params)
     # THE SAME ASK AGAIN is not a change: a "yes" read as the decision once more re-proposed it as "Changed to: <the same
     # thing>", a new version that changed nothing (2026-09-22 audit). It stays the one proposal and says it still waits.
     unchanged = same and {k: v for k, v in (prev.get('params') or {}).items() if k != 'processing_context'} == params
@@ -2668,6 +2681,18 @@ def _pending_setup(store, tid: int) -> dict | None:
     return card if card and card.get('kind') == SETUP_QUESTIONS else None
 
 
+def _same_proposal(prev: dict | None, kind: str, target, params: dict) -> bool:
+    """Is this ask a revision of the proposal still waiting, or a new one? Same kind on the same target - but a NEW thing has
+    no target to share: every to-do, report and setting proposes on 0, so "make a task to renew Spendly" became version 2 of
+    the to-do card still waiting above it, said "Changed to:" over a different ask (2026-10-06). On 0 it is the same proposal
+    only when it is the same words, or names the same thing (the setting, the connection type, the report's title)."""
+    if not (prev and prev['kind'] == kind and int(prev['target']) == int(target or 0)): return False
+    if int(target or 0): return True
+    ident = lambda p: tuple(str((p or {}).get(k) or '').strip().lower() for k in ('setting', 'type', 'title', 'name'))
+    bare = {k: v for k, v in (prev.get('params') or {}).items() if k != 'processing_context'}
+    return bare == params or (any(ident(bare)) and ident(bare) == ident(params))
+
+
 def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, label: str, summary: str, tail: str, actor: str,
                  item: dict | None = None) -> dict:
     """A proposal that is not about the item on the table: the same revise-or-replace rule as propose_for, recorded as a card."""
@@ -2676,11 +2701,17 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
     # would have rewritten the undo of the first. The next act closes the old undo (it no longer applies).
     if prev and (prev.get('params') or {}).get('_undo'):
         operations.cancel(store, prev['id'], actor); store.set_setting(LAST_UNDO, '', actor); prev = None
-    if prev and prev['kind'] == kind and int(prev['target']) == int(target): op = operations.revise(store, prev['id'], params, actor)
+    same = _same_proposal(prev, kind, target, params)
+    # the same words again are the card still waiting, as on propose_for - not a version 2 said "Changed to:"
+    unchanged = same and {k: v for k, v in (prev.get('params') or {}).items() if k != 'processing_context'} == params
+    if unchanged: op = prev
+    elif same: op = operations.revise(store, prev['id'], params, actor)
     else:
         if prev: operations.cancel(store, prev['id'], actor)
         op = operations.propose(store, kind, target, params, actor)
-    text = (f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}") + ('.' if tail.startswith('\n') else '. ') + tail
+    head = (f"Still waiting for your yes: {label} - {summary}" if unchanged else f"Changed to: {label} - {summary}" if same
+            else f"{label}: {summary}")
+    text = head + ('.' if tail.startswith('\n') else '. ') + tail
     record_related(store, dock_tid, item, 'assistant', text, {'kind': 'proposal', 'key': None, 'title': label, 'op': op['id'], 'tid': None, 'ref': None})
     return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text}
 
@@ -3054,6 +3085,23 @@ def _asks_block(store, p: dict) -> str:
         logger.warning(f'concierge: the open asks were left out of this turn - {e}'); return ''
 
 
+RAIL_CAP = 20
+
+
+def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
+    """THE RAIL BY NAME, for this turn: ref, who and what of each row the pile already holds - no read, no build. "Remind me
+    tomorrow about the Payworth invoice" had nothing in the prompt that said the Payworth invoice was TQ-0005, so it became a
+    new to-do every time (2026-10-06). Only for resolving a name the owner uses; the item on the table still comes first."""
+    items = p.get('items') or []
+    rows = []
+    for i in items[:cap]:
+        bits = [x for x in (i.get('ref'), i.get('who'), _cut(i.get('title') or '', 90)) if x]
+        if bits: rows.append(f"- {' · '.join(bits)} ({funnel.LANE_WORDS.get(i.get('lane'), ('',))[0]})")
+    if not rows: return ''
+    more = f"\n- ...and {len(items) - cap} more" if len(items) > cap else ''
+    return 'THE RAIL BY NAME - only to find the one the owner names; never act on a row they did not name\n' + '\n'.join(rows) + more
+
+
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
         open_card: str | None = None, images: list | None = None) -> dict:
     token = _TURN.set({})
@@ -3110,6 +3158,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
                       + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')
+                      + (f"{rail}\n\n" if (rail := _rail_block(p)) else '')
                       + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table
@@ -3144,9 +3193,13 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             raw, call = parse_call(raw)
         # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
         # never handed on to call_turn, which only knows operations that CHANGE something.
-        if call and toolcatalog.is_read(call['kind']): call = None
+        out_of_reads = bool(call and toolcatalog.is_read(call['kind']))
+        if out_of_reads: call = None
         raw, decision = parse_decision(raw)
         reply, options = parse_options(raw)
+        # ...and the words it wrote around that last call are a PREAMBLE, never the answer: "I'm handing it to the analyst -
+        # you'll confirm it on the card" was shown with no card behind it (2026-10-06)
+        if out_of_reads and not decision: reply, options = "I could not finish looking that up - ask me again, a little more narrowly.", []
         if not in_character(reply):
             logger.info('concierge: the voice broke character - answering with the facts instead')
             reply, options = '', []
@@ -3158,9 +3211,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # them" is written for the model, and it reached the owner word for word (the 2026-09-24 audit). The model gets
         # it back, may look the name up, and calls again; only a second miss is said - once, in the owner's hearing.
         miss = None
-        for _ in range(3):
+        for _ in range(LOOKUP_ROUNDS + 1):
             _strays(item, call)
             if toolcatalog.is_read(call['kind']):
+                if _ == LOOKUP_ROUNDS: break                 # out of look-ups: said below, never the promise around it
                 found = _read(store, item, call)
                 trace and trace('tool', call['kind'], {'params': call['params']})
                 ask = (f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\nThe owner asked: {text}\n"
@@ -3190,9 +3244,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             reply, options = parse_options(raw)
             if not call: break
         if call or (miss and not reply and not decision):
-            # still stuck on a call it cannot make: say what is missing, never the filler it wrote around the call
+            # still stuck on a call it cannot make: say what is missing, never the filler it wrote around the call - the
+            # filler is a promise ("I'm handing it to the analyst, confirm it on the card"), and with the call dropped there
+            # was no card (2026-10-06). The last pass's own action is never dropped: the loop above runs it on its way out.
             say_ = (f"I could not find what that points at ({miss.rstrip('.')}). Say it another way and I will try again."
-                    if miss else reply or "I could not finish that look-up - say it another way.")
+                    if miss else "I could not finish looking that up - ask me again, a little more narrowly.")
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
     # NO WORD MATCH OVERRIDES THE ANSWER. Any subject sharing half the owner's words used to replace the model's
@@ -3250,6 +3306,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         it2 = members.get(other) or funnel.next_item(store, other) or funnel.item_for_key(store, other)
         if it2 and it2.get('key') != item.get('key'): target_item, elsewhere = it2, True
     if elsewhere: turn['aside'] = True
+    # A JOB OF ITS OWN: "how many open invoices does Harbor Supply have?" over Erin's export bug - the model said it was leaving
+    # TQ-0001 alone and called regular_agent with its own brief, and the card handed Erin's bug to the analyst with the AP
+    # question as instructions (2026-10-06). `new` is the model saying so; the brief becomes a task of its own.
+    if decision and decision.get('new') and verb in ('coder', 'regular_agent') and str(decision.get('text') or '').strip():
+        target_item, elsewhere = None, False
     # WORDS TO AN AGENT THAT ASKED are its answer: "reply to Marcus: yes, Thursday at 2 works" landed on the agent parked on
     # Marcus's task with "are you free Thursday at 2?", and was refused as "nothing to reply to" (2026-10-06)
     # ...and so is "send Omar the answer" (approve) over an agent asking "send it as drafted, or hold it?"

@@ -9,7 +9,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
-| **table** | decide about the item on the table | reply(text), approve, redraft(text), mine, regular_agent(text, as?), coder(text, as?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), clear(text), confirm, cancel |
+| **table** | decide about the item on the table | reply(text), approve, redraft(text), mine, regular_agent(text, as?, new?), coder(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), clear(text), confirm, cancel |
 | **task** | change any task - the one on the table or one named with ref | task.update(priority/title/assignee), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject |
 | **agents** | start, continue, answer or stop the agent on a task, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
@@ -54,10 +54,11 @@ Make it a task on the owner's own list - no agent.
 
 ### `regular_agent`
 
-Send it to a non-coding agent.
+Send it to a non-coding agent - it becomes a task of its own.
 
 - `text` - the job
 - `as` (optional) - a profile from agents.list, only when one fits
+- `new` (optional) - true when the job is NOT about the item on the table
 
 <p class="runs">Waits for your yes on a card.</p>
 
@@ -67,6 +68,7 @@ Send it to a coding agent. Not sure which repository is no reason to ask - CALL 
 
 - `text` - what is wanted
 - `as` (optional) - the repository (repos.list), only when sure
+- `new` (optional) - true when the job is NOT about the item on the table
 
 <p class="runs">Waits for your yes on a card.</p>
 
@@ -281,9 +283,9 @@ Mark done - the task is finished (note: optional, what came of it - kept on the 
 
 ### `task.defer`
 
-Remind me: put an open task away until a day and bring it back that morning.
+Remind me: put an open task away until a day and bring it back then. "Remind me about <a task that exists>" - named by ref, sender or subject - is this, never a new to-do.
 
-- `until` - a date (2026-10-09), "2 weeks", "3 days", "monday", or "none" to bring it back now
+- `until` - a date (2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", "friday 2pm"), or "none" to bring it back now
 - `ref` (optional) - the task (TQ-0123) when it is not the one on the table
 
 <p class="runs">Runs at once, with an undo on the receipt.</p>
@@ -376,7 +378,7 @@ New work with no task yet.
 
 ### `task.create_from_text`
 
-A new job with no message behind it. Never for a task that already exists (a TQ ref): starting an agent on one is dispatch.prepare, and its own last session is agent.continue.
+A new job with no message behind it. Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and "remind me about it" is task.defer on it.
 
 - `kind` - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding
 - `text` - , and a short `title` in your own words for the job (never "send it to the agent")

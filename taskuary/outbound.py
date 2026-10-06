@@ -642,6 +642,14 @@ def reconcile_outbound(store, envelope: dict, body: str, since: str = None):
     return _reconcile_graph(store, box, body, since, to=envelope.get('to'), cc=envelope.get('cc'), subject=envelope.get('subject'))
 
 
+def _smtp_box(store, address: str):
+    """The IMAP/Gmail card that sends as this address; else the only one, when no Outlook card is on to send instead."""
+    boxes = [x for x in store.list_connectors() if x['Type'] in ('gmail', 'imap') and x['Active']]
+    hit = next((x for x in boxes if json.loads(x.get('ConfigJson') or '{}').get('address', '').lower() == str(address or '').lower()), None)
+    if not hit and len(boxes) == 1 and not any(x['Type'] == 'outlook' and x['Active'] for x in store.list_connectors()): hit = boxes[0]
+    return store.get_connector(hit['ConnectorId'], with_secret=True) if hit else None
+
+
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None, attachments: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""
@@ -670,6 +678,14 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         return send_smtp(store, c, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
                          body, in_reply_to=msg.get('ConversationId'), cc=cc,
                          attachments=read_attachments(attachments))
+    # ...and mail that came in another way (a forward, the push door) leaves through the SMTP mailbox it was addressed to - or
+    # the only one there is when no Outlook is connected: the Graph road alone answered "the outlook connection is not set
+    # up" with an IMAP mailbox connected and working (2026-10-06)
+    smtp = None if ext.startswith('graph:') else _smtp_box(store, msg.get('SourceName')) if ch == 'email' else None
+    if smtp:
+        from .imapmail import send_smtp
+        return send_smtp(store, smtp, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
+                         body, cc=cc, attachments=read_attachments(attachments))
     if ch == 'email':
         return send_email(store, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
                           body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'),

@@ -855,6 +855,54 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
             self.assertEqual((p['kind'], p['target']), ('agent.answer', tid), verb)
             self.assertIn(words.split(',')[0], p['params']['text'], verb)
 
+    def test_a_second_new_to_do_is_its_own_card_not_a_revision_of_the_first(self):
+        """Every new to-do proposes on target 0, so "renew Spendly" became version 2 of the to-do card still waiting above
+        it, said as "Changed to:" (2026-10-06). The same words again still wait as the one card."""
+        s, tid, mid, item = ResponseTests()._asked()
+        call = lambda t: 'CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'task', 'text': t}})
+        first = say(s, 'make a task to call Gail', model=call('Call Gail about the AP report'))['proposal']
+        second = say(s, 'make a task to renew Spendly', model=call('Renew the Spendly contract by Friday'))
+        self.assertNotEqual(second['proposal']['id'], first['id'])
+        self.assertNotIn('Changed to', second['say'])
+        again = say(s, 'make a task to renew Spendly', model=call('Renew the Spendly contract by Friday'))
+        self.assertEqual(again['proposal']['id'], second['proposal']['id']); self.assertIn('Still waiting', again['say'])
+
+    def test_a_job_of_its_own_is_a_new_task_not_the_hand_off_of_the_item_on_the_table(self):
+        """The model left the export bug alone and called regular_agent with the AP question; the card handed the export bug
+        to the analyst with that question as instructions (2026-10-06)."""
+        s, tid, mid, item = ResponseTests()._asked()
+        line = 'CALL: ' + json.dumps({'kind': 'regular_agent', 'params': {'text': 'Count Harbor Supply open invoices', 'as': 'analyst', 'new': True}})
+        p = say(s, 'how many open invoices does Harbor Supply have?', key=item['key'], model=line)['proposal']
+        self.assertEqual((p['kind'], p['target'], p['params']['kind']), ('task.create_from_text', 0, 'general'))
+        self.assertIn('Harbor Supply', p['params']['text'])
+        plain = 'CALL: ' + json.dumps({'kind': 'regular_agent', 'params': {'text': 'and check the attachment'}})
+        p2 = say(s, 'send it to an agent, check the attachment', key=item['key'], model=plain)['proposal']
+        self.assertEqual((p2['kind'], p2['target']), ('task.create_from_message', mid))          # without `new` it is still the item's
+
+    def test_the_action_after_the_last_look_up_still_runs_and_its_promise_is_never_the_answer(self):
+        """Four look-ups, then the call - and the turn had three: it ended on "I'm handing it to the analyst, you'll confirm
+        it on the card", with no card (2026-10-06)."""
+        s, tid, mid, item = ResponseTests()._asked()
+        look = lambda i: 'Checking.\nCALL: ' + json.dumps({'kind': 'timeline.search', 'params': {'contains': f'Harbor {i}'}})
+        act = "I'm handing it to the analyst.\nCALL: " + json.dumps({'kind': 'regular_agent', 'params': {'text': 'Count Harbor invoices', 'new': True}})
+        turns = iter([look(i) for i in range(concierge.READ_ROUNDS)] + [act])
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'how many Harbor invoices?', key=item['key'], llm=lambda *a, **k: next(turns))
+        self.assertEqual(out['proposal']['kind'], 'task.create_from_text')
+        endless = iter([look(i) for i in range(20)])
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'how many Harbor invoices?', key=item['key'], llm=lambda *a, **k: next(endless))
+        self.assertIsNone(out.get('proposal')); self.assertNotIn('Checking', out['say'])
+
+    def test_a_reminder_about_an_open_task_puts_that_task_away_not_a_new_one_about_it(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        ref = f'TQ-{tid:04d}'
+        turns = iter(['CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'task', 'text': f'Remind me about it ({ref}) tomorrow 9am'}}),
+                      'CALL: ' + json.dumps({'kind': 'task.defer', 'params': {'ref': ref, 'until': 'tomorrow 9am'}})])
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'remind me tomorrow at 9am about it', llm=lambda *a, **k: next(turns))
+        self.assertEqual((out['proposal']['kind'], out['proposal']['target']), ('task.defer', tid))
+
     def test_a_dispatch_named_by_its_verb_is_the_kind_it_names(self):
         """"Start an agent on it" carried kind "coder" and failed at the press: kind must be general or coding (2026-10-06)."""
         s, tid, mid, item = ResponseTests()._asked()

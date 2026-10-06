@@ -5011,13 +5011,13 @@ class SQLiteStore:
         w, p = (' AND d.ConnectorId=?', (cid,)) if cid else ('', ())
         if self.kb_fts:
             q = ('SELECT d.DocId, d.Name, d.Path, d.Source, d.Modified, c.Seq, bm25(kb_fts) score, '
-                 "snippet(kb_fts, 0, '[', ']', ' … ', 48) snip FROM kb_fts JOIN kb_chunk c ON c.ChunkId=kb_fts.ChunkId "
+                 "snippet(kb_fts, 0, '[', ']', ' … ', 48) snip, c.Text text FROM kb_fts JOIN kb_chunk c ON c.ChunkId=kb_fts.ChunkId "
                  f'JOIN kb_doc d ON d.DocId=c.DocId WHERE kb_fts MATCH ?{w} ORDER BY score LIMIT ?')
             rows = self._rows(q, (fts_query, *p, limit * 4))
         else:
             words = [t.strip('"') for t in fts_query.split(' OR ') if t.strip('"')]
             like = ' OR '.join('c.Text LIKE ?' for _ in words)
-            rows = self._rows('SELECT d.DocId, d.Name, d.Path, d.Source, d.Modified, c.Seq, 0 score, substr(c.Text, 1, 400) snip '
+            rows = self._rows('SELECT d.DocId, d.Name, d.Path, d.Source, d.Modified, c.Seq, 0 score, substr(c.Text, 1, 400) snip, c.Text text '
                               f'FROM kb_chunk c JOIN kb_doc d ON d.DocId=c.DocId WHERE ({like}){w} LIMIT ?',
                               (*[f'%{x}%' for x in words], *p, limit * 4))
         out, seen = [], set()
@@ -5025,7 +5025,8 @@ class SQLiteStore:
             if r['DocId'] in seen: continue
             seen.add(r['DocId'])
             out.append({'doc_id': r['DocId'], 'name': r['Name'], 'path': r['Path'], 'source': r['Source'], 'modified': r['Modified'] or '',
-                        'seq': r['Seq'], 'score': round(-float(r['score']), 3), 'snippet': ' '.join(str(r['snip'] or '').split())})
+                        'seq': r['Seq'], 'score': round(-float(r['score']), 3), 'snippet': ' '.join(str(r['snip'] or '').split()),
+                        'text': r['text'] or ''})
             if len(out) >= limit: break
         return out
 

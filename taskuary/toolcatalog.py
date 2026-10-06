@@ -23,17 +23,20 @@ PURPOSE = {
     'task.create_from_text':    ('a new job with no message behind it - `kind`: task (a to-do or reminder the owner does '
                                  'themselves, no agent) | general (a regular agent) | coding, `text`, and a short `title` in '
                                  'your own words for the job (never "send it to the agent"). Never for a task that '
-                                 'already exists (a TQ ref): starting an agent on one is dispatch.prepare, and its own last '
-                                 'session is agent.continue'),
+                                 'already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is '
+                                 'dispatch.prepare, its own last session is agent.continue, and "remind me about it" is '
+                                 'task.defer on it'),
     'message.file':             "file it - not ours, just this one",
     'message.archive':          'archive it: off the pipe and closed, nothing deleted',
     'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
     'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline',
     'item.settle':              'put the item down - `verb`: done | later | skip (the item on the table is the target)',
     'task.complete':            'Mark done - the task is finished (note: optional, what came of it - kept on the task)',
-    'task.defer':               ('Remind me: put an open task away until a day and bring it back that morning - `until`: a date '
-                                 '(2026-10-09), "2 weeks", "3 days", "monday", or "none" to bring it back now; `ref` names '
-                                 'the task (TQ-0123) when it is not the one on the table'),
+    'task.defer':               ('Remind me: put an open task away until a day and bring it back then - `until`: a date '
+                                 '(2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", '
+                                 '"friday 2pm"), or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
+                                 'the one on the table. "Remind me about <a task that exists>" - named by ref, sender or '
+                                 'subject - is this, never a new to-do'),
     'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull "
                                  "request (or closes the issue) FIRST, sending the reply only if that worked"),
     'agent.answer':             'answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table',
@@ -206,9 +209,11 @@ DECISIONS = {
                         "continues an agent's session - that is agent.continue"),
     'redraft':         'write the draft again - `text`: the change',
     'mine':            "make it a task on the owner's own list - no agent",
-    'regular_agent':   'send it to a non-coding agent - `text`: the job; `as`: a profile from agents.list, only when one fits',
+    'regular_agent':   ('send it to a non-coding agent - `text`: the job; `as`: a profile from agents.list, only when one fits; '
+                        '`new`: true when the job is NOT about the item on the table - it becomes a task of its own'),
     'coder':           ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
-                        'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick'),
+                        'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick. '
+                        '`new`: true when the job is NOT about the item on the table'),
     'not_ours':        'file it, just this once - its card asks whether from now on, or as a rule',
     'not_ours_sender': 'file everything from this sender from now on - their mail still arrives and stays readable',
     'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule',
@@ -266,7 +271,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?', 'coder': 'text, as?',
+HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coder': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'clear': 'text', 'task.handoff': 'who, note?',
          'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 

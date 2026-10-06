@@ -70,7 +70,8 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(s.kb_count(), {'docs': 2, 'chunks': 3})
         hits = kb.search(s, 'how are resident refunds approved?')
         self.assertEqual([h['name'] for h in hits], ['refunds.md'])                  # one hit per document, the best passage
-        self.assertIn('[refund', hits[0]['snippet'].lower()); self.assertEqual(hits[0]['seq'], 0)
+        # the whole passage, not FTS5's 48-token cut: "anything over …" lost what the limit was for (2026-10-06)
+        self.assertIn('approved by the business office within thirty days.', hits[0]['snippet']); self.assertEqual(hits[0]['seq'], 0)
         # replacing a document replaces its passages; pruning drops what a walk no longer sees
         s.kb_put({'ConnectorId': 1, 'Source': 'folder:/docs', 'Path': 'refunds.md', 'Name': 'refunds.md', 'Modified': 'm2', 'Size': 4, 'Chars': 9}, ['new text'])
         self.assertEqual(s.kb_count(1), {'docs': 2, 'chunks': 2})
@@ -203,3 +204,14 @@ class ApiTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class PassageTests(unittest.TestCase):
+    def test_a_long_passage_is_cut_to_the_sentences_around_the_match_never_inside_one(self):
+        rule = 'Expense reports are due within 30 days; anything over $2,500 needs the CFO approval (Gail Moreno).'
+        text = 'Hotels are capped at $220 a night. ' * 30 + rule + ' Meals are $65 a day. ' * 30
+        out = kb.passage(text, '… anything over [2,500] needs …')
+        self.assertIn(rule, out)
+        self.assertLessEqual(len(out), kb.HIT_CHARS * 2 + 400)
+        self.assertTrue(out.startswith('… ') and out.endswith(' …'))
+        self.assertEqual(kb.passage('Short. Whole.', ''), 'Short. Whole.')

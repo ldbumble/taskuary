@@ -1768,7 +1768,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     # A plain answer with nothing on the table offered "Reply with one of: 1 · Next" under every reply - three
     # lines of menu for the one word the owner can always type (2026-09-24 audit). The desktop's lone Next is
     # one small button; on a phone it is noise.
-    if not item and [str(w).strip().lower() for w in words] == ['next']: words = []
+    # ...but a lone Next is never dropped any more: "walk me through my tasks" answered with three fyi and "Shall we begin
+    # with the rejected refund form?" and nothing to tap - stuck (the owner, 2026-10-06: "where are the buttons?? we should
+    # never get stuck"). The way on is a pick whenever the pipe still holds something.
     # THE WALK RAN OUT, ON THE PHONE: hand it back from here (the owner, 2026-10-02: "hand back choice at the end of the walk
     # though asking question of assistant will always work") - a pick, the desktop's Take it back; typed words still talk
     if out.get('over') and store is not None and handoff(store): extra = list(extra or []) + [(HAND_BACK, {'t': 'handback'})]

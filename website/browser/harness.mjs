@@ -15,7 +15,9 @@ const forbiddenPorts = new Set([7787, 7790]);
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function freePort() {
+// `taken`: ports this harness already holds - the OS can hand the same free port back to two asks in a row, and the start
+// refused ("fixture ports must be unique") about once in many CI runs (2026-10-05)
+async function freePort(taken = new Set()) {
   for (;;) {
     const port = await new Promise((resolve, reject) => {
       const socket = net.createServer();
@@ -26,7 +28,7 @@ async function freePort() {
         socket.close(() => resolve(found));
       });
     });
-    if (!forbiddenPorts.has(port)) return port;
+    if (!forbiddenPorts.has(port) && !taken.has(port)) return port;
   }
 }
 
@@ -104,7 +106,7 @@ async function waitHttp(url, child, headers = {}) {
 
 export async function startHarness() {
   const backendPort = await freePort();
-  const frontendPort = await freePort();
+  const frontendPort = await freePort(new Set([backendPort]));
   if (backendPort === frontendPort || forbiddenPorts.has(backendPort) || forbiddenPorts.has(frontendPort)) {
     throw new Error("fixture ports must be unique and must never use live Taskuary/bridge ports");
   }

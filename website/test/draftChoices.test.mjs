@@ -29,7 +29,8 @@ test("the row draws Mark done once: the decision's, with the task's own left out
   assert.deepEqual(r.decide.map((x) => x.id), ["approve", "4:redraft", "4:done"]);
   assert.ok(!r.more.some((x) => x.id === "done"), "not twice");
   const plain = rowOf({ ref: "TQ-1", list: [v("approve", "decide", { tone: "p" }), v("done", "more"), v("next", "next")] });
-  assert.deepEqual(plain.more.map((x) => x.id), ["done"], "a decision with no close of its own still sends Mark done behind More");
+  assert.deepEqual(plain.agent.map((x) => x.id), ["done"], "a decision with no close of its own: Mark done on the bar beside it (2026-10-06)");
+  assert.ok(!r.agent.some((x) => x.id === "done"), "and still not twice beside the draft's own");
 });
 
 test("the Timeline's reply box and the dock's reply are Send, Mark done and Redraft - no Reject", () => {

@@ -14,7 +14,8 @@ test("a decision waiting is the ONE filled button; Next is outlined beside it", 
   const r = rowOf({ ref: "TQ-1", list: [v("approve", "decide", { tone: "p", label: "Close out" }), v("alt", "decide"), v("done", "more"), v("next", "next")] });
   assert.deepEqual(filled(r), ["approve"]);
   assert.equal(r.next.tone, "s");
-  assert.deepEqual(r.more.map((x) => x.id), ["done"], "Mark done steps back behind More when a decision is waiting");
+  // Mark done stays on the bar, outlined, beside the decision (the owner, 2026-10-06: "next to next on every single task")
+  assert.deepEqual(r.agent.map((x) => [x.id, x.tone]), [["done", "s"]]); assert.deepEqual(r.more, []);
 });
 
 test("nothing to decide: Mark done is the move, and Next stays outlined", () => {
@@ -33,7 +34,7 @@ test("the way back into an agent's session leads, and Mark done stands outlined 
 test("a live session has no primary: Mark done is not promoted, Next is the one filled button", () => {
   const r = rowOf({ ref: "", list: [v("save-end", "agent"), v("done", "more", { promote: false }), v("next", "next")] });
   assert.deepEqual(filled(r), ["next"]);
-  assert.ok(r.more.some((x) => x.id === "done"));
+  assert.ok(r.agent.some((x) => x.id === "done" && x.tone === "s") && !r.more.some((x) => x.id === "done"));
 });
 
 test("a greyed decision says WHY, in the row, and Next is not a second filled button", () => {
@@ -173,10 +174,10 @@ test("a typed question is about what is OPEN on the table, whatever put it there
 
 // TWO WAYS TO CLOSE, ONE PLACE (the owner, 2026-10-05: "why is close with note not inside the more.. menu but mark done is in the
 // menu?"): Close with a note is Mark done with words, so it stands right after Mark done wherever Mark done stands.
-test("close with a note stands beside Mark done behind More when a decision is waiting", () => {
+test("close with a note stands beside Mark done on the bar when a decision is waiting", () => {
   const r = rowOf({ ref: "TQ-1", list: [v("reply", "decide", { tone: "p" }), v("done", "more"), v("close-note", "more"), v("nat", "more"), v("next", "next")] });
   assert.deepEqual(r.decide.map((x) => x.id), ["reply"]);
-  assert.deepEqual(r.more.map((x) => x.id).slice(0, 2), ["done", "close-note"]);
+  assert.deepEqual(r.agent.map((x) => x.id), ["done", "close-note"]); assert.deepEqual(r.more.map((x) => x.id), ["nat"]);
 });
 
 test("...beside it as the move when nothing else waits, outlined", () => {
@@ -216,7 +217,7 @@ test("no word stands twice: a word on the bar is not repeated, nor behind More",
   assert.deepEqual(r.more.map((x) => x.label), ["Not a task"]);
 });
 
-test("a live session's Mark done stands on the bar when there is room, outlined, and Next stays the filled one", () => {
+test("a live session's Mark done stands on the bar, outlined, and Next stays the filled one - room or not", () => {
   const live = [v("diff", "agent", { label: "Review changes" }), v("save-end", "agent", { label: "Save and end session" }),
     v("run-another", "agent", { label: "Run another agent" }), v("done", "more", { label: "Mark done", promote: false, beside: true }), v("next", "next")];
   const r = rowOf({ ref: "", list: live });
@@ -224,5 +225,5 @@ test("a live session's Mark done stands on the bar when there is room, outlined,
   assert.equal(r.agent.find((x) => x.id === "done").tone, "s");
   assert.equal(r.next.tone, "p");
   const full = rowOf({ ref: "", list: [v("a1", "agent"), v("a2", "agent"), v("a3", "agent"), v("a4", "agent"), ...live.slice(3)] });
-  assert.ok(full.more.some((x) => x.id === "done"), "no room: it waits behind More");
+  assert.ok(full.agent.some((x) => x.id === "done") && !full.more.some((x) => x.id === "done"), "never behind More (2026-10-06)");
 });

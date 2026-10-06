@@ -83,6 +83,21 @@ class SignInTests(unittest.TestCase):
 
 
 class CallTests(unittest.TestCase):
+    def test_a_stream_with_no_charset_is_read_as_utf8_not_bytes(self):
+        # the plan's text/event-stream names no charset, so requests yielded BYTES even with decode_unicode, and every
+        # triage failed with "startswith first arg must be bytes or a tuple of bytes" (2026-10-06)
+        class Raw(_Resp):
+            encoding = None
+            def iter_lines(self, decode_unicode=True):
+                return iter([l.encode('utf-8') for l in self._lines]) if self.encoding is None else iter(self._lines)
+        raw = Raw(200, lines=_sse({'type': 'response.output_text.delta', 'delta': 'Café ✓'}, {'type': 'response.completed'}))
+        with mock.patch.object(ca.requests, 'post', return_value=raw):
+            self.assertEqual(ca.complete('tok', 'gpt-x', 'sys', 'hi', 50), 'Café ✓')
+        bare = Raw(200, lines=_sse({'type': 'response.output_text.delta', 'delta': 'ok'}, {'type': 'response.completed'}))
+        bare.iter_lines = lambda decode_unicode=True: iter([l.encode('utf-8') for l in bare._lines])   # bytes whatever encoding says
+        with mock.patch.object(ca.requests, 'post', return_value=bare):
+            self.assertEqual(ca.complete('tok', 'gpt-x', 'sys', 'hi', 50), 'ok')
+
     def test_only_a_completed_stream_is_an_answer(self):
         ok = _sse({'type': 'response.output_text.delta', 'delta': 'Hello '}, {'type': 'response.output_text.delta', 'delta': 'Alex'},
                   {'type': 'response.completed'})

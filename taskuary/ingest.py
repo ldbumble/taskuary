@@ -1951,6 +1951,12 @@ def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = 
     # its own reasons (the owner, 2026-10-06: "those messages were within 24 hours")
     try: after = int(store.get_setting('triage_recovered_route') or 0)
     except (TypeError, ValueError): after = 0
+    # ...and a brain that came back BEFORE anything recorded the mark (0.3.7.9 cleared the error and stamped nothing) is
+    # back as of its last real answer - set once, so it stays the mark until the next recovery (the owner, 2026-10-06:
+    # "hitting sync now ... is not retriaging old ones")
+    if not after and not store.get_setting('triage_last_error'):
+        after = store.last_judged_route_id()
+        if after: store.set_setting('triage_recovered_route', str(after), 'system')
     stranded = store.stranded_triage_failures(limit, since=since, tries_after=after)
     done = 0
     for row in stranded:

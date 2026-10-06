@@ -3614,6 +3614,10 @@ class SQLiteStore:
         for mid in ids: self._exec("UPDATE message SET Status='error' WHERE MessageId=? AND Status='filed'", (mid,))
         if ids: self._poke('feed-changed')
         return len(ids)
+    def last_judged_route_id(self) -> int:
+        """The newest route triage actually judged (no failure on it) - the brain's last answer."""
+        r = self._rows("SELECT MAX(RouteId) m FROM route WHERE RoutedBy='triage' AND ParseError IS NULL")
+        return int((r[0]['m'] if r else 0) or 0)
     def last_route_id(self) -> int:
         r = self._rows('SELECT MAX(RouteId) m FROM route')
         return int((r[0]['m'] if r else 0) or 0)

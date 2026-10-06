@@ -793,7 +793,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     store.set_setting('triage_last_error_at', _now(), 'system')   # the bell ages a failure out by this
                     logger.warning(f"ingest: AI triage failed - {fail['err']}")
                     return {'status': 'error', 'task_id': None, 'message_id': mid}
-                if cfg.get('triage_last_error'): store.set_setting('triage_last_error', '', 'system')   # it answered: the brain is back
+                if cfg.get('triage_last_error'):                       # it answered: the brain is back
+                    store.set_setting('triage_last_error', '', 'system')
+                    # ...and FROM WHICH ROUTE: the retry sweep counts a row's tries after it, so a day the brain failed for
+                    # everyone does not leave that day's rows spent (retry_failed_triage). A route id, not a clock - failures
+                    # in the same second as the recovery must still count
+                    store.set_setting('triage_recovered_route', str(store.last_route_id()), 'system')
                 if intent.get('degraded'):
                     # the call SUCCEEDED and came back unusable, so `fail` is empty and the old
                     # code sailed on with a keyword guess that reads none of the standing notes
@@ -1942,7 +1947,11 @@ def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = 
     """
     if llm is None: return 0
     since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S') if hours else None
-    stranded = store.stranded_triage_failures(limit, since=since)
+    # tries count from the brain's last recovery: what it failed on while it was down for everyone is not a row failing for
+    # its own reasons (the owner, 2026-10-06: "those messages were within 24 hours")
+    try: after = int(store.get_setting('triage_recovered_route') or 0)
+    except (TypeError, ValueError): after = 0
+    stranded = store.stranded_triage_failures(limit, since=since, tries_after=after)
     done = 0
     for row in stranded:
         if tries and (row.get('Tries') or 0) >= tries:

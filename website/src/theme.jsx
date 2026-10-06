@@ -214,6 +214,11 @@ export const card = { bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadiu
 // Use for the big detail surfaces - review panel, task detail - so they read as raised.
 export const frame = { p: 0.75, bgcolor: "#eae5dd", border: "1px solid #dad4cb", borderRadius: 3,
   boxShadow: "0 14px 44px rgba(30,50,38,.12)" };
+// THE TASK CARD'S TWO PIECES (the cleanup, 2026-10-06). A LABEL is sentence case at the small size, never 9px spaced-out
+// capitals - those read as noise, not as structure. A STEP is a section of the one card, divided by a hairline, never a
+// bordered card inside a card.
+export const label = { fontSize: 12, fontWeight: 500, color: FAINT, letterSpacing: 0, textTransform: "none", lineHeight: 1.4 };
+export const step = { bgcolor: "transparent", border: 0, borderRadius: 0, boxShadow: "none", borderTop: `1px solid ${BORDER}` };
 export const frameInner = { bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2.25, overflow: "hidden" };
 
 export const hoverable = {

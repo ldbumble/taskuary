@@ -36,7 +36,7 @@ import SlotList from "./SlotList.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
@@ -1074,9 +1074,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* In the agent view the task card (and its "Where this came from") is not drawn, and a report task's
                     whole substance is the report - so it is one click away here (the owner, 2026-09-30) */}
                 {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
-                  <Box sx={{ ...card, mb: 1.25, px: 1.5, py: 0.85, bgcolor: "#fff", flexShrink: 0 }}>
+                  <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
                     <Box onClick={() => setReportOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
-                      <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 600, letterSpacing: 1.35 }}>THE REPORT</Typography>
+                      <Typography sx={{ ...label }}>The report</Typography>
                       <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
                         {sourceMessage.SourceName || sourceMessage.Subject} · {fmtDateTime(sourceMessage.SentAt)}</Typography>
                       <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: reportOpen ? "rotate(180deg)" : "none" }} />
@@ -1090,16 +1090,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </Box>
                 )}
                 {!sessionView && (
-                  <Box sx={{ ...card, mb: 1.25, px: 1.5, py: stage === "task" ? 1.5 : 0.85,
-                    bgcolor: "#fff", flexShrink: 0 }}>
+                  <Box sx={{ ...card, ...step, borderTop: 0, mb: 0, px: 1.5, py: stage === "task" ? 1.5 : 1.1, flexShrink: 0 }}>
                     {/* FOLDED - the same controls the open card has, in the same order, with their
                         labels dropped. The left half carries what the header cannot: how far the
                         checklist got, and what the task is. The whole strip reopens the task. */}
                     {stage !== "task" && (
                       <Box onClick={() => setOpenStage("task")}
                         sx={{ display: "flex", alignItems: "center", gap: 0.85, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" } }}>
-                        <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 600, letterSpacing: 1.35, flexShrink: 0 }}>TASK</Typography>
-                        <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
+                        <Typography sx={{ ...label, flexShrink: 0 }}>Task</Typography>
+                        <Typography noWrap sx={{ color: DIM, fontSize: 12.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
                         {!inRow && !["done", "dropped"].includes(t.Status) && (
                           <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
                             <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={12} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 14 }} />}
@@ -1159,8 +1158,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {/* 2 - WHAT THERE IS TO DO. The title is in the header now; repeating it here was
                         the same words twice, an inch apart. */}
                     <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="overline" sx={{ color: FAINT, fontSize: 9,
-                          fontWeight: 600, letterSpacing: 1.35, lineHeight: 1.2, display: "block" }}>What needs doing</Typography>
+                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>What needs doing</Typography>
                         {taskAsk && (
                           <Typography variant="body2" sx={{ color: DIM, mt: 0.45, lineHeight: 1.55,
                             whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxWidth: 900,
@@ -1268,8 +1266,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 <AltRouteIcon sx={{ fontSize: 16, color: ACCENT2, mt: 0.3 }} />
                                 <Box sx={{ minWidth: 0, flex: 1 }}>
                                   <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
-                                    <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
-                                      fontWeight: 600, letterSpacing: 1.25 }}>Triage</Typography>
+                                    <Typography sx={{ ...label }}>Triage</Typography>
                                     <Chip size="small" label={sourceRoute.Decision}
                                       sx={{ height: 17, fontSize: 9.5, fontWeight: 600, bgcolor: "#e4e9ee", color: "#41525f" }} />
                                   </Box>
@@ -1350,9 +1347,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
-                <Box sx={{ ...card, mb: liveSession ? 0.55 : 1.25,
+                <Box sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
-                  bgcolor: "#fff", flexShrink: 0,
+                  flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
                   <Box sx={{ minWidth: 0, flex: liveSession ? "0 1 auto" : "initial" }}>
@@ -1427,8 +1424,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   )}
                   {report && !wrapped && !sessionView && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
-                      <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.35,
-                        fontSize: 9, fontWeight: 600 }}>Latest saved result</Typography>
+                      <Typography sx={{ ...label }}>Latest saved result</Typography>
                       <Box sx={{ mt: 0.35, bgcolor: PANEL2, border: `1px solid ${BORDER}`,
                         borderRadius: 1.5, overflow: "hidden" }}>
                         <CoderReport body={report.Body} artifacts={detail?.artifacts || []} />
@@ -1611,8 +1607,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>
                 ) : null}
 
-                {!sessionView && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
-                  bgcolor: "#fff", flexShrink: 0 }}>
+                {!sessionView && <Box sx={{ ...card, ...step, mt: 0, p: 1.5, py: stage === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"
@@ -1689,7 +1684,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {/* THE ENVELOPE over what was sent, read from the same Deliver blob
                               (replyDelivery.js). Read-only: this one is history, not a decision. */}
                           <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
-                            <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
+                            <Typography sx={{ ...label, flexShrink: 0 }}>To</Typography>
                             <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>
                               {replyContext(sentReview || sourceMessage)}
                             </Typography>
@@ -1716,8 +1711,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {sentReview?.DraftText && (
                             <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
                               px: 1.1, py: 0.85, mt: 0.9 }}>
-                              <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
-                                fontWeight: 600, letterSpacing: 1.25 }}>What was sent</Typography>
+                              <Typography sx={{ ...label, display: "block" }}>What was sent</Typography>
                               <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap",
                                 overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
                                 WebkitBoxOrient: "vertical", overflow: "hidden" }}>
@@ -1728,8 +1722,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {unsentReview && (
                             <Box sx={{ bgcolor: PANEL2, border: `1px dashed ${BORDER}`, borderRadius: 1.25,
                               px: 1.1, py: 0.85, mt: 0.9 }}>
-                              <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
-                                fontWeight: 600, letterSpacing: 1.25 }}>Not sent - closed without sending</Typography>
+                              <Typography sx={{ ...label, display: "block" }}>Not sent - closed without sending</Typography>
                               <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                                 {unsentReview.DraftText}</Typography>
                               {/* ...and it can still go: the draft comes back to send, the task done or not (T11) */}
@@ -1750,8 +1743,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           action alike, and one lane on the rail is one section on the page. */}
                       {proposals.length > 0 && (
                         <Box sx={{ mt: 1.4, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
-                          <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
-                            fontSize: 9, fontWeight: 600, display: "block", mb: 0.5 }}>
+                          <Typography sx={{ ...label, display: "block", mb: 0.5 }}>
                             {proposals.length === 1 ? "Also waiting on you" : `Also waiting on you · ${proposals.length}`}
                           </Typography>
                           {proposals.map((p) => (
@@ -1768,9 +1760,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   ))}
                 </Box>}
 
-                {!sessionView && <Fold title={`Context & history ·${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
-                  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
-                    fontSize: 9, fontWeight: 600, display: "block", mb: 0.65 }}>Messages</Typography>
+                {!sessionView && <Fold title={`Context & history · ${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
+                  <Typography sx={{ ...label, display: "block", mb: 0.65 }}>Messages</Typography>
                   {taskMessages.map((m) => {
                     const route = detail.routes.find((r) => r.MessageId === m.MessageId);
                     const mine = m.Status === "context" || m.Direction === "out";
@@ -1810,8 +1801,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   })}
                   {!taskMessages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
                   <Divider sx={{ my: 1.2, borderColor: BORDER }} />
-                  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
-                    fontSize: 9, fontWeight: 600, display: "block", mb: 0.35 }}>Notes & activity</Typography>
+                  <Typography sx={{ ...label, display: "block", mb: 0.35 }}>Notes & activity</Typography>
                   <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
                     <tbody>{detail.comments.map((c) => <CommentRow key={c.CommentId} c={c} />)}</tbody>
                   </Box>
@@ -2022,8 +2012,8 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
       {number}
     </Box>
     <Box sx={{ minWidth: 0, flex: 1 }}>
-      <Typography sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.25 }}>{title}</Typography>
-      {description && !folded && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
+      <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>{title}</Typography>
+      {description && !folded && <Typography sx={{ color: FAINT, fontSize: 12, display: "block", lineHeight: 1.4 }}>{description}</Typography>}
     </Box>
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
     {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>{action}</Box>}

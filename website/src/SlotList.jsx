@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import ReviewDecision from "./ReviewDecision.jsx";
-import { ACCENT2, BORDER, FAINT, INK } from "./theme.jsx";
+import { ACCENT2, BORDER, FAINT, INK, label } from "./theme.jsx";
 import api from "./api";
 import { bulkSendable, slotReviews, slotState } from "./taskLifecycle.js";
 
@@ -26,9 +26,9 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
     finally { setBusy(false); onChanged?.(); }
   };
   return (
-    <Box sx={{ mt: 1.2, pt: 1, borderTop: `1px solid ${BORDER}`, maxWidth: 900 }}>
+    <Box sx={{ mt: 1.5, maxWidth: 900 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.6 }}>
-        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25, fontSize: 9, fontWeight: 600 }}>
+        <Typography sx={{ ...label }}>
           {`Closes when sent · ${items.filter((i) => i.done).length} of ${items.length}`}
         </Typography>
         {waiting.length > 1 && <Button size="small" disabled={busy} onClick={approveAll}>{busy ? "Sending…" : `Approve all (${waiting.length})`}</Button>}

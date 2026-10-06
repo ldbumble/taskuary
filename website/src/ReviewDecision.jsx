@@ -9,7 +9,7 @@ import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { CLOSE_OUT, proposalPresentation, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
-import { PANEL2, BORDER, DIM, FAINT, INK } from "./theme.jsx";
+import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { useVerbs } from "./actionRow.js";
@@ -268,8 +268,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
       ) : (
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
-        <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600,
-          letterSpacing: "1.5px", flexShrink: 0 }}>{proposal?.destinationLabel || "TO"}</Typography>
+        <Typography sx={{ ...label, flexShrink: 0 }}>{proposal?.destinationLabel || "To"}</Typography>
         <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>
           {proposal?.destination || replyContext(filedDelivery)}
         </Typography>
@@ -277,7 +276,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       )}
       {co && (
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
-          <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>{co.destinationLabel}</Typography>
+          <Typography sx={{ ...label, flexShrink: 0 }}>{co.destinationLabel}</Typography>
           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{co.destination}</Typography>
           <Typography variant="caption" sx={{ color: FAINT }} noWrap>· first, then the reply goes out</Typography>
         </Box>

@@ -130,7 +130,9 @@ test("needs you is the one phase that wears the loud colour", () => {
   const ui = readFileSync(fileURLToPath(new URL("../src/ui.jsx", import.meta.url)), "utf8");
   // the palette has always said so - theme.jsx calls ALERT "the needs-you pill" - but the chip
   // used the pale tint, the same weight as four calmer phases (the owner, 2026-09-11)
-  assert.match(ui, /needsYou: \{ bg: ALERT, fg: "#fffdfb", bd: ALERT \}/);
+  // ...solid, in On you's own sage since the five-colour palette (the owner, 2026-10-06: on you is not red) - still the
+  // one SOLID phase among tinted ones
+  assert.match(ui, /needsYou: \{ bg: "#5f7a5f", fg: "#fffdfb", bd: "#5f7a5f" \}/);
   assert.match(ui, /if \(value === AGENT\.waiting\) return LC\.needsYou;/);
   // ...and only that one: a draft waiting for a yes is not an agent blocked on you
   assert.match(ui, /if \(value === "ready to close out" \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);

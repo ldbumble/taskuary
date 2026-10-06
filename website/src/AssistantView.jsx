@@ -28,12 +28,14 @@ import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
-import { ChannelIcon, MicButton, StarMark, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
 // taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
 // the avatars on its cards - the bright tile repeated on every line shouted over the card it introduced
-const AssistantMark = () => <StarMark />;
-import { BORDER, BRAND, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
+// the speaker's mark is TASKUARY'S OWN LOGO, never a second drawing of it (the owner, 2026-10-06: "logo should match the
+// taskuary one not a different one")
+const AssistantMark = () => <TaskuaryMark size={24} />;
+import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
@@ -1754,7 +1756,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
-        <Box sx={{ width: 22, height: 22, borderRadius: "50%", background: BRAND.solid, color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}><AssistantMark /></Box>
+        {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>

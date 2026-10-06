@@ -16,16 +16,23 @@ export const FAINT = "#6e685f";        // tertiary (timestamps, rails) - twice d
                                        // passes still read as fog against oat paper
 export const ACCENT = "#55697a";       // slate blue - the brand: chrome, links, buttons
 export const ACCENT2 = "#6f8a6e";      // sage - section labels, secondary emphasis
-export const GRADIENT = `linear-gradient(90deg, ${ACCENT}, #7d9a7c)`;
+// THE FIVE (the owner, 2026-10-06, "choose 4/5 colors that go together ... and then use them everywhere"): the task steps'
+// slate, sage and oxblood, with brass and oat from the same family. Every colour that MEANS something is one of these; the
+// sage, brass and oat are the shade that carries white text at 4.5:1, since pills are solid with white words.
+export const PALETTE = { slate: "#55697a", sage: "#5f7a5f", oxblood: "#8a3646", brass: "#827356", oat: "#7b7366" };
+// ...one per rail band: the pill, the row's dot and the day card's dot all wear it
+export const LEVEL_COLOR = { urgent: PALETTE.oxblood, task: PALETTE.sage, agents: PALETTE.slate, later: PALETTE.oat,
+  reports: PALETTE.brass, ideas: PALETTE.brass, fyi: PALETTE.oat };
+// the primary was a slate-to-sage gradient; the brand is slate, solid
+export const GRADIENT = ACCENT;
 // The assistant shares the sync control's slate-to-sage family: the sage end identifies its
 // posts without the old light-blue wash, and primary actions use the exact same gradient.
 // The tint and border sit close to the paper on purpose: a saturated green panel among cream
 // cards read as a warning rather than as a voice (the owner, 2026-08-30 - "make it more subtle
 // like the rest of the colors"). Identity comes from the dot, the icon and the label, which stay
 // sage; the surfaces stay quiet. Timeline rows take no assistant tint at all.
-// TASKUARY GREEN - the mark, the assistant and the one primary button wear it (the owner, 2026-10-06: "it should be
-// the dark green of taskuary on the assistant and walk me through my tasks"); the chat header's circle was already it
-export const BRAND = { solid: "#5f7a5f", deep: "#4c654c", ink: "#3f5943", tint: "#e8eee6", bd: "#cfdacb" };
+// THE BRAND IS SLATE (variant C, 2026-10-06): the mark, the assistant's circle and every primary button
+export const BRAND = { solid: PALETTE.slate, deep: "#46586a", ink: "#41525f", tint: "#e4e9ee", bd: "#cbd4dc" };
 export const ASSISTANT = {
   solid: "#7d9a7c", ink: "#526b53", tint: "#f3f5f0", bd: "#dde1d6", gradient: GRADIENT,
 };
@@ -50,12 +57,12 @@ export const ALERT_BD = "#e0c6cb";
    badges, the one loud pill), an ink (text on a tint), a tint and a border. Everything that
    carries meaning reads from here; anything not in this table does not get to be coloured. */
 export const ROLES = {
-  you:     { solid: ALERT,     ink: ALERT_INK, tint: ALERT_TINT, bd: ALERT_BD },   // it is on YOU
+  you:     { solid: "#5f7a5f", ink: "#3f5943", tint: "#e3eadf",  bd: "#c4d2c0" },  // it is on YOU - sage, not an alarm (2026-10-06)
   working: { solid: "#55697a", ink: "#41525f", tint: "#e4e9ee",  bd: "#cbd4dc" },  // an agent has it
   handled: { solid: "#6f8a6e", ink: "#4c6450", tint: "#e4ebe2",  bd: "#cdd9cb" },  // done for you
   done:    { solid: "#47654a", ink: "#3c5740", tint: "#e2ebe0",  bd: "#c9dcc8" },  // finished
-  info:    { solid: "#8a7a5c", ink: "#6b5f45", tint: "#eee7d6",  bd: "#ddd2b9" },  // a report, to read
-  muted:   { solid: "#a09787", ink: "#6f6960", tint: "#e6e0d5",  bd: "#dad3c5" },  // filed, ignored
+  info:    { solid: "#827356", ink: "#5f5440", tint: "#ece5d6",  bd: "#d8ccb4" },  // a report, to read - brass
+  muted:   { solid: "#7b7366", ink: "#5e574c", tint: "#ebe6de",  bd: "#d8d0c3" },  // filed, ignored - oat
   // PASSED is still yours, only put off - "your task" softened, never fyi's beige (the owner, 2026-09-28: "in rail
   // fyi/passed have same color?" - the one read as nothing to do, the other is work waiting on you)
   passed:  { solid: "#b58790", ink: "#86505b", tint: "#f5eaec",  bd: "#e6d2d6" },

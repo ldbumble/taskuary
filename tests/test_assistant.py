@@ -35,6 +35,45 @@ def _mine(s, subject, body, days, conv, tid=None):
 
 
 class FollowupCandidateTests(unittest.TestCase):
+    def test_a_chase_that_grew_is_said_even_when_the_model_lets_it_go_and_says_only_the_facts(self):
+        # told "be useful, not busy", the model let a vendor's twelve days of silence go twice; the owner's ask was still open
+        s = _store()
+        _mail(s, DANA, 'SSO', 'Here are our settings.', days=13, conv='c1')
+        _mine(s, 'Re: SSO', 'Has that been solved so employee ids are unique?', days=12, conv='c1')
+        [c] = assistant.followups(s, hours=24)
+        s.upsert_idea({'key': c['key'], 'kind': 'followup', 'text': 'said on day 2', 'sig': c['sig'].split('|')[0] + '|1', 'action': {}}, _ago(11))
+        s.set_setting('assistant_producers', 'followup', 't')
+        silent = lambda system, user, **k: json.dumps({'say': [], 'notes': 'nothing new'})
+        out = assistant.run(s, llm=silent, force=True)
+        self.assertEqual(out['said'], 1)
+        body = s.get_message(out['message_id'])['BodyText']
+        self.assertIn('No answer from Dana', body); self.assertNotIn('RAISED BEFORE', body); self.assertNotIn('say it again', body)
+
+    def test_nobody_is_chased_behind_a_report_or_a_calendar_response(self):
+        s = _store()
+        _mail(s, 'calendar@ours.com', 'Accepted: AI Agents', 'Accepted', days=6, conv='c1')
+        _mine(s, 'Re: AI Agents', 'Can you bring the numbers?', days=5, conv='c1')
+        s.add_message({'ExternalId': 'r1', 'ConversationId': 'c2', 'Channel': 'report', 'SourceName': 'Automation ideas', 'Subject': 'Automation ideas',
+                       'FromName': 'Automation ideas', 'FromEmail': '', 'SentAt': _ago(6), 'BodyText': 'Ideas.', 'Status': 'feed'})
+        _mine(s, 'Re: Automation ideas', 'Could you add the T&E ones?', days=5, conv='c2')
+        self.assertEqual(assistant.followups(s, hours=24), [])
+
+    def test_an_open_follow_up_comes_back_as_the_silence_grows_but_a_dismissed_one_stays_down(self):
+        # a vendor who never answered was raised on day 2 as the second line of a 6:56 post, then never again: the Sig was the
+        # last word alone, and silence does not move it (2026-10-06)
+        from datetime import datetime
+        s = _store()
+        _mail(s, DANA, 'SSO', 'Here are our settings.', days=13, conv='c1')
+        _mine(s, 'Re: SSO', 'Has that been solved so employee ids are unique?', days=12, conv='c1')
+        [now] = assistant.followups(s, hours=24)
+        said_day2 = {'Key': now['key'], 'Status': 'open', 'Sig': now['sig'].split('|')[0] + '|1'}
+        self.assertTrue(assistant.fresh({now['key']: said_day2}, now, datetime.now()))           # 12 days on: said again
+        self.assertFalse(assistant.fresh({now['key']: {**said_day2, 'Sig': now['sig']}}, now, datetime.now()))  # same step: once
+        for done in ('dismissed', 'done'):
+            self.assertFalse(assistant.fresh({now['key']: {**said_day2, 'Status': done}}, now, datetime.now()), done)
+        _mail(s, DANA, 'Re: SSO', 'Can you check the ids again?', days=0, hours=1, conv='c1')      # the thread itself moved
+        self.assertEqual(assistant.followups(s, hours=24), [])
+
     def test_your_unanswered_ask_becomes_a_followup_but_a_thanks_does_not(self):
         s = _store()
         _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
@@ -650,7 +689,7 @@ class WhatItReadsTests(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertIn('they are out until Monday September 7th', got[0]['text']); self.assertIn("I'd wait", got[0]['text'])
         self.assertIn('BUT Dana is out until Monday September 7th', got[0]['facts'])
-        self.assertTrue(got[0]['sig'].endswith(':away'))                       # the facts changed: a dismissed chase may be said again as a wait
+        self.assertTrue(got[0]['sig'].split('|')[0].endswith(':away'))         # the facts changed: a dismissed chase may be said again as a wait
         self.assertIn('OUT OF OFFICE (from their auto-replies):\n- ' + DANA, assistant.inputs(s, got))
 
     def test_what_people_said_carries_the_words_and_marks_yours(self):

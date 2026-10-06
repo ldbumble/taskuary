@@ -45,6 +45,8 @@ from .assistantblocks import said_number   # the payload's own English for a win
 CHANNEL = 'assistant'
 PRODUCERS = ('followup', 'promise', 'prep', 'cold', 'idea')
 DAYS = 30                  # how far back followups and promises are read
+CHASE_STEPS = (2, 5, 9, 14, 21)   # days of silence at which an open follow-up or promise is said again
+FORCED_CHASES = 2                 # of those, said per run even when the model let them go
 MAX_LINES = 5              # lines per post by default - a post nobody reads to the end is a post that failed
 POST_TOKENS = 900
 WATCH_SOURCE_CHARS = 6_000
@@ -182,6 +184,7 @@ def _reply_text(review: dict | None) -> str:
     return str((review or {}).get('FinalText') or (review or {}).get('DraftText') or '').strip()
 
 from .autoreply import SUBJECT as _OOO                      # the mail system's own auto-reply mark (autoreply.py)
+_CAL_REPLY = re.compile(r'^(accepted|declined|tentative|tentatively accepted|updated invitation|canceled|cancelled)\s*:', re.I)   # a calendar's own answer
 _UNTIL = re.compile(r'\b(until|through|returning( on)?|back (on|in the office on))\s+([A-Z][a-z]+day,?\s+)?([A-Z][a-z]+ \d{1,2}(st|nd|rd|th)?|\d{1,2}/\d{1,2}(/\d{2,4})?)', re.I)
 def ooo(store, days: int = 14) -> dict:
     """{sender email: 'out until Monday August 31st (auto-reply Thu 28 Aug)'} from the auto-replies in the
@@ -211,19 +214,28 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
         if not kind or kind not in want: continue
         inbound = store.last_inbound_in(r['ConversationId'])
         if not inbound: continue                                    # nothing of theirs to answer under
+        # ...and nobody to chase behind a report, the Advisor's own thread, an auto-reply or a calendar response - the mail
+        # system wrote those, as unanswered() already knew; with a quiet chase said again, "No answer from Automation ideas"
+        # and "Accepted: AI Agents" would have come back with it (2026-10-06)
+        subj = str(inbound.get('Subject') or '')
+        if inbound.get('Channel') in ('report', CHANNEL) or _OOO.match(subj) or _CAL_REPLY.match(subj): continue
         who = inbound.get('FromName') or inbound.get('FromEmail') or 'them'
         sent = _dt(r['SentAt']) or datetime.now()
         days = max(1, int((datetime.now() - sent).total_seconds() // 86400))
         subj = _short(inbound.get('Subject'), 60)
         if away is None: away = ooo(store)
         gone = away.get((inbound.get('FromEmail') or '').lower(), '')
+        # ...and SILENCE THAT GROWS is said again: the Sig was the last word alone, so a follow-up said once came back only
+        # when the thread moved - a vendor who never answered was raised on day 2 as the second line of a 6:56 post, and
+        # not again for eleven days (2026-10-06). Each step it crosses is new; a dismissed or done one stays down (fresh).
+        step = f"|{sum(1 for d in CHASE_STEPS if days >= d)}"
         if kind == 'promise':
-            out.append({'key': f"promise:{r['ConversationId']}", 'kind': 'promise', 'sig': _ts(r['SentAt']),
+            out.append({'key': f"promise:{r['ConversationId']}", 'kind': 'promise', 'sig': _ts(r['SentAt']) + step,
                         'facts': f"You told {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" - {days} day(s) ago, and the thread has not moved.",
                         'text': f"You told {who} you would - \"{_short(body, 70)}\" - {days} day{'s' if days != 1 else ''} ago on \"{subj}\". Done?",
                         'action': {'type': 'message', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')}})
         else:
-            out.append({'key': f"followup:{r['ConversationId']}", 'kind': 'followup', 'sig': _ts(r['SentAt']) + (':away' if gone else ''),
+            out.append({'key': f"followup:{r['ConversationId']}", 'kind': 'followup', 'sig': _ts(r['SentAt']) + (':away' if gone else '') + step,
                         'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
                                   f"- nothing has come back in {days} day(s)." + (f" BUT {who} is {gone}." if gone else '')),
                         'text': (f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
@@ -498,7 +510,22 @@ def fresh(state: dict, cand: dict, now: datetime) -> bool:
     i = state.get(cand['key'])
     if not i: return True
     if i.get('Status') == 'snoozed': return bool(i.get('SnoozeUntil')) and _ts(i['SnoozeUntil']) <= now.strftime('%Y-%m-%d %H:%M:%S')
-    return not is_model_idea(cand['key']) and (i.get('Sig') or '') != (cand.get('sig') or '')
+    # a chase's Sig is its last word and how long the silence has run ("|n", followups): the silence growing brings an OPEN
+    # one back, never one the owner dismissed or did - that waits for the thread itself to move
+    was, now_sig = str(i.get('Sig') or ''), str(cand.get('sig') or '')
+    if i.get('Status') in ('dismissed', 'done') and was.split('|')[0] == now_sig.split('|')[0]: return False
+    return not is_model_idea(cand['key']) and was != now_sig
+
+
+def again(state: dict, cand: dict) -> dict:
+    """A chase said before and back because the silence grew says so in its facts. The prompt's "never repeat anything
+    under ALREADY SAID" let the model drop it as a repeat: the vendor follow-up came back at twelve days and was skipped,
+    the 9/25 line about it still listed as said (2026-10-06). The longer silence IS the new fact."""
+    i = state.get(cand.get('key'))
+    if not (i and cand.get('kind') in ('followup', 'promise') and i.get('LastSaid')): return cand
+    was = str(i.get('Sig') or '').split('|')[1:] or ['0']
+    return {**cand, 'again': True, 'plain': cand['facts'], 'facts': cand['facts'] + (f" RAISED BEFORE on {_ts(i['LastSaid'])[:10]} and STILL unanswered - the silence has grown "
+                                             f"since (step {was[0]} then): that is new, say it again, plainly, with how long it has been.")}
 
 
 def source_of(line: dict, mids: dict, chosen: dict) -> dict | None:
@@ -853,7 +880,7 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
         if not key or key in seen or not txt: continue
         if key in by:
             # the first line of the facts: prep's line carries a 1200-char dossier under it that belongs in 'skipped', not under a button
-            out.append({**by[key], 'text': txt, 'why': by[key]['facts'].split('\n', 1)[0] + (f"\nThe model's read: {why}" if why else '')})
+            out.append({**by[key], 'text': txt, 'why': (by[key].get('plain') or by[key]['facts']).split('\n', 1)[0] + (f"\nThe model's read: {why}" if why else '')})
         elif key.startswith('idea:') and len(key) > 5:
             mid = s.get('mid') if isinstance(s.get('mid'), int) else None
             title = _short(s.get('task'), 120) or None
@@ -1526,7 +1553,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         return {'ran': True, 'said': 0, 'reads_nothing': True, 'summary': why, 'inputs': '',
                 'reviewed': {'notes': '', 'scope': 'nothing', 'systems': 0, 'why': why}}
     state = {i['Key']: i for i in store.list_ideas()}
-    cands = [] if systems_only else [x for x in candidates(store, c) if fresh(state, x, now)]
+    cands = [] if systems_only else [again(state, x) for x in candidates(store, c) if fresh(state, x, now)]
     if llm is None:
         from .llm import build_llm
         try: llm = build_llm(store)
@@ -1574,8 +1601,17 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # the state is read AGAIN here: another process may have posted while the model was thinking, and a
     # model echoing a dismissed key changes nothing
     state = {i['Key']: i for i in store.list_ideas()}
-    say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say
+    say = [s | {'why': s.get('why') or s.get('plain') or s.get('facts') or ''} for s in say
            if fresh(state, s, now) and (systems_only or not contradicts_sent_reply(store, s))]
+    # A CHASE THAT GREW IS SAID, whatever the model chose: told "be useful, not busy" and reading its own "nothing new" note,
+    # it let a vendor's twelve days of silence go twice in a row, the owner's ask still open (2026-10-06). Only one it
+    # raised before and the owner left open - once per step of silence (followups), the longest silence first.
+    if not systems_only:
+        have = {s['key'] for s in say}
+        grown = sorted((x for x in cands if x.get('again') and x['key'] not in have and fresh(state, x, now)
+                        and ':away' not in str(x.get('sig') or '')),                     # "they are away, I'd wait" can wait
+                       key=lambda x: x.get('sig') or '', reverse=True)[:FORCED_CHASES]      # the newest silence first: the most to act on
+        say = [x | {'why': x.get('plain') or x.get('facts') or ''} for x in grown] + say    # the owner reads facts, not the model's note
     if systems_only:
         rv = reviewed([], say, '(', '(', '(', used, '(', '(') | {
             'notes': '', 'scope': 'sources', 'systems': len(_ids(watch_source_ids)) + len(_inline(watch_sources))}

@@ -370,6 +370,12 @@ def split_own(text: str, floor: int = None) -> tuple:
                 or (_re.match(r'^\s*from:\s', l, _re.I) and i + 1 < len(lines) and _re.match(r'^\s*(sent|date):\s', lines[i + 1], _re.I)))
         if head and len(NL.join(lines[:i]).strip()) >= (_KEEP_MIN if floor is None else floor):
             return strip_boilerplate(NL.join(lines[:i]).rstrip()), NL.join(lines[i:]).strip()
+        # ...and Outlook's HTML often glues the quote head onto the signature's last line ("MFA Heritage From: Ashley ...",
+        # "Sent:" under it): a "2:30 Thursday works." read as asking, from the "?" in the mail it quoted (2026-10-06)
+        glued = _re.search(r'\sfrom:\s', l, _re.I) if i + 1 < len(lines) and _re.match(r'^\s*(sent|date):\s', lines[i + 1], _re.I) else None
+        if glued and len(NL.join(lines[:i] + [l[:glued.start()]]).strip()) >= (_KEEP_MIN if floor is None else floor):
+            return (strip_boilerplate(NL.join(lines[:i] + [l[:glued.start()]]).rstrip()),
+                    NL.join([l[glued.start():].strip()] + lines[i + 1:]).strip())
     return (strip_boilerplate(NL.join(lines).rstrip()) if lines else strip_boilerplate(text)), ''
 
 

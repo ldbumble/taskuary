@@ -8,7 +8,7 @@ export default function ApprovalInterrupt({ it, onResolve }) {
   if (!it) return null;
   return (
     <Dialog open onClose={() => onResolve("cancel")} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>{it.title}</DialogTitle>
+      <DialogTitle sx={{ fontSize: 15, fontWeight: 600 }}>{it.title}</DialogTitle>
       <DialogContent>
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
           Nothing was sent. The draft you approved was written before this arrived.

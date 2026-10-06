@@ -94,7 +94,7 @@ const Post = ({ p, onChanged, onOpenTask, onOpen = null, defaultOpen = false }) 
             sx={{ p: { xs: 0.9, md: 0.25 }, color: mine > 0 ? ACCENT : FAINT, "&:hover": { color: ACCENT } }}>
             <ArrowUpwardIcon sx={{ fontSize: { xs: 20, md: 16 } }} />
           </IconButton>
-          <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 700, lineHeight: 1,
+          <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 600, lineHeight: 1,
             color: score > 0 ? ACCENT : score < 0 ? ALERT_INK : FAINT }}>{score}</Typography>
           <Typography sx={{ ...mono, fontSize: 7.5, lineHeight: 1.2, color: FAINT, mt: 0.3 }}>
             {voteLabel}
@@ -341,7 +341,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
       <Box sx={{ minWidth: 0 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 1.5, flexWrap: "wrap" }}>
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: 15, fontWeight: 800, color: INK }}>
+            <Typography sx={{ fontSize: 15, fontWeight: 600, color: INK }}>
               {removed ? "Removed from Hub" : "Hub"}
             </Typography>
             <Typography variant="caption" sx={{ color: FAINT }}>

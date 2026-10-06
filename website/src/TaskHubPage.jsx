@@ -72,7 +72,7 @@ function Bell({ onGo }) {
           {n ? <NotificationsActiveIcon sx={{ fontSize: 18, color: ALERT }} /> : <NotificationsNoneIcon sx={{ fontSize: 18, color: DIM }} />}
           {n > 0 && (
             <Box component="span" sx={{ position: "absolute", top: 1, right: 1, minWidth: 14, height: 14, px: 0.3, borderRadius: 99,
-              bgcolor: ALERT, color: "#fffdfb", fontSize: 9, fontWeight: 700, display: "grid", placeItems: "center", lineHeight: 1 }}>
+              bgcolor: ALERT, color: "#fffdfb", fontSize: 9, fontWeight: 600, display: "grid", placeItems: "center", lineHeight: 1 }}>
               {n > 9 ? "9+" : n}
             </Box>
           )}
@@ -81,12 +81,12 @@ function Bell({ onGo }) {
       <Popover open={!!el} anchorEl={el} onClose={() => setEl(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { width: 440, p: 1.5, mt: 0.5 } } }}>
-        <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
         {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Nothing has failed in the last few hours: connections, the triage brain and reports. Anything you dismissed comes back if it happens again.</Typography>}
         {items.map((p) => (
           <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" sx={{ fontWeight: 650, color: INK, fontSize: 12.5 }}>{p.title}</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: INK, fontSize: 12.5 }}>{p.title}</Typography>
               <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45, wordBreak: "break-word" }}>{p.detail}</Typography>
               {p.since && <Typography variant="caption" sx={{ color: FAINT }} title={p.since}>failed {timeAgo(p.since)} · {fmtWhen(p.since)}</Typography>}
             </Box>
@@ -134,7 +134,7 @@ function DemoBadge({ demo }) {
       <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 0.5, px: 0.9, py: 0.3, borderRadius: 99,
         flexShrink: 0, border: "1px solid #d8cfbe", bgcolor: "#f1ead9" }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#8a7a5c" }} />
-        <Typography variant="caption" noWrap sx={{ fontWeight: 700, color: "#6b5f45" }}>demo data</Typography>
+        <Typography variant="caption" noWrap sx={{ fontWeight: 600, color: "#6b5f45" }}>demo data</Typography>
       </Box>
     </Tooltip>
   );
@@ -162,7 +162,7 @@ function StaleBuild() {
         sx={{ display: "flex", alignItems: "center", gap: 0.6, cursor: restart ? "default" : "pointer", px: 1, py: 0.3,
           borderRadius: 99, border: "1px solid #d8cfbe", bgcolor: "#f1ead9" }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#6f8a6e" }} />
-        <Typography variant="caption" sx={{ fontWeight: 700, color: "#55697a" }}>{stale}</Typography>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: "#55697a" }}>{stale}</Typography>
       </Box>
     </Tooltip>
   );
@@ -330,7 +330,7 @@ export default function TaskHubPage() {
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           sx={{ mb: 8 }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
-          action={raised && <Button size="small" sx={{ color: ACCENT, fontWeight: 700 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
+          action={raised && <Button size="small" sx={{ color: ACCENT, fontWeight: 600 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
         {/* Full width, deliberately. Constraining this to the page column squeezed the tab strip
             until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to
@@ -346,12 +346,8 @@ export default function TaskHubPage() {
           px: { xs: 1.25, md: 2.5 }, py: 1,
           bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 30 }}>
           <TaskuaryMark size={26} sx={{ borderRadius: 1.5 }} />
-          <Typography sx={{ fontWeight: 800, fontSize: 14.5, color: INK, letterSpacing: 0.2 }}>Taskuary</Typography>
-          {/* the tagline waits for xl. Below that its width is what pushed the tab strip off true
-              centre, and the tabs are the thing people aim at all day - a strapline is not. */}
-          <Typography variant="caption" noWrap sx={{ color: DIM, display: demo ? "none" : { xs: "none", xl: "block" } }}>
-            everything in → one funnel → agents + you
-          </Typography>
+          <Typography sx={{ fontWeight: 600, fontSize: 14.5, color: INK, letterSpacing: 0.2 }}>Taskuary</Typography>
+          {/* no tagline here (the cleanup, 2026-10-06): the top bar is the logo, the views and three icons */}
           <ServerVersion />
           <DemoBadge demo={demo} />
 
@@ -361,7 +357,7 @@ export default function TaskHubPage() {
             onClick={() => go(tab === "Board" ? "Assistant" : "Board")}
             title={tab === "Board" ? "Back to the Assistant" : "The Board - every agent and its session, full screen"}
             sx={{ display: "flex", alignItems: "center", gap: 0.75, height: 30, px: 1.4, ml: { xs: 0.25, md: 1 }, borderRadius: 99, cursor: "pointer",
-              fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap",
+              fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
               color: tab === "Board" ? "#fff" : INK, background: tab === "Board" ? BRAND.solid : PANEL,
               border: `1px solid ${tab === "Board" ? "transparent" : "#d8d1c5"}`, "&:hover": { borderColor: tab === "Board" ? "transparent" : BRAND.solid } }}>
             {tab === "Board" ? <><StarMark size={14} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}

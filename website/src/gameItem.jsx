@@ -33,12 +33,12 @@ export function Btn({ children, onClick, disabled, kind = "ghost", title }) {
   return (
     <Box component="button" type="button" onClick={(e) => { e.stopPropagation(); onClick?.(e); }} disabled={disabled} title={title}
       sx={{ border: `1px solid ${kind === "ghost" ? G.line : "transparent"}`, bgcolor: bg, color: kind === "gold" || kind === "mint" ? "#1c1f24" : G.ink,
-        borderRadius: "9px", px: 1.1, py: 0.55, fontSize: 11.5, fontWeight: 800, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1,
+        borderRadius: "9px", px: 1.1, py: 0.55, fontSize: 11.5, fontWeight: 600, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1,
         "&:hover": { filter: disabled ? "none" : "brightness(1.12)" } }}>{children}</Box>
   );
 }
 const Row = ({ children }) => <Box sx={{ display: "flex", gap: 0.5, mt: 0.8, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>{children}</Box>;
-const Label = ({ children }) => <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1.1, color: G.faint, mt: 1, mb: 0.4 }}>{children}</Typography>;
+const Label = ({ children }) => <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: 1.1, color: G.faint, mt: 1, mb: 0.4 }}>{children}</Typography>;
 
 // something to read, in a box that caps its height: markdown when it is markdown, text when not
 function Reading({ text, cap = 150 }) {
@@ -54,7 +54,7 @@ function Reading({ text, cap = 150 }) {
         {looksMd(text) ? <Md text={text} /> : text}
       </Box>
       {long && <Box component="button" type="button" onClick={() => setAll((v) => !v)}
-        sx={{ border: 0, bgcolor: "transparent", color: G.mint, fontSize: 11.5, fontWeight: 700, cursor: "pointer", p: 0, mt: 0.4 }}>
+        sx={{ border: 0, bgcolor: "transparent", color: G.mint, fontSize: 11.5, fontWeight: 600, cursor: "pointer", p: 0, mt: 0.4 }}>
         {all ? "Less" : "Read it all"}</Box>}
     </Box>
   );
@@ -239,10 +239,10 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
 export function Who({ item }) {
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
-      <Typography noWrap sx={{ fontSize: 11, fontWeight: 800, color: G.dim }}>{item.who || "—"}</Typography>
+      <Typography noWrap sx={{ fontSize: 11, fontWeight: 600, color: G.dim }}>{item.who || "—"}</Typography>
       {item.channel && <Typography sx={{ fontSize: 10, color: G.faint }}>· {item.channel}</Typography>}
       {item.ref && <Typography sx={{ ...mono, fontSize: 10, color: G.faint }}>{item.ref}</Typography>}
-      <Typography sx={{ fontSize: 10, fontWeight: 800, color: needsYou(item) ? G.red : G.faint, ml: "auto", letterSpacing: 0.5, whiteSpace: "nowrap" }}>{laneMeta(item.lane).word}</Typography>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, color: needsYou(item) ? G.red : G.faint, ml: "auto", letterSpacing: 0.5, whiteSpace: "nowrap" }}>{laneMeta(item.lane).word}</Typography>
     </Box>
   );
 }
@@ -317,7 +317,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
           return data;
         })}>🎯 Prep me · +20</Btn>
         {e.join && <Box component="a" href={e.join} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}
-          sx={{ px: 1.1, py: 0.55, borderRadius: "9px", bgcolor: G.mint, color: "#1c1f24", fontSize: 11.5, fontWeight: 800, textDecoration: "none" }}>Join ↗</Box>}
+          sx={{ px: 1.1, py: 0.55, borderRadius: "9px", bgcolor: G.mint, color: "#1c1f24", fontSize: 11.5, fontWeight: 600, textDecoration: "none" }}>Join ↗</Box>}
       </Row>
     </>;
   } else if (card === "report") {
@@ -367,7 +367,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
     <Box>
       {body}
       {repo && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1, p: 1, borderRadius: "9px", bgcolor: "#f6f2ea", color: "#262521" }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>Which repository should the coding agent use?</Typography>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Which repository should the coding agent use?</Typography>
         <RepoPicker taskId={repo.taskId} agent={repo.agent} onDone={(d) => { if (d?.repo) { setRepo(null); dispatch("coding"); } }} />
       </Box>}
       <Moves item={item} covers={covers} busy={busy} play={play} onRepo={setRepo} />

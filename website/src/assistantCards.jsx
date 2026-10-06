@@ -512,7 +512,7 @@ function CombinedTaskText({ card, list = true }) {
   return <>
     {task}
     <div className="tq-card-full tq-card-context">
-      <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 700 }}>
+      <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 600 }}>
         Email context · {messages.length} messages combined by triage
       </div>
       {messages.map((m, n) => {
@@ -934,7 +934,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
       {repoAsk && (
         <div className="tq-card-full" style={{ marginTop: 8 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Which repository should the coding agent use?</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Which repository should the coding agent use?</div>
           <RepoPicker taskId={repoAsk.taskId} agent={repoAsk.agent}
             onDone={(data) => { if (data?.repo) { setRepoAsk(null); startAgent("coding"); } }} />
           <Button size="small" sx={faint} onClick={() => setRepoAsk(null)}>Not now</Button>
@@ -978,8 +978,7 @@ export function DayCards({ groups, onSection }) {
     <div className="tq-day-cards">
       {(groups || []).map((g) => (
         <button key={g.key} type="button" className={`tq-day-card lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
-          <span className="lbl"><i className="dot" />{g.word}</span>
-          <b>{g.n ?? g.rows.length}</b>
+          <span className="top"><span className="lbl"><i className="dot" />{g.word}</span><b>{g.n ?? g.rows.length}</b></span>
           <span className="who">{gistOf(g)}</span>
         </button>
       ))}
@@ -1159,7 +1158,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
             it's done. Make the walk through accurate to what was completed"). */}
         {"done" in card && (
           <span aria-hidden="true" title={card.done ? "already done" : "not done yet"}
-            style={{ marginRight: 7, fontSize: 13, fontWeight: 700, color: card.done ? "#47654a" : "#b3aa9c" }}>
+            style={{ marginRight: 7, fontSize: 13, fontWeight: 600, color: card.done ? "#47654a" : "#b3aa9c" }}>
             {card.done ? "☑" : "☐"}</span>
         )}
         {card.title}

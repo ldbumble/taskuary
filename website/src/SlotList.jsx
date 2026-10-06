@@ -28,7 +28,7 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
   return (
     <Box sx={{ mt: 1.2, pt: 1, borderTop: `1px solid ${BORDER}`, maxWidth: 900 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.6 }}>
-        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25, fontSize: 9, fontWeight: 750 }}>
+        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25, fontSize: 9, fontWeight: 600 }}>
           {`Closes when sent · ${items.filter((i) => i.done).length} of ${items.length}`}
         </Typography>
         {waiting.length > 1 && <Button size="small" disabled={busy} onClick={approveAll}>{busy ? "Sending…" : `Approve all (${waiting.length})`}</Button>}

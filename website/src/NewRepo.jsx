@@ -36,7 +36,7 @@ export default function NewRepo({ agent = "coder", bus, out, first = "" }) {
     <Box data-tq-new-repo="">
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
         <AccountTreeIcon sx={{ fontSize: 15, color: DIM }} />
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Repository</Typography>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Repository</Typography>
         <select aria-label="Repository the session opens in" value={pick} onChange={(e) => setPick(e.target.value)}
           style={{ fontSize: 12.5, padding: "5px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fff", color: INK, minWidth: 240, maxWidth: "100%" }}>
           <option value={AUTO}>{c.named ? `Auto - ${c.repo}` : "Auto - picks from what you write"}</option>

@@ -22,7 +22,7 @@ export default function QueuedStart({ taskId, queued, onChanged, compact = false
   return (
     <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: c.bg, border: `1px solid ${c.bd}55`,
       borderLeft: `3px solid ${c.bd}`, borderRadius: 1.25 }}>
-      <Typography variant="caption" sx={{ color: c.ink, fontWeight: 700, display: "block", fontSize: compact ? 10 : 11.5, lineHeight: 1.4 }}>
+      <Typography variant="caption" sx={{ color: c.ink, fontWeight: 600, display: "block", fontSize: compact ? 10 : 11.5, lineHeight: 1.4 }}>
         {failed ? "⏳ Could not start" : queued.behind ? `⏳ Waiting on ${queued.behind}` : "⏳ Waiting for a free agent slot"}
         {!failed && queued.behindTitle ? ` — “${queued.behindTitle}”` : ""}
       </Typography>

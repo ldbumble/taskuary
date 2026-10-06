@@ -117,7 +117,7 @@ export const Confirm = ({ open, title, text, confirmLabel = "OK", onConfirm, onC
   };
   return (
     <Dialog open={!!open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 700, pb: 0.5 }}>{title}</DialogTitle>
+      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 600, pb: 0.5 }}>{title}</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ fontSize: 13, color: DIM, whiteSpace: "pre-wrap" }}>{text}</DialogContentText>
         {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
@@ -141,7 +141,7 @@ export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete"
   };
   return (
     <Dialog open={!!open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 700, pb: 0.5 }}>Delete {what}?</DialogTitle>
+      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 600, pb: 0.5 }}>Delete {what}?</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ fontSize: 13, color: DIM }}>
           {consequence} This cannot be undone.
@@ -162,7 +162,7 @@ export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete"
 export const RefChip = ({ taskId, onClick }) => taskId ? (
   <Chip size="small" label={`TQ-${String(taskId).padStart(4, "0")}`} onClick={onClick}
     sx={{ fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
-      letterSpacing: ".015em", fontWeight: 700, bgcolor: "#eae4d8", color: "#55697a",
+      letterSpacing: ".015em", fontWeight: 600, bgcolor: "#eae4d8", color: "#55697a",
       height: 19, fontSize: 10.5 }} />
 ) : null;
 
@@ -172,29 +172,29 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, categor
     // "agent", not the agent's name: the name is whichever CLI happens to be configured (claude,
     // codex, a wrapper) and reads as a brand on a status chip; the tooltip still says who
     return <Chip size="small" label="agent working" title={`${working} has this task open in a live session right now`}
-      sx={{ bgcolor: ROLES.working.tint, color: ROLES.working.ink, height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+      sx={{ bgcolor: ROLES.working.tint, color: ROLES.working.ink, height: 19, fontSize: 10.5, fontWeight: 600 }} />;
   }
   // a category that is NOT a review state (info, promo, ignored…) is the whole story - a
   // stray review row must not turn a colleague's FYI into "reviewed · edited"
   const cat = category && TAGS[category];
   if (cat && !["coding", "todo", "review", "triaging"].includes(category) && taskStatus !== "done") {
-    return <Chip size="small" label={cat.label} title={cat.hint} sx={{ bgcolor: cat.bg, color: cat.fg, height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+    return <Chip size="small" label={cat.label} title={cat.hint} sx={{ bgcolor: cat.bg, color: cat.fg, height: 19, fontSize: 10.5, fontWeight: 600 }} />;
   }
   // A finished task outranks everything else the chip could say.
   if (taskStatus === "done" && reviewStatus !== "pending") {
-    return <Chip size="small" label="done" sx={{ bgcolor: "#dfeade", color: "#47654a", height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+    return <Chip size="small" label="done" sx={{ bgcolor: "#dfeade", color: "#47654a", height: 19, fontSize: 10.5, fontWeight: 600 }} />;
   }
   // and "nobody is moving this" outranks the verdict: what happened to it matters less
   // than whether it is sitting on you right now
   if (needsYou) {
     return <Chip size="small" label="needs you" sx={{ bgcolor: ALERT, color: "#fffdfb",
-      height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+      height: 19, fontSize: 10.5, fontWeight: 600 }} />;
   }
   // What actually matters to the reader: current state, not just the original verdict.
   // 'report' and 'feed' are NOT verdicts - nothing judged those items; they are here to be
   // read. Only 'ignored' means a policy actually rejected something.
   if (action === "triaging") {                     // decided in seconds: the pill breathes until then
-    return <Chip size="small" label="triaging…" sx={{ bgcolor: "#e6e0d5", color: "#6f6960", height: 19, fontSize: 10.5, fontWeight: 700,
+    return <Chip size="small" label="triaging…" sx={{ bgcolor: "#e6e0d5", color: "#6f6960", height: 19, fontSize: 10.5, fontWeight: 600,
       "@keyframes tqBreathe": { "50%": { opacity: 0.45 } }, animation: "tqBreathe 1.4s ease-in-out infinite" }} />;
   }
   const key = ["report", "feed", "filed"].includes(action) ? action
@@ -216,7 +216,7 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, categor
 const PILL = { ok: { bg: "#dfeade", fg: "#47654a" }, bad: { bg: "#f0e2e4", fg: "#6b2733" },
   wait: { bg: "#eae4d8", fg: "#55697a" }, none: { bg: "#e9e3d8", fg: "#867f74" } };
 const Pill = ({ tone = "none", children }) => (
-  <Box component="span" sx={{ ...PILL[tone], px: 0.85, py: 0.2, borderRadius: 99, fontSize: 10.5, fontWeight: 700 }}>
+  <Box component="span" sx={{ ...PILL[tone], px: 0.85, py: 0.2, borderRadius: 99, fontSize: 10.5, fontWeight: 600 }}>
     {children}
   </Box>
 );
@@ -288,11 +288,11 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
         {ci ? (
           <>
             <Box component="a" href={ci.url} target="_blank" rel="noreferrer"
-              sx={{ fontSize: 11, fontWeight: 700, color: "#55697a", textDecoration: "none" }}>
+              sx={{ fontSize: 11, fontWeight: 600, color: "#55697a", textDecoration: "none" }}>
               {ci.kind === "pr" ? "open PR ↗" : "the commit ↗"}
             </Box>
             <Box component="span" onClick={() => !busy && act("ci")}
-              sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
+              sx={{ fontSize: 11, fontWeight: 600, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
               {busy === "ci" ? "checking…" : "re-check CI"}
             </Box>
           </>
@@ -303,7 +303,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
             <Box component="span" onClick={() => !busy && act("land")}
               title={p.flow === "direct" ? "pushes the commits already in the checkout straight onto the default branch"
                 : "opens a DRAFT pull request from this task's branch — it merges only when you approve the task's close-out"}
-              sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
+              sx={{ fontSize: 11, fontWeight: 600, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
               {busy === "land" ? "landing…" : p.flow === "direct" ? "push straight to the branch" : "open a draft PR"}
             </Box>
             <Box component="span" onClick={() => !busy && act(`land?flow=${p.flow === "direct" ? "pr" : "direct"}`)}
@@ -315,7 +315,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
         )}
         {onOpenTask && (
           <Box component="span" onClick={() => onOpenTask(taskId)}
-            sx={{ fontSize: 11, fontWeight: 700, color: "#55697a", cursor: "pointer" }}>the whole session</Box>
+            sx={{ fontSize: 11, fontWeight: 600, color: "#55697a", cursor: "pointer" }}>the whole session</Box>
         )}
       </Box>
       {p.error && <Typography variant="caption" sx={{ color: "#6b2733", display: "block", mt: 0.5 }}>{p.error}</Typography>}
@@ -390,7 +390,7 @@ export const DiffBlock = ({ text }) => {
   if (!text) return null;
   const lines = String(text).split("\n");
   const style = (l) => l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff --git")
-    ? { color: "#2b2a26", fontWeight: 700, bgcolor: "#e9e3d8" }
+    ? { color: "#2b2a26", fontWeight: 600, bgcolor: "#e9e3d8" }
     : l.startsWith("@@") ? { color: "#6f8a6e", bgcolor: "#e3e6e1" }
       : l.startsWith("+") ? { color: "#47654a", bgcolor: "#dfeade" }
         : l.startsWith("-") ? { color: "#6b2733", bgcolor: "#f0e2e4" }
@@ -615,7 +615,7 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
           <Box sx={{ px: 1.35, py: 1 }}>
             {detailRows.map((r, i) => (
               <Box key={`${r.label}-${i}`} sx={{ mt: i ? 1.15 : 0 }}>
-                <Typography sx={{ ...mono, color: FAINT, fontWeight: 700, fontSize: 9.5,
+                <Typography sx={{ ...mono, color: FAINT, fontWeight: 600, fontSize: 9.5,
                   letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>
                   {REPORT_LABELS[r.label] || r.label}
                 </Typography>
@@ -625,7 +625,7 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
             ))}
             {!!artifacts.length && (
               <Box sx={{ mt: detailRows.length ? 1.15 : 0 }}>
-                <Typography sx={{ ...mono, color: FAINT, fontWeight: 700, fontSize: 9.5,
+                <Typography sx={{ ...mono, color: FAINT, fontWeight: 600, fontSize: 9.5,
                   letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>Session result</Typography>
                 {/* Newest first, numbered by run, each with its own time. */}
                 {artifacts.slice(0, 3).map((artifact, i, all) => (        /* newest first, as the API sends them */
@@ -842,7 +842,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
         "&:hover": { bgcolor: "#f1eafa", borderColor: "#bca3d8", boxShadow: "none" } }}>
       Not ours
       <Box component="span" aria-hidden sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8,
-        bgcolor: "rgba(90,62,131,.1)", fontSize: 8.5, fontWeight: 800, letterSpacing: 0.7,
+        bgcolor: "rgba(90,62,131,.1)", fontSize: 8.5, fontWeight: 600, letterSpacing: 0.7,
         lineHeight: 1.5 }}>MEMORY</Box>
     </Button>
   );
@@ -857,7 +857,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
   return (
     <Box sx={{ width: "100%", flexBasis: compact ? "100%" : "auto", mt: row ? 0 : 1, p: 1.25, bgcolor: PANEL2,
       border: row ? "none" : `1px solid ${BORDER}`, borderRadius: row ? 0 : 1.5 }}>
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>
         Not our task — what should triage remember?
       </Typography>
       {/* WHAT the verdict is about, in the owner's words. Trimming the subject guesses at the
@@ -935,7 +935,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
   };
   if (repoAsk) return (
     <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>Which repository should the coding agent use?</Typography>
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>Which repository should the coding agent use?</Typography>
       <RepoPicker taskId={repoAsk.taskId} agent={repoAsk.agent}
         onDone={(data) => { if (data?.repo) { setRepoAsk(null); send(); } }} />
       <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setRepoAsk(null)}>Not now - nothing was started</Button>
@@ -969,7 +969,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
     <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
         <TaskuaryMark size={17} />
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Which kind of agent?</Typography>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Which kind of agent?</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         {coding && <AgentPicker agents={agents} models={models} agent={agent} model={model} coding
           brains={brainList} brainModels={brainModels} brain={brain} onBrain={(b) => { setBrain(b); setModel(""); }}
@@ -1077,7 +1077,7 @@ export const StateChip = ({ task }) => {
   const st = stateOf(task);
   // the rail's mark leads the word, as it does on the rail (⏳ waiting to start, 👋 agent waiting on you)
   return <Chip size="small" label={st.mark && st.mark !== "spinner" ? `${st.mark} ${st.label}` : st.label}
-    sx={{ bgcolor: st.c.bg, color: st.c.fg, border: `1px solid ${st.c.bd}`, height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+    sx={{ bgcolor: st.c.bg, color: st.c.fg, border: `1px solid ${st.c.bd}`, height: 19, fontSize: 10.5, fontWeight: 600 }} />;
 };
 
 export const TaskStatusChip = ({ status }) => (
@@ -1114,7 +1114,7 @@ export const LifecycleChip = ({ kind, phase, compact = false, sx = {} }) => {
   // ...unless the phase names it already: "agent · agent working" says it twice
   return <Chip size="small" label={String(phase || "").startsWith(kind) ? phase : `${kind} · ${phase}`}
     sx={{ bgcolor: c.bg, color: c.fg, border: `1px solid ${c.bd}`, height: compact ? 17 : 20,
-      fontSize: compact ? 9.5 : 10.5, fontWeight: 700, "& .MuiChip-label": { px: compact ? 0.7 : 0.9 }, ...sx }} />;
+      fontSize: compact ? 9.5 : 10.5, fontWeight: 600, "& .MuiChip-label": { px: compact ? 0.7 : 0.9 }, ...sx }} />;
 };
 
 export const timeAgo = (s) => {
@@ -1213,7 +1213,7 @@ export const Crumb = ({ section, onBack, title }) => (
       sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
       {section}
     </Typography>
-    <Typography sx={{ color: "#2b2a26", fontWeight: 800, fontSize: 20, lineHeight: 1.2, mt: 0.25 }}>{title}</Typography>
+    <Typography sx={{ color: "#2b2a26", fontWeight: 600, fontSize: 20, lineHeight: 1.2, mt: 0.25 }}>{title}</Typography>
   </Box>
 );
 
@@ -1226,7 +1226,7 @@ export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeho
   <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "236px minmax(0,1fr)" },
     gap: 3, alignItems: "start", maxWidth: 1320, mx: "auto" }}>
     <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
-      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>{title}</Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 1.5 }}>{title}</Typography>
       {setQ && (
         <TextField fullWidth placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)}
           sx={{ mb: 1.5, bgcolor: "#fff", borderRadius: 2 }}
@@ -1235,7 +1235,7 @@ export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeho
       {items.map((it) => {
         if (it.section) return (
           <Typography key={`section-${it.section}`} variant="overline"
-            sx={{ display: "block", color: ACCENT2, letterSpacing: 1.35, fontWeight: 750,
+            sx={{ display: "block", color: ACCENT2, letterSpacing: 1.35, fontWeight: 600,
               fontSize: 9.5, px: 1.25, mt: it.first ? 0 : 1.6, mb: 0.3 }}>
             {it.section}
           </Typography>
@@ -1285,7 +1285,7 @@ export const LandingCard = ({ icon, title, desc, onOpen, foot }) => (
       {icon}
     </Box>
     <Box sx={{ minWidth: 0 }}>
-      <Typography className="thubPgTitle" sx={{ color: "#55697a", fontWeight: 700, fontSize: 14.5, lineHeight: 1.3 }}>{title}</Typography>
+      <Typography className="thubPgTitle" sx={{ color: "#55697a", fontWeight: 600, fontSize: 14.5, lineHeight: 1.3 }}>{title}</Typography>
       <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{desc}</Typography>
       {foot && <Box onClick={(e) => e.stopPropagation()}>{foot}</Box>}
     </Box>
@@ -1294,7 +1294,7 @@ export const LandingCard = ({ icon, title, desc, onOpen, foot }) => (
 
 export const SectionLabel = ({ children, right }) => (
   <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1, mt: 2 }}>
-    <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontWeight: 700, fontSize: 10 }}>{children}</Typography>
+    <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontWeight: 600, fontSize: 10 }}>{children}</Typography>
     {right}
   </Box>
 );
@@ -1455,12 +1455,12 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
             sx={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
               width: 20, height: 24, color: "#6b5f45", flexShrink: 0, userSelect: "none",
               cursor: pending.length ? "pointer" : "default" }}>
-            <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: "inherit" }}>✎</Typography>
+            <Typography sx={{ ...mono, fontSize: 11, fontWeight: 600, color: "inherit" }}>✎</Typography>
             {pending.length > 0 && (
               <Box sx={{ position: "absolute", top: -4, right: -5, minWidth: 14, height: 14, px: 0.3,
                 display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99,
                 bgcolor: "#6b5f45", color: "#fffdfb", border: "1px solid #f1ead9",
-                ...mono, fontSize: 8, fontWeight: 800, lineHeight: 1 }}>
+                ...mono, fontSize: 8, fontWeight: 600, lineHeight: 1 }}>
                 {pending.length > 99 ? "99+" : pending.length}
               </Box>
             )}
@@ -1486,7 +1486,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   return (
     <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>
+        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 600 }}>
           ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} in the funnel` : ""}
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -1525,7 +1525,7 @@ export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) =
       {small ? (
         <Box component="span" onClick={show} title="Tell the agent something — queued until it stops"
           sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.6, py: 0.15, borderRadius: 99, cursor: "pointer",
-            bgcolor: "#f1ead9", color: "#6b5f45", border: "1px solid #ddd2b9", fontSize: 9.5, fontWeight: 700, whiteSpace: "nowrap",
+            bgcolor: "#f1ead9", color: "#6b5f45", border: "1px solid #ddd2b9", fontSize: 9.5, fontWeight: 600, whiteSpace: "nowrap",
             "&:hover": { bgcolor: "#e9dfc5" } }}>
           ✎ {label}
         </Box>
@@ -1657,7 +1657,7 @@ export const WorkLine = ({ work, who = "agent", waiting = false, asking = false,
     <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, minWidth: 0, maxWidth: "100%", ...mono, fontSize: 10.5 }}>
       <Box component="span" sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, bgcolor: waiting ? ROLES.you.solid : ROLES.working.solid,
         ...(waiting ? {} : { "@keyframes tqPulse2": { "50%": { opacity: 0.25 } }, animation: "tqPulse2 1.4s ease-in-out infinite" }) }} />
-      <Box component="span" sx={{ fontWeight: 700, color: waiting ? ROLES.you.ink : INK, whiteSpace: "nowrap" }}>{waiting ? h.text : who}</Box>
+      <Box component="span" sx={{ fontWeight: 600, color: waiting ? ROLES.you.ink : INK, whiteSpace: "nowrap" }}>{waiting ? h.text : who}</Box>
       {h.tool && <Box component="span" noWrap sx={{ px: 0.6, borderRadius: 0.75, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0,
         bgcolor: h.muted ? ROLES.muted.tint : ROLES.working.tint, color: h.muted ? ROLES.muted.ink : ROLES.working.ink }}>{h.tool}</Box>}
       {h.t && <Box component="span" sx={{ color: FAINT, flexShrink: 0 }}>{h.t}</Box>}
@@ -1669,7 +1669,7 @@ export const WorkLine = ({ work, who = "agent", waiting = false, asking = false,
    reconciled in plain sentences (taskuary/witness.py decides "late" and "stray"; nothing is
    inferred). Provenance pills say where the task came from and who worked it - facts the audit
    chain already held and the card never showed. Polls only while the session is alive. */
-const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 700, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
+const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 600, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
 const hhmm = (s) => s ? new Date(String(s).replace(" ", "T")).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
 export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed = false }) => {
   // The terminal list already carries current witness/provenance data. Paint that immediately;
@@ -1714,7 +1714,7 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
   if (!d) return failed ? (
     <Box sx={{ mb: 0.75, border: `1px solid ${ROLES.you.bd}`, borderRadius: 2, bgcolor: ROLES.you.tint,
       px: 1.5, py: 0.65, display: "flex", alignItems: "center", gap: 1 }}>
-      <Typography sx={{ ...mono, fontSize: 10, fontWeight: 700, color: ROLES.you.ink }}>agent activity unavailable</Typography>
+      <Typography sx={{ ...mono, fontSize: 10, fontWeight: 600, color: ROLES.you.ink }}>agent activity unavailable</Typography>
       <Typography variant="caption" sx={{ color: DIM }}>the terminal is unaffected · {live ? "retrying" : "reload to retry"}</Typography>
     </Box>
   ) : null;
@@ -1731,7 +1731,7 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
       <Box onClick={toggle} title={open ? "Fold the detail away" : "Open: the agent's list beside the files it wrote"}
         sx={{ px: 1.5, py: 0.5, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", cursor: "pointer", borderBottom: open ? `1px solid ${BORDER}` : 0, "&:hover": { bgcolor: "#faf8f5" } }}>
         <Typography component="span" sx={{ ...mono, fontSize: 10, color: FAINT, width: 12 }}>{open ? "▾" : "▸"}</Typography>
-        <Typography component="span" sx={{ ...mono, fontSize: 9.5, color: DIM, fontWeight: 700, letterSpacing: ".06em", mr: 0.25 }}>AGENT ACTIVITY</Typography>
+        <Typography component="span" sx={{ ...mono, fontSize: 9.5, color: DIM, fontWeight: 600, letterSpacing: ".06em", mr: 0.25 }}>AGENT ACTIVITY</Typography>
         {d.prov?.from && <Chip size="small" label={`from: ${d.prov.from}`} sx={pillSx("muted")} />}
         {d.prov?.kind && <Chip size="small" label={`kind: ${d.prov.kind}`} sx={pillSx("working")} />}
         {d.prov?.by && <Chip size="small" label={`by: ${who}`} sx={pillSx("working")} />}
@@ -1809,7 +1809,7 @@ export const LiveConsole = ({ run, agent, lines = 5, onOpen, fill }) => {
         ...(fill ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : {}),
         "&:hover": onOpen ? { borderColor: CATPPUCCIN.overlay } : {} }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: tail.length ? 0.5 : 0, flexShrink: 0 }}>
-        <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
+        <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 600, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
           ...(waiting ? {} : { "@keyframes tqBlink2": { "50%": { opacity: 0.25 } }, animation: "tqBlink2 1.1s step-end infinite" }) }}>
           {waiting ? `⏸ ${says(run?.state || (run?.asking ? "asking" : "parked"), who)}` : `▮ ${who} working${run?.StartedAt ? ` · ${_elapsed(run.StartedAt)}` : ""}`}
         </Typography>
@@ -1858,7 +1858,7 @@ export const FilterPills = ({ options, value, onChange }) => (
           {/* the count is a BADGE, not the last word of the label - glued on with a space,
               "needs you 2" reads as one phrase and the number disappears into the name */}
           {o.n != null && (
-            <Box component="span" sx={{ px: 0.55, py: 0.05, borderRadius: 99, fontSize: 10, fontWeight: 700,
+            <Box component="span" sx={{ px: 0.55, py: 0.05, borderRadius: 99, fontSize: 10, fontWeight: 600,
               fontVariantNumeric: "tabular-nums", lineHeight: 1.5,
               bgcolor: on ? "rgba(255,255,255,.7)" : "#e6e2da", color: on ? c.fg : "#867f74" }}>{o.n}</Box>
           )}
@@ -1936,7 +1936,7 @@ export const CcRow = ({ cc, setCc, channel }) => {
   };
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
-      <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
+      <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
       {(cc || []).map((a) => (
         <Box key={a} sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.8, py: 0.15,
           borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>

@@ -28,7 +28,7 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 320 }) }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#41525f" }}>Continue session{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>Continue session{taskRef ? ` · ${taskRef}` : ""}</Typography>
       <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder="Anything to tell it as it picks up? (optional) - paste or drop a picture too"
         value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} {...pics.drop}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) go(); }}

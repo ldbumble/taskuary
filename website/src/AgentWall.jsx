@@ -60,7 +60,7 @@ const Kind = ({ kind }) => {
       <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.55, px: 0.85, height: 19, borderRadius: 99,
         border: `1px solid ${BORDER}`, bgcolor: PANEL, flexShrink: 0 }}>
         <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: k.dot }} />
-        <Typography sx={{ fontSize: 10, fontWeight: 700, color: DIM, letterSpacing: 0.2 }}>{k.label}</Typography>
+        <Typography sx={{ fontSize: 10, fontWeight: 600, color: DIM, letterSpacing: 0.2 }}>{k.label}</Typography>
       </Box>
     </Tooltip>
   );
@@ -73,7 +73,7 @@ const Note = ({ n, onOpenTask }) => {
       <Face who={n.Agent} />
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.85, flexWrap: "wrap" }}>
-          <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{n.Agent}</Typography>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{n.Agent}</Typography>
           <Kind kind={n.Kind} />
           {!!n.TaskId && (
             <Typography component="button" type="button" disabled={!onOpenTask} onClick={() => onOpenTask?.(n.TaskId)}

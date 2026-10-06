@@ -48,7 +48,7 @@ const Inbound = ({ r }) => {
 export const InvoiceLine = ({ meta }) => (
   <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 1, px: 1.25, py: 0.8,
     bgcolor: "#eef1ec", border: "1px solid #d9e0d6", borderRadius: 1.5 }}>
-    <Typography variant="caption" sx={{ color: INK, fontWeight: 700 }}>{meta.customer}</Typography>
+    <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>{meta.customer}</Typography>
     <Typography variant="caption" sx={{ color: INK }}>${Number(meta.amount || 0).toFixed(2)}</Typography>
     <Typography variant="caption" sx={{ color: DIM }}>last month: {meta.previous_amount == null ? "—" : `$${Number(meta.previous_amount).toFixed(2)}`}</Typography>
     {meta.invoice_number && <Typography variant="caption" sx={{ color: DIM }}>Zoho {meta.invoice_number}</Typography>}
@@ -209,7 +209,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   if (r.Status === "held") {
     return (
       <Box sx={{ mt: 0.5, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
-        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, display: "block" }}>
+        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
           Waiting on the agent working this task
         </Typography>
         <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25 }}>
@@ -263,16 +263,16 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       </Alert>}
       {!proposal && <Inbound r={r} />}
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
-        <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800,
+        <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600,
           letterSpacing: "1.5px", flexShrink: 0 }}>{proposal?.destinationLabel || "TO"}</Typography>
-        <Typography variant="body2" sx={{ color: INK, fontWeight: 650 }} noWrap>
+        <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>
           {proposal?.destination || replyContext(filedDelivery)}
         </Typography>
       </Box>
       {co && (
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
-          <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>{co.destinationLabel}</Typography>
-          <Typography variant="body2" sx={{ color: INK, fontWeight: 650 }} noWrap>{co.destination}</Typography>
+          <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>{co.destinationLabel}</Typography>
+          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{co.destination}</Typography>
           <Typography variant="caption" sx={{ color: FAINT }} noWrap>· first, then the reply goes out</Typography>
         </Box>
       )}
@@ -299,7 +299,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         inputProps={{ readOnly: busy || delivery.frozen, style: { fontSize: 12.5, lineHeight: 1.45 } }} />
       {compare?.reviewId === r.ReviewId && (
         <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
-          <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, display: "block" }}>
+          <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
             Refreshed draft - written after the new message. Your edit stays in the box above.
           </Typography>
           <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>

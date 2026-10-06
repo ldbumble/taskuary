@@ -50,11 +50,11 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
   const state = { done: "Confirmed.", cancelled: "Cancelled.", stale: "Out of date - say it again.", error: "Failed - nothing moved." }[p.status] || "";
   return (
     <div className="tq-proposal" style={{ border: "1px solid #d8d1c5", borderRadius: 12, padding: "10px 12px", marginTop: 6, background: "#fffdfb" }}>
-      <div style={{ fontWeight: 700, fontSize: 12.5, color: "#41525f" }}>{d.title}</div>
+      <div style={{ fontWeight: 600, fontSize: 12.5, color: "#41525f" }}>{d.title}</div>
       {d.target && <div style={{ fontSize: 12, color: "#55697a", marginTop: 2 }}>{d.target}</div>}
       {d.detail && (d.detailHead
         ? <div className="tq-proposal-section" style={{ marginTop: 8, padding: "6px 9px", borderRadius: 8, background: "#f6f2ec" }}>
-            <div style={{ fontSize: 10, letterSpacing: 1.2, textTransform: "uppercase", color: "#8a8276", fontWeight: 700 }}>{d.detailHead}</div>
+            <div style={{ fontSize: 10, letterSpacing: 1.2, textTransform: "uppercase", color: "#8a8276", fontWeight: 600 }}>{d.detailHead}</div>
             <div style={{ fontSize: 12, color: "#3d4a55", marginTop: 2, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{d.detail}</div>
           </div>
         : <div style={{ fontSize: 12, color: "#3d4a55", marginTop: 4, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{d.detail}</div>)}

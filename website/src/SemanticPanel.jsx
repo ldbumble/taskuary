@@ -85,7 +85,7 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
     <Box sx={{ border: `1px solid ${open ? s.c.bd : BORDER}`, borderRadius: 1.5, bgcolor: open ? s.c.bg : PANEL, mb: 0.6 }}>
       <Box onClick={onOpen} sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 1.1, py: 0.7, cursor: "pointer" }}>
         <StatusIcon status={m.Status} sx={{ fontSize: 15, color: s.c.fg }} />
-        <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 700, color: INK }}>{m.Name}</Typography>
+        <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 600, color: INK }}>{m.Name}</Typography>
         <Typography variant="caption" sx={{ color: DIM, flex: 1, minWidth: 0 }} noWrap>{m.Label || m.Definition || ""}</Typography>
         <Chip size="small" label={s.label} sx={{ height: 16, fontSize: 9, bgcolor: s.c.bg, color: s.c.fg, border: `1px solid ${s.c.bd}` }} />
         <Typography variant="caption" sx={{ ...mono, fontSize: 10, color: FAINT, whiteSpace: "nowrap" }}>
@@ -100,7 +100,7 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
 
           {/* the proof, or the absence of it */}
           <Box>
-            <Typography sx={{ ...mono, fontSize: 9, letterSpacing: 1, color: "#6b5f45", fontWeight: 700, mb: 0.3 }}>
+            <Typography sx={{ ...mono, fontSize: 9, letterSpacing: 1, color: "#6b5f45", fontWeight: 600, mb: 0.3 }}>
               KNOWN NUMBERS IT MUST MATCH
             </Typography>
             {fixtures.length ? (
@@ -192,7 +192,7 @@ export default function SemanticPanel() {
         </Box>
       ) : (
         <>
-          <Typography sx={{ ...mono, fontSize: 10, color: "#6b5f45", fontWeight: 700, mb: 0.6 }}>
+          <Typography sx={{ ...mono, fontSize: 10, color: "#6b5f45", fontWeight: 600, mb: 0.6 }}>
             {by("verified")} CERTIFIED · {by("draft")} BEING PROVED{by("broken") ? ` · ${by("broken")} STOPPED MATCHING` : ""}
           </Typography>
           {rows.map((m) => (

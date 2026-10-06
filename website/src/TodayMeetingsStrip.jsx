@@ -32,7 +32,7 @@ export default function TodayMeetingsStrip() {
       "@keyframes tqSlide": { from: { opacity: 0, transform: "translateY(6px) scaleX(.6)" }, to: { opacity: 1, transform: "none" } },
       "@keyframes tqPulse": { "0%": { boxShadow: "0 0 0 0 rgba(138,54,70,.45)" }, "100%": { boxShadow: "0 0 0 8px rgba(138,54,70,0)" } } }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.75 }}>
-        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>📅 TODAY’S MEETINGS · {today.events.length}</Typography>
+        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 600 }}>📅 TODAY’S MEETINGS · {today.events.length}</Typography>
         {allDay.map((event) => <Typography key={event.subject} variant="caption" sx={{ color: FAINT }}>· all day: {event.subject}</Typography>)}
       </Box>
       <Box sx={{ position: "relative", height: 44, borderTop: "1px solid #ddd2b9", borderBottom: "1px solid #ddd2b9" }}>
@@ -50,7 +50,7 @@ export default function TodayMeetingsStrip() {
               sx={{ position: "absolute", left: pct(start), width: `calc(${pct(Math.max(end, start + 0.35))} - ${pct(start)})`, top: 8, height: 28, borderRadius: 1,
                 bgcolor: live ? "#8a3646" : past ? "#d9cfb6" : "#8a7a5c", color: live || !past ? "#fffdfb" : "#6b5f45",
                 px: wide ? 0.75 : 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
-                fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis",
+                fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis",
                 transformOrigin: "left center", animation: `tqSlide .5s ease ${index * 0.08}s both`, cursor: "default" }}>
               <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{wide ? event.subject : index + 1}</Box>
             </Box>

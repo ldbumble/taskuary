@@ -141,7 +141,7 @@ const OwnerCard = () => {
     <Box ref={box} sx={{ mb: 2.5, p: 1.75, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2,
       display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
       <Box sx={{ minWidth: 260, flex: 1 }}>
-        <Typography variant="body2" sx={{ color: INK, fontWeight: 700 }}>Who the documents speak for</Typography>
+        <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>Who the documents speak for</Typography>
         <Typography variant="caption" sx={{ color: FAINT }}>
           Set your identity once and Taskuary uses it everywhere it speaks for you — signatures,
           escalation rules, and the coder's instructions. Saving also updates older documents that spell out your name.
@@ -438,7 +438,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                  maxHeight: { xs: "none", md: "100%" } }}>
         {section === "profiles" ? (
           <>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 0.5 }}>Profiles</Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 0.5 }}>Profiles</Typography>
             {/* ONE door. Three buttons, two of them bare text, wrapped mid-label into something that
                 read as a menu of unrelated things (the owner, 2026-09-17: "just have 2 clear buttons
                 .. make them look like buttons.. make it look normal"). Adding a worker - by hand or
@@ -473,7 +473,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                     sx={isRouted(pr) ? undefined : { color: ROLES.muted.ink, borderColor: ROLES.muted.bd }} />
                   {`prof:${pr.name}` === docName && (
                     <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
-                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
+                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>open</Box>
                   )}
                 </Box>
                 <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{pr.purpose || "no purpose set — triage cannot tell when to pick it"}</Typography>
@@ -484,7 +484,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           </>
         ) : section === "documents" ? (
           <>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5, flexShrink: 0 }}>Operator documents</Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 1.5, flexShrink: 0 }}>Operator documents</Typography>
             {/* the eight scroll; the identity card below them does not, so it is always on screen */}
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>
             {NAMES.map((n) => (
@@ -499,7 +499,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                   <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>{DOCS[n].label}</Typography>
                   {n === docName && (
                     <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
-                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
+                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>open</Box>
                   )}
                 </Box>
                 <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{DOCS[n].blurb}</Typography>
@@ -510,7 +510,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           </>
         ) : (
           <>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 0.5 }}>Playbooks</Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 0.5 }}>Playbooks</Typography>
             <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.25, lineHeight: 1.5 }}>
               One per kind of job—how it is done here, and where the line is between “just do it” and “ask”.
             </Typography>
@@ -536,7 +536,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                       <Box sx={{ display: "flex", opacity: on ? 1 : .65 }}><MenuBookIcon sx={{ fontSize: 19, color: "#55697a" }} /></Box>
                       <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{b.title}</Typography>
                       {on && <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
-                        borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>}
+                        borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>open</Box>}
                     </Box>
                     <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>when: {b.when}</Typography>
                     {b.uses?.length > 0 && <Typography noWrap sx={{ ...mono, fontSize: 10.5, color: FAINT, pt: 0.25 }}>uses {b.uses.join(" · ")}</Typography>}
@@ -557,7 +557,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5, flexShrink: 0, flexWrap: { xs: "wrap", md: "nowrap" } }}>
           {/* on a phone the title takes its own line; beside four buttons it was 45px wide */}
           <Box sx={{ flex: 1, minWidth: 0, flexBasis: { xs: "100%", md: "auto" } }}>
-            <Typography noWrap sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 17 }}>{meta.label}</Typography>
+            <Typography noWrap sx={{ ...mono, color: INK, fontWeight: 600, fontSize: 17 }}>{meta.label}</Typography>
             <Typography variant="body2" sx={{ color: FAINT, pt: 0.75 }}>{meta.blurb}</Typography>
             {/* WHO RUNS ON THIS, and whether triage is actually offered them. It used to sit on the
                 profile's card in the shelf; the rail lists documents by name, so the fact that a
@@ -624,7 +624,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             truncated where the roster truncates it - or the reason there is none. */}
         {cur && (
           <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2, flexShrink: 0 }}>
-            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.5 }}>
+            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}>
               WHAT TRIAGE SEES
             </Typography>
             {cur.seen.filter((m) => m.line).map((m) => (
@@ -655,7 +655,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             block in the doc is traceable back to your own mail, not a vibe */}
         {genEv?.length > 0 && GEN[docName] && (
           <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.5 }}>
+            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}>
               WHAT IT READ — AND WHAT EACH LINE DID
             </Typography>
             <Box sx={{ maxHeight: 260, overflowY: "auto" }}>

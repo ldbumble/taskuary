@@ -158,7 +158,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
         Wrapped up {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval on the task; the task closes when you send or dismiss it." : "The task is closed."}
       </Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>
-        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>The wall</Typography>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15 }}>The wall</Typography>
         <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5, flex: 1 }}>
           Every live session, side by side — code several agents at once. Drag a pane by its handle to rearrange; drag the bar under it to resize.
         </Typography>
@@ -214,9 +214,9 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                         "&:hover": { bgcolor: "#e7eae2" }, "&:active": { cursor: "grabbing" } }}>
                       <DragIndicatorIcon sx={{ fontSize: 16, color: FAINT }} />
                     </Box>
-                    <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`}</Typography>
+                    <Typography sx={{ ...mono, fontSize: 11, fontWeight: 600, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`}</Typography>
                     <Typography noWrap title={t.Title || s.cwd}
-                      sx={{ fontSize: 12, fontWeight: 650, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
+                      sx={{ fontSize: 12, fontWeight: 600, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
                     <Tooltip title="Open the full task page"><IconButton aria-label="Open full task" size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
                     <Tooltip title="Close session — stop the agent; keep the task and transcript"><span><IconButton aria-label="Close session" size="small" disabled={wrapBusy} onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></span></Tooltip>
                   </Box>

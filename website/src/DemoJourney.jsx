@@ -34,7 +34,7 @@ export default function DemoJourney({ onChanged }) {
     <Box data-tq-demo-journey={phase} sx={{ maxWidth: 1120, mx: "auto", mb: 2, border: `1px solid ${BORDER}`, borderRadius: 2,
       bgcolor: PANEL, p: { xs: 1.5, md: 2.5 }, color: INK }}>
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 1, mb: 1 }}>
-        <Typography component="h1" sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 800 }}>Try one request</Typography>
+        <Typography component="h1" sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 600 }}>Try one request</Typography>
         <Typography sx={{ fontSize: 12, color: DIM }}>Scripted demo · fictional data · nothing sends or connects</Typography>
       </Box>
       <Box component="ol" aria-label="Demo steps" sx={{ listStyle: "none", m: 0, p: 0, display: "flex", flexWrap: "wrap", gap: 1.5, mb: 2 }}>
@@ -46,7 +46,7 @@ export default function DemoJourney({ onChanged }) {
         ))}
       </Box>
       {phase === "request" && <>
-        <Typography sx={{ fontWeight: 700, fontSize: 14 }}>Ruth asks for the latest vendor spend numbers</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>Ruth asks for the latest vendor spend numbers</Typography>
         <Typography sx={{ fontSize: 13, color: DIM, my: 1, maxWidth: 760 }}>{NUMBERS_REQUEST}</Typography>
         <Typography sx={{ fontSize: 12, color: DIM, mb: 1.5 }}>The task already has her request. Let the demo analyst prepare a sourced answer and a draft for you to review.</Typography>
         <Button variant="contained" disableElevation disabled={starting} onClick={start}>
@@ -60,7 +60,7 @@ export default function DemoJourney({ onChanged }) {
         <Box sx={{ height: { xs: 360, md: 420 }, minWidth: 0 }}><GeneralWorkspace task={journey.task} compact /></Box>
       </>}
       {phase === "review" && <>
-        <Typography sx={{ fontSize: 14, fontWeight: 700, mb: 1.5 }}>The result is ready. Check its evidence, edit the reply, then simulate approval.</Typography>
+        <Typography sx={{ fontSize: 14, fontWeight: 600, mb: 1.5 }}>The result is ready. Check its evidence, edit the reply, then simulate approval.</Typography>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(0, 1fr)" }, gap: 2 }}>
           <Box sx={{ minWidth: 0, p: 1.5, bgcolor: PANEL2, borderRadius: 1.5 }} data-tq-demo-result=""><Md text={journey.result} /></Box>
           <Box sx={{ minWidth: 0 }} data-tq-demo-review=""><ReviewDecision review={journey.review} simulated
@@ -68,7 +68,7 @@ export default function DemoJourney({ onChanged }) {
         </Box>
       </>}
       {phase === "complete" && <Box role="status" data-tq-demo-outcome="">
-        <Typography sx={{ fontSize: 18, fontWeight: 800 }}>Request finished in this demo.</Typography>
+        <Typography sx={{ fontSize: 18, fontWeight: 600 }}>Request finished in this demo.</Typography>
         <Typography sx={{ fontSize: 13, my: 1 }}>You reviewed the checked numbers and approved the reply. The fictional task is done. No email was sent.</Typography>
         <Box component="details" sx={{ fontSize: 12, color: DIM, mb: 1.5 }}><summary>Your approved demo reply</summary>
           <Typography sx={{ fontSize: 12, whiteSpace: "pre-wrap", mt: 1 }}>{journey.review?.FinalText}</Typography>

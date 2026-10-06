@@ -86,7 +86,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
           borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: ROLES.working.solid,
             boxShadow: "0 0 0 4px rgba(111,138,110,.10)" }} />
-          <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.3, color: FAINT, flex: 1 }}>
+          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.3, color: FAINT, flex: 1 }}>
             IN THE STUDIO
           </Typography>
           <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{seated.length}/{desks.length}</Typography>
@@ -105,16 +105,16 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
                   bgcolor: selected ? "#f4f1ec" : "transparent", "&:hover": { bgcolor: "#f4f1ec" } }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
                   <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: color, flexShrink: 0 }} />
-                  <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 700, color }}>{state.agent}</Typography>
+                  <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 600, color }}>{state.agent}</Typography>
                   <Typography sx={{ ...mono, fontSize: 10, color: FAINT, ml: "auto" }}>{task.ref}</Typography>
                   {task.Waiting > 0 && (
-                    <Typography sx={{ ...mono, fontSize: 10, color: "#6b5f45", fontWeight: 700 }}
+                    <Typography sx={{ ...mono, fontSize: 10, color: "#6b5f45", fontWeight: 600 }}
                       title={`${task.Waiting} queued prompt${task.Waiting === 1 ? "" : "s"} waiting in the funnel`}>
                       ✎ {task.Waiting}
                     </Typography>
                   )}
                 </Box>
-                <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 650, color: INK, pt: 0.35 }}>{task.Title}</Typography>
+                <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: INK, pt: 0.35 }}>{task.Title}</Typography>
                 <Typography sx={{ fontSize: 10.5, color, pt: 0.2 }}>{state.label}</Typography>
                 {(liveRow?.work || liveRow?.promptPending) && (
                   <Box sx={{ pt: 0.5 }}>
@@ -125,7 +125,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
                 {liveRow?.files?.length > 0 && <Box sx={{ pt: 0.6 }}><FileChips files={liveRow.files} /></Box>}
                 {selected && (
                   <Typography onClick={(event) => { event.stopPropagation(); onOpenTask(task.TaskId); }}
-                    sx={{ fontSize: 11.5, fontWeight: 700, color: ACCENT, pt: 0.6,
+                    sx={{ fontSize: 11.5, fontWeight: 600, color: ACCENT, pt: 0.6,
                       "&:hover": { textDecoration: "underline" } }}>
                     Open the task →
                   </Typography>
@@ -142,7 +142,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
           {queue.length > 0 && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.75, pt: 1.15, pb: 0.85,
               bgcolor: "#f4f1ec", borderBottom: `1px solid ${BORDER}` }}>
-              <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.15, color: FAINT, flex: 1 }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.15, color: FAINT, flex: 1 }}>
                 WAITING FOR A DESK
               </Typography>
               <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{queue.length}</Typography>
@@ -153,7 +153,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
               sx={{ px: 1.75, py: 0.9, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
                 "&:hover": { bgcolor: "#f4f1ec" } }}>
               <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>
-                {task.ref}{task.Waiting > 0 ? <Box component="span" sx={{ color: "#6b5f45", fontWeight: 700, ml: 0.75 }}>✎ {task.Waiting}</Box> : null}
+                {task.ref}{task.Waiting > 0 ? <Box component="span" sx={{ color: "#6b5f45", fontWeight: 600, ml: 0.75 }}>✎ {task.Waiting}</Box> : null}
               </Typography>
               <Typography noWrap sx={{ fontSize: 12.5, color: DIM, pt: 0.2 }}>{task.Title}</Typography>
             </Box>
@@ -168,7 +168,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
         <Box sx={{ px: 1.75, pt: 1.1, pb: 1.3, borderTop: `1px solid ${BORDER}`, flexShrink: 0 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75 }}>
             <Typography sx={{ fontSize: 11, color: DIM, flex: 1 }}>Agents at once</Typography>
-            <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 700, color: INK }}>{cap ?? "—"}</Typography>
+            <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 600, color: INK }}>{cap ?? "—"}</Typography>
             <Typography sx={{ fontSize: 11, color: FAINT }}>{free} free</Typography>
           </Box>
           <Slider size="small" min={1} max={8} step={1} marks value={cap ?? 4}

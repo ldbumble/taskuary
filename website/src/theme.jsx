@@ -23,6 +23,9 @@ export const PALETTE = { slate: "#55697a", sage: "#5f7a5f", oxblood: "#8a3646", 
 // ...one per rail band: the pill, the row's dot and the day card's dot all wear it
 export const LEVEL_COLOR = { urgent: PALETTE.oxblood, task: PALETTE.sage, agents: PALETTE.slate, later: PALETTE.oat,
   reports: PALETTE.brass, ideas: PALETTE.brass, fyi: PALETTE.oat };
+// ...and the pale tint of each, for the row on the table: green in On you, brass in Reports (the owner, 2026-10-06)
+export const LEVEL_TINT = { urgent: "#f3e6e8", task: "#e5ece2", agents: "#e6ebef", later: "#efece6",
+  reports: "#ede7da", ideas: "#ede7da", fyi: "#ece8e1" };
 // the primary was a slate-to-sage gradient; the brand is slate, solid
 export const GRADIENT = ACCENT;
 // The assistant shares the sync control's slate-to-sage family: the sage end identifies its
@@ -139,6 +142,9 @@ export const theme = createTheme({
   },
   typography: {
     fontFamily: "'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+    // THREE REAL WEIGHTS (2026-10-06): the page loads Plex at 400-600, and 650-900 were asked for ~130 times - the browser
+    // smeared 700 thicker to fake them, which is what read as "not clear font"
+    fontWeightBold: 600,
     fontSize: 12.5,
     body2: { fontSize: 12.5 },
     caption: { fontSize: 11 },
@@ -153,6 +159,7 @@ export const theme = createTheme({
       // Chromium ignores the ::-webkit-scrollbar rules once scrollbar-width is set, so the
       // standard property is for Firefox only; Edge and Chrome take the webkit rules below
       "@supports not selector(::-webkit-scrollbar)": { "*": { scrollbarWidth: "thin", scrollbarColor: "#d3ccc1 transparent" } },
+      "b, strong": { fontWeight: 600 },
       "*::-webkit-scrollbar": { width: 8, height: 8 },
       "*::-webkit-scrollbar-thumb": { backgroundColor: "#d3ccc1", borderRadius: 8 },
       "*::-webkit-scrollbar-track": { background: "transparent" },
@@ -181,7 +188,7 @@ export const theme = createTheme({
       },
       defaultProps: { slotProps: { backdrop: { sx: { backgroundColor: "rgba(30,50,38,.35)", backdropFilter: "blur(3px)" } } } },
     },
-    MuiDialogTitle: { styleOverrides: { root: { fontSize: 15, fontWeight: 700, paddingBottom: 4 } } },
+    MuiDialogTitle: { styleOverrides: { root: { fontSize: 15, fontWeight: 600, paddingBottom: 4 } } },
     MuiDrawer: {
       styleOverrides: { paper: { boxShadow: "-12px 0 40px rgba(30,50,38,.12)", borderTopLeftRadius: 16, borderBottomLeftRadius: 16 } },
       defaultProps: { slotProps: { backdrop: { sx: { backgroundColor: "rgba(30,50,38,.25)", backdropFilter: "blur(2px)" } } } },

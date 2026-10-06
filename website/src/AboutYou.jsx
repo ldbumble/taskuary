@@ -65,7 +65,7 @@ export default function AboutYou() {
         <Box sx={{ flex: 1, minWidth: 280 }}>
           <TextField variant="standard" value={f.owner_name} placeholder="Your name" onChange={(e) => setP({ ...p, facts: { ...f, owner_name: e.target.value } })}
             onBlur={(e) => saveOwner(e.target.value.trim(), f.owner_email)} onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
-            inputProps={{ "aria-label": "Your name", style: { fontSize: 24, fontWeight: 700, color: INK, letterSpacing: "-.01em" } }} fullWidth />
+            inputProps={{ "aria-label": "Your name", style: { fontSize: 24, fontWeight: 600, color: INK, letterSpacing: "-.01em" } }} fullWidth />
           <Box sx={{ display: "flex", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
             <TextField variant="standard" value={f.owner_title} placeholder="role or title" onChange={(e) => setP({ ...p, facts: { ...f, owner_title: e.target.value } })}
               onBlur={(e) => save({ owner_title: e.target.value.trim() })} inputProps={{ "aria-label": "Role or title", style: { fontSize: 13, color: DIM } }} sx={{ width: 220 }} />
@@ -100,7 +100,7 @@ export default function AboutYou() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.1, borderBottom: `1px solid ${BORDER}`,
             background: "linear-gradient(180deg,#fffefc,#fbf9f6)" }}>
             <ChannelIcon channel={ch} sx={{ fontSize: 17 }} />
-            <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: INK }}>{CHANNEL_LABEL[ch] || ch}</Typography>
+            <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: INK }}>{CHANNEL_LABEL[ch] || ch}</Typography>
             <Box sx={{ flex: 1 }} />
             <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{rows.length}</Typography>
           </Box>

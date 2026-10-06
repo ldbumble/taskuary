@@ -66,7 +66,7 @@ export default function NewPlaybookDialog({ connectorType = "", onClose, onManua
           <Button key={choice.value} variant={mode === choice.value ? "contained" : "outlined"} aria-pressed={mode === choice.value}
             disabled={busy} onClick={() => { setMode(choice.value); setError(""); }}
             sx={{ alignItems: "flex-start", flexDirection: "column", textAlign: "left", textTransform: "none", p: 2, gap: 0.75 }}>
-            {choice.icon}<Box component="span" sx={{ fontWeight: 700 }}>{choice.title}</Box>
+            {choice.icon}<Box component="span" sx={{ fontWeight: 600 }}>{choice.title}</Box>
             <Box component="span" sx={{ fontSize: 12, fontWeight: 400 }}>{choice.detail}</Box>
           </Button>)}
       </Box>
@@ -88,7 +88,7 @@ export default function NewPlaybookDialog({ connectorType = "", onClose, onManua
           {next && !loading && <Button onClick={() => setBefore(next)} disabled={busy}>Load more emails</Button>}
         </Box>
         {selected && <Box sx={{ bgcolor: "action.hover", p: 1.5, mb: 2, borderRadius: 1 }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 700 }}>Selected example: {selected.Subject || "(no subject)"}</Typography>
+          <Typography sx={{ fontSize: 12, fontWeight: 600 }}>Selected example: {selected.Subject || "(no subject)"}</Typography>
           <Typography sx={{ fontSize: 12, whiteSpace: "pre-wrap", maxHeight: 120, overflowY: "auto", mt: 0.75 }}>{selected.BodyText || "This email has no text preview."}</Typography>
           <Button size="small" disabled={busy} onClick={() => setSelected(null)}>Remove example</Button>
         </Box>}

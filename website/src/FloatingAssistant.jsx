@@ -112,7 +112,7 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.35, py: 1.05, color: "white", background: GRADIENT }}>
             <TaskuaryMark size={27} sx={{ boxShadow: "0 1px 5px #0002" }} />
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography sx={{ fontSize: 13.5, lineHeight: 1.2, fontWeight: 800 }}>Taskuary</Typography>
+              <Typography sx={{ fontSize: 13.5, lineHeight: 1.2, fontWeight: 600 }}>Taskuary</Typography>
               <Typography sx={{ fontSize: 10.5, opacity: 0.78 }}>{busy ? "Working on your last message…" : "Talk it through. Take action."}</Typography>
             </Box>
             <Tooltip title={expanded ? "Return to compact view" : "Fill the workspace beside Timeline"}>

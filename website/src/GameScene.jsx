@@ -1079,7 +1079,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
               <Box sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
                 bgcolor: descriptor.state.tone === "waiting" ? ROLES.you.solid : ROLES.working.solid }} />
-              <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 700, color: INK }}>{descriptor.state.agent}</Typography>
+              <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 600, color: INK }}>{descriptor.state.agent}</Typography>
               <Typography sx={{ ...mono, ml: "auto", fontSize: 9.5, color: FAINT }}>{descriptor.task.ref}</Typography>
             </Box>
             <Typography noWrap sx={{ fontSize: 10.5, color: descriptor.state.tone === "waiting" ? ROLES.you.solid : FAINT,
@@ -1095,7 +1095,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
             bgcolor: item.key === picked ? "#1f242c" : zone === "archive" ? "rgba(236,240,255,.94)" : "rgba(255,253,249,.94)",
             color: item.key === picked ? "#fff" : INK, border: `1px solid ${item.key === picked ? "#1f242c" : BORDER}`,
             boxShadow: "0 8px 22px rgba(30,34,40,.16)", outline: hoverKey === item.key ? "2px solid #d9a441" : "none" }}>
-          <Typography noWrap sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.3, opacity: 0.8 }}>
+          <Typography noWrap sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.3, opacity: 0.8 }}>
             {item.sub === "email" ? "✉ " : item.sub === "chat" ? "💬 " : item.zone === "gym" ? "🏋 " : ""}{item.who}</Typography>
           <Typography noWrap sx={{ fontSize: 11, fontWeight: 600 }}>{item.title}</Typography>
         </Box>
@@ -1105,7 +1105,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
         <Box key={`cab:${c.Topic}`} ref={tagRef(`cab:${i}`)} onClick={() => onCabinet?.(c.Topic)}
           sx={{ ...pinned, px: 0.9, py: 0.35, borderRadius: "6px", cursor: "pointer", bgcolor: c.Topic === picked ? "#1f242c" : "#f3efe6",
             color: c.Topic === picked ? "#fff" : INK, border: "1px solid #b9b2a3", boxShadow: "0 4px 12px rgba(30,34,40,.12)" }}>
-          <Typography noWrap sx={{ ...mono, fontSize: 10.5, fontWeight: 700 }}>🗄 {c.Topic} · {c.n}</Typography>
+          <Typography noWrap sx={{ ...mono, fontSize: 10.5, fontWeight: 600 }}>🗄 {c.Topic} · {c.n}</Typography>
         </Box>
       ))}
 
@@ -1113,26 +1113,26 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
         <Box key={zone} ref={tagRef(`zone:${zone}`)} onClick={() => onZone?.(zone)}
           sx={{ ...pinned, px: 1.2, py: 0.45, borderRadius: 99, cursor: "pointer", whiteSpace: "nowrap",
             bgcolor: focus === zone ? "#f0c05a" : "rgba(24,28,34,.82)", color: focus === zone ? "#1c1f24" : "#fff",
-            fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, boxShadow: "0 6px 18px rgba(0,0,0,.2)",
+            fontSize: 11.5, fontWeight: 600, letterSpacing: 0.3, boxShadow: "0 6px 18px rgba(0,0,0,.2)",
             "&:hover": { bgcolor: "#f0c05a", color: "#1c1f24" } }}>
           {name}{zoneCounts[zone] ? <Box component="span" sx={{ ml: 0.75, px: 0.6, borderRadius: 99, bgcolor: "#b04a5c", color: "#fff", fontSize: 10.5 }}>{zoneCounts[zone]}</Box> : null}
         </Box>
       ))}
 
       <Box ref={tagRef("near")} sx={{ ...pinned, transform: "translate(-50%, 10px)", pointerEvents: "none", px: 1, py: 0.3, borderRadius: "7px", bgcolor: "#1c1f24",
-        color: "#f0c05a", fontSize: 11, fontWeight: 800, whiteSpace: "nowrap", border: "1px solid #f0c05a", zIndex: 5 }} />
+        color: "#f0c05a", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", border: "1px solid #f0c05a", zIndex: 5 }} />
       <Box ref={tagRef("door")} onClick={() => onExit?.()} title="Walk out through the door (or click) - back to the Assistant's chat"
         sx={{ ...pinned, px: 1, py: 0.35, borderRadius: "7px", cursor: "pointer", whiteSpace: "nowrap", bgcolor: "#1c1f24", color: "#f3f1ec",
-          fontSize: 11, fontWeight: 800, border: "1px solid rgba(255,255,255,.25)", "&:hover": { borderColor: "#f0c05a", color: "#f0c05a" } }}>🚪 Back to chat</Box>
+          fontSize: 11, fontWeight: 600, border: "1px solid rgba(255,255,255,.25)", "&:hover": { borderColor: "#f0c05a", color: "#f0c05a" } }}>🚪 Back to chat</Box>
       <Box ref={tagRef("you")} sx={{ ...pinned, pointerEvents: "none", px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "#f0c05a",
-        color: "#1c1f24", fontSize: 10, fontWeight: 900, letterSpacing: 1 }}>YOU</Box>
+        color: "#1c1f24", fontSize: 10, fontWeight: 600, letterSpacing: 1 }}>YOU</Box>
 
       <Box sx={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", zIndex: 4,
         display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 1, px: 1.2, py: 0.65, borderRadius: "8px",
         bgcolor: "rgba(24,28,34,.78)", backdropFilter: "blur(7px)" }}>
         <Typography sx={{ fontSize: 10.5, color: "#cfd5dc" }}>WASD walk · E talk · N next · 1-6 jump · Esc out</Typography>
         <Box component="button" type="button" onClick={() => sceneApi.current?.reset()}
-          sx={{ border: 0, bgcolor: "transparent", color: "#f0c05a", fontSize: 10.5, fontWeight: 700,
+          sx={{ border: 0, bgcolor: "transparent", color: "#f0c05a", fontSize: 10.5, fontWeight: 600,
             cursor: "pointer", p: 0, "&:hover": { textDecoration: "underline" } }}>Reset view</Box>
       </Box>
     </Box>

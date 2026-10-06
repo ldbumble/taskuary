@@ -23,7 +23,7 @@ const short = (s, n) => { const t = String(s || "").replace(/^\d{4}-\d{2}-\d{2}:
 // The badge shows what the line is WORTH, not what its tag says: an untested line loses a point
 // per quiet month, so a stale s:5 counts as less and the strikethrough says by how much.
 const Score = ({ s, eff, color }) => (
-  <Box component="span" sx={{ ...mono, fontWeight: 700, fontSize: 10, borderRadius: 1, px: 0.6, color: "#fff", bgcolor: color }}>
+  <Box component="span" sx={{ ...mono, fontWeight: 600, fontSize: 10, borderRadius: 1, px: 0.6, color: "#fff", bgcolor: color }}>
     {eff != null && eff !== s && <Box component="span" sx={{ opacity: 0.6, textDecoration: "line-through", mr: 0.4 }}>s:{s}</Box>}
     s:{eff != null ? eff : s}
   </Box>
@@ -81,9 +81,9 @@ const Fan = ({ line, promoteAt }) => {
   const evs = [...(line.evidence || [])].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   return (
     <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px dashed ${BORDER}` }}>
-      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 700, mb: 0.5 }}>THE LEDGER · every point gained or lost</Typography>
+      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, mb: 0.5 }}>THE LEDGER · every point gained or lost</Typography>
       <Ledger line={line} promoteAt={promoteAt} />
-      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 700, mt: 1.25, mb: 0.75 }}>
+      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, mt: 1.25, mb: 0.75 }}>
         WHAT FED IT · {evs.length} verdict{evs.length === 1 ? "" : "s"}, oldest first{contraIds.size ? ` · ${contraIds.size} against` : ""}
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 0.75 }}>
@@ -126,7 +126,7 @@ export default function LearnedView({ onChanged }) {
             <Score s={l.score} eff={l.effective} color={st.color} />
             <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}
               title={l.effective !== l.score ? `Nothing has confirmed this since ${l.seen}, so it counts as s:${l.effective}` : ""}>seen {l.seen}</Typography>
-            <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 700 }}>
+            <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>
               {isOpen ? "▾" : "▸"} {l.evidence.length} verdict{l.evidence.length === 1 ? "" : "s"}{isPinned ? " · pinned" : ""}
             </Typography>
             <Box sx={{ flex: 1 }} />
@@ -152,7 +152,7 @@ export default function LearnedView({ onChanged }) {
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 3, alignItems: "start" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 700 }}>SOUL.md · OUTRANKS</Typography>
+          <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600 }}>SOUL.md · OUTRANKS</Typography>
           {(g.soul || []).map((r, i) => (
             <Box key={i} sx={{ p: 1, borderRadius: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, fontSize: 11, color: DIM, lineHeight: 1.4 }}>{r.text}</Box>
           ))}
@@ -161,14 +161,14 @@ export default function LearnedView({ onChanged }) {
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
           {groups.map(([status, ls]) => (
             <Box key={status} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: status === "proposed" ? RED : FAINT, fontWeight: 700 }}>{STATUS[status].label}</Typography>
+              <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: status === "proposed" ? RED : FAINT, fontWeight: 600 }}>{STATUS[status].label}</Typography>
               {ls.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>nothing here yet</Typography>}
               {ls.map((l) => <Card key={l.key} l={l} />)}
             </Box>
           ))}
           {(g.deleted || []).length > 0 && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: RED, fontWeight: 700 }}>DIED · contradicted until s:0</Typography>
+              <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: RED, fontWeight: 600 }}>DIED · contradicted until s:0</Typography>
               {g.deleted.map((l) => (
                 <Box key={l.key} sx={{ p: 1.1, borderRadius: 2, bgcolor: RED_TINT, border: `1px dashed ${RED_BD}`, color: RED_INK, opacity: .85 }}>
                   <Typography variant="caption" sx={{ ...mono, fontSize: 10 }}>
@@ -182,7 +182,7 @@ export default function LearnedView({ onChanged }) {
           )}
           {loose.length > 0 && (
             <Box>
-              <Typography onClick={() => setLooseOpen((o) => !o)} sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 700, cursor: "pointer" }}>
+              <Typography onClick={() => setLooseOpen((o) => !o)} sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, cursor: "pointer" }}>
                 {looseOpen ? "▾" : "▸"} VERDICTS NOT YET IN ANY LINE · {loose.length}
               </Typography>
               {looseOpen && (

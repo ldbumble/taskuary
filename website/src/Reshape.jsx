@@ -17,7 +17,7 @@ const Head = ({ icon, title, sub }) => (
   <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", mb: 1 }}>
     {icon}
     <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{title}</Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{title}</Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.3 }}>{sub}</Typography>
     </Box>
   </Box>
@@ -100,7 +100,7 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
             placeholder="the part of the ask that belongs to it — the agent reads this" />
           {(sug?.messages || []).length > 0 && (
             <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1, py: 0.5 }}>
-              <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Messages that move with it</Typography>
+              <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Messages that move with it</Typography>
               {sug.messages.map((m) => (
                 <Box key={m.message_id} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                   <Checkbox size="small" sx={{ p: 0.4 }} checked={move.includes(m.message_id)}
@@ -172,7 +172,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
             isOptionEqualToValue={(a, b) => a.task_id === b.task_id}
             renderOption={(props, o) => (
               <li {...props} style={{ display: "block", fontSize: 12.5 }}>
-                <span style={{ ...mono, color: "#55697a", fontWeight: 700 }}>{o.ref}</span> {o.title}
+                <span style={{ ...mono, color: "#55697a", fontWeight: 600 }}>{o.ref}</span> {o.title}
                 <div style={{ color: "#867f74", fontSize: 10.5 }}>{o.why} · match {o.score.toFixed(2)}</div>
               </li>
             )}

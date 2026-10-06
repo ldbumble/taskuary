@@ -45,7 +45,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
       {/* 1. sections */}
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, px: 2, py: 1.75 }}>
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.25, flexWrap: "wrap" }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 700, color: INK }}>{title}</Typography>
+          <Typography sx={{ fontSize: 14, fontWeight: 600, color: INK }}>{title}</Typography>
           {!!summary && <Typography sx={{ fontSize: 12, color: DIM }}>{summary}</Typography>}
         </Box>
         {search}
@@ -97,7 +97,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
                   "&:hover": c.onOpen ? { borderColor: "#b9c3cb" } : {} }}>
                 {c.icon}
                 <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 650, color: INK }} noWrap>{c.title}</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: INK }} noWrap>{c.title}</Typography>
                   {!!c.sub && <Typography sx={{ fontSize: 11.5, color: DIM, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2,
                     WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.sub}</Typography>}
                 </Box>

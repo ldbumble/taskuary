@@ -896,7 +896,16 @@ def receipt_text(store, done: dict, actor: str = 'owner') -> str:
     """The receipt - and when the act did NOT happen, its way on, numbered (2026-09-29: a failed Close out on the phone
     said "Not done - 403 ..." and offered nothing to pick, and the list it was picked from was already spent)."""
     from . import concierge
-    if done.get('status') == 'done': return concierge.receipt(store, done, actor)
+    if done.get('status') == 'done':
+        line = concierge.receipt(store, done, actor)
+        # ...and the task it made or moved is a pick: "open it from here or from Tasks" with nothing to tap (2026-10-06),
+        # where the desktop draws Open TQ-… under the same line
+        o = done.get('outcome') or {}
+        tid = o.get('taskId') or o.get('task_id') or (done.get('target') if done.get('targetKind') == 'task' else None)
+        if not str(tid or '').isdigit(): return line
+        from .store import task_ref
+        ref = o.get('ref') or task_ref(int(tid))
+        return turn_text({'say': line, 'item': None}, store=store, extra=[(f'Open {ref}', {'t': 'open', 'key': f'task:{int(tid)}'})])
     turn = concierge.receipt_turn(store, done, actor)
     if not turn['chips']: return turn['say']
     return turn_text({'say': turn['say'], 'item': None}, store=store, extra=list(recovery_rows(store, turn['chips'], actor)))
@@ -1455,11 +1464,13 @@ DOT_TASK, DOT_AGENT, DOT_YOU = '🔵', '🟢', '🟤'
 def _advisor(store, item: dict | None) -> bool:
     """A task made from an Advisor idea: the Advisor asked, never the owner."""
     it = item or {}
-    if str(it.get('channel') or '') == 'assistant': return True
-    if store is None or not it.get('tid'): return False
+    if store is None or not it.get('tid'): return str(it.get('channel') or '') == 'assistant'
     try: t = store.get_task(int(it['tid'])) or {}
     except Exception: return False
-    return str(t.get('Source') or '') == 'assistant' or str(t.get('SourceRef') or '').startswith('assistant:')
+    # ...never one the OWNER asked for: a job started from the chat carries the Assistant's Source too, and read "Advisor
+    # raised an idea" over what the owner had just asked for on WhatsApp (2026-10-06)
+    if t.get('AskedVia') or str(t.get('CreatedBy') or '') == 'owner': return False
+    return str(it.get('channel') or '') == 'assistant' or str(t.get('Source') or '') == 'assistant' or str(t.get('SourceRef') or '').startswith('assistant:')
 
 
 def channel_word(ch) -> str:
@@ -1479,6 +1490,16 @@ def agent_label(item: dict | None, name: str = None) -> str:
     p = str(name or it.get('working') or it.get('agent') or '').strip()
     kind = 'General agent' if str(it.get('mode') or '') in ('chat', 'assistant') or p.lower() == 'assistant' else 'Coding agent'
     return f'{kind} · {p}' if p.lower() not in _PLAIN_PROFILE else kind
+
+
+def last_result(store, tid, n: int = 600) -> str:
+    """A regular agent's answer: its newest finished turn (worker_event turn_end), plain and cut - '' when it has none."""
+    if store is None or not tid: return ''
+    try:
+        row = store._one("SELECT Text FROM worker_event WHERE TaskId=? AND Kind='turn_end' AND IFNULL(Text,'')<>'' ORDER BY Id DESC LIMIT 1", (int(tid),))
+    except Exception as e:
+        logger.debug(f'the phone could not read the agent result: {e}'); return ''
+    return _cut(_plain(str((row or {}).get('Text') or '')), n)
 
 
 def agent_report(store, tid) -> dict:
@@ -1609,6 +1630,9 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     # the agent: its state and what it found, did and concluded - the evidence the move is decided on
     rep = agent_report(store, it.get('tid'))
     found = rep.get('summary') or ' '.join(str(it.get('summary') or '').split())
+    # ...and a regular agent files no report: what it RETURNED is its last finished turn. The phone showed only its
+    # follow-up question, never the answer above it (2026-10-06: "in whatsapp you just see the question")
+    if not found and kind == 'agent': found = last_result(store, it.get('tid'))
     # ...a finished agent with no summary on the card: the assistant's own line says what it found
     if not found and kind == 'agentdone' and say: found = say
     state = agent_state(it)
@@ -1618,6 +1642,9 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
         if found: lines.append(_cut(found, 400))
         if rep.get('actions'): lines.append(f"did: {_cut(rep['actions'], 300)}")
         if rep.get('verdict'): lines.append(f"verdict: {_cut(rep['verdict'], 300)}")
+        # what the AGENT asks is the agent's line, not the owner's: it sat under "You · answer the agent" (2026-10-06)
+        asked = ' '.join(str((it.get('tail') or [''])[0]).split()) if kind == 'agent' and it.get('asking') and len(it.get('questions') or []) <= 1 else ''
+        if asked: lines.append(f'asks: **{_cut(asked, 600)}**')
     elif it.get('tid') and kind in ('todo', 'message', 'asked') and (kind == 'todo' or is_own(it)):
         lines += ['', f'{DOT_AGENT} No agent yet - nobody is working on this.']
     return '\n'.join(lines).strip()
@@ -1637,8 +1664,7 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
             body.append(f"**{i}. {_cut(q.get('text') or '', 300)}**" + (f' ({opts})' if opts else ''))
         body.append(f"Answer all {len(qs)} in one line - \"1 {((qs[0].get('choices') or ['yes'])[0])}, 2 ...\" - or in your own words. They go back to the agent together.")
     elif it.get('kind') == 'agent' and not it.get('paused') and it.get('lane') != 'working':
-        asked = ' '.join(str((it.get('tail') or [''])[0]).split()) if it.get('asking') else ''
-        if asked: body.append(f'**{_cut(asked, 600)}**')
+        # the question itself is on the agent's own line (story_block): here only what the owner does about it
         # "goes straight in" only where it does: an agent ASKING takes typed words as its answer (answer_the_agent)
         body.append(('Pick an answer below, or type your own - it goes straight in.' if it.get('choices')
                      else 'Type your answer - it goes straight in.') if it.get('asking')

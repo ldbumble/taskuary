@@ -284,7 +284,8 @@ _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S
 ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer, end your reply with a final line: '
             f'{ASK_MARKER} <the exact question> | <choice> | <choice> (choices optional). Several questions: one such line each, '
             f'at the end. Taskuary shows them as questions waiting for them and brings their answers back to you together. '
-            f'Only for a real blocker, never for a rhetorical question.')
+            f'Only for a real blocker, never for a rhetorical question - and never after you have answered: a part you could not '
+            f'do is said in the answer (what you could not check and what would let you), not asked as a question.')
 
 
 def without_ask(text: str) -> str:

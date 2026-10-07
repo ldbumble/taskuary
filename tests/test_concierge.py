@@ -139,7 +139,7 @@ class TurnTests(unittest.TestCase):
         self.assertIn('deep dive', task['Summary'])
         thread.assert_called_once()
         thread.return_value.start.assert_called_once()
-        self.assertIn('is with the regular agent now', last_receipt(s))
+        self.assertIn('is being worked on now', last_receipt(s))
 
     def test_okay_send_it_is_read_with_the_conversation_and_keeps_the_prior_brief(self):
         s = store()
@@ -163,7 +163,7 @@ class TurnTests(unittest.TestCase):
         with mock.patch.object(concierge, 'brain', return_value=None):
             out = concierge.surface(s)
         self.assertIn('Dana wrote on email', out['say']); self.assertIn('"Export still broken"', out['say'])
-        self.assertIn('Since then: triage judged it a reply to write', out['say']); self.assertIn('From you: approve the draft below', out['say'])
+        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: approve the draft below', out['say'])
         self.assertEqual(out['options'], [])
 
     def test_a_model_that_fails_still_leaves_a_line(self):
@@ -340,7 +340,7 @@ class BrainTests(unittest.TestCase):
             out = concierge.surface(s)
             # the introduction is the FACTS and it is instant: the model's sentence (PW-153) put a
             # blocking call in front of every Next (the owner, 2026-09-07: "next still take 5 seconds?")
-            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: triage judged it a reply to write. From you: approve the draft below, or redraft it.')
+            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: approve the draft below, or redraft it.')
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet@low', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24) at low effort, tools off
@@ -355,7 +355,7 @@ class BrainTests(unittest.TestCase):
             self.assertEqual(seen['resume'], 'sess-1')                                                   # the next turn resumes it
             self.assertIsNone(seen['cwd'])                                                               # a typed ask too: tools off, the assistant runs nothing
             self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system'])
-            self.assertIn('I have look-ups', seen['system'])       # COUNSEL.md's own words (PW-248/256); it said "I have no tools" until 2026-09-24
+            self.assertIn('A question gets a look-up first', seen['system'])       # COUNSEL.md's own words (PW-248/256); it said "I have no tools" until 2026-09-24
         s.set_setting('assistant_ai', 'connector:3', 't')
         self.assertTrue(concierge.is_cli(s))                                                            # the old dock's pick is not this page's
         s.set_setting(concierge.AI_KEY, 'connector:3', 't')
@@ -637,7 +637,7 @@ class SetupAndTroubleTests(unittest.TestCase):
         with mock.patch('taskuary.ingest._spawn') as spawn:
             made = run(s, p).json()['outcome']
         self.assertEqual(s.get_task(made['taskId'])['Kind'], 'general'); self.assertFalse(spawn.called)
-        self.assertIn('walk-through', last_receipt(s)); self.assertIn('no repository touched', last_receipt(s))
+        self.assertIn('walk-through', last_receipt(s)); self.assertIn('nothing built', last_receipt(s))
         # ...and a hand-off the owner asks for by name IS the coder, in a checkout
         with mock.patch('taskuary.ingest._spawn') as spawn:
             made = concierge.setup_task(s, 'find out why the export drops inter-company rows', kind='coding')
@@ -689,11 +689,11 @@ class SweepTests(unittest.TestCase):
         o = run(s, p).json()['outcome']
         self.assertEqual(o['cleared'], 3)
         line = last_receipt(s)
-        self.assertIn('Cleared 3 from the pipe', line); self.assertIn('Read, not deleted', line)
+        self.assertIn('Cleared 3 - ', line); self.assertIn('Read, not deleted', line)
         self.assertEqual((funnel.mutes(s), s.list_memories(active_only=True)), ([], []))   # clearing is all it does (R8)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])                # Omar stays
         again = decided(s, 'same for all resident refunds', 'clear')
-        self.assertEqual(run(s, again['proposal']).json()['outcome']['cleared'], 0); self.assertIn('Nothing in the pipe matches', last_receipt(s))
+        self.assertEqual(run(s, again['proposal']).json()['outcome']['cleared'], 0); self.assertIn('Nothing waiting matches', last_receipt(s))
         al = funnel.alerts(s, funnel.build(s)['items'])
         self.assertEqual([(a['kind'], a['text']) for a in al], [('asked', 'Omar Keller asked you: RE: Payworth')] if any(i['lane'] == 'asked' for i in funnel.build(s)['items']) else [])
 
@@ -715,7 +715,7 @@ class SweepPronounTests(unittest.TestCase):
         self.assertEqual(first['proposal']['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])      # no rule on the words
         self.assertEqual(run(s, first['proposal']).json()['outcome']['cleared'], 3)
         line = last_receipt(s)
-        self.assertIn('Cleared 3 from the pipe', line)
+        self.assertIn('Cleared 3 - ', line)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])
 
 
@@ -876,7 +876,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   # fifteen since 'theirs' (2026-09-25)
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r)
-            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: triage judged it a reply to write. From you: approve the draft below, or redraft it.')      # the facts, instant (2026-09-07)
+            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: approve the draft below, or redraft it.')      # the facts, instant (2026-09-07)
             # The browser's walk resumes unresolved rows it already showed; a shown card is not read.
             resumed = c.post('/api/concierge/next', json={'include_surfaced': True}).json()
             self.assertEqual(resumed['item']['rid'], r)

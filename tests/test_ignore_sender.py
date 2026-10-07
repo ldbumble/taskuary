@@ -78,7 +78,7 @@ class IgnoreScopeInstructionTests(unittest.TestCase):
                 'title': 'FCB_prod Success File Notification',
                 'why': 'triage: fyi - an automated success-file notification'}
         said = concierge.fallback(item, opening=True)
-        self.assertIn('triage filed it as fyi - an automated success-file notification', said)
+        self.assertIn('I read it as just for your information - an automated success-file notification', said)
         self.assertNotIn('fyi - triage: fyi', said)              # the verdict word is not said twice
         self.assertIn('make it a task', said); self.assertIn('ignore this sender', said)
 
@@ -86,7 +86,7 @@ class IgnoreScopeInstructionTests(unittest.TestCase):
         from taskuary import concierge
         said = concierge.fallback({'kind': 'fyi', 'mid': 7, 'who': 'A', 'title': 'T',
                                    'why': 'a newsletter nobody asked for'}, opening=True)
-        self.assertIn('triage filed it as fyi - a newsletter nobody asked for', said)
+        self.assertIn('I read it as just for your information - a newsletter nobody asked for', said)
 
 
 if __name__ == '__main__':

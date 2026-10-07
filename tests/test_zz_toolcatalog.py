@@ -121,7 +121,7 @@ class SelectorTests(unittest.TestCase):
         call = {'kind': 'pipe.clear', 'params': {'select': {'category': 'promo'}}}
         out = concierge.call_turn(s, dock['TaskId'], call, None, 'clear the promos', 'owner')
         self.assertIsNone(out.get('proposal'))
-        self.assertIn('Nothing in the pipe matches', out['say'])
+        self.assertIn('Nothing waiting matches', out['say'])
         self.assertIn('nothing has been touched', out['say'].lower())
 
 

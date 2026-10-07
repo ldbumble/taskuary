@@ -251,7 +251,7 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual((r['status'], r['outcome']['started']), ('done', True))
         from taskuary import general
         dock, _ = general.dock_task(s, 'owner')
-        self.assertTrue(any('coder is on it - moving on' in (c.get('Body') or '') for c in general.chat_rows(s, dock['TaskId'])))
+        self.assertTrue(any("It's being worked on now - moving on" in (c.get('Body') or '') for c in general.chat_rows(s, dock['TaskId'])))
         self.assertNotIn(item['key'], {k for k, st in s.funnel_states().items() if st.get('Status') == 'done'})   # nothing settled
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
         live = [{'taskId': tid, 'sid': 's1', 'agent': 'coder', 'label': 'coder', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': ['reading']}]

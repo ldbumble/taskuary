@@ -185,9 +185,14 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
     rid = rv['ReviewId']
     env = dict(envelope if envelope is not None else _envelope(rv))
     msg = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
-    outgoing = bool(env and env.get('kind') != 'reply')
-    if not outgoing:
-        env = env if env.get('kind') == 'reply' else (outbound.reply_envelope(store, msg) or {'kind': 'reply'})
+    # FILES ARE NOT AN ADDRESS. A reply's envelope stays empty until the send works out who it goes to, and attaching
+    # to it wrote {"attachments": [...]} alone - which read as new outbound mail with no recipient (2026-10-07: a
+    # session's `--attach`; the owner's Attach button did the same). Only a destination makes it outgoing - not files,
+    # not a cc, not the bookkeeping a failed attempt leaves behind, which is how a retry kept failing the same way.
+    outgoing = env.get('kind') not in (None, '', 'reply') or (not env.get('kind') and bool(env.get('to') or env.get('channel')))
+    if not outgoing and env.get('kind') != 'reply':
+        files = env.get('attachments')
+        env = {**(outbound.reply_envelope(store, msg) or {'kind': 'reply'}), **({'attachments': files} if files else {})}
     if cc is not None: env['cc'] = list(cc)
     snapshot = {'envelope': env, 'message': msg, 'body': final, 'status': VERB2STATUS[verb],
                 'actor': actor, 'note': note, 'attempted_at': _now_iso()}

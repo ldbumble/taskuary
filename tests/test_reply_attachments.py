@@ -168,3 +168,39 @@ class TheEnvelopeReachesTheSendTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AFileOnAReplyNotYetAddressedTests(unittest.TestCase):
+    def test_it_still_goes_back_to_the_thread_with_the_file(self):
+        """A session's `--reply` left the envelope empty (who it goes to is worked out at send time) and its
+        `--attach` then wrote {"attachments": [...]} alone. With no `kind`, the send read it as new outbound mail
+        with no address: "no recipient - an outbound email needs an address" (2026-10-07)."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Send the list', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:list-1', 'ConversationId': 'list-thread', 'Channel': 'email',
+                             'SourceName': 'alex@northwind.example', 'Subject': 'Access list', 'FromEmail': 'erin@vendor.example',
+                             'BodyText': 'Can you send the list?', 'SentAt': '2026-10-07 09:00:00', 'Status': 'routed'})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
+                            'DraftText': 'The list is attached.', 'Deliver': ''})
+        verdicts.attach(s, rid, 'list.xlsx', b'PK-xlsx', 'agent')
+        sent = {'channel': 'email', 'to': ['erin@vendor.example'], 'cc': []}
+        with mock.patch('taskuary.outbound.reply_to_message', return_value=sent) as reply, \
+             mock.patch('taskuary.outbound.send_out', side_effect=AssertionError('sent as new mail')):
+            out = verdicts.decide(s, s.get_review(rid), 'approve')
+        self.assertTrue(out.get('ok'), out)
+        self.assertEqual([f['name'] for f in reply.call_args.kwargs['attachments']], ['list.xlsx'])
+
+    def test_a_retry_after_that_failure_goes_to_the_thread_too(self):
+        # the failed attempt left its bookkeeping (and a cc) in the envelope - still no destination
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Send the list', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:list-2', 'ConversationId': 'list-thread-2', 'Channel': 'email',
+                             'SourceName': 'alex@northwind.example', 'Subject': 'Access list', 'FromEmail': 'erin@vendor.example',
+                             'BodyText': 'Can you send the list?', 'SentAt': '2026-10-07 09:00:00', 'Status': 'routed'})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Attached.',
+                            'Deliver': json.dumps({'cc': [], 'delivery': 'failed', 'attempted_at': '2026-10-07T18:00:00Z'})})
+        verdicts.attach(s, rid, 'list.xlsx', b'PK-xlsx', 'agent')
+        with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['erin@vendor.example'], 'cc': []}) as reply,              mock.patch('taskuary.outbound.send_out', side_effect=AssertionError('sent as new mail')):
+            out = verdicts.decide(s, s.get_review(rid), 'approve')
+        self.assertTrue(out.get('ok'), out)
+        self.assertEqual([f['name'] for f in reply.call_args.kwargs['attachments']], ['list.xlsx'])

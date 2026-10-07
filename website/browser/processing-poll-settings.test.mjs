@@ -58,9 +58,10 @@ test("PW-003/PW-004/PW-005 render the six chat clocks and global off help read-o
   page.on("request", (request) => {
     const url = new URL(request.url());
     // the models page's "you have looked at the defaults" mark (AiDefaults -> /api/setup/seen) is the
-    // visit recording itself, not a save, sync, test or edit - see fixtureState above
+    // visit recording itself, not a save, sync, test or edit - see fixtureState above; so is the page noting the owner
+    // sat down or left (/api/concierge/arrive, welcome.arrive)
     if (url.origin === harness.ui && !["GET", "HEAD", "OPTIONS"].includes(request.method())
-      && url.pathname !== "/api/setup/seen") {
+      && !["/api/setup/seen", "/api/concierge/arrive"].includes(url.pathname)) {
       writes.push(`${request.method()} ${url.pathname}`);
     }
   });

@@ -64,7 +64,8 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
     const url = new URL(request.url());
     if (url.origin === harness.ui) requests.push({ method: request.method(), path: url.pathname, search: url.search });
   });
-  const assistantWrites = () => requests.filter(({ method, path }) => method !== "GET"
+  // arrive only notes the owner sat down (welcome.arrive); on a fresh install it never speaks
+  const assistantWrites = () => requests.filter(({ method, path }) => method !== "GET" && path !== "/api/concierge/arrive"
     && (path.startsWith("/api/concierge") || path === "/api/funnel/settle"));
 
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
@@ -143,7 +144,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   race.on("pageerror", (error) => raceErrors.push(error.message));
   race.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.origin === harness.ui && request.method() !== "GET"
+    if (url.origin === harness.ui && request.method() !== "GET" && url.pathname !== "/api/concierge/arrive"
         && (url.pathname.startsWith("/api/concierge") || url.pathname === "/api/funnel/settle")) {
       raceWrites.push({ method: request.method(), path: url.pathname });
     }
@@ -200,7 +201,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   narrow.on("pageerror", (error) => narrowErrors.push(error.message));
   narrow.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.origin === harness.ui && request.method() !== "GET"
+    if (url.origin === harness.ui && request.method() !== "GET" && url.pathname !== "/api/concierge/arrive"
         && (url.pathname.startsWith("/api/concierge") || url.pathname === "/api/funnel/settle")) {
       narrowWrites.push({ method: request.method(), path: url.pathname });
     }

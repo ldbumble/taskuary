@@ -206,7 +206,7 @@ class NeverADeadEndTests(unittest.TestCase):
         from pathlib import Path
         src = Path(__file__).resolve().parents[1].joinpath('website', 'src', 'AssistantView.jsx').read_text(encoding='utf-8')
         self.assertIn('NEVER A DEAD END', src)
-        self.assertIn('? said : [{ verb: "next", label: "Next" }]', src)
+        self.assertIn('? said : idle ? IDLE_CHIPS : [{ verb: "next", label: "Next" }]', src)   # an empty rail offers ways to start something
 
 
 if __name__ == '__main__':

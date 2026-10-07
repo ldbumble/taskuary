@@ -956,6 +956,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // the server's clock, as an offset from OUR clock: nextPollAt is its time, so the countdown
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
   const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
+  const [thinking, setThinking] = useState("");      // ...and the line she reads about it, while anything is held
   const [fade, setFade] = useState("normal");        // Settings > Display; height of the viewport's bottom fade
   // ...drawn only while something is actually BELOW it. The band means "rows are passing behind the
   // bottom edge" (timelineFade.js): true of the Timeline's endless history, and true of work only
@@ -981,6 +982,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     if (pollAt) seenPollAt.current = pollAt;
     nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
     setTriageErr(data.triageError || "");
+    setThinking(data.thinking || "");
     if (data.timelineFade) setFade(data.timelineFade);
     // a coalesced feed-changed can fold running+idle into one idle payload, so lastPollAt
     // advancing is how a sub-second automatic poll still gets a visible receipt
@@ -1608,9 +1610,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           </Box>
           {/* a brain that errors on every call used to look like slow triage: rows parked on
               "triaging…" and nothing saying why. The last error stays until it answers again. */}
-          {triageErr && (
-            <Typography variant="caption" noWrap title={triageErr} sx={{ color: ALERT_INK, fontWeight: 600, fontSize: 10.5 }}>
-              triage brain failing — {triageErr}
+          {/* ...said the way the owner should hear it (problems.thinking), with the raw cause on hover only - and it stays
+              while mail is still held, after the first good answer, saying "I'm catching up" in a quieter colour */}
+          {(thinking || triageErr) && (
+            <Typography variant="caption" noWrap title={triageErr || thinking} sx={{ color: triageErr ? ALERT_INK : DIM, fontWeight: 600, fontSize: 10.5 }}>
+              {thinking || "I'm having trouble thinking for a few minutes. Mail is still coming in and I'm holding all of it."}
             </Typography>
           )}
           {allFallbackNotice && !view && (
@@ -2014,7 +2018,9 @@ const historyOf = (sel, detail) => {
     c: r.Decision === "ignore" ? "#8a3646" : "#6f8a6e",
     label: r.Decision === "ignore" ? "You said: not ours"
       : r.Decision === "attach" ? "Routed — attached to this thread"
-      : r.Decision === "create" ? "Routed — new task created" : `Routed — ${r.Decision}`,
+      : r.Decision === "create" ? "Routed — new task created"
+      // the automatic tries stopped on it, so it went on your list (ingest.give_up)
+      : r.Decision === "held" ? "Put on your list to be safe" : `Routed — ${r.Decision}`,
     sub: r.Decision === "ignore"
       ? cleanText(String(r.Reason || "")).replace(/^not ours\s*[-—]\s*/i, "").slice(0, 70)
       : undefined,

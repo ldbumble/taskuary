@@ -89,10 +89,20 @@ def refresh(cfg: dict, refresh_token: str) -> dict:
     r = requests.post(f'{AUTH}/{tenant(cfg)}/oauth2/v2.0/token', timeout=20,
                       data={'client_id': _need_client(cfg), 'refresh_token': refresh_token,
                             'grant_type': 'refresh_token', 'scope': SCOPES})
-    if r.status_code != 200:
-        raise RuntimeError('the Microsoft sign-in has lapsed - sign in again on the Outlook card '
-                           f'({_friendly(_err(r))})')
+    # only Microsoft REFUSING the token is a lapse: a 5xx or a throttle is their service having a bad minute, and
+    # calling it "signed out" would send the owner to sign in again for nothing (problems.py reads LAPSED)
+    if r.status_code in (400, 401):
+        raise RuntimeError(f'{LAPSED} - sign in again on the Outlook card ({_friendly(_err(r))})')
+    if r.status_code != 200: raise RuntimeError(f'Microsoft did not answer the sign-in check ({r.status_code}) - trying again next time')
     return _tokens(r.json())
+
+
+LAPSED = 'the Microsoft sign-in has lapsed'
+
+
+def lapsed(err) -> bool:
+    """Is this card's last error Microsoft signing the owner out? The card and the bell both ask."""
+    return LAPSED in str(err or '')
 
 
 def access_token(cfg: dict, refresh_token: str) -> str:

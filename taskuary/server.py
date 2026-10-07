@@ -4385,7 +4385,8 @@ def report_types():
 def problems_now():
     """What is failing right now, for the bell in the top bar (problems.py): each with where to fix it."""
     from . import problems
-    return {'data': problems.collect(store)}
+    # ...and beside it, what ENDED on its own ("Back on. 14 came in, 2 need you.") - news, never a red count
+    return {'data': problems.collect(store), 'news': problems.news(store)}
 
 @app.post('/api/problems/{key:path}/dismiss')
 def problem_dismiss(key: str):
@@ -4401,8 +4402,9 @@ def connectors(request: Request):
     ScopeDefault rides along so the card can show what an unset Authority actually means -
     which is per type (winrm starts at admin, a tracker at read), not one global floor.
     Agents still list cards (they have to pick a tool) but ConfigJson drops credential keys."""
-    from . import scopes
-    rows = [c | {'ScopeDefault': scopes.default_scope(c['Type'])} for c in store.list_connectors()]
+    from . import problems, scopes
+    # SignedOut: a stored token is not a sign-in - Microsoft can let it lapse, and the card said "Signed in" over it
+    rows = [c | {'ScopeDefault': scopes.default_scope(c['Type']), 'SignedOut': problems.signed_out(c)} for c in store.list_connectors()]
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         rows = [guard.without_config_secrets(c) for c in rows]
     return {'data': rows}
@@ -6846,6 +6848,12 @@ def ingest_poll(background: BackgroundTasks):
     background.add_task(_poll_reports)
     return {'report': 'running'}
 
+def _thinking_line() -> str:
+    from . import problems
+    try: t = problems.thinking(store)
+    except Exception: return ''
+    return f"{t['title']}. {t['detail']}" if t else ''
+
 @app.get('/api/ingest/status')
 def ingest_status():
     try: st = json.loads(store.get_setting('ingest_status') or '{"state": "idle"}')
@@ -6873,6 +6881,8 @@ def ingest_status():
             'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),
             # the brain's last failure, until it answers again - shown in the caption, not buried in rows
             'triageError': store.get_setting('triage_last_error') or '',
+            # ...and the same thing in the assistant's voice, while held mail keeps it true (problems.thinking)
+            'thinking': _thinking_line(),
             'timelineFade': store.get_setting('timeline_fade') or 'normal'}  # how old rows dim (FeedView)
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──

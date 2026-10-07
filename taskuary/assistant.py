@@ -1435,7 +1435,9 @@ def _public(i: dict) -> dict:
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
     return {'id': i['IdeaId'], 'key': i['Key'], 'kind': i['Kind'], 'text': i['Text'], 'why': a.pop('why', ''), 'action': a, 'status': i.get('Status'),
-            'source': a.get('source'), 'section': section_of({'section': a.get('section'), 'kind': i['Kind']})}
+            'source': a.get('source'), 'section': section_of({'section': a.get('section'), 'kind': i['Kind']}),
+            # a put-away idea says which day it comes back, not "until its day"
+            'until': i.get('SnoozeUntil') if i.get('Status') == 'snoozed' else None}
 
 
 def reviewed(cands: list, say: list, recent: str, open_: str, said: str, model: bool, week: str = '(', people: str = '(') -> dict:

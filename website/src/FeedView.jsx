@@ -3732,10 +3732,16 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
                 {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
               </Box>
             ) : (
-              <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.4 }}>
-                {answered ? `reply sent${answered.at ? ` · ${fmtDateTime(answered.at)}` : ""}`
-                  : i.status === "done" ? "done" : i.status === "dismissed" ? "not ours" : i.status === "snoozed" ? "put away until its day" : i.status}
-              </Typography>
+              // a settled idea still leads to the task it became, says which day a put-away one comes back, and never
+              // shows a status's raw name
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.4, flexWrap: "wrap" }}>
+                <Typography variant="caption" sx={{ color: FAINT }}>
+                  {answered ? `reply sent${answered.at ? ` · ${fmtDateTime(answered.at)}` : ""}`
+                    : i.status === "done" ? "done" : i.status === "dismissed" ? "not ours"
+                      : i.status === "snoozed" ? (i.until ? `put away until ${fmtDateTime(i.until)}` : "put away until its day") : "no longer open"}
+                </Typography>
+                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
+              </Box>
             )}
           </Box>
         );

@@ -1809,6 +1809,17 @@ def route_words(cfg: dict) -> str:
     return '; '.join(f'{LINE_NAMES[l]}: {say(*route_of(cfg, l))}' for l in LINES if l != 'send' or (cfg.get('deliver') or {}).get('to'))
 
 
+def run_lands(cfg: dict) -> str:
+    """Where a run started by hand will show, said before it runs. "It comes back here" was a promise that a run routed
+    off the Timeline, or one that failed, never kept - a failure is the bell's alone (decide)."""
+    how, w = route_of(cfg, 'timeline')
+    where = {'always': 'Its result shows under Reports when it is done',
+             'ai': 'Its result shows under Reports only if the AI judges it worth your time; otherwise only its run history keeps it',
+             'rule': f'Its result shows under Reports only when {w}; otherwise only its run history keeps it',
+             'never': 'It is set to post nothing on the Timeline - the run is kept in its history on the Reports page'}[how]
+    return f'{where}. If it fails, the bell says why.'
+
+
 def set_line(cfg: dict, line: str, how: str, when: str = '', rule: str = '', count=None, text: str = '') -> dict:
     """One line of the card changed, the other three as they were. Refuses what no line can mean."""
     if line not in LINES: raise ValueError(f'a route line is one of {", ".join(LINES)} - not {line or "nothing"}')

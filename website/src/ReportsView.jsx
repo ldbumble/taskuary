@@ -339,7 +339,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         api.get("/api/reports/last-runs").catch(() => ({ data: { data: {} } }))]);
       setSources((s.data.data || []).filter((x) => x.Channel === "report"));
       setTypes(t.data.data || []); setConnectors(c.data.data || []); setLastRuns(r.data.data || {});
-    } catch (e) { setErr(e?.response?.data?.detail || "Failed to load reports"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "The reports could not be loaded."); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -347,6 +347,11 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   // abandoned when the owner switched tabs, so the report stopped before it filed its result.
   // Queue the same background road the Assistant uses; leaving Reports cannot cancel it.
   const [draft, setDraft] = useState(null);   // a composed config waiting in the builder
+  // ...and what the composer said about it, shown above step 1 of the draft - the list's note was hidden the
+  // moment the draft opened, so a "not confident" or a failed check never reached the owner
+  const [draftNote, setDraftNote] = useState(null);
+  // a NEW report's first save remounts its editor on its new id: what it said and where it stood ride across
+  const [carry, setCarry] = useState(null);
   const [running, setRunning] = useState(null);
   useEffect(() => {
     const fromHash = () => {
@@ -362,17 +367,38 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     setRunning(sid); setNote(null);
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
-      setNote({ ok: true, detail: `${data.title || "Report"} is running in the background. You can leave this tab; its result will land on the Timeline.` });
+      // where it lands is the report's own routing, and a failure is the bell's alone (reports.run_lands)
+      setNote({ ok: true, detail: `${data.title || "Report"} is running in the background — you can leave this tab. ${data.lands || "If it fails, the bell says why."}` });
     } catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "report could not be queued" }); }
     setRunning(null); load();
   };
   const syncNow = async () => {
-    setSyncing(true);
-    try { await api.post("/api/reports/due"); setTimeout(() => { setSyncing(false); load(); }, 3000); }
-    catch { setSyncing(false); }
+    setSyncing(true); setNote(null);
+    try {
+      const { data } = await api.post("/api/reports/due");
+      setNote({ ok: true, detail: data?.report === "busy"
+        ? "Reports are already running — whatever is due goes in that pass. If one fails, the bell says why."
+        : "Running every report that is due, in the background — if none is due, nothing runs. If one fails, the bell says why." });
+      setTimeout(() => { setSyncing(false); load(); }, 3000);
+    } catch (e) {
+      setSyncing(false);
+      setNote({ ok: false, detail: e?.response?.data?.detail || "The due reports could not be started — try again in a moment." });
+    }
+  };
+  const retry = () => { setErr(""); load(); };
+  // the composer's word on a draft: a check it failed is a warning to fix before saving, never "Drafted."
+  const onDraft = (config, meta) => {
+    setDraft(config);
+    const low = meta.confidence === "low";
+    setDraftNote(meta.error ? { severity: "warning", text: `It drafted this, but: ${meta.error}. Fix that below before you save — nothing is saved yet.` }
+      : { severity: low ? "warning" : "info", text: `${meta.explain || "Drafted."} ${low
+        ? "It is not confident about this one — preview it in step 2 before you save." : "Check it below and preview it in step 2 before you save."}` });
   };
 
-  if (!sources) return <CircularProgress size={22} sx={{ m: 4 }} />;
+  // a failed load is said, with a way to try again - a spinner here waited for ever
+  if (!sources) return err
+    ? <Alert severity="error" sx={{ m: 2 }} action={<Button color="inherit" size="small" onClick={retry}>Try again</Button>}>{err}</Alert>
+    : <CircularProgress size={22} sx={{ m: 4 }} />;
 
   /* Reports and workflows use the same durable scheduler rows, but they are not the same
      product concept. The rail says which is which; selecting either still opens it directly. */
@@ -442,18 +468,27 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
               onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
             <Button size="small" onClick={() => openOne(s.SourceId)}>Edit</Button>
             <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
-              onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
+              onChange={async () => {
+                try { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); }
+                catch (e) { setNote({ ok: false, detail: `${titleOf(s)} could not be switched ${s.Active ? "off" : "on"} — ${e?.response?.data?.detail || "the app did not answer"}. Try again.` }); }
+                load();
+              }} />
           </Box>
           {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} />}
           </Box>
         );
   };
+  const wizardNote = draft && !selectedSource ? draftNote : null;
+  const carried = carry && carry.sid === openId ? carry : null;
+  const saved = (then) => (sid, c) => { setDraft(null); setCarry(c ? { sid, ...c } : null); then(sid); };
   const wizard = (onBack, onSaved) => invoiceOpen
     ? <InvoiceWorkflowWizard key={String(bucketNow)} sourceId={openId} sources={sources}
-        connectors={connectors} draft={selectedConfig} reload={load} onBack={onBack} onSaved={onSaved} />
+        connectors={connectors} draft={selectedConfig} reload={load} onBack={onBack} onSaved={saved(onSaved)}
+        note={wizardNote} carry={carried} onCarried={() => setCarry(null)} />
     : <ReportWizard key={String(bucketNow) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
         types={types} connectors={connectors} draft={selectedConfig} workflow={workflowOpen}
-        reload={load} onBack={onBack} onSaved={onSaved} />;
+        reload={load} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote} lastRun={lastRuns[openId]}
+        carry={carried} onCarried={() => setCarry(null)} />;
 
   if (browse) {
     const section = browseState.section ?? null;
@@ -484,15 +519,12 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
           </Box>
           <Composer kind={section === "workflows" ? "workflow" : "report"} onDraft={(config, meta) => {
-            setDraft(config);
-            setNote({ ok: true, detail: `${meta.explain || "Drafted."} Check it below and preview before saving.`
-              + (meta.confidence === "low" ? " It is not confident about this one." : "") });
-            onBrowseState?.({ section, open: "draft" });
+            onDraft(config, meta); onBrowseState?.({ section, open: "draft" });
           }} />
         </Box>
       ) : null,
       cards: sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
-      detail: browseState.open != null && !missing ? wizard(back, (sid) => { setDraft(null); onBrowseState?.({ ...browseState, open: sid }); }) : null,
+      detail: browseState.open != null && !missing ? wizard(back, (sid) => onBrowseState?.({ ...browseState, open: sid })) : null,
       onBack: back,
       openLabel: browseState.open === "new-report" ? "a new report being set up (Reports)"
         : openSource ? `the report "${titleOf(openSource)}" (Reports), its editor open` : "",
@@ -507,7 +539,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       note="Reports only read data and summarize it. Workflows write data or keep state. Their connections live on the Connections tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {open ? (
-        wizard(() => { setBucket(invoiceOpen ? "workflows" : backTo); setDraft(null); load(); }, (sid) => { setDraft(null); setBucket(sid); })
+        wizard(() => { setBucket(invoiceOpen ? "workflows" : backTo); setDraft(null); load(); }, (sid) => setBucket(sid))
       ) : (<>
       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
@@ -526,12 +558,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           onClick={() => { setQ(""); setDraft(null); setBucket("new-report"); }} sx={{ background: GRADIENT }}>New report</Button>}
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
-      <Composer kind={workflowOverview ? "workflow" : "report"} onDraft={(config, meta) => {
-        setDraft(config);
-        setNote({ ok: true, detail: `${meta.explain || "Drafted."} Check it below and preview before saving.`
-          + (meta.confidence === "low" ? " It is not confident about this one." : "") });
-        setBucket("draft");
-      }} />
+      <Composer kind={workflowOverview ? "workflow" : "report"} onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />
       {!list.length && <Empty>{q ? "Nothing here." : workflowOverview
         ? "No workflows yet — describe one above, or start with Monthly invoices or an AI agent."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
@@ -652,7 +679,7 @@ function SavedReportSummary({ source, workflow = false }) {
 
 /* A workflow is not a source-query-summary form. Its idle page is the month's workbench:
    customers and schedule at the top, durable amounts in the middle, Review handoff at the end. */
-function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, onSaved, draft }) {
+function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, onSaved, draft, note = null, carry = null, onCarried }) {
   const cur = sources.find((s) => s.SourceId === sourceId);
   const initial = cur ? parse(cur.ConfigJson) : (draft || { type: "zoho_monthly_invoices", title: "Monthly customer invoices", cron: "0 9 1 * *" });
   const zohoCards = connectors.filter((c) => c.Type === "zoho_invoice");
@@ -661,7 +688,8 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
   const [batches, setBatches] = useState([]);
   const [batch, setBatch] = useState(null);
   const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(carry?.msg || "");
+  useEffect(() => { if (carry) onCarried?.(); }, []);   // read once, at mount: the carry is spent
   const period = new Date().toISOString().slice(0, 7);
   const loadCustomers = useCallback(async () => {
     if (!cfg.connector_id) return setCustomers([]);
@@ -690,7 +718,8 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
         ConfigJson: JSON.stringify({ ...cfg, type: "zoho_monthly_invoices", connector_id: Number(cfg.connector_id) }) };
       if (cur) body.SourceId = cur.SourceId;
       const { data } = await api.post("/api/sources", body); await reload();
-      setMsg("Saved. The schedule opens a batch; it never sends invoices."); onSaved?.(data.sourceId);
+      const said = "Saved. The schedule opens a batch; it never sends invoices.";
+      setMsg(said); onSaved?.(data.sourceId, cur ? null : { msg: said });
     } catch (e) { setMsg(e?.response?.data?.detail || e.message || "Save failed"); }
     setBusy("");
   };
@@ -718,6 +747,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
   return (
     <Box sx={{ maxWidth: 1050, mx: "auto" }}>
       <Crumb section="Workflows" onBack={onBack} title={cur ? cfg.title : "New monthly invoice workflow"} />
+      {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
       <Box sx={{ ...card, p: 2, mb: 2 }}>
         <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>WORKFLOW SETUP</Typography>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, mb: 0.4 }}>Monthly invoices → Zoho drafts → Review</Typography>
@@ -974,7 +1004,8 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
   );
 }
 
-function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved, draft, workflow = false }) {
+function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved, draft, workflow = false,
+  note = null, lastRun = null, carry = null, onCarried }) {
   const cur = sources.find((s) => s.SourceId === sourceId);
   // a composed draft is a STARTING POINT, not a saved report: it lands in the same boxes the
   // owner would have filled in, and nothing exists until they preview it and press save
@@ -991,7 +1022,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     return [...own, ...ws];
   });
   const [drag, setDrag] = useState(null);
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(carry?.step ?? 0);
+  useEffect(() => { if (carry) onCarried?.(); }, []);   // read once, at mount: the carry is spent
   const [test, setTest] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState("");
@@ -1119,21 +1151,28 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
      at once: the message had nowhere to appear, the button did not know it could not work, and a
      POST that failed for any other reason threw into a void with no catch anywhere. */
   const [saveErr, setSaveErr] = useState("");
-  const [savedMsg, setSavedMsg] = useState("");
+  const [savedMsg, setSavedMsg] = useState(carry?.msg || "");
   const [confirmDel, setConfirmDel] = useState(false);
   const save = async () => {
     setSaveErr(""); setSavedMsg("");
     const c = bodyCfg();
-    if (!c.title) { setSaveErr(`Give the ${workflow ? "workflow" : "report"} a title first — it is the headline on the Timeline (step 1).`); return; }
-    const body = { Channel: "report", Address: c.title, ConfigJson: JSON.stringify(c), Active: true };
+    if (!c.title) { setSaveErr(`Give the ${workflow ? "workflow" : "report"} a title first — it is the headline on the Timeline (step 1).`); return false; }
+    // saving an edit is not switching it back on: a report the owner turned off stays off
+    const active = cur ? !!cur.Active : true;
+    const body = { Channel: "report", Address: c.title, ConfigJson: JSON.stringify(c), Active: active };
     if (cur) body.SourceId = cur.SourceId;
     try {
       const { data } = await api.post("/api/sources", body);
       await reload();
-      setSavedMsg("saved — enabled and scheduled");
-      onSaved?.(data.sourceId);
+      const msg = !active ? "saved — it is switched off, so it does not run on its schedule until you turn it back on in the list"
+        : (c.every_minutes || c.daily_at || c.cron || c.on_startup) ? "saved — enabled and scheduled"
+          : "saved — it has no schedule, so it runs only when you press Run now";
+      setSavedMsg(msg);
+      onSaved?.(data.sourceId, cur ? null : { step, msg });
+      return true;
     } catch (e) {
       setSaveErr(e?.response?.data?.detail || e?.message || "the server refused to save it");
+      return false;
     }
   };
 
@@ -1157,6 +1196,15 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           Delete {workflow ? "workflow" : "report"}
         </Button>}
       </Box>
+      {/* the bell's "Open the report" lands here: the failure it rang for is the first thing on the page */}
+      {cur && lastRun?.failed && (
+        <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}>
+          Its last run failed{lastRun.error ? `: ${String(lastRun.error).slice(0, 400)}` : "."} Fix it below and Preview it in step 2 —
+          that runs it without filing anything. The next run that works clears the bell.
+          <LastRun r={lastRun} sid={cur.SourceId} flush />
+        </Alert>
+      )}
+      {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
       <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
         <Step completed={!!String(cfg.title || "").trim() && srcs.some((x) => x.type)}>
           <StepButton onClick={() => setStep(0)}>Pipeline</StepButton>
@@ -1434,7 +1482,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 (the owner, 2026-09-18: "i updated ... but it did not save? ... the continue button?").
                 A new report still has nowhere to save to until it has a title, so it only advances. */}
             <Box sx={{ mt: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
-              <Button variant="contained" disableElevation onClick={async () => { if (cur) await save(); setStep(1); }}>
+              <Button variant="contained" disableElevation onClick={async () => { if (cur && !(await save())) return; setStep(1); }}>
                 {cur ? "Save & continue" : "Continue"}</Button>
               {saveErr && <Typography variant="body2" sx={{ color: "#6b2733" }}>{saveErr}</Typography>}
               {savedMsg && <Typography variant="body2" sx={{ color: "#47654a" }}>{savedMsg}</Typography>}
@@ -1689,8 +1737,10 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
       if (data.sources?.length) {
         onSources(data.sources, data.ai_prompt || "");
         setAsk(""); setAnswers({});
-        setOut({ done: (data.explain || (one ? "Filled it in." : "Added them."))
-          + (data.confidence === "low" ? " It is not confident about this one — check it before you save." : "") });
+        // the server hands back cards that failed its check WITH the reason (compose_sources) - never a bare tick
+        setOut(data.error ? { error: `It drafted ${one ? "this" : "these"}, but: ${data.error}. Fix that before you save.` }
+          : { done: (data.explain || (one ? "Filled it in." : "Added them."))
+            + (data.confidence === "low" ? " It is not confident about this one — check it before you save." : "") });
       } else setOut(data);
     } catch (e) { setOut({ error: e?.response?.data?.detail || "the composer could not be reached" }); }
     setBusy(false);
@@ -2023,7 +2073,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
    the only place its work shows: what it read (the exact text the model saw), what it reviewed and let
    go, its note to the next check, and what came out - or the error, when it failed. */
 const IDEA_KINDS = { followup: "follow up", promise: "promise", prep: "prep", cold: "gone quiet", idea: "idea" };
-function LastRun({ r, sid, embedded }) {
+function LastRun({ r, sid, embedded, flush }) {
   // embedded: one run inside the History dialog - starts open, no "last run" header of its own
   const [open, setOpen] = useState(!!embedded);
   const [showInputs, setShowInputs] = useState(false);
@@ -2036,7 +2086,7 @@ function LastRun({ r, sid, embedded }) {
     : rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
       `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KINDS[k] || k}`).join(", ") || "no candidates"] : [];
   return (
-    <Box sx={{ pl: embedded ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded ? 0 : 1.25, mt: embedded ? 0 : -0.5 }}>
+    <Box sx={{ pl: embedded || flush ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded || flush ? 0 : 1.25, mt: embedded ? 0 : flush ? 0.5 : -0.5 }}>
       {!embedded && (
       <Typography variant="caption" sx={{ color: r.failed ? "#8a3646" : FAINT, display: "block", lineHeight: 1.5 }}>
         <Box component="span" sx={{ fontWeight: 600, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
@@ -2122,27 +2172,34 @@ function RunHistory({ sid, title, onClose }) {
   const [runs, setRuns] = useState(null);
   const [pick, setPick] = useState(null);      // the run id chosen
   const [full, setFull] = useState({});        // run id -> the whole record, inputs and all
+  // a lookup that failed says so and offers again - "No runs kept yet" and a spinner for ever were both untrue
+  const [tries, setTries] = useState(0);
+  const [lost, setLost] = useState(false);     // the list did not load
+  const [missed, setMissed] = useState(null);  // the run whose detail did not load
   useEffect(() => {
+    setLost(false);
     api.get(`/api/reports/${sid}/runs`).then(({ data }) => { const rs = data.data || []; setRuns(rs); if (rs.length) setPick(rs[0].runId); })
-      .catch(() => setRuns([]));
-  }, [sid]);
+      .catch(() => setLost(true));
+  }, [sid, tries]);
   useEffect(() => {
-    if (pick == null || full[pick]) return;
-    api.get(`/api/reports/runs/${pick}`).then(({ data }) => setFull((f) => ({ ...f, [pick]: data }))).catch(() => {});
-  }, [pick, full]);
+    if (pick == null || full[pick] || missed === pick) return;
+    api.get(`/api/reports/runs/${pick}`).then(({ data }) => setFull((f) => ({ ...f, [pick]: data }))).catch(() => setMissed(pick));
+  }, [pick, full, missed]);
   const outcome = (r) => r.failed ? "failed" : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "quiet") : (r.subject ? "filed" : "ran");
   const cur = pick != null ? (full[pick] || runs?.find((r) => r.runId === pick)) : null;
   return (
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth onClick={(e) => e.stopPropagation()}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 15 }}>
         {title || "Report"} — run history
-        <Typography variant="caption" sx={{ color: FAINT }}>{runs ? `${runs.length} run${runs.length === 1 ? "" : "s"} kept` : "loading…"}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{runs ? `${runs.length} run${runs.length === 1 ? "" : "s"} kept` : lost ? "" : "loading…"}</Typography>
         <Box sx={{ flex: 1 }} />
         <Button size="small" onClick={onClose} startIcon={<CloseIcon sx={{ fontSize: 14 }} />}>Close</Button>
       </DialogTitle>
       <DialogContent sx={{ display: "flex", gap: 1.5, minHeight: 420 }}>
         <Box sx={{ width: 260, flexShrink: 0, borderRight: `1px solid ${BORDER}`, pr: 1, overflowY: "auto", maxHeight: "70vh" }}>
-          {runs && !runs.length && <Empty>No runs kept yet — the history starts with the next run.</Empty>}
+          {lost && <Alert severity="warning" sx={{ fontSize: 12 }} action={<Button color="inherit" size="small" onClick={() => setTries((n) => n + 1)}>Try again</Button>}>
+            The run history could not be loaded.</Alert>}
+          {!lost && runs && !runs.length && <Empty>No runs kept yet — the history starts with the next run.</Empty>}
           {(runs || []).map((r) => (
             <Box key={r.runId} onClick={() => setPick(r.runId)}
               sx={{ px: 1, py: 0.6, mb: 0.4, borderRadius: 1, cursor: "pointer", bgcolor: pick === r.runId ? "#eef3ea" : "transparent",
@@ -2160,7 +2217,10 @@ function RunHistory({ sid, title, onClose }) {
               <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mb: 0.5 }}>
                 {cur.at} · {outcome(cur)}{cur.error ? ` — ${cur.error}` : ""}{cur.subject && cur.type !== "assistant" ? ` · ${cur.subject}` : ""}
               </Typography>
-              {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded /> : <CircularProgress size={16} />}
+              {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded />
+                : missed === pick ? <Typography variant="caption" sx={{ color: DIM }}>This run's details could not be loaded.{" "}
+                  <Box component="span" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>Try again</Box></Typography>
+                  : <CircularProgress size={16} />}
             </>
           ) : <Typography variant="caption" sx={{ color: FAINT }}>Pick a run on the left.</Typography>}
         </Box>

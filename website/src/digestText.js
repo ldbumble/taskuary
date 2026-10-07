@@ -52,7 +52,7 @@ export function digestSections(text) {
 export function parseDigest(text) {
   const body = String(text || "").replace(/\r/g, "").trim();
   const failed = /^\((?:AI summary failed|AI prompt set, but no active AI connector|the model returned an empty summary)/i.test(body);
-  if (!failed) return { error: "", source: "", ...digestSections(body) };
+  if (!failed) return { error: "", plain: "", source: "", ...digestSections(body) };
   const lines = body.split("\n");
   const sourceAt = lines.findIndex((line) => /^NOW:\s*/.test(line));
   const errorLines = lines.slice(0, sourceAt < 0 ? lines.length : sourceAt).filter((line) => line.trim());
@@ -62,5 +62,9 @@ export function parseDigest(text) {
     .replace(/^\(the model returned an empty summary\s*-?\s*/i, "The model returned an empty summary. ")
     .replace(/\)\s*$/, "").trim();
   const source = sourceAt < 0 ? "" : lines.slice(sourceAt).join("\n");
-  return { error: error.slice(0, 360), source, ...digestSections(source) };
+  // what the owner reads first: the cause in plain words - the AI's own error is the detail beneath it
+  const plain = /^No active AI connector/.test(error) ? "No AI is connected, so this morning's digest could not be written."
+    : /^The model returned an empty summary/.test(error) ? "The AI answered with nothing, so this morning's digest could not be written."
+      : "The AI did not answer, so this morning's digest could not be written.";
+  return { error: error.slice(0, 360), plain, source, ...digestSections(source) };
 }

@@ -130,7 +130,8 @@ test("on an existing report the routing step's Continue saves before it advances
   const wizard = source.slice(source.indexOf("function ReportWizard"));
   const at = wizard.indexOf("<RoutingCard");
   const step = wizard.slice(at, wizard.indexOf("</StepContent>", at));
-  assert.match(step, /onClick=\{async \(\) => \{ if \(cur\) await save\(\); setStep\(1\); \}\}/);
+  // ...and only a save that worked moves on: a refused one stays on the step that says why
+  assert.match(step, /onClick=\{async \(\) => \{ if \(cur && !\(await save\(\)\)\) return; setStep\(1\); \}\}/);
   assert.match(step, /\{cur \? "Save & continue" : "Continue"\}/);
   assert.match(step, /\{saveErr && /, "a refused save must say so on the step where the button is");
 });

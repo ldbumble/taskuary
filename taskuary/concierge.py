@@ -80,7 +80,8 @@ CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from 
          # the words that said nothing on hover: each line is what the handler does (TaskPage's own titles are the same sentences)
          'stop_agent': "Writes up what was done, stops the work, and drafts the reply to whoever asked (with nothing to write up it just stops) - the task stays open",
          'close': 'Closes the task - it stops coming back to Work',
-         'rerun': 'Runs the report again in the background - it comes back here when it is done'}
+         # where the result shows is the report's own routing, and a failure only ever reaches the bell (reports.run_lands)
+         'rerun': 'Runs the report again in the background - its result goes where the report sends it, and if it fails the bell says why'}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
 # THE SHORT LIST (the owner, 2026-09-25, word by word): eight buttons. Tomorrow and Later are gone - Next on
@@ -158,7 +159,7 @@ RECEIPTS = {'reply': "I'll draft that - nothing goes out until you say so.", 'ap
             'remember': "Remembered. Moving on.", 'coder': "Handed off - the code work starts now, and what it finds comes back here.",
             'regular_agent': "Handed off - work on it starts now, and the answer comes back here.",
             'clear': 'Cleared. Moving on.',
-            'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Running it again - the new one comes back here when it's done. Moving on.",
+            'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Running it again - its result goes where the report sends it, and if it fails the bell says why. Moving on.",
             'setup': "I'll walk you through it, one step at a time - nothing is built and nothing changes until you say so.",
             'answer_agent': "Passing that on - right away if it's waiting on you, otherwise the moment it next pauses.",
             'redraft': "Writing it again with that - the new draft lands below for your yes.",
@@ -2967,7 +2968,8 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'review.approve' and o.get('watching'): return f" {o['watching']}"
     if kind == 'item.settle' and o.get('says') and not o.get('closed'): return f" {o['says']}"
     # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
-    if kind == 'report.run': return f" {o.get('title') or 'It'} is running - it comes back here when it's done."
+    if kind in ('report.run', 'report.rerun'):
+        return f" {o.get('title') or 'It'} is running. {o.get('lands') or 'If it fails, the bell says why.'}"
     if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."
     if kind == 'report.route': return f" {o.get('title') or 'It'} now goes - {o.get('route')}."
     if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."

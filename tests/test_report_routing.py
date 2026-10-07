@@ -438,3 +438,20 @@ def test_the_card_shows_the_sentence_the_server_asks():
     from pathlib import Path
     src = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'ReportsView.jsx').read_text(encoding='utf-8')
     assert f'export const ASSISTANT_WHEN = "{reports.ASSISTANT_WHEN}"' in src
+
+
+def test_run_now_says_where_the_run_will_show_by_its_own_route():
+    """"Its result will land on the Timeline" was said of every manual run - of one routed off the Timeline, and of one
+    that failed, whose only word is the bell's (decide). The sentence is the report's route, and the bell for a failure."""
+    says = lambda **route: reports.run_lands({'route': route} if route else {})
+    assert says().startswith('Its result shows under Reports when it is done')
+    assert 'only if the AI judges' in says(timeline={'how': 'ai', 'when': 'an invoice is overdue'})
+    assert 'only when anything came back' in says(timeline={'how': 'rule', 'rule': 'something_came_back'})
+    assert 'post nothing on the Timeline' in says(timeline={'how': 'never'})
+    assert all(s.endswith('If it fails, the bell says why.') for s in (says(), says(timeline={'how': 'never'})))
+    # ...and Run now hands it back, so the page and the chat say it rather than a promise of their own
+    sid = server.store.save_source({'Channel': 'report', 'Address': 'quiet one', 'Active': 1, 'Owner': 'test',
+                                    'ConfigJson': json.dumps({'type': 'mssql', 'title': 'Quiet one', 'route': {'timeline': {'how': 'never'}}})}, 'test')
+    with mock.patch.object(server, '_spawn_rerun', lambda fn: None):
+        out = c.post(f'/api/reports/{sid}/rerun').json()
+    assert out['queued'] and 'post nothing on the Timeline' in out['lands']

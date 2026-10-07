@@ -437,7 +437,7 @@ function FullText({ mid, revision }) {
   const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
   return (
     <div className="tq-card-full">
-      {morning ? <DigestText text={text} /> : jsonRows(text) ? <RowsTable rows={jsonRows(text)} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
+      {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : jsonRows(text) ? <RowsTable rows={jsonRows(text)} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
       {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense />}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
@@ -780,9 +780,14 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
       {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
       {card.brief_today && <TodayMeetingsStrip />}
       {card.mid && <Clamp what="the whole report"><FullText mid={card.mid} revision={card.presentation_revision} /></Clamp>}
+      {/* where its result shows is the report's routing, and a failure only ever reaches the bell (reports.run_lands) */}
       <Foot close={card} onDone={onDone} promote={card.bad ? "rerun" : null}
-        then={card.bad ? "Running it again reruns the report in the background; it comes back here." : null}
-        where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
+        then={card.bad ? "Running it again runs the report in the background - its result goes where the report sends it, and if it fails the bell says why." : null}
+        where={<>
+          <Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />
+          {/* the report itself, one press away - the card was the only place it showed and it had no way back to it */}
+          {card.source_id != null && <Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>Edit this report ↗</Button>}
+        </>} />
     </CardShell>
   );
 }
@@ -790,7 +795,6 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
 export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
   const a = card.action || {};
-  const [err] = useState("");
   const words = { followup: "waiting on them", promise: "you promised", asked: "slipped", cold: "gone quiet", idea: "worth a thought",
                   connect: "worth connecting", health: "needs a look" };
   // THE REPORT PROPOSES, THE CARD HAS THE DOORS (the assistant-runs-the-app design, 2026-09-18): a
@@ -798,7 +802,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
   // it. Putting it down is the chips' Not ours, the same word every idea carries (C5, 2026-09-27).
   const go = (tab, hash) => { if (hash) window.location.hash = hash; onNavigate?.(tab); };
   return (
-    <CardShell card={card} kicker={words[card.idea_kind] || "slipped"} title={card.title} err={err}>
+    <CardShell card={card} kicker={words[card.idea_kind] || "slipped"} title={card.title}>
       {card.why && <div className="tq-card-excerpt">{card.why}</div>}
       <Foot
         verb={card.idea_kind === "connect" && a.connector_type ? (
@@ -811,7 +815,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
           : card.idea_kind === "health" && a.tab ? <><b>Open {a.tab}</b> takes you to the tab that fixes it.</>
           // the buttons are the short way; saying it is the real one (2026-09-04: "all the ideas
           // should just say it and I will create it")
-          : "Say what you want done with it and I'll create it."}
+          : <><b>Make a task</b> puts it on your list, <b>Send to agent</b> hands it off, <b>Not ours</b> puts it down - or say what you want done with it.</>}
         where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
     </CardShell>
   );
@@ -1063,6 +1067,8 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title="Proposes a task on your own list - nothing is made until you confirm" sx={quiet}>Make task</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coder", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Proposes sending it to a regular agent - nothing starts until you confirm" sx={quiet}>Regular agent</Button>}
+              {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title="Proposes filing just this one - nothing is filed until you confirm" sx={quiet}>Not ours</Button>}
               <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
             </div>
           )}

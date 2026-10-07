@@ -39,10 +39,13 @@ class ActsTests(unittest.TestCase):
         prop = out['proposal']
         self.assertEqual((prop['kind'], prop['target'], prop.get('auto')), ('report.run', self.sid, True))
         self.assertIn('Monthly AR Report', out['say'])
-        with mock.patch.object(server, '_rerun_report', return_value={'queued': True}) as rr:
+        lands = 'Its result shows under Reports when it is done. If it fails, the bell says why.'
+        with mock.patch.object(server, '_rerun_report', return_value={'queued': True, 'lands': lands}) as rr:
             done = concierge.run_proposal(self.s, prop)
         self.assertEqual(done['status'], 'done'); rr.assert_called_once()
-        self.assertIn('is running', concierge.receipt(self.s, done))
+        # where it shows is the report's own route (reports.run_lands), never "it comes back here"
+        self.assertIn('is running', concierge.receipt(self.s, done)); self.assertIn(lands, concierge.receipt(self.s, done))
+        self.assertNotIn('comes back here', concierge.receipt(self.s, done))
 
     def test_a_name_that_finds_nothing_proposes_nothing_and_lists_what_exists(self):
         out = self._turn('report.run', title='payroll')

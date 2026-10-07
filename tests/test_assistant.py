@@ -436,6 +436,8 @@ class ButtonTests(unittest.TestCase):
         out = assistant.act(s, idea['IdeaId'], 'snooze', until='2 weeks')
         self.assertTrue(out['until'].endswith('07:00:00')); self.assertTrue(out['when'])
         self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'snoozed')
+        # the post's line says which day it comes back, not "until its day"
+        self.assertEqual(assistant._public(s.get_idea(idea['IdeaId']))['until'], out['until'])
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertEqual(assistant.run(s, force=True)['said'], 0)
             s._exec('UPDATE idea SET SnoozeUntil=? WHERE IdeaId=?', (_ago(hours=1), idea['IdeaId']))

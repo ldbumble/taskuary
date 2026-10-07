@@ -3867,9 +3867,10 @@ def _rerun_report(sid: int, asked: dict | None = None) -> dict:
             except Exception as e: logger.warning(f'the landed report could not reach {asked.get("channel")}: {e}')
     # queued, not awaited: the report lands on the Timeline like a scheduled run, and the pipe picks it up
     _spawn_rerun(work)
-    try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
-    except ValueError: title = src.get('Address')
-    return {'queued': True, 'sourceId': sid, 'title': title}
+    try: cfg = json.loads(src.get('ConfigJson') or '{}') or {}
+    except ValueError: cfg = {}
+    from .reports import run_lands
+    return {'queued': True, 'sourceId': sid, 'title': cfg.get('title') or src.get('Address'), 'lands': run_lands(cfg)}
 
 @app.post('/api/concierge/say')
 def concierge_say(body: ConciergeSayBody):

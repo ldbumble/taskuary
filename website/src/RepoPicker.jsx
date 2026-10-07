@@ -63,7 +63,8 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
   if (!rows.length) return (
     <Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-        No repository map yet — add one to SOUL.md (Docs) and Taskuary can route tasks to a checkout.
+        No code repositories connected yet. Connect GitHub under Connections and Taskuary can work in one - or, if this
+        isn't code work, use the non-coding agent.
       </Typography>
       {noRepoRow}
     </Box>

@@ -16,7 +16,8 @@ test("clicking a row's state chip narrows In progress to that state, and its pil
 
 test("the states are pills on top of In progress, with counts and an 'all' that clears", () => {
   const s = taskSource();
-  assert.match(s, /filter === "live" && !search && liveStates\.length > 1 &&/);
+  assert.match(s, /filter === "live" && !search && \(liveStates\.length > 1 \|\| only\) &&/);   // a set filter keeps its way out
+  assert.match(s, /if \(only && tasks && !liveStates\.some\(\(x\) => x\.key === only\)\) setOnly\(null\)/);   // a state that emptied lets go
   assert.match(s, /<FilterPills value=\{only \|\| ""\} onChange=\{\(k\) => setOnly\(k \|\| null\)\}/);
   assert.match(s, /\{ key: "", label: "all", n: liveStates\.reduce/);
 });

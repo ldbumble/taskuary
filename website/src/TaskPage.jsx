@@ -297,7 +297,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const owned = assignedAgent(task.Assignee);
     setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : agents[0], model: "" }));
   }, [selected, detail?.task, agents]);
-  useEffect(() => { setRestartOpen(false); }, [selected]);
+  // ...and an error belongs to the task it happened on: a failed Mark done stayed up over the next task opened, as if about it.
+  // Only a move from one task straight to another clears it: "That task is gone" empties the selection, and the list then
+  // opens its first row - that message must survive the hop.
+  const prevSel = useRef(selected);
+  useEffect(() => { setRestartOpen(false); if (selected && prevSel.current) setErr(""); prevSel.current = selected; }, [selected]);
   useEffect(() => {
     // a LIVE SESSION counts as much as a headless run here: the header chip is derived from
     // how long the pty has been quiet, so without re-asking it froze on whatever it said
@@ -330,10 +334,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } catch (e) { setErr(e?.response?.data?.detail || "Could not queue the note"); }
   };
 
+  const [posting, setPosting] = useState(false);
   const post = async () => {
-    if (!comment.trim()) return;
-    await api.post(`/api/tasks/${selected}/comments`, { body: comment });
-    setComment(""); loadDetail(selected);
+    if (!comment.trim() || posting) return;
+    setPosting(true);
+    try { await api.post(`/api/tasks/${selected}/comments`, { body: comment }); setComment(""); loadDetail(selected); }
+    catch (e) { setErr(`Your note wasn't saved - ${e?.response?.data?.detail || "Taskuary didn't answer"}. It is still in the box; press Post again.`); }
+    finally { setPosting(false); }
   };
   // Finish the AGENT RUN, not the task. It files the durable result, closes this session and drafts
   // the reply to whoever asked (coder.wrap -> finish(keep_open=True)); completing the task stays a
@@ -681,7 +688,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // the last tick closed it (server: tick_checklist): the list and the rail move with it now,
       // not on the next poll, or the row you just finished sits there looking open
       if (data?.closed) { loadTasks(); onChanged?.(); }
-    } catch { /* the list reloads on the next refresh */ }
+    } catch (e) { setErr(`That box didn't change - ${e?.response?.data?.detail || "Taskuary didn't answer"}. Tick it again.`); }
   };
   // what the folded strip says on its left: the header already has the id, title and state, so
   // this carries the two things it cannot - how far the list got, and what the task is
@@ -882,7 +889,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
       { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession },   // a live session has no primary;
       // ...nor a waiting draft: its Send & close, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next
-      { id: "nat", group: "more", label: "Not a task", run: () => setConfirmNAT(true), title: "Delete it and teach triage why — the sender keeps writing to you." },
+      { id: "nat", group: "more", label: "Not a task", run: () => setConfirmNAT(true), title: "Delete it and teach Taskuary why — the sender keeps writing to you." },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "Remind me", run: (e, a) => setRemindAt(a || e?.currentTarget),
         title: "Put it away until a day; it is back on your work rail that morning" },
       { id: "hand", group: "more", label: "Hand it to a person", run: () => setHandoff(true),
@@ -1022,7 +1029,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
                         title={markDoneHint}
                         disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
-                      <Tooltip title="Not a task — delete it and teach triage why">
+                      <Tooltip title="Not a task — delete it and teach Taskuary why">
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
@@ -1106,7 +1113,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               title={markDoneHint}
                               disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
-                            <Tooltip title="Not a task — delete it and teach triage why">
+                            <Tooltip title="Not a task — delete it and teach Taskuary why">
                               <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                                 <BlockIcon sx={{ fontSize: 16 }} /></IconButton>
                             </Tooltip>
@@ -1137,7 +1144,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
                         <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
                           sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
-                          title="Delete it and teach triage why — the sender keeps writing to you."
+                          title="Delete it and teach Taskuary why — the sender keeps writing to you."
                           onClick={() => setConfirmNAT(true)}>Not a task</Button>
                         <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
@@ -1339,7 +1346,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       )}
                       <Box sx={{ flex: 1, minWidth: 12 }} />
                       <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 340 }}>
-                        {completionLine(completionIsManual, (detail?.checklist || []).some((i) => i.out && !i.done))}
+                        {completionLine(completionIsManual, (detail?.checklist || []).some((i) => i.out && !i.done), !replyMessage)}
                       </Typography>
                     </Box>
                     </>}
@@ -1421,7 +1428,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
                         title="Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it."
                         onClick={wrapUp}>Save and end session</Button>
-
+                      {/* A STUCK AGENT (a rate limit, a token ceiling) had only the two moves above, and neither gets the work done:
+                          the way on is another agent - startCodingAgent pauses this one and files its handover first */}
+                      {!isGeneral && agentState === AGENT.waiting && subState(term) === "stalled" && (
+                        <Button size="small" variant="contained" disableElevation sx={liveCtl} startIcon={<RefreshIcon sx={{ fontSize: 13 }} />}
+                          title="Pauses this one (its notes are kept) and starts a fresh agent - you choose which."
+                          onClick={() => setRestartOpen(true)}>Run another agent</Button>
+                      )}
                     </Box>
                   )}
                   {/* pages a session published, kept even when it ended without a written summary */}
@@ -1818,7 +1831,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
                     <TextField fullWidth placeholder="Add a note (humans only)" value={comment}
                       onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
-                    <Button size="small" onClick={post}>Post</Button>
+                    <Button size="small" disabled={posting} onClick={post}>{posting ? "Posting…" : "Post"}</Button>
                   </Box>
                 </Fold>}
 

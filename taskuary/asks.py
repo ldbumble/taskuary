@@ -136,13 +136,15 @@ def send_picked(store, sends: list) -> str:
     return '. '.join(s[:1].upper() + s[1:] for s in said) + '.'
 
 
-def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: str = '') -> bool:
+def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: str = '', desktop: bool = False) -> bool:
     """One line at the ask's door. The phone it was asked from - or, failing that, the phone the walk is handed to - only
     in a gap of the conversation (remote_assistant.quiet: never between a card and its answer); False = not now, try
-    again. Everywhere else, the desktop Assistant chat. `via`: a door other than the ask's (a reminder's)."""
+    again. Everywhere else, the desktop Assistant chat. `via`: a door other than the ask's (a reminder's). `desktop`: a
+    line nobody asked for at that moment - a due day, a nudge, a watch ending - which the phone never speaks first (the
+    owner, 2026-10-02)."""
     from . import concierge, general, live, remote_assistant
-    via, handed = via or of(task) or 'desktop', remote_assistant.handoff(store)
-    doors = ([tuple(via.split(':', 1))] if ':' in via else []) + ([(handed['channel'], handed['chat'])] if handed else [])
+    via, handed = via or of(task) or 'desktop', None if desktop else remote_assistant.handoff(store)
+    doors = ([tuple(via.split(':', 1))] if ':' in via and not desktop else []) + ([(handed['channel'], handed['chat'])] if handed else [])
     for channel, chat in doors:
         c = remote_assistant.connector_for_chat(store, channel, chat)
         if not c: continue
@@ -189,16 +191,102 @@ def check(store, tid: int) -> str | None:
     return line
 
 
+def _answer(store, tid: int) -> dict | None:
+    """The newest word from the other side on this task's mail threads. A FILED one too: an answer that settles the
+    question ("Thursday at 2 works") is exactly what triage files as needing nothing, and lands on no task at all. Never
+    an auto-reply, never our own; a chat room is one task's lines only (a room is not a thread)."""
+    from .autoreply import STATUS as AUTO
+    from .ingest import is_ours
+    me = str(store.get_setting('owner_email') or '').lower()
+    rows = store._rows("SELECT * FROM message WHERE (TaskId=? OR ConversationId IN (SELECT ConversationId FROM message WHERE TaskId=? "
+                       "AND Channel='email' AND ConversationId IS NOT NULL)) AND Status NOT IN ('context','history','skipped',?) "
+                       "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' ORDER BY SentAt DESC, MessageId DESC LIMIT 8",
+                       (tid, tid, AUTO))
+    return next((m for m in rows if not is_ours(m) and (not me or str(m.get('FromEmail') or '').lower() != me)), None)
+
+
+def _who(m: dict, first: bool = True) -> str:
+    """A person as the owner calls them: 'Erin' from "Blake, Erin" - or the address when there is no name."""
+    from .triage import person_name
+    n = person_name((m or {}).get('FromName'))
+    return (n.split()[0] if first else n) if n else str((m or {}).get('FromEmail') or 'them')
+
+
 def _reply(store, t: dict) -> str | None:
-    """A watched task's new message, said once: who wrote and the start of what they said."""
+    """A watched task's new message, said once: who answered and the start of what they said. A reply watch ends with
+    the answer - it was waiting for exactly that; a watch on everything goes on."""
     from .store import task_ref
-    m = store.last_material_inbound_on_task(t['TaskId']) or {}
-    if not m.get('MessageId') or m['MessageId'] == t.get('AskedSeenMid'): return None
+    m = _answer(store, t['TaskId']) or {}
+    if not m.get('MessageId') or str(m['MessageId']) == str(t.get('AskedSeenMid') or ''): return None
     words = ' '.join(str(m.get('OwnText') or m.get('BodyText') or '').split())[:140]
-    line = f"{task_ref(t['TaskId'])} {str(t.get('Title') or '').strip()} - {m.get('FromName') or m.get('FromEmail') or 'someone'} wrote: {words}"
+    line = f"{task_ref(t['TaskId'])} {str(t.get('Title') or '').strip()} - {_who(m, first=False)} answered: {words}"
     if not _say(store, t, line): return None
     store._exec('UPDATE task SET AskedSeenMid=? WHERE TaskId=?', (m['MessageId'], t['TaskId']))
+    if t.get('AskedWatch') == 'reply': store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (t['TaskId'],))
     return line
+
+
+# ── "I'll keep an eye out" that keeps it: a sent reply that asks something watches for the answer ──
+# Sending closes the task, so an ordinary reply had no "waiting on them" at all, and the sweep forgot any watch on a task
+# over 30 days old however recently it began (2026-10-06). Now the watch starts at the send and counts its own 30 days;
+# their answer ends it; a quiet stretch offers one nudge - held while they are out of office; at 30 days it stops, and
+# says so. The lines nobody asked for at that moment (the nudge, the end) stay in the app.
+NUDGE_DAYS = 2                     # assistant.CHASE_STEPS' first step: silence worth a word
+
+
+def watch_reply(store, rv: dict, body: str, now: datetime = None) -> str | None:
+    """After a reply really left: when it ASKED them something (assistant._ASKS, the Advisor's own test for a follow-up
+    owed), watch for their answer - on the task the send just closed too. The line to say, or None."""
+    from .assistant import _ASKS
+    from .triage import own_words
+    tid, msg = rv.get('TaskId'), store.get_message(rv['MessageId']) if rv.get('MessageId') else None
+    if not tid or not msg or msg.get('Channel') != 'email' or not _ASKS.search(own_words(str(body or ''))): return None
+    t = store.get_task(tid) or {}
+    seen, at = (_answer(store, tid) or msg).get('MessageId'), (now or datetime.now()).isoformat(' ', 'seconds')
+    store._exec('UPDATE task SET AskedVia=COALESCE(AskedVia,?), AskedWatch=?, AskedSeenMid=?, AskedWatchAt=?, AskedNudgedAt=NULL '
+                'WHERE TaskId=?', (door(), 'any' if t.get('AskedWatch') == 'any' else 'reply', seen, at, tid))
+    line = f"Sent. I'll watch for {_who(msg)}'s answer."
+    store.add_comment(tid, 'assistant', 'agent', line)
+    return line
+
+
+def _waiting_on(store, t: dict) -> dict:
+    """Whose answer a watch waits for: the message the owner answered (what was seen when it began)."""
+    return (store.get_message(t['AskedSeenMid']) if t.get('AskedSeenMid') else None) or {}
+
+
+def nudge(store, t: dict, now: datetime = None) -> str | None:
+    """Two days of silence on a reply watch: offered once - never to someone whose auto-reply says they are away."""
+    from . import assistant
+    from .store import task_ref
+    now = now or datetime.now()
+    if t.get('AskedWatch') not in ('reply', 'any') or t.get('AskedNudgedAt') or not t.get('AskedWatchAt'): return None
+    try: quiet = now - datetime.fromisoformat(str(t['AskedWatchAt'])[:19])
+    except ValueError: return None
+    if quiet < timedelta(days=NUDGE_DAYS): return None
+    m = _waiting_on(store, t)
+    if str(m.get('FromEmail') or '').lower() in assistant.ooo(store): return None     # held while they are away
+    line = f"{task_ref(t['TaskId'])} {_title(t)} - still nothing from {_who(m)}. Want a short nudge ready?"
+    if not _say(store, t, line, desktop=True): return None
+    store._exec('UPDATE task SET AskedNudgedAt=? WHERE TaskId=?', (now.isoformat(' ', 'seconds'), t['TaskId']))
+    return line
+
+
+def stop_watching(store, t: dict, quiet: bool = False) -> str | None:
+    """A watch at its 30 days ends, and says so with the way back (watch_task again). One with no start of its own -
+    from before watches kept one - ends quietly."""
+    from .store import task_ref
+    line = None if quiet else f"I've stopped watching for {_who(_waiting_on(store, t))}'s answer on {task_ref(t['TaskId'])} {_title(t)}. Keep going?"
+    if line and not _say(store, t, line, desktop=True): return None
+    store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (t['TaskId'],))
+    return line
+
+
+def say_due(store, tid: int, line: str) -> bool:
+    """A due day's line (remind.deadlines), in the desktop chat only."""
+    from .store import task_ref
+    t = store.get_task(tid) or {}
+    return bool(t) and _say(store, t, f"{task_ref(tid)} {_title(t)} - {line}", via='desktop', desktop=True)
 
 
 WATCHES = ('done', 'reply', 'any', 'off')
@@ -212,8 +300,10 @@ def watch_task(store, tid: int, what: str = 'any') -> dict:
     if not store.get_task(tid): raise ValueError('task not found')
     if what == 'off':
         store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (tid,)); return {'taskId': tid, 'watch': 'off'}
-    seen = (store.last_material_inbound_on_task(tid) or {}).get('MessageId')
-    store._exec('UPDATE task SET AskedVia=?, AskedWatch=?, AskedSeenMid=? WHERE TaskId=?', (door(), what, seen, tid))
+    seen = (_answer(store, tid) or {}).get('MessageId')
+    # ...and its 30 days count from NOW: "keep going" after a watch ended starts a fresh one
+    store._exec('UPDATE task SET AskedVia=?, AskedWatch=?, AskedSeenMid=?, AskedWatchAt=?, AskedNudgedAt=NULL WHERE TaskId=?',
+                (door(), what, seen, datetime.now().isoformat(' ', 'seconds'), tid))
     return {'taskId': tid, 'watch': what, 'via': door()}
 
 
@@ -258,14 +348,23 @@ def drain():
         except Exception as e: logger.warning(f'asks: could not check {tid} - {e}')
 
 
-def sweep(store):
+def sweep(store, now: datetime = None):
+    from . import remind
+    try: remind.tick(store, now)             # a reminder for later today comes due on this clock too, not only on a sync
+    except Exception as e: logger.warning(f'asks: reminders not looked at - {e}')
     for r in store._rows("SELECT TaskId FROM task WHERE RemindOwed='1'"):
         try: _remind(store, r['TaskId'])
         except Exception as e: logger.warning(f"asks: could not say the reminder on {r['TaskId']} - {e}")
-    since = (datetime.now() - timedelta(days=DAYS)).isoformat(' ', 'seconds')
-    for r in store._rows("SELECT TaskId FROM task WHERE AskedVia IS NOT NULL AND CreatedAt>=? AND "
-                         "(Status NOT IN ('done','dropped') OR IFNULL(AskedTold,'')<>'finished') ORDER BY TaskId", (since,)):
-        try: check(store, r['TaskId'])
+    now = now or datetime.now()
+    since = (now - timedelta(days=DAYS)).isoformat(' ', 'seconds')
+    # a watch's 30 days are its own, counted from when it began - not the task's age
+    for t in store._rows("SELECT * FROM task WHERE AskedWatch IN ('reply','any') AND COALESCE(AskedWatchAt, CreatedAt)<?", (since,)):
+        try: stop_watching(store, t, quiet=not t.get('AskedWatchAt'))
+        except Exception as e: logger.warning(f"asks: could not end the watch on {t['TaskId']} - {e}")
+    for r in store._rows("SELECT TaskId FROM task WHERE AskedVia IS NOT NULL AND COALESCE(AskedWatchAt, CreatedAt)>=? AND "
+                         "(Status NOT IN ('done','dropped') OR IFNULL(AskedTold,'')<>'finished' OR AskedWatch IN ('reply','any')) "
+                         "ORDER BY TaskId", (since,)):
+        try: check(store, r['TaskId']); nudge(store, store.get_task(r['TaskId']) or {}, now)
         except Exception as e: logger.warning(f"asks: could not check {r['TaskId']} - {e}")
 
 
@@ -347,7 +446,8 @@ def touched(store, hours: float) -> dict:
     reached. The Advisor's follow-ups on any of these are not news yet."""
     cut = _since(hours)
     tids = {r['TaskId'] for r in store._rows(
-        "SELECT TaskId FROM task WHERE (AskedVia IS NOT NULL AND Status NOT IN ('done','dropped')) OR ClosedAt>=? "
+        # ...and a reply being watched: the watch offers its own nudge, so the Advisor's chase would be the same line twice
+        "SELECT TaskId FROM task WHERE (AskedVia IS NOT NULL AND Status NOT IN ('done','dropped')) OR AskedWatch IN ('reply','any') OR ClosedAt>=? "
         f"OR (AskedToldAt>=? AND AskedTold IN ({','.join('?' * len(SAID))}))", (cut, cut, *SAID))}
     people = set()
     for r in store._rows("SELECT TaskId, Deliver FROM review WHERE DeliveryState='sent' AND DecidedAt>=?", (cut,)):

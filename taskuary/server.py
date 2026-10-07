@@ -121,6 +121,10 @@ async def _lifespan(_app):
         from . import hooks as _hooks
         _hooks.start_codex_spool()
     except Exception as e: logger.warning(f'codex hook spool not started: {e}')
+    try:                           # reminders and due days come due on start, before any mail is read (remind.tick)
+        from . import remind
+        remind.tick(store)
+    except Exception as e: logger.warning(f'reminders on start skipped: {e}')
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     try:                           # a relaunch opens a NEW chat rather than resuming the last one
         from . import funnel as _f
@@ -6528,6 +6532,13 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
         nonlocal t0
         now = time.monotonic(); spent[name] = spent.get(name, 0.0) + now - t0; t0 = now
     try:
+        # the morning's Remind me dates and the due days, each filed as a note on its task so it is back on the rail -
+        # BEFORE the catch-up: behind minutes of mail, a reminder came late on exactly the mornings it mattered (remind.tick)
+        try:
+            from . import remind
+            remind.tick(target_store)
+        except Exception as e:
+            logger.warning(f'reminders failed: {e}')
         # channels FIRST: the Morning digest is a report over Taskuary's own data, and run
         # before the catch-up it would summarize yesterday while today sat in the mailbox
         from .channels import poll_channels, _poll_jobs
@@ -6575,12 +6586,6 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             if retried: _status_progress(target_store, status, f'{what} · {retried} retried', phase='triaging')
         except Exception as e:
             logger.warning(f'retrying stranded triage failures failed: {e}')
-        # the morning's Remind me dates, each filed as a note on its task so it is back on the rail (remind.due)
-        try:
-            from . import remind
-            remind.due(target_store)
-        except Exception as e:
-            logger.warning(f'reminders failed: {e}')
         _lap('judging')
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on

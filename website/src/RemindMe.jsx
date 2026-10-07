@@ -50,6 +50,13 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
                 sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1 }}>{label}</Button>
             ))}
           </Box>
+          {/* later TODAY, at a time (2026-10-06: only tomorrow could be picked); the server refuses a time already gone */}
+          <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "#6b6459" }}>
+            Later today
+            <input type="time" id={`remind-time-${task.TaskId}`} disabled={busy}
+              onBlur={(e) => e.target.value && set(`today ${e.target.value}`)}
+              style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid #d8d1c5" }} />
+          </Box>
           <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "#6b6459" }}>
             Or pick a day
             <input type="date" id={`remind-${task.TaskId}`} min={iso(tomorrow)} disabled={busy}

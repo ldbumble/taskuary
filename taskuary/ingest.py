@@ -12,7 +12,7 @@ from .routing import ask_line, route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
 from .store import task_ref, auto_code_enabled, _now
-from . import senders
+from . import remind, senders
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
 # it is exactly as durable as it needs to be - the feed row reads it to say "held · new sender",
@@ -713,6 +713,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if r.get('reopen'): _reopen(store, tid, msg, actor)
         if pol['action'] == 'escalate': _escalate(store, tid, pol, actor)
         elif (follow or {}).get('urgent'): _mark_urgent(store, tid, follow, actor)
+        if (follow or {}).get('due'): remind.set_due(store, tid, follow['due'], actor)
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
         # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
         # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
@@ -839,6 +840,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
             elif intent.get('urgent'): _mark_urgent(store, same, intent, actor)
+            if intent.get('due'): remind.set_due(store, same, intent['due'], actor)
             return _join_same(store, msg, same, intent, actor, _notes_note())
         if intent['intent'] == 'fyi':
             mid = _land(store, msg, None, 'filed')
@@ -889,6 +891,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                  **({'Assignee': f'agent:{role}'} if role else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         if intent.get('checklist'): store.set_task_checklist(tid, intent['checklist'], 'triage')
+        if intent.get('due'): remind.set_due(store, tid, intent['due'], actor)     # the day it is due, as triage read it
         if intent.get('outputs'):                  # what closes it beyond the reply: emails to other people (slots.py)
             from . import slots
             slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))

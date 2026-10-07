@@ -3267,7 +3267,13 @@ def agent_done(body: AgentDoneBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return selfclose.declare(store, body.task_id, body.summary, body.agent)
 
-class AgentReplyBody(BaseModel): task_id: int; text: str; agent: str = 'agent'
+class AgentFile(BaseModel): name: str; data: str                  # data is base64: the CLI reads the file, the server never opens a path it is handed
+class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
+
+def _agent_files(files):
+    import base64, binascii
+    try: return [(f.name, base64.b64decode(f.data, validate=True)) for f in files]
+    except (binascii.Error, ValueError): raise HTTPException(422, 'an attached file was not valid base64')
 
 @app.post('/api/agent/reply')
 def agent_reply(body: AgentReplyBody, request: Request):
@@ -3277,9 +3283,9 @@ def agent_reply(body: AgentReplyBody, request: Request):
     from . import coder
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return coder.agent_reply(store, body.task_id, body.text, body.agent)
+    return coder.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files))
 
-class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'
+class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
 
 @app.post('/api/agent/draft')
 def agent_draft(body: AgentDraftBody, request: Request):
@@ -3287,7 +3293,10 @@ def agent_draft(body: AgentDraftBody, request: Request):
     from . import slots
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent)
+    from . import coder
+    files = _agent_files(body.files)
+    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent)
+    return {**out, **coder.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
 
 @app.get('/api/tasks/{tid}/diff')
 def task_diff(tid: int, scope: str = 'task'):
@@ -7561,7 +7570,7 @@ def settings():
     from .store import DEFAULT_SETTINGS
     # `assistant_notes*` is a check's private memory of its own last run, one key per report
     # (assistant.notes_key) - bookkeeping, not a knob, however many reports there are
-    rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'pane_geometry')
+    rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'pane_geometry', 'pane_theme')
             and not s['Name'].startswith('report_last_run:') and not s['Name'].startswith('assistant_notes')]
     return {'data': [{**r, 'Default': DEFAULT_SETTINGS.get(r['Name'])} for r in rows]}
 

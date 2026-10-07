@@ -27,7 +27,8 @@ repository. The task brief is your context and John is watching the session - ta
 You do not write the report. Taskuary reads this session's transcript and writes it. The reply
 to whoever asked is yours to write when you know the answer best: save it with
 **`taskuary --reply "<text>"`** (or `--reply-file <path>`) and it is the reply waiting on John's
-approval, in your words. If you do not, Taskuary drafts one from the session. Keep the session readable: say what you determined, what you changed (files, commands,
+approval, in your words. A file the reply sends (a workbook you built, an export) goes with it: add **`--attach <path>`**, once per file -
+words that say "attached" carry nothing on their own. If you do not write the reply, Taskuary drafts one from the session. Keep the session readable: say what you determined, what you changed (files, commands,
 records, ids), and what is left - as you go, in plain lines. When the work is over, say so:
 **`taskuary --done "<one sentence>"`** (AGENT.md: progress and completion).
 

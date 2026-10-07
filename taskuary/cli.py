@@ -142,6 +142,9 @@ def main():
                          "task's pending reply for the owner to approve (you are not sending it), and "
                          "finishing keeps it instead of redrafting. Use - to read it from stdin.")
     ap.add_argument('--reply-file', metavar='PATH', help='--reply, read from a file (for a long or multi-line reply)')
+    ap.add_argument('--attach', action='append', default=[], metavar='PATH',
+                    help='a file that goes with --reply or --draft (repeat for more). If your words say "attached", attach it - '
+                         'otherwise the mail goes out without it. Alone, it adds the file to the reply already saved.')
     # ...and the emails that close a task (slots.py): its checklist lines marked "-> email to" name them
     ap.add_argument('--draft', metavar='TEXT', help="write one of the emails that closes this task (its checklist names them) - "
                                                     "pending for the owner to approve; use with --slot or --to. Use - for stdin.")
@@ -160,7 +163,7 @@ def main():
     # --done goes over HTTP, unlike --note. A note is a database row and any process can write
     # one; ENDING a task needs the live session's scrollback, which exists only inside the
     # running server - this process would find no transcript and wrap an empty one.
-    if args.reply is not None or args.reply_file or args.draft is not None or args.draft_file:
+    if args.reply is not None or args.reply_file or args.draft is not None or args.draft_file or args.attach:
         import os, sys, requests
         try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         except (AttributeError, OSError): pass
@@ -174,7 +177,12 @@ def main():
             try: text = open(path, encoding='utf-8').read()
             except (OSError, UnicodeDecodeError) as e:
                 print(f'not saved: cannot read {path}: {getattr(e, "strerror", None) or e}'); return
-        else: text = sys.stdin.read() if flag == '-' else flag
+        else: text = sys.stdin.read() if flag == '-' else flag or ''
+        import base64
+        files = []
+        for a in args.attach:
+            try: files.append({'name': os.path.basename(a), 'data': base64.b64encode(open(a, 'rb').read()).decode()})
+            except OSError as e: print(f'not saved: cannot read {a}: {e.strerror or e}'); return
         srv = config.load()['server']
         host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
         base = f"http://{host}:{srv.get('port') or 7787}"
@@ -182,14 +190,16 @@ def main():
         try:
             who = os.environ.get('TASKUARY_AGENT') or 'agent'
             r = (requests.post(f'{base}/api/agent/draft', timeout=60, headers=hdr, json={'task_id': int(tid), 'text': text, 'to': args.to,
-                                                                                         'subject': args.subject, 'slot': args.slot, 'agent': who})
-                 if drafting else requests.post(f'{base}/api/agent/reply', timeout=60, headers=hdr, json={'task_id': int(tid), 'text': text, 'agent': who}))
+                                                                                         'subject': args.subject, 'slot': args.slot, 'agent': who, 'files': files})
+                 if drafting else requests.post(f'{base}/api/agent/reply', timeout=60, headers=hdr, json={'task_id': int(tid), 'text': text, 'agent': who, 'files': files}))
             out = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
         except Exception as e:
             print(f'could not reach Taskuary at {base}: {e}'); return
-        print("saved on the task as its result - nobody is waiting on a reply, so nothing will be sent." if out.get('saved') == 'result'
-              else f"{'email' if drafting else 'reply'} saved on the task, waiting on the owner to approve and send it." if out.get('ok')
-              else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
+        if text or not out.get('ok'): print("saved on the task as its result - nobody is waiting on a reply, so nothing will be sent." if out.get('saved') == 'result'
+                                            else f"{'email' if drafting else 'reply'} saved on the task, waiting on the owner to approve and send it." if out.get('ok')
+                                            else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
+        if out.get('attached'): print('attached: ' + ', '.join(out['attached']))
+        for w in out.get('not_attached') or []: print(f'NOT attached - {w}')
         return
     if args.done is not None:
         import os, sys, requests

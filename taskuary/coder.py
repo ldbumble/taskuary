@@ -126,11 +126,31 @@ def own_draft(store, task_id: int):
                              store.pending_review(task_id, 'draft', live_only=False)) if agent_drafted(r)), None)
 
 
-def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None) -> dict:
+def attach_files(store, rid: int, files, agent: str = 'agent') -> dict:
+    """The files the agent hands over with its words (`--attach PATH`) ride on that same review.
+
+    A session rebuilt a workbook, wrote "the list is attached (….xlsx)" and the card said nothing was
+    attached: `--reply` carried words only, so the file it made stayed on its disk and the promise went
+    out empty. Each file goes through verdicts.attach - the owner's own Attach button - so the size cap
+    and the delivery lock hold, and a file that cannot ride says why instead of vanishing."""
+    from . import verdicts
+    done, why = [], []
+    for name, data in files or []:
+        try: verdicts.attach(store, rid, name, data, agent); done.append(name)
+        except ValueError as e: why.append(f'{name}: {e}')
+    return {'attached': done, 'not_attached': why}
+
+
+def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None) -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
     write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
-    the owner approves it like every other reply."""
+    the owner approves it like every other reply. `files` are (name, bytes) pairs to attach; with no
+    text they go on the reply already pending - an agent that forgot the file adds it afterwards."""
     text = str(text or '').strip()
+    if not text and files:
+        rv = store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False)
+        if not rv: return {'ok': False, 'why': 'there is no pending reply to attach to - save one with --reply first'}
+        return {'ok': True, 'review_id': rv['ReviewId'], **attach_files(store, rv['ReviewId'], files, agent)}
     if not text: return {'ok': False, 'why': 'no reply text'}
     held = store.held_review(task_id) or {}
     mid = reply_target(store, task_id) or held.get('MessageId')
@@ -141,7 +161,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         from . import session_artifacts
         art = session_artifacts.result(store, task_id, text, agent)
         store.add_comment(task_id, agent, 'agent', f'{agent} saved its answer on the task as the result - nobody is waiting on a reply, so nothing will be sent.')
-        return {'ok': True, 'saved': 'result', 'artifact_id': art.get('ArtifactId')}
+        return {'ok': True, 'saved': 'result', 'artifact_id': art.get('ArtifactId'),
+                'not_attached': [f'{n}: nobody is waiting on a reply, so there is nothing to attach it to' for n, _ in files or []]}
     live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
     why = f'{agent} wrote this reply in its session - approve to send'
     if held:
@@ -154,7 +175,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if rv.get('MessageId') != mid: store.update_review_message(rid, mid)
     store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent)
     store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
-    return {'ok': True, 'review_id': rid, 'message_id': mid}
+    return {'ok': True, 'review_id': rid, 'message_id': mid, **attach_files(store, rid, files, agent)}
 
 
 # ── the cheap ending ────────────────────────────────────────────────────────────────────

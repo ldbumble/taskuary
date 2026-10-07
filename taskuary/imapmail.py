@@ -158,7 +158,9 @@ def _login(c):
         raise
     verify_pin(M.sock, cfg, imap_h)
     try: M.login(user, c['Secret'])
+    except imaplib.IMAP4.abort: raise          # the connection dropped mid-login: not a password, and not the owner's to fix
     except imaplib.IMAP4.error as e:
+        if not re.search(r'AUTHENTICATIONFAILED|invalid credentials|login failed|authentication failed|incorrect', str(e), re.I): raise
         # the server's own words are b'[AUTHENTICATIONFAILED] Invalid credentials (Failure)' - true, and no help
         with contextlib.suppress(Exception): M.shutdown()
         raise RuntimeError('The mail server refused the password. Gmail and some others need an app password '

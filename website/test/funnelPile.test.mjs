@@ -331,7 +331,10 @@ test("the action words hang on the last thing Taskuary SAID about the item, not 
   // ...but a receipt carrying its way on (Not done -> Try again, a cancel, a sweep's Next) takes the words: drawn under the
   // line above it, a failed act ended on an empty row
   const failed = { id: "r2", role: "receipt", status: "error", chips: [{ verb: "next", label: "Next" }] };
-  assert.equal(lastActIndex([item, failed]), 1);
+  assert.equal(lastActIndex([item, failed]), 0, "a live item card keeps its own words");
+  const proposal = { id: "p1", role: "assistant", proposal: { id: 7 }, card: { kind: "proposal", key: "msg:1" } };
+  assert.equal(lastActIndex([proposal, failed]), 1, "a failed proposal's receipt carries the way on");
+  assert.equal(lastActIndex([{ ...item, done: true }, failed]), 1, "a folded card has nothing left to press");
   assert.equal(lastActIndex([item, { id: "r1", role: "receipt" }]), 0, "a bare receipt still is not");
   assert.equal(lastActIndex([failed, item]), 1, "a newer line takes them back");
   // an answer to a typed question carries them on the turn itself; a surfaced item on its card

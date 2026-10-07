@@ -175,8 +175,11 @@ export const lastSaidIndex = (messages) => {
 };
 // ...except a receipt that CARRIES its way on: "Not done", a cancel, a sweep put Try again or Next on it, and with the
 // words held by the line above they were never drawn - a failed act ended on an empty row (2026-10-07)
+// A LIVE ITEM CARD keeps them, though: its words are its own buttons (Reply, Make a task...), and a receipt under it saying
+// "use the buttons on the card" took them away. A proposal is not such a card - a failed one is exactly the receipt's case.
 export const lastActIndex = (messages) => {
-  const said = lastSaidIndex(messages);
+  const said = lastSaidIndex(messages), m = messages?.[said];
+  if (said >= 0 && said === interactiveCardIndex(messages) && !m.proposal && m.card?.kind !== "proposal") return said;
   for (let index = (messages || []).length - 1; index > said; index -= 1) {
     if (messages[index]?.role === "receipt" && chipsOf(messages[index]).length) return index;
   }

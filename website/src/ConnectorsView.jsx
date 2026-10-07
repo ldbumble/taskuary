@@ -3372,6 +3372,7 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
         if (!alive) return;
         // a wait with no end is a page that never says anything again: ten minutes is long past any real sign-in
         if (data.status === "pending" && Date.now() - flow.at > 600000) {
+          api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/cancel`, { flow: flow.flow }).catch(() => {});   // the listener too
           setFlow(null); setState("error"); setDetail("The sign-in was not finished in ten minutes, so this stopped waiting. Press Sign in with ChatGPT to start a fresh one.");
           return;
         }
@@ -3410,7 +3411,8 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
         <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
           <CircularProgress size={11} /> Finish in the browser tab that opened - this page completes by itself.
           <a href={flow.url} target="_blank" rel="noreferrer">Open it again</a>
-          <Button size="small" onClick={() => { setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
+          <Button size="small" onClick={() => { api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/cancel`, { flow: flow.flow }).catch(() => {});
+            setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
         </Typography>
       ) : (
         <Box><Button variant="contained" disableElevation disabled={busy} onClick={start}>

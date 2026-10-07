@@ -746,6 +746,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const chatEpoch = useRef(0);
   const resettingRef = useRef(false);
   const turnFlight = useRef(false);       // React state updates after the event; this closes same-tick double submits
+  const stopRef = useRef(null);           // the Stop beside the dots: aborts the turn being waited on
   // Pile construction is comparatively expensive. Never let a timer tick and a websocket
   // notification queue duplicate requests in this tab; remember one forced refresh instead.
   const pileFlight = useRef(null);
@@ -787,6 +788,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turn = useCallback(async (body) => {
     setWork([]);
+    const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
       return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only, include_surfaced: body.include_surfaced, exclude: body.exclude,
@@ -797,7 +799,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // endpoint: its invented threads should never look like a model is working behind the page.
     if (DEMO) return plain();
     const token = localStorage.getItem("taskuary_token");
-    const res = await fetch("/api/concierge/stream", { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
+    const res = await fetch("/api/concierge/stream", { method: "POST", signal: stop.signal, headers: { "Content-Type": "application/json", ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
     if (!res.ok) {
       // An old server may not have the streaming door. A selection conflict is authoritative:
       // replaying it through the plain endpoint would submit the same navigation twice.
@@ -1255,8 +1257,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // a typed line that got no answer ended on a red "Assistant request failed (500)" and an empty composer: the line is
       // above, so Try again sends it once more - and Next is there whatever the trouble was
       const why = errText(e), raw = /request failed|network error|stopped without|could not answer/i.test(why);
+      if (!images.length) setText((v) => v || t);        // back in the box: a live card under it keeps the row, and its Try again with it
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "error",
-        text: raw ? "I didn't get an answer through. Nothing was changed." : `Not answered - ${why}`,
+        text: e?.name === "AbortError" ? "Stopped." : raw ? "I didn't get an answer through. Nothing was changed." : `Not answered - ${why}`,
         chips: [{ ask: t, label: "Try again" }, ...((pile?.items || []).length ? [{ verb: "next", label: "Next" }] : [])] }]);
     }
     turnFlight.current = false;
@@ -1467,8 +1470,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (current) {
       try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current })).data?.pile || null; }
       catch (e) {
-        // gone already is done; anything else did NOT happen, and folding the card and walking on said it had
-        if (e?.response?.status !== 404) {
+        // A receipt means the act already landed (a close, a sent reply) and only the settle after it failed - often with
+        // the 422 "unavailable" that closing a task causes: walk on. Without one, gone already (404/422) is done too;
+        // anything else did NOT happen, and folding the card and walking on said it had.
+        if (!receipt && ![404, 422].includes(e?.response?.status)) {
           setNextComing(false);
           setMsgs((m) => [...m.map((x) => (x.done && x.card?.key === current ? { ...x, done: false } : x)),
             { id: `r${Date.now()}`, role: "receipt", status: "error", text: "Not done - Taskuary didn't answer. It is still here; press it again.", chips: [{ verb: "next", label: "Next" }] }]);
@@ -1969,9 +1974,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
                 {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}
-                {busy && !!state?.task?.TaskId && !DEMO && (
-                  <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written. Nothing else changes."
-                    onClick={() => api.post(`/api/tasks/${state.task.TaskId}/assistant/cancel`).catch(() => setErr("It didn't stop - try again in a moment."))}>Stop</button>
+                {busy && turnFlight.current && !DEMO && (
+                  <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written and gives you the chat back."
+                    onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); }}>Stop</button>
                 )}
                 {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
               </div>

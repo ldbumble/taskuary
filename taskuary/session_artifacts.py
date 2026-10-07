@@ -37,11 +37,31 @@ def _write(store, tid: int, label: str, body: str, kind: str, actor: str) -> dic
 def coding(store, tid: int, report: str, transcript: str, actor='coder', final_message: str = '') -> dict:
     """Save the useful outcome, not a repaint-heavy copy of the terminal scrollback."""
     task = store.get_task(tid) or {}
+    ans = answer_since(store, tid)
     body = (f'# {task_ref(tid)} — {task.get("Title") or "Agent session"}\n\n'
+            + (f"## The agent's answer\n\n{ans}\n\n" if ans else '') +
             f'## Session result\n\n{str(report or "(no compact result)").strip()}\n\n'
             + (f'## Final agent response\n\n{str(final_message).strip()}\n\n'
                if str(final_message or '').strip() else ''))
     return _write(store, tid, 'agent-session', body, 'coding_session', actor)
+
+
+def result(store, tid: int, text: str, actor='agent') -> dict:
+    """What the agent answered on work nobody emailed in: there is no one to reply to, so the answer IS the result."""
+    task = store.get_task(tid) or {}
+    return _write(store, tid, 'agent-result', f'# {task_ref(tid)} — {task.get("Title") or "Agent result"}\n\n{str(text).strip()}', 'agent_result', actor)
+
+
+def answer_since(store, tid: int) -> str:
+    """The newest answer the agent saved since the last session record, so a run's record carries what it answered."""
+    arts = store.list_task_artifacts(tid)
+    last = max((str(a.get('CreatedAt') or '') for a in arts if a.get('Kind') == 'coding_session'), default='')
+    ans = [a for a in arts if a.get('Kind') == 'agent_result' and str(a.get('CreatedAt') or '') >= last]
+    if not ans: return ''
+    path = confined(max(ans, key=lambda a: (str(a.get('CreatedAt') or ''), int(a.get('ArtifactId') or 0))).get('Path'))
+    if not path: return ''
+    body = path.read_text(encoding='utf-8')
+    return re.sub(r'^# .*\n+', '', body, count=1).strip()
 
 
 def confined(raw: str):

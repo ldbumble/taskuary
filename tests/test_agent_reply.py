@@ -28,6 +28,12 @@ def task_with(s, inbound=True):
     return tid, mid
 
 
+def kept(s, tid):
+    from taskuary import session_artifacts
+    a = [a for a in s.list_task_artifacts(tid) if a['Kind'] == 'agent_result']
+    return session_artifacts.confined(a[0]['Path']).read_text(encoding='utf-8') if a else ''
+
+
 class NoHook(unittest.TestCase):
     def setUp(self): self._prev, coder.REFRESH = coder.REFRESH, None
     def tearDown(self): coder.REFRESH = self._prev
@@ -71,10 +77,11 @@ class AgentReplyTests(NoHook):
         s.update_review_draft(rid, 'An AI rewrite.', None)                       # "Draft with AI" pressed
         self.assertFalse(coder.agent_drafted(s.get_review(rid)))
 
-    def test_nobody_to_answer_means_nothing_is_saved(self):
+    def test_nobody_to_answer_keeps_it_as_the_result(self):
         s = MemoryStore(); tid, _ = task_with(s, inbound=False)
         out = coder.agent_reply(s, tid, OWN, 'coder')
-        self.assertFalse(out['ok']); self.assertEqual(s.list_reviews('pending'), [])
+        self.assertEqual((out['ok'], out['saved']), (True, 'result')); self.assertEqual(s.list_reviews('pending'), [])
+        self.assertIn(OWN, kept(s, tid))
 
     def test_work_the_owner_started_has_nobody_to_reply_to(self):
         """A brief typed in the chat is the task's only message ('own', from You): the agent's checklist was
@@ -84,7 +91,17 @@ class AgentReplyTests(NoHook):
         s.add_message({'TaskId': tid, 'ExternalId': 'own-1', 'Channel': 'own', 'Subject': 'AP clerk checklist',
                        'FromName': 'You', 'BodyText': 'write a short checklist', 'Status': 'routed'})
         out = coder.agent_reply(s, tid, OWN, 'assistant')
-        self.assertFalse(out['ok']); self.assertEqual(s.list_reviews('pending'), [])
+        self.assertEqual(s.list_reviews('pending'), [])
+        # ...but the answer is what the owner asked for: refusing it threw a whole review away (2026-10-06)
+        self.assertEqual(out['saved'], 'result'); self.assertIn(OWN, kept(s, tid))
+
+    def test_the_run_record_carries_the_answer(self):
+        from taskuary import session_artifacts
+        s = MemoryStore(); tid, _ = task_with(s, inbound=False)
+        coder.agent_reply(s, tid, OWN, 'coder')
+        art = session_artifacts.coding(s, tid, 'Summary: reviewed it', 'transcript', final_message='Saved the reply file.')
+        body = session_artifacts.confined(art['Path']).read_text(encoding='utf-8')
+        self.assertLess(body.index(OWN), body.index('## Session result'))
 
     def test_the_shell_door(self):
         s = MemoryStore(); tid, _ = task_with(s)

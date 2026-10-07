@@ -560,7 +560,9 @@ const artifactTime = (a) => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 };
 export const CoderReport = ({ body, artifacts: all = [] }) => {
-  const artifacts = all.filter((a) => !isPublished(a));
+  // what the agent ANSWERED (session_artifacts.result) is the thing the owner asked for - one click, never inside the details
+  const answers = all.filter((a) => a.kind === "agent_result");
+  const artifacts = all.filter((a) => !isPublished(a) && a.kind !== "agent_result");
   // ...and the pages the session PUBLISHED stay with its summary once the agent is gone - what it made, one click away
   const pages = <PublishedPages pages={all.filter(isPublished)} />;
   const [reader, setReader] = useState(null);
@@ -575,6 +577,28 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
       setReaderError(e?.response?.data?.detail || "Could not open this session result.");
     } finally { setReaderBusy(false); }
   };
+  const readerBox = (
+    <Dialog open={!!reader} onClose={() => !readerBusy && setReader(null)} fullWidth maxWidth="md"
+      PaperProps={{ sx: { borderRadius: 2.5, maxHeight: "88vh" } }}>
+      <DialogTitle sx={{ pb: 0.75 }}>
+        {reader?.artifact?.kind === "agent_result" ? "The agent's answer" : "Session result"}
+        <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25, fontWeight: 400 }}>
+          {reader?.artifact?.name || "Agent session"}
+        </Typography>
+      </DialogTitle>
+      <DialogContent dividers sx={{ bgcolor: "#fffdfb" }}>
+        {readerBusy ? <Box sx={{ py: 5, display: "grid", placeItems: "center" }}><CircularProgress size={24} /></Box>
+          : readerError ? <Alert severity="error">{readerError}</Alert>
+            : <Md text={reader?.text || "Nothing was saved for this session."} />}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setReader(null)}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+  const answer = !!answers.length && (
+    <Button onClick={() => openArtifact(answers[0])} size="small" variant="outlined" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
+      title={answers[0].name || ""} sx={{ textTransform: "none" }}>Read the agent's answer</Button>);
   const text = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim();
   // ^ anchored per line, and the label eats spaces but NOT the newline - letting \s* run on
   // swallowed the separator, so an all-empty report rendered "TRIAGE -> Determination:"
@@ -586,9 +610,11 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
   }
   // free prose (a shell session, a note written by hand) - show it as written
   if (!rows.length) {
-    return text || all.some(isPublished) ? <>
+    return text || all.some(isPublished) || answer ? <>
       {text && <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, overflowWrap: "anywhere" }}>{text}</Typography>}
-      <Box sx={{ mt: text ? 1 : 0 }}>{pages}</Box>
+      {answer && <Box sx={{ mt: text ? 1 : 0 }}>{answer}</Box>}
+      <Box sx={{ mt: text || answer ? 1 : 0 }}>{pages}</Box>
+      {readerBox}
     </> : null;
   }
   // Lead with one normal paragraph. The supporting fields are evidence, not the main reading
@@ -603,7 +629,8 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
             whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{result.text}</Typography>
         </Box>
       )}
-      {all.some(isPublished) && <Box sx={{ px: 1.35, pb: 1.15, pt: result ? 0 : 1.15 }}>{pages}</Box>}
+      {answer && <Box sx={{ px: 1.35, pb: 1.15, pt: result ? 0 : 1.15 }}>{answer}</Box>}
+      {all.some(isPublished) && <Box sx={{ px: 1.35, pb: 1.15, pt: result || answer ? 0 : 1.15 }}>{pages}</Box>}
       {!!(detailRows.length || artifacts.length) && (
         <Box component="details" sx={{ borderTop: result ? `1px solid ${BORDER}` : "none",
           "&[open] > summary": { borderBottom: `1px solid ${BORDER}` } }}>
@@ -643,23 +670,7 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
           </Box>
         </Box>
       )}
-      <Dialog open={!!reader} onClose={() => !readerBusy && setReader(null)} fullWidth maxWidth="md"
-        PaperProps={{ sx: { borderRadius: 2.5, maxHeight: "88vh" } }}>
-        <DialogTitle sx={{ pb: 0.75 }}>
-          Session result
-          <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25, fontWeight: 400 }}>
-            {reader?.artifact?.name || "Agent session"}
-          </Typography>
-        </DialogTitle>
-        <DialogContent dividers sx={{ bgcolor: "#fffdfb" }}>
-          {readerBusy ? <Box sx={{ py: 5, display: "grid", placeItems: "center" }}><CircularProgress size={24} /></Box>
-            : readerError ? <Alert severity="error">{readerError}</Alert>
-              : <Md text={reader?.text || "Nothing was saved for this session."} />}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setReader(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      {readerBox}
     </Box>
   );
 };

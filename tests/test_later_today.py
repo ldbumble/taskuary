@@ -110,3 +110,10 @@ def test_settle_carries_the_sentence(s):
     with cal(), mock.patch.object(s, 'set_funnel_state') as put:
         out = funnel.settle(s, 'mail:1', 'later')
     assert put.call_args[0][1] == 'later' and out['says'].startswith("I'll bring it back")
+
+
+def test_the_receipt_says_when_it_comes_back_and_who_is_watched():
+    from taskuary import concierge
+    assert concierge._outcome_line('item.settle', {'verb': 'later'}, {'says': "I'll bring it back at 2:35."}) == " I'll bring it back at 2:35."
+    assert concierge._outcome_line('review.approve', {}, {'watching': "Sent. I'll watch for Erin's answer."}).endswith("Erin's answer.")
+    assert concierge._outcome_line('item.settle', {'verb': 'done'}, {'closed': 7, 'says': 'x'}) != ' x'

@@ -64,7 +64,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
-import { completionLine, waitingEmails,
+import { completionFact, completionLine, waitingEmails,
   AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
@@ -845,6 +845,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const inRow = !!canvas;
   const [remindAt, setRemindAt] = useState(null);
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
+  // the task's own controls ride in the header strip only while a session hides the task card - and never on the canvas,
+  // whose row holds them
+  const headControls = sessionView && !inRow && notDone;
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
   const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
@@ -1005,14 +1008,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {/* on a phone the strip WRAPS: ref and title keep the first line, the controls take the next - one line
                     pushed Next, Expand and the X off the right edge (the canvas redesign's phone pass, 2026-09-29) */}
-                <Box sx={{ display: "flex", gap: 0.9, rowGap: 0.5, alignItems: "center", flexWrap: { xs: "wrap", sm: "nowrap" } }}>
-                  <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
-                    display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 600 }}>1</Box>
+                {/* ...only while there ARE controls to wrap. On the assistant's canvas there are none up here, and the strip still
+                    wrapped: Expand and the X took a row of their own under a cut title (the 2026-10-07 design pass) */}
+                <Box sx={{ display: "flex", gap: 0.9, rowGap: 0.5, alignItems: "center",
+                  flexWrap: headControls ? { xs: "wrap", sm: "nowrap" } : "nowrap" }}>
+                  {/* THE (1) IS THE TASK STEP'S NUMBER, so it sits on whichever line is that step's heading: up here while the
+                      step is open (or a session hides it), on the folded Task strip once another step is open - it stood up
+                      here beside a folded "Task" row that had none, and the count read 1 · Task · 2 · 3 */}
+                  {(stage === "task" || sessionView) && <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
+                    display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 600 }}>1</Box>}
                   <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
                     letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5 }}>{detail.ref}</Typography>
                   <Typography sx={{ color: INK, flex: 1, fontWeight: 600,
                     fontSize: liveSession ? 12.5 : 13,
-                    minWidth: { xs: 90, sm: 180 }, flexBasis: { xs: "calc(100% - 90px)", sm: "auto" }, letterSpacing: "-.005em" }} noWrap>
+                    minWidth: headControls ? { xs: 90, sm: 180 } : 0, flexBasis: headControls ? { xs: "calc(100% - 90px)", sm: "auto" } : "auto",
+                    letterSpacing: "-.005em" }} noWrap>
                     {t.Title}
                   </Typography>
                   {/* the list row said this and the task page did not, so a held task looked merely open */}
@@ -1024,7 +1034,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       the space (2026-09-16: "if agent in progress we want it small to give the most
                       space to the agent canvas"). The four controls ride up here instead: the same
                       four, in the same order, labels dropped to icons after the first. */}
-                  {sessionView && !inRow && !["done", "dropped"].includes(t.Status) && (
+                  {headControls && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
                       <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={11} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 13 }} />}
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
@@ -1105,8 +1115,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         checklist got, and what the task is. The whole strip reopens the task. */}
                     {stage !== "task" && (
                       <Box onClick={() => setOpenStage("task")}
-                        sx={{ display: "flex", alignItems: "center", gap: 0.85, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" } }}>
-                        <Typography sx={{ ...label, flexShrink: 0 }}>Task</Typography>
+                        sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" },
+                          opacity: 0.72, "&:hover": { opacity: 1 } }}>
+                        {/* the SAME heading as Agent work and Close out under it - circle, title, then what it holds - where it
+                            was a small-caps "Task" label with no number, beside a (1) still up in the header */}
+                        <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: PALETTE.slate, color: "#fff",
+                          display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>1</Box>
+                        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3, flexShrink: 0 }}>Task</Typography>
                         <Typography noWrap sx={{ color: DIM, fontSize: 12.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
                         {!inRow && !["done", "dropped"].includes(t.Status) && (
                           <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
@@ -1318,14 +1333,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* no Status box: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12). A hand-set
                             "in progress" was read as an agent's at the next restart, and the list ignored it */}
                         <Select value={t.Priority || "normal"} onChange={(e) => patch({ Priority: e.target.value })}
-                          sx={chipSel} title="Priority">
+                          sx={chipSel} title="Priority" renderValue={(v) => `${v} priority`}>
                           {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
                         </Select>
                         <Select value={t.Assignee || ""} onChange={(e) => {
                           const assignee = e.target.value, worker = assignedAgent(assignee);
                           patch({ Assignee: assignee });
                           if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
-                        }} sx={chipSel} title="Who works it" displayEmpty renderValue={assigneeLabel}>
+                        }} sx={chipSel} title="Who works it" displayEmpty renderValue={(v) => (v ? assigneeLabel(v) : "nobody on it")}>
                           <MenuItem value="" sx={{ fontSize: 12 }}>unassigned</MenuItem>
                           <MenuItem value="owner" sx={{ fontSize: 12 }}>you</MenuItem>
                           {agents.map((name) => <MenuItem key={name} value={agentAssignee(name)} sx={{ fontSize: 12 }}>
@@ -1345,10 +1360,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {["done", "dropped"].includes(t.Status) && (
                         <Typography variant="caption" sx={{ color: FAINT }}>{foldedFacts}</Typography>
                       )}
-                      <Box sx={{ flex: 1, minWidth: 12 }} />
-                      <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 340 }}>
-                        {completionLine(completionIsManual, (detail?.checklist || []).some((i) => i.out && !i.done), !replyMessage)}
-                      </Typography>
+                      {/* WHAT HAPPENS AT THE END, said in a few words on the pills' own line; the sentence that explained it
+                          sat right-aligned over two lines and is the tooltip now (the 2026-10-07 design pass) */}
+                      {!["done", "dropped"].includes(t.Status) && <Typography variant="caption" sx={{ color: DIM, ml: 0.4 }}
+                        title={completionLine(completionIsManual, (detail?.checklist || []).some((i) => i.out && !i.done), !replyMessage)}>
+                        {completionFact(completionIsManual, (detail?.checklist || []).some((i) => i.out && !i.done), !replyMessage)}
+                      </Typography>}
                     </Box>
                     </>}
                   </Box>
@@ -1477,7 +1494,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {startingAgent === "general" ? "Starting…" : "Send to agent"}
                       </Button>}
                       <Typography variant="caption" sx={{ color: FAINT, ml: inRow ? 0 : 1 }}>
-                        {inRow ? "Send to agent (below) starts the regular assistant with these choices, this task and its messages."
+                        {inRow ? "Send to agent starts it with these choices, this task and its messages."
                           : "Starts the regular assistant with this task and its messages."}
                       </Typography>
                     </Box>
@@ -1640,13 +1657,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         ? (replyMessage ? "Your reply to the sender and the last act on GitHub - approving them closes the task." : "The last act on GitHub - approving it closes the task.")
                       : replyMessage
                         ? (owesEmails ? "What goes back to the sender, and the emails this task owes. It closes when they are all sent or dropped."
-                          : "What goes back to the sender. Sending it closes the task.")
+                          : pendingReview ? "What goes back to the sender." : "What goes back to the sender. Sending it closes the task.")
                       : owesEmails
                         ? "The emails this task owes - each waits for your yes. It closes when the last is sent or dropped."
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
                     chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact />
                       : <LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
-                    tone={PALETTE.oxblood} {...stageProps("reply")}
+                    /* oxblood is the one colour that means "this is on you" - a draft or an email waiting for your yes. Every card
+                       wore it on this step, whatever it held (the 2026-10-07 design pass) */
+                    tone={pendingReview || emailsWaiting ? PALETTE.oxblood : PALETTE.oat} {...stageProps("reply")}
                     action={!inRow && stage !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
@@ -1690,10 +1709,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
                             {/* no More button: with these on the surface there is nothing left to hide */}
                             {pendingReview
-                              ? "Nothing is sent until you approve it."
+                              ? (inRow ? "" : "Nothing is sent until you approve it.")
                               : sentReview
                               ? `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${String(t?.Status || "") === "done" ? "The task closed with it." : "The task stays open while its agent is still working."}`
-                              : "A reply is optional. Starting or stopping an agent does not send one."}
+                              : inRow ? "" /* the chip already says "not drafted" */ : "A reply is optional. Starting or stopping an agent does not send one."}
                           </Typography>
                         </Box>
                       )}

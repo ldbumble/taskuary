@@ -52,7 +52,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // ...but a view with NO PANE in it (a stopped agent, a note, a closed task) is only as tall as what it says: the full
         // height left a screen of blank canvas under three short bars (the owner, 2026-09-30: "what's with extra space???").
         // A pane - terminal, agent chat, browser - still gets the one height it is sized for, so the pty is never grown.
-        ...(!pin && !phone ? { "&:not(:has(.xterm, [class*='tq-aui'], canvas, iframe))": { height: "auto", maxHeight: h } } : {}),
+        // ...on a phone too: there it stood the full screen under a three-row task, 350px of cream below Context & history
+        // (the 2026-10-07 design pass). Pinned (Expand) it keeps the screen.
+        ...(!pin ? { "&:not(:has(.xterm, [class*='tq-aui'], canvas, iframe))": { height: "auto", maxHeight: h } } : {}),
         ...(pin ? { position: "fixed", top: 8, left: pin.left, width: pin.width, zIndex: 1350 } : {}) }}>
       {/* a COLUMN that shrinks to the box: the task view inside is a flex column too, so its own scroller gets what is left (TaskPage) */}
       <Box sx={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>

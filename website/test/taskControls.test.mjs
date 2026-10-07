@@ -97,7 +97,10 @@ test("a live session still lets you act on the TASK", () => {
   // (2026-09-16) a live session had no way to complete, hand off, split or reject the task. The
   // header carries them for exactly that window - `sessionView`, which is the live session unless
   // the owner has stepped back to the task behind it (peek), where the card and its controls return.
-  const at = tasks.indexOf('{sessionView && !inRow && !["done", "dropped"].includes(t.Status) && (');
+  // the condition has a name now (it also decides whether the header strip may wrap on a phone)
+  assert.match(tasks, /const headControls = sessionView && !inRow && notDone;/);
+  assert.match(tasks, /const notDone = !!t && !\["done", "dropped"\]\.includes\(t\.Status\);/);
+  const at = tasks.indexOf("{headControls && (");
   assert.notEqual(at, -1, "the header must carry the task controls while a session fills the page");
   const bar = tasks.slice(at, at + 2200);
   // Mark done goes through askFinish, which asks first while an agent session is live (2026-09-25)

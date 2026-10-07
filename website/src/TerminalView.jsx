@@ -13,7 +13,7 @@ import "@xterm/xterm/css/xterm.css";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
-import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
+import { BORDER, CATPPUCCIN, FAINT, XTERM_THEME, mono } from "./theme.jsx";
 import { MicButton } from "./ui.jsx";
 import { adoptPtyGeometry, canRevealTerminal, changedTerminalSize, safeTerminalRows, usableTerminalBox } from "./terminalSizing.js";
 import { pastedImageFiles, pastedImagePrompt } from "./terminalInput.js";
@@ -31,7 +31,29 @@ const TERM_FONT = "'Cascadia Mono', 'JetBrains Mono', 'Fira Code', Consolas, 'Co
 // The palettes people actually run their terminals in. A CLI like codex has no theme command
 // of its own - it paints with the TERMINAL's colors - so this picker is how you restyle it
 // (claude additionally themes itself; see ThemeHint). Choice sticks per browser.
+// WHITE FIRST (the owner, 2026-10-07): a pane is white with dark text unless you pick otherwise. The light
+// palettes come first; every dark one is still a pick away.
 const THEMES = {
+  "GitHub Light": { background: "#ffffff", foreground: "#1f2328", cursor: "#1f2328", selectionBackground: "#cce5ff",
+    black: "#24292f", red: "#cf222e", green: "#116329", yellow: "#4d2d00", blue: "#0969da",
+    magenta: "#8250df", cyan: "#1b7c83", white: "#6e7781", brightBlack: "#57606a", brightRed: "#a40e26",
+    brightGreen: "#1a7f37", brightYellow: "#633c01", brightBlue: "#218bff", brightMagenta: "#a475f9",
+    brightCyan: "#3192aa", brightWhite: "#8c959f" },
+  "Catppuccin Latte": { background: "#eff1f5", foreground: "#4c4f69", cursor: "#dc8a78", selectionBackground: "#acb0be",
+    black: "#5c5f77", red: "#d20f39", green: "#40a02b", yellow: "#df8e1d", blue: "#1e66f5",
+    magenta: "#ea76cb", cyan: "#179299", white: "#acb0be", brightBlack: "#6c6f85", brightRed: "#d20f39",
+    brightGreen: "#40a02b", brightYellow: "#df8e1d", brightBlue: "#1e66f5", brightMagenta: "#ea76cb",
+    brightCyan: "#179299", brightWhite: "#bcc0cc" },
+  "Solarized Light": { background: "#fdf6e3", foreground: "#657b83", cursor: "#586e75", selectionBackground: "#eee8d5",
+    black: "#073642", red: "#dc322f", green: "#859900", yellow: "#b58900", blue: "#268bd2",
+    magenta: "#d33682", cyan: "#2aa198", white: "#eee8d5", brightBlack: "#002b36", brightRed: "#cb4b16",
+    brightGreen: "#586e75", brightYellow: "#657b83", brightBlue: "#839496", brightMagenta: "#6c71c4",
+    brightCyan: "#93a1a1", brightWhite: "#fdf6e3" },
+  "One Light": { background: "#fafafa", foreground: "#383a42", cursor: "#526fff", selectionBackground: "#e5e5e6",
+    black: "#383a42", red: "#e45649", green: "#50a14f", yellow: "#c18401", blue: "#4078f2",
+    magenta: "#a626a4", cyan: "#0184bc", white: "#a0a1a7", brightBlack: "#4f525e", brightRed: "#e06c75",
+    brightGreen: "#98c379", brightYellow: "#e5c07b", brightBlue: "#61afef", brightMagenta: "#c678dd",
+    brightCyan: "#56b6c2", brightWhite: "#ffffff" },
   "Catppuccin Mocha": XTERM_THEME,
   Dracula: { background: "#282a36", foreground: "#f8f8f2", cursor: "#f8f8f2", selectionBackground: "#44475a",
     black: "#21222c", red: "#ff5555", green: "#50fa7b", yellow: "#f1fa8c", blue: "#bd93f9",
@@ -54,9 +76,13 @@ const THEMES = {
     brightGreen: "#98c379", brightYellow: "#d19a66", brightBlue: "#61afef", brightMagenta: "#c678dd",
     brightCyan: "#56b6c2", brightWhite: "#ffffff" },
 };
+const LIGHT = new Set(["GitHub Light", "Catppuccin Latte", "Solarized Light", "One Light"]);
+export const DEFAULT_THEME = "GitHub Light";
+export const isLightTheme = (n) => LIGHT.has(n);
+let toldServer = null;                                   // the light/dark this page last told the server (pane_theme)
 const savedTheme = () => {
-  try { const n = localStorage.getItem("tq-term-theme"); return THEMES[n] ? n : "Catppuccin Mocha"; }
-  catch { return "Catppuccin Mocha"; }
+  try { const n = localStorage.getItem("tq-term-theme"); return THEMES[n] ? n : DEFAULT_THEME; }
+  catch { return DEFAULT_THEME; }
 };
 
 // How much of the run fits on screen. A coding CLI writes far more than it asks, so the
@@ -397,6 +423,10 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
   useEffect(() => {                                  // live restyle, no reconnect
     try { localStorage.setItem("tq-term-theme", themeName); } catch { /* private mode */ }
     if (termRef.current) termRef.current.options.theme = THEMES[themeName];
+    // ...and the server opens the NEXT Claude session in the matching theme (terminal.claude_theme_args): Claude
+    // paints its own text colours, white under its dark theme, and they vanished on a white pane
+    const mode = isLightTheme(themeName) ? "light" : "dark";
+    if (mode !== toldServer) { toldServer = mode; api.patch("/api/settings", { name: "pane_theme", value: mode }).catch(() => { toldServer = null; }); }
   }, [themeName]);
   // resizing the FONT resizes the terminal: same pane, more rows. The pty has to be told, or
   // the CLI keeps painting for the old window and its TUI wraps against nothing.
@@ -504,7 +534,8 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
           title="terminal palette"
           sx={{ ...mono, fontSize: 10, bgcolor: "transparent", color: "#867f74", border: "none",
             outline: "none", cursor: "pointer" }}>
-          {Object.keys(THEMES).map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
+          {[["Light", true], ["Dark", false]].map(([g, light]) => (
+            <optgroup key={g} label={g}>{Object.keys(THEMES).filter((n) => isLightTheme(n) === light).map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}</optgroup>))}
         </Box>
       </Box>}
       {/* A scrollbar on the session itself, the way a console has one.
@@ -529,7 +560,8 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
           opacity: "var(--sbar, 0) !important", pointerEvents: "auto !important", visibility: "visible !important",
           // a visible TRACK, not just a slider: a bare thumb floating on a dark pane still reads
           // as "there is no scrollbar" - the channel is what says the pane scrolls
-          background: "rgba(255,255,255,.06)", borderLeft: "1px solid rgba(255,255,255,.08)" },
+          ...(isLightTheme(themeName) ? { background: "rgba(0,0,0,.04)", borderLeft: "1px solid rgba(0,0,0,.08)" }
+            : { background: "rgba(255,255,255,.06)", borderLeft: "1px solid rgba(255,255,255,.08)" }) },
         "& .xterm-scrollable-element > .scrollbar.vertical > .slider": {
           borderRadius: 99, width: "8px !important", marginLeft: "3px", transition: "background .15s" },
         "& .xterm-scrollable-element > .scrollbar.vertical:hover > .slider": { width: "11px !important" } }} />
@@ -724,32 +756,26 @@ export const TerminalPane = React.memo(TerminalPaneOuter,
     && a.expectBrowser === b.expectBrowser && a.canFull === b.canFull);
 TerminalPane.displayName = "TerminalPane";
 
-// Taskuary's terminals default to Catppuccin Mocha, switchable per pane (top-right picker)
-// - that palette is what styles codex and every other CLI, since a TUI paints with the
-// terminal's colors. Claude Code additionally themes ITSELF, which is set inside Claude
-// Code - a command to run there, not something to write into somebody's global CLI config
-// behind their back.
+// Taskuary's terminals default to a WHITE palette (GitHub Light), switchable per browser (top-right picker,
+// light and dark groups) - that palette is what styles codex and every other CLI, since a TUI paints with the
+// terminal's colors. Claude Code paints its own: a new Claude session opens in Claude's light or dark theme to
+// match (terminal.claude_theme_args, per session - the owner's global CLI config is never written), and a custom
+// Claude theme they picked themselves is left alone.
 //
 // The knobs it describes sit at 0.62 opacity until hovered, which is the whole reason this
 // exists: nobody finds a discreet control they were never told about. `cli` narrows it to one
-// row - Claude Code's own /theme is noise under a codex pane, which paints with the terminal's
-// palette and has no theme command of its own.
+// row - Claude's line is noise under a codex pane, which paints with the terminal's palette.
 export const ThemeHint = ({ cli = "" }) => (
   <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
     The session's top-right corner holds both knobs: A− / A+ set the text size, 7px to 14px with
     the current one shown between them (7 fits roughly twice the run on screen — the leading
     tightens with it, so the rows are gained rather than spent on whitespace), and the picker switches the terminal
-    palette (Catppuccin, Dracula, Tokyo Night, Gruvbox, One Dark) — that restyles codex and any
-    other CLI, since a TUI paints with the terminal's colors.
+    palette — light ones first (GitHub Light is the default; Catppuccin Latte, Solarized Light, One Light), then the
+    dark ones (Catppuccin Mocha, Dracula, Tokyo Night, Gruvbox, One Dark). That restyles codex and any other CLI,
+    since a TUI paints with the terminal's colors.
     {(!cli || cli === "claude") && <>
-      {" "}To match Catppuccin inside Claude Code itself, run{" "}
-      <Box component="code" sx={{ ...mono, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 1,
-        px: 0.75, py: 0.25, fontSize: 11, cursor: "pointer" }}
-        title="click to copy"
-        onClick={() => navigator.clipboard?.writeText("/plugin install catppuccin@matcra587/claude-themes")}>
-        /plugin install catppuccin@matcra587/claude-themes
-      </Box>{" "}
-      in a Claude Code session, then pick a flavor with /theme.
+      {" "}Claude Code paints its own colours, so the next Claude session you start opens in its light or dark theme to
+      match — one already running keeps the theme it opened with. A custom theme you chose with /theme is left alone.
     </>}
   </Typography>
 );

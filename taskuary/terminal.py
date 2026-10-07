@@ -788,6 +788,31 @@ def agent_argv(profile: dict, model: str = None) -> list:
     return _codex_hook_trust(_codex_windows_auto(_codex_browser_tui(argv)))
 
 
+# THE PANE'S PALETTE IS CLAUDE'S THEME. Claude Code paints with its OWN colours, not the terminal's: its dark theme
+# writes text in explicit white, which vanished on a white pane, and its light theme writes black, which vanishes on a
+# dark one. The pane's corner picker records light or dark (`pane_theme`, blank = the white default) and a new session
+# opens in the matching theme. `--settings` holds for this session only - the owner's ~/.claude/settings.json is never
+# touched - and it is a FILE, not inline JSON, because an npm .CMD shim runs through cmd.exe, which mangles quotes.
+# Claude's own `auto` (an OSC 11 query) was tried first: the answer never reaches it through ConPTY (2026-10-07).
+# A theme the owner chose for themselves - a plugin's, through /theme - is theirs and is left alone; the daltonized and
+# ansi variants keep their kind and only swap light for dark.
+def claude_theme_args(store, own: str = None) -> list:
+    from . import config
+    mode = 'dark' if str(store.get_setting('pane_theme') or '').strip() == 'dark' else 'light'
+    if own is None:
+        try: own = str(json.loads(open(os.path.join(os.path.expanduser('~'), '.claude', 'settings.json'), encoding='utf-8').read()).get('theme') or '')
+        except (OSError, ValueError, AttributeError): own = ''
+    kind = own.split('-', 1)[1] if own.startswith(('dark-', 'light-')) else ''
+    if own and own not in ('dark', 'light', 'auto') and not kind: return []
+    mode = f'{mode}-{kind}' if kind else mode
+    f = config.home() / f'claude-theme-{mode}.json'
+    try:
+        if not f.exists(): f.write_text(json.dumps({'theme': mode}), encoding='utf-8')
+    except OSError as e:
+        logger.debug(f'claude theme file not written: {e}'); return []
+    return ['--settings', str(f)]
+
+
 def _codex_hook_trust(argv: list) -> list:
     """Codex runs a user-scope hook only once it is trusted inside its TUI, which a pane never is; the flag
     is what makes hooks.py's events arrive (2026-09-20). A profile saved before the flag existed - the
@@ -961,6 +986,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # without it answered "'claude' not found on PATH" to a task whose real problem was that nothing
     # said where it belonged - the wrong sentence, and the one the owner cannot act on.
     argv = agent_argv(profile, model) if agent else default_shell()
+    if agent and cli_named(profile, argv) == 'claude' and '--settings' not in argv: argv = [*argv, *claude_theme_args(store)]
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
     # differ per CLI, and the typed road is the one verified against every TUI here.

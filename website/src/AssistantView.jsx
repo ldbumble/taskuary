@@ -44,7 +44,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
@@ -100,6 +100,8 @@ const errText = (e) => {
     : "Next changed while the list refreshed. Review the updated Next item and press Next again.");
   return (typeof detail === "string" ? detail : null) || e?.message || "Taskuary could not answer.";
 };
+// what an empty rail offers: the same doors as the welcome block (runChip knows these three)
+const IDLE_CHIPS = [{ verb: "newtask", label: "New task" }, { verb: "setupask", label: "Set something up" }, { verb: "tour", label: "Set up Taskuary" }];
 const speakOn = () => { try { return localStorage.getItem("taskuary_speak") === "1"; } catch { return false; } };
 const speak = (text) => {
   if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
@@ -195,8 +197,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
   // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
   // funnel", so from fifteen: the count is the encouragement - no header, no total)
   const left = items.filter((i) => !i.settling && i.lane !== "working").length;
-  const cheer = !left || left > 15 ? "" : left === 1 ? "One more and the pipe is clear."
-    : left <= 5 ? `${left} to go, then the pipe is clear.` : `${left} away from a clear pipe.`;
+  const cheer = !left || left > 15 ? "" : left === 1 ? "One more and you're clear."
+    : left <= 5 ? `${left} to go, then you're clear.` : `${left} away from clear.`;
 
   // ── the ranked tail, when a connector is in bulk mode ───────────────────────────────────────
   // The server says WHICH row wears the pill and how many wait behind it; on an install that ranks
@@ -383,7 +385,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
                     {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it */}
                     <div className="card" onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key, `Show me “${i.title}”`))}
-                      title={[i.who, meta.word, i.ref, i.promoted ? 'triage moved it up' : '', i.why].filter(Boolean).join(" · ")}>
+                      title={[i.who, meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         <span className="logo"><SourceMark item={i} size={15} /></span>
                         {!!rankNo[i.key] && <span className="tq-pile-rank" title={`#${rankNo[i.key]} of this batch, by importance`}>
@@ -392,7 +394,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                         {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
                             match a row to the Tasks tab, and it was only ever in the tooltip. */}
                         {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
-                        {i.settling && <span className="tq-pile-tag">triaging…</span>}
+                        {i.settling && <span className="tq-pile-tag">reading…</span>}
                         {!!word && (
                           <span className="tq-pile-word"
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
@@ -495,7 +497,7 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
     setBusy(false); onDone?.();
   };
   useVerbs("retriage", [
-    { id: "retriage", label: "Retry triage", group: "decide", tone: "p", disabled: busy, run: () => go(false), title: "Ask the AI to judge this one again" },
+    { id: "retriage", label: "Sort it again", group: "decide", tone: "p", disabled: busy, run: () => go(false), title: "Ask the AI to read this one again and decide where it goes" },
     ...(failed > 1 ? [{ id: "retriage-all", label: `Retry all that failed (${failed})`, group: "decide", tone: "s", disabled: busy, run: () => go(true),
       title: "Every message triage failed on, oldest first - whatever its age" }] : []),
   ], on);
@@ -546,9 +548,12 @@ function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false
   // NEVER A DEAD END (the owner, 2026-09-30: "it can write that ... but then should move to next or at least have buttons to
   // navigate"): the newest line with nothing to press - a notice, an answer, a line read back from history - offers Next
   // while the pipe still holds something. Not under an FYI batch: its own "All read, next" IS Next (the owner, 2026-10-02)
+  // ...and with the rail EMPTY it offered nothing at all: "Nothing's waiting." ended on no button, and the morning line took
+  // the place of the welcome block's own. What there is to do then is start something - the welcome block's doors, as words.
+  const idle = !(actions.items || []).length;
   const chips = barHolds && !m.card ? []          // the task view's own row under the chat holds its words, Next included
-    : said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis" || !(actions.items || []).length
-    ? said : [{ verb: "next", label: "Next" }];
+    : said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis"
+    ? said : idle ? IDLE_CHIPS : [{ verb: "next", label: "Next" }];
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
@@ -1084,7 +1089,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const landed = useCallback((data) => {
     if (data.exhausted && !only.current?.startsWith("view:")) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
     const card = data.item ? { ...data.item } : null;
-    setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], card }]);
+    // the end of the walk's "Open TQ-12" words come as `chips`: dropped here, its only button was a Next that said it again
+    setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }]);
     currentRef.current = card;
     if (card) { setCurrent(card.key); setCurrentItem(card); } else { setCurrent(null); setCurrentItem(null); }
     say(data.say);
@@ -1181,7 +1187,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const epoch = chatEpoch.current;
     const said = "Walk me through my tasks.";
     setStarting(true); setErr("");
-    setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: said }]);
+    const lineId = `u${Date.now()}`;
+    setMsgs((m) => [...m, { id: lineId, role: "user", text: said }]);
     try {
       only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : (pile?.canonical ? null : what);
       selectionRef.current = null;
@@ -1194,8 +1201,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       if (!currentRef.current || currentRef.current.surfaced) await surface(null, null);
     } catch (e) {
       // the owner's line is on screen now, so a failure has to be answered on screen too -
-      // an unhandled rejection would leave "Walk me through my tasks." sitting there alone
-      setErr(errText(e));
+      // an unhandled rejection would leave "Walk me through my tasks." sitting there alone. The line is taken back, so the
+      // welcome block (drawn on an empty chat) returns with its button - kept, it hid the only way to try again
+      setMsgs((m) => m.filter((x) => x.id !== lineId));
+      setErr(`The walk didn't start - ${errText(e)}. Press Walk me through my tasks to try again.`);
     } finally {
       startFlight.current = false;
       setStarting(false);
@@ -1242,7 +1251,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         if (prop?.auto) await runProposal(prop);                   // a plain verb on the item on the table: no button to press
         else if (!prop && data.decision) await decide(data.decision, data);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
       }
-    } catch (e) { setErr(errText(e)); }
+    } catch (e) {
+      // a typed line that got no answer ended on a red "Assistant request failed (500)" and an empty composer: the line is
+      // above, so Try again sends it once more - and Next is there whatever the trouble was
+      const why = errText(e), raw = /request failed|network error|stopped without|could not answer/i.test(why);
+      setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "error",
+        text: raw ? "I didn't get an answer through. Nothing was changed." : `Not answered - ${why}`,
+        chips: [{ ask: t, label: "Try again" }, ...((pile?.items || []).length ? [{ verb: "next", label: "Next" }] : [])] }]);
+    }
     turnFlight.current = false;
     setBusy(false);
   };
@@ -1292,7 +1308,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       }
       if (verb === "setting" || verb === "forwarded") { loadPile(); return; }   // Taskuary put these on the task itself
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: cur?.ref,
-                              text: `That needs a confirmation card and none came back${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Say it again.` }]);
+                              text: `I couldn't line that up${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Say it again, or use the buttons on the card.`, chips: [{ verb: "next", label: "Next" }] }]);
     } catch (e) { setErr(errText(e)); }
   };
   // the confirmation button (PW-124/125): the structured proposal by id and version - never a phrase sent
@@ -1312,7 +1328,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // item's other verbs, Next - it said "Not done" and offered nothing (2026-09-29)
       // (the repositories stay on the proposal card's own picker here - the chat has them only where there is no card)
       const chips = out.status !== "done" && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
-        : step === "offer" ? [{ verb: "next", label: "Next" }] : [];
+        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: "Next" }] : [];
       setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
       onChanged?.();
@@ -1365,6 +1381,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const runChip = async (c, anchor) => {
     if (busy || resetting || handoff || !c) return;
     if (c.ask) { send(c.ask); return; }
+    if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
+    if (c.verb === "setupask") { askSetup(); return; }
+    if (c.verb === "tour") { await setup(); return; }
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
     if (c.verb === "next") { surface(null, null, key); return; }
@@ -1418,7 +1437,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     try { await api.delete(`/api/operations/${p.id}`); } catch { /* it may be gone already */ }
     const out = afterCancel(p);
     setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status } } : x)),
-                     { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
+                     { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref, chips: [{ verb: "next", label: "Next" }] }]);
   };
   // a card did its thing: say so in the thread, then move on
   // the table is put down - nothing is chosen in its place. Walking on is advance(), which is this
@@ -1445,7 +1464,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     setNextComing(true);
     let pile = null;
     // `only` rides along so the rail comes back captured under the scope this page walks with
-    if (current) { try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current })).data?.pile || null; } catch { /* it may already be gone */ } }
+    if (current) {
+      try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current })).data?.pile || null; }
+      catch (e) {
+        // gone already is done; anything else did NOT happen, and folding the card and walking on said it had
+        if (e?.response?.status !== 404) {
+          setNextComing(false);
+          setMsgs((m) => [...m.map((x) => (x.done && x.card?.key === current ? { ...x, done: false } : x)),
+            { id: `r${Date.now()}`, role: "receipt", status: "error", text: "Not done - Taskuary didn't answer. It is still here; press it again.", chips: [{ verb: "next", label: "Next" }] }]);
+          return;
+        }
+      }
+    }
     advance(pile);
   };
   // Setting Taskuary up: the scripted walk, one stop per message so the conversation keeps the
@@ -1494,7 +1524,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     }
     setWalking(true);
     try { pushStop((await api.get("/api/setup/walk")).data); }
-    catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", text: "The walk could not be loaded." }]); }
+    catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", status: "error", text: "The walk-through didn't load.", chips: [{ verb: "tour", label: "Try again" }] }]); }
     finally { setWalking(false); }
   };
   // -1 is Finish: walking off the end clears the place server-side, so the next press starts over.
@@ -1507,8 +1537,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       const { data } = await api.post("/api/setup/walk", { at });
       if (walkAdvances(at, data.total)) pushStop(data);
       else setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt",
-        text: "Walk finished — “Set up Taskuary” starts it again any time." }]);
-    } catch { /* the card stays where it is; nothing was lost */ }
+        text: "Walk finished. Set up Taskuary below starts it again any time.", chips: IDLE_CHIPS }]);   // the button it named had gone with the welcome block
+    } catch {      // the card stays where it is; nothing was lost - but a press that did nothing says so
+      setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", status: "error", text: "That step didn't load. Press it again." }]);
+    }
     finally { setWalking(false); }
   };
   // Start over: the server's reset (place -> 0), then the first stop as a fresh card. Not walkTo(0):
@@ -1517,7 +1549,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (walking) return;
     setWalking(true);
     try { pushStop((await api.post("/api/setup/walk/reset")).data); }
-    catch { /* the card stays where it is */ }
+    catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", status: "error", text: "The walk didn't start over. Press Start over again." }]); }
     finally { setWalking(false); }
   };
   // The walk's task, fetched once so GeneralWorkspace has the row it needs (it owns everything
@@ -1570,10 +1602,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   };
   // past chats are read, a page at a time (PW-157): listing them changes nothing on the server
   const [chatsNext, setChatsNext] = useState(null);
+  const [chatsErr, setChatsErr] = useState("");
   const openChats = async () => {
-    setChatsOpen(true); setChatsLoading(true);
+    setChatsOpen(true); setChatsLoading(true); setChatsErr("");
+    // said INSIDE the list: the page's own error line sits under this overlay, which read "No earlier chats yet." instead
     try { const { data } = await api.get("/api/concierge/chats", { params: { limit: 25 }, timeout: 10000 }); setChats(data.data || []); setChatsNext(data.next || null); }
-    catch (e) { setErr(errText(e)); }
+    catch (e) { setChatsErr(`Past chats didn't load - ${errText(e)}`); }
     setChatsLoading(false);
   };
   const moreChats = async () => {
@@ -1617,7 +1651,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const openOld = async (c) => {
     if (c.open) { setOld(null); setChatsOpen(false); return; }
     try { const { data } = await api.get(`/api/concierge/chats/${c.taskId}`); setOld({ ...c, messages: data.messages || [] }); setChatsOpen(false); }
-    catch (e) { setErr(errText(e)); }
+    catch (e) { setChatsErr(`That chat didn't open - ${errText(e)}. Click it again.`); }
   };
   const pickAi = async (pick) => {
     const p = (state?.providers || []).find((x) => x.pick === pick);
@@ -1782,7 +1816,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     [bodyH, expanded, foldedKey, browsing, phone]);
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
-  const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
+  const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]);
   // a reloaded answer is text only: the item still on the table lends it its verbs, so Next is never gone
   // ONE ROW OF WORDS (the owner, 2026-10-05: "why is there buttons both places?"): a task on the table is drawn as its task view,
   // and that view registers its words in the row under the chat (layout B). A bare line under it then borrowed the same item's
@@ -1812,7 +1846,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} onClose={() => setRemindOn(null)}
         onDone={(out) => {
           setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: remindOn.path ? null : remindOn.task.TaskId, ref: remindOn.ref,
-            text: out?.remindAt ? `Away until ${out.when} - it is under Upcoming in Tasks, and back on your rail that morning.` : "It is back on your rail now." }]);
+            text: out?.remindAt ? `Away until ${out.when} - it is under For later on your rail, and back in front of you that morning.` : "It is back on your rail now." }]);
           if (out?.remindAt) advance();
         }} />}
       <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
@@ -1820,7 +1854,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>
         <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.45 }}>{state?.scripted
           ? "Every thread, Timeline post, and reply here is invented and runs locally in this page. No AI, agent, mailbox, or outside system is connected."
-          : "Your CLI agent is the default, on its quick gear (haiku, low effort, flash) - it can read, rerun reports and run tools. An API model answers faster but cannot act. The agents doing the actual work are chosen elsewhere."}</Typography>
+          : "Your coding tool's AI is the default, on its fastest setting - it can read, rerun reports and run tools. An AI connected by key answers faster but cannot act. The agents doing the actual work are chosen elsewhere."}</Typography>
         <Select size="small" fullWidth value={state?.pick || ""} displayEmpty disabled={!!state?.scripted} onChange={(e) => pickAi(e.target.value)} sx={{ fontSize: 12 }}>
           {!state?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
           {(state?.providers || []).map((p) => <MenuItem key={p.pick} value={p.pick} sx={{ fontSize: 12 }}>{p.label}{p.type === "demo" ? " · local fixture" : p.type === "cli" ? " · can act (default)" : " · fast, talk only"}</MenuItem>)}
@@ -1832,7 +1866,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <div className="tq-chats-head">Chats<span style={{ flex: 1 }} /><IconButton aria-label="Close past chats" size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>
           <div className="tq-chats-list">
             {chatsLoading && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>Loading past chats…</Typography>}
-            {!chatsLoading && !chats.length && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>No earlier chats yet.</Typography>}
+            {chatsErr && <Typography role="alert" sx={{ color: "#7a2f3c", fontSize: 12, p: 1.5 }}>{chatsErr}{" "}
+              <button type="button" className="tq-chip" onClick={openChats}>Try again</button></Typography>}
+            {!chatsLoading && !chatsErr && !chats.length && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>No earlier chats yet.</Typography>}
             {chats.map((c) => (
               <div key={c.taskId} className="c" onClick={() => openOld(c)} title={c.started ? `started ${c.started.slice(0, 16)}` : ""}>
                 {c.open ? <i /> : <span style={{ width: 7 }} />}<b>{c.title}</b>
@@ -1874,9 +1910,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               <div className="tq-welcome-sum"><TodayMeetingsStrip /></div>
               {items.length ? <DayCards groups={summarize(railPile?.items || items).groups} onSection={walkSection} />
                 : <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
+              {/* greyed with no reason read as broken: say why, and where the rows are */}
+              {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
+                Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
               <div className="tq-modes">
                 <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
-                  title="Everything in the pipe, most important first - mail, reports, agents, meetings">{starting ? "Reading your pipe..." : "Walk me through my tasks"}</button>
+                  title="Everything waiting, most important first - mail, reports, agents, meetings">{starting ? "Getting your first one..." : "Walk me through my tasks"}</button>
                 {/* the same walk the header chip opens. It lives here as well because the header
                     hides its chip on a phone, and this block is what a phone shows - without it the
                     one door to the set-up guidance was absent on the device it is most needed on. */}
@@ -1929,6 +1968,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           {(busy || phoneBusy || nextComing) && (
             <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
+                {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}
+                {busy && !!state?.task?.TaskId && !DEMO && (
+                  <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written. Nothing else changes."
+                    onClick={() => api.post(`/api/tasks/${state.task.TaskId}/assistant/cancel`).catch(() => setErr("It didn't stop - try again in a moment."))}>Stop</button>
+                )}
                 {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
               </div>
             </div>
@@ -1991,8 +2035,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             </Box>
             {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
           </Popover>
-          <div className="tq-compose-hint">{phone ? "Enter sends · the words under each message do the acting"   /* no rail on the left on a phone */
-            : "Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the words under each message do the acting"}</div>
+          <div className="tq-compose-hint">{phone ? "Enter sends · the buttons by the prompt do the acting"   /* no rail on the left on a phone */
+            : "Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the buttons by the prompt do the acting"}</div>
         </div>
       )}
     </div>
@@ -2004,7 +2048,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       alignItems: "center", justifyContent: "center", gap: 1, px: 4, textAlign: "center" }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM }}>Pick anything on the left</Typography>
       <Typography variant="caption" sx={{ color: FAINT, maxWidth: 380, lineHeight: 1.6 }}>
-        Hovering a row opens it here; clicking pins it. You get the message that arrived, why triage sent it
+        Hovering a row opens it here; clicking pins it. You get the message that arrived, why Taskuary sorted it
         where it did, what the agent is doing about it, and the reply waiting to go — each on its own tab.
       </Typography>
     </Box>

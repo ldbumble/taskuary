@@ -173,6 +173,15 @@ export const lastSaidIndex = (messages) => {
   }
   return -1;
 };
+// ...except a receipt that CARRIES its way on: "Not done", a cancel, a sweep put Try again or Next on it, and with the
+// words held by the line above they were never drawn - a failed act ended on an empty row (2026-10-07)
+export const lastActIndex = (messages) => {
+  const said = lastSaidIndex(messages);
+  for (let index = (messages || []).length - 1; index > said; index -= 1) {
+    if (messages[index]?.role === "receipt" && chipsOf(messages[index]).length) return index;
+  }
+  return said;
+};
 // The words offered under one line: the item's own verbs, or a clarifying choice the assistant asked
 // with (OPTIONS) - which goes back as words, not as a verb. Never both: one row, one place to look.
 export const chipsOf = (message) => {

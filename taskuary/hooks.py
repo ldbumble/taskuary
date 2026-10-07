@@ -438,6 +438,12 @@ def receive(payload: dict, cli: str = 'claude') -> dict:
             res = payload.get('tool_response')
             claude_artifacts.capture(getattr(t, 'store', None), t.task_id, res if isinstance(res, dict) else None,
                                      res if isinstance(res, str) else '', by=getattr(t, 'agent', '') or 'agent')
+        # ...and so is a Claude Doc it wrote with the Claude Docs connector - a different tool, a different answer (2026-10-06)
+        elif payload.get('hook_event_name') == 'PostToolUse':
+            from . import claude_artifacts
+            if claude_artifacts.is_doc_create(payload.get('tool_name'), payload.get('tool_input')):
+                claude_artifacts.capture_doc(getattr(t, 'store', None), t.task_id, payload['tool_input'], payload.get('tool_response'),
+                                             by=getattr(t, 'agent', '') or 'agent')
     _events(t, payload)
     # Stop is an observation like the rest: the agent finished a RESPONSE, not the task. Nothing closes
     # on it - only `taskuary --done` (selfclose.declare) or the owner ends a task (2026-09-24). The answer

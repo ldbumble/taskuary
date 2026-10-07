@@ -16,7 +16,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
 | **app** | settings, connections, scripts and kept facts | setting.set(setting, value), connection.create(type, name), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
-| **look** | look-ups - they run at once and change nothing | task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
+| **look** | look-ups - they run at once and change nothing | task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
 
@@ -713,6 +713,12 @@ Everything kept about the owner: the saved notes (from "remember this", their ve
 The standing filters on the owner's mail - queue mutes set with a reason, and the policy rules (skip, ignore, escalate...) that decide before any model reads it. Use it for "why did I never see X", "what am I filtering"
 
 - `about` - words to narrow it
+
+<p class="runs">Runs at once and changes nothing.</p>
+
+### `missed.check`
+
+Whether the owner missed anything: asks nobody answered, people who have not answered the owner, anything marked urgent, and every place that could not be checked - with the answer written out. Use it for "did I miss anything", "anything slip", "am I behind on anything"
 
 <p class="runs">Runs at once and changes nothing.</p>
 

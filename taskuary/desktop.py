@@ -53,6 +53,56 @@ STALLED = (SPLASH.replace('Taskuary is starting up', 'Taskuary could not start')
                           'The window is here but the server never answered. See desktop-error.log next to your data.'))
 
 
+# CLOSING IS QUITTING: the server stops with the window, and there is no tray to keep watching (the owner has not chosen
+# one). So the window says what is true before it goes - what Taskuary cannot see while it is closed, and where the mail
+# waits meanwhile (welcome.goodbye) - and the next open counts what came in from this moment.
+GOODBYE_SECS = 3.0
+
+
+def goodbye_html(text: str) -> str:
+    import html
+    return (SPLASH.replace('Taskuary is starting up', 'Taskuary is closing')
+                  .replace('Reading your work - this takes a few seconds.', html.escape(text))
+                  .replace('<div class="d"><i></i><i></i><i></i></div>', ''))
+
+
+def _server_store():
+    """The running app's store - already imported by the boot, so nothing is imported here (see the note at the top)."""
+    return getattr(sys.modules.get('taskuary.server'), 'store', None)
+
+
+def farewell(store) -> str:
+    """The goodbye, with the close written down; '' when it cannot be said - a goodbye never holds a window open."""
+    if store is None: return ''
+    try:
+        from taskuary import welcome
+        return welcome.closing(store)
+    except Exception as e:
+        logger.warning(f'closing: no goodbye - {e}'); return ''
+
+
+def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS):
+    """pywebview's `closing` event. The first close puts the goodbye in the window and closes it `secs` later - returning
+    False holds the window for that moment; the second close (that one, or an impatient click) goes straight through.
+    The work runs on its own thread: the event may arrive on the GUI thread, which load_html also needs."""
+    said = []
+    def on_closing():
+        if said: return True
+        said.append(1)
+        text = farewell(store_of())
+        if not text: return True
+        def show():
+            try:
+                window.load_html(goodbye_html(text)); time.sleep(secs)
+            except Exception as e: logger.debug(f'closing: the goodbye was not shown - {e}')
+            finally:
+                try: window.destroy()
+                except Exception as e: logger.debug(f'closing: the window was already gone - {e}')
+        threading.Thread(target=show, daemon=True).start()
+        return False
+    return on_closing
+
+
 def serving(url: str, secs: float = BOOT_WAIT) -> bool:
     """Is the server ANSWERING yet - not merely started.
 
@@ -191,6 +241,10 @@ def main():
         print(f'Taskuary is already running at {running} - opening that one.')
         webview.start()
         return 0
+
+    # this window owns the server, so closing it is quitting - it says goodbye first (a view of another one does not)
+    try: window.events.closing += closing_handler(window, lambda: _server_store() if 'server' in held else None)
+    except Exception as e: logger.debug(f'closing: no goodbye on this pywebview - {e}')
 
     def opened():
         try: held['server'], url = boot()

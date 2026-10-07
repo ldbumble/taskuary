@@ -212,7 +212,7 @@ class ConnectionSetupTests(unittest.TestCase):
         self.assertEqual(s.list_tasks(active_only=True), [])                                                # proposed, not opened
         with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(concierge, '_compose_llm', return_value=None):
             out = concierge.say(s, 'set up a report', llm=lambda *a, **k: 'On it.\nCALL: {"kind": "setup", "params": {"text": "set up a report"}}')
-        self.assertIsNone(out.get('proposal')); self.assertIn('AI connector', out['say'])
+        self.assertIsNone(out.get('proposal')); self.assertIn("cannot set that up from the chat yet", out['say'])
 
 
 if __name__ == '__main__':

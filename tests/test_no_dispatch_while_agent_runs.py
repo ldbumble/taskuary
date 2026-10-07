@@ -53,7 +53,7 @@ class ChipTests(Base):
     def test_no_send_to_agent_chip_on_a_task_an_agent_is_working(self):
         item = {'kind': 'message', 'tid': self.tid, 'mid': self.mid, 'ref': 'TQ-0001', 'lane': 'asked'}
         for verb in ('coder', 'regular_agent'):
-            self.assertIn('already working', concierge.cannot(item, verb, self.s))
+            self.assertIn('already being worked on', concierge.cannot(item, verb, self.s))
 
     def test_it_is_offered_again_once_the_session_is_gone(self):
         item = {'kind': 'message', 'tid': self.tid, 'mid': self.mid, 'ref': 'TQ-0001', 'lane': 'asked'}

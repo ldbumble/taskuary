@@ -2963,6 +2963,9 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     # the merge landed and the reply beside it did not: both halves are facts, and the second one is still yours
     if kind == 'review.approve' and o.get('reply_error'):
         return f" {str(o['reply_error']).replace('Done on GitHub, but the', 'But the', 1)} - it is kept as the draft."
+    # a sent reply that asked them something is watched (asks.watch_reply); Later says WHEN it comes back (funnel.later_until)
+    if kind == 'review.approve' and o.get('watching'): return f" {o['watching']}"
+    if kind == 'item.settle' and o.get('says') and not o.get('closed'): return f" {o['says']}"
     # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
     if kind == 'report.run': return f" {o.get('title') or 'It'} is running - it comes back here when it's done."
     if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."

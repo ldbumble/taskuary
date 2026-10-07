@@ -127,6 +127,25 @@ URGENT = ('Also answer "urgent": true ONLY when the message carries a time press
           'urgent: a failure, a problem or a request with no time on it is false, and so is a suggestion to follow up. The '
           'words "urgent" or "ASAP" alone are tone, not a deadline; an fyi, a newsletter or a report is never urgent. '
           'Almost everything is false.')
+# ...and WHEN, as a day (2026-10-06): urgent was the only trace of a deadline, so "the form is due Friday" was forgotten
+# by Thursday. The model reads the day; the code checks it is a real one near the mail (due_of), and remind.deadlines
+# brings the task to the top the day before, says "today" on the day, and asks once when it has passed.
+DUE = ('Also answer "due": "YYYY-MM-DD" - the day the work must be done by, when the message names one ("by Friday", '
+       '"before the 15th", "due 10/9"), worked out from sent_on, the day the message was sent; null when no day is named. '
+       'A meeting\'s date is a due date only when something must be ready for it. Never guess one.')
+
+
+def due_of(j: dict, sent=None) -> str | None:
+    """The verdict's due day, only when it is a real date within a week before and a year after the mail - a model's
+    invented or misread year never lands on a task."""
+    from datetime import date, datetime, timedelta
+    s = str((j or {}).get('due') or '').strip()[:10]
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', s): return None
+    try: d = date.fromisoformat(s)
+    except ValueError: return None
+    try: base = date.fromisoformat(str(sent or '')[:10])
+    except ValueError: base = datetime.now().date()
+    return s if base - timedelta(days=7) <= d <= base + timedelta(days=366) else None
 
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
@@ -142,6 +161,7 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          'why': {'type': 'string'}, 'title': {'type': 'string'}, 'summary': {'type': 'string'},
          'kind': {'type': ['string', 'null'], 'enum': ['coding', 'general', 'task', None]},
          'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}, 'urgent': {'type': 'boolean'},
+         'due': {'type': ['string', 'null']},
          # what closes it beyond the reply (slots.py): emails to OTHER people the message asks the owner to send
          'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
@@ -205,6 +225,7 @@ INTENT_SYSTEM = (
     + FIELDS['sender_history'] + '\n'
     + TASK_FIELDS + '\n'
     + URGENT + '\n'
+    + DUE + '\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
     'nobody for anything - a task the owner glances at and drops costs less than a job nobody did, and a drafted reply '
     'is no substitute for either.')
@@ -776,6 +797,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                # lost the noun its whole sentence was about. This is the one line the model routes on.
                                **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:REPO_ABOUT]} for r in repos]} if repos else {}),
                                **({'body_truncated': True} if body_cut else {}),
+                               # what "by Friday" counts from (DUE)
+                               **({'sent_on': str(msg['sent_at'])[:10]} if msg.get('sent_at') else {}),
                                'body': body_text,
                                # the shape once more, under the message, because a LONG message is what
                                # loses it: on 8,400 characters of forwarded mail the model answered the
@@ -793,6 +816,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # ...and "urgent" on its own (2026-09-25): a document written before triage decided urgency never asks for
             # it, and the owner's document is otherwise left as they wrote it
             if '"urgent"' not in base: system += '\n\n' + URGENT
+            if '"due"' not in base: system += '\n\n' + DUE          # ...and the due day, for the same reason (2026-10-06)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\nWHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -846,6 +870,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if summary: out['summary'] = summary
                 # urgent only means something on work: an fyi that says "urgent" is still an fyi
                 if j.get('urgent') is True and out['intent'] in ('task', 'reply_only'): out['urgent'] = True
+                if out['intent'] in ('task', 'reply_only') and due_of(j, msg.get('sent_at')): out['due'] = due_of(j, msg.get('sent_at'))
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
                     out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
                 if out['intent'] == 'task' and parse_outputs(j): out['outputs'] = parse_outputs(j)

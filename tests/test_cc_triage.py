@@ -114,6 +114,9 @@ class AddressingTests(unittest.TestCase):
         # names it - a field every verdict answers, like the shape; the one exception, and only that exact line
         self.assertIn('\n\n' + triage.URGENT, added)
         added = added.replace('\n\n' + triage.URGENT, '')
+        # ...and "due" the same way (2026-10-06: the day the work is due, a field every verdict answers)
+        self.assertIn('\n\n' + triage.DUE, added)
+        added = added.replace('\n\n' + triage.DUE, '')
         kind_block, _, rest = added.strip().partition('\n\nWHATEVER ELSE')
         self.assertTrue(kind_block.startswith('KIND, DECIDED FIRST') and '\n\n' not in kind_block, kind_block[:120])
         self.assertEqual(('WHATEVER ELSE' + rest).strip(), ('WHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + triage.TASK_FIELDS).strip())

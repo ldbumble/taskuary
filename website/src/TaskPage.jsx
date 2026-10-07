@@ -285,17 +285,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // page offered to start one, which would have made a second).
     return onLive("task-changed", () => { if (selRef.current) loadDetail(selRef.current); });
   }, [active, loadDetail]);
-  // the roster is user-config - default to whatever actually exists
+  // the roster is user-config - default to whatever actually exists. A GENERAL task's blank is an answer, not a gap: it means
+  // "the profile it has", and filling it with agents[0] sent `coder` - which the dispatch refuses on a non-coding task (422), so
+  // Send to agent failed on every general task nobody had assigned a role (the owner, 2026-10-07: "we don't want coder profile always")
+  const generalTask = isGeneralKind(detail?.task?.Kind);
   useEffect(() => {
-    if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0], model: "" }));
-  }, [agents, run.agent]);
+    if (agents.length && !agents.includes(run.agent) && !(generalTask && !run.agent)) setRun((r) => ({ ...r, agent: agents[0], model: "" }));
+  }, [agents, run.agent, generalTask]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
   useEffect(() => {
     const task = detail?.task;
     if (!task || task.TaskId !== selected || !agents.length || pickerTask.current === task.TaskId) return;
     pickerTask.current = task.TaskId;
     const owned = assignedAgent(task.Assignee);
-    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : agents[0], model: "" }));
+    // a general task starts from the role it was handed, else blank (its configured profile) - never the roster's first name
+    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : isGeneralKind(task.Kind) ? "" : agents[0], model: "" }));
   }, [selected, detail?.task, agents]);
   // ...and an error belongs to the task it happened on: a failed Mark done stayed up over the next task opened, as if about it.
   // Only a move from one task straight to another clears it: "That task is gone" empties the selection, and the list then

@@ -1,6 +1,6 @@
 // The card's draft, the one save its controls go through, and the bar that lists and saves it (connectorDraft.js has
 // the rules). A control outside a card with a draft - there is none today, but a panel reused elsewhere - saves at once.
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, BORDER, DIM, INK } from "./theme.jsx";
@@ -14,6 +14,10 @@ export function useCardDraft(conn, sources, reload) {
   const [wantSrc, setWantSrc] = useState({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // THE BAR SAYS IT WORKED before it goes. It used to vanish the instant the save landed, which
+  // looks exactly like a click that did nothing - or like the changes were thrown away.
+  const [saved, setSaved] = useState(0);
+  useEffect(() => { if (!saved) return undefined; const t = setTimeout(() => setSaved(0), 3500); return () => clearTimeout(t); }, [saved]);
   const draftConn = applied(conn, want);
   const draftSources = sources.map((s) => (wantSrc[s.SourceId] ? applied(s, wantSrc[s.SourceId]) : s));
   const pending = [
@@ -30,7 +34,8 @@ export function useCardDraft(conn, sources, reload) {
         const sb = saveBody(s, wantSrc[s.SourceId], "SourceId");
         if (sb) await api.post("/api/sources", sb);
       }
-      discard();
+      const n = pending.length;
+      discard(); setSaved(n || 1);
       await reload?.();
     } catch (e) {
       setErr(e?.response?.data?.detail || "the changes could not be saved - nothing was lost, try again");
@@ -40,7 +45,7 @@ export function useCardDraft(conn, sources, reload) {
     stageConn: (body) => setWant((w) => stage(w, body)),
     stageSource: (body) => setWantSrc((m) => ({ ...m, [body.SourceId]: stage(m[body.SourceId], body) })),
   };
-  return { conn: draftConn, sources: draftSources, pending, save, discard, busy, err, ctx };
+  return { conn: draftConn, sources: draftSources, pending, save, discard, busy, err, saved, ctx };
 }
 
 export const DraftProvider = ({ value, children }) => <Draft.Provider value={value}>{children}</Draft.Provider>;
@@ -64,6 +69,12 @@ export function useSaveSource(reload) {
 // "2 unsaved changes" and each one, then Discard / Save. Sticky, so it stays in reach on a long card.
 export function SaveBar({ draft, labels = {}, words = {} }) {
   const n = draft.pending.length;
+  if (!n && draft.saved) return (
+    <Box role="status" sx={{ position: "sticky", bottom: 12, zIndex: 5, mt: 2, px: 1.5, py: 1, bgcolor: PANEL, border: `1px solid ${BORDER}`,
+      borderLeft: "3px solid #47654a", borderRadius: 2, fontSize: 13, color: "#47654a", fontWeight: 600 }}>
+      ✓ Saved {draft.saved === 1 ? "your change" : `${draft.saved} changes`}
+    </Box>
+  );
   if (!n) return null;
   const line = (c) => {
     const label = labels[c.key] || c.key.replace(/_/g, " ");

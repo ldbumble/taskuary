@@ -23,6 +23,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { pollWhileVisible } from "./visible.js";
+import { plainError } from "./apiError.js";
+import { useSaveNote } from "./SaveNote.jsx";
 import { TaskuaryMark } from "./ui.jsx";
 import {
   ACCENT, ACCENT2, ALERT_INK, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono,
@@ -55,8 +57,10 @@ const Label = ({ children }) => (
 /* ── one entry, with its thread ─────────────────────────────────────────────── */
 const byOwner = (author) => /^(owner|you|dana whitfield)$/i.test(String(author || "").trim());
 // onOpen (the assistant canvas): its thread opens as the one card on the canvas instead of inline; defaultOpen draws it open
-const Post = ({ p, onChanged, onOpenTask, onOpen = null, defaultOpen = false }) => {
+const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen = false }) => {
   const [open, setOpen] = useState(defaultOpen);
+  // a press that did not land says so on the post it was pressed on - they all used to fail in silence
+  const [err, setErr] = useState("");
   const [full, setFull] = useState(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,17 +71,23 @@ const Post = ({ p, onChanged, onOpenTask, onOpen = null, defaultOpen = false }) 
   useEffect(() => { if (open && !full) load(); }, [open, full, load]);
   const comment = async () => {
     const text = draft.trim(); if (!text) return;
-    setBusy(true);
+    setBusy(true); setErr("");
     try { const { data } = await api.post(`/api/hub/${p.LoreId}/comment`, { body: text });
       setFull((f) => ({ ...(f || p), comments: data.comments })); setDraft(""); onChanged?.(); }
-    catch { /* nothing posted; the box keeps the text */ }
+    catch (e) { setErr(`Your comment didn't post — ${plainError(e, "try again.")} It is still in the box.`); }
     setBusy(false);
   };
   // one vote per voter, forum rules: pressing the arrow you already pressed changes nothing, the
   // other one flips you. Below zero the entry leaves this list (handbook.vote retires it).
-  const vote = async (up) => { try { await api.post(`/api/hub/${p.LoreId}/vote?up=${up}`); onChanged?.(); } catch { /* */ } };
-  const retire = async () => { try { await api.post(`/api/hub/${p.LoreId}/retire`); onChanged?.(); } catch { /* */ } };
-  const restore = async () => { try { await api.post(`/api/hub/${p.LoreId}/restore`); onChanged?.(); } catch { /* */ } };
+  const act = async (path, failed, then) => {
+    setErr("");
+    try { await api.post(`/api/hub/${p.LoreId}/${path}`); then?.(); onChanged?.(); }
+    catch (e) { setErr(`${failed} — ${plainError(e, "try again.")}`); }
+  };
+  const vote = (up) => act(`vote?up=${up}`, "Your vote didn't count");
+  // removing takes the post out of this list at once, so the notice (and its Undo) lives on the page
+  const retire = () => act("retire", "Couldn't remove it", () => onRemoved?.(p));
+  const restore = () => act("restore", "Couldn't put it back");
   const comments = full?.comments || [];
   const removed = p.Status && p.Status !== "live";
   const score = p.Score || 0, mine = p.MyVote || 0;
@@ -151,6 +161,7 @@ const Post = ({ p, onChanged, onOpenTask, onOpen = null, defaultOpen = false }) 
               </Button>
             )}
           </Box>
+          {err && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block", mt: 0.5 }}>{err}</Typography>}
         </Box>
       </Box>
       {open && (
@@ -254,13 +265,25 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
   const [sort, setSort] = useState("top");
   const [removed, setRemoved] = useState(false);   // the shelf the vote (or you) took things off
   const [newOpen, setNewOpen] = useState(false);
+  // A HUB THAT DID NOT LOAD IS NOT AN EMPTY HUB. Catching into an empty list told the owner nothing
+  // had ever been posted; what is already on screen stays, and the failure is said above it.
+  const [loadErr, setLoadErr] = useState("");
   const load = useCallback(async () => {
     try {
       const { data } = await api.get("/api/hub", { params: { topic: topic || undefined, q: q || undefined,
         kind: kind || undefined, sort, status: removed ? "removed" : "live" } });
-      setD(data);
-    } catch { setD({ topics: [], data: [], count: { posts: 0, topics: 0, comments: 0 } }); }
+      setD(data); setLoadErr("");
+    } catch (e) { setLoadErr(plainError(e, "The Hub didn't load just now.")); }
   }, [topic, q, kind, sort, removed]);
+  const { say, note } = useSaveNote();
+  const onRemoved = (p) => say(`Removed “${p.Title}” — kept under Removed`, { undo: async () => {
+    try { await api.post(`/api/hub/${p.LoreId}/restore`); load(); }
+    catch (e) { say(`Couldn't put it back — ${plainError(e, "try again from Removed.")}`, { bad: true }); }
+  } });
+  const failed = loadErr && (
+    <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}
+      action={<Button size="small" color="inherit" onClick={load}>Retry</Button>}>{loadErr}</Alert>
+  );
   useEffect(() => { load(); return pollWhileVisible(load, 30000); }, [load]);
   useEffect(() => { const t = setTimeout(() => setQ(typed.trim()), 300); return () => clearTimeout(t); }, [typed]);
 
@@ -272,7 +295,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
     const one = posts.find((x) => x.LoreId === browseState.open);
     return browse({
       title: "Hub", wide: true,
-      summary: !d ? "loading…" : `${d.count.posts} posts · ${d.count.topics} topics · ${d.count.comments} comments`,
+      summary: !d ? (loadErr ? "couldn't load" : "loading…") : `${d.count.posts} posts · ${d.count.topics} topics · ${d.count.comments} comments`,
       sections: [{ key: "", label: "everything", n: d?.count?.posts || 0 }, ...topics.map((t) => ({ key: t.Topic, label: t.Topic, n: t.n }))],
       section: browseState.section ?? "",
       onSection: (key) => onBrowseState?.({ section: key, open: null }),
@@ -282,15 +305,17 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
           InputProps={{ startAdornment: <SearchIcon sx={{ fontSize: 16, color: FAINT, mr: 0.75 }} /> }}
           sx={{ mt: 1.5, "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: "#fff" } }} />
       ),
-      cards: posts.map((x) => ({ key: String(x.LoreId), node: <Post p={x} onChanged={load} onOpenTask={onOpenTask}
+      cards: posts.map((x) => ({ key: String(x.LoreId), node: <Post p={x} onChanged={load} onOpenTask={onOpenTask} onRemoved={onRemoved}
         onOpen={() => onBrowseState?.({ ...browseState, open: x.LoreId })} /> })),
-      detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={load} onOpenTask={onOpenTask} defaultOpen /> : null,
+      detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={load} onOpenTask={onOpenTask} onRemoved={onRemoved} defaultOpen /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: one ? `the Hub post "${one.Title}" (${one.Topic || "Hub"})` : "",
       empty: q ? "Nothing here matches that." : removed ? "Nothing has been voted off." : "Nothing posted yet.",
       // the tab's own controls: which order, which tag, the shelf the vote took things off, and writing one
       tools: (
         <Box sx={{ mt: 1.25, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+          {note}
+          {failed && <Box sx={{ flexBasis: "100%" }}>{failed}</Box>}
           <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)} sx={{ fontSize: 12, bgcolor: PANEL, height: 32 }}>
             <MenuItem value="top" sx={{ fontSize: 12.5 }}>most valuable</MenuItem>
             <MenuItem value="new" sx={{ fontSize: 12.5 }}>newest</MenuItem>
@@ -372,8 +397,9 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
             onClick={() => setNewOpen(true)} sx={{ background: GRADIENT, fontSize: 12.5 }}>Write one</Button>
         </Box>
 
-        {!d ? <CircularProgress size={22} sx={{ m: 4 }} />
-          : posts.length ? posts.map((p) => <Post key={p.LoreId} p={p} onChanged={load} onOpenTask={onOpenTask} />)
+        {failed}
+        {!d ? (loadErr ? null : <CircularProgress size={22} sx={{ m: 4 }} />)
+          : posts.length ? posts.map((p) => <Post key={p.LoreId} p={p} onChanged={load} onOpenTask={onOpenTask} onRemoved={onRemoved} />)
           : (
             <Box sx={{ border: `1px dashed ${BORDER}`, borderRadius: 2, p: 4, textAlign: "center" }}>
               <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM, mb: 0.75 }}>
@@ -389,6 +415,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
       </Box>
 
       <NewEntry open={newOpen} onClose={() => setNewOpen(false)} onDone={load} topics={topics} />
+      {note}
     </Box>
   );
 }

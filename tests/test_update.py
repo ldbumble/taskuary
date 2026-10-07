@@ -51,10 +51,11 @@ class Checking(unittest.TestCase):
             self.assertEqual(update.check(force=True)['url'], update.EXE_URL)
 
     def test_github_unreachable_is_an_answer_not_an_exception(self):
-        with mock.patch.object(update.requests, 'get', side_effect=OSError('offline')):
+        with mock.patch.object(update.requests, 'get', side_effect=OSError('[Errno 11001] getaddrinfo failed')):
             out = update.check(force=True)
         self.assertFalse(out['newer']); self.assertIsNone(out['latest'])
-        self.assertIn('could not reach GitHub', out['error'])
+        # said in words with a next step, never the exception's own text
+        self.assertIn("Couldn't reach the release page", out['error']); self.assertNotIn('Errno', out['error'])
 
     def test_the_answer_is_cached_between_pill_polls(self):
         j = {'tag_name': 'v9.9.9', 'assets': []}

@@ -26,6 +26,7 @@ import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import api from "./api";
+import { useSaveNote } from "./SaveNote.jsx";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, ConfirmDelete, Empty } from "./ui.jsx";
 import { normalizeBrainOptions } from "./brainOptions.js";
@@ -35,9 +36,28 @@ import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
+// the stored names are the engine's (policy.py); these are what the owner reads
+const KIND_LABEL = { keyword: "Words in the subject or body", sender: "From a sender", sender_domain: "From anyone at a domain",
+  noreply: "From an automated address (no-reply)", first_time_sender: "From someone who never wrote before" };
+const PATTERN_LABEL = { keyword: "Words to look for — separate several with |, e.g. newsletter|unsubscribe",
+  sender: "Addresses — separate several with |, e.g. alerts@vendor.example", sender_domain: "Domains — separate several with |, e.g. vendor.example" };
 // skip = never shows on the timeline at all (flood senders); ignore = shows, no task
 const ACTIONS = ["skip", "ignore", "escalate"];
-const NEW_POLICY = { Name: "", Kind: "keyword", Pattern: "", Action: "draft", Reason: "", SortOrder: 100, Active: true };
+const ACTION_LABEL = { skip: "Skip — hide it completely", ignore: "Ignore — keep it visible, never a task",
+  escalate: "Escalate — always yours to decide, marked urgent" };
+// "ignore" because it is the gentlest of the three - the old default, "draft", was honoured nowhere
+// (policy.py) and a rule saved with it looked set and never fired
+const NEW_POLICY = { Name: "", Kind: "keyword", Pattern: "", Action: "ignore", Reason: "", SortOrder: 100, Active: true };
+// settings whose value is JSON: checked on the page before it is sent
+const JSON_KNOBS = new Set(["profile_brains"]);
+const jsonProblem = (v) => {
+  if (!v) return "";
+  try {
+    const o = JSON.parse(v);
+    if (!o || typeof o !== "object" || Array.isArray(o)) return 'Write it as {"role": "brain"} pairs inside curly braces.';
+    return Object.values(o).every((x) => typeof x === "string") ? "" : 'Each role needs a brain name in quotes, e.g. {"researcher": "codex"}.';
+  } catch { return 'That is not valid JSON yet — check the quotes and braces, e.g. {"researcher": "codex"}. Not saved.'; }
+};
 // what a note can be ABOUT. "subject" leads because most verdicts are about a kind of work
 // rather than a person - and it was missing here, so a topic rule could only be created by
 // pressing "Not our task" on a message, never written by hand.
@@ -65,7 +85,7 @@ const KNOB_META = schema.knobs;
 
    Only chats you are ALONE in are offered, and that is enforced again on the way in
    (remote_assistant.use_chat) - the picker is a convenience, not the guard. */
-const PhoneDoorways = ({ onLoaded }) => {
+const PhoneDoorways = ({ onLoaded, onNavigate }) => {
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");     // could not READ the channels
@@ -85,6 +105,13 @@ const PhoneDoorways = ({ onLoaded }) => {
     }
   }, [onLoaded]);
   useEffect(() => { load(); }, [load]);
+  // the list fills from chats the app has SEEN, so the owner is told to go and message themselves -
+  // coming back to this window is the moment to look again, without a reload
+  useEffect(() => { const f = () => load(); window.addEventListener("focus", f); return () => window.removeEventListener("focus", f); }, [load]);
+  const [looking, setLooking] = useState(false);
+  const lookAgain = async () => { setLooking(true); await load(); setLooking(false); };
+  // a button, not a sentence that names a tab: the card opens with the chat already in front of you
+  const toCard = (channel) => { window.location.hash = `connector=${channel || ""}`; onNavigate?.("Connections"); };
   const choose = async (channel, chat) => {
     setBusy(channel); setWErr("");
     try { await api.post("/api/assistant/doorways", { channel, chat }); await load(); }
@@ -109,9 +136,10 @@ const PhoneDoorways = ({ onLoaded }) => {
                 {r.channel}
               </Typography>
               {!r.live ? (
-                <Typography variant="body2" sx={{ color: DIM }}>
-                  not switched on — turn it on under Connections first
-                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                  <Typography variant="body2" sx={{ color: DIM }}>not switched on yet</Typography>
+                  <Button size="small" variant="outlined" onClick={() => toCard(r.connectorId || r.channel)}>Open the {r.channel} card</Button>
+                </Box>
               ) : (
                 <>
                   <Autocomplete size="small" sx={{ flex: 1, minWidth: 260 }} autoHighlight disabled={busy === r.channel}
@@ -120,8 +148,8 @@ const PhoneDoorways = ({ onLoaded }) => {
                     isOptionEqualToValue={(o, v) => o.to === v.to}
                     onChange={(_e, v) => choose(r.channel, v?.to || "")}
                     noOptionsText={r.channel === "whatsapp"
-                      ? "no private chat seen yet — message yourself on WhatsApp, then reopen this page"
-                      : "no private chat seen yet — send your bot a direct message, then reopen this page"}
+                      ? "no private chat seen yet — message yourself on WhatsApp, then press Look again"
+                      : "no private chat seen yet — send your bot a direct message, then press Look again"}
                     renderOption={(props, o) => (
                       <li {...props} key={o.to} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
                         <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>{o.name}</Typography>
@@ -132,6 +160,8 @@ const PhoneDoorways = ({ onLoaded }) => {
                       placeholder="not connected — pick the chat that is only you" />} />
                   {r.chat && <Button size="small" disabled={busy === r.channel}
                     onClick={() => choose(r.channel, "")} sx={{ fontSize: 11.5 }}>disconnect</Button>}
+                  {!r.chat && <Button size="small" disabled={looking} onClick={lookAgain} sx={{ fontSize: 11.5 }}
+                    title="Read the chats again - after you message yourself or your bot">{looking ? "Looking…" : "Look again"}</Button>}
                 </>
               )}
             </Box>
@@ -159,9 +189,11 @@ const PhoneDoorways = ({ onLoaded }) => {
         <Typography variant="body2" sx={{ color: "#6b2733", py: 2 }}>{err}</Typography>
       )}
       {rows && !rows.length && (
-        <Typography variant="body2" sx={{ color: DIM, py: 2 }}>
-          No WhatsApp or Telegram connection yet. Add one under Connections and it appears here.
-        </Typography>
+        <Box sx={{ py: 2, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+          <Typography variant="body2" sx={{ color: DIM }}>No WhatsApp or Telegram connection yet — add one and it appears here.</Typography>
+          <Button size="small" variant="outlined" onClick={() => toCard("whatsapp")}>Set up WhatsApp</Button>
+          <Button size="small" variant="outlined" onClick={() => toCard("telegram")}>Set up Telegram</Button>
+        </Box>
       )}
       {rows === null && !err && <Typography variant="body2" sx={{ color: FAINT, py: 2 }}>reading your channels…</Typography>}
       <Typography variant="body2" sx={{ color: FAINT, mt: 2 }}>
@@ -369,14 +401,32 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     [brains, agentModels, selectedBrains]);
   useEffect(() => { load(); }, [load]);
 
-  const savePolicy = async (p) => { await api.post("/api/policies", p); setDraft(null); load(); };
-  const togglePolicy = async (p) => { await api.post("/api/policies", { PolicyId: p.PolicyId, Active: !p.Active }); load(); };
+  // EVERY WRITE ON THIS PAGE GOES THROUGH `run`: it says "Saved", or why not in words, and the page
+  // re-reads either way so what you see is what is stored - a refused switch flips back.
+  const { run, note } = useSaveNote();
+  const savePolicy = async (p) => { if ((await run(() => api.post("/api/policies", p), { ok: "Rule saved" })).ok) setDraft(null); load(); };
+  const togglePolicy = async (p) => { await run(() => api.post("/api/policies", { PolicyId: p.PolicyId, Active: !p.Active }),
+    { ok: p.Active ? "Rule switched off" : "Rule switched on" }); load(); };
   const [delPolicy, setDelPolicy] = useState(null);      // the rule awaiting its confirm
-  const deletePolicy = async (p) => { await api.delete(`/api/policies/${p.PolicyId}`); load(); };
-  const saveSetting = async (name, value) => { await api.patch("/api/settings", { name, value }); load(); };
-  const toggleMemory = async (m) => { await api.patch(`/api/memory/${m.MemoryId}`, { active: !m.Active }); load(); };
-  const addNote = async () => { await api.post("/api/memory", newNote); setNewNote(null); load(); };
-  const runVerify = async () => setVerify((await api.get("/api/audit/verify")).data);
+  const deletePolicy = async (p) => { await run(() => api.delete(`/api/policies/${p.PolicyId}`), { ok: "Rule deleted", lead: "Not deleted — " }); load(); };
+  // `el`: the text box that was typed in - put back to the stored value when the save is refused,
+  // or it keeps showing a value that is not the one in force
+  const saveSetting = async (name, value, el) => {
+    const { ok } = await run(() => api.patch("/api/settings", { name, value }));
+    if (!ok && el) el.value = settings.find((s) => s.Name === name)?.Value ?? "";
+    load();
+  };
+  const toggleMemory = async (m) => { await run(() => api.patch(`/api/memory/${m.MemoryId}`, { active: !m.Active }),
+    { ok: m.Active ? "Switched off - it will not be used again" : "Switched back on" }); load(); };
+  const addNote = async () => { if ((await run(() => api.post("/api/memory", newNote), { ok: "Note added" })).ok) setNewNote(null); load(); };
+  const [jsonBad, setJsonBad] = useState({});           // a JSON knob's problem, said under its box until fixed
+  const [verifying, setVerifying] = useState(false);
+  const runVerify = async () => {
+    setVerifying(true); setVerify(null);
+    const r = await run(() => api.get("/api/audit/verify"), { ok: "", lead: "Couldn't check the record — " });
+    if (r.ok) setVerify(r.r.data);
+    setVerifying(false);
+  };
 
   // Where a model is really saved. The AI defaults panel names the owning screen and this
   // opens it: the CLI roster is a Settings page, a connector card lives on Connections (whose
@@ -548,14 +598,28 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     if (m.type === "number") return (
       <TextField type="number" defaultValue={s.Value} sx={{ width: 100, bgcolor: "#fff" }}
         inputProps={{ style: { fontSize: 12.5, padding: "6px 10px" } }}
-        onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value)} />
+        onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value, e.target)} />
     );
     if (m.type === "switch" || ["0", "1"].includes(String(s.Value))) return (
       <Switch checked={s.Value === "1"} onChange={() => saveSetting(s.Name, s.Value === "1" ? "0" : "1")} />
     );
+    // A JSON KNOB IS CHECKED BEFORE IT IS SENT. A stray quote used to save, and the reader ignored the
+    // whole value without a word - so every role quietly fell back to the default brain.
+    if (JSON_KNOBS.has(s.Name)) {
+      const bad = jsonBad[s.Name];
+      return (
+        <TextField defaultValue={s.Value} multiline minRows={1} error={!!bad} helperText={bad || " "}
+          placeholder='{"researcher": "codex"}' sx={{ width: 260, bgcolor: "#fff" }} inputProps={{ style: { fontSize: 12.5, fontFamily: "monospace" } }}
+          onBlur={(e) => {
+            const v = e.target.value.trim(), why = jsonProblem(v);
+            setJsonBad((b) => ({ ...b, [s.Name]: why }));
+            if (!why && v !== (s.Value || "")) saveSetting(s.Name, v, e.target);
+          }} />
+      );
+    }
     return (
       <TextField defaultValue={s.Value} sx={{ width: 150, bgcolor: "#fff" }} inputProps={{ style: { fontSize: 12.5, padding: "6px 10px" } }}
-        onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value)} />
+        onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value, e.target)} />
     );
   };
 
@@ -566,7 +630,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     && !(panelOk && PANEL_OWNED.has(s.Name)));
   const panels = {
     "Triage & agents": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
-    "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} />,
+    "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} onNavigate={onNavigate} />,
     "Agent permissions": <AgentPermissions />,
   };
   const cfgGroups = GROUPS.filter((g) => panels[g] || rowsOf(g).length);
@@ -652,8 +716,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             <Box sx={{ ...card, bgcolor: PANEL2, p: 2.25, mt: 2, maxWidth: 680 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>No routing rules yet</Typography>
               <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5, maxWidth: 560 }}>
-                Rules are optional. Add one when a sender, domain, or message type should always be drafted,
-                filed, made into a task, or sent to you for a decision.
+                Rules are optional — triage judges everything else. Add one when a sender, domain, or kind of
+                message should always be hidden, kept out of your tasks, or put in front of you as urgent.
               </Typography>
               <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
                 onClick={() => setDraft({ ...NEW_POLICY })}>Add your first rule</Button>
@@ -665,9 +729,10 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
                 sx={{ bgcolor: ACTION_COLORS[p.Action]?.bg, color: ACTION_COLORS[p.Action]?.fg, height: 21, fontSize: 10.5, width: 100, justifyContent: "center" }} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{p.Name}</Typography>
-                <Typography variant="caption" sx={{ ...mono, color: FAINT }} noWrap>{p.Kind}{p.Pattern ? `: ${p.Pattern}` : ""}</Typography>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>{KIND_LABEL[p.Kind] || p.Kind}{p.Pattern ? `: ${p.Pattern}` : ""}</Typography>
               </Box>
-              <Typography variant="caption" sx={{ ...mono, color: FAINT }}>#{p.SortOrder}</Typography>
+              <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap" }}
+                title="When two rules with the same action match, the lower number wins">priority {p.SortOrder}</Typography>
               <Button size="small" onClick={() => setDraft({ ...p, Active: !!p.Active })}>Edit</Button>
               <Switch checked={!!p.Active} onChange={() => togglePolicy(p)} />
               <IconButton size="small" title="Delete this rule" onClick={() => setDelPolicy(p)}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
@@ -680,23 +745,29 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
               <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 600 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
               <TextField label="Name" value={draft.Name} onChange={(e) => setDraft({ ...draft, Name: e.target.value })} />
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Select fullWidth value={draft.Kind} onChange={(e) => setDraft({ ...draft, Kind: e.target.value })}>
-                  {KINDS.map((k) => <MenuItem key={k} value={k}>{k}</MenuItem>)}
-                </Select>
-                <Select fullWidth value={draft.Action} onChange={(e) => setDraft({ ...draft, Action: e.target.value })}>
-                  {ACTIONS.map((a) => <MenuItem key={a} value={a}>{a.replace("_", " ")}</MenuItem>)}
-                </Select>
-                <TextField label="Order" type="number" sx={{ width: 100 }} value={draft.SortOrder}
-                  onChange={(e) => setDraft({ ...draft, SortOrder: Number(e.target.value) })} />
+              <Box sx={{ display: "flex", gap: 1, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
+                <TextField select fullWidth label="Matches mail" value={draft.Kind} onChange={(e) => setDraft({ ...draft, Kind: e.target.value })}>
+                  {KINDS.map((k) => <MenuItem key={k} value={k}>{KIND_LABEL[k]}</MenuItem>)}
+                </TextField>
+                {/* an old rule may carry an action the engine dropped - shown as "pick one" rather than as a blank box */}
+                <TextField select fullWidth label="Then" value={ACTIONS.includes(draft.Action) ? draft.Action : ""}
+                  error={!ACTIONS.includes(draft.Action)} helperText={ACTIONS.includes(draft.Action) ? " " : "pick what this rule does"}
+                  onChange={(e) => setDraft({ ...draft, Action: e.target.value })}>
+                  {ACTIONS.map((a) => <MenuItem key={a} value={a}>{ACTION_LABEL[a]}</MenuItem>)}
+                </TextField>
+                <TextField label="Priority" type="number" sx={{ width: 110, flexShrink: 0 }} value={draft.SortOrder}
+                  helperText="lower wins a tie" onChange={(e) => setDraft({ ...draft, SortOrder: Number(e.target.value) })} />
               </Box>
               {!["noreply", "first_time_sender"].includes(draft.Kind) && (
-                <TextField label="Pattern (pipe-separated terms / addresses / domains)"
+                <TextField label={PATTERN_LABEL[draft.Kind] || "What to match"}
                   value={draft.Pattern || ""} onChange={(e) => setDraft({ ...draft, Pattern: e.target.value })} />
               )}
               <TextField label="Reason (shown to the reviewer)" value={draft.Reason} onChange={(e) => setDraft({ ...draft, Reason: e.target.value })} />
               <Box sx={{ display: "flex", gap: 0.75 }}>
-                <Button size="small" variant="contained" disabled={!draft.Name || !draft.Reason} onClick={() => savePolicy(draft)}>Save</Button>
+                <Button size="small" variant="contained" disabled={!draft.Name || !draft.Reason || !ACTIONS.includes(draft.Action)}
+                  onClick={() => savePolicy(draft)}>Save</Button>
+                {(!draft.Name || !draft.Reason) && <Typography variant="caption" sx={{ color: FAINT, alignSelf: "center" }}>
+                  a name and a reason are needed to save</Typography>}
                 <Button size="small" onClick={() => setDraft(null)}>Cancel</Button>
               </Box>
             </Box>
@@ -776,7 +847,9 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
               How to read it →
             </Typography>
           </Typography>
-          <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
+          <Button variant="contained" disabled={verifying} onClick={runVerify}
+            startIcon={verifying ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : <VerifiedIcon sx={{ fontSize: 16 }} />}>
+            {verifying ? "Checking every row…" : "Verify chain"}</Button>
           {verify && (
             <Box sx={{ mt: 2 }}>
               {verify.ok && <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: "#47654a" }}>
@@ -816,6 +889,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   if (q) return (
     <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
+      {note}
       {!results.length ? <Empty>Nothing matches “{q}”. Try a setting, rule, or memory keyword.</Empty> : (
         <>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
@@ -850,6 +924,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
         </React.Fragment>
       ))}
       <HelpDialog help={help} onClose={() => setHelp(null)} />
+      {note}
     </Box>
   );
 }

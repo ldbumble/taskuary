@@ -137,6 +137,38 @@ def _slack(tok, method, post=False, **params):
 ACTOR_DISCOVER = 'connector-test'
 
 
+# WHAT A FAILED TEST SAYS. The card used to print the exception as it came - a socket's
+# "[Errno 11001] getaddrinfo failed", a server's "401 Client Error: Unauthorized for url: ..." -
+# which tells the owner something broke and not what to do next. The common failures get a
+# sentence with the next step in it; anything else keeps its own words, which are usually ours.
+# LastError keeps the raw text: problems.lapsed() reads it to spot an expired sign-in.
+_DNS = re.compile(r'getaddrinfo failed|Name or service not known|nodename nor servname|Temporary failure in name resolution|NameResolutionError|No address associated', re.I)
+_TIMEOUT = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
+_REFUSED = re.compile(r'Connection refused|actively refused|ECONNREFUSED|WinError 10061', re.I)
+def _status(e):
+    r = getattr(e, 'response', None)
+    code = getattr(r, 'status_code', None) or getattr(e, 'code', None) or getattr(e, 'status_code', None)
+    if isinstance(code, int): return code
+    # requests/httpx spell it "401 Client Error: Unauthorized for url" when only the text survives a re-raise
+    m = re.search(r'\b(401|403)\b[^\n]{0,20}(?:Client Error|Unauthori[sz]ed|Forbidden)', str(e), re.I)
+    return int(m.group(1)) if m else None
+
+def plain_failure(e: Exception) -> str:
+    raw = str(e)
+    from .msauth import LAPSED
+    if LAPSED in raw: return raw[:500]      # already says what to do: sign in again
+    code = _status(e)
+    if code == 401: return ("The service turned the key or password down. Check it is the current one - "
+                            "paste it again if it was changed or has expired - then Save and Test again.")
+    if code == 403: return ("The service knows this account but would not let it in. The key may not have permission "
+                            "for this, or an administrator has to allow it.")
+    if _DNS.search(raw): return ("The server's address could not be found. Check the host name for typos, "
+                                 "and that this computer is online.")
+    if isinstance(e, TimeoutError) or _TIMEOUT.search(raw):
+        return ("The server did not answer in time. It may be down, or this network may block it - try again in a minute.")
+    if _REFUSED.search(raw): return "The server turned the connection away. Check the host name and port."
+    return raw[:500] or type(e).__name__
+
 def test_connector(store, cid: int) -> dict:
     """Live credential + access probe; the result (or failure) lands on the connector row."""
     c = store.get_connector(cid, with_secret=True)
@@ -395,7 +427,7 @@ def test_connector(store, cid: int) -> dict:
         return out
     except Exception as e:
         store.touch_connector(cid, str(e))
-        out = {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': str(e)[:500]}
+        out = {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': plain_failure(e)}
         # a failure the owner fixes in the OS (macOS privacy consent) carries the structured
         # half too - which pane, which host - so the card can offer the button, not a paragraph
         if getattr(e, 'setup', None): out['setup'] = e.setup

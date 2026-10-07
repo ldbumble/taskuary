@@ -115,7 +115,10 @@ def state(store) -> dict:
          'goto': ({'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'}
                   if not ai['Type'] or ai['Type'] == 'cli'
                   else {'tab': 'Connections', 'hash': f"connector={ai.get('Type')}",
-                        'label': f"Open the {ai.get('Name') or 'provider'} card"})},
+                        'label': f"Open the {ai.get('Name') or 'provider'} card"}),
+         # ...and with no brain at all, the OTHER road too: an owner with an OpenAI or Azure key and no
+         # CLI saw only the CLI door and had nowhere to paste it. Connections opens on its AI group.
+         **({'alt': {'tab': 'Connections', 'hash': '', 'label': 'Paste an API key'}} if not ai['Type'] else {})},
         {'key': 'inbound', 'title': 'Connect one work source',
          'why': 'Start with one mailbox, chat, or issue tracker. Choose the account or project you '
                 'want read, enable it as an input, and test the connection. Other sources can wait.',

@@ -747,6 +747,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(me['Active'], 0)
         self.assertEqual(c.post('/api/policies', json={'Name': 'incomplete'}).status_code, 422)
 
+    def test_policy_refuses_an_action_the_engine_never_honours(self):
+        """The page once defaulted a new rule to 'draft', which matches nothing - the rule looked set and never fired."""
+        bad = c.post('/api/policies', json={'Name': 'x', 'Kind': 'keyword', 'Pattern': 'y', 'Action': 'draft', 'Reason': 'z'})
+        self.assertEqual(bad.status_code, 422)
+        self.assertIn('skip, ignore or escalate', bad.json()['detail'])
+        self.assertEqual(c.post('/api/policies', json={'Name': 'x', 'Kind': 'subject', 'Action': 'ignore', 'Reason': 'z'}).status_code, 422)
+        self.assertFalse(any(p['Name'] == 'x' for p in c.get('/api/policies').json()['data']))
+
     def test_skip_policy_applies_to_history_through_the_api(self):
         for i in range(2):
             c.post('/api/ingest/push', json={'external_id': f'flood{i}', 'subject': 'Provisioning notice',

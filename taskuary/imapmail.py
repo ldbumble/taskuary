@@ -9,7 +9,7 @@ the same triage, with the same attachment pipeline, and replies go back over SMT
 
 Stdlib only (imaplib, smtplib, email) - nothing new frozen into the exe.
 """
-import base64, email, email.utils, hashlib, imaplib, json, re, smtplib, socket, ssl
+import base64, contextlib, email, email.utils, hashlib, imaplib, json, re, smtplib, socket, ssl
 from datetime import datetime, timedelta
 from email.header import decode_header, make_header
 from email.mime.text import MIMEText
@@ -157,7 +157,12 @@ def _login(c):
                                'Taskuary from reaching the mail server; ask IT to allow it (or allow port 993)') from e
         raise
     verify_pin(M.sock, cfg, imap_h)
-    M.login(user, c['Secret'])
+    try: M.login(user, c['Secret'])
+    except imaplib.IMAP4.error as e:
+        # the server's own words are b'[AUTHENTICATIONFAILED] Invalid credentials (Failure)' - true, and no help
+        with contextlib.suppress(Exception): M.shutdown()
+        raise RuntimeError('The mail server refused the password. Gmail and some others need an app password '
+                           '(myaccount.google.com → Security → App passwords) rather than your normal one.') from e
     return M, user
 
 

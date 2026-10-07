@@ -15,6 +15,16 @@ export const detailText = (d) => Array.isArray(d)
   ? d.map((x) => `${(x.loc || []).join(".")}: ${x.msg || JSON.stringify(x)}`).join(" · ")
   : JSON.stringify(d);
 
+// WHAT A FAILED SAVE SAYS TO THE OWNER. The server's own sentence when it sent one (they are
+// written for the owner); when nothing answered at all, that - never axios's "Network Error".
+export const plainError = (e, fallback = "That didn't save. Try again in a moment.") => {
+  if (typeof e?.detail?.message === "string") return e.detail.message;   // a structured refusal's own words
+  const d = e?.response?.data?.detail;
+  if (d) return typeof d === "string" ? d : detailText(d);
+  if (e && !e.response) return "Taskuary isn't answering. Check the app is still running, then try again.";
+  return fallback;
+};
+
 export function keepDetail(e) {
   const d = e?.response?.data?.detail;
   if (d && typeof d !== "string") { e.detail = d; e.response.data.detail = detailText(d); }

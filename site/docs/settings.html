@@ -125,12 +125,12 @@ is what you see if those cards cannot load.</li>
 <p>This starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant.</p>
 <h3 id="assistant-tab-brain">Assistant tab brain<a class="anchor" href="#assistant-tab-brain" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_ai</code> · type: brain · set on a card at the top of the page</p>
-<p>Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent&#39;s CLI on its quick gear.</p>
+<p>Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.</p>
 <p>THREE DEFAULTS, one place each: the triage brain (Triage &amp; routing), the default coding agent (Coder agent), and this one.</p>
 <p>A CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent&#39;s own &#39;light model&#39; from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks.</p>
 <h3 id="assistant-tab-model">Assistant tab model<a class="anchor" href="#assistant-tab-model" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_model</code> · type: text · set on a card at the top of the page</p>
-<p>Override the quick gear for the brain above (e.g. sonnet, claude-sonnet-5@medium, gpt-5.4-mini@low). Blank = the default; a Claude pick with no @effort runs at low effort.</p>
+<p>A different model for the Assistant tab, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.</p>
 <p>For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation.</p>
 <h3 id="general-agent-brain">General agent brain<a class="anchor" href="#general-agent-brain" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_ai</code> · type: brain · default: blank · set on a card at the top of the page</p>
@@ -144,18 +144,18 @@ is what you see if those cards cannot load.</li>
 <p><code>assistant_model</code> · type: text · default: blank · set on a card at the top of the page</p>
 <p>Override the model for the brain above. Blank = the provider&#39;s own default.</p>
 <p>For an API connector this is its model or deployment name; for a CLI it is the profile&#39;s light model. Changing it starts a fresh CLI conversation.</p>
-<h3 id="default-brain">Default brain<a class="anchor" href="#default-brain" aria-label="Link to this section">#</a></h3>
+<h3 id="default-ai-for-agents">Default AI for agents<a class="anchor" href="#default-ai-for-agents" aria-label="Link to this section">#</a></h3>
 <p><code>default_brain</code> · type: text · default: blank</p>
-<p>Which CLI actually executes a worker when its role names none. A ROLE picks the document a session is seeded with (coder, researcher, analyst); a BRAIN is the executable that runs it. Blank = each profile&#39;s own command.</p>
+<p>Which AI program runs an agent&#39;s work when its role does not name one. A role (coder, researcher, analyst) decides the instructions an agent starts with; this decides which program follows them. Blank = each profile&#39;s own program.</p>
 <p>Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588&#39;s coding work was once routed to Copilot.</p>
 <p>A role and a brain are different questions and one name cannot answer both.</p>
-<h3 id="backup-agent-clis">Backup agent CLIs<a class="anchor" href="#backup-agent-clis" aria-label="Link to this section">#</a></h3>
+<h3 id="fallback-ai-programs">Fallback AI programs<a class="anchor" href="#fallback-ai-programs" aria-label="Link to this section">#</a></h3>
 <p><code>backup_brains</code> · type: text · default: <code>*</code></p>
-<p>Ordered alternates when the first brain is out of sessions, signed out, or cannot start. * = every other configured one, in roster order. This is the live successor to the old &#39;Backup coding CLIs&#39;, which named profiles and no longer does anything.</p>
+<p>Tried in order when the first one has used up its allowance, is signed out, or will not start. * = every other one you have set up, in the order they are listed.</p>
 <p>Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model.</p>
-<h3 id="per-role-brain-overrides">Per-role brain overrides<a class="anchor" href="#per-role-brain-overrides" aria-label="Link to this section">#</a></h3>
+<h3 id="a-different-ai-for-one-role">A different AI for one role<a class="anchor" href="#a-different-ai-for-one-role" aria-label="Link to this section">#</a></h3>
 <p><code>profile_brains</code> · type: text · default: blank</p>
-<p>JSON, e.g. {&quot;researcher&quot;: &quot;codex&quot;} — one role that should run on a different brain from the default above. Blank (the default) means every role uses the default brain.</p>
+<p>For a role that should run on a different AI from the default above. Written as JSON, e.g. {&quot;researcher&quot;: &quot;codex&quot;}. Blank (the default) means every role uses the default.</p>
 <p>The escape hatch for &#39;the analyst should run on codex but everything else on claude&#39;. An unknown role name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker.</p>
 <h3 id="default-coding-cli">Default coding CLI<a class="anchor" href="#default-coding-cli" aria-label="Link to this section">#</a></h3>
 <p><code>default_agent</code> · type: agent · default: <code>coder</code> · set on a card at the top of the page</p>

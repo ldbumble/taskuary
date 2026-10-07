@@ -83,14 +83,14 @@
       "group": "Triage & agents",
       "label": "Assistant tab brain",
       "type": "brain",
-      "desc": "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent's CLI on its quick gear.",
+      "desc": "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.",
       "help": "THREE DEFAULTS, one place each: the triage brain (Triage & routing), the default coding agent (Coder agent), and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
     },
     "concierge_model": {
       "group": "Triage & agents",
       "label": "Assistant tab model",
       "type": "text",
-      "desc": "Override the quick gear for the brain above (e.g. sonnet, claude-sonnet-5@medium, gpt-5.4-mini@low). Blank = the default; a Claude pick with no @effort runs at low effort.",
+      "desc": "A different model for the Assistant tab, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.",
       "help": "For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation."
     },
     "assistant_ai": {
@@ -151,23 +151,23 @@
     },
     "default_brain": {
       "group": "Triage & agents",
-      "label": "Default brain",
+      "label": "Default AI for agents",
       "type": "text",
-      "desc": "Which CLI actually executes a worker when its role names none. A ROLE picks the document a session is seeded with (coder, researcher, analyst); a BRAIN is the executable that runs it. Blank = each profile's own command.",
+      "desc": "Which AI program runs an agent's work when its role does not name one. A role (coder, researcher, analyst) decides the instructions an agent starts with; this decides which program follows them. Blank = each profile's own program.",
       "help": "Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588's coding work was once routed to Copilot.\n\nA role and a brain are different questions and one name cannot answer both."
     },
     "backup_brains": {
       "group": "Triage & agents",
-      "label": "Backup agent CLIs",
+      "label": "Fallback AI programs",
       "type": "text",
-      "desc": "Ordered alternates when the first brain is out of sessions, signed out, or cannot start. * = every other configured one, in roster order. This is the live successor to the old 'Backup coding CLIs', which named profiles and no longer does anything.",
+      "desc": "Tried in order when the first one has used up its allowance, is signed out, or will not start. * = every other one you have set up, in the order they are listed.",
       "help": "Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model."
     },
     "profile_brains": {
       "group": "Triage & agents",
-      "label": "Per-role brain overrides",
+      "label": "A different AI for one role",
       "type": "text",
-      "desc": "JSON, e.g. {\"researcher\": \"codex\"} — one role that should run on a different brain from the default above. Blank (the default) means every role uses the default brain.",
+      "desc": "For a role that should run on a different AI from the default above. Written as JSON, e.g. {\"researcher\": \"codex\"}. Blank (the default) means every role uses the default.",
       "help": "The escape hatch for 'the analyst should run on codex but everything else on claude'. An unknown role name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker."
     },
     "default_agent": {

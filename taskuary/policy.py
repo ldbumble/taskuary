@@ -13,6 +13,7 @@ that says one of those now simply matches nothing.
 import re
 
 PRECEDENCE = ('skip', 'ignore', 'escalate')
+KINDS = ('keyword', 'sender', 'sender_domain', 'noreply', 'first_time_sender')   # what matches() reads
 _NOREPLY = re.compile(r'(no-?reply|do-?not-?reply|donotreply|notifications?@|automated|mailer-daemon|postmaster)', re.I)
 
 

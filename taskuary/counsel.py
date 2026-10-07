@@ -163,6 +163,7 @@ def check_budget(store, name: str, text: str) -> str:
 
 MARKER = '<!-- counsel:deciding -->'
 MATCH_MARKER = '<!-- counsel:match-first -->'     # the deciding section's first bullet, added 2026-10-01
+CALM_MARKER = '<!-- counsel:calm -->'             # the head of Voice: every line leaves the owner calmer, added 2026-10-06
 _CODING_WAS = ('Anything with a system to type at - a repository, a server, a database, a query, a file, an error: the coding '
                'agent.')
 _CODING_NOW = ('READING a system (a query, a report) goes to a regular agent; a CHANGE to a system - code, data, a server, an '
@@ -180,12 +181,30 @@ def _goal_line(lines):
         if not in_fence and l.strip() == f'## {GOAL_HEAD}': return i
     return None
 
+def _calm_block(new_lines: list) -> list:
+    """The shipped Voice section's calm rule: its marker and the bullets under it, up to the next heading."""
+    i = next(n for n, l in enumerate(new_lines) if l.strip() == CALM_MARKER)
+    j = next((n for n in range(i + 1, len(new_lines)) if new_lines[n].startswith('## ')), len(new_lines))
+    block = new_lines[i:j]
+    while block and not block[-1].strip(): block.pop()
+    return block
+
+def _voice_line(lines):
+    """Index of the REAL '## Voice' heading (never one inside a fence), or None - _goal_line's rule."""
+    in_fence = False
+    for i, l in enumerate(lines):
+        if l.strip().startswith('```'): in_fence = not in_fence; continue
+        if not in_fence and l.strip() == f'## {VOICE_HEAD}': return i
+    return None
+
 def migrate(store) -> str:
-    """The shipped document gained `## When the owner decides` (the prose that left concierge.SYSTEM), and then that
-    section's first bullet - match the words to the actions on the table, ask when unsure (the 2026-10-01 press audit).
-    A stock document - blank, never edited, or matching any previously shipped template - is replaced outright; an
-    owner's document keeps every word and gets whichever is missing: the section before the real My goal heading (or
-    at the end), the bullet right under the section's marker - budget-checked and audited (PW-256, PW-258)."""
+    """The shipped document gained `## When the owner decides` (the prose that left concierge.SYSTEM), then that section's
+    first bullet - match the words to the actions on the table, ask when unsure (the 2026-10-01 press audit) - and then the
+    calm rule at the head of Voice (every line leaves the owner calmer; the words they never hear, 2026-10-06).
+    A stock document - blank, never edited, or matching any previously shipped template - is replaced outright; an owner's
+    document keeps every word and gets whichever is missing: the section before the real My goal heading (or at the end),
+    the bullet right under the section's marker, the calm rule right under the real Voice heading (or a Voice section at the
+    end) - budget-checked and audited (PW-256, PW-258)."""
     from pathlib import Path
     tdir = Path(__file__).parent / 'templates'
     new = tdir.joinpath('counsel.md').read_text(encoding='utf-8')
@@ -197,15 +216,13 @@ def migrate(store) -> str:
     if not (cur or '').strip() or (row and row.get('UpdatedBy') == 'template') or _squash(cur) in stock:
         if cur and _squash(cur) == _squash(new): return 'unchanged'
         store.save_doc('counsel', new, 'template'); return 'replaced'
-    if MARKER in cur and MATCH_MARKER in cur:
-        # ...and an owner's own copy keeps every word but the one sentence that sent READING a database to the coding agent
-        # (the owner, 2026-10-05: data is coding when it CHANGES; "open AP over 90 days" went to the coder, 2026-10-06)
-        if _CODING_WAS not in _squash(cur): return 'unchanged'
-        fixed = re.sub(r'\s+'.join(map(re.escape, _CODING_WAS.split())), _CODING_NOW, cur, count=1)
-        store.save_doc('counsel', check_budget(store, 'counsel', fixed), 'migration')
-        store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': 'reading-is-not-coding'})
-        return 'appended'
-    new_lines, lines, added = new.splitlines(), cur.rstrip('\n').splitlines(), []
+    added = []
+    # ...an owner's own copy keeps every word but the one sentence that sent READING a database to the coding agent
+    # (the owner, 2026-10-05: data is coding when it CHANGES; "open AP over 90 days" went to the coder, 2026-10-06)
+    if MARKER in cur and MATCH_MARKER in cur and _CODING_WAS in _squash(cur):
+        cur = re.sub(r'\s+'.join(map(re.escape, _CODING_WAS.split())), _CODING_NOW, cur, count=1)
+        added.append('reading-is-not-coding')
+    new_lines, lines = new.splitlines(), cur.rstrip('\n').splitlines()
     if MARKER not in cur:
         start = new_lines.index(f'## {DECIDING_HEAD}')
         end = next((i for i in range(start + 1, len(new_lines)) if new_lines[i].startswith('## ')), len(new_lines))
@@ -222,6 +239,15 @@ def migrate(store) -> str:
         if at < len(lines) and not lines[at].strip(): at += 1
         lines = lines[:at] + new_lines[i:j] + lines[at:]
         added.append('match-first')
+    if not any(CALM_MARKER in l for l in lines):
+        calm, at = _calm_block(new_lines), _voice_line(lines)
+        if at is None: lines = lines + ['', f'## {VOICE_HEAD}'] + calm
+        else:
+            at += 1
+            if at < len(lines) and not lines[at].strip(): at += 1
+            lines = lines[:at] + calm + lines[at:]
+        added.append('calm')
+    if not added: return 'unchanged'
     text = '\n'.join(lines) + '\n'
     store.save_doc('counsel', check_budget(store, 'counsel', text), 'migration')
     store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': ' + '.join(added)})

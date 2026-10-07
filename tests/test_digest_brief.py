@@ -66,7 +66,7 @@ class BriefVoiceTests(unittest.TestCase):
         self.assertIn('MORNING BRIEF', sys_digest)
         # The approved COUNSEL edit renamed the heading; assert its voice rule,
         # not the old section title. Report/chat prompt separation is a later change.
-        self.assertIn('Plain, direct and short.', sys_digest)
+        self.assertIn('Every line leaves', sys_digest)
         self.assertEqual(reports.report_system(s, {'type': 'sqlite'}), reports.AI_SYSTEM)
         self.assertIn('MORNING BRIEF', reports.report_system(s, {'type': 'rest', 'sources': [{'type': 'digest'}]}))
 
@@ -79,7 +79,7 @@ class BriefVoiceTests(unittest.TestCase):
         def llm(system, user, **kw): seen.setdefault('system', system); return '- morning.'   # the summary's call, not triage's
         reports.run_report_source(s, src, llm=llm)
         self.assertIn('MORNING BRIEF', seen['system'])
-        self.assertIn('Plain, direct and short.', seen['system'])
+        self.assertIn('Every line leaves', seen['system'])
 
 
 class BriefMemoryTests(unittest.TestCase):

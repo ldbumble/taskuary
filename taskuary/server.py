@@ -1089,7 +1089,10 @@ def task_detail(task_id: int):
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
+    from . import concierge
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
+            # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
+            'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
             'messages': [_readable(x) for x in d.get('messages') or []],
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
@@ -3691,6 +3694,15 @@ def concierge_open():
     from . import concierge
     _hands_off()
     return concierge.open_day(store, actor=ACTOR)
+
+class ArriveBody(BaseModel): leaving: bool = False
+
+@app.post('/api/concierge/arrive')
+def concierge_arrive(body: ArriveBody = ArriveBody()):
+    """The owner is in front of the chat (the page opened, the window got focus) or just left it. The first time on a new
+    day, or back after a long gap, the chat opens with the day in a breath (welcome.arrive) - code, never a model call."""
+    from . import welcome
+    return welcome.arrive(store, actor=ACTOR, leaving=body.leaving)
 
 class ConciergeStreamBody(BaseModel):
     mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None; context_mid: int | None = None

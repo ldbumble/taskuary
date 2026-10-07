@@ -286,10 +286,19 @@ def asks_list(store, p: dict) -> str:
     from . import asks
     return asks.listing(store, p)
 
+def missed_check(store, p: dict) -> str:
+    """"Did I miss anything?" - the morning brief's unanswered and waiting-on-them checks, and what could not be seen."""
+    from . import welcome
+    d = welcome.missed(store)
+    facts = ([f"ASKED, NO ANSWER FROM YOU: {a['facts']}" for a in d['asked']] + [f"WAITING ON THEM: {w['facts']}" for w in d['waiting']]
+             + [f"COULD NOT CHECK: {n} (not answering since {_day(at) or '?'})" for n, at in d['blind']]
+             + [f"URGENT: {task_ref(t['TaskId'])} {_cut(t.get('Title'), 100)}" for t in d['urgent']])
+    return NL.join(facts + ['', 'SAY IT LIKE THIS (keep every fact, in your own words if you like):', welcome.missed_says(d)])
+
 READ = {'tasks.list': tasks_list, 'message.read': message_read, 'sender.read': sender_read, 'docs.search': docs_search,
         'agents.now': agents_now, 'approvals.list': approvals_list, 'pipe.list': pipe_list, 'calendar.read': calendar_read,
         'activity.list': activity_list, 'errors.list': errors_list,
-        'memory.list': memory_list, 'rules.list': rules_list, 'asks.list': asks_list}
+        'memory.list': memory_list, 'rules.list': rules_list, 'asks.list': asks_list, 'missed.check': missed_check}
 
 def read(store, kind: str, p: dict) -> str:
     f = READ.get(kind)

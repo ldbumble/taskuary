@@ -249,6 +249,7 @@ WHERE = (
     ("the owner's meetings", 'calendar.read', {'from': 'tomorrow'}),
     ('what is failing, or failed', 'errors.list', {}),
     ('what you remember about the owner', 'memory.list', {}),
+    ('whether the owner missed anything', 'missed.check', {}),
 )
 
 # THE BUCKETS. Every tool is in one (a test holds it to that), so the index is exhaustive though no tool's
@@ -347,6 +348,10 @@ READS = {
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
                          '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '
                          'Use it for "why did I never see X", "what am I filtering"'),
+    # DID I MISS ANYTHING (welcome.missed): the morning brief's two checks, for the chat, and what could not be seen
+    'missed.check':     ('whether the owner missed anything: asks nobody answered, people who have not answered the owner, '
+                         'anything marked urgent, and every place that could not be checked - with the answer written out. '
+                         'Use it for "did I miss anything", "anything slip", "am I behind on anything"'),
     'report.read':      'a report or workflow and its last runs - what it said, whether it failed and why, and its source_id. `title`: part of its name (or `source_id`)',
     # THE APP ITSELF, by name (appfacts). Asked from a chat to "run me the AR report" the assistant had
     # no list of reports at all; "is Teams connected" had no answer but a guess (the owner, 2026-09-18).
@@ -386,7 +391,7 @@ def valid(kind: str, params: dict) -> str:
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),
                 'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (),
-                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': (),
+                'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'rules.list': (), 'missed.check': (),
                 'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',)}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"

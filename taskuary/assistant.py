@@ -239,7 +239,33 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
                         'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
                                   f"- nothing has come back in {days} day(s)." + (f" BUT {who} is {gone}." if gone else '')),
                         'text': (f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
-                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')}})
+                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')},
+                        'who': who, 'subject': subj, 'days': days, 'away': gone})
+    return out
+
+
+_DUE_TODAY = re.compile(r'\b(today|this (morning|afternoon|evening)|by (the )?end of (the )?day|by eod|tonight)\b', re.I)
+
+def promises_due(store, now=None) -> list:
+    """The owner's own promises that fall due TODAY, by their own words: "I'll send it today" written today, "tomorrow"
+    written yesterday, or today's weekday named. [{'who', 'what', 'mid'}] - the arrival's one promise line (welcome.py)."""
+    from .triage import own_words
+    now = now or datetime.now()
+    day, yday, wd = now.strftime('%Y-%m-%d'), (now - timedelta(days=1)).strftime('%Y-%m-%d'), now.strftime('%A').lower()
+    out = []
+    for r in store.owner_last_words(_since(7), now.strftime('%Y-%m-%d %H:%M:%S')):
+        body, sent = own_words(str(r.get('BodyText') or '')), _ts(r.get('SentAt'))[:10]
+        m = _PROMISE.search(body)
+        if not m: continue
+        line = (body[m.start():].splitlines() or [''])[0].split('. ')[0]
+        if not ((sent == day and _DUE_TODAY.search(line)) or (sent == yday and re.search(r'\btomorrow\b', line, re.I))
+                or (sent != day and re.search(rf'\b{wd}\b', line, re.I))): continue
+        inbound = store.last_inbound_in(r['ConversationId']) if r.get('ConversationId') else None
+        who = (inbound or {}).get('FromName') or (inbound or {}).get('FromEmail') or 'them'
+        what = re.sub(r"^(i('ll| will)|i'?m going to|let me)\s+", '', _short(line, 90), flags=re.I)
+        what = re.sub(rf"\s*\b(today|tomorrow|tonight|this (morning|afternoon|evening)|by (the )?end of (the )?day|by eod|(by |on )?{wd})\b.*$",
+                      '', what, flags=re.I).rstrip(' ,.')
+        out.append({'who': who, 'what': what or 'get back to them', 'mid': r.get('MessageId')})
     return out
 
 
@@ -279,7 +305,8 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
                     'facts': f"{who} asked {_when(last['SentAt'])} re \"{_short(last.get('Subject'), 70)}\": \"{_gist(body, 160)}\" - no answer from you in {ago}; {cover}"
                              + (f"; {who} is {gone}" if gone else ''),
                     'text': f"{who} asked \"{_gist(body, 60)}\" {ago} ago - no answer yet ({cover})",
-                    'action': {'type': 'message', 'mid': last['MessageId'], 'tid': tid}})
+                    'action': {'type': 'message', 'mid': last['MessageId'], 'tid': tid},
+                    'who': who, 'gist': _gist(body, 60), 'ago': ago})
     return out
 
 

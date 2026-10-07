@@ -43,7 +43,7 @@ def _delivery_claim_alive(claim):
 GENESIS = '0' * 64
 # the channels Taskuary writes itself - its reports and the Advisor's ideas - which carry no sender address
 OWN_CHANNELS = ('report', 'assistant')
-TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia')
+TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
             'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy')
@@ -238,7 +238,8 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
   Kind TEXT DEFAULT 'general', Status TEXT DEFAULT 'open', Priority TEXT DEFAULT 'normal',
   Assignee TEXT, Source TEXT DEFAULT 'manual', SourceRef TEXT, Tags TEXT,
   CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT, ClosedAt TEXT, RemindAt TEXT,
-  AskedVia TEXT, AskedTold TEXT, AskedToldAt TEXT, AskedWatch TEXT, AskedSeenMid INTEGER, RemindVia TEXT, RemindOwed TEXT);
+  AskedVia TEXT, AskedTold TEXT, AskedToldAt TEXT, AskedWatch TEXT, AskedSeenMid INTEGER, RemindVia TEXT, RemindOwed TEXT,
+  AskedWatchAt TEXT, AskedNudgedAt TEXT, DueAt TEXT, DueSaid TEXT);
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
@@ -827,6 +828,10 @@ class SQLiteStore:
             # ...a watch on a task nobody works (what, and the last reply already seen), and where a reminder was set
             # and whether it is still owed to a busy phone chat
             for col in ('AskedVia', 'AskedTold', 'AskedToldAt', 'AskedWatch', 'AskedSeenMid', 'RemindVia', 'RemindOwed'):
+                if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
+            # a watch counts its 30 days from when it began, not from the task's age, and says its nudge once (asks.py);
+            # the day the work is due, as triage read it from the mail, and the last step of it already said (remind.py)
+            for col in ('AskedWatchAt', 'AskedNudgedAt', 'DueAt', 'DueSaid'):
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
             # an email slot an agent addressed as "Name <address>" handed the provider the whole string (TQ-0957): the
             # recipient is the address, the name rides beside it (slots.split) - repaired once, on start

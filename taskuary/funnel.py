@@ -1534,7 +1534,10 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         start = _activity_time(key.split(':', 1)[1][:16])
         if start and start > datetime.now(): verb, until = 'later', start.strftime('%Y-%m-%d %H:%M:%S')
         else: verb = 'done'
-    if verb == 'later' and until is None: until = (datetime.now() + timedelta(hours=hours or LATER_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
+    says = ''
+    if verb == 'later' and until is None:
+        back, says = later_until(store, hours=hours)
+        until = back.strftime('%Y-%m-%d %H:%M:%S')
     if verb == 'skip':
         tomorrow = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=0, second=0)
         until = tomorrow.strftime('%Y-%m-%d %H:%M:%S')
@@ -1565,7 +1568,25 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
             if rank.any_rank(store): rank.top_up(store, 1)
         except Exception as e:
             logger.debug(f'the ranked queue did not top up: {e}')
-    return {'key': key, 'verb': verb, 'until': until}
+    return {'key': key, 'verb': verb, 'until': until, **({'says': says} if says else {})}
+
+
+def later_until(store, now: datetime = None, hours: float = None) -> tuple:
+    """When Later brings it back, and the sentence that says so. Three hours on - unless the calendar shows her in
+    meetings: then five minutes after the run of them she is in now, or the one the three hours would land in (the
+    owner could only say "later" and get it back mid-call, 2026-10-06). Today's meetings as already read, never a live
+    calendar call in front of a press; no calendar, plain hours."""
+    from .remind import agenda, busy_run, clock, AFTER_MIN
+    now = now or datetime.now()
+    back = now + timedelta(hours=hours or LATER_HOURS)
+    events = agenda(store) if not hours else []
+    run = busy_run(events, now + timedelta(minutes=ALERT_MIN)) or busy_run(events, back)
+    if run and run[0] + timedelta(minutes=AFTER_MIN) > now:
+        back = run[0] + timedelta(minutes=AFTER_MIN)
+        day = '' if back.date() == now.date() else 'tomorrow ' if back.date() == (now + timedelta(days=1)).date() else f"{back:%a} "
+        return back, f"You're in meetings until {clock(run[0])}. I'll bring it back {day}at {clock(back)}."
+    day = '' if back.date() == now.date() else 'tomorrow '
+    return back, f"I'll bring it back {day}at {clock(back)}."
 
 
 def reset_walk(store):

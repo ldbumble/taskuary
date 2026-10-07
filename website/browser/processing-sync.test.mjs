@@ -56,7 +56,9 @@ test('sync phases leave rows usable and completion is discovered without live ev
   await phase('triaging');
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(n => n.textContent.trim() === 'Organizing'), { timeout: 10000 });
   assert.equal(await page.$eval('[data-tq-sync-icon]', n => getComputedStyle(n).animationName), 'none');
-  assert.ok(await page.evaluate(() => document.body.innerText.includes('Synthetic triage error remains visible')));
+  // said the way the owner should hear it (problems.thinking); the raw cause stays on hover
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('[title]')]
+    .some(n => n.title.includes('Synthetic triage error remains visible') && n.innerText.includes('trouble thinking'))));
   const compose = await page.$('.tq-compose textarea');
   if (compose) {
     await compose.type('Owner can still type while messages are organized');

@@ -26,7 +26,8 @@ test("PW-115 abandons a Walk validation when New chat replaces its conversation"
   const page = await h.newPage();
   const writes = [];
   page.on("request", r => {
-    if (r.method() === "POST" && new URL(r.url()).pathname.startsWith("/api/concierge")) writes.push(r.url());
+    const path = new URL(r.url()).pathname;     // arrive only notes the owner is here (welcome.arrive) - not a Walk turn
+    if (r.method() === "POST" && path.startsWith("/api/concierge") && path !== "/api/concierge/arrive") writes.push(r.url());
   });
   await page.goto(h.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForFunction(() => [...document.querySelectorAll("button")]
@@ -87,7 +88,7 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
   page.on("pageerror", error => errors.push(error.message));
   page.on("request", r => {
     const url = new URL(r.url());
-    if (url.origin === h.ui && r.method() === "POST"
+    if (url.origin === h.ui && r.method() === "POST" && url.pathname !== "/api/concierge/arrive"
       && (url.pathname.startsWith("/api/concierge") || url.pathname === "/api/funnel/settle")) {
       writes.push({ path: url.pathname, body: JSON.parse(r.postData() || "{}") });
     }

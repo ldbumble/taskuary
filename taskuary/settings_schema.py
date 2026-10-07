@@ -2,7 +2,7 @@
 the setting look-ups) read the same taskuary/settings_schema.json, so a knob cannot be called one thing
 on the page and another in the chat - the rule lanes.json already keeps for the lanes. The schema used
 to live only in the JSX, which is why the assistant knew the pile and not one of the 52 knobs."""
-import json
+import json, math
 from functools import lru_cache
 from pathlib import Path
 
@@ -30,3 +30,15 @@ def describe(key: str, value) -> str:
     meta = knobs().get(key)
     if not meta: return f'{key}: {value}'
     return f"{meta['label']} ({meta['group']}): {_word(meta, value)}"
+
+
+def refuse(key: str, value) -> str:
+    """'' when `value` may be stored under `key`, else the sentence why not. A number knob takes 0 or more, or blank for its
+    default: -5 days of Timeline said Saved and emptied the Timeline (the 2026-10-07 click-through)."""
+    meta = knobs().get(key)
+    if not meta or meta.get('type') != 'number': return ''
+    v = str('' if value is None else value).strip()
+    if not v: return ''
+    try: n = float(v)
+    except ValueError: n = None
+    return '' if n is not None and math.isfinite(n) and n >= 0 else f"{meta['label']} takes a number, 0 or more - not {v!r}"

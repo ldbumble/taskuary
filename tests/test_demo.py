@@ -63,6 +63,10 @@ class TheDoorsAreShutTests(unittest.TestCase):
             for path in ('/api/sync', '/api/ingest/push', '/api/hooks/claude', '/api/msauth/start'):
                 self.assertTrue(demo.refuse('POST', path), path)
 
+    def test_the_greeting_when_a_visitor_sits_down_is_the_demo_itself(self):
+        # refused, the demo never said good morning: the arrive ping only writes the demo's own chat
+        with on(): self.assertFalse(demo.refuse('POST', '/api/concierge/arrive'))
+
     def test_an_endpoint_nobody_thought_about_is_refused_by_default(self):
         """The list says what MAY happen. Anything else - including something added next month -
         is refused until somebody decides it is safe."""

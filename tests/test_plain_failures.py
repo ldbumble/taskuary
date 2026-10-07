@@ -72,3 +72,21 @@ class StopAndCancelTests(unittest.TestCase):
         chatgptauth.cancel('f1')
         self.assertNotIn('f1', chatgptauth._FLOWS); srv.shutdown.assert_called_once()
         chatgptauth.cancel('gone')                    # a flow already over is no error
+
+
+class NumberSettingTests(unittest.TestCase):
+    def test_a_number_setting_takes_zero_or_more_or_blank_for_its_default(self):
+        """-5 days of Timeline said Saved and emptied the Timeline (the 2026-10-07 click-through)."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            for bad in ('-5', 'often', 'nan', 'inf'):
+                r = c.patch('/api/settings', json={'name': 'feed_days', 'value': bad})
+                self.assertEqual(r.status_code, 422, bad); self.assertIn('Timeline lookback', r.json()['detail'])
+            self.assertEqual(s.get_settings()['feed_days'], '14')
+            for good in ('21', '0', ''):
+                self.assertEqual(c.patch('/api/settings', json={'name': 'feed_days', 'value': good}).status_code, 200, good)
+            self.assertEqual(c.patch('/api/settings', json={'name': 'ui_note', 'value': '-5'}).status_code, 200, 'not a number knob')

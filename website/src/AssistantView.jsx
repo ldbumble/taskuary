@@ -1000,6 +1000,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, []);
   useEffect(() => { currentRef.current = currentItem; }, [currentItem]);
   useEffect(() => { loadState().catch((e) => setErr(errText(e))); }, [loadState]);
+  // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
+  // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
+  // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
+  useEffect(() => {
+    if (!active) return undefined;
+    let last = 0;
+    const arrive = (leaving = false) => {
+      if (!leaving && Date.now() - last < 60_000) return;
+      if (!leaving) last = Date.now();
+      api.post("/api/concierge/arrive", { leaving }).then(({ data }) => { if (data?.said) readChat().catch(() => {}); }).catch(() => {});
+    };
+    const back = () => { if (document.visibilityState !== "hidden") arrive(false); };
+    const away = () => arrive(true);
+    arrive(false);
+    window.addEventListener("focus", back); window.addEventListener("blur", away);
+    document.addEventListener("visibilitychange", back);
+    return () => { window.removeEventListener("focus", back); window.removeEventListener("blur", away); document.removeEventListener("visibilitychange", back); };
+  }, [active, readChat]);
   // Writes push an event and force one fresh rebuild. The timer is only a disconnected-socket
   // safety net: rebuilding this multi-source pile every five seconds starved Board, Tasks and
   // Past chats behind work whose answer had not changed.

@@ -3384,7 +3384,10 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
   const [adminUrl, setAdminUrl] = useState("");   // the link IT clicks once; shown when Microsoft says "Need admin approval" or on request
-  const signedIn = cfg.auth === "user" && conn.HasSecret;
+  // a stored token is not a sign-in: Microsoft lets one lapse, and this said "Signed in" over hours of unread mail
+  // (problems.signed_out, from the card's last poll)
+  const signedOut = cfg.auth === "user" && conn.HasSecret && conn.SignedOut;
+  const signedIn = cfg.auth === "user" && conn.HasSecret && !signedOut;
   useEffect(() => {
     if (!flow) return undefined;
     let alive = true;
@@ -3448,11 +3451,17 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
         </Box>
       ) : (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+          {signedOut && (
+            <Typography variant="body2" sx={{ color: INK, fontWeight: 600, flexBasis: "100%" }}>
+              Microsoft signed you out{cfg.account ? ` of ${cfg.account}` : ""}. I can't see your mail until you sign in again —
+              nothing is lost, and I'll catch up on everything that came in.
+            </Typography>
+          )}
           <Button variant="contained" disableElevation disabled={busy} onClick={start}>
-            {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with Microsoft"}</Button>
+            {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : signedOut ? "Sign in again" : "Sign in with Microsoft"}</Button>
           {/* the QUESTION is not the button. Asked and answered in one 48-character control, it was
               the widest thing on the card and read as a sentence somebody had made clickable. */}
-          {!adminUrl && (
+          {!adminUrl && !signedOut && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
               <Typography variant="caption" sx={{ color: DIM }}>Does IT have to approve apps?</Typography>
               <Button size="small" onClick={adminLink} sx={{ fontSize: 11.5, color: DIM }}>Get the admin link</Button>

@@ -62,14 +62,26 @@ function Bell({ onGo }) {
   const [items, setItems] = useState([]);
   const [el, setEl] = useState(null);
   const [busy, setBusy] = useState(null);
-  const load = useCallback(async () => { try { setItems((await api.get("/api/problems")).data.data || []); } catch { /* the bell is optional */ } }, []);
+  // news: something that ENDED on its own - "Back on. 14 came in, 2 need you." (problems.news). A quiet dot, never the red count.
+  const [news, setNews] = useState([]);
+  const load = useCallback(async () => {
+    try { const { data } = await api.get("/api/problems"); setItems(data.data || []); setNews(data.news || []); } catch { /* the bell is optional */ }
+  }, []);
   useEffect(() => pollWhileVisible(load, 30000), [load]);
   const n = items.length;
+  const put = async (p) => {
+    setBusy(p.key);
+    try { await api.post(`/api/problems/${encodeURIComponent(p.key)}/dismiss`); } catch { /* it may have cleared itself */ }
+    await load(); setBusy(null);
+  };
   return (
     <>
-      <Tooltip title={n ? `${n} thing${n === 1 ? "" : "s"} failing — click to see` : "Nothing is failing"}>
+      <Tooltip title={n ? `${n} thing${n === 1 ? "" : "s"} failing — click to see` : news.length ? news[news.length - 1].title : "Nothing is failing"}>
         <IconButton size="small" onClick={(e) => { setEl(e.currentTarget); load(); }} sx={{ position: "relative" }}>
           {n ? <NotificationsActiveIcon sx={{ fontSize: 18, color: ALERT }} /> : <NotificationsNoneIcon sx={{ fontSize: 18, color: DIM }} />}
+          {!n && news.length > 0 && (
+            <Box component="span" sx={{ position: "absolute", top: 3, right: 3, width: 7, height: 7, borderRadius: 99, bgcolor: "#47654a" }} />
+          )}
           {n > 0 && (
             <Box component="span" sx={{ position: "absolute", top: 1, right: 1, minWidth: 14, height: 14, px: 0.3, borderRadius: 99,
               bgcolor: ALERT, color: "#fffdfb", fontSize: 9, fontWeight: 600, display: "grid", placeItems: "center", lineHeight: 1 }}>
@@ -88,7 +100,8 @@ function Bell({ onGo }) {
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, color: INK, fontSize: 12.5 }}>{p.title}</Typography>
               <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45, wordBreak: "break-word" }}>{p.detail}</Typography>
-              {p.since && <Typography variant="caption" sx={{ color: FAINT }} title={p.since}>failed {timeAgo(p.since)} · {fmtWhen(p.since)}</Typography>}
+              {/* the two said in the assistant's voice (problems.collect `kind`) are a state, not a failure: "since" */}
+              {p.since && <Typography variant="caption" sx={{ color: FAINT }} title={p.since}>{p.kind ? "since" : "failed"} {timeAgo(p.since)} · {fmtWhen(p.since)}</Typography>}
             </Box>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4, alignItems: "stretch", flexShrink: 0 }}>
               <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
@@ -97,11 +110,25 @@ function Bell({ onGo }) {
                   (problems.signature), so this quiets something you have decided to live with. */}
               <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
                 title="I have read this. It returns if it happens again."
-                onClick={async () => {
-                  setBusy(p.key);
-                  try { await api.post(`/api/problems/${encodeURIComponent(p.key)}/dismiss`); } catch { /* it may have cleared itself */ }
-                  await load(); setBusy(null);
-                }}>{busy === p.key ? "…" : "Dismiss"}</Button>
+                onClick={() => put(p)}>{busy === p.key ? "…" : "Dismiss"}</Button>
+            </Box>
+          </Box>
+        ))}
+        {news.length > 0 && (
+          <Typography sx={{ fontWeight: 600, fontSize: 12, color: DIM, mt: n ? 1 : 0, mb: 0.25 }}>Back to normal</Typography>
+        )}
+        {news.map((p) => (
+          <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: INK, fontSize: 12.5 }}>{p.title}</Typography>
+              {p.detail && <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45 }}>{p.detail}</Typography>}
+              {p.since && <Typography variant="caption" sx={{ color: FAINT }} title={p.since}>{timeAgo(p.since)}</Typography>}
+            </Box>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4, alignItems: "stretch", flexShrink: 0 }}>
+              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
+                onClick={() => { setEl(null); onGo(p); }}>{p.fix || "Show me"} →</Button>
+              <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
+                onClick={() => put(p)}>{busy === p.key ? "…" : "Got it"}</Button>
             </Box>
           </Box>
         ))}

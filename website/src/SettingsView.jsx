@@ -1080,7 +1080,11 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
 
   if (browse) {
     // a page or a group this install does not have (an old link) opens the list, and says why - never a crash or a blank card
-    const section = PAGES[browseState.section] ? browseState.section : null;
+    // PROFILES AND PLAYBOOKS ARE SECTIONS OF THEIR OWN up here, beside Docs - not shelves inside it (the owner, 2026-10-07: "separate
+    // docs and profiles ... it should have separate section on the top level settings thing"). They open in the Docs page's editor.
+    const SHELF = { docs: ["g:documents", "g:how"], profiles: ["g:profiles"], playbooks: ["g:playbooks"] };
+    const section = PAGES[browseState.section] || SHELF[browseState.section] ? browseState.section : null;
+    const page = SHELF[section] ? "docs" : section;
     const gone = section === "config" && browseState.open && !GROUPS.includes(browseState.open);
     const knobsIn = (g) => Object.values(schema.knobs || {}).filter((k) => k.group === g).length;
     // SEARCH, as the tab had it: a setting you half remember is found by its words, and opens the group it lives in
@@ -1089,20 +1093,27 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     // DOCS IS A SHELF OF FILES, not one page (the owner, 2026-09-29: "I don't see the rest of the docs ... we need sub
     // settings to see all the files soul.md/counsel"): the same tree the tab's rail drew - the operator documents, the
     // profiles, the playbooks and their New / Manage entries, How it works - each a card that opens that document
+    // ...each card saying what it is, not which shelf it is on ("Operator documents" in grey under every name)
+    const what = { ...Object.fromEntries(OPERATOR_DOCS.map((d) => [`d:${d.name}`, d.blurb])),
+      ...Object.fromEntries((docCat.profiles || []).map((r) => [`p:${r.name}`, r.purpose])),
+      ...Object.fromEntries((docCat.playbooks || []).map((pb) => [`b:${pb.slug}`, pb.when])),
+      "a:new-profile": "a new worker with its own rules", "a:manage-profiles": "add, rename or remove workers",
+      "a:new-playbook": "a job an agent can repeat", "g:how": "the assistant and the gates a message passes" };
     let shelf = "";
     const docCards = docsTree(docCat).flatMap((e) => {
-      if (e.head && e.key !== "g:how") { shelf = e.label; return []; }
-      return [{ key: e.key, title: e.label, sub: e.key === "g:how" ? "the assistant and the gates a message passes" : shelf, sel: e.sel }];
-    });
+      if (e.head) shelf = e.key;
+      if (e.head && e.key !== "g:how") return [];
+      return [{ key: e.key, shelf, title: e.label, sub: String(what[e.key] || "").split(/(?<=\.)\s/)[0], sel: e.sel }];
+    }).filter((c) => (SHELF[section] || []).includes(c.shelf));
     const cards = needle ? hits.map(([k, m]) => ({ key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config" }))
       : section === "config" ? GROUPS.map((g) => ({ key: g, title: g, sub: `${knobsIn(g) || "its own panel"}${knobsIn(g) ? " settings" : ""}` }))
-      : section === "docs" ? docCards
+      : SHELF[section] ? docCards
       : section ? [{ key: section, title: PAGES[section].title, sub: PAGES[section].desc }] : [];
     const open = gone || !section ? null : browseState.open;
     return browse({
       title: "Settings",
       summary: "how Taskuary works for you · pick a section",
-      sections: NAV.map((k) => ({ key: k, label: PAGES[k].title })),
+      sections: NAV.flatMap((k) => [{ key: k, label: PAGES[k].title }, ...(k === "docs" ? [{ key: "profiles", label: "Profiles" }, { key: "playbooks", label: "Playbooks" }] : [])]),
       section: needle ? "" : section,
       onSection: (key) => { setQ(""); onBrowseState?.({ section: key, open: null }); },
       cards: cards.map((c, i) => ({ ...c, key: needle ? `${c.key}-${i}` : c.key,
@@ -1121,11 +1132,11 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       // what the assistant changed here, and the way to undo it - the tab drew it over Configuration
       tools: section === "config" && !open && !needle ? <Box sx={{ mt: 1.5 }}><AssistantChanges /></Box>
         // the shelf's profiles and playbooks come from DocsView's own reads - mounted unseen, as the tab's rail had it
-        : section === "docs" && !open ? <Box sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box> : null,
-      detail: open ? <SettingsPages only={{ page: section, group: section === "config" ? open : null }} q="" setQ={() => {}} onNavigate={onNavigate}
+        : SHELF[section] && !open ? <Box sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box> : null,
+      detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
-      openLabel: !open ? "" : section === "docs" ? `the document "${docCards.find((c) => c.key === open)?.title || "Docs"}" (Settings - Docs)`
+      openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || "Docs"}" (Settings - ${section === "docs" ? "Docs" : section === "profiles" ? "Profiles" : "Playbooks"})`
         : `the settings group "${section === "config" ? open : PAGES[section]?.title}" (Settings)`,
       note: gone ? `“${browseState.open}” is not a settings group any more - here are the ones there are.` : "",
     });

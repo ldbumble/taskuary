@@ -42,7 +42,7 @@ const DOCS = {
 const NAMES = Object.keys(DOCS);
 // The rail in Settings draws these, so the list of operator documents lives in ONE place rather
 // than being retyped beside the sidebar that lists it.
-export const OPERATOR_DOCS = NAMES.map((n) => ({ name: n, label: DOCS[n].label }));
+export const OPERATOR_DOCS = NAMES.map((n) => ({ name: n, label: DOCS[n].label, blurb: DOCS[n].blurb }));
 
 // The Assistant, and the gates a message passes in order. Shipped markdown (templates/how-it-works.md),
 // read-only: it describes what the code does, so it is reference rather than an operator document -

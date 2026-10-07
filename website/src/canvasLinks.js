@@ -28,10 +28,9 @@ export function canvasRequestFromHash(hash, n = 0) {
     // Docs is a shelf of files: its link opens the shelf, not whichever document happens to be first
     return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page === "docs" ? null : page }, n };
   }
-  // a playbook: the words live in Settings -> Docs (DocsView reads the hash itself and opens it)
-  if (/^#playbook=/.test(h)) return { kind: "browse", area: "settings", state: { section: "docs", open: "docs" }, n };
-  // "Manage profiles": Docs' shelf, where every profile is a card beside Manage profiles and + New profile - what the
-  // tab's rail showed on this link
-  if (/^#profiles(?:$|=)/.test(h)) return { kind: "browse", area: "settings", state: { section: "docs", open: null }, n };
+  // a playbook: the words live in Settings -> Playbooks, edited in the Docs page (DocsView reads the hash itself and opens it)
+  if (/^#playbook=/.test(h)) return { kind: "browse", area: "settings", state: { section: "playbooks", open: "docs" }, n };
+  // "Manage profiles": the Profiles section, where every profile is a card beside Manage profiles and + New profile
+  if (/^#profiles(?:$|=)/.test(h)) return { kind: "browse", area: "settings", state: { section: "profiles", open: null }, n };
   return null;
 }

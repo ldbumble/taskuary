@@ -15,8 +15,8 @@ test("each old link becomes a canvas request", () => {
   assert.deepEqual(canvasRequestFromHash("#settings=config&group=Triage%20%26%20agents").state, { section: "config", open: "Triage & agents" });
   assert.deepEqual(canvasRequestFromHash("#settings=policies").state, { section: "policies", open: "policies" });
   assert.deepEqual(canvasRequestFromHash("#settings=docs").state, { section: "docs", open: null }, "Docs opens on its shelf of files");
-  assert.deepEqual(canvasRequestFromHash("#playbook=weekly-close").state, { section: "docs", open: "docs" });
-  assert.deepEqual(canvasRequestFromHash("#profiles").state, { section: "docs", open: null }, "Docs' shelf, every profile a card");
+  assert.deepEqual(canvasRequestFromHash("#playbook=weekly-close").state, { section: "playbooks", open: "docs" });
+  assert.deepEqual(canvasRequestFromHash("#profiles").state, { section: "profiles", open: null }, "the Profiles section, every profile a card");
 });
 
 test("a link that is not a page is left alone", () => {

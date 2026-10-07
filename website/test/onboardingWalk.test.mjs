@@ -74,7 +74,10 @@ test("a tab stop shows the whole tab, clickable, and a missing image never leave
 test("a tab stop is the tab itself in a scrollable window, and the Assistant stop keeps its picture", () => {
   const cards = read("assistantCards.jsx");
   const table = cards.slice(cards.indexOf("const TAB_WINDOWS"), cards.indexOf("function TabWindow"));
-  for (const stop of ["connections", "docs", "settings", "board", "tasks", "reports", "hub"]) assert.match(table, new RegExp(`${stop}: React\.lazy`));
+  for (const stop of ["connections", "board", "tasks", "reports", "hub"]) assert.match(table, new RegExp(`${stop}: React\.lazy`));
+  // Settings and Docs are the canvas's picker, the chips - not the old tab with its scrolling rail (2026-10-07)
+  for (const stop of ["docs", "settings"]) assert.match(table, new RegExp(`${stop}: SettingsWindow`));
+  assert.match(cards, /const Picker = React\.lazy\(\(\) => import\("\.\/CanvasBrowse\.jsx"\)\)/);
   assert.doesNotMatch(table, /assistant:/);
   assert.match(cards, /onSelect=\{setSel\} selected=\{sel\}/);
   assert.match(cards, /card\.image && !TAB_WINDOWS\[card\.key\]/);

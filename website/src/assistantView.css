@@ -188,15 +188,19 @@
 .tq-welcome-sum { margin: 6px 0 4px; text-align: left; }
 .tq-welcome-why { display: block; margin: 4px 0; font-size: 12px; color: #7d7468; }
 /* the day's opener: a card per band, paper and a hairline; the band is the label's DOT, never a tinted card */
-.tq-day-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 16px 0 2px; }
+/* ONE ROW, however many bands: auto-fit at 170px held four across 822px, so a fifth band (an agent still working at launch)
+   dropped FYI alone under the rest, and the row snapped back to four when that band left (the owner, 2026-10-07). A narrow
+   pane wraps them evenly in twos instead. */
+.tq-day-cards { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; margin: 16px 0 2px; }
+@container (max-width: 640px) { .tq-day-cards { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .tq-day-card { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; padding: 12px 14px; text-align: left; cursor: pointer;
   border: 1px solid #e6e1d8; border-radius: 10px; background: #fffdfb; font: inherit; color: #262521; transition: border-color .15s, background .15s; }
 .tq-day-card:hover { border-color: #d3ccc1; background: #fbf9f6; }
 /* the count sits BESIDE its label (the cleanup, 2026-10-06): one line says what and how many, the next says who */
 .tq-day-card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .tq-day-card:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
-.tq-welcome .tq-day-card .lbl { display: flex; align-items: center; gap: 7px; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; color: #4d4a43; }
-.tq-day-card .dot { width: 7px; height: 7px; border-radius: 50%; background: #b8afa1; }
+.tq-welcome .tq-day-card .lbl { display: flex; align-items: center; gap: 7px; min-width: 0; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; color: #4d4a43; }
+.tq-day-card .dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #b8afa1; }
 .tq-day-card .top b { font: 600 22px/1 'IBM Plex Sans', system-ui, sans-serif; color: #262521; font-variant-numeric: tabular-nums; }
 .tq-welcome .tq-day-card .who { width: 100%; font-size: 12.5px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-day-card.lvl-urgent .dot { background: #8a3646; }

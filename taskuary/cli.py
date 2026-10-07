@@ -187,7 +187,8 @@ def main():
             out = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
         except Exception as e:
             print(f'could not reach Taskuary at {base}: {e}'); return
-        print(f"{'email' if drafting else 'reply'} saved on the task, waiting on the owner to approve and send it." if out.get('ok')
+        print("saved on the task as its result - nobody is waiting on a reply, so nothing will be sent." if out.get('saved') == 'result'
+              else f"{'email' if drafting else 'reply'} saved on the task, waiting on the owner to approve and send it." if out.get('ok')
               else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
     if args.done is not None:

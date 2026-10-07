@@ -1418,9 +1418,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Box>
                   )}
                   {/* pages a session published, kept even when it ended without a written summary */}
-                  {!report && !wrapped && !sessionView && !isGeneral && (detail?.artifacts || []).some(isPublished) && (
+                  {/* ...and an answer the agent saved (an owner-started task has nobody to reply to, so it is the result) */}
+                  {!report && !wrapped && !sessionView && (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result") && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
-                      <PublishedPages pages={detail.artifacts.filter(isPublished)} />
+                      <CoderReport body="" artifacts={detail.artifacts.filter((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result")} />
                     </Box>
                   )}
                   {report && !wrapped && !sessionView && (

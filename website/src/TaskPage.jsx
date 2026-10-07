@@ -22,7 +22,7 @@ import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
-import { openReply } from "./replyDraft.js";
+import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { runOperation } from "./taskOps.js";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
@@ -631,7 +631,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     setOpeningReply(generate ? "generate" : "write"); setErr("");
     try {
       // the box at once and the AI's draft behind it, "Drafting…" in the decision meanwhile (replyDraft.js, 2026-10-01)
-      await (generate ? openReply(api, replyMessage.MessageId) : api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: false }));
+      await (generate ? draftReply(api, replyMessage.MessageId) : api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: false }));
       if (stale(id)) return;
       await loadDetail(id);
       onChanged?.();
@@ -871,24 +871,25 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         { id: "save-end", group: "agent", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
           title: "Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it." },
         ...(notDone ? [runAnother] : []),
-      ] : continueHere ? [{ id: "continue", group: "agent", lead: true, label: startingAgent === "resume" ? "Continuing…" : "Continue session", disabled: !!startingAgent,
+      ] : continueHere ? [{ id: "continue", group: "agent", lead: !pendingReview, label: startingAgent === "resume" ? "Continuing…" : "Continue session", disabled: !!startingAgent,
         run: (e, a) => setContinueAt(a || e?.currentTarget),
         title: isGeneral ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.` }]
-      : sendGeneral ? [{ id: "send-general", group: "agent", lead: true, label: startingAgent === "general" ? "Starting…" : "Send to agent",
+      : sendGeneral ? [{ id: "send-general", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : "Send to agent",
         disabled: !!startingAgent, run: startGeneralAgent,
         // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
         // the profile, brain and model pickers stay in that card for whoever wants to change them first
         title: "Starts the regular assistant with this task and its messages - profile, brain and model as set in Agent work." }]
-      : startHere ? [{ id: "start-agent", group: "agent", lead: true, label: ranBefore ? "Run another agent" : "Start an agent",
+      : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? "Run another agent" : "Start an agent",
         run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")),
         // it OPENS the step where the harness, model and prompt are chosen - nothing starts until that step's own Start button
         title: ranBefore ? "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
           : "Opens the agent step so you can choose a harness, a model and a prompt. Nothing starts until you press Start there." }] : []),
       ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: "Ask sender", run: () => setAskSenderOpen(true),
         title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
-      { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession },   // a live session has no primary;
-      // ...nor a waiting draft: its Send & close, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next
+      { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
+      // ...nor a waiting draft: its Send & close, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
+      // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
       { id: "nat", group: "more", label: "Not a task", run: () => setConfirmNAT(true), title: "Delete it and teach Taskuary why — the sender keeps writing to you." },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "Remind me", run: (e, a) => setRemindAt(a || e?.currentTarget),
         title: "Put it away until a day; it is back on your work rail that morning" },

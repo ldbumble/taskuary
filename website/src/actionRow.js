@@ -9,7 +9,7 @@ import React, { useEffect, useSyncExternalStore } from "react";
 const live = new Map();          // id -> the latest verb (its run closes over the freshest state)
 const owners = new Map();        // owner -> { verbs, ref }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.beside ? { beside: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 
 export function put(owner, verbs, ref = "") {
@@ -71,8 +71,11 @@ export function rowOf({ list, ref }) {
   const by = (g) => list.filter((v) => v.group === g);
   let decide = by("decide"), more = by("more"), agent = by("agent");
   let primary = decide.find((v) => v.tone === "p") || null;
+  // THE CARD ALREADY HOLDS THE MOVE (a waiting draft's Send & close, under the draft): the bar fills nothing, Next included -
+  // two filled buttons on one screen leave the owner to work out which one is meant
+  const onCard = list.some((v) => v.onCard);
   // no decision waiting: the session's way back in (Continue session / Start an agent) is the move, else Mark done
-  const lead = !primary && agent.find((v) => v.lead);
+  const lead = !primary && !onCard && agent.find((v) => v.lead);
   if (lead) { agent = agent.map((v) => (v === lead ? { ...v, tone: "p" } : v)); primary = lead; }
   // MARK DONE IS ALWAYS ON THE BAR, beside Next - never behind More (the owner, 2026-10-06: "mark done should show next to next on every
   // single task not inside the more button"; before that it went behind More whenever a decision waited, or a live session left no room).
@@ -103,6 +106,6 @@ export function rowOf({ list, ref }) {
   decide = once(decide); agent = once(agent); more = once(more);
   const next = by("next")[0] || null;
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
-  return { ref, decide, agent, more, primary, next: next && { ...next, tone: primary ? "s" : "p" },
+  return { ref, decide, agent, more, primary, next: next && { ...next, tone: primary || onCard ? "s" : "p" },
     why: primary?.disabled && primary.why ? `${primary.label} is off - ${primary.why}` : "" };
 }

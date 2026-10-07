@@ -954,7 +954,7 @@ class MemoryTests(unittest.TestCase):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('queued', t))
             again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
-            self.assertIsNone(again['item']); self.assertIn('waits for later', again['say'])   # put down: read, waiting in Passed (2026-09-23)
+            self.assertIsNone(again['item']); self.assertIn('waits under For later', again['say'])   # put down: read, waiting in Passed (2026-09-23)
             later = datetime.now() + timedelta(hours=4)
             on_rail = [(i['lane'], bool(i.get('why_open')), bool(i.get('surfaced'))) for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
             self.assertEqual(on_rail, [('queued', True, False)])                                # the hour brought it back, and the mark went with it

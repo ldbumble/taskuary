@@ -2238,17 +2238,20 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # draft/question, put down less than task_return_minutes ago (180 by default). Next will not repeat
             # them yet, so the line must not promise it does - it did ("Say next and I'll take them"), and
             # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
-            n = len(waiting)
+            # ...in ONE order for the line and its buttons - what waits on the owner first, then the soonest back: the line named
+            # TQ-0001 and TQ-0002 over buttons that opened TQ-0003..5 (the UX review, 2026-10-07)
+            n, waiting = len(waiting), sorted(waiting, key=lambda i: (not funnel.on_you(i), str(i.get('back_at') or '')))
             when = ', '.join(f"{i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40)} {_back_words(i.get('back_at'))}"
-                             for i in sorted(waiting, key=lambda i: str(i.get('back_at') or ''))[:4])
-            say = (f"Nothing new right now. {n} thing{'s' if n != 1 else ''} wait{'s' if n == 1 else ''} for later - {when}"
-                   f"{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
+                             for i in waiting[:4])
+            # "Nothing new right now" opened a line about nine things still waiting: say the walk is through, then where they are
+            say = (f"That's everything for now. {n} thing{'s' if n != 1 else ''} you put aside wait{'s' if n == 1 else ''} under For later"
+                   f" - {when}{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
             # What waits on the owner first - a close-out, an agent's question - then the rest.
             # ...each saying WHAT it is, not a bare number (the owner, 2026-09-30: "have to write what they are about a little")
             opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
                          f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
-                     for i in sorted(waiting, key=lambda i: not funnel.on_you(i))[:3]]
+                     for i in waiting[:3]]
         elif only and left:
             # the filtered set is done; what remains is the rest of the pipe - offer it rather than call the day over
             say = f"That's all of those. {len(left)} other thing{'s' if len(left) != 1 else ''} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."

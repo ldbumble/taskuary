@@ -442,7 +442,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
             {hidden > 0 && (
               <button type="button" className="tq-pile-more"
                 onClick={() => setOpened((cur) => new Set(cur).add(level))}>
-                {hidden} more {level === "reports" ? "reports" : level === "ideas" ? "ideas" : "fyi"}
+                {hidden} more {level === "reports" ? "report" : level === "ideas" ? "idea" : "fyi"}{hidden > 1 && level !== "fyi" ? "s" : ""}
               </button>
             )}
           </div>
@@ -2043,8 +2043,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             </Box>
             {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
           </Popover>
-          <div className="tq-compose-hint">{phone ? "Enter sends · the buttons by the prompt do the acting"   /* no rail on the left on a phone */
-            : "Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the buttons by the prompt do the acting"}</div>
+          <div className="tq-compose-hint">{phone ? "Enter sends · the buttons above the box do the acting"   /* no rail on the left on a phone */
+            : "Enter sends · Shift+Enter adds a line · click a row on the left to bring it here · the buttons above the box do the acting"}</div>
         </div>
       )}
     </div>

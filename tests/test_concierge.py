@@ -198,7 +198,7 @@ class TurnTests(unittest.TestCase):
         drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^Nothing new right now\. 1 thing waits for later - TQ-\d+ back in \d+h\. Open it now if you want it sooner\.$")
+        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing you put aside waits under For later - TQ-\d+ back in \d+h\. Open it now if you want it sooner\.$")
         # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23)
         self.assertEqual([c['verb'] for c in again['chips']], ['open'])
         self.assertTrue(again['chips'][0]['label'].startswith('Open TQ-'))
@@ -297,7 +297,7 @@ class DecisionTests(unittest.TestCase):
         # ...and nothing on the table means nothing to decide - the words move the WALK instead
         out = concierge.say(s, 'done', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nCALL: {"kind": "done", "params": {}}')
         self.assertIsNone(out.get('decision'))
-        self.assertIn('waits for later', out['say'])
+        self.assertIn('waits under For later', out['say'])
 
     def test_mine_with_nothing_on_the_table_is_a_new_to_do_in_their_words(self):
         """"remind me to renew the contract" came back as DECIDE: mine - theirs to do - and was answered
@@ -976,6 +976,6 @@ class ForLaterLine(unittest.TestCase):
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
              mock.patch.object(concierge.funnel, 'next_item', return_value=None):
             out = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertEqual(out['say'], "Nothing new right now. 2 things wait for later - TQ-0014 back in 2h, TQ-0008 back in 19h. "
+        self.assertEqual(out['say'], "That's everything for now. 2 things you put aside wait under For later - TQ-0014 back in 2h, TQ-0008 back in 19h. "
                                      "Open one now if you want it sooner.")
         self.assertEqual(concierge._back_words('not a time'), 'back in a while')

@@ -415,6 +415,23 @@ def _task_files(store, tid: int) -> list[dict]:
     return out
 
 
+def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
+    """The (name, bytes) of each file the chat named to send. Only its own working folder (where a CLI brain's hands
+    write) or a file this turn was handed: the reply goes to someone outside, so a path an injected mail talks the
+    model into naming - a key file, another task's attachments - is refused, and the task says so."""
+    from . import config
+    root, handed = (config.home() / 'scratch').resolve(), {str(Path(p).resolve()) for p in paths or []}
+    out = []
+    for raw in named or []:
+        try: p = Path(raw).expanduser().resolve()
+        except (OSError, ValueError): p = None
+        if p is None or not (str(p) in handed or p.is_relative_to(root)):
+            store.add_comment(tid, 'assistant', 'agent', f'Not attached to the reply - {raw}: only a file from the working folder or one that came with this task can go'); continue
+        try: out.append((p.name, p.read_bytes()))
+        except OSError as e: store.add_comment(tid, 'assistant', 'agent', f'Not attached to the reply - {raw}: {e.strerror or e}')
+    return out
+
+
 # The chat is on the wall too (blackboard.py). It has no checkout, so it reads and writes the
 # HOUSE lane - the notes with no repository behind them - and it can only write when a CLI is
 # doing the thinking, because an API provider has no shell to run the command in.
@@ -1040,11 +1057,14 @@ class GeneralSession:
             # signal to Taskuary, not prose for the owner, so it comes out of what gets filed and
             # what gets shown - the sentence after it becomes the closing comment.
             from . import selfclose
+            reply, named = selfclose.attach_markers(reply)
             reply, drafted = selfclose.reply_marker(reply)
-            if drafted:
+            files = _files_to_attach(self.store, self.task_id, named, paths)
+            if drafted or files:
                 from . import coder
-                out = coder.agent_reply(self.store, self.task_id, drafted, 'assistant')
+                out = coder.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files)
                 if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
+                for w in out.get('not_attached') or []: self.store.add_comment(self.task_id, 'assistant', 'agent', f'Not attached to the reply - {w}')
             reply, drafts = selfclose.draft_markers(reply)
             if drafts:
                 from . import slots

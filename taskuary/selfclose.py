@@ -209,7 +209,7 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '') -> dic
 # Short on purpose. Every character here rides on a command line that a canonical tty caps at
 # 1024 bytes, so the WHOLE rule lives in CODER.md (which rides in as RULES) and this is only the
 # part that must survive a blanked document: the command, and what pressing it does.
-SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` - the owner approves it. '
+SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it. '
              'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and drafts the reply unless you saved one.')
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
 # agent must NOT do is end it. Said in the prompt, because CODER.md's finishing rules say the
@@ -242,7 +242,9 @@ REPLY_OPEN, REPLY_CLOSE = '[[TASKUARY-REPLY]]', '[[/TASKUARY-REPLY]]'
 _REPLY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?REPLY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?REPLY\s*\]\]', re.I | re.S)
 REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who asked will get, put exactly that '
               f'text between {REPLY_OPEN} and {REPLY_CLOSE}. It becomes the reply waiting on the owner\'s approval, '
-              f'in your words - nothing is sent until they approve it.')
+              f'in your words - nothing is sent until they approve it. A file it sends rides only if you name it on its own '
+              f'line: [[TASKUARY-ATTACH: <full path>]] - a file you made in your working folder, or one listed under '
+              f'ATTACHED FILES. Never say a file is attached unless you named it that way.')
 
 
 def reply_marker(text: str) -> tuple:
@@ -251,6 +253,15 @@ def reply_marker(text: str) -> tuple:
     if not m: return text, None
     said = m.group(1).strip()
     return (text[:m.start()] + said + text[m.end():]).strip(), said or None
+
+
+# ...and the files that go with it. A chat brain has no `taskuary --attach` it can use: an API provider has no shell, and a
+# CLI's command would run mid-turn, before the reply block above is read. So it names the file and the turn's end attaches it.
+_ATTACH_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?ATTACH\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)
+
+def attach_markers(text: str) -> tuple:
+    """(text with every attach line taken out, [the paths it named])."""
+    return _ATTACH_RE.sub('', text or '').strip(), [m.strip().strip('"\'') for m in _ATTACH_RE.findall(text or '')]
 
 
 # ...and the emails that close a task (slots.draft): one block per email, its attributes say which slot or who.

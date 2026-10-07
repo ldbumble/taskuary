@@ -1160,6 +1160,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         the same words twice, an inch apart. */}
                     <Box sx={{ minWidth: 0 }}>
                         <Typography sx={{ ...label, display: "block", mb: 0.25 }}>What needs doing</Typography>
+                        {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task;
+                            the card says so once - how many, and what they need now (concierge.repeats, counted by code) */}
+                        {detail?.repeats?.line && (
+                          <Typography variant="body2" sx={{ color: INK, mt: 0.45, lineHeight: 1.55, maxWidth: 900, overflowWrap: "anywhere" }}>
+                            {detail.repeats.line}
+                          </Typography>
+                        )}
                         {taskAsk && (
                           <Typography variant="body2" sx={{ color: DIM, mt: 0.45, lineHeight: 1.55,
                             whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxWidth: 900,

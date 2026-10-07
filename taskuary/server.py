@@ -3695,6 +3695,16 @@ def concierge_open():
     _hands_off()
     return concierge.open_day(store, actor=ACTOR)
 
+_ANSWERING = set()        # the cancel Event of every answer being written in the Assistant tab (concierge_stream)
+
+@app.post('/api/concierge/stop')
+def concierge_stop():
+    """The Stop beside the typing dots. An answer that hung had no way out: New chat is refused while one is being
+    written. A CLI brain is killed by its cancel; the page also stops waiting, so the owner has the chat back either way."""
+    live = list(_ANSWERING)
+    for c in live: c.set()
+    return {'stopped': len(live)}
+
 class ArriveBody(BaseModel): leaving: bool = False
 
 @app.post('/api/concierge/arrive')
@@ -3740,7 +3750,7 @@ def _navigation_reservation(body):
 async def concierge_stream(body: ConciergeStreamBody):
     """One turn of the assistant, streamed: the CLI's tool calls and progress as they happen, then
     `done` with the same payload the plain endpoints return. Same shape as the task assistant's
-    stream; the browser walking away detaches, the stop button (cancel) is not wired here yet."""
+    stream; the browser walking away detaches, and the page's Stop sets `cancel` (/api/concierge/stop)."""
     from . import concierge
     from .processing_navigation import NavigationStale
     from .funnel_selection import SelectionUnavailable
@@ -3765,6 +3775,7 @@ async def concierge_stream(body: ConciergeStreamBody):
         if kind == 'prompt' or (kind == 'tool' and name == 'cli'): return    # the prompt and the launch line are ours, not news
         put({'type': kind, 'name': name, 'detail': detail if isinstance(detail, (dict, str)) else str(detail)})
     def work():
+        _ANSWERING.add(cancel)
         try:
             # the item first, then its source (PW-050): a named item refreshes itself; Next without a key refreshes
             # what it is about to surface, every channel of an FYI batch once, and re-picks if the pile moved
@@ -3817,6 +3828,7 @@ async def concierge_stream(body: ConciergeStreamBody):
             logger.warning(f'concierge stream failed: {e}')
             put({'type': 'error', 'error': str(e)})
         finally:
+            _ANSWERING.discard(cancel)
             if reservation: reservation.close()
     try:
         threading.Thread(target=work, daemon=True).start()
@@ -4729,6 +4741,15 @@ def chatgpt_poll(cid: int, body: dict):
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
     store.audit('connector', cid, 'chatgpt_signin', ACTOR, detail={'account': t['email']})
     return {'status': 'ok', 'account': t['email'], 'name': t['name']}
+
+@app.post('/api/connectors/{cid}/chatgpt/cancel')
+def chatgpt_cancel(cid: int, body: dict):
+    """Cancel on the card. Stopping only the page left the listener up: a sign-in finished in the open tab showed
+    success in the browser, and the app never collected it."""
+    from . import chatgptauth
+    _chatgpt_card(cid)
+    chatgptauth.cancel((body or {}).get('flow') or '')
+    return {'ok': True}
 
 @app.post('/api/connectors/{cid}/chatgpt/signout')
 def chatgpt_signout(cid: int):

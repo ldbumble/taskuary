@@ -33,6 +33,15 @@ class PlainFailureTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as e: imapmail._login(c)
         self.assertIn('app password', str(e.exception)); self.assertNotIn('AUTHENTICATIONFAILED', str(e.exception))
 
+    def test_imap_trouble_that_is_not_the_password_keeps_its_own_words(self):
+        # a dropped connection or "too many connections" is not the owner's password, and must not send them for an app password
+        c = {'Type': 'imap', 'Secret': 'pw', 'ConfigJson': json.dumps({'address': 'alex@northwind.example', 'imap_host': 'imap.northwind.example'})}
+        for err in (imaplib.IMAP4.abort('socket error: EOF'), imaplib.IMAP4.error(b'[UNAVAILABLE] Too many simultaneous connections')):
+            M = mock.MagicMock(); M.login.side_effect = err
+            with mock.patch('imaplib.IMAP4_SSL', return_value=M), mock.patch.object(imapmail, 'verify_pin'):
+                with self.assertRaises(imaplib.IMAP4.error) as e: imapmail._login(c)
+            self.assertNotIn('app password', str(e.exception))
+
     def test_the_test_button_reports_the_sentence_and_keeps_the_raw_error_on_the_row(self):
         from taskuary.store import MemoryStore
         s = MemoryStore(); cid = s.get_connector_by_type('teams')['ConnectorId']
@@ -43,3 +52,23 @@ class PlainFailureTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class StopAndCancelTests(unittest.TestCase):
+    def test_stop_sets_every_answer_being_written(self):
+        # the Stop beside the typing dots: an answer that hung had no way out (New chat is refused while one is written)
+        import threading
+        from taskuary import server
+        a, b = threading.Event(), threading.Event()
+        server._ANSWERING.update({a, b})
+        try: self.assertEqual(server.concierge_stop(), {'stopped': 2})
+        finally: server._ANSWERING.difference_update({a, b})
+        self.assertTrue(a.is_set() and b.is_set())
+        self.assertEqual(server.concierge_stop(), {'stopped': 0})
+
+    def test_cancel_takes_the_chatgpt_listener_down_now(self):
+        from taskuary import chatgptauth
+        srv = mock.MagicMock(); chatgptauth._FLOWS['f1'] = {'srv': srv, 'at': 0}
+        chatgptauth.cancel('f1')
+        self.assertNotIn('f1', chatgptauth._FLOWS); srv.shutdown.assert_called_once()
+        chatgptauth.cancel('gone')                    # a flow already over is no error

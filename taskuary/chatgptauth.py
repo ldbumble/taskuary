@@ -98,6 +98,9 @@ def start(cfg: dict) -> dict:
     return {'flow': fid, 'url': f'{AUTH}/api/accounts/authorize?{urlencode(q)}'}
 
 
+def cancel(fid): _stop(fid)        # the card's Cancel: the listener goes now, not after fifteen minutes
+
+
 def _stop(fid):
     f = _FLOWS.pop(fid, None)
     if f:

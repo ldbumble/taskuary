@@ -28,7 +28,7 @@ export default function UpdateCard() {
       // every install has - "Running v..." forever is the one thing this card must never show
       try { const { data } = await api.get("/api/version"); setInfo({ current: data.version, how: "exe", latest: null, newer: false, error: null }); }
       catch { /* nothing answers: the message below says so */ }
-      setErr(e?.response?.data?.detail || "update checks are not available here");
+      setErr(e?.response?.data?.detail || "Couldn't check for updates from here. Press Check now to try again, or download the latest build from the project's GitHub page.");
     }
     setBusy("");
   }, []);
@@ -59,6 +59,9 @@ export default function UpdateCard() {
 
   const how = info?.how || "exe";
   const canApply = !!info && info.newer && !info.error && how !== "source";
+  // A FAILED CHECK IS NOT "UP TO DATE". With nothing to compare against, the button used to read as
+  // a clean bill of health while the warning under it said the opposite.
+  const unknown = !info?.latest && !!(err || info?.error);
   // no width of its own: every settings page is as wide as the shell's column (2026-09-18)
   return (
     <Box>
@@ -87,8 +90,10 @@ export default function UpdateCard() {
             startIcon={busy === "check" ? <CircularProgress size={12} /> : null}>Check now</Button>
           <Button size="small" variant="contained" disableElevation disabled={!canApply || !!busy} onClick={apply}
             startIcon={busy === "apply" || busy === "restarting" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
-            title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen` : "nothing newer to install"}>
-            {busy === "restarting" ? "Reopening…" : busy === "apply" ? "Updating…" : info?.newer ? `Update to v${info.latest}` : "Up to date"}
+            title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen`
+              : unknown ? "the check did not reach the release page - press Check now to try again" : "nothing newer to install"}>
+            {busy === "restarting" ? "Reopening…" : busy === "apply" ? "Updating…" : info?.newer ? `Update to v${info.latest}`
+              : unknown ? "Couldn't check" : info ? "Up to date" : "Checking…"}
           </Button>
         </Box>
         {info?.notes && info.newer && (

@@ -71,7 +71,10 @@ def check(force: bool = False) -> dict:
                     'url': next((a.get('browser_download_url') for a in j.get('assets') or []
                                  if str(a.get('name') or '').lower() == 'taskuary.exe'), EXE_URL)})
     except Exception as e:
-        out['error'] = f'could not reach GitHub to check: {str(e)[:160]}'
+        # the reason is for the log; the card says what it means and what to do about it
+        logger.warning(f'update check failed: {e}')
+        out['error'] = ("Couldn't reach the release page to check for a newer version. "
+                        'This computer may be offline, or a network filter blocks GitHub - try Check now in a minute.')
     _cache.update({'at': time.time(), 'result': out})
     return out
 

@@ -27,6 +27,8 @@ import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { plannedFor } from "./connectorCatalog.js";
 import { pollSecondsField } from "./pollFields.js";
+import { useSaveNote } from "./SaveNote.jsx";
+import { plainError } from "./apiError.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
@@ -1530,7 +1532,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const syncNow = async () => {
     setSyncing(true);
     try { await api.post("/api/ingest/poll"); setTimeout(() => { setSyncing(false); load(); }, 3000); }
-    catch { setSyncing(false); }
+    catch (e) { setSyncing(false); setErr(`Sync didn't start — ${plainError(e, "try again in a moment.")}`); }
   };
 
   const allOf = (type) => (connectors || []).filter((c) => c.Type === type);
@@ -2055,10 +2057,14 @@ function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack:
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
     setBusy(""); reload();
   };
+  // the box keeps what you typed when the add is refused, so the reason can be acted on
+  const { run, note } = useSaveNote();
   const addSource = async () => {
     if (!newSrc.trim()) return;
-    await api.post("/api/sources", { Channel: m.channel, Address: newSrc.trim(), ConnectorId: conn.ConnectorId, Active: true });
-    setNewSrc(""); reload();
+    const r = await run(() => api.post("/api/sources", { Channel: m.channel, Address: newSrc.trim(), ConnectorId: conn.ConnectorId, Active: true }),
+      { ok: `Added ${newSrc.trim()}`, lead: "Not added — " });
+    if (r.ok) setNewSrc("");
+    reload();
   };
   // the telegram flow says "hit Sync now" - so the button has to BE here, not on another tab
   const [srcSync, setSrcSync] = useState(false);
@@ -2067,8 +2073,9 @@ function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack:
   const [adminFields, setAdminFields] = useState(conn.Type !== "outlook" || (!!cfg.client_id && cfg.auth !== "user"));
   const syncHere = async () => {
     setSrcSync(true);
-    try { await api.post("/api/ingest/poll"); setTimeout(() => { setSrcSync(false); reload(); }, 3000); }
-    catch { setSrcSync(false); }
+    const r = await run(() => api.post("/api/ingest/poll"), { ok: "Syncing — new items appear in a minute", lead: "Sync didn't start — " });
+    if (r.ok) setTimeout(() => { setSrcSync(false); reload(); }, 3000);
+    else setSrcSync(false);
   };
   const toggleSource = (s) => draft.ctx.stageSource({ SourceId: s.SourceId, Active: !s.Active });
   const [delSrc, setDelSrc] = useState(null);      // a source being removed for good - off was the only option before
@@ -2203,6 +2210,7 @@ function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack:
   return (
     <DraftProvider value={draft.ctx}>
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
+      {note}
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       {/* WhatsApp has no agent box: there is nothing for an agent to do that the pairing box does not do
@@ -2547,7 +2555,15 @@ function OAuthConnect({ conn, meta, reload }) {
   useEffect(() => { load(); }, [load]);
   // the sign-in happens in another tab; poll while it is likely underway so the box flips to
   // "connected" without a refresh
-  useEffect(() => { if (!busy) return undefined; const id = setInterval(load, 3000); const stop = setTimeout(() => setBusy(false), 180000); return () => { clearInterval(id); clearTimeout(stop); }; }, [busy, load]);
+  // ...and when it stops waiting it SAYS so: the spinner used to vanish after three minutes and leave
+  // the button as if nothing had been tried
+  useEffect(() => {
+    if (!busy) return undefined;
+    const id = setInterval(load, 3000);
+    const stop = setTimeout(() => { setBusy(false); setErr("Nothing came back from the sign-in in three minutes, so this stopped waiting. If you finished it, press the button again; otherwise start over."); }, 180000);
+    return () => { clearInterval(id); clearTimeout(stop); };
+  }, [busy, load]);
+  const [url, setUrl] = useState("");   // the sign-in page that opened in another tab - a blocked popup needs it again
   useEffect(() => { if (st?.connected) setBusy(false); }, [st?.connected]);
   // Teller Connect is a script on THIS page, not a redirect: it opens the bank's sign-in in a
   // modal and calls back with the token, which goes straight to the server and nowhere else
@@ -2586,7 +2602,7 @@ function OAuthConnect({ conn, meta, reload }) {
     try {
       if (meta.connect.widget === "token") return await pasteToken();
       if (meta.connect.widget === "teller") return await teller();
-      const { data } = await api.get(meta.connect.start(conn.ConnectorId)); window.open(data.url, "_blank", "noopener"); setBusy(true);
+      const { data } = await api.get(meta.connect.start(conn.ConnectorId)); setUrl(data.url); window.open(data.url, "_blank", "noopener"); setBusy(true);
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "could not start the sign-in"); }
   };
   return (
@@ -2605,6 +2621,13 @@ function OAuthConnect({ conn, meta, reload }) {
         {st?.connected
           ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}</Typography>
           : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below and Save first"}</Typography>}
+        {busy && url && !st?.connected && (
+          <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexBasis: "100%" }}>
+            Finish in the tab that opened — this box turns green by itself.
+            <a href={url} target="_blank" rel="noreferrer">Open it again</a>
+            <Button size="small" onClick={() => { setBusy(false); setUrl(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
+          </Typography>
+        )}
       </Box>
       {st?.bridge && !st?.connected && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
@@ -3110,12 +3133,23 @@ const WaPair = ({ conn, reload }) => {
         // Node is there and the bridge is not: start it, once per visit - the owner opened this card to pair
         if (data.bridge === false && data.node && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; startBridge(); }
         setTimeout(tick, data.connected ? 30000 : data.bridge === false ? (data.node ? 3000 : 6000) : 4000);
-      } catch { if (alive) { setSt({ connected: false, bridge: false }); setTimeout(tick, 8000); } }
+      // A STATUS WE COULD NOT READ IS NOT "NODE IS MISSING". Faking {bridge:false} here sent the owner
+      // off to install Node they already had, because the app was restarting or busy for a moment.
+      } catch { if (alive) { setSt({ unreachable: true }); setTimeout(tick, 8000); } }
     };
     tick();
     return () => { alive = false; };
   }, [conn.ConnectorId, reload, startBridge]);
   if (!st) return null;
+  if (st.unreachable) return (
+    <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Pair with your phone</Typography>
+      <Typography variant="body2" sx={{ color: DIM, mt: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
+        <CircularProgress size={11} sx={{ color: DIM }} />
+        Couldn't read the pairing status just now. This box tries again by itself every few seconds — if it stays like this, restart Taskuary.
+      </Typography>
+    </Box>
+  );
   const phase = st.manager?.phase, busy = ["installing", "starting"].includes(phase);
   const reconnect = st.reconnect || {};
   const stepNo = st.connected ? 4 : st.bridge === false ? (st.node ? 2 : 1) : 3;
@@ -3336,6 +3370,11 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
       try {
         const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/poll`, { flow: flow.flow });
         if (!alive) return;
+        // a wait with no end is a page that never says anything again: ten minutes is long past any real sign-in
+        if (data.status === "pending" && Date.now() - flow.at > 600000) {
+          setFlow(null); setState("error"); setDetail("The sign-in was not finished in ten minutes, so this stopped waiting. Press Sign in with ChatGPT to start a fresh one.");
+          return;
+        }
         if (data.status === "pending") { setTimeout(tick, 2000); return; }
         setFlow(null);
         if (data.status === "ok") { setState("ok"); setDetail(`Signed in as ${data.name || data.account}. Pick it as a brain under Settings → Triage & agents.`); reload(); }
@@ -3347,11 +3386,13 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
   }, [flow, conn.ConnectorId, reload]);
   const start = async () => {
     setBusy(true); setState(""); setDetail("");
-    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signin`); setFlow(data); window.open(data.url, "_blank", "noopener"); }
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signin`); setFlow({ ...data, at: Date.now() }); window.open(data.url, "_blank", "noopener"); }
     catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
     setBusy(false);
   };
-  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signout`); setState(""); setDetail(""); reload(); };
+  // asked first, and a refusal is said in the dialog (Confirm) - it used to sign out on one click and say nothing either way
+  const [askOut, setAskOut] = useState(false);
+  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signout`); setState("ok"); setDetail("Signed out."); reload(); };
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with ChatGPT</Typography>
@@ -3361,12 +3402,15 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
-          <Button size="small" variant="outlined" onClick={signout}>Sign out</Button>
+          <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>Sign out</Button>
+          <Confirm open={askOut} title="Sign out of ChatGPT?" confirmLabel="Sign out" onConfirm={signout} onClose={() => setAskOut(false)}
+            text="Anything set to run on your ChatGPT account stops until you sign in again." />
         </Box>
       ) : flow ? (
         <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
           <CircularProgress size={11} /> Finish in the browser tab that opened - this page completes by itself.
           <a href={flow.url} target="_blank" rel="noreferrer">Open it again</a>
+          <Button size="small" onClick={() => { setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
         </Typography>
       ) : (
         <Box><Button variant="contained" disableElevation disabled={busy} onClick={start}>
@@ -3397,6 +3441,11 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
       try {
         const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/poll`, { flow: flow.flow });
         if (!alive) return;
+        // the code Microsoft handed out dies after expires_in seconds - stop there and say so rather than spin on
+        if (data.status === "pending" && Date.now() - flow.at > (flow.expires_in || 900) * 1000) {
+          setFlow(null); setState("error"); setDetail("The sign-in code expired before it was used. Press Sign in with Microsoft for a fresh one.");
+          return;
+        }
         if (data.status === "pending") { setTimeout(tick, wait); return; }
         setFlow(null);
         if (data.status === "ok") {
@@ -3411,11 +3460,12 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
   }, [flow, conn.ConnectorId, reload]);
   const start = async () => {
     setBusy(true); setState(""); setDetail("");
-    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/signin`); setFlow(data); }
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/signin`); setFlow({ ...data, at: Date.now() }); }
     catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
     setBusy(false);
   };
-  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/ms/signout`); setState(""); setDetail(""); setAdminUrl(""); reload(); };
+  const [askOut, setAskOut] = useState(false);
+  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/ms/signout`); setState("ok"); setDetail("Signed out."); setAdminUrl(""); reload(); };
   const copy = (s) => { try { navigator.clipboard?.writeText(s); } catch { /* it is on screen anyway */ } };
   const adminLink = async () => {
     try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/ms/adminlink`); setAdminUrl(data.url); }
@@ -3431,7 +3481,9 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
-          <Button size="small" variant="outlined" onClick={signout}>Sign out</Button>
+          <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>Sign out</Button>
+          <Confirm open={askOut} title="Sign out of Microsoft?" confirmLabel="Sign out" onConfirm={signout} onClose={() => setAskOut(false)}
+            text={`Mail and calendar${cfg.account ? ` for ${cfg.account}` : ""} stop syncing until you sign in again. Nothing already here is lost.`} />
         </Box>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
@@ -3447,6 +3499,7 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
           </Box>
           <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75 }}>
             <CircularProgress size={11} /> 2. Sign in with your Microsoft account and accept — this page finishes by itself.
+            <Button size="small" onClick={() => { setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
           </Typography>
         </Box>
       ) : (

@@ -63,6 +63,14 @@ test("the selection guard's shape - written for error.detail all along - now get
   assert.equal(selectionGuardDetail(e)?.code, "selection_unavailable");
 });
 
+test("a failed save reads as a sentence: the server's, or that nothing answered - never axios's", async () => {
+  const { plainError } = await import("../src/apiError.js");
+  assert.equal(plainError(keepDetail({ response: { status: 422, data: { detail: "pick one of those three" } } })), "pick one of those three");
+  assert.equal(plainError(refused("x", "That item moved under you")), "That item moved under you");
+  assert.match(plainError(new Error("Network Error")), /isn't answering/);
+  assert.equal(plainError({ response: { status: 500, data: {} } }, "fallback"), "fallback");
+});
+
 test("api.js normalizes through the one helper, so this cannot drift back apart", () => {
   const src = readFileSync(fileURLToPath(new URL("../src/api.js", import.meta.url)), "utf8");
   assert.match(src, /keepDetail/);

@@ -170,6 +170,11 @@ const Step = ({ s, n, open, onOpen, onGo, onDone, firstItems }) => {
           <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => onGo(s.goto)}
             sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.goto?.label || s.goto?.tab}</Button>
         )}
+        {/* a second road where the step has one (an API key beside the CLI door) - setup.state owns its words too */}
+        {!s.done && !Form && s.alt && (
+          <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => onGo(s.alt)}
+            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.alt.label}</Button>
+        )}
         {s.done && s.action !== "sync" && (Form
           ? <Typography variant="caption" onClick={onOpen}
               sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>change</Typography>

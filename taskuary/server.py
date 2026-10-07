@@ -6026,6 +6026,11 @@ def save_policy(body: PolicyBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.model_dump().items() if v is not None}
     if not fields.get('PolicyId') and not all(fields.get(k) for k in ('Name', 'Kind', 'Action', 'Reason')):
         raise HTTPException(422, 'new policies need Name, Kind, Action, Reason')
+    # an action the engine does not know matches nothing, so a rule saved with one looks set and never fires
+    if body.Action is not None and body.Action not in policy_engine.PRECEDENCE:
+        raise HTTPException(422, 'A rule can skip, ignore or escalate a message - pick one of those three.')
+    if body.Kind is not None and body.Kind not in policy_engine.KINDS:
+        raise HTTPException(422, 'A rule matches on a keyword, a sender, a domain, an automated address or a first-time sender - pick one of those.')
     pid = store.save_policy(fields, ACTOR)
     store.audit('policy', pid, 'edit' if body.PolicyId else 'create', ACTOR, detail=fields)
     # a skip rule also reaches BACKWARDS: the sender's existing rows leave the timeline

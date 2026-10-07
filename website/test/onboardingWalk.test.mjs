@@ -182,8 +182,9 @@ test("a row's button names what it opens, in words the server owns", () => {
   assert.match(walkCard(read("assistantCards.jsx")), /card\.goto\.label \|\| `Open \$\{card\.goto\.tab\}`/);
   const setupPy = readFileSync(fileURLToPath(new URL("../../taskuary/setup.py", import.meta.url)), "utf8");
   const labels = [...setupPy.matchAll(/'label': '([^']+)'/g)].map((m) => m[1]);
-  assert.equal(labels.length, 4);
-  assert.equal(new Set(labels).size, 4, `two rows wear the same button: ${labels}`);
+  assert.equal(labels.length, 5);   // four rows, plus the AI row's second road (Paste an API key)
+  assert.equal(new Set(labels).size, 5, `two rows wear the same button: ${labels}`);
+  assert.match(read("SetupWizard.jsx"), /onGo\(s\.alt\)/, "the second road is drawn, not only sent");
 });
 
 // A box only where there is something to complete: the first five stops carry the checklist's own

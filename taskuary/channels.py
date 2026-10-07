@@ -1653,10 +1653,19 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                     n += out['status'] != 'duplicate'
             store.touch_source(s['SourceId'])
         store.touch_connector(c['ConnectorId'], '; '.join(errors) if errors else None)
+        _watch(store, full, '; '.join(errors) if errors else None)
     except Exception as e:
         logger.warning(f"channel poll failed ({c['Type']}): {e}")
         store.touch_connector(c['ConnectorId'], str(e))
+        _watch(store, full, str(e))
     return n
+
+
+def _watch(store, c, err):
+    """Signed out of Microsoft, and back: problems.py keeps the story (when it lapsed, what came in since)."""
+    from . import problems
+    try: problems.watch_mail(store, c, err)
+    except Exception as e: logger.warning(f'could not note the mail sign-in state: {e}')
 
 
 def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) -> int:

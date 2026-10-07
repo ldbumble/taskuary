@@ -17,7 +17,8 @@ def attention_band(*, urgent=False, owner_wait=False, working=False, actionable=
       a check that failed, a task an agent finished and closed (until it is read). Owner-input and actionable were two levels for a split triage never
       made, and nothing needed the difference: inside a level the oldest comes first.
     3 reports - a report you set up landed. Information, never a task.
-    4 fyi - what triage called fyi, and anything it has not judged yet.
+    4 fyi - what triage called fyi, and anything it has not judged yet - while it is still being retried. A row
+      the retry GAVE UP on is level 2 (gave_up): nobody will judge it now, so it is the owner's.
     5 agents working - an agent has it; nothing here is for the owner until it stops or asks."""
     if urgent:
         return 1
@@ -30,6 +31,11 @@ def attention_band(*, urgent=False, owner_wait=False, working=False, actionable=
     return 3 if result else 4
 
 
+def gave_up(row) -> bool:
+    """Unjudged, and the automatic retry has stopped on it (store.HELD, written by ingest.give_up)."""
+    return row.get('MsgStatus') == 'error' and row.get('Decision') == 'held'
+
+
 def feed_band(row):
     """Rank the already evaluated feed fields without changing eligibility."""
     owner_wait = bool(row.get('AgentWaiting') or row.get('ReviewStatus') == 'pending')
@@ -39,7 +45,7 @@ def feed_band(row):
     # a report the owner made work of - or one that could not run - is work; the rest are results
     report_work = (row.get('TaskId') and not failed
                    and (row.get('NeedsYou') or row.get('Category') in ('coding', 'todo', 'action')))
-    work = bool(row.get('NeedsYou')) or failed or (report and bool(report_work))
+    work = bool(row.get('NeedsYou')) or failed or (report and bool(report_work)) or gave_up(row)
     # a report row is never an urgent REQUEST unless the owner made work of it: a failed check on an
     # urgent task is a failed check, and feed_band must say what funnel._band says about it
     urgent_request = work and (not report or bool(report_work))

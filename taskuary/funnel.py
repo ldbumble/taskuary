@@ -16,7 +16,7 @@ from loguru import logger
 from .store import task_ref, auto_code_enabled
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda, _OOO
 from .funnel_presentation import present as _present
-from .processing_order import attention_band, priority_rank
+from .processing_order import attention_band, gave_up, priority_rank
 from .workerstate import says as agent_says, sub_state, request_line   # funnel.says is a message's subject
 
 # ONE VOCABULARY, in taskuary/lanes.json - the words, roles and marks a lane wears, loaded here and
@@ -188,6 +188,13 @@ def broken_connections(store) -> list:
         if not err: continue
         kind = str(c.get('Type') or full.get('Type') or '')
         label = CONN_LABELS.get(kind, kind.title() or 'A connection')
+        # Microsoft signing the owner out is not a connection "not answering": it is one tap to fix, and said the bell's way
+        from . import problems
+        if problems.signed_out({**c, **full}):
+            title, why = problems.signed_out_line(store, {**c, **full})
+            out.append(_item(f'conn:{c["ConnectorId"]}', 'connection', 'broken', title, channel=kind, who=label, why=why,
+                             sig=_short(err, 120), when=full.get('LastSyncAt') or '', since=full.get('LastSyncAt') or ''))
+            continue
         out.append(_item(f'conn:{c["ConnectorId"]}', 'connection', 'broken',
                          f'{label} stopped answering', channel=kind,
                          who=label, why=_short(err, 220), sig=_short(err, 120),   # a NEW error is news again
@@ -396,8 +403,10 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # "somebody told you something; nothing to do" - which is the exact face the error state was
         # added to keep it out of (ingest, PW-036). Same quiet band, honest word, and the Retry is
         # one tap in (the owner, 2026-09-15: "were they put to fyi even with a error? that's a bad bug").
+        # ...and once the retry has GIVEN UP on it, the quiet band is where it would be lost: `held` lifts it to your
+        # task (_band), the lane and its Retry stay (processing_order.gave_up)
         if cat == 'error':
-            out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'unjudged', subj,
+            out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'unjudged', subj, held=gave_up(r),
                              why=r.get('RouteReason') or 'triage could not classify this - nothing was started', **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
@@ -814,7 +823,8 @@ def _band(item):
                           # a task an agent FINISHED is still a task - Your task until Next reads it, never a report:
                           # reports are what a report you set up filed (the owner, 2026-09-24: "reports are never
                           # tasks just information" / "it's not agent working if task is done")
-                          actionable=lane in ('broken', 'asked', 'yours', 'theirs', 'queued', 'stopped', 'saved') or item.get('kind') == 'agentdone',
+                          actionable=lane in ('broken', 'asked', 'yours', 'theirs', 'queued', 'stopped', 'saved') or item.get('kind') == 'agentdone'
+                                     or (lane == 'unjudged' and bool(item.get('held'))),
                           result=lane == 'report')
 
 

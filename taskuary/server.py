@@ -760,10 +760,10 @@ def _run_operation(op: dict, background: BackgroundTasks):
         v = str(raw if raw is not None else '').strip()
         if t == 'switch': v = '1' if v.lower() in ('1', 'true', 'on', 'yes') else '0' if v.lower() in ('0', 'false', 'off', 'no') else None
         elif t == 'number':
-            try: v = str(int(float(v)))
-            except (ValueError, OverflowError): v = None        # '--5', 'nan', 'inf' get the same sentence as 'often'
+            if settings_schema.refuse(key, v): v = None         # '--5', 'nan', 'inf', -5 get the same sentence as 'often'
+            elif v: v = str(int(float(v)))                      # ...and blank is the default, which an undo puts back
         elif t == 'select': v = v if v in [str(o) for o in (meta.get('options') or [])] else None
-        if v is None: raise HTTPException(422, f"{meta['label']} takes {'on or off' if t == 'switch' else 'a number' if t == 'number' else 'one of ' + ', '.join(str(o) for o in meta.get('options') or [])} - not {raw!r}")
+        if v is None: raise HTTPException(422, f"{meta['label']} takes {'on or off' if t == 'switch' else 'a number, 0 or more' if t == 'number' else 'one of ' + ', '.join(str(o) for o in meta.get('options') or [])} - not {raw!r}")
         prev = store.get_setting(key)
         store.set_setting(key, v, ACTOR)
         store.audit('setting', 0, 'set', 'assistant', detail={'key': key, 'from': prev, 'to': v})
@@ -3824,6 +3824,8 @@ async def concierge_stream(body: ConciergeStreamBody):
             put({'type': 'error', 'code': 'selection_unavailable', 'detail': error.detail, 'error': str(error)})
         except processing_all.AllError as error:      # the page retries on this code once membership settles
             put({'type': 'error', 'code': error.detail['code'], 'detail': error.detail, 'error': str(error)})
+        except concierge.Stopped:                     # the page stopped waiting already; nothing of the turn was kept
+            put({'type': 'error', 'code': 'stopped', 'error': 'Stopped.'})
         except Exception as e:
             logger.warning(f'concierge stream failed: {e}')
             put({'type': 'error', 'error': str(e)})
@@ -7565,6 +7567,8 @@ def settings():
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):
+    from . import settings_schema
+    if why := settings_schema.refuse(body.name, body.value): raise HTTPException(422, why)
     store.set_setting(body.name, body.value, ACTOR)
     return {'ok': True}
 

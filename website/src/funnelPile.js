@@ -210,7 +210,11 @@ export const interactiveCardIndex = (messages) => {
 // said nothing was on the table (the owner, 2026-10-02: "it reopens the same 4 again before disappearing"). Every item
 // card that is not the server's Current comes back put down; a proposal, the set-up walk and the brief are not items.
 const NOT_ITEMS = new Set(["proposal", "walk", "setup", "brief"]);
+// A line's own WORDS ride the server's record as a `words` card ({kind: "words", chips}), but the live turn drew them as plain
+// chips on a card-less line. Read back as a card, it was put down like an item and kept only Next: the end of the walk's
+// "Open TQ-12" buttons were gone after a reload (the 2026-10-07 click-through). Read back, it is the line it was.
 export const settledHistory = (messages, currentKey) => (messages || []).map((m) => {
+  if (m?.card?.kind === "words") return { ...m, chips: m.chips || m.card.chips || [], card: null };
   const c = m?.card;
   if (!c || c.background_event || m.proposal || NOT_ITEMS.has(c.kind)) return m;
   return currentKey && (c.key === currentKey || (c.aliases || []).includes(currentKey)) ? m : { ...m, done: true };

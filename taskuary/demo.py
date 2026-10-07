@@ -61,9 +61,9 @@ ALLOWED_WRITES = (
     # no CLI to test, so nothing on the visitor's screen can even reach it.
     r'^/api/setup/(dismiss|seen|walk(/reset)?)$',
     r'^/api/terminals/\d+/resize$',
-    # the Assistant page: the pipe's own memory and the concierge's turns - the demo's database,
-    # the demo's canned brain, nothing real behind either (funnel.py, concierge.py)
-    r'^/api/(funnel/settle|concierge/(open|next|say|act|stream|ai|setup)|assistant/dock(/new)?)$',
+    # the Assistant page: the pipe's own memory, the concierge's turns and the greeting when the visitor sits down
+    # (arrive) - the demo's database, the demo's canned brain, nothing real behind either (funnel.py, concierge.py, welcome.py)
+    r'^/api/(funnel/settle|concierge/(open|next|say|act|stream|ai|setup|arrive)|assistant/dock(/new)?)$',
 )
 
 # What is refused, and the sentence the visitor sees. Order matters: the first match wins.

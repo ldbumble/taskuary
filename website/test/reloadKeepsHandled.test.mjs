@@ -4,7 +4,7 @@
 // still the newest card, was drawn live again while the server said nothing was on the table.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { interactiveCardIndex, settledHistory } from "../src/funnelPile.js";
+import { chipsOf, interactiveCardIndex, lastActIndex, settledHistory } from "../src/funnelPile.js";
 
 const batch = { id: "a1", role: "assistant", card: { key: "fyis:processing:p1,processing:p2", kind: "fyis" } };
 const empty = { id: "a2", role: "assistant", text: "That's everything for now." };
@@ -25,4 +25,14 @@ test("a proposal, the set-up walk and the brief are not item cards - a reload le
     assert.equal(settledHistory([{ id: "x", role: "assistant", card }], null)[0].done, undefined, card.kind);
   }
   assert.equal(settledHistory([{ id: "p", role: "assistant", proposal: { id: "op1" }, card: { key: "msg:3", kind: "message" } }], null)[0].done, undefined);
+});
+
+test("a line's own words come back as the line they were - the end of the walk keeps its Open buttons", () => {
+  const opens = [{ verb: "open", label: "Open TQ-3 · import", key: "agent:3" }];
+  const end = { id: "a3", role: "assistant", text: "Nothing new right now.", card: { kind: "words", key: null, chips: opens } };
+  const [m] = settledHistory([end], null);
+  assert.equal(m.card, null);
+  assert.equal(m.done, undefined);
+  assert.deepEqual(chipsOf(m), opens);
+  assert.equal(lastActIndex([m]), 0);
 });

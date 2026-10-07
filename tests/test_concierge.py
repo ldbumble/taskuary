@@ -107,6 +107,18 @@ class TurnTests(unittest.TestCase):
                           concierge.DISCUSSION_ASSISTANT_TYPE])
         self.assertIn('corrected export', discussion[0]['Body'])
 
+    def test_a_stopped_answer_is_never_kept(self):
+        """Stop cannot kill an API call: its answer came back anyway and landed in the chat later, under another card."""
+        import threading
+        s = store()
+        t, m, r = drafted(s)
+        cancel = threading.Event()
+        def model(*a, **k): cancel.set(); return 'She asked for the corrected file.'   # Stop pressed mid-call
+        with self.assertRaises(concierge.Stopped):
+            concierge.say(s, 'what exactly did she ask?', key=f'review:{r}', llm=model, cancel=cancel)
+        self.assertNotIn('corrected file', last_receipt(s))
+        self.assertFalse([c for c in s.list_comments(t) if 'corrected file' in (c.get('Body') or '')])
+
     def test_what_is_said_about_an_item_is_kept_against_the_item_not_only_in_the_browser(self):
         """PW-132: the chat's turns about an item lived in the dock conversation and the browser's receipts; the
         durable per-item record (operations.discuss) never saw them."""

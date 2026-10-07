@@ -104,7 +104,7 @@ class ActsTests(unittest.TestCase):
         bad = concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value='often')['proposal'])
         self.assertEqual(bad['status'], 'error'); self.assertIn('takes a number', bad['error'])
         self.assertEqual(self.s.get_settings()['poll_minutes'], '10')
-        for odd in ('--5', 'nan', 'inf'):
+        for odd in ('--5', 'nan', 'inf', '-5'):
             bad = concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value=odd)['proposal'])
             self.assertEqual(bad['status'], 'error'); self.assertIn('takes a number', bad['error'])
         self.assertEqual(self.s.get_settings()['poll_minutes'], '10')

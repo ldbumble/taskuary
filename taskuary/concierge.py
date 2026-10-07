@@ -1151,6 +1151,12 @@ DISCUSSION_ASSISTANT_TYPE = 'concierge_assistant'
 # read it back as this task's own (the 2026-10-01 press audit) - so the owner's line waits until the turn knows.
 _TURN = contextvars.ContextVar('taskuary_turn', default=None)
 
+
+class Stopped(Exception):
+    """The owner pressed Stop while the answer was being written (server /api/concierge/stop). A CLI brain is killed by
+    its cancel, but an API call cannot be: it comes back anyway, and kept, it landed in the chat minutes later under
+    whatever card was open by then (the 2026-10-07 click-through). Nothing of a stopped turn is kept."""
+
 def _same(a: dict | None, b: dict | None) -> bool: return bool(a and b and a.get('key') and a.get('key') == b.get('key'))
 
 def _about_table(item: dict | None, call: dict | None) -> bool:
@@ -3279,6 +3285,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         _remember_sid(store, tid, llm)
     except Exception as e:
         logger.warning(f'concierge: the model pass failed - {e}'); failed = e
+    if cancel is not None and cancel.is_set(): raise Stopped('stopped by the owner')
     if call:
         # A MISS IS THE MODEL'S TO FIX, not the owner's to read. "No setting by that name - settings.list <group> names
         # them" is written for the model, and it reached the owner word for word (the 2026-09-24 audit). The model gets

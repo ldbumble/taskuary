@@ -203,12 +203,25 @@ def _result_text(c) -> str:
     return re.sub(r'\s*\n\s*', ' ⏎ ', str(v or '').strip())
 
 
+_DOC_CREATES = {}                                    # tool_use id -> a Claude Docs create's input, until its result
+
+
 def _published(j, trace):
     """A page the CLI published with its Artifact tool, said to the caller as its own trace event - the
     caller knows the task it belongs to (general.send_prompt keeps it there, claude_artifacts)."""
     from . import claude_artifacts
+    if j.get('type') == 'assistant':                # a Claude Docs create: its answer does not say which tool it was
+        for c in (j.get('message') or {}).get('content') or []:
+            if isinstance(c, dict) and c.get('type') == 'tool_use' and claude_artifacts.is_doc_create(c.get('name'), c.get('input')):
+                _DOC_CREATES[c.get('id')] = c['input']
+                while len(_DOC_CREATES) > 64: _DOC_CREATES.pop(next(iter(_DOC_CREATES)))
+        return
     info = claude_artifacts.from_stream(j)
     if info: trace('artifact', 'claude', info)
+    for c in (j.get('message') or {}).get('content') or []:
+        inp = _DOC_CREATES.pop(c.get('tool_use_id'), None) if isinstance(c, dict) and c.get('type') == 'tool_result' else None
+        doc = inp and claude_artifacts.doc_made(inp, c.get('content'))
+        if doc: trace('artifact', 'claude', doc)
 
 
 def _live_line(j):
@@ -1110,6 +1123,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                             'tool_call_id': c.get('id') or f'tool-{len(raw)}', 'args': c.get('input') or {}})
                     elif c.get('type') == 'text' and str(c.get('text') or '').strip():
                         trace('progress', 'text', str(c['text']).strip())
+                _published(j, trace)
             elif isinstance(j, dict) and j.get('type') == 'user':
                 for c in (j.get('message') or {}).get('content') or []:
                     if isinstance(c, dict) and c.get('type') == 'tool_result':
@@ -1190,6 +1204,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
                     trace('tool_call', c.get('name') or 'tool', {'tool_call_id': c.get('id') or 'tool', 'args': c.get('input') or {}})
                 elif c.get('type') == 'text' and str(c.get('text') or '').strip():
                     trace('progress', 'text', str(c['text']).strip())
+            _published(j, trace)
         elif j.get('type') == 'user':
             for c in (j.get('message') or {}).get('content') or []:
                 if isinstance(c, dict) and c.get('type') == 'tool_result':

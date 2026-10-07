@@ -115,6 +115,47 @@ class StreamRoadTests(unittest.TestCase):
         agents._published({'type': 'user', 'message': {'content': []}}, lambda *a: seen.append(a))
         self.assertEqual(len(seen), 1)
 
+# a Claude Doc made with the Claude Docs connector: a different tool, a short viewer link, and the answer is JSON text (2026-10-06)
+SHORT = 'https://claude.ai/artifact/Zq7Kp2mWx9TaLb'
+DOC_IN = {'container': {'kind': 'project', 'create': {'name': 'Ledger review', 'doc': {'markdown': '# Ledger review'}}}, 'batch': []}
+DOC_OUT = [{'type': 'text', 'text': '{"verdict":"allow","acks":[{"minted":"abc"}],"frame":{"slug":"' + AID + '","url":"' + URL
+            + '","artifactUrl":"' + URL + '"}}'}]
+
+
+class DocRoadTests(Base):
+    def rows(self): return [a for a in self.s.list_task_artifacts(self.tid) if a['Kind'] == ca.KIND]
+
+    def test_a_short_link_is_a_link(self):
+        got = ca.published({'url': SHORT, 'artifact_id': AID, 'title': 'Ledger review'})
+        self.assertEqual((got['url'], got['artifact_id']), (SHORT, AID))
+
+    def test_opening_an_artifact_is_not_publishing_one(self):
+        self.assertIsNone(ca.published({'opened': True, 'url': SHORT, 'artifact_id': AID, 'title': "someone else's page"}))
+
+    def test_a_doc_the_session_created_reaches_its_task(self):
+        self.session()
+        self.fire('PostToolUse', tool_name='mcp__claude_ai_Claude_Docs__batch', tool_input=DOC_IN, tool_response=DOC_OUT)
+        (row,) = self.rows()
+        self.assertEqual((row['Url'], row['ExtId'], row['Name']), (URL, AID, 'Ledger review'))
+
+    def test_editing_or_commenting_on_a_doc_is_not_making_one(self):
+        self.session()
+        self.fire('PostToolUse', tool_name='mcp__claude_ai_Claude_Docs__update', tool_input={'container': {'kind': 'project', 'id': AID}},
+                  tool_response=DOC_OUT)
+        self.fire('PostToolUse', tool_name='mcp__claude_ai_Claude_Docs__batch', tool_input={'container': {'kind': 'project', 'id': AID}, 'batch': []},
+                  tool_response=DOC_OUT)
+        self.assertEqual(self.rows(), [])
+
+    def test_the_stream_road_pairs_the_create_with_its_answer(self):
+        seen = []
+        agents._published({'type': 'assistant', 'message': {'content': [
+            {'type': 'tool_use', 'id': 'd1', 'name': 'mcp__claude_ai_Claude_Docs__batch', 'input': DOC_IN}]}}, lambda *a: seen.append(a))
+        agents._published({'type': 'user', 'message': {'content': [
+            {'type': 'tool_result', 'tool_use_id': 'zz', 'content': DOC_OUT},          # someone else's answer carrying a frame
+            {'type': 'tool_result', 'tool_use_id': 'd1', 'content': DOC_OUT}]}}, lambda *a: seen.append(a))
+        self.assertEqual([(k, d['url'], d['title']) for k, _n, d in seen], [('artifact', URL, 'Ledger review')])
+
+
 
 class PreviewEndpointTests(unittest.TestCase):
     def test_the_copy_is_served_as_text_never_as_a_page(self):

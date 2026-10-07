@@ -1944,9 +1944,47 @@ def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = 
 
     `hours=0, tries=0` is the owner's RETRY ALL (/api/messages/retriage-failed): a decision, not a side effect, so it reaches
     what the automatic sweep deliberately leaves - a day of mail a broken brain failed on, past the day and past its tries.
+
+    Whatever it did, the brain's story is settled after it (problems.thinking): the sweep that sorts the last held row is
+    the moment "I'm back. All 9 sorted, 2 need you." becomes true, and the bell should not wait for someone to open it.
     """
+    try: return _sweep(store, llm, limit, hours, tries)
+    finally:
+        from . import problems
+        try: problems.thinking(store)
+        except Exception as e: logger.warning(f'retry sweep: could not settle the outage notice - {e}')
+
+
+# A row that slid out of the sweep's window is handed over only if it slid out recently: the first run of this rule must
+# not put a fortnight of old failures on the owner's list at once - those keep the Retry button they always had
+GIVE_UP_REACH_HOURS = 24
+HELD_REASON = "I couldn't make sense of this one, so I put it on your list to be safe - nothing was started. Read it, or ask me to try again."
+
+
+def give_up(store, since, after, tries) -> list:
+    """WHEN THE AUTOMATIC RETRY STOPS, THE OWNER IS TOLD. It used to stop with a debug line, and the row sat in the quiet
+    band with the newsletters - nobody had judged it and nobody would. Now it gets a HELD route (store.HELD): still `error`
+    with its Retry button, on the owner's list (processing_order.feed_band), and one line beside the bell says how many
+    and who from (problems.news).
+
+    Spent tries count only while the brain is answering: during an outage every row fails for the same reason, and the
+    recovery gives them their tries back. Sliding out of the window is a stop whatever the brain is doing."""
+    down = bool(store.get_setting('triage_last_error'))
+    aged_from = (datetime.strptime(since, '%Y-%m-%d %H:%M:%S') - timedelta(hours=GIVE_UP_REACH_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
+    rows = [r for r in store.spent_triage_failures(since=since, tries_after=after, tries=tries, aged_from=aged_from)
+            if not (down and str(r.get('SentAt') or '') >= since)]
+    for r in rows:
+        store.add_route(r['MessageId'], r.get('TaskId'), store.HELD, None, HELD_REASON, [], 'retry-sweep')
+        logger.info(f"retry sweep: message {r['MessageId']} stopped after {r.get('Tries')} tries - on the owner's list")
+    if rows:
+        from . import problems
+        problems.held(store, [r['MessageId'] for r in rows])
+    return rows
+
+
+def _sweep(store, llm, limit, hours, tries) -> int:
     if llm is None: return 0
-    since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S') if hours else None
+    since =(datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S') if hours else None
     # tries count from the brain's last recovery: what it failed on while it was down for everyone is not a row failing for
     # its own reasons (the owner, 2026-10-06: "those messages were within 24 hours")
     try: after = int(store.get_setting('triage_recovered_route') or 0)
@@ -1957,12 +1995,11 @@ def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = 
     if not after and not store.get_setting('triage_last_error'):
         after = store.last_judged_route_id()
         if after: store.set_setting('triage_recovered_route', str(after), 'system')
-    stranded = store.stranded_triage_failures(limit, since=since, tries_after=after)
+    if tries and since: give_up(store, since, after, tries)
+    # spent and given-up rows are left out by the query itself, ahead of its LIMIT
+    stranded = store.stranded_triage_failures(limit, since=since, tries_after=after, tries=tries)
     done = 0
     for row in stranded:
-        if tries and (row.get('Tries') or 0) >= tries:
-            logger.debug(f"retry sweep: message {row['MessageId']} has failed {row['Tries']}x - left for the owner")
-            continue
         mid = row['MessageId']
         m = store.get_message(mid)
         if not m or not store.claim_retriage(mid): continue

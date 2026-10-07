@@ -3621,7 +3621,7 @@ class SQLiteStore:
     def last_route_id(self) -> int:
         r = self._rows('SELECT MAX(RouteId) m FROM route')
         return int((r[0]['m'] if r else 0) or 0)
-    def stranded_triage_failures(self, limit=25, since=None, tries_after=0) -> list:
+    def stranded_triage_failures(self, limit=25, since=None, tries_after=0, tries=0, failed_only=False) -> list:
         """Rows the AI never judged, oldest first, with how many times it has already been tried.
 
         A triage failure was only ever retried by hand, one row at a time, from the opened row - so
@@ -3641,15 +3641,46 @@ class SQLiteStore:
         Retry button it always had - reopening it is then somebody's decision, not a side effect.
         Same clock both sides: SentAt is local 'YYYY-MM-DD HH:MM:SS' (norm_stamp), and so is _now().
         `tries_after`: count only failures on routes after this one - the brain's last recovery (ingest.retry_failed_triage).
+
+        `tries` > 0 is the AUTOMATIC sweep, and what it will not try is left out INSIDE the query: a row whose tries are
+        spent, and a row it already gave up on and put on the owner's list (HELD). Skipped after the LIMIT instead, 25 spent
+        rows at the head filled every page, and nothing newer was ever retried again. 0 is the owner's own Retry all, which
+        reaches both. `failed_only` leaves out the no-AI install's `awaiting AI triage`: nothing failed there.
         """
-        rows = self._rows(f"""SELECT m.MessageId, m.SentAt, r.Reason,
+        like = self.FAILURE_LIKE + (() if failed_only else ('awaiting AI triage%',))
+        auto = " AND IFNULL(Decision,'') <> ? AND Tries < ?" if tries else ''
+        rows = self._rows(f"""SELECT * FROM (SELECT m.MessageId, m.SentAt, r.Reason, r.Decision,
                                (SELECT COUNT(*) FROM route x WHERE x.MessageId=m.MessageId
                                 AND x.ParseError IS NOT NULL AND x.RouteId > ?) Tries
                              FROM message m JOIN route r
                                ON r.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
                              WHERE m.Status='error'{' AND m.SentAt >= ?' if since else ''}
-                             ORDER BY m.MessageId LIMIT ?""", (int(tries_after or 0),) + ((since,) if since else ()) + (limit,))
-        return [dict(r) for r in rows if re.match(self.TRIAGE_UNJUDGED, r['Reason'] or '')]
+                               AND (r.Decision=? OR {' OR '.join(['r.Reason LIKE ?'] * len(like))}))
+                             WHERE 1=1{auto} ORDER BY MessageId LIMIT ?""",
+                          (int(tries_after or 0),) + ((since,) if since else ()) + (self.HELD,) + like
+                          + ((self.HELD, int(tries)) if tries else ()) + (limit,))
+        unjudged = self.TRIAGE_FAILURE if failed_only else self.TRIAGE_UNJUDGED
+        return [dict(r) for r in rows if r['Decision'] == self.HELD or re.match(unjudged, r['Reason'] or '')]
+    # THE SWEEP GAVE UP ON IT: the route a row gets when the automatic retry stops for good (ingest.give_up). It stays in
+    # `error` - its Retry button is the owner's - and the bands read it as the owner's (processing_order.feed_band).
+    HELD = 'held'
+    # TRIAGE_FAILURE's prefixes, as SQL can match them - so a filter lives in the query, before its LIMIT
+    FAILURE_LIKE = ('AI triage failed (%', 'AI triage returned an answer it could not read%', 'triage failed (%', 'triage retry failed (%')
+    def spent_triage_failures(self, since=None, tries_after=0, tries=4, aged_from=None) -> list:
+        """What the automatic sweep has stopped on and not yet handed over: failed rows inside the window whose tries are
+        spent, and - with `aged_from` - rows that slid out of the window since then, still unjudged."""
+        aged = ' OR (SentAt >= ? AND SentAt < ?)' if aged_from and since else ''
+        rows = self._rows(f"""SELECT * FROM (SELECT m.MessageId, m.TaskId, m.SentAt, r.Reason,
+                               (SELECT COUNT(*) FROM route x WHERE x.MessageId=m.MessageId
+                                AND x.ParseError IS NOT NULL AND x.RouteId > ?) Tries
+                             FROM message m JOIN route r
+                               ON r.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
+                             WHERE m.Status='error' AND IFNULL(r.Decision,'') <> ?
+                               AND ({' OR '.join(['r.Reason LIKE ?'] * len(self.FAILURE_LIKE))}))
+                             WHERE (Tries >= ?{' AND SentAt >= ?' if since else ''}){aged} ORDER BY MessageId""",
+                          (int(tries_after or 0), self.HELD) + self.FAILURE_LIKE + (int(tries),) + ((since,) if since else ())
+                          + ((aged_from, since) if aged else ()))
+        return [dict(r) for r in rows if re.match(self.TRIAGE_FAILURE, r['Reason'] or '')]
     def live_tasks_from_sender(self, email: str) -> list:
         """Open tasks carrying a message from this address - what a skip rule leaves behind.
 

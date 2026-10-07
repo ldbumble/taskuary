@@ -1115,10 +1115,18 @@ export function SetupCard({ card, onNavigate, onHandOff }) {
 // can scroll. like we have session window"). So a stop draws the tab itself - live, scrollable, the real
 // thing - in a box the size of the AI stop's terminal. Loaded only when a stop shows it. The Assistant
 // stop keeps its picture: the walk runs inside the Assistant, and a window onto it would hold itself.
+// ...and Settings and Docs are the canvas's own picker - the chips and their cards - not the old tab's scrolling rail, which
+// nothing else in the app draws any more (the owner, 2026-10-07: "do we still have the scroll settings left sidebar?")
+const Picker = React.lazy(() => import("./CanvasBrowse.jsx"));
+const PICKER_AT = { settings: null, docs: "docs" };
+function SettingsWindow({ stop, go }) {
+  const [state, setState] = useState({ section: PICKER_AT[stop], open: null });
+  return <Picker area="settings" state={state} onState={setState} live onNavigate={(tab) => go({ tab })} />;
+}
 const TAB_WINDOWS = {
   connections: React.lazy(() => import("./ConnectorsView.jsx")),
-  docs: React.lazy(() => import("./DocsView.jsx")),
-  settings: React.lazy(() => import("./SettingsView.jsx")),
+  docs: SettingsWindow,
+  settings: SettingsWindow,
   board: React.lazy(() => import("./BoardView.jsx")),
   tasks: React.lazy(() => import("./TasksView.jsx")),
   reports: React.lazy(() => import("./ReportsView.jsx")),
@@ -1136,7 +1144,8 @@ function TabWindow({ stop, go }) {
   return (
     <div className="tq-walk-window">
       <React.Suspense fallback={<div className="tq-card-full">…</div>}>
-        <View active onNavigate={(tab) => go({ tab })} onOpenTask={openTask} onSelect={setSel} selected={sel} />
+        {View === SettingsWindow ? <View stop={stop} go={go} />
+          : <View active onNavigate={(tab) => go({ tab })} onOpenTask={openTask} onSelect={setSel} selected={sel} />}
       </React.Suspense>
     </div>
   );

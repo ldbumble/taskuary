@@ -141,7 +141,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <tr>
 <td><strong>look</strong></td>
 <td>look-ups - they run at once and change nothing</td>
-<td>task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
+<td>task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
 </tr>
 </tbody></table>
 <p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
@@ -554,6 +554,8 @@ except the few that can be undone, which run at once with an undo on the receipt
 <ul>
 <li><code>about</code> - words to narrow it</li>
 </ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="missed-check"><code>missed.check</code><a class="anchor" href="#missed-check" aria-label="Link to this section">#</a></h3>
+<p>Whether the owner missed anything: asks nobody answered, people who have not answered the owner, anything marked urgent, and every place that could not be checked - with the answer written out. Use it for &quot;did I miss anything&quot;, &quot;anything slip&quot;, &quot;am I behind on anything&quot;</p>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="report-read"><code>report.read</code><a class="anchor" href="#report-read" aria-label="Link to this section">#</a></h3>
 <p>A report or workflow and its last runs - what it said, whether it failed and why, and its source_id.</p>
 <ul>

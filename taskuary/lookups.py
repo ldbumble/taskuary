@@ -227,8 +227,12 @@ def errors_list(store, p: dict) -> str:
     days, down = _days(p, 3), problems._dismissed(store)
     if days is None: return 'errors.list needs days to be a number.'
     bell = [f"{'(you dismissed this) ' if down.get(x['key']) == problems.signature(x) else ''}{x['title']} - {_cut(x['detail'], 300)}"
+            f"{' (' + _cut(x['error'], 200) + ')' if x.get('error') else ''}"
             f"{' since ' + _day(x['since']) if x.get('since') else ''} - fix: {x['fix']} on {x['where']}" for x in problems.collect(store, all_of_them=True)]
     out = (['FAILING NOW:'] + bell) if bell else ['Nothing is failing right now.']
+    # ...and what ended by itself in the last few hours, in the words the bell used
+    back = [f"{x['title']} {x['detail']}" for x in problems.news(store)]
+    if back: out += ['RECOVERED IN THE LAST FEW HOURS:'] + back
     for what, rows in store.failures_since(_since(days)).items():
         if rows: out += [f'{what.upper()} THAT FAILED ({len(rows)}):'] + [
             f"  {_day(r['At'])} {_title(store, r['TaskId']) + ' ' if r.get('TaskId') else ''}{r['Who'] or ''}: {_cut(r['Error'], 240)}" for r in rows[:8]]

@@ -15,6 +15,8 @@ test("each old link becomes a canvas request", () => {
   assert.deepEqual(canvasRequestFromHash("#settings=config&group=Triage%20%26%20agents").state, { section: "config", open: "Triage & agents" });
   assert.deepEqual(canvasRequestFromHash("#settings=policies").state, { section: "policies", open: "policies" });
   assert.deepEqual(canvasRequestFromHash("#settings=docs").state, { section: "docs", open: null }, "Docs opens on its shelf of files");
+  assert.deepEqual(canvasRequestFromHash("#settings=playbooks").state, { section: "playbooks", open: null }, "Playbooks is a section of its own");
+  assert.deepEqual(canvasRequestFromHash("#settings=profiles").state, { section: "profiles", open: null }, "and so is Profiles");
   assert.deepEqual(canvasRequestFromHash("#playbook=weekly-close").state, { section: "playbooks", open: "docs" });
   assert.deepEqual(canvasRequestFromHash("#profiles").state, { section: "profiles", open: null }, "the Profiles section, every profile a card");
 });

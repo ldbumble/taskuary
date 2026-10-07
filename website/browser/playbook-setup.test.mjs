@@ -76,7 +76,8 @@ test('New playbook offers optional historical email, starts AI, and preserves co
     if (data) return request.respond({ status, contentType: 'application/json', body: JSON.stringify(data) });
     page.fixtureRequestGuard(request);
   });
-  await page.goto(`${harness.ui}#settings=docs`, { waitUntil: 'domcontentloaded' });
+  // Playbooks is a Settings section of its own (2107f0d2), no longer a group on the Docs shelf
+  await page.goto(`${harness.ui}#settings=playbooks`, { waitUntil: 'domcontentloaded' });
   await clickRail(page, 'Playbooks');
   assert.equal(await page.$('[role="dialog"]'), null, 'Opening the group does not start setup');
   await clickRail(page, '+ New playbook');

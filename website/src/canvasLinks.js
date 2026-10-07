@@ -24,6 +24,9 @@ export function canvasRequestFromHash(hash, n = 0) {
   if (/^#(?:connector=|cli-agents)/.test(h)) return { kind: "browse", area: "connections", state: {}, n };
   if ((m = /^#settings=([^&]*)(?:&group=([^&]*))?/.exec(h))) {
     const page = decodeURIComponent(m[1] || "config") || "config", group = m[2] ? decodeURIComponent(m[2]) : "";
+    // Profiles and Playbooks are sections of their own now (2107f0d2): their link opens that section's list, where it fell to the
+    // section list above - and the playbook test's New playbook was on neither
+    if (["profiles", "playbooks"].includes(page)) return { kind: "browse", area: "settings", state: { section: page, open: null }, n };
     if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
     // Docs is a shelf of files: its link opens the shelf, not whichever document happens to be first
     return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page === "docs" ? null : page }, n };

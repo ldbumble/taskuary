@@ -994,6 +994,19 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
         self.assertEqual(c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId'], rid)
 
+    def test_a_tasks_draft_says_who_it_answers_and_whether_its_channel_can_carry_it(self):
+        """The walk's task card read its drafts from the task detail, which carried neither: every inbound reply said
+        "To this conversation", and a Teams draft offered Send & close only to come back "not sent" (2026-10-07)."""
+        tid = server.store.create_task({'Title': 'Import check', 'Kind': 'general', 'Status': 'open'}, 'test')
+        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'td-from1', 'Channel': 'teams', 'SourceName': 'Ops chat',
+                                        'Subject': 'Import', 'BodyText': 'did the import finish?', 'FromName': 'Gail Moreno',
+                                        'Status': 'routed'})
+        server.store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'yes'})
+        with mock.patch.object(server, '_can_send', return_value=False):
+            rv = c.get(f'/api/tasks/{tid}').json()['reviews'][0]
+        self.assertEqual((rv['FromName'], rv['Channel'], rv['SourceName']), ('Gail Moreno', 'teams', 'Ops chat'))
+        self.assertIs(rv['CanSend'], False)
+
     def test_a_waiting_agent_can_ask_the_sender_and_leave_the_task_waiting(self):
         """Clarification is a separate reviewed reply, not the coder's final response. Sending
         it must leave the coding task open and any other pending review alone."""

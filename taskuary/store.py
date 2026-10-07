@@ -4977,7 +4977,9 @@ class SQLiteStore:
                 'artifacts': self.list_task_artifacts(task_id),
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),
-                'reviews': self._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId DESC', (task_id,))}
+                # ...with who it answers, as list_reviews has: without it a draft's To line read "this conversation"
+                'reviews': self._rows('SELECT rv.*, m.FromName, m.FromEmail, m.Channel, m.SourceName, m.ConversationId FROM review rv '
+                                      'LEFT JOIN message m ON m.MessageId=rv.MessageId WHERE rv.TaskId=? ORDER BY rv.ReviewId DESC', (task_id,))}
 
     # ── knowledge base (knowledge.py): documents as passages behind an FTS5 index ──
     def kb_doc(self, cid, source, path):

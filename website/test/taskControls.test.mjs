@@ -138,7 +138,7 @@ test("complete, reopen, coding start and stop run the shared operations road, ne
 test("saving a result never completes the task, drafts never send, a question waits on the task", () => {
   assert.match(tasks, /\/wrap`, \{ close: false \}/);
   // the box opens at once and the AI's draft is written behind it (replyDraft.js, 2026-10-01) - neither sends
-  assert.match(tasks, /generate \? openReply\(api, replyMessage\.MessageId\) : api\.post\(`[^`]*\/reply`, \{ draft: false \}\)/);
+  assert.match(tasks, /generate \? draftReply\(api, replyMessage\.MessageId\) : api\.post\(`[^`]*\/reply`, \{ draft: false \}\)/);
   assert.match(tasks, /\/clarify`, \{ body: text/);
   assert.doesNotMatch(tasks, /\/send`/);
 });
@@ -222,10 +222,10 @@ test("starting the new one pauses a live session first - its handover kept, no r
 
 test("an unstarted general task's Send to agent is the row's lead, not a button inside the card", () => {
   assert.match(tasks, /const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;/);
-  assert.match(tasks, /sendGeneral \? \[\{ id: "send-general", group: "agent", lead: true/);
+  assert.match(tasks, /sendGeneral \? \[\{ id: "send-general", group: "agent", lead: !pendingReview/);
   assert.match(tasks, /\{!inRow && <Button size="small" variant="contained" disableElevation disabled=\{!!startingAgent\}\s+startIcon=\{startingAgent === "general"/);
 });
 
 test("a live session's Mark done asks for a place on the bar", () => {
-  assert.match(tasks, /promote: !liveSession && !pendingReview, beside: liveSession \}/);   // ...and a waiting draft's send is the move (2026-10-06)
+  assert.match(tasks, /promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession \}/);   // ...and a waiting draft's send is the move (2026-10-06)
 });

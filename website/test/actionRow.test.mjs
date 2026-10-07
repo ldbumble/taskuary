@@ -230,3 +230,10 @@ test("a live session's Mark done stands on the bar, outlined, and Next stays the
   const full = rowOf({ ref: "", list: [v("a1", "agent"), v("a2", "agent"), v("a3", "agent"), v("a4", "agent"), ...live.slice(3)] });
   assert.ok(full.agent.some((x) => x.id === "done") && !full.more.some((x) => x.id === "done"), "never behind More (2026-10-06)");
 });
+
+test("a draft waiting under the card holds the move: the bar fills nothing - not Start an agent, not Next", () => {
+  // the UX review, 2026-10-07: a drafted reply wore a filled Send & close on the card AND a filled Start an agent on the bar
+  const r = rowOf({ ref: "TQ-3", list: [v("start-agent", "agent", { lead: true }), v("done", "more", { promote: false, onCard: true }), v("next", "next")] });
+  assert.deepEqual(filled(r), []);
+  assert.equal(r.next.tone, "s");
+});

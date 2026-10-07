@@ -1090,6 +1090,14 @@ def task_detail(task_id: int):
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
     from . import concierge
+    # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send & close, and
+    # the press came back "not sent" instead of the card offering Copy & close from the start
+    memo = {}
+    for r in d.get('reviews') or []:
+        try: special = json.loads(r.get('Deliver') or '{}').get('kind') == 'zoho_invoice'
+        except (TypeError, ValueError, AttributeError): special = False
+        ok, why = _send_state(memo, r.get('Channel'), bool(r.get('MessageId')))
+        r['CanSend'] = special or ok; r['SendBlock'] = '' if r['CanSend'] else why
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),

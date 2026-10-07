@@ -57,7 +57,7 @@ test("every Reply press opens at once, and both views of a draft show Drafting w
   assert.doesNotMatch(cards, /\/reply`, \{ draft: true/, "no card waits on the model");
   assert.equal((cards.match(/openReply\(api, /g) || []).length, 2, "Draft a reply, an fyi's Reply");
   assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null\);/);
-  assert.match(page, /await \(generate \? openReply\(api, replyMessage\.MessageId\)/);
+  assert.match(page, /await \(generate \? draftReply\(api, replyMessage\.MessageId\)/);   // the import, renamed: the page's own openReply shadowed it
   for (const src of [cards, dec]) assert.match(src, /useDraftJob\(/);
   assert.match(dec, /drafting \? "Drafting…"/);
   assert.match(cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function MeetingCard")), /drafting \? "Drafting…"/);

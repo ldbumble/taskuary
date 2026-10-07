@@ -22,3 +22,9 @@ test("the view takes the list's part as props - it never loads the task list its
   assert.match(page, /data-tq-task-page=\{selected \|\| ""\}/);
   assert.match(page, /height: canvas \? "auto" : "calc\(100vh - 118px\)"/);
 });
+
+test("Write reply calls the draft helper, not itself - the component's own openReply shadowed the import (2026-10-07)", () => {
+  const s = src("TaskPage.jsx");
+  assert.doesNotMatch(s, /import \{ openReply \} from "\.\/replyDraft\.js"/);
+  assert.match(s, /generate \? draftReply\(api, replyMessage\.MessageId\)/);
+});

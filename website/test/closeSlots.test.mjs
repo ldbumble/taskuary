@@ -38,6 +38,7 @@ test("the footer says what closes the task", async () => {
   assert.match(completionLine(true, false), /sending the reply closes it/);
   assert.match(completionLine(true, true), /closes when its emails are sent or dropped/);
   assert.match(completionLine(false, false), /Automatic task/);
+  assert.match(completionLine(true, false, true), /press Mark done/);       // nobody to answer: no reply to send
 });
 
 test("waiting emails open Close out, and it says how many", async () => {

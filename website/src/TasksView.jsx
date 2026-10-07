@@ -58,9 +58,16 @@ const PRIORITIES = ["low", "normal", "high", "urgent"];
 const KIND_OPTIONS = [
   { key: "task", label: "your task", hint: "yours to do - nothing works it, and it is not on the Board" },
   { key: "general", label: "agent · general", hint: "research, writing, analysis, planning - an agent runs it without a repository" },
-  { key: "coding", label: "agent · coding", hint: "the configured CLI in a repository terminal" },
-  { key: "reply", label: "reply", hint: "drafted by the model triage uses and approved on the task - it never opens a session" },
+  { key: "coding", label: "agent · coding", hint: "an agent works it in one of your code repositories" },
+  { key: "reply", label: "reply", hint: "a draft answer you approve on the task before it goes", made: false },
 ];
+// what Create leads to, said for the kind picked - the caption promised a terminal and a draft that Create never made.
+// A reply is not offered here: a task you type yourself has nobody to answer, so its draft step was a dead end.
+const NEXT_STEP = {
+  task: "Create puts it on your In progress list. Press Mark done on it when it's finished.",
+  general: "Create opens it with your summary already asked. Press Start an agent on it to have one work it.",
+  coding: "Create opens it. Press Start an agent on it to choose the agent and start it in the repository.",
+};
 const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
 
 // The task's settings read as FACTS you can change, not as a form: pill-shaped, label-less,
@@ -124,6 +131,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const taskLoadSeq = useRef(0);
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
+  const [creating, setCreating] = useState(false), [newErr, setNewErr] = useState("");
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
   useEffect(() => {
     const fromHash = () => {
@@ -151,7 +159,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     }
   }, [sent]);
   // the tab always lands on what is still in progress - whatever it was left on last time
-  useEffect(() => { if (active) { setFilter("live"); setOlder(false); } }, [active]);
+  useEffect(() => { if (active) { setFilter("live"); setOlder(false); setOnly(null); } }, [active]);
   useEffect(() => { setOlder(false); }, [filter]);
   // ...and keep it honest: the rows are re-asked on every task change while this tab is on screen (the open task's own
   // view, TaskPage, reloads itself on the same event)
@@ -181,9 +189,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     // `repo` is not a task column - it rides as a tag, the same one the Board writes
     const { repo, ...fields } = nt;
     const tags = [repo && nt.Kind === "coding" ? `repo:${repo}` : "", ask ? ASK_TAG : ""].filter(Boolean);
-    const { data } = await api.post("/api/tasks", { ...fields, ...(tags.length ? { Tags: tags.join(",") } : {}) });
-    setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
-    setFilter("live"); loadTasks(); onSelect(data.taskId);
+    // a refusal said in the dialog, and one press only: it sat open saying nothing, and a second press made two
+    setCreating(true); setNewErr("");
+    try {
+      const { data } = await api.post("/api/tasks", { ...fields, ...(tags.length ? { Tags: tags.join(",") } : {}) });
+      setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
+      setFilter("live"); setOnly(null); loadTasks(); onSelect(data.taskId);
+    } catch (e) {
+      setNewErr(`The task wasn't made - ${e?.response?.data?.detail || "Taskuary didn't answer"}. What you typed is still here; try Create again.`);
+    } finally { setCreating(false); }
   };
   const search = query.trim();
   useEffect(() => {
@@ -219,6 +233,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     acc[st.label] = { key: st.label, label: st.label, c: st.c, n: (acc[st.label]?.n || 0) + 1 };
     return acc;
   }, {})).sort((a, b) => b.n - a.n);
+  // A STATE THAT EMPTIED lets go: answer the one agent that was waiting and the chip filtered by "waiting on you" had no
+  // row left to click, its pill row hid (one state), and the list read "Nothing here." over "in progress 3" until a reload
+  useEffect(() => { if (only && tasks && !liveStates.some((x) => x.key === only)) setOnly(null); }, [only, tasks, liveStates]);
   // A task may finish while its detail stays open (especially an assistant conversation). Move
   // the selected bucket with it so Done never sits under an In progress filter. Search is a
   // deliberate cross-status view, so it is not changed.
@@ -287,7 +304,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (active && !selected && firstShownId && !dismissed.current) onSelect(firstShownId);
   }, [active, selected, firstShownId, onSelect]);
   const changeFilter = (next) => {
-    setFilter(next); setQuery(""); setOlder(false);
+    setFilter(next); setQuery(""); setOlder(false); setOnly(null);
     if (!next || !selected) return;
     const row = (tasks || []).find((x) => x.TaskId === selected);
     if (!row || inBucket(row, next)) return;
@@ -327,7 +344,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           </Box>
           {/* THE STATES OF WHAT IS IN PROGRESS, ON TOP (the owner, 2026-09-28: "don't see the filter on top of tasks") -
               the same pills as the row above, a count each, only when there is more than one state to tell apart */}
-          {filter === "live" && !search && liveStates.length > 1 && (
+          {filter === "live" && !search && (liveStates.length > 1 || only) && (
             <Box className="tq-tasks-states" sx={{ px: 1, pt: 0.75, bgcolor: PANEL2, flexShrink: 0 }}>
               <FilterPills value={only || ""} onChange={(k) => setOnly(k || null)}
                 options={[{ key: "", label: "all", n: liveStates.reduce((a, x) => a + x.n, 0) }, ...liveStates]} />
@@ -350,7 +367,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length && !nOlder
               ? <Empty>{search ? `No tasks match “${search}”.`
                 : !tasks.length ? "No tasks yet — they arrive from the Timeline as work comes in, or start one with New."
-                : "Nothing here."}</Empty> : shown.map((task) => {
+                : filter === "upcoming" ? "Nothing put away. Remind me on a task puts it here until that day."
+                : filter === "done" ? "Nothing finished yet. Mark done on a task puts it here."
+                : "Nothing in progress. New starts one, or the Assistant hands you work as it comes in."}</Empty> : shown.map((task) => {
               const st = stateOf(task), sel = selected === task.TaskId;
               const list = rowChecklist(task), nDone = list.filter((i) => i.done).length;
               const asked = askedAgo(task), worker = assignedAgent(task.Assignee);
@@ -453,7 +472,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <TextField label="Summary" value={nt.Summary} multiline minRows={2} onChange={(e) => setNt({ ...nt, Summary: e.target.value })} />
           <Box sx={{ display: "flex", gap: 1.5 }}>
             <Select fullWidth value={nt.Kind} renderValue={kindLabel} onChange={(e) => setNt({ ...nt, Kind: e.target.value })}>
-              {KIND_OPTIONS.map((o) => <MenuItem key={o.key} value={o.key} sx={{ py: 0.7 }}>
+              {KIND_OPTIONS.filter((o) => o.made !== false).map((o) => <MenuItem key={o.key} value={o.key} sx={{ py: 0.7 }}>
                 <ListItemText primary={o.label} secondary={o.hint}
                   primaryTypographyProps={{ fontSize: 13 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
               </MenuItem>)}
@@ -476,13 +495,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
               </Select>
             </Box>
           )}
-          <Typography variant="caption" sx={{ color: DIM }}>
-            To do stays on your list. General / non-coding opens the visual assistant. Coding opens the agent's repository terminal. Reply creates a draft on the task.
-          </Typography>
+          <Typography variant="caption" sx={{ color: DIM }}>{NEXT_STEP[nt.Kind] || NEXT_STEP.task}</Typography>
+          {newErr && <Alert severity="error" onClose={() => setNewErr("")}>{newErr}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setNewOpen(false)}>Cancel</Button>
-          <Button variant="contained" disabled={!nt.Title.trim()} onClick={create}>Create</Button>
+          <Button onClick={() => { setNewOpen(false); setNewErr(""); }}>Cancel</Button>
+          <Button variant="contained" disabled={!nt.Title.trim() || creating} onClick={create}
+            startIcon={creating ? <CircularProgress size={13} /> : null}>{creating ? "Creating…" : "Create"}</Button>
         </DialogActions>
       </Dialog>
     </Box>

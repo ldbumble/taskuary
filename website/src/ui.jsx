@@ -1377,6 +1377,9 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   const [wait, setWait] = React.useState({ data: [], state: null });
   const [text, setText] = React.useState("");
   const [flash, setFlash] = React.useState("");
+  // a refusal is not a hint: in compact it was grey placeholder text in an empty box, read as the box's own suggestion
+  const [fail, setFail] = React.useState("");
+  const failed = (s) => { setFail(s); setTimeout(() => setFail(""), 8000); };
   const [many, setMany] = React.useState(false);      // paste a list: one prompt per line, queued in order
   const { imgs, onPaste, drop: dropImg, clear: dropImgs, upload: uploadImgs } = usePromptImages();
   const [showQ, setShowQ] = React.useState(false);    // Wall badge peeks at the queue, then folds itself away
@@ -1401,7 +1404,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
       setFlash(data.delivered ? (data.state === "restarted" ? "session reopened with it" : "typed in — the agent was parked") : "queued — goes in when the agent stops");
       setTimeout(() => setFlash(""), 4000);
       load(); onQueued?.(data);
-    } catch (e) { setFlash(e?.response?.data?.detail || "could not queue it"); }
+    } catch (e) { failed(`Not sent - ${e?.response?.data?.detail || "Taskuary didn't answer"}. Your words are still in the box; try again.`); }
   };
   const pending = wait.data.filter((w) => !w.DeliveredAt);
   const peekQueue = () => {
@@ -1414,6 +1417,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     : wait.state === "parked" ? "agent is parked — this goes straight in"
     : wait.state === "no_session" ? "no live session — this reopens one with your note as the ask" : "";
   // compact has no room for a header line, so the placeholder carries the state instead
+  const straight = ["asking", "parked", "no_session"].includes(wait.state), verb = straight && !many ? "Send" : "Queue";
   const ph = many ? "One prompt per line — twenty is fine. Bullets and numbers are stripped; they drip in one per stop, in this order."
     : !compact ? "Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line. Paste a screenshot to send it along."
     : wait.state === "asking" ? "It is asking — answer here and it goes straight in"
@@ -1434,7 +1438,9 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
           <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>
           <Typography variant="body2" noWrap={compact} title={w.Note}
             sx={{ fontSize: compact ? 11 : 11.5, flex: 1, minWidth: 0, whiteSpace: compact ? "nowrap" : "pre-wrap", color: INK }}>{w.Note}</Typography>
-          <Typography variant="caption" onClick={async () => { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); load(); }}
+          <Typography variant="caption" onClick={async () => {
+              try { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); } catch { failed("Couldn't withdraw it - it may already have gone in."); }
+              load(); }}
             sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>withdraw</Typography>
         </Box>
   ));
@@ -1450,6 +1456,12 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   if (compact) {
     return (
       <Box sx={{ position: "relative", height: 40 }}>
+        {fail && (
+          <Box role="alert" sx={{ position: "absolute", zIndex: 6, left: 0, right: 0, bottom: "calc(100% + 4px)", bgcolor: "#f3e7e9",
+            border: "1px solid #8a364655", borderRadius: 1.5, px: 1, py: 0.5 }}>
+            <Typography variant="caption" sx={{ color: "#8a3646", fontSize: 11 }}>{fail}</Typography>
+          </Box>
+        )}
         {showQ && pending.length > 0 && (
           <Box sx={{ position: "absolute", zIndex: 5, left: 0, right: 0, bottom: "calc(100% + 4px)",
             maxHeight: 104, overflowY: "auto", display: "flex", flexDirection: "column", gap: 0.3,
@@ -1461,7 +1473,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
         <Box sx={{ height: 40, boxSizing: "border-box", overflow: "hidden", bgcolor: "#f1ead9",
           border: "1px solid #ddd2b9", borderRadius: 1.5, px: 0.75, py: 0.45 }}>
           <Box sx={{ height: "100%", display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Box title={pending.length ? `${pending.length} prompt${pending.length === 1 ? "" : "s"} waiting in the funnel — click to peek for 3 seconds; open the full task to withdraw them` : stateLine}
+          <Box title={pending.length ? `${pending.length} prompt${pending.length === 1 ? "" : "s"} waiting to go in — click to peek for 3 seconds; open the full task to withdraw them` : stateLine}
             onClick={peekQueue}
             sx={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
               width: 20, height: 24, color: "#6b5f45", flexShrink: 0, userSelect: "none",
@@ -1488,7 +1500,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
           )}
           <MicButton size={15} sx={{ color: "#6b5f45", p: 0.25 }} onText={(t) => setText((s) => (s.trim() ? `${s.trimEnd()} ${t}` : t))} />
           <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim() && !imgs.length}
-            sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, minWidth: 0, px: 1, py: 0.2, fontSize: 11, lineHeight: 1.4, whiteSpace: "nowrap" }}>Queue</Button>
+            sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, minWidth: 0, px: 1, py: 0.2, fontSize: 11, lineHeight: 1.4, whiteSpace: "nowrap" }}>{verb}</Button>
           </Box>
         </Box>
       </Box>
@@ -1498,7 +1510,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
         <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 600 }}>
-          ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} in the funnel` : ""}
+          ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} waiting to go in` : ""}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {stateLine && <Typography variant="caption" sx={{ color: "#6b5f45", fontSize: 10.5 }}>{stateLine}</Typography>}
@@ -1512,10 +1524,11 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
         <MicButton sx={{ alignSelf: "flex-end", color: "#6b5f45" }} onText={(t) => setText((s) => (s.trim() ? `${s.trimEnd()} ${t}` : t))} />
         <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim() && !imgs.length}
           sx={{ alignSelf: "flex-end", bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, whiteSpace: "nowrap" }}>
-          {many ? `Queue ${lines || ""} prompt${lines === 1 ? "" : "s"}` : "Queue"}</Button>
+          {many ? `Queue ${lines || ""} prompt${lines === 1 ? "" : "s"}` : verb}</Button>
       </Box>
       {thumbs}
       {flash && <Typography variant="caption" sx={{ color: "#47654a", display: "block", mt: 0.5 }}>{flash}</Typography>}
+      {fail && <Typography variant="caption" role="alert" sx={{ color: "#8a3646", display: "block", mt: 0.5 }}>{fail}</Typography>}
       {queued}
       {wait.data.some((w) => w.DeliveredAt) && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>

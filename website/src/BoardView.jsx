@@ -259,6 +259,7 @@ const COLS = [
 export default function BoardView({ onOpenTask, onOpenReports, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
+  const [creating, setCreating] = useState(false), [newErr, setNewErr] = useState("");
   const [view, setView] = useState("columns");   // columns | studio | wall - three looks at one board
   const [boardTick, setBoardTick] = useState(0); // bumped when a session starts here: the active board view reloads at once
   const [newOpen, setNewOpen] = useState(false);
@@ -326,8 +327,12 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
   const noRepo = !plan.repo;                    // which of the two "live" readings the box offers
   const create = async () => {
     const { repo, kind, chat, tags } = plan;
-    const { data } = await api.post("/api/tasks",
-      { Title: nt.Title, Summary: nt.Summary || null, Kind: kind, Tags: tags });
+    // the refusal is said IN the dialog - the page's alert sits behind it - and one press makes one task
+    let data;
+    setCreating(true); setNewErr("");
+    try { ({ data } = await api.post("/api/tasks", { Title: nt.Title, Summary: nt.Summary || null, Kind: kind, Tags: tags })); }
+    catch (e) { setNewErr(`The task wasn't made - ${e?.response?.data?.detail || "Taskuary didn't answer"}. What you typed is still here; try Create again.`); return; }
+    finally { setCreating(false); }
     // The images can only be stored against a task, so they upload now and the prompt gains the
     // sentence that names them - the seed reads Summary, so this has to land before the session.
     try {
@@ -625,10 +630,12 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
             {/* A terminal you start here is yours to end: the server marks the task the moment it opens
                 (selfclose.claim) - no switch to forget. */}
           </Box>
+          {newErr && <Alert severity="error" onClose={() => setNewErr("")} sx={{ mt: 1 }}>{newErr}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setNewOpen(false)}>Cancel</Button>
-          <Button variant="contained" disableElevation disabled={!nt.Title.trim()} onClick={create}>Create</Button>
+          <Button onClick={() => { setNewOpen(false); setNewErr(""); }}>Cancel</Button>
+          <Button variant="contained" disableElevation disabled={!nt.Title.trim() || creating} onClick={create}
+            startIcon={creating ? <CircularProgress size={13} /> : null}>{creating ? "Creating…" : "Create"}</Button>
         </DialogActions>
       </Dialog>
 

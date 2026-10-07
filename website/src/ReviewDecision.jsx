@@ -119,7 +119,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // WAIT FOR IT, THEN MOVE ON (the owner, 2026-10-02): the close-out landed with no error, so the task may be closed now
       else if (data.ok && verb !== "reject" && onSent) { await onSent(); setBusy(false); return; }
       reloadGh(); onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }
     setBusy(false);
   };
 
@@ -143,7 +143,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // task page closes the walk on it when that send closed the task (the owner, 2026-10-02)
       else if (data.ok && verb === "approve" && onSent) { await onSent(); setBusy(false); return; }
       onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }
     setBusy(false);
   };
 

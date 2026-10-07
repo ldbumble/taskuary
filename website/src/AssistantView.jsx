@@ -747,6 +747,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const resettingRef = useRef(false);
   const turnFlight = useRef(false);       // React state updates after the event; this closes same-tick double submits
   const stopRef = useRef(null);           // the Stop beside the dots: aborts the turn being waited on
+  // ...only a turn the model is ANSWERING. Next loading the following item is a fetch, not an answer: it showed "Stop"
+  // beside the dots after every let-go (the owner, 2026-10-07: "why is there a button though it should just be ...")
+  const answering = useRef(false);
   // Pile construction is comparatively expensive. Never let a timer tick and a websocket
   // notification queue duplicate requests in this tab; remember one forced refresh instead.
   const pileFlight = useRef(null);
@@ -1223,7 +1226,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const images = line == null ? pics.paths : [];
     const t = String(line ?? text).trim() || (images.length ? "What is this?" : "");
     if (!t || busy || resetting || handoff || turnFlight.current || pics.busy) return;
-    turnFlight.current = true;
+    turnFlight.current = answering.current = true;
     setText(""); setBusy(true); setErr("");
     const shots = line == null ? pics.imgs : [];
     if (images.length) pics.clear();
@@ -1262,7 +1265,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         text: e?.name === "AbortError" ? "Stopped." : raw ? "I didn't get an answer through. Nothing was changed." : `Not answered - ${why}`,
         chips: [{ ask: t, label: "Try again" }, ...((pile?.items || []).length ? [{ verb: "next", label: "Next" }] : [])] }]);
     }
-    turnFlight.current = false;
+    turnFlight.current = answering.current = false;
     setBusy(false);
   };
   const sendEmoji = (emoji) => {
@@ -1974,7 +1977,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
                 {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}
-                {busy && turnFlight.current && !DEMO && (
+                {busy && answering.current && !DEMO && (
                   <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written and gives you the chat back."
                     onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); }}>Stop</button>
                 )}

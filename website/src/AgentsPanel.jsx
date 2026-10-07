@@ -29,6 +29,18 @@ export const CliConnectionsPage = ({ onBack }) => {
     catch (e) { setErr(e?.response?.status === 404 ? "Restart Taskuary to load the updated CLI connections configuration." : failure(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // CONNECT, in one press: the CLI's own known command saved as its connection. A card only ever becomes connected through this
+  // (or Edit command → Save) - an installed CLI is found, never connected for you (the owner, 2026-10-07)
+  const [connecting, setConnecting] = useState("");
+  const connect = async (cli) => {
+    setConnecting(cli.name); setErr("");
+    try {
+      const c = cli.config || {};
+      await api.put(`/api/cli/connections/${encodeURIComponent(cli.name)}`, {
+        cmd: c.cmd, args: c.args || [], resume_args: c.resume_args || [], timeout: c.timeout || 1500, ...(c.model_arg ? { model_arg: c.model_arg } : {}) });
+      await load();
+    } catch (e) { setErr(failure(e)); } finally { setConnecting(""); }
+  };
   const edit = (cli) => {
     const c = cli.config;
     setDraft({ name: cli.name, existing: true, cmd: c.cmd || "", args: (c.args || []).join("\n"),
@@ -77,18 +89,25 @@ export const CliConnectionsPage = ({ onBack }) => {
             icon={cli.installed ? <CheckCircleOutlineIcon /> : undefined}
             sx={cli.installed ? { bgcolor: ROLES.done.tint, color: ROLES.done.ink, border: `1px solid ${ROLES.done.bd}`,
               fontWeight: 600, "& .MuiChip-icon": { color: "inherit" } } : undefined} />
-          {cli.configured && <Chip size="small" label="Configured" />}
+          {/* CONNECTED OR NOT, said on every card. A CLI that is only installed carried the same command line and buttons as a
+              connected one, so a disconnected Qwen read as "it came back" and Gemini as "set up without asking" (the owner,
+              2026-10-07: "it should not be installed automatically unless you say detect it") */}
+          <Chip size="small" label={cli.configured ? "Connected" : "Not connected"}
+            sx={cli.configured ? { bgcolor: "#e6ebef", color: "#41525f", fontWeight: 600 } : { bgcolor: "transparent", color: DIM, border: `1px dashed ${BORDER}` }} />
         </Box>
         {cli.description && <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>{cli.description}</Typography>}
-        <Typography sx={{ ...mono, fontSize: 12, overflowWrap: "anywhere", mb: 1 }}>{cli.config.cmd} {(cli.config.args || []).join(" ")}</Typography>
+        {cli.configured
+          ? <Typography sx={{ ...mono, fontSize: 12, overflowWrap: "anywhere", mb: 1 }}>{cli.config.cmd} {(cli.config.args || []).join(" ")}</Typography>
+          : <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>{cli.installed ? "On this computer. Taskuary does not use it until you connect it." : "Taskuary does not use it."}</Typography>}
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-          <Button size="small" onClick={() => edit(cli)}>{cli.configured ? "Edit command" : "Configure"}</Button>
+          {cli.configured ? <Button size="small" onClick={() => edit(cli)}>Edit command</Button>
+            : cli.installed && <Button size="small" variant="outlined" disabled={!!connecting} onClick={() => connect(cli)}>{connecting === cli.name ? "Connecting…" : "Connect"}</Button>}
           {cli.configured && <Button size="small" disabled={tests[cli.name]?.busy} onClick={() => runTest(cli.name)}>{tests[cli.name]?.busy ? "Testing..." : "Test"}</Button>}
           {cli.installed ? <>
             <SetupButton cli={cli} opening={opening} onOpen={openSetup} />
             <UpdateLine cli={cli} busy={busy} onUpdate={async () => { if (await update(cli)) await load(); }} />
           </> : <InstallLine cli={cli} busy={busy} onInstall={async () => { if (await install(cli)) await load(); }} />}
-          {cli.configured && <Button size="small" color="error" onClick={() => setConfirmDel(cli.name)}>Remove</Button>}
+          {cli.configured && <Button size="small" color="error" onClick={() => setConfirmDel(cli.name)}>Disconnect</Button>}
         </Box>
         {tests[cli.name] && !tests[cli.name].busy && <Alert severity={tests[cli.name].ok ? "success" : "error"} sx={{ mt: 1 }}>{tests[cli.name].ok ? tests[cli.name].result || "Connection works" : tests[cli.name].error}</Alert>}
       </Box>)}
@@ -124,10 +143,11 @@ export const CliConnectionsPage = ({ onBack }) => {
     </Dialog>}
     {/* REMOVE REMOVES (the owner, 2026-10-06: "can't remove the claude cli install"): the profiles on it are named here and
         left with no CLI until one is picked for them - never moved onto another CLI behind the owner's back */}
-    <ConfirmDelete open={!!confirmDel} what={`the CLI connection "${confirmDel}"`}
+    <ConfirmDelete open={!!confirmDel} what={`the CLI connection "${confirmDel}"`} title={`Disconnect ${(clis || []).find((c) => c.name === confirmDel)?.label || confirmDel}?`}
+      confirmLabel="Disconnect" undoable
       consequence={(() => { const used = (clis || []).find((c) => c.name === confirmDel)?.used_by || [];
         return (used.length ? `${used.join(", ")} ${used.length === 1 ? "uses" : "use"} it and will have no CLI until you pick one for ${used.length === 1 ? "it" : "them"}. ` : "")
-          + "The CLI stays installed; Set it up connects it again."; })()}
+          + "Taskuary stops using it. The program stays installed on this computer, and Connect brings it back."; })()}
       onClose={() => setConfirmDel(null)} onConfirm={async () => { try { await api.delete(`/api/cli/connections/${encodeURIComponent(confirmDel)}?detach=1`); await load(); } catch (e) { setErr(failure(e)); } }} />
   </Box>;
 };

@@ -131,7 +131,7 @@ export const Confirm = ({ open, title, text, confirmLabel = "OK", onConfirm, onC
   );
 };
 
-export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete", onConfirm, onClose }) => {
+export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete", title = null, undoable = false, onConfirm, onClose }) => {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const go = async () => {
@@ -141,10 +141,10 @@ export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete"
   };
   return (
     <Dialog open={!!open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 600, pb: 0.5 }}>Delete {what}?</DialogTitle>
+      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 600, pb: 0.5 }}>{title || `Delete ${what}?`}</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ fontSize: 13, color: DIM }}>
-          {consequence} This cannot be undone.
+          {consequence}{undoable ? "" : " This cannot be undone."}
         </DialogContentText>
         {err && <Alert severity="error" sx={{ mt: 1.5, fontSize: 12.5 }}>{err}</Alert>}
       </DialogContent>

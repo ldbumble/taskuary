@@ -474,22 +474,27 @@ def test_the_assistant_can_set_a_watch(s):
 
 
 # ── 1b: a reminder reaches you ───────────────────────────────────────────────────────────
+# relative, so the day set is always ahead of the clock
+AT = datetime.combine(datetime.now().date()+timedelta(days=3), datetime.min.time()).replace(hour=8)
+DAY = AT.strftime('%Y-%m-%d')
+
+
 def test_a_reminder_set_on_the_phone_is_said_on_the_phone_when_due(s):
     from taskuary import remind
     tid = mail_born(s)
     remote_assistant._ASKING.chat = PHONE
-    try: remind.set_reminder(s, tid, '2026-10-09', 'owner')
+    try: remind.set_reminder(s, tid, DAY, 'owner')
     finally: remote_assistant._ASKING.chat = None
     with mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
          mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
-        remind.due(s, datetime(2026, 10, 9, 8, 0))
+        remind.due(s, AT)
     assert send.called and 'Reminder' in send.call_args[0][3] and 'TQ-0001' in send.call_args[0][3]
 
 
 def test_a_reminder_set_on_the_desktop_is_a_chat_line(s):
     from taskuary import remind
-    tid = mail_born(s); remind.set_reminder(s, tid, '2026-10-09', 'owner')
-    remind.due(s, datetime(2026, 10, 9, 8, 0))
+    tid = mail_born(s); remind.set_reminder(s, tid, DAY, 'owner')
+    remind.due(s, AT)
     assert any('Reminder' in l for l in dock_lines(s))
 
 
@@ -497,11 +502,11 @@ def test_a_reminder_for_a_busy_phone_chat_is_kept_for_the_next_look(s):
     from taskuary import remind
     tid = mail_born(s)
     remote_assistant._ASKING.chat = PHONE
-    try: remind.set_reminder(s, tid, '2026-10-09', 'owner')
+    try: remind.set_reminder(s, tid, DAY, 'owner')
     finally: remote_assistant._ASKING.chat = None
     with mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
          mock.patch.object(remote_assistant, 'quiet', return_value=False), mock.patch.object(remote_assistant, 'send') as send:
-        remind.due(s, datetime(2026, 10, 9, 8, 0))
+        remind.due(s, AT)
     assert not send.called and s.get_task(tid)['RemindOwed']
     with mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
          mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
@@ -511,9 +516,9 @@ def test_a_reminder_for_a_busy_phone_chat_is_kept_for_the_next_look(s):
 
 def test_a_reminder_that_cannot_be_said_never_breaks_the_sync(s):
     from taskuary import remind
-    tid = mail_born(s); remind.set_reminder(s, tid, '2026-10-09', 'owner')
+    tid = mail_born(s); remind.set_reminder(s, tid, DAY, 'owner')
     with mock.patch.object(asks, 'remind_due', side_effect=RuntimeError('no door')):
-        assert remind.due(s, datetime(2026, 10, 9, 8, 0)) == 1
+        assert remind.due(s, AT) == 1
     assert not s.get_task(tid)['RemindAt']
 
 

@@ -756,7 +756,10 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
   const chosenBrain = generalBrains.find((b) => b.pick === pick) || {};
   return (
     <>
+      {/* a blank answer SAYS so: closed, the select drew an empty box where "the profile it has" belonged (the 2026-10-07
+          design pass) - MUI does not draw an empty value's item unless it is told how */}
       <Select size="small" value={selected || ""} displayEmpty={handOff}
+        renderValue={handOff ? (v) => v || "the profile it has" : undefined}
         onChange={(e) => (coding ? onBrain : onAgent)(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
         {handOff && <MenuItem value="" sx={{ fontSize: 12.5 }}>the profile it has</MenuItem>}

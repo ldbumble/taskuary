@@ -7,7 +7,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import DownloadIcon from "@mui/icons-material/Download";
 import GraphicEqIcon from "@mui/icons-material/GraphicEq";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, mono } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 // An <img src> carries no headers, so the token rides in the query string (see token_gate).
 export const attUrl = (a, download) => {
@@ -57,9 +57,12 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
   if (items === null) return null;
   if (!items.length) return canFetch ? (
     <Typography variant="caption" component="button" type="button" disabled={busy} onClick={fetchNow}
-      sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0,
-        color: err ? FAINT : ACCENT2, cursor: busy ? "default" : "pointer", display: "inline-flex",
-        alignItems: "center", gap: 0.3, mt: 0.5, fontSize: 10.5, "&:hover": { color: err ? FAINT : "#55697a" } }}>
+      // slate, 11.5px and a real target: the sage at 10.5px read 3.8:1 on the card and its hit box was 17px tall (the 2026-10-07
+      // design pass)
+      sx={{ appearance: "none", border: 0, bgcolor: "transparent", px: 0, py: 0.6,
+        color: err ? FAINT : "#41525f", cursor: busy ? "default" : "pointer", display: "inline-flex",
+        alignItems: "center", gap: 0.4, mt: 0.2, fontSize: 11.5, textDecoration: "underline", textDecorationColor: "#c7d2dc",
+        textUnderlineOffset: "3px", "&:hover": { color: err ? FAINT : "#2f3d48", textDecorationColor: "currentColor" } }}>
       {busy ? <CircularProgress size={10} /> : <AttachFileIcon sx={{ fontSize: 12 }} />}
       {err || "look for attachments on this mail"}
     </Typography>

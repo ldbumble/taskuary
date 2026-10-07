@@ -53,6 +53,10 @@ export const completionLine = (manual, owesEmails, noSender = false) => !manual
   : owesEmails ? "You control completion. Ending an agent run leaves this task open; it closes when its emails are sent or dropped."
   : noSender ? "You control completion. Ending an agent run leaves this task open; press Mark done when it's finished."
   : "You control completion. Ending an agent run leaves this task open; sending the reply closes it.";
+// ...and the same answer as a FACT on the settings row, beside the pills it belongs with: the sentence above sat
+// right-aligned across two lines and explained ("Hate the why. Just tell me what." - the owner); it is the tooltip now.
+export const completionFact = (manual, owesEmails, noSender = false) => !manual ? "closes itself when the work is done"
+  : owesEmails ? "closes when its emails are sent" : noSender ? "closes when you mark it done" : "closes when the reply is sent";
 export const slotReviews = (reviews = []) => (reviews || []).filter((review) => review.Kind === "slot");
 // what one Approve all may send: drafted, addressed, and asked for - never an address the agent added on its own
 export const bulkSendable = (items = [], reviews = []) => {

@@ -91,7 +91,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn('removed Bulk Approve and Deny', p['items'][0]['summary'])
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             out = concierge.surface(s)
-        self.assertEqual(out['item']['rid'], r); self.assertIn('the agent removed Bulk Approve and Deny', out['say']); self.assertIn('approve the draft below', out['say'])
+        self.assertEqual(out['item']['rid'], r); self.assertIn('it was worked on - removed Bulk Approve and Deny', out['say']); self.assertIn('approve the draft below', out['say'])
         # 8. approving sends and CLOSES the task; the pipe empties and says so
         sent = {'channel': 'email', 'to': ['craig@northwind.example'], 'cc': []}
         with mock.patch('taskuary.outbound.reply_to_message', return_value=sent), mock.patch('taskuary.terminal.live_sessions', return_value=[]):

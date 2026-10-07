@@ -73,12 +73,12 @@ CHIP_WORDS = {'approve': 'Send & close', 'redraft': 'Redraft it', 'reply': 'Repl
               'prep': 'Prep me', 'defer': 'Remind me', 'continue': 'Continue session', 'test_connection': 'Test it'}
 # What the word will actually DO, on hover - written where the difference matters.
 CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
-              'regular_agent': 'An agent takes it - triage picks a coding or a non-coding one, and you can change it on the card',
+              'regular_agent': 'Hand the work off - whether it needs code is picked for you, and you can change it on the card',
               'mine': "A task on your own list - no agent starts", 'next': 'Read it and move on',
          'defer': 'Put the task away until a day - it is Upcoming in Tasks and back on your rail that morning',
-         'continue': 'Pick the agent up where it left off - say what to tell it, or continue as is',
+         'continue': 'Pick the work up where it left off - say what to add, or continue as is',
          # the words that said nothing on hover: each line is what the handler does (TaskPage's own titles are the same sentences)
-         'stop_agent': "Writes up what the session did, ends it, and drafts the reply to whoever asked (with nothing to write up it just stops it) - the task stays open",
+         'stop_agent': "Writes up what was done, stops the work, and drafts the reply to whoever asked (with nothing to write up it just stops) - the task stays open",
          'close': 'Closes the task - it stops coming back to Work',
          'rerun': 'Runs the report again in the background - it comes back here when it is done'}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
@@ -152,22 +152,33 @@ OPENING = (
     "Do not walk through any item yet - the owner starts that with a button. Under 90 words. No options line.")
 
 # what the assistant says when a decision is carried out - the fact of what happens now, never a claim
-RECEIPTS = {'reply': "I'll draft that - it lands below for your yes.", 'approve': 'Sending it as drafted. Moving on.',
+RECEIPTS = {'reply': "I'll draft that - nothing goes out until you say so.", 'approve': 'Sending it as drafted. Moving on.',
             'not_ours': "Not ours, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
             'not_ours_sender': "Noted: that sender is noise - everything from them files itself from now on. Moving on.",
-            'remember': "Remembered. Moving on.", 'coder': "Sent to the coding agent - it is starting on it now, and its findings come back here when it is done.",
-            'regular_agent': "Sent to an agent - it is starting on it now, and its answer comes back here when it is done.",
+            'remember': "Remembered. Moving on.", 'coder': "Handed off - the code work starts now, and what it finds comes back here.",
+            'regular_agent': "Handed off - work on it starts now, and the answer comes back here.",
             'clear': 'Cleared. Moving on.',
-            'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Queued the rerun - it lands back in the pipe when it's done. Moving on.",
-            'setup': "I'll walk you through it - opening it as a conversation with the assistant, no code, nothing built. "
-                     "Say send it to the coding agent if it turns out something has to be built.",
-            'answer_agent': "Passing that to the agent - now if it is waiting on you, otherwise when it next stops.",
+            'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Running it again - the new one comes back here when it's done. Moving on.",
+            'setup': "I'll walk you through it, one step at a time - nothing is built and nothing changes until you say so.",
+            'answer_agent': "Passing that on - right away if it's waiting on you, otherwise the moment it next pauses.",
             'redraft': "Writing it again with that - the new draft lands below for your yes.",
-            'archive': 'Archived - off the pipe and closed, nothing deleted. Moving on.',
+            'archive': 'Archived and closed - nothing deleted. Moving on.',
             'done': 'Done. Moving on.', 'later': "Pushed back a few hours.", 'skip': 'Tomorrow, then.', 'next': 'Next.'}
 
-ALL_DONE = ("That's everything for now. The pipe is empty - nothing is waiting on you. "
-            "Ask me anything, or I'll speak up when something lands.")
+# The end of the walk, in COUNSEL's calm voice: what is true, and nothing to do (2026-10-06). all_done() adds the
+# next meeting and a promise of the owner's that is due today - each only when there is one.
+ALL_DONE = "Nothing's waiting."
+
+
+def all_done(store) -> str:
+    """ALL_DONE, then the next meeting (from the calendar's cache - this runs on a button) and one of the owner's own
+    promises due today, when either exists."""
+    from . import welcome
+    now = datetime.now()
+    try: extra = [x for x in (welcome.next_meeting(store, now, fetch=False), welcome.promise_today(store, now)) if x]
+    except Exception as e:
+        logger.debug(f'concierge: the end of the walk said only the facts - {e}'); extra = []
+    return ' '.join([ALL_DONE] + extra)
 
 
 # the quick gear per CLI when the agent profile names no light_model: the assistant's turns are two
@@ -645,26 +656,26 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     if verb == 'not_ours_kind': return f"{what} is not one of the assistant's ideas - say Not ours."
     if verb == 'answer_agent' and item.get('kind') != 'agent':
-        return f"There is nothing to answer on this one - no agent is parked on {what}. Say stop the agent, or open the Board."
+        return f"There's nothing to answer on {what} - nothing on it is waiting for an answer."
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03)
         return (f"There is nothing to approve yet - no reply has been drafted on {what}. Say reply and what to tell them, "
                 'and it lands here for your yes.')
     # an agent already RUNNING on the task is not handed it again (the owner, 2026-10-01) - the dispatch door refuses it too
     if verb in ('coder', 'regular_agent') and item.get('tid') and _agent_running(item['tid']):
-        return f"An agent is already working on {what} - Continue that session instead of sending it to another agent."
+        return f"{what} is already being worked on - press Continue to add to it instead of handing it off again."
     if verb == 'coder' and store is not None:
         gone = no_agent(store)
-        if gone: return (f"There is nothing to hand it to - {gone} is not set up on this machine. "
-                         'Connections → AI CLI agents, and then say it again.')
+        if gone: return (f"There's no one to hand it to yet - {gone} isn't set up on this computer. "
+                         'Set it up under Connections, then say it again. Nothing has changed.')
     # ...and a message that is ALREADY a task is not made one again: "Make a task" sat on TQ-0748's own card, on the
     # desktop and in the phone's poll (the owner, 2026-09-25: "why am i getting make this a task?? it already is")
     if verb == 'mine' and item.get('tid') and not _agent_holds(store, item):
         return f"{what} is already a task on your list."
-    if verb == 'close' and item.get('closed'): return f"{what} is already closed - its agent finished it."
+    if verb == 'close' and item.get('closed'): return f"{what} is already closed - the work on it is finished."
     if verb == 'stop_agent' and item.get('paused'):
         # a paused conversation has no live session: the pick answered "no agent is running right now" (A20, 2026-09-25)
-        return f"{what} has no live session - there is nothing to end."
+        return f"{what} isn't running right now - there's nothing to stop."
     if verb == 'defer' and item.get('closed'): return f"{what} is closed - there is nothing to put away."
     need = NEEDS.get(verb)
     if need and not item.get(need):
@@ -684,19 +695,19 @@ def brain_trouble(error) -> str:
     low = text.lower()
     detail = _re.sub(r'\s*\{.*$', '', text)[:160].rstrip(' :.')
     if _re.search(r'context (length|window)|maximum context|too many tokens|token limit|prompt is too long|max_tokens|too long', low):
-        return ("My AI could not take this conversation any more - it has grown longer than it can read. Start a new chat "
-                "(the pencil at the top right) and ask again; your work and the pipe are untouched.")
+        return ("This conversation has grown longer than I can follow. Nothing is lost - your work stays exactly where it "
+                "is. Start a new chat with the pencil at the top right and ask me again there.")
     if _re.search(r'rate.?limit|429|quota|insufficient_quota|usage limit|out of (credits|sessions|tokens)|overloaded|529|capacity', low):
-        return (f"My AI is out of room for the moment ({detail}). It clears on its own - wait a few minutes and try again, "
-                "or go on with Next.")
+        return (f"I've hit my limit for the moment ({detail}). Nothing is lost - it clears on its own, so wait a few minutes "
+                "and ask again, or go on with Next.")
     if _re.search(r'401|403|unauthori[sz]ed|invalid.*(key|token)|signed out|not logged in|login|expired', low):
-        return (f"My AI turned the request away - its sign-in or key needs attention ({detail}). Settings → Triage & agents "
-                "names which AI I use; Connections is where it is signed in.")
+        return (f"I can't answer right now - my sign-in needs attention ({detail}). Nothing is lost. Sign me back in on the "
+                "Connections page and ask again.")
     if _re.search(r'timed out|timeout|connection|network|unreachable|502|503|504|500|server error', low):
-        return (f"My AI did not answer - the service had a problem ({detail}). Try again in a moment; if it keeps failing, "
-                "start a new chat (the pencil at the top right).")
-    return (f"My AI ran into an error and gave me no answer ({detail or 'no reason given'}). Try again - if it keeps "
-            "happening, start a new chat (the pencil at the top right).")
+        return (f"I couldn't get an answer just now - the service didn't respond ({detail}). Nothing is lost; ask again in "
+                "a moment.")
+    return (f"I couldn't get an answer that time ({detail or 'no reason given'}). Nothing is lost - ask again. If it keeps "
+            "happening, a new chat (the pencil at the top right) starts me fresh, and your work stays where it is.")
 
 
 def walk_chips(left) -> list:
@@ -744,12 +755,12 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         # task", "Close without sending" and "Mark task done" for the same act; only the hint says a draft stays unsent
         if v == 'close' and (item.get('kind') == 'review' or item.get('reply_pending')):
             out.append({'verb': v, 'label': 'Mark done',
-                        'hint': 'Marks the task done without sending the draft, and ends any live agent session.'})
+                        'hint': 'Marks the task done without sending the draft, and stops any work still running on it.'})
         # an agent's proposal runs an action rather than sending a reply, so the word says that
         # ...and a task's close-out says its own act (the owner, 2026-09-27: merge the PR, close the issue)
         elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': closeout_label(item) or 'Run it'})
         # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25)
-        elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append({'verb': v, 'label': 'Take it myself', 'hint': "Takes it off the agent - it stays on your list."})
+        elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append({'verb': v, 'label': 'Take it myself', 'hint': "Takes the work back - it stays on your list."})
         else:
             out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
     return out
@@ -851,6 +862,64 @@ def _verdict_why(item: dict) -> str:
     return f' - {w}' if w else ''
 
 
+def _sender_name(m: dict) -> str:
+    """'Payworth Billing' as they sign; an address alone reads as its company ('billing@payworth.example' -> 'Payworth')."""
+    name = ' '.join(str(m.get('FromName') or '').split())
+    if name and '@' not in name: return name
+    dom = str(m.get('FromEmail') or '').split('@')[-1].split('.')[0]
+    return dom[:1].upper() + dom[1:] if dom else 'They'
+
+
+def repeats(store, tid: int, msgs: list = None, routes: list = None) -> dict | None:
+    """ONE VENDOR, ONE ITEM, SAID. Ingest folds a sender writing again about the same thing onto one task (_join_same) and
+    never told the owner: {'n', 'who', 'line'} - "Payworth wrote five times about the same thing - every one is kept here.
+    All they need now: the signed W-9." The count is code; what they need is the newest repeat's own triage summary, else
+    the task's ask - nothing new is asked of a model (a task card never waits on one). None below two."""
+    from .welcome import times
+    msgs = (store.list_messages(tid) or []) if msgs is None else msgs
+    routes = (store.list_routes(tid) or []) if routes is None else routes
+    same = f'the same as {task_ref(tid)}'
+    joined = {r['MessageId']: r for r in routes if r.get('Decision') == 'attach' and same in str(r.get('Reason') or '')}
+    inbound = [m for m in msgs if not _own_word(m)]
+    by = {m['MessageId']: m for m in inbound}
+    senders = Counter(str(by[mid].get('FromEmail') or '').lower() for mid in joined if mid in by)
+    if not senders: return None
+    em = senders.most_common(1)[0][0]
+    theirs = sorted((m for m in inbound if str(m.get('FromEmail') or '').lower() == em), key=lambda m: str(m.get('SentAt') or ''))
+    if len(theirs) < 2: return None
+    last = max((joined[m['MessageId']] for m in theirs if m['MessageId'] in joined), key=lambda r: r.get('RouteId') or 0)
+    try: verdict = json.loads(last.get('VerdictJson') or 'null') or {}
+    except ValueError: verdict = {}
+    need = ' '.join(str(verdict.get('summary') or (store.get_task(tid) or {}).get('Summary') or '').split())
+    need = re.split(r'(?<=[.!?])\s', need, maxsplit=1)[0].rstrip('.')[:200]
+    who = _sender_name(theirs[-1])
+    line = f"{who} wrote {times(len(theirs))} about the same thing - every one is kept here." + (f" All they need now: {need}." if need else '')
+    return {'n': len(theirs), 'who': who, 'line': line}
+
+
+def _finished(item: dict) -> str:
+    """'Erin finished TQ-0101', or 'TQ-0101 is done' - never 'The agent finished'."""
+    ref = item.get('ref') or item['title']
+    return f"{item['who']} finished {ref}" if item.get('who') else f"{ref} is done"
+
+
+# what each kind of waiting thing is, in the owner's words - the counts a sentence can carry
+KIND_SAYS = {'review': ('draft to approve', 'drafts to approve'), 'action': ('ready to run', 'ready to run'),
+             'asked': ('question for you', 'questions for you'), 'todo': ('to-do', 'to-dos'), 'fyi': ('for your information', 'for your information'),
+             'fyis': ('set of notices', 'sets of notices'), 'agent': ('waiting on your answer', 'waiting on your answer'),
+             'agentdone': ('finished', 'finished'), 'wrapup': ('to close', 'to close'), 'report': ('report', 'reports'),
+             'idea': ('idea', 'ideas'), 'meeting': ('meeting', 'meetings'), 'task': ('task', 'tasks'), 'connection': ('connection to check', 'connections to check')}
+
+
+def waiting_line(items: list) -> str:
+    """'4 waiting: 2 questions for you, 1 draft to approve, 1 report.' - the pile in words, counted by code."""
+    live = [i for i in items or [] if not i.get('settling')]
+    if not live: return "Nothing is waiting."
+    kinds = Counter(str(i.get('kind') or '') for i in live)
+    part = ', '.join(f"{n} {KIND_SAYS.get(k, (k or 'other', k or 'other'))[n != 1]}" for k, n in kinds.most_common())
+    return f"{len(live)} waiting: {part}."
+
+
 def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: bool = False) -> str:
     """No model: the facts in the same three beats - where from, what was done, what you need to do."""
     if not item:
@@ -861,22 +930,21 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         if left:
             # the tab was as far as this went, and the page that fixes it had no door of its
             # own until the checklist needed one. Now it does, so say it.
-            return (f"{funnel.summary(left)} Say next and I'll take you through them, or name the one you mean. "
-                    + ('(The AI gave me no answer to that one - say it again, or name what you want done.)' if brain else
-                       '(No AI is connected, so I speak in facts rather than sentences - '
-                       'Connections → AI CLI agents: #cli-agents.)'))
+            return (f"{waiting_line(left)} Say next and I'll take you through them, or name the one you mean. "
+                    + ("(I didn't get an answer to that one - say it again, or name what you want done.)" if brain else
+                       "(Nothing is set up yet to write my answers, so I'm speaking in plain facts - "
+                       'set one up under Connections: #cli-agents.)'))
         return ALL_DONE
     if opening and item.get('mid') and item['kind'] in ('review', 'action', 'asked', 'todo', 'fyi'):
         frm = f"{item.get('who') or 'Someone'} wrote on {item.get('channel') or 'email'}" + (f" ({funnel_age(item)})" if funnel_age(item) else '') + f": \"{item['title']}\""
         # "the agent removed X" reads; "the agent The PR was reviewed.." did not - a summary that is its own sentence gets a lead-in
-        done = ((lambda sm: f"the agent {sm}" if sm[:1].islower() else f"the agent finished - {sm}")(str(item['summary']).strip().rstrip('.'))
-                if item.get('summary') else
-                'triage judged it a reply to write' if item['kind'] == 'review' else 'an agent proposed an action' if item['kind'] == 'action' else
-                'a coding task with no agent on it yet' if item.get('coding') else 'nothing has been done with it yet' if item['kind'] in ('asked', 'todo')
-                else f'triage filed it as fyi{_verdict_why(item)}')
+        done = (f"it was worked on - {str(item['summary']).strip().rstrip('.')}" if item.get('summary') else
+                'I read it as needing a reply' if item['kind'] == 'review' else 'something is ready to run, waiting for your yes' if item['kind'] == 'action' else
+                'it needs code work, and nobody has started it yet' if item.get('coding') else 'nothing has been done with it yet' if item['kind'] in ('asked', 'todo')
+                else f'I read it as just for your information{_verdict_why(item)}')
         need = ('approve the draft below, or redraft it' if item['kind'] == 'review' else
                 f"Close out ({item['closeout']}), or move on" if item.get('closeout') else 'say whether it may run' if item['kind'] == 'action' else
-                'reply, choose a coding or regular agent, or say it is not ours' if item['kind'] in ('asked', 'todo')
+                'reply, hand it off, or say it is not ours' if item['kind'] in ('asked', 'todo')
                 else 'nothing has to happen - tell me to ignore this sender, or move on' if item.get('tid')     # it IS a task
                 else 'nothing has to happen - make it a task, tell me to ignore this sender, or move on')
         return f"{frm}. Since then: {done}. From you: {need}."
@@ -886,24 +954,24 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         # sent the owner typing at a wall.
         sub = ws.sub_state(True, bool(item.get('asking')), {'kind': item['request_kind']} if item.get('request_kind') else None)
         line = item['why'] if item.get('request_kind') and item.get('why') else ws.says(sub, item.get('agent') or 'An agent', item['tail'][-1] if sub == 'asking' and item.get('tail') else '')
-        return f"{line} ({item.get('ref') or item['title']}) - " + ('it resumes when the limit lifts, or continue it in its session.' if sub == 'stalled' else 'answer it below.')
+        return f"{line} ({item.get('ref') or item['title']}) - " + ("it picks up again on its own when the limit lifts, or continue it now. Nothing is lost." if sub == 'stalled' else 'answer it below.')
     if item['kind'] == 'wrapup':
-        return f"{item.get('ref') or item['title']}: the reply went out" + (f" and the agent finished ({item['summary']})" if item.get('summary') else '') + '. The task is still open - close it?'
+        return f"{item.get('ref') or item['title']}: the reply went out" + (f" and the work is done ({item['summary']})" if item.get('summary') else '') + '. The task is still open - close it?'
     if item['kind'] == 'idea':
-        return f"{item['title']}" + (f" ({item.get('who')})" if item.get('who') else '') + f" - {item.get('why') or 'the assistant raised this'}." + (' Draft the follow-up, or let it go.' if item.get('tid') else ' Draft the follow-up, make it a task, or let it go.')
+        return f"{item['title']}" + (f" ({item.get('who')})" if item.get('who') else '') + f" - {item.get('why') or 'I raised this'}." + (' Draft the follow-up, or let it go.' if item.get('tid') else ' Draft the follow-up, make it a task, or let it go.')
     if item['kind'] == 'meeting': return f"{item['title']} is {item.get('why')}. Prep me, or move on."
     if item['kind'] == 'report':
-        return f"{item['title']} landed {funnel_age(item)}" + (' and FAILED - the cause is in it.' if item.get('bad') else '.') + ' It is open below - make it a task, hand it to an agent, or move on.'
-    if item['kind'] == 'agentdone': return f"{item.get('who') or 'The agent'} finished {item.get('ref') or item['title']}" + (f": {item['summary']}" if item.get('summary') else '.') + ' Its full report is on the card.'
+        return f"{item['title']} landed {funnel_age(item)}" + (" and didn't finish - the reason is inside." if item.get('bad') else '.') + ' It is open below - make it a task, hand it off, or move on.'
+    if item['kind'] == 'agentdone': return _finished(item) + (f": {item['summary']}" if item.get('summary') else '.') + ' Its full report is on the card.'
     lead = {'agent': f"{item.get('why') or ws.says('parked', item.get('agent') or 'An agent')} ({item.get('ref') or item['title']}).",
             'meeting': f"{item['title']} is {item.get('why')}.",
             'review': f"{item.get('who') or 'Someone'} is owed a reply on \"{item['title']}\"" + (' - the draft is below.' if item.get('draft') else ' - nothing is drafted yet.'),
             'action': (f"{item.get('why') or item['title']} - it closes when you say so." if item.get('closeout') else
-                       f"An agent wants to run something on \"{item['title']}\" - it waits for your yes."),
-            'report': f"\"{item['title']}\" landed" + (' and it FAILED - the cause is inside.' if item.get('bad') else '.'),
-            'agentdone': f"{item.get('who') or 'The agent'} finished {item.get('ref') or item['title']}: {item.get('summary') or ''}",
+                       f"Something is ready to run on \"{item['title']}\" - nothing happens until you say so."),
+            'report': f"\"{item['title']}\" landed" + (" and didn't finish - the reason is inside." if item.get('bad') else '.'),
+            'agentdone': f"{_finished(item)}: {item.get('summary') or ''}",
             'idea': item['title'], 'todo': f"{item.get('who') or 'Someone'} - \"{item['title']}\": {item.get('why')}",
-            'asked': f"{item.get('who') or 'Someone'} asked: \"{item['title']}\".", 'fyi': f"{item.get('who') or 'Someone'} - \"{item['title']}\" - fyi."}
+            'asked': f"{item.get('who') or 'Someone'} asked: \"{item['title']}\".", 'fyi': f"{item.get('who') or 'Someone'} - \"{item['title']}\" - just for your information."}
     return (('Next: ' if opening else '') + lead.get(item['kind'], item['title'])).strip()
 
 
@@ -1406,12 +1474,10 @@ def pipe_holds(store) -> str:
     rows the owner could see (2026-09-10). Counted over the same set select_items searches."""
     try: items = _pipe(store)
     except Exception: return ''
-    if not items: return 'The pipe is empty.'
-    kinds = Counter(str(i.get('kind') or '?') for i in items)
+    if not items: return 'Nothing is waiting.'
     who = Counter(str(i.get('who') or '').strip() for i in items if str(i.get('who') or '').strip())
-    part = ', '.join(f'{n} {k}' for k, n in kinds.most_common())
     top = ', '.join(w for w, _ in who.most_common(3))
-    return (f"The pipe holds {len(items)}: {part}." + (f' Senders include {top}.' if top else ''))
+    return waiting_line(items) + (f' From {top}, among others.' if len(who) > 3 else f' From {top}.' if top else '')
 
 
 def select_items(store, sel: dict) -> list:
@@ -1754,8 +1820,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         hits = select_items(store, sel)
         if not hits and not any(v not in (None, '', [], False) for v in (sel or {}).values()):
             # a set that names nothing ("mark them all read" with nothing before it) is a question, not "nothing matches"
-            say_ = (f"Which ones? {pipe_holds(store)} Say all the fyi, the reports, everything from one sender - or "
-                    'everything - and I clear that. Nothing has been touched.')
+            say_ = (f"Which ones? {pipe_holds(store)} Say the notices, the reports, everything from one sender - or "
+                    "everything - and I'll clear that. Nothing has been touched.")
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
         if not hits:
@@ -1763,8 +1829,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             # ...and WHAT IS THERE, so a miss can be re-aimed instead of read as "those items do not
             # exist". The owner was looking at eleven rows while this said nothing matched them
             # (2026-09-10): the selector had been offered a category the pipe could not hold.
-            say_ = (f"Nothing in the pipe matches {said}, so there is nothing to clear. "
-                    f"{pipe_holds(store)} Say it another way and I will look again - nothing has been touched.")
+            say_ = (f"Nothing waiting matches {said}, so there is nothing to clear. "
+                    f"{pipe_holds(store)} Say it another way and I'll look again - nothing has been touched.")
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
         where = ', '.join(f'{k}: {v}' for k, v in sel.items())
@@ -2182,10 +2248,10 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         elif selection is not None and any(selection.pending.values()):
             pending = selection.pending
             parts = ([f"{pending['working']} in progress"] if pending['working'] else [])
-            parts += ([f"{pending['settling']} still being triaged"] if pending['settling'] else [])
+            parts += ([f"{pending['settling']} still being read"] if pending['settling'] else [])
             parts += ([f"{pending['scheduled']} scheduled for a little later"] if pending['scheduled'] else [])
             say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
-        else: say = ALL_DONE
+        else: say = all_done(store)
         with guarded():
             put_down()
             if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
@@ -2534,7 +2600,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         try: wrap = bool((term.transcript_for(store, end) or ('',))[0].strip())
         except Exception: wrap = False
         target, params = end, {'wrap': wrap}
-        if not wrap: note = ' There is no transcript to write a report from yet - this stops the agent and the task stays open.'
+        if not wrap: note = ' There is nothing written down to report from yet - this stops the work, and the task stays open.'
     elif verb == 'continue': target, params = it.get('tid'), {'note': d_text or ''}
     elif verb == 'rerun': target = it.get('source_id')
     elif verb == 'test_connection':
@@ -2780,7 +2846,7 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
     cllm = llm or _compose_llm(store, trace, cancel)
     if not cllm:
-        say_ = 'Setting that up needs an AI connector - Connections → AI - or the Reports and Connections tabs, where the forms are. Nothing is set up.'
+        say_ = 'I cannot set that up from the chat yet - the Reports and Connections tabs have the forms for it. Nothing has changed.'
         rec(say_); return {'say': say_, 'options': [], 'decision': None}
     pending, answers = _pending_setup(store, tid), None
     if pending:
@@ -2898,7 +2964,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'review.approve' and o.get('reply_error'):
         return f" {str(o['reply_error']).replace('Done on GitHub, but the', 'But the', 1)} - it is kept as the draft."
     # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
-    if kind == 'report.run': return f" {o.get('title') or 'It'} is running - it lands in the pipe when it is done."
+    if kind == 'report.run': return f" {o.get('title') or 'It'} is running - it comes back here when it's done."
     if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."
     if kind == 'report.route': return f" {o.get('title') or 'It'} now goes - {o.get('route')}."
     if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."
@@ -2919,25 +2985,25 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'script.start': return f" Starting: {o.get('script')}."
     if kind == 'pipe.clear':
         if o.get('cleared'):
-            return (f" Cleared {o['cleared']} from the pipe - {', '.join((o.get('titles') or [])[:3])}{'…' if o['cleared'] > 3 else ''}. "
-                    'Read, not deleted; they are on the Timeline.'
-                    + (f" {o['stuck']} would not move just then and {'is' if o['stuck'] == 1 else 'are'} still in the pipe"
+            return (f" Cleared {o['cleared']} - {', '.join((o.get('titles') or [])[:3])}{'…' if o['cleared'] > 3 else ''}. "
+                    "Read, not deleted; they're on the Timeline."
+                    + (f" {o['stuck']} wouldn't move just then and {'is' if o['stuck'] == 1 else 'are'} still waiting"
                        ' - say it again and they go too.' if o.get('stuck') else '')
                     )
-        return ' Nothing in the pipe matches those words.'
+        return ' Nothing waiting matches those words.'
     if kind == 'task.split':
         if o.get('newRef'): return f" {o.get('ref') or 'It'} keeps \"{o.get('kept') or ''}\" and {o['newRef']} is \"{o.get('title') or ''}\" - each is its own job now."
         return ' I can only see one ask in that one' + (f" - {o['why']}" if o.get('why') else '') + '. It stays as it was.'
     if kind == 'task.create_from_text' and o.get('ref') and p.get('kind') == 'task':
-        return f" {o['ref']} - \"{o.get('title') or ''}\" is on your list; no agent was started."
+        return f" {o['ref']} - \"{o.get('title') or ''}\" is on your list; nothing was started."
     if kind == 'task.create_from_text' and o.get('ref'):
-        return f" {o['ref']} - \"{o.get('title') or ''}\" is with the {'coding' if p.get('kind') == 'coding' else 'regular'} agent now; what it finds is kept on {o['ref']} - open it from here or from Tasks."
+        return f" {o['ref']} - \"{o.get('title') or ''}\" is being worked on now{' (code work)' if p.get('kind') == 'coding' else ''}; what comes of it is kept on {o['ref']} - open it from here or from Tasks."
     if kind == 'task.setup' and o.get('ref'):
-        return (f" {o['ref']} - \"{o.get('title') or ''}\" is open as a walk-through: a conversation with the assistant, nothing built, no repository touched. "
-                'Open it when you want to start; its browser opens beside the assistant.')
+        return (f" {o['ref']} - \"{o.get('title') or ''}\" is ready as a walk-through - one step at a time, nothing built and nothing "
+                "changed until you say so. Open it when you want to start.")
     if kind == 'task.create_from_message' and p.get('kind') in ('coding', 'general'):
-        if o.get('existing'): return f" {o.get('agent') or 'An agent'} was already on it."
-        if o.get('started') or o.get('chat'): return f" {o.get('agent') or 'The agent'} is on it - moving on."
+        if o.get('existing'): return " It was already being worked on."
+        if o.get('started') or o.get('chat'): return " It's being worked on now - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
     if kind == 'agent.stop': return ' The task stays open - say close it when you want it closed.'
     if kind == 'memory.remember': return ' I will use it from now on; whatever you were on stays where it was.'
@@ -3026,7 +3092,7 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None) -> dict:
                 + ('' if op.get('duplicate') else _outcome_line(op.get('kind'), op.get('params') or {}, op.get('outcome'))))
     elif st == 'error' and (op.get('outcome') or {}).get('unsent'):
         line = f"Not sent - {op.get('error') or 'the reply did not go out'}. The reply is kept; {ref or 'it'} is where it was."
-    elif st == 'error': line = f"Not done - {op.get('error') or 'it failed'}. {ref or 'It'} is where it was."
+    elif st == 'error': line = f"Not done - {op.get('error') or 'it did not go through'}. {ref or 'It'} is where it was."
     else: line = f"Not done - {op.get('error') or st}. {ref or 'It'} is where it was."
     # only what THIS chat proposed is its news. A close from the Tasks page or the wall used to be narrated
     # here too - and opened a fresh chat to say it in (the owner, 2026-09-07: "no one asked you to do that")

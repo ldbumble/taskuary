@@ -579,7 +579,7 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(r.json()['outcome']['cleared'], 3)
         self.assertEqual([i['who'] for i in pile(s)], ['Omar'])
         self.assertEqual(funnel.mutes(s), [])                          # a reason in the words writes no rule (R8)
-        self.assertTrue(any('Cleared 3 from the pipe' in b for b in receipts(s)), receipts(s)[-2:])
+        self.assertTrue(any('Cleared 3 - ' in b for b in receipts(s)), receipts(s)[-2:])
         self.assertTrue(keep['message_id'])
 
     def test_split_is_confirmed_then_breaks_one_arrival_into_two_jobs(self):
@@ -763,7 +763,7 @@ class OneTruthPerTurnTests(unittest.TestCase):
         s, tid, mid, item = ResponseTests()._asked()
         s._exec('DELETE FROM agent')
         out = decide(s, 'send it to the coder', 'coder', key=item['key'])
-        self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal')); self.assertIn('not set up on this machine', out['say'])
+        self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal')); self.assertIn("isn't set up on this computer", out['say'])
 
     def test_remembering_writes_the_row_on_the_click_and_leaves_the_walk_where_it_was(self):
         s, tid, mid, item = ResponseTests()._asked()
@@ -948,7 +948,7 @@ class AgentEndingsTests(unittest.TestCase):
         s, tid, live, item = self._parked()
         out = decide(s, 'wrap it up', 'stop_agent', key=item['key'], live=live)
         self.assertFalse(out['proposal']['params']['wrap'])                          # the wrap would 422: it stops instead
-        self.assertIn('no transcript to write a report from yet', out['say'])
+        self.assertIn('nothing written down to report from yet', out['say'])
 
 
 class WalkFromWordsTests(unittest.TestCase):

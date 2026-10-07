@@ -314,7 +314,7 @@ def test_working_or_settling_only_capture_is_pending_and_never_claims_all_done()
     assert out["item"] is None
     assert out["say"] != concierge.ALL_DONE
     assert "in progress" in out["say"]
-    assert "triaged" in out["say"]
+    assert "still being read" in out["say"]
 
 
 def test_watcher_events_write_no_chat_card_and_explicit_cards_carry_no_background_flag():

@@ -541,7 +541,7 @@ def day_opener(store, items: list, now=None) -> str:
     """THE DAY IN A BREATH - the greeting, today's meetings, then who wants what. ONE text for the morning line and for
     "Walk me through my tasks" (the owner, 2026-09-29: "when you hit walk me through on whatsapp that should trigger the
     morning summary"): the walk opened with who-wants-what alone, without the meetings the morning line carried."""
-    return '\n\n'.join(x for x in (greeting(now), meetings_line(store), who_wants_what(items) if items else 'The pipe is clear.') if x)
+    return '\n\n'.join(x for x in (greeting(now), meetings_line(store), who_wants_what(items) if items else 'Nothing is waiting on you.') if x)
 
 
 def spend_morning(store, now=None):
@@ -610,6 +610,8 @@ def walk(store, actor: str = 'owner') -> str:
         except Exception as e:
             logger.debug(f'the phone walk opened without its summary: {e}'); opener = ''
         spend_morning(store)                                  # the summary IS the day's opener - it is not said twice
+        from . import welcome
+        welcome.mark_greeted(store)                           # ...on the desk too: one good morning a day, wherever it was said
         out = concierge.resume(store, actor)                  # the item on the table first, when there still is one
         return carry_out(store, out, None, actor=actor, lead=opener)
 
@@ -689,6 +691,14 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             if cancel is not None and cancel.is_set(): return          # a pick came in behind it and answers instead
             if not picked: forget_offered(store, channel, chat)
             text = carry_out(store, out, item, picked=picked)
+            # THE DAY'S OPENING rides on the answer to their first typed message of the day (or after a long gap): the phone
+            # never speaks first, so this is where it goes - once, and never if the desk already said it (welcome.phone_lead)
+            if not picked:
+                from . import welcome
+                try: lead = welcome.phone_lead(store)
+                except Exception as e:
+                    logger.debug(f'the phone answered without its opening: {e}'); lead = ''
+                if lead: text = f'{lead}\n\n{text}'
         send(store, channel, chat, text, connector_id)
     except Exception as e:
         if cancel is not None and cancel.is_set():

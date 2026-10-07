@@ -225,8 +225,14 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         store.audit('review', rid, 'reconciled_sent' if reconciled else 'sent_outbound' if outgoing else verb, actor,
                     detail={'kind': rv.get('Kind'), 'sent': True, 'channel': sent.get('channel'), 'to': sent.get('to')})
         _settle_task_after_sent_reply(store, rv, actor, True)
+        # A reply that ASKED them something keeps watching for the answer, though the send closed the task (asks.py)
+        watching = None
+        if not outgoing and rv.get('Kind') not in ('action', 'slot'):
+            from . import asks
+            try: watching = asks.watch_reply(store, rv, attempted['body'])
+            except Exception as e: logger.warning(f'the reply watch did not start on review {rid}: {e}')
         return {'ok': True, 'status': attempted['status'], 'sent': sent, 'send_error': None,
-                'delivery': 'reconciled' if reconciled else 'sent'}
+                'delivery': 'reconciled' if reconciled else 'sent', **({'watching': watching} if watching else {})}
 
     try:
         if claim['previous'] in ('unknown', 'sending'):

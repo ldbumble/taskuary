@@ -24,7 +24,13 @@ export const agentOpen = (i) => !!i?.sid && i.kind === "agent" && !i.paused && !
 export const agentRuns = (i) => !!i && (!!i.working || (!!i.sid && !i.paused && !["stopped", "saved"].includes(i.lane)));
 export const remindDay = (at) => {
   const [y, m, d] = String(at || "").slice(0, 10).split("-").map(Number);
-  return y ? new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : "";
+  if (!y) return "";
+  // a reminder for later today says its time (remind.when): "Thu 9 Oct" for today read as a day away
+  if (String(at).slice(0, 10) === localStamp().slice(0, 10)) {
+    const [hh, mm] = String(at).slice(11, 16).split(":").map(Number);
+    return Number.isFinite(mm) ? `today at ${hh % 12 || 12}:${String(mm).padStart(2, "0")}` : "today";
+  }
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 };
 
 // Closing the detail on the right advances through the work list on the left. Keep this tiny and

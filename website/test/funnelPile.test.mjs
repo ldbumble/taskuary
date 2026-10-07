@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, railAge, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
+import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, lastActIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, railAge, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -227,7 +227,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(view, /className="tq-verbs"/);
   assert.match(view, /chipsOf\(m\)/);                       // from the durable turn: a poll must not erase them
   assert.match(view, /chip: runChip/);                    // one road for every one of them
-  assert.match(view, /triage moved it up/);                // the rail shows promotions
+  assert.match(view, /moved up - it looked urgent/);       // the rail shows promotions
   assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
   // a rerun is the chat line's word now, not a second button on the card (2026-09-07: "only one place")
   assert.doesNotMatch(cardsSrc(), /Run it again/);
@@ -268,7 +268,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   // ...and a band you can open is shut the same way: the heading is the control (2026-09-16)
   assert.match(view, /const folds = CAPPED\.includes\(level\) && rows\.length > FLOOR/);
   assert.match(css, /\.tq-pile-head \{[^}]*position: sticky/);
-  assert.match(view, /One more and the pipe is clear/);    // ...the count is the encouragement, at the bottom, from fifteen
+  assert.match(view, /One more and you're clear/);    // ...the count is the encouragement, at the bottom, from fifteen
   const feed = read("FeedView.jsx");
   assert.match(feed, /useState\(top \? "unread" : ""\)/);   // the Assistant rail opens on unread
   assert.match(feed, /view === "unread" \? \(typeof top/);     // ranked pipe, not historical rows
@@ -328,6 +328,12 @@ test("the action words hang on the last thing Taskuary SAID about the item, not 
   assert.equal(lastSaidIndex([item, notice]), 0, "a background update must not take the words off the item");
   assert.equal(lastSaidIndex([item, { id: "r1", role: "receipt" }]), 0, "a receipt is not somewhere to act");
   assert.equal(lastSaidIndex([]), -1);
+  // ...but a receipt carrying its way on (Not done -> Try again, a cancel, a sweep's Next) takes the words: drawn under the
+  // line above it, a failed act ended on an empty row
+  const failed = { id: "r2", role: "receipt", status: "error", chips: [{ verb: "next", label: "Next" }] };
+  assert.equal(lastActIndex([item, failed]), 1);
+  assert.equal(lastActIndex([item, { id: "r1", role: "receipt" }]), 0, "a bare receipt still is not");
+  assert.equal(lastActIndex([failed, item]), 1, "a newer line takes them back");
   // an answer to a typed question carries them on the turn itself; a surfaced item on its card
   assert.deepEqual(chipsOf(item).map((c) => c.verb), ["approve"]);
   assert.deepEqual(chipsOf({ role: "assistant", chips: [{ verb: "next", label: "Next" }] }).map((c) => c.verb), ["next"]);

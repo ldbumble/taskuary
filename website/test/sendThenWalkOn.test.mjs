@@ -23,7 +23,7 @@ test("a clean send hands over to the task page, which walks on only when the tas
 });
 
 test("an fyi batch offers its own All read, next and no second Next", () => {
-  assert.match(read("AssistantView.jsx"), /kind === "proposal" \|\| kind === "fyis" \|\| !\(actions\.items/);
+  assert.match(read("AssistantView.jsx"), /m\.proposal \|\| kind === "proposal" \|\| kind === "fyis"\s*\? said : idle \? IDLE_CHIPS/);
 });
 
 test("the meeting card promises no prep it cannot do", () => {

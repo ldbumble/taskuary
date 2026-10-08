@@ -262,6 +262,35 @@ def close(sid: str):
         if _START_LOCKS.get(sid) is lock: _START_LOCKS.pop(sid, None)
 
 
+# THE PAGE A TASK WAS ON, kept across a restart (the owner, 2026-10-08: "we have to handle this if we restart how it picks
+# up"). A session's browser dies with Taskuary - an orderly close saves its cookies (RESTORE_KEY), but a fresh session opened
+# on about:blank, so an agent still asking "sign in on the page beside us" pointed at a blank tab. The newest page each task's
+# browser showed is kept here, by TASK (a session id does not outlive the process), and a fresh browser opens on it.
+_PAGES_LOCK = threading.Lock()
+def _pages_file() -> Path:
+    from .config import home
+    return home() / 'browser_pages.json'
+
+def _pages() -> dict:
+    try: return json.loads(_pages_file().read_text(encoding='utf-8')) or {}
+    except (OSError, ValueError): return {}
+
+def keep_page(tid, url: str) -> None:
+    """Keep `url` as the page task `tid`'s browser was last on. A blank or internal page is not a place to come back to."""
+    url = str(url or '').strip()
+    if not tid or not url.startswith(('http://', 'https://')): return
+    with _PAGES_LOCK:
+        pages = _pages()
+        if pages.get(str(tid)) == url: return
+        pages[str(tid)] = url
+        try: _pages_file().write_text(json.dumps(pages), encoding='utf-8')
+        except OSError as e: logger.debug(f'could not keep the page of task {tid}: {e}')
+
+def last_page(tid) -> str:
+    """The page task `tid`'s browser was last on, or '' - what a fresh browser for it opens on."""
+    return str(_pages().get(str(tid)) or '') if tid else ''
+
+
 # One profile's worth of cookies, keyed here and not on the session id: a session is born and
 # dies per task, and a login the owner typed by hand in the pane last week should still be
 # there this week. --restore is agent-browser's own auto-save/restore of cookies and storage.

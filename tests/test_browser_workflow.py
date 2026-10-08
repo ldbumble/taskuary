@@ -238,5 +238,32 @@ class TheWatchedBrowserOutlivesAPauseTests(unittest.TestCase):
             self.assertEqual(kw['env']['AGENT_BROWSER_SESSION'], 'tq-abc123', cmd)
 
 
+class ARestartReopensTheTasksPageTests(unittest.TestCase):
+    """The owner, 2026-10-08: "we have to handle this if we restart how it picks up". The agent's ask outlived Taskuary's
+    restart and pointed at "the page beside us" - a fresh browser on about:blank. The task's page is kept and reopened."""
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.dir = tempfile.TemporaryDirectory(); self.addCleanup(self.dir.cleanup)
+        p = mock.patch.object(browserview, '_pages_file', return_value=Path(self.dir.name) / 'pages.json'); p.start(); self.addCleanup(p.stop)
+
+    def test_the_newest_real_page_is_kept_per_task(self):
+        browserview.keep_page(7, 'about:blank'); self.assertEqual(browserview.last_page(7), '')
+        browserview.keep_page(7, 'https://portal.example/login'); browserview.keep_page(7, 'https://portal.example/bills')
+        browserview.keep_page(8, 'https://other.example/')
+        self.assertEqual((browserview.last_page(7), browserview.last_page(8), browserview.last_page(9)),
+                         ('https://portal.example/bills', 'https://other.example/', ''))
+
+    def test_a_fresh_session_opens_its_browser_on_that_page(self):
+        s = store()
+        tid = s.create_task({'Title': 'Bills', 'Kind': 'general', 'Status': 'open', 'Tags': browserview.WANTS}, 'o')
+        browserview.keep_page(tid, 'https://portal.example/login')
+        with mock.patch.object(browserview, 'start') as start, mock.patch.object(general.threading, 'Thread') as th:
+            session = general.start_session(s, tid, actor='owner')
+        self.addCleanup(terminal.SESSIONS.pop, session.sid, None)      # a session left registered holds its task id in later tests
+        args = th.call_args.kwargs.get('args') or th.call_args[1].get('args')
+        self.assertEqual(args[1], 'https://portal.example/login')
+
+
 if __name__ == '__main__':
     unittest.main()

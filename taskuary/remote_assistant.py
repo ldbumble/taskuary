@@ -323,6 +323,8 @@ def push_alerts(store, force: bool = False) -> int:
     """
     if not force and time.monotonic() - _looked[0] < ALERT_EVERY: return 0
     _looked[0] = time.monotonic()
+    try: keep_promises(store, force=force)
+    except Exception as e: logger.warning(f'could not follow up in the chat: {e}')
     h = handoff(store)
     if not h: return 0
     if not force and not quiet(store, h['channel'], h['chat']): return 0          # mid-conversation: the next look tries again
@@ -360,6 +362,83 @@ def push_alerts(store, force: bool = False) -> int:
     if now and now.get('at') == h.get('at'):
         store.set_setting(HANDOFF_KEY, json.dumps({**now, 'told': list(now.get('told') or []) + [a['key'] for a in fresh]}), 'owner')
     return len(fresh)
+
+
+# ── the phone never drops you ─────────────────────────────────────────────────────────────────────────────────────
+# "Told coder: ..." and "Continuing TQ-… - it comes back here when it stops or asks" were the last words the chat ever said: the
+# by-the-way push runs only while the walk is HANDED to the phone, and an owner who simply talks to it never hands it over. The
+# agent finished, wrote its draft, and the chat sat silent (the owner, 2026-10-08: "it never sends close out email draft to
+# whatsapp?" - "make sure the assistant on the phone never just drops you"). So work handed to an agent FROM a chat is a promise
+# kept in that chat: when the agent stops working - finished, asking, a draft for your yes - the card comes back there.
+PROMISES_KEY = 'phone_promises'
+WORKING = ('working', 'queued')
+PROMISE_HOURS = 12
+PROMISE_LINE = 'I will tell you here when it finishes or needs you.'
+
+
+def _promises(store) -> list:
+    try: return [p for p in json.loads(store.get_setting(PROMISES_KEY) or '[]') or [] if isinstance(p, dict) and p.get('tid')]
+    except ValueError: return []
+
+
+def _task_item(store, tid: int, items: list = None) -> dict | None:
+    """The task's row in the pile - the first, which is the one the rail leads with."""
+    if items is None:
+        from . import funnel
+        items = funnel.pile(store).get('items') or []
+    return next((i for i in items if str(i.get('tid') or '') == str(tid)), None)
+
+
+def _starts_agent(op: dict) -> bool:
+    """An act that sets an agent working: a hand-off, a continue, an answer to one that asked."""
+    k = op.get('kind')
+    return k in ('agent.continue', 'agent.answer', 'dispatch.prepare') or \
+        (k == 'task.create_from_text' and str((op.get('params') or {}).get('kind')) in ('coding', 'general'))
+
+
+def promise(store, tid) -> bool:
+    """Work on `tid` was just handed to an agent from the chat speaking now (asking()): follow it up there."""
+    at = asking()
+    if not at or not str(tid or '').isdigit(): return False
+    try: lane = (_task_item(store, int(tid)) or {}).get('lane') or ''
+    except Exception: lane = ''
+    keep = [p for p in _promises(store) if int(p['tid']) != int(tid)]
+    keep.append({'tid': int(tid), 'channel': at['channel'], 'chat': at['chat'], 'connector_id': at.get('connector_id'),
+                 'at': time.time(), 'lane': lane, 'armed': lane in WORKING})
+    store.set_setting(PROMISES_KEY, json.dumps(keep), 'assistant')
+    return True
+
+
+def keep_promises(store, force: bool = False) -> int:
+    """Each promised task whose agent has STOPPED working comes back to its chat as its card - once. It waits until the agent
+    has been seen working (an answered question is still `blocked` for a moment), or until its row is something new."""
+    ps = _promises(store)
+    if not ps: return 0
+    from . import concierge, funnel
+    items = funnel.pile(store).get('items') or []
+    keep, kept = [], 0
+    for p in ps:
+        tid, chat = int(p['tid']), p['chat']
+        if time.time() - float(p.get('at') or 0) > PROMISE_HOURS * 3600: continue        # stale: the walk has long moved on
+        it, t = _task_item(store, tid, items), store.get_task(tid) or {}
+        lane = (it or {}).get('lane') or ''
+        if lane in WORKING: keep.append({**p, 'armed': True}); continue
+        done = t.get('Status') in ('done', 'dropped') and not it
+        if not (p.get('armed') or done or (it and lane != p.get('lane'))): keep.append(p); continue
+        if not force and not quiet(store, p['channel'], chat): keep.append(p); continue   # mid-conversation: the next look tries again
+        ref = f'TQ-{tid:04d}'
+        if it:
+            with concierge.delivering(concierge.PHONE): nxt = concierge.surface(store, it['key'], actor='owner')
+            text = turn_text(nxt, lead=f'{ref} is back:', store=store)
+        else:
+            text = turn_text({'say': f'{ref} is finished - nothing on it waits on you.', 'item': None}, store=store,
+                             extra=[(f'Open {ref}', {'t': 'open', 'key': f'task:{tid}'}), (concierge.CHIP_WORDS['next'], {'t': 'next'})])
+        send(store, p['channel'], chat, text, p.get('connector_id'))
+        kept += 1
+    # ...plus any promise made WHILE this looked (a chat turn on another thread): rewriting the list read above would drop it
+    seen = {(int(p['tid']), p.get('at')) for p in ps}
+    store.set_setting(PROMISES_KEY, json.dumps(keep + [p for p in _promises(store) if (int(p['tid']), p.get('at')) not in seen]), 'assistant')
+    return kept
 
 
 def _now() -> str:
@@ -727,7 +806,11 @@ def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: 
     if not picked and not item.get('asking'): return ''
     out = ws.answer_open(store, int(item['tid']), words, actor) if item.get('tid') else {'delivered': False, 'state': 'no_request'}
     who = item.get('agent') or 'the agent'
-    if out.get('delivered'): return f'Told {who}: "{words}".'
+    if out.get('delivered'):
+        # ...never the last word: it is followed up here when the agent is done with it, and the walk goes on meanwhile
+        from . import concierge
+        said = f'Told {who}: "{words}".' + (f' {PROMISE_LINE}' if promise(store, item['tid']) else '')
+        return turn_text({'say': said, 'item': None}, store=store, extra=[(concierge.CHIP_WORDS['next'], {'t': 'next'})])
     if out.get('state') == 'no_request':
         # ...and SAVED, as the desktop saves it (server agent.answer -> waitroom_add): the phone said "it is in its
         # waiting room" and kept nothing (A12, 2026-09-25). It reaches the agent when it next stops.
@@ -915,7 +998,11 @@ def receipt_text(store, done: dict, actor: str = 'owner') -> str:
         if not str(tid or '').isdigit(): return line
         from .store import task_ref
         ref = o.get('ref') or task_ref(int(tid))
-        return turn_text({'say': line, 'item': None}, store=store, extra=[(f'Open {ref}', {'t': 'open', 'key': f'task:{int(tid)}'})])
+        extra = [(f'Open {ref}', {'t': 'open', 'key': f'task:{int(tid)}'})]
+        # ...and an agent set to work from here is followed up HERE (keep_promises), with the walk's way on meanwhile
+        if _starts_agent(done) and promise(store, tid):
+            line, extra = f'{line} {PROMISE_LINE}', extra + [(concierge.CHIP_WORDS['next'], {'t': 'next'})]
+        return turn_text({'say': line, 'item': None}, store=store, extra=extra)
     turn = concierge.receipt_turn(store, done, actor)
     if not turn['chips']: return turn['say']
     return turn_text({'say': turn['say'], 'item': None}, store=store, extra=list(recovery_rows(store, turn['chips'], actor)))
@@ -1096,7 +1183,10 @@ def _continue(store, tid, note: str) -> str:
     try: continue_work(int(tid), ContinueBody(note=note or None))
     except HTTPException as e: return stuck(store, f'Could not continue it - {e.detail}.')
     ref = f'TQ-{int(tid):04d}'
-    return f'Continuing {ref}' + (' with your note' if note else '') + ' - it picks up where it left off, and comes back here when it stops or asks.'
+    from . import concierge
+    said = f'Continuing {ref}' + (' with your note' if note else '') + ' - it picks up where it left off.'
+    said += f' {PROMISE_LINE}' if promise(store, tid) else ''
+    return turn_text({'say': said, 'item': None}, store=store, extra=[(concierge.CHIP_WORDS['next'], {'t': 'next'})])
 
 
 def plain(e) -> str:

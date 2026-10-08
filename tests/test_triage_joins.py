@@ -50,10 +50,13 @@ class SameAsTests(unittest.TestCase):
     def test_one_pull_request_never_joins_another_ones_task(self):
         """The owner, 2026-09-28: two docs PRs from one contributor read alike, and triage filed #121 into #120's task.
         A pull request or an issue is its own job; a new push on the SAME one still joins its task."""
+        # ...said to TRIAGE as a rule it applies, not enforced over its answer (2026-10-08): it is told, it answers null
         s = MemoryStore()
+        seen = []
         first = mail(s, 'pr120', brain('task'), conv='gh:northwind/portal#120', channel='github', subject='northwind/portal#120 docs: fix the example')
-        other = mail(s, 'pr121', brain('task', same_as=first['task_id']), conv='gh:northwind/portal#121', channel='github',
+        other = mail(s, 'pr121', brain('task', seen=seen), conv='gh:northwind/portal#121', channel='github',
                      subject='northwind/portal#121 docs: fill in the descriptions')
+        self.assertIn("One pull request or issue is never another one's task", seen[-1]['sys'])
         self.assertNotEqual(other['task_id'], first['task_id'])
         again = mail(s, 'pr120-push', brain('task', same_as=first['task_id']), conv='gh:northwind/portal#120', channel='github',
                      subject='northwind/portal#120 docs: fix the example')
@@ -79,7 +82,10 @@ class SameAsTests(unittest.TestCase):
         run = lambda ext, llm: mail(s, ext, llm, conv='report:7', channel='report', frm='', subject='Morning digest - 40 lines')
         first = run('report:7:mon', brain('task', title='Review the morning digest')); tid = first['task_id']
         s.update_task(tid, {'Status': 'done'}, 'owner')
-        today = run('report:7:tue', brain('fyi', same_as=tid, title='Morning digest'))
+        # the rule is TRIAGE's to apply (2026-10-08) - told, it answers null; code no longer unjoins its answer
+        seen = []
+        today = run('report:7:tue', brain('fyi', title='Morning digest', seen=seen))
+        self.assertIn('never joins a CLOSED task - every run shares one', seen[-1]['sys'])
         self.assertEqual((today['status'], today['task_id']), ('filed', None), 'today\'s run vanished into the closed task')
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         s.update_task(tid, {'Status': 'open'}, 'owner')
@@ -147,8 +153,11 @@ class OwnChannelRepeatTests(unittest.TestCase):
         s = MemoryStore()
         a = mail(s, 'r1', brain('task', title='Nightly export failed'), conv='report:1', channel='report', frm='',
                  subject='Process error check', body='The nightly export failed at 02:00.')
-        b = mail(s, 'i1', brain('task', title='Nightly export failed'), conv='report:140:idea:export', channel='assistant', frm='',
-                 subject='Idea', body='The nightly export failed - worth a look.')
+        # one task because TRIAGE says this idea IS that task - shown it as open work - not an exact-title check (2026-10-08)
+        seen = []
+        b = mail(s, 'i1', brain('task', same_as=a['task_id'], title='Nightly export failed', seen=seen), conv='report:140:idea:export',
+                 channel='assistant', frm='', subject='Idea', body='The nightly export failed - worth a look.')
+        self.assertIn(f"TQ-{a['task_id']:04d}", seen[-1]['usr'])
         self.assertEqual(b['task_id'], a['task_id'])
         self.assertEqual(len(s.list_tasks()), 1)
 

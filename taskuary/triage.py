@@ -765,7 +765,14 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'system, again. When a task is from someone else and this message is a new thread, this is '
                            'never same_as, however closely the subject matches and even when that task already did the same fix: '
                            'their pull request answering that issue, a second person reporting that bug, is THEIR ask - it needs '
-                           'its own task ("same_as": null), and the summary can say which task it relates to.')
+                           'its own task ("same_as": null), and the summary can say which task it relates to. '
+                           # THREE RULES THE CODE USED TO ENFORCE AFTER YOU ANSWERED - overruling you in silence (the owner, 2026-10-08:
+                           # "tell them what we want in the prompt but not hard coded"). They are yours to apply:
+                           "Three more: an Advisor idea is Taskuary's own thought about work, not the sender writing again - it never "
+                           "joins a CLOSED task (same_as names an open one, or null). One pull request or issue is never another one's "
+                           'task: a different PR or issue number, even from the same person on the same repository, is "same_as": null. '
+                           "And a report's run that needs nothing from the owner (fyi) never joins a CLOSED task - every run shares one "
+                           'conversation, and a row filed on a closed task is shown nowhere; it is its own row ("same_as": null).')
             if project:
                 system += ('\n\nPROJECT RELATIONSHIP CONTEXT - selected from the owner\'s prior explicit repository '
                            'choices for this sender/channel. It helps identify what the message is about; it does '

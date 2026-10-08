@@ -14,7 +14,10 @@ Nothing here executes. A CALL becomes a proposal exactly as a verb does; the own
 still what runs it (PW-123/124), and the AUTO verbs are still the only things that go straight through.
 """
 import json, re
-from . import operations
+from . import operations, roles
+
+# the roles a role.apply call may name, from roles.ROLES - a list in prose here would drift from what applies
+_ROLES = ' | '.join(f"{k} ({r['title'].lower()})" for k, r in roles.ROLES.items())
 
 # What each operation is FOR, in the owner's terms. Kinds absent from here are internal roads the chat
 # has no business offering (triage corrections, dispatch plumbing) and are left out of the catalogue.
@@ -85,6 +88,14 @@ PURPOSE = {
     # uses - report.create through save_source, connection.create through save_connector.
     'report.create':            'create a scheduled report or workflow - `config`; the composer builds it from what the owner asked for',
     'connection.create':        'add a system Taskuary talks to - `type`, `name`; created OFF and never carrying a secret, which the owner gives on the card',
+    # A ROLE IS A WALK, NOT A GUESS (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up
+    # new role and work"): the chat asks the two questions a role needs, then puts the whole set-up on one card.
+    'role.apply':               ("set Taskuary up for the owner's job in one go - its worker, playbooks and daily workflow. `role`: "
+                                 + _ROLES + ". Before calling, ASK the owner, one question at a time: the address of their "
+                                 "bill-approval portal (`portal`; fine to leave out), and whether their own non-coding mail "
+                                 "should go to that worker (`route_mail`: true or false - when they are only trying it out, "
+                                 "false). The workflow is created OFF: after the yes, offer to run it once (report.run), and say "
+                                 "they sign in to the portal themselves in the browser pane"),
     # THE APP ITSELF, by name. A report is named by `title` (part of its name) or `source_id`; a
     # connection by `name` or `connector_id`; a setting by `key` or `label`. These run AT ONCE
     # (INSTANT below) with an undo in the receipt, except report.delete, which asks first.
@@ -266,7 +277,7 @@ BUCKETS = (
                                                             'preference.exclude_sender', 'preference.sender_rule')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
-    ('app', 'settings, connections, scripts and kept facts', ('setting.set', 'connection.create', 'connection.test', 'connection.pause',
+    ('app', 'settings, connections, roles, scripts and kept facts', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
                                                              'connection.resume', 'script.start', 'memory.remember', 'hub.publish')),
 )
 
@@ -274,7 +285,7 @@ BUCKETS = (
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coder': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'clear': 'text', 'task.handoff': 'who, note?',
-         'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
+         'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 
 
 def signature(kind: str) -> str:

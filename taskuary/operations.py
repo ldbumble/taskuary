@@ -68,6 +68,8 @@ KINDS = {
     # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection
     'report.create':            ('report', ('config',), None),
     'connection.create':        ('connector', ('type', 'name'), None),
+    # ...and a whole job at once (roles.py): the worker, its playbooks, its workflow and where the mail goes
+    'role.apply':               ('role', ('role',), None),
     # ...and the app itself, by name (the assistant-runs-the-app design, 2026-09-18): a report or
     # workflow run, paused, resumed, re-aimed, edited or deleted; a setting set; a connection tested,
     # paused or resumed; a script started. The chat names the thing, appfacts resolves it, and each

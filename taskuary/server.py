@@ -951,6 +951,11 @@ def _run_operation(op: dict, background: BackgroundTasks):
                  else 'validation failed' if c.get('LastError') else 'saved, not yet verified')
         return {'connectorId': out['connectorId'], 'type': c.get('Type') or typ, 'name': c.get('Name') or name, 'state': state,
                 'active': bool(c.get('Active')), 'link': f"#connector={out['connectorId']}"}
+    if kind == 'role.apply':
+        # the same road the Profiles page's Set up takes (roles.apply) - the chat walked the owner to it
+        from . import roles
+        # the SERVER's config (the one put_agent saves): `cfg` is a local name further down this function
+        return roles.apply(store, globals()['cfg'], str(p.get('role') or ''), str(p.get('portal') or ''), bool(p.get('route_mail')))
     if kind == 'pipe.clear':
         from . import concierge
         # a SELECTOR names a set exactly (category/kind/lane/sender/contains/age); the word-matching
@@ -5817,11 +5822,12 @@ def roles_list():
 
 class RoleBody(BaseModel):
     portal: str = ''
+    route_mail: bool = True
 
 @app.post('/api/roles/{name}')
 def roles_apply(name: str, body: RoleBody):
     from . import roles
-    try: return roles.apply(store, cfg, name, body.portal)
+    try: return roles.apply(store, cfg, name, body.portal, body.route_mail)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.delete('/api/agents/{name}')

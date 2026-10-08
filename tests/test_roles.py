@@ -205,4 +205,87 @@ class RolesApiTests(unittest.TestCase):
             self.assertEqual(c.post('/api/roles/nope', json={}).status_code, 422)
 
 
+class TheAssistantSetsARoleUpTests(unittest.TestCase):
+    """The owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work". The chat
+    asks its questions, then puts the whole set-up on ONE card; the yes runs the Profiles page's own road."""
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory(); self.addCleanup(self.dir.cleanup)
+        for p in (mock.patch.object(playbooks, 'folder', return_value=Path(self.dir.name)), mock.patch.object(config, 'save')):
+            p.start(); self.addCleanup(p.stop)
+
+    def card(self, s, params):
+        from taskuary import concierge, terminal
+        line = 'CALL: ' + json.dumps({'kind': 'role.apply', 'params': params})
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            return concierge.say(s, 'set me up as an AP rep', llm=lambda *a, **k: line)
+
+    def run_card(self, s, cfg, p):
+        from fastapi.testclient import TestClient
+        from taskuary import server, terminal
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, 'cfg', {**server.cfg, **cfg}),              mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            return TestClient(server.app).post(f"/api/operations/{p['id']}/execute", json={'version': p['version']}).json()
+
+    def test_a_trial_sets_up_the_worker_and_the_job_and_leaves_the_mail_alone(self):
+        s, cfg = setup()
+        p = self.card(s, {'role': 'ap', 'portal': 'https://portal.example', 'route_mail': 'no'})['proposal']
+        self.assertEqual((p['kind'], p['label'], p['targetKind']), ('role.apply', 'Set it up', 'role'))
+        self.assertIsNone(s.get_agent('ap'))                                   # nothing before the yes
+        r = self.run_card(s, cfg, p)
+        self.assertEqual(r['status'], 'done')
+        self.assertFalse(json.loads(s.get_agent('ap')['Config'])['triage_enabled'])
+        self.assertNotIn('- ap:', agents.roster(s)); self.assertEqual(s.get_setting('default_profile') or '', '')
+        self.assertIn('https://portal.example', json.loads(s.get_source(r['outcome']['workflow_id'])['ConfigJson'])['prompt'])
+        from taskuary import concierge
+        said = concierge._outcome_line('role.apply', p['params'], r['outcome'])
+        self.assertIn('your mail goes where it went before', said); self.assertIn('switched off', said)
+
+    def test_handing_over_the_mail_is_said_outright(self):
+        s, cfg = setup()
+        p = self.card(s, {'role': 'ap', 'route_mail': True})['proposal']
+        self.assertEqual(self.run_card(s, cfg, p)['status'], 'done')
+        self.assertEqual(s.get_setting('default_profile'), 'ap')
+        self.assertIn('- ap:', agents.roster(s))
+
+    def test_a_role_nobody_ships_is_answered_with_the_ones_there_are(self):
+        s, _ = setup()
+        out = self.card(s, {'role': 'astronaut'})
+        self.assertFalse(out.get('proposal'))
+        self.assertIn('accounts payable', out['say'].lower())
+
+    def test_the_walk_asks_its_questions_then_puts_one_card_with_what_it_lays_out(self):
+        from taskuary import concierge, terminal
+        s, cfg = setup()
+        def brain(system, user, **kw):
+            if 'sort one set-up request' in system: return json.dumps({'kind': 'role', 'role': 'ap', 'why': 'their job'})
+            if 'answer to set-up questions' in system: return json.dumps({'portal': 'portal.example/bills', 'route_mail': False})
+            return '{}'
+        def turn(text):
+            line = 'CALL: ' + json.dumps({'kind': 'setup', 'params': {'text': text}})
+            with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(concierge, '_compose_llm', return_value=brain):
+                return concierge.say(s, text, llm=lambda *a, **k: line)
+        first = turn('I am an AP rep, set Taskuary up for my job')
+        self.assertFalse(first.get('proposal'))
+        self.assertIn('1. What is the address of your bill-approval portal', first['say']); self.assertIn('2. Should your own', first['say'])
+        p = turn('portal.example/bills, and I am only trying it out')['proposal']
+        self.assertEqual((p['kind'], p['params']), ('role.apply', {'role': 'ap', 'portal': 'https://portal.example/bills', 'route_mail': False}))
+        for line in ('Worker: AP.md', 'Your mail: goes where it goes today', 'created switched off'): self.assertIn(line, p['say'])
+        self.assertEqual(self.run_card(s, cfg, p)['status'], 'done')
+        self.assertEqual(s.get_setting('default_profile') or '', '')
+
+    def test_a_worker_already_on_the_roster_is_said_to_still_be_reachable(self):
+        from taskuary import concierge
+        s, cfg = setup()
+        s.upsert_agent('ap', 'accounts-payable', 'cli', json.dumps({'triage_enabled': True, 'purpose': 'AP work'}))
+        o = roles.apply(s, cfg, 'ap', route_mail=False)
+        self.assertFalse(o['profile_added']); self.assertTrue(o['on_roster'])
+        said = concierge._outcome_line('role.apply', {}, o)
+        self.assertIn("on triage's list", said); self.assertNotIn('where it went before', said)
+
+    def test_the_catalogue_offers_it_with_its_questions(self):
+        from taskuary import toolcatalog
+        self.assertIn('role.apply', toolcatalog.bucket_list('app'))
+        d = toolcatalog.describe('role.apply')
+        self.assertIn('ap (accounts payable)', d); self.assertIn('route_mail', d); self.assertIn('a card the owner confirms', d)
+
+
 if __name__ == '__main__': unittest.main()

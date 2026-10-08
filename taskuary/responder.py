@@ -64,6 +64,13 @@ NOT_YET = ('If the request cannot be answered by a reply alone - it needs work d
 OWNER_SAYS = ('The owner has told you what this reply must say - it is below, marked as theirs. Write THAT, in their voice: it '
               'outranks the thread and any finished result, which are only there so you get the facts right if they asked '
               'for them. Never add what they did not ask to send.\n')
+NO_REPLY = 'NO REPLY'
+
+
+class NoReply(Exception):
+    """The writer read the thread and the result and said no answer is owed."""
+
+
 DONE = ('The work this thread asked for is FINISHED - the complete result below says what was done. '
         'Answer EVERY distinct question, request, and issue in the sender\'s thread that the result '
         'addresses. Check them one by one before writing: never omit an item merely to make the reply '
@@ -79,7 +86,11 @@ DONE = ('The work this thread asked for is FINISHED - the complete result below 
         'they did not file anything and none of those words mean anything to them. Write only the '
         'part that is news to THEM, about THEIR message, in the words they used. If the honest answer '
         'is that nothing was needed, that is a sentence about their thing, never about our handling '
-        'of it.')
+        'of it.\n'
+        # ...and NOTHING is a choice the writer makes, not an empty email: told "not ours, no reply", it had no way to say so,
+        # signed off with nothing above it, and the card offered Send & close on a signature (the owner, 2026-10-08)
+        f'If the result says no answer should go back - the owner decided not to reply, or there is nothing the sender '
+        f'needs to hear - write exactly {NO_REPLY} and nothing else.')
 
 CHAT_CHANNELS = ('teams', 'slack', 'telegram', 'whatsapp', 'imessage')
 
@@ -272,6 +283,18 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
     out = (llm(system, user, max_tokens=COMPLETE_REPLY_TOKENS if resolution else REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
+    # THE WRITER SAID NOTHING GOES BACK - in words, or by signing off under nothing. A reply the owner asked for (nudge) is
+    # theirs to want: that one is never dropped here, it fails as empty instead
+    # ...signed under nothing means a sign-off WORD or the owner's own signature with nothing above it - never a short real
+    # answer ("on it", "ok"), which the sign-off stripper would also eat
+    body, sig = out.rstrip(), signature_for(store).strip()
+    signed = bool(sig) and body.endswith(sig)
+    if signed: body = body[:-len(sig)].rstrip()
+    first = next((l.strip() for l in body.splitlines() if l.strip()), '')
+    empty = (signed and not body) or (bool(_SIGNOFF.match(first)) and not strip_signoff(body).strip())
+    if out.strip().strip('.').upper() == NO_REPLY or empty:
+        if nudge: raise RuntimeError('the AI wrote no reply to what you asked for - try Redraft with more to go on')
+        raise NoReply(out)
     return (strip_signoff(out) or out) if chat else out    # never strip a reply down to nothing
 
 
@@ -284,7 +307,17 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     # the writer says what it read (below); this is what to assume if it says nothing - the older,
     # stricter reading, so a caller that replaces draft_reply cannot quietly switch the guard off
     seen = {'saw': store.last_inbound_on_task(task_id), 'revision': operations.message_revision(store, task_id)}
-    text = draft_reply(store, task_id, llm, resolution, nudge, seen)
+    try: text = draft_reply(store, task_id, llm, resolution, nudge, seen)
+    except NoReply:
+        # ...carried out, and said: the draft is put down as no reply, the way the owner's own No reply does it (which closes
+        # the task when nothing else of it waits), never left on the card as an email of one signature
+        from . import verdicts
+        rv = store.get_review(review_id)
+        if rv and rv.get('Status') in ('pending', 'held'):
+            store.add_comment(task_id, 'responder', 'agent', 'No reply drafted - from what was done, nothing needs to go back to the sender.')
+            verdicts.decide(store, rv, 'no_reply', None, None, 'responder')
+        logger.info(f'no reply for task {task_id}: the writer said nothing needs to go back')
+        return ''
     saw, revision = seen['saw'], seen['revision']
     if saw and str(saw.get('Channel') or '').lower() == 'email':
         # the signature rides in the draft the owner reviews, once (PW-065); the recipients it will go to are pinned

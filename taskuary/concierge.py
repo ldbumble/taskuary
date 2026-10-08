@@ -505,6 +505,13 @@ def facts(store, item: dict, whole: bool = False) -> str:
     # should be closed").
     if item.get('why_open'): lines.append(f"WHY IT IS BACK: {item['why_open']} The card's Completed button closes it.")
     if item['kind'] == 'agentdone': lines.append(f"the agent's summary: {item.get('summary') or ''}")
+    # THE SESSION IS STILL THERE. A finished agent's card said only its summary, so "can you do that? just null those two" read as
+    # a new job and opened a second task with a cold agent beside the session that had the answer (the owner, 2026-10-08). The
+    # model is told what exists; it decides.
+    sess = item.get('tid') and store.resumable_session(item['tid'])
+    if sess: lines.append(f"AGENT SESSION: {sess.get('Agent') or 'the agent'}'s own session on {item.get('ref') or 'this task'} is saved, "
+                          "closed task or not - more work on it (a follow-up, a change, \"now do that\") is agent.continue on it "
+                          "with the owner's words as `note`, which reopens it; a new task would start a fresh agent that knows none of this")
     if item['kind'] == 'wrapup': lines.append(f"WRAP-UP: the reply went out (\"{item.get('sent') or ''}\")" + (f"; the agent finished: {item['summary']}" if item.get('summary') else '') + ' - the task is still open; ask whether to close it')
     if item['kind'] == 'report' and item.get('source_id'):
         runs = store.report_runs(item['source_id'], 3)
@@ -740,6 +747,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     verbs = list(CHIPS[item['kind']] if item.get('kind') in CHIPS else ('next',))    # the handful's () is deliberate
     # CONTINUE SESSION leads on work an agent left - stopped, saved by you, or paused when Taskuary stopped (A19)
     if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused')): verbs = ['continue'] + [v for v in verbs if v != 'continue']
+    # ...and on FINISHED work it is offered after the card's own close: the session is still there to be asked for more
+    elif item.get('kind') == 'agentdone' and item.get('tid') and store is not None and store.resumable_session(item['tid'])             and 'continue' not in verbs: verbs = [v for v in verbs if v != 'next'] + ['continue'] + (['next'] if 'next' in verbs else [])
     if first and first in CHIP_WORDS and first != 'next':
         verbs = [first] + [v for v in verbs if v != first]
     out = []
@@ -1768,12 +1777,6 @@ class CallMiss(Exception):
 LOOKUP_ROUNDS = 2
 
 
-def _followed_up(store, words) -> int | None:
-    """The task a hand-off's words NAME that an agent has already worked - its follow-up is that task's next turn."""
-    agented = store.agented_task_ids()
-    return next((int(n) for n in re.findall(r'\bTQ-?0*(\d+)\b', str(words or ''), re.I) if int(n) in agented and store.get_task(int(n))), None)
-
-
 def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:
     """The model named an operation out of the registry. Turn it into the same proposal card a verb
     makes - NOTHING runs here (PW-123/124); the owner's confirmation is still what executes it.
@@ -1814,13 +1817,6 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # failed at the run with "what: done | reply | any | off" (2026-10-06). The model fixes it before anything is proposed.
     if kind == 'task.watch' and str(params.get('what') or 'any').strip().lower() not in asks.WATCHES:
         raise CallMiss(f"task.watch what is one of done, reply, any, off - not {str(params.get('what'))[:60]!r}. Nothing was set.")
-    # A FOLLOW-UP ON AN AGENT'S TASK IS THAT TASK'S NEXT TURN, not a new task: "can you do that? just null them" after the coder
-    # reported on TQ-1006 was written as a new hand-off "Following up on TQ-1006: ..." and opened TQ-1007, its own agent starting
-    # cold beside the session that had the answer (the owner, 2026-10-08: "it created a new task when i followed up on task??").
-    # The task the words NAME, if an agent has worked it, is continued with them - done or not (a continue reopens it).
-    if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
-        follow = _followed_up(store, params.get('text'))
-        if follow: kind, params = 'agent.continue', {'ref': task_ref(follow), 'note': str(params.get('text') or text or '').strip()}
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
         verb = 'coder' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),

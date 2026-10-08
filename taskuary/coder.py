@@ -303,6 +303,13 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     if mid and _owners_own(store, store.get_message(mid) or {}):
         store.add_comment(task_id, actor, 'agent', 'You opened this yourself - the result is filed with the report, no reply drafted.')
         mid = None
+    # ...nor when the agent already WROTE the email this needed (slots.draft): "hand it off to her" came back as that email AND,
+    # seconds later, a reply-all to the original sender beside it - two drafts on one task (the owner, 2026-10-08: "why is there
+    # 2 emails??"). A held triage draft still stands: that is somebody waiting.
+    from . import slots
+    if mid and not held and slots.written(store, task_id):
+        store.add_comment(task_id, actor, 'agent', 'The agent wrote the email this needed - no reply to the original sender drafted.')
+        mid = None
     # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
     if mid and not held and not own_draft(store, task_id) and nobody_waiting(store, mid, rep):
         store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '

@@ -1768,6 +1768,12 @@ class CallMiss(Exception):
 LOOKUP_ROUNDS = 2
 
 
+def _followed_up(store, words) -> int | None:
+    """The task a hand-off's words NAME that an agent has already worked - its follow-up is that task's next turn."""
+    agented = store.agented_task_ids()
+    return next((int(n) for n in re.findall(r'\bTQ-?0*(\d+)\b', str(words or ''), re.I) if int(n) in agented and store.get_task(int(n))), None)
+
+
 def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:
     """The model named an operation out of the registry. Turn it into the same proposal card a verb
     makes - NOTHING runs here (PW-123/124); the owner's confirmation is still what executes it.
@@ -1808,6 +1814,13 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # failed at the run with "what: done | reply | any | off" (2026-10-06). The model fixes it before anything is proposed.
     if kind == 'task.watch' and str(params.get('what') or 'any').strip().lower() not in asks.WATCHES:
         raise CallMiss(f"task.watch what is one of done, reply, any, off - not {str(params.get('what'))[:60]!r}. Nothing was set.")
+    # A FOLLOW-UP ON AN AGENT'S TASK IS THAT TASK'S NEXT TURN, not a new task: "can you do that? just null them" after the coder
+    # reported on TQ-1006 was written as a new hand-off "Following up on TQ-1006: ..." and opened TQ-1007, its own agent starting
+    # cold beside the session that had the answer (the owner, 2026-10-08: "it created a new task when i followed up on task??").
+    # The task the words NAME, if an agent has worked it, is continued with them - done or not (a continue reopens it).
+    if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
+        follow = _followed_up(store, params.get('text'))
+        if follow: kind, params = 'agent.continue', {'ref': task_ref(follow), 'note': str(params.get('text') or text or '').strip()}
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
         verb = 'coder' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),

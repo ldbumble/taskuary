@@ -79,5 +79,5 @@ test("Docs in the canvas lists every document the tab's rail did, and opens the 
   const b = s.slice(s.indexOf("if (browse) {"), s.indexOf("return browse({", s.indexOf("if (browse) {")));
   assert.match(b, /docsTree\(docCat\)/, "the same tree the rail drew: documents, profiles, playbooks, How it works");
   assert.match(s, /setDocSel\(e\.sel\.action \? \{ \.\.\.e\.sel, n: Date\.now\(\) \} : e\.sel\)/);
-  assert.match(s, /<DocsView onCatalog=\{onCatalog\} catalogOnly \/>/, "the profiles and playbooks are listed before any document is opened");
+  assert.match(s, /<DocsView (?:key=\{catN\} )?onCatalog=\{onCatalog\} catalogOnly \/>/, "the profiles and playbooks are listed before any document is opened");
 });

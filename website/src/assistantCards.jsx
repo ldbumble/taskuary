@@ -15,11 +15,12 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
-import { ChannelIcon, TaskuaryMark, channelColor, cleanText, fmtDateTime } from "./ui.jsx";
+import { ChannelIcon, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { jsonRows } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
+import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
 import { laneMeta, ageText, agoText } from "./funnelPile.js";
 import { sendBlockLine, draftState } from "./sendState.js";
@@ -1015,6 +1016,58 @@ export function DayCards({ groups, onSection }) {
           <span className="who">{gistOf(g)}</span>
         </button>
       ))}
+    </div>
+  );
+}
+// THE DAY'S OPENER (the owner picked mock-up A, 2026-10-08): one paper card - the day's meetings as plain lines on the left,
+// what waits on the right as a row per band (its gist, its count). It replaces the grey meetings box over a row of tiles.
+// No meetings: the waiting side alone; nothing waiting: the meetings alone; neither: nothing.
+const atLocal = (s) => new Date(String(s).replace(" ", "T")).getTime();
+const firstNames = (who = []) => who.slice(0, 2).map((w) => String(w).split(/[ @]/)[0]).join(", ") + (who.length > 2 ? ` +${who.length - 2}` : "");
+export function DayOpener({ groups = [], onSection }) {
+  const today = useCalendarToday();
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setInterval(() => tick((v) => v + 1), 60000); return () => clearInterval(id); }, []);
+  const all = today?.events || [], evs = all.filter((e) => !e.all_day), allDay = all.filter((e) => e.all_day);
+  const now = Date.now(), next = evs.findIndex((e) => atLocal(e.start) > now);
+  // the now line sits between what is behind you and what is ahead - not above a day that has not started
+  const nowAt = next === -1 ? (evs.length ? evs.length : -1) : next > 0 ? next : -1;
+  const total = groups.reduce((n, g) => n + (g.n ?? g.rows.length), 0);
+  if (!all.length && !groups.length) return null;
+  const line = (e, i) => {
+    const end = e.end ? atLocal(e.end) : atLocal(e.start) + 30 * 60000, past = end < now, live = !past && atLocal(e.start) <= now;
+    return (
+      <div key={`${e.start}-${i}`} className={`ev${past ? " past" : ""}${live ? " live" : ""}`} title={e.about || undefined}>
+        <span className="t">{fmtTime12(e.start)}</span>
+        <span className="s"><b>{e.subject}</b>{!!e.who?.length && <span> · {firstNames(e.who)}</span>}</span>
+      </div>
+    );
+  };
+  return (
+    <div className={`tq-day${all.length && groups.length ? "" : " solo"}`}>
+      {!!all.length && (
+        <div className="tq-day-agenda">
+          <div className="tq-day-h">Your day · {evs.length} meeting{evs.length === 1 ? "" : "s"}</div>
+          {allDay.map((e) => <div key={e.subject} className="ev allday"><span className="t">all day</span><span className="s"><b>{e.subject}</b></span></div>)}
+          {evs.map((e, i) => (
+            <React.Fragment key={`${e.start}-${i}`}>
+              {i === nowAt && <div className="ev now"><span className="t">now</span><i /></div>}
+              {line(e, i)}
+            </React.Fragment>
+          ))}
+          {nowAt === evs.length && <div className="ev now"><span className="t">now</span><i /></div>}
+        </div>
+      )}
+      {!!groups.length && (
+        <div className="tq-day-wait">
+          <div className="tq-day-h">Waiting · {total}</div>
+          {groups.map((g) => (
+            <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
+              <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{g.n ?? g.rows.length}</b>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -13,10 +13,11 @@ test("Timeline and Assistant share the meeting rail for today's digest", () => {
   assert.match(feed, /<TodayMeetingsStrip \/>/);
   assert.doesNotMatch(feed, /const TodayStrip/);
   assert.match(cards, /card\.brief_today && <TodayMeetingsStrip \/>/);
-  // ...and the screen the day opens on draws it too: the walk's opener took the digest's job (2026-09-23)
+  // ...and the screen the day opens on draws the day too - as the opener's agenda column now, not the grey strip (mock-up A, 2026-10-08)
   const view = read("AssistantView.jsx");
   const welcome = view.slice(view.indexOf('className="tq-welcome"'), view.indexOf('className="tq-modes"'));
-  assert.match(welcome, /<TodayMeetingsStrip \/>/);
+  assert.match(welcome, /<DayOpener /);
+  assert.match(cards, /export function DayOpener[\s\S]*?useCalendarToday\(\)/);
   assert.match(strip, /TODAY’S MEETINGS/);
   assert.match(strip, /useCalendarToday\(\)/);                                     // shown at once from the last answer
   assert.match(read("calendarToday.js"), /api\.get\("\/api\/calendar\/today"\)/);

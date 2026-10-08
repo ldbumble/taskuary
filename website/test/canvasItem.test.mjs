@@ -80,7 +80,7 @@ test("the item on the table spans the canvas, not the chat's reading column", ()
   assert.match(css, /width: 100%; margin-left: 0; max-width: none; \}/);
   assert.match(css, /\.tq-chat-inner \{ width: 100%; \}/);
   assert.match(css, /\.tq-compose-box \{ width: 100%; \}/);
-  assert.match(view, /live && card \? "tq-msg tq-live-card" : "tq-msg"/);
+  assert.match(view, /live && card && kind !== "proposal" \? "tq-msg tq-live-card" : "tq-msg"/);   // ...a proposal is a chat line, not the item
 });
 
 // the gate at 1830x823: an expanded body's smaller top padding grew the pane 345 -> 355 (the view is sized off 100cqh)

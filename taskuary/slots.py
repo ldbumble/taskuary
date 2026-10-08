@@ -74,6 +74,10 @@ def add(store, tid: int, outputs, actor: str, sender: dict = None) -> list:
 
 def all_(store, tid: int) -> list: return [i for i in store.task_checklist(tid) if isinstance(i.get('out'), dict)]
 def open_(store, tid: int) -> list: return [i for i in all_(store, tid) if not i.get('done')]
+def written(store, tid: int) -> list:
+    """The open slots the agent already wrote, each waiting on the owner's yes."""
+    rvs = (store.get_review(i['rid']) for i in open_(store, tid) if i.get('rid'))
+    return [r for r in rvs if r and r.get('Status') == 'pending' and str(r.get('DraftBy') or '').startswith('agent:')]
 
 
 def of_review(rv) -> str | None:

@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { groupOf, refOf, stateOf, summarize, whoOf, GROUPS } from "../src/walkSummary.js";
+import { gistOf, groupOf, refOf, stateOf, summarize, whoOf, GROUPS } from "../src/walkSummary.js";
 import { LEVEL_ORDER, SECTION_WORDS, bandsOf, levelOf } from "../src/funnelPile.js";
 
 const it = (lane, kind = "asked", extra = {}) => ({ key: `${lane}:${kind}:${Math.random()}`, lane, kind, who: "Erin Blake", title: "Q3 numbers", ...extra });
@@ -66,4 +66,12 @@ test("a row reads cleanly: its task number, the agent on an agent row, an addres
   // two TASKS with one title are two jobs, never folded
   const t = summarize([it("asked", "asked", { tid: 1 }), it("asked", "asked", { tid: 2 })]);
   assert.equal(t.groups[0].rows.length, 2);
+});
+
+test("a band's box names an agent's task, never the profile running it", () => {
+  const rows = [{ key: "a", lane: "blocked", kind: "agent", agent: "coder", who: "Alex Doyle", title: "Investigate the missing ledger exports for the north region" },
+    { key: "b", lane: "reply", kind: "mail", who: "Erin Blake", title: "Budget question" }];
+  const g = gistOf({ rows });
+  assert.ok(!/\bcoder\b/.test(g), g);
+  assert.match(g, /^Investigate the missing ledger exports…, Erin Blake$/);
 });

@@ -30,8 +30,12 @@ export const stateOf = (i, laneWord) => i?.lane === "approve"
 // ...a report has no "who" but its own name, so it says that
 // ...and an agent's row says the TASK, not the profile running it: "coder" alone read as a task called coder (the owner, 2026-10-08)
 const cut = (t, n = 40) => t.length <= n ? t : `${t.slice(0, n).replace(/\s+\S*$/, "")}…`;
+// ...nor a row with nobody behind it but the agent - a task an agent opened from a report, say - whose only name IS the profile
+// ...and an agent's FINISHED work (kind agentdone), whose "who" is the agent itself with no agent field beside it (TQ-1016 live)
+const byAgent = (i) => isAgentRow(i) || i?.kind === "agentdone"
+  || (!!i?.agent && (!String(i?.who || "").trim() || String(i.who).trim().toLowerCase() === String(i.agent).toLowerCase()));
 const gistWord = (i) => whoOf(i) === "Report" ? String(i.title || "").split(/ [-—] /)[0]
-  : isAgentRow(i) && i.title ? cut(String(i.title).trim()) : whoOf(i);
+  : byAgent(i) && i.title ? cut(String(i.title).trim()) : whoOf(i);
 export const gistOf = (g, max = 2) => {
   const ws = [...new Set(g.rows.map(gistWord))].filter(Boolean);
   return ws.slice(0, max).join(", ") + (ws.length > max ? ` +${ws.length - max}` : "");

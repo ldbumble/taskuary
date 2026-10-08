@@ -100,8 +100,8 @@ class WholeOpenBoxTests(unittest.TestCase):
         batch = {'key': 'fyis:x', 'kind': 'fyis', 'lane': 'fyi', 'title': '2 fyi', 'who': '', 'when': '', 'why': 'people told you things',
                  'items': [{'mid': m, 'who': w, 'title': t} for m, w, t in zip(mids, ('Erin', 'Gail'), ('Back Tuesday', 'Office closed Friday'))]}
         prompt = self.ask(s, item=batch)
-        self.assertIn('FYI 1 of 2: Erin - Back Tuesday', prompt); self.assertIn('I am out until Tuesday.', prompt)
-        self.assertIn('FYI 2 of 2: Gail - Office closed Friday', prompt); self.assertIn('closes at noon Friday', prompt)
+        self.assertIn(f'FYI 1 of 2 [m{mids[0]}]: Erin - Back Tuesday', prompt); self.assertIn('I am out until Tuesday.', prompt)   # with its handle (2026-10-08)
+        self.assertIn(f'FYI 2 of 2 [m{mids[1]}]: Gail - Office closed Friday', prompt); self.assertIn('closes at noon Friday', prompt)
 
     def test_the_walks_own_intro_stays_small(self):
         s = store()

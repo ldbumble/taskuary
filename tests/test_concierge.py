@@ -216,16 +216,17 @@ class TurnTests(unittest.TestCase):
         t, m, r = drafted(s)                                            # Dana, "Export still broken"
         s.add_message({'ExternalId': 'x:lee', 'Channel': 'teams', 'Subject': 'Teams chat with Lee', 'FromName': 'Lee Park', 'FromEmail': 'lee@ours.com',
                        'SentAt': ago(1), 'BodyText': 'lunch?', 'Status': 'filed'})
-        self.assertEqual(concierge.lookup(s, 'what did Dana send about the export?'), f'review:{r}')
-        self.assertEqual(concierge.lookup(s, 'show me the Lee chat'), 'msg:2')
-        self.assertIsNone(concierge.lookup(s, 'thanks, next'))
-        self.assertEqual(concierge.lookup(s, f'what about TQ-{t:04d}?'), f'task:{t}')          # a task by its reference
-        self.assertIsNone(concierge.lookup(s, 'what about TQ-0999?'))
+        # the model names a row by its HANDLE - TQ ref or m-number off THE RAIL BY NAME - and code only checks it (2026-10-08: a
+        # word-overlap lookup of the model's phrase put actions on whatever subject shared its words)
+        self.assertEqual(concierge._resolve_named(s, f'TQ-{t:04d}', None), f'task:{t}')
+        self.assertEqual(concierge._resolve_named(s, 'm2', None), 'msg:2')
+        self.assertEqual(concierge._resolve_named(s, 'TQ-0999', None), '?')
+        for words in ('what did Dana send about the export?', 'show me the Lee chat', 'thanks, next'):
+            self.assertEqual(concierge._resolve_named(s, words, None), '?', "words are the model's to resolve, never a guess here")
         old = s.create_task({'Title': 'Rename the flag', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         s.add_comment(old, 'claude', 'agent', 'CODER REPORT\nSummary: renamed it in three places.')
         pulled = concierge.surface(s, key=f'task:{old}', llm=lambda *a, **k: 'That one is renamed in three places.')
         self.assertEqual((pulled['item']['kind'], pulled['item']['tid']), ('task', old)); self.assertIn('renamed it', pulled['item']['summary'])
-        self.assertIsNone(concierge.lookup(s, 'what about the invoice from Marcus'))
         concierge.surface(s, llm=lambda *a, **k: 'first')               # Dana's is on the table
         # ...but the owner's WORDS never override the model's answer: a word match replaced it with whatever subject
         # shared half the words - "yes, go ahead" became someone else's message (the 2026-09-24 debug). The model

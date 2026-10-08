@@ -146,7 +146,9 @@ class InterpretationTests(unittest.TestCase):
         other = arrive(s, subject='Payroll portal is down', body='Nobody can clock in.', who='Elena', email='elena@ours.com', conv='c:outage', hours=0,
                        llm=brain('task', 'general'))
         mine = next(i for i in pile(s) if i.get('mid') == mid)
-        out = say(s, 'not ours, the payroll portal outage is facilities', key=mine['key'], model='Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "payroll portal outage"}}')
+        # the model names that row by its HANDLE off the rail (2026-10-08) - words in `on` are handed back, never guessed
+        out = say(s, 'not ours, the payroll portal outage is facilities', key=mine['key'],
+                  model='Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "TQ-%04d"}}' % other['task_id'])
         self.assertEqual(out['proposal']['target'], other['message_id']); self.assertIn('not the one on the table', out['say'])
         out = say(s, 'not ours, the badge printer contract is legal', key=mine['key'], model='Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "badge printer contract"}}')
         self.assertIsNone(out.get('proposal')); self.assertIn('nothing has been touched', out['say'].lower())
@@ -158,7 +160,8 @@ class InterpretationTests(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             batch = concierge.surface(s, llm=None)['item']
         self.assertEqual((batch['kind'], len(batch['items'])), ('fyis', 2))
-        out = say(s, 'not ours, the Rebecca one', key=batch['key'], model='Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "Rebecca is back"}}')
+        out = say(s, 'not ours, the Rebecca one', key=batch['key'],
+                  model='Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "m%d"}}' % a['message_id'])      # its handle
         p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['settles']), ('message.file', a['message_id'], False))
         self.assertEqual(run(s, p).json()['status'], 'done')

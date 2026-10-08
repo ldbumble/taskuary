@@ -49,13 +49,20 @@ class IdentityTests(unittest.TestCase):
     def test_the_same_ask_from_the_same_sender_joins_the_open_task_it_already_has(self):
         """A daily machine alert gets a new conversation every morning, so the thread check finds
         nothing to join: TQ-0510 and TQ-0511, one title, one sender, one day apart (2026-09-14)."""
+        # ...and it is TRIAGE that says so: it is shown the sender's open task (open_work) and names it - an exact-title check
+        # used to join them over its answer (2026-10-08: no code in front of the AI)
         s = MemoryStore()
-        gateway = lambda *a, **k: ('{"intent": "task", "kind": "task", "why": "the gateway is deprecated", '
-                                   '"title": "Upgrade deprecated Power BI gateway"}')
+        seen = []
+        def gateway(system, user, **k):
+            seen.append(user)
+            same = ', "same_as": 1' if len(seen) > 1 else ''
+            return ('{"intent": "task", "kind": "task", "why": "the gateway is deprecated", '
+                    '"title": "Upgrade deprecated Power BI gateway"' + same + '}')
         frm = 'no-reply-powerbi@microsoft.com'
         a = mail(s, 'a', 'Refresh succeeded with critical warnings.', 'AAQk-day-1', frm=frm, llm=gateway)
         b = mail(s, 'b', 'Refresh succeeded with critical warnings.', 'AAQk-day-2', frm=frm, llm=gateway,
                  at='2026-09-07 09:00:00')
+        self.assertIn('TQ-0001', seen[-1], 'the open task from this sender is in front of triage')
         self.assertEqual((a['status'], b['status']), ('created', 'routed'))
         self.assertEqual(b['task_id'], a['task_id'])
         self.assertIn('the same as', s.message_routes(b['message_id'])[-1]['Reason'])

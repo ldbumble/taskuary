@@ -494,12 +494,12 @@ def facts(store, item: dict, whole: bool = False) -> str:
         for n, i in enumerate(item.get('items') or [], 1):
             m = store.get_message(i['mid']) if i.get('mid') else {}
             body = own_words(str((m or {}).get('BodyText') or i.get('preview') or ''))
-            lines.append(f"FYI {n} of {len(item['items'])}: {i.get('who') or '?'} - {i.get('title') or ''}" + (f"\n  {_cut(body, 600)}" if body else ''))
+            lines.append(f"FYI {n} of {len(item['items'])} [{handle_of(i)}]: {i.get('who') or '?'} - {i.get('title') or ''}" + (f"\n  {_cut(body, 600)}" if body else ''))
     # WHAT A BATCH CAN DO, said to the model (2026-10-08): its verbs were rewritten in code - not ours / remember / archive / close on a
     # batch all became "read", and "remember this sender" taught nothing. The model is told; it chooses
     if item['kind'] == 'fyis':
         lines.append(f"BATCH: these {len(item.get('items') or [])} notices are one card. Its own button is done (All read, next) - for the "
-                     "whole set. A verb meant for ONE of them names it with `on` (its sender or title): not_ours, not_ours_remember "
+                     "whole set. A verb meant for ONE of them names it with `on` (its m-number, below): not_ours, not_ours_remember "
                      "(teaches triage about that sender), archive.")
     if item['kind'] == 'meeting':
         e = item.get('event') or {}
@@ -584,31 +584,6 @@ def assent_verb(item: dict | None) -> str | None:
     if not item: return None
     if item.get('kind') == 'review' and not item.get('draft'): return 'reply'   # nothing drafted yet: write one
     return ASSENT_VERB.get(item.get('kind'))
-
-
-# courtesy and filler carry no subject: "done, thanks" names nothing
-_FILLER = {'thanks', 'thank', 'cheers', 'great', 'good', 'fine', 'perfect', 'please', 'sorry', 'nice',
-           'right', 'sure', 'really', 'actually', 'maybe', 'probably', 'definitely', 'anyway', 'though',
-           # ...and the words that stand IN for a subject rather than being one: "for this kind",
-           # "that sort of thing" name nothing at all
-           'kind', 'kinds', 'sort', 'sorts', 'type', 'types', 'thing', 'things', 'stuff', 'item', 'items',
-           'way', 'ways', 'case', 'cases', 'matter', 'work', 'job', 'jobs', 'note', 'notes', 'task', 'tasks',
-           'message', 'messages', 'mail', 'email', 'emails', 'reply', 'replies', 'issue', 'issues', 'problem', 'problems'}
-
-def _pile_hit(store, extra: list, item: dict) -> str | None:
-    """The item in the PIPE those words are about. lookup() scores over the whole timeline and wants
-    half the words; two words of a five-word clause ("the payroll portal outage - facilities handle
-    that") never reach that, and the thing they name is sitting two rows down."""
-    from .routing import tokens
-    best, hits = None, 0
-    try: items = funnel.pile(store)['items']
-    except Exception: return None
-    for i in items:
-        if i.get('key') == item.get('key'): continue
-        hay = set(tokens(f"{i.get('who') or ''} {i.get('title') or ''} {i.get('preview') or ''}"))
-        n = sum(1 for w in extra if w in hay or any(h.startswith(w) for h in hay))
-        if n > hits: best, hits = i, n
-    return best['key'] if hits >= 2 else None
 
 
 # What a card must HAVE for a verb to be carried out on it - the same map the page checks. The
@@ -1299,55 +1274,6 @@ def _when(ts: str) -> str:
 def _span_minutes(start: str, end: str) -> int:
     a, b = funnel._dt(start), funnel._dt(end)
     return max(0, int((b - a).total_seconds() // 60)) if a and b else 0
-
-
-_CUES = {'show', 'me', 'tell', 'about', 'what', 'did', 'does', 'send', 'sent', 'email', 'mail', 'message', 'from', 'the', 'find',
-         'open', 'read', 'pull', 'up', 'one', 'that', 'thing', 'said', 'say', 'again', 'back', 'please', 'can', 'you', 'and', 'with',
-         'for', 'was', 'there', 'anything', 'thread', 'wrote', 'write', 'asked', 'ask', 'get', 'have', 'has', 'any', 'this', 'his', 'her',
-         # "did you do it?" is a question about US - it used to score against every subject with a
-         # short word in it and come back as "I can't find that one" (the owner, 2026-09-03)
-         'do', 'done', 'doing', 'it', 'its', 'them', 'they', 'i', 'we', 'my', 'our', 'your', 'yet', 'still', 'already', 'now', 'why', 'how',
-         'when', 'where', 'who', 'is', 'are', 'be', 'been', 'not', 'no', 'yes', 'ok', 'okay', 'sure', 'but', 'so', 'just', 'all'}
-
-
-def lookup_days(text: str) -> int:
-    """How far back the owner's own words reach. A fixed fortnight meant anything older simply did not
-    exist to the assistant (the owner, 2026-09-07: "widen the lookup to intent of user - if he asked 6
-    months ago, search that"). The model can also say `days` outright on timeline.search."""
-    t = (text or '').lower()
-    m = re.search(r'(\d+)\s*(day|week|month|year)s?', t)
-    if m:
-        n, unit = int(m.group(1)), m.group(2)
-        return min(3650, n * {'day': 1, 'week': 7, 'month': 31, 'year': 365}[unit] + 7)
-    for phrase, d in (('last year', 400), ('this year', 365), ('year', 365), ('months', 190),
-                      ('month', 62), ('last week', 21), ('week', 14), ('yesterday', 3), ('today', 2)):
-        if phrase in t: return d
-    return 90                                   # the default reach, not a fortnight
-
-
-def lookup(store, text: str, days: int = None) -> str | None:
-    """The pile item, or Timeline row, the owner's words point at - "what did Dana send", "the invoice
-    thread". Sender and subject words only (a body matches everything), most of the meaningful words
-    must hit, and the newest wins a tie. None when nothing is clearly meant."""
-    from .routing import tokens
-    if days is None: days = lookup_days(text)
-    ref = re.search(r'\bTQ-?0*(\d+)\b|#task=(\d+)', text or '', re.I)
-    if ref:
-        tid = int(ref.group(1) or ref.group(2))
-        if store.get_task(tid): return f'task:{tid}'
-    words = [w for w in tokens(text) if w not in _CUES]
-    if not words: return None
-    best, score = None, 0.0
-    for r in store.feed(limit=400, days=days):
-        if r.get('Direction') == 'out' or r.get('Channel') == 'assistant': continue
-        hay = set(tokens(f"{r.get('FromName') or ''} {r.get('FromEmail') or ''} {r.get('Subject') or ''} {r.get('SourceName') or ''}"))
-        hit = sum(1 for w in words if w in hay or any(h.startswith(w) for h in hay))
-        sc = hit / len(words)
-        if hit and sc > score: best, score = r, sc
-    if not best or score < 0.5: return None
-    return (f"review:{best['ReviewId']}" if best.get('ReviewStatus') == 'pending' and best.get('ReviewId')
-            else f"agent:{best['TaskId']}" if best.get('AgentWaiting') and best.get('TaskId')
-            else f"report:{best['MessageId']}" if best.get('Channel') == 'report' else f"msg:{best['MessageId']}")
 
 
 def day(store) -> str:
@@ -2419,13 +2345,18 @@ def _read_outputs(store, made: dict, job: str, actor: str):
 
 
 def _resolve_named(store, phrase: str, item: dict | None) -> str | None:
-    """The pile key the model's ON: words name - '?' when they name something that cannot be found."""
-    from .routing import tokens
-    ref = re.search(r'\bTQ-?0*(\d+)\b', phrase or '', re.I)
+    """The pile key the model's `on` HANDLE names - a TQ ref, an m-number, a pile key (_rail_block, handle_of) - or '?'.
+
+    Code CHECKS the handle; it never guesses from words. A phrase ("the Payworth mail") was scored against the timeline and the
+    pile by word overlap and a "yesterday = 3 days" table, and a wrong guess put the action on another item (the owner,
+    2026-10-08: no code in front of the AI). '?' goes back to the model with its rail (_say)."""
+    on = str(phrase or '').strip()
+    ref = re.fullmatch(r'TQ-?0*(\d+)', on, re.I)
     if ref: return f"task:{int(ref.group(1))}" if store.get_task(int(ref.group(1))) else '?'
-    words = [w for w in tokens(phrase or '') if w not in _CUES and w not in _FILLER and len(w) > 2]
-    hit = (lookup(store, ' '.join(words)) if words else None) or _pile_hit(store, words, item or {})
-    return hit or '?'
+    mid = re.fullmatch(r'm-?(\d+)', on, re.I)
+    if mid: return f"msg:{int(mid.group(1))}" if store.get_message(int(mid.group(1))) else '?'
+    if ':' in on and (funnel.item_for_key(store, on) or any(on == e.get('key') for e in (item or {}).get('items') or [])): return on
+    return '?'
 
 
 def open_proposal(store, dock_tid: int) -> dict | None:
@@ -3216,11 +3147,19 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
     items = p.get('items') or []
     rows = []
     for i in items[:cap]:
-        bits = [x for x in (i.get('ref'), i.get('who'), _cut(i.get('title') or '', 90)) if x]
+        # EVERY ROW HAS A HANDLE the model copies into `on` - its TQ ref, else its message's m-number - so naming one is exact: words
+        # ("the Payworth mail") were resolved by a word-overlap guess in code (the owner, 2026-10-08: no code in front of the AI)
+        bits = [x for x in (handle_of(i), i.get('who'), _cut(i.get('title') or '', 90)) if x]
         if bits: rows.append(f"- {' · '.join(bits)} ({funnel.LANE_WORDS.get(i.get('lane'), ('',))[0]})")
     if not rows: return ''
-    more = f"\n- ...and {len(items) - cap} more" if len(items) > cap else ''
-    return 'THE RAIL BY NAME - only to find the one the owner names; never act on a row they did not name\n' + '\n'.join(rows) + more
+    more = f"\n- ...and {len(items) - cap} more (timeline.search finds them)" if len(items) > cap else ''
+    return ('THE RAIL BY NAME - only to find the one the owner names; never act on a row they did not name. To act on one, put its '
+            'handle (the TQ ref or m-number that starts its line) in `on` exactly\n' + '\n'.join(rows) + more)
+
+
+def handle_of(i: dict) -> str:
+    """What the model names a row by: its task's TQ ref, else its message's m-number, else its pile key."""
+    return i.get('ref') or (f"m{i['mid']}" if i.get('mid') else '') or str(i.get('key') or '')
 
 
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
@@ -3393,6 +3332,17 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # "Nothing is on the table ... name the one you mean" - the owner had named it, and so had the model (2026-10-06). The
     # named item is the target, exactly as it is when something else is on the table.
     target_item, elsewhere = item, False
+    # AN `on` THAT IS NO ROW goes back to the model once, with the rail in front of it, to name the handle - code does not guess
+    # which row its words meant (2026-10-08)
+    if decision and decision.get('on') and _resolve_named(store, decision['on'], item) == '?' and llm:
+        try:
+            again = str(llm(_system(store, llm), f"{table}\n\n{_rail_block(p)}\n\nThe owner says: {text}\nYou chose {decision.get('verb')} "
+                                                f"with `on`: {str(decision['on'])[:80]!r}, which names no row. Put the row's handle in `on` - the "
+                                                'TQ ref or m-number that starts its line above, or one a look-up gave you - and CALL it again. '
+                                                'If none of them is it, say so in plain words.', max_tokens=MAX_TOKENS) or '')
+            redo = parse_decision(parse_call(again)[0])[1]
+            if redo and redo.get('verb') == decision.get('verb') and redo.get('on'): decision = {**decision, **redo}
+        except Exception as e: logger.warning(f'concierge: asking for the row again failed - {e}')
     if decision and not item and decision.get('on') and decision.get('verb') not in ('next', 'done', 'skip', 'later'):
         other = _resolve_named(store, decision['on'], None)
         it2 = None if other == '?' else (funnel.next_item(store, other) or funnel.item_for_key(store, other))

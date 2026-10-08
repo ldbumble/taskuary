@@ -252,12 +252,9 @@ class ReadsTests(unittest.TestCase):
         self.assertIn('TQ-0001', concierge.read_op(s, 'timeline.search', {'contains': 'export'}))
         self.assertIn('Nothing in the history', concierge.read_op(s, 'timeline.search', {'contains': 'zzzz'}))
 
-    def test_the_period_follows_the_owners_own_words(self):
-        for phrase, low, high in (('6 months ago', 150, 250), ('last year', 350, 450),
-                                  ('yesterday', 1, 5), ('what did craig send', 60, 120)):
-            d = concierge.lookup_days(phrase)
-            self.assertTrue(low <= d <= high, f'{phrase!r} -> {d} days')
-        self.assertGreater(concierge.lookup_days('anything'), 14, 'the old fortnight was the bug')
+    def test_no_phrase_table_decides_how_far_back_to_look(self):
+        # "yesterday = 3 days" was a word table in code; the model searches the timeline with its own selector (2026-10-08)
+        self.assertFalse(hasattr(concierge, 'lookup_days')); self.assertFalse(hasattr(concierge, 'lookup'))
 
     def test_a_read_answers_in_two_calls_and_never_moves_the_table(self):
         s = self._task()

@@ -821,22 +821,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # the exact repeat check found one (the same triaged title from the same sender - Taskuary's own reports
         # and ideas count as one sender, T3). It joins that task: filed on it when it adds nothing for the owner,
         # otherwise on it - and a closed one reopens. Never a second task for one job.
-        same = intent.get('same_as') or store.open_task_with_same_ask(intent.get('title'), msg.get('from_email'), msg.get('channel'))
-        # ...but an Advisor idea never reopens finished work: it is the Advisor's own thought about the task, not the
-        # sender writing again, and it brought a task closed yesterday back as waiting (I7, 2026-09-27)
-        if same and re.fullmatch(r'idea:\d+', str(msg.get('external_id') or '')) and (store.get_task(same) or {}).get('Status') in ('done', 'dropped'):
-            same = None
-        # ...and one pull request or issue is never ANOTHER one's task. Two docs PRs from the same contributor read alike,
-        # and the model filed #121 into #120's task - a second PR's review folded into the first (the owner, 2026-09-28)
-        own = str(msg.get('conversation_id') or '')
-        if same and own.startswith('gh:') and any(str(m.get('ConversationId') or '').startswith('gh:') and m.get('ConversationId') != own
-                                                    for m in store.list_messages(same)):
-            same = None
-        # ...and a report's run that needs nobody is never filed away on a CLOSED task: every run shares one conversation,
-        # so yesterday's closed task reads as "the same", and a row on a closed task is shown nowhere - the morning report
-        # never appeared (2026-10-01). It lands as its own row and the report's Timeline line decides; an open task keeps it.
-        if same and msg.get('channel') == 'report' and intent.get('intent') == 'fyi' and (store.get_task(same) or {}).get('Status') in ('done', 'dropped'):
-            same = None
+        # TRIAGE DECIDES, and only triage: an exact-title repeat check joined tasks triage had not named, and three rules unjoined ones
+        # it had - an Advisor idea on a closed task (I7), one PR into another's task (2026-09-28), a report run onto a closed task
+        # (2026-10-01). Each is now said to triage as a rule it applies (triage.py, SAME AS), with the sender's open and closed work
+        # in front of it (context.recent_open / recent_closures) - never applied over its answer (the owner, 2026-10-08)
+        same = intent.get('same_as')
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
             elif intent.get('urgent'): _mark_urgent(store, same, intent, actor)

@@ -665,8 +665,9 @@ class WrongTargetTests(unittest.TestCase):
         s, mine, rid, other = self._two()
         item = next(i for i in pile(s) if i.get('rid') == rid)
         with mock.patch.object(ingest, '_spawn'):
+            # the model names THAT row by its handle off the rail (2026-10-08: words were matched by a guess in code)
             out = decide(s, 'not ours, this is the payroll portal outage - facilities handle that', 'not_ours', key=item['key'],
-                         on='payroll portal outage')
+                         on=f"m{other['message_id']}")
         p = out['proposal']
         self.assertEqual((p['kind'], p['target']), ('message.file', other['message_id']))   # THAT one, by its own ids
         self.assertFalse(p['settles'])                                                        # ...and the walk stays here
@@ -675,6 +676,20 @@ class WrongTargetTests(unittest.TestCase):
         self.assertEqual(s.get_task(mine['task_id'])['Status'], 'open')
         run(s, p)
         self.assertEqual(s.get_review(rid)['Status'], 'pending'); self.assertEqual(s.get_task(mine['task_id'])['Status'], 'open')
+
+    def test_words_in_on_go_back_to_the_model_which_names_the_handle_off_the_rail(self):
+        """2026-10-08: no word-overlap guess picks the row - the model is shown its handles and asked again."""
+        s, mine, rid, other = self._two()
+        item = next(i for i in pile(s) if i.get('rid') == rid)
+        asked = []
+        def model(system, user, **kw):
+            asked.append(user)
+            on = 'payroll portal outage' if len(asked) == 1 else f"TQ-{other['task_id']:04d}"
+            return 'Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'not_ours', 'params': {'on': on}})
+        with mock.patch.object(ingest, '_spawn'), mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'not ours, this is the payroll portal outage', key=item['key'], llm=model)
+        self.assertIn('names no row', asked[-1]); self.assertIn(f"- TQ-{other['task_id']:04d} ", asked[-1])   # the rail, with its handles
+        self.assertEqual((out['proposal']['kind'], out['proposal']['target']), ('message.file', other['message_id']))
 
     def test_a_verb_about_a_subject_we_cannot_find_asks_instead_of_acting(self):
         s, mine, rid, other = self._two()

@@ -1701,7 +1701,10 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         logger.warning(f'report artifacts for {title} failed: {e}')
     # put down only AFTER the files are on it: the read receipt fingerprints the row WITH its attachments, so a
     # run put down first was a different row by the time it settled and every held-back "all clear" came back unread
-    if not d['timeline'] and not (store.get_message(mid) or {}).get('TaskId'):
+    # ...and the MORNING DIGEST lives on the opening screen now, folded under what changed (since.digest - the owner, 2026-10-08:
+    # "morning digest is usually stale when you get to it since it comes after the tasks"): its row is read as it lands
+    is_digest = 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}
+    if (not d['timeline'] or is_digest) and not (store.get_message(mid) or {}).get('TaskId'):
         from . import funnel
         funnel.settle(store, f'report:{mid}', 'done', 'report')
     expire_previous_runs(store, src, cfg, mid)

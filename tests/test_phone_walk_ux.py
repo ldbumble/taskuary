@@ -251,14 +251,18 @@ class AnAgentsQuestionComesBackAnsweredTests(unittest.TestCase):
         # ...words typed to an agent that is NOT asking are the assistant's
         self.assertEqual(remote_assistant.answer_the_agent(s, {**asking_agent(), 'asking': False}, 'main', picked=False), '')
 
-    def test_typed_words_to_an_asking_agent_go_straight_to_it(self):
-        # the owner, 2026-10-02: "if agent asks you a question in whatsapp and you respond it should go directly to the agent"
-        from taskuary import workerstate as ws
+    def test_typed_words_to_an_asking_agent_are_the_ais_to_read_and_an_answer_still_goes_straight_in(self):
+        # 2026-10-08: typed words go to the AI, as on the desktop ("ai should match to pill action") - typed "next" was sent to
+        # the agent as its answer. What the AI matches to the Answer pill runs at once (AUTO), so an answer still goes straight in
+        # (2026-10-02: "if agent asks you a question in whatsapp and you respond it should go directly to the agent")
+        from taskuary import concierge, workerstate as ws
         s = MemoryStore()
-        with mock.patch.object(ws, 'answer_open', return_value={'delivered': True, 'state': 'delivered'}) as sent:
-            said = remote_assistant.answer_the_agent(s, asking_agent(), 'use the staging branch', picked=False)
-        self.assertEqual(sent.call_args[0][2], 'use the staging branch')
-        self.assertIn('Told codex: "use the staging branch"', said)
+        with mock.patch.object(ws, 'answer_open') as sent:
+            for words in ('use the staging branch', 'next'):
+                self.assertEqual(remote_assistant.answer_the_agent(s, asking_agent(), words, picked=False), '')
+        sent.assert_not_called()
+        self.assertIn('answer_agent', concierge.AUTO)
+        self.assertNotIn('answer_agent', concierge.AGENT_STARTS)
 
     def test_answer_it_with_no_words_asks_instead_of_saying_yes(self):
         s = MemoryStore()

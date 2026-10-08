@@ -237,7 +237,6 @@ DECISIONS = {
     'rerun':           'run the report on the table again',
     'remember':        'keep a fact - `text`',
     'setup':           'build a report, a connection to another system or an automation - `text`: the request. Never a to-do',
-    'clear':           'clear these from the pipe - `text`: which',
     'confirm':         "the owner's yes to the card already waiting - only when one is",
     'cancel':          "the owner's no to it",
 }
@@ -284,7 +283,7 @@ BUCKETS = (
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coder': 'text, as?, new?',
-         'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'clear': 'text', 'task.handoff': 'who, note?',
+         'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 
 

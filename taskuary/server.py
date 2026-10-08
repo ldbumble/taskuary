@@ -958,12 +958,10 @@ def _run_operation(op: dict, background: BackgroundTasks):
         return roles.apply(store, globals()['cfg'], str(p.get('role') or ''), str(p.get('portal') or ''), bool(p.get('route_mail')))
     if kind == 'pipe.clear':
         from . import concierge
-        # a SELECTOR names a set exactly (category/kind/lane/sender/contains/age); the word-matching
-        # road stays for the sentences that name a subject rather than a class
-        if p.get('select'):
-            out = concierge.clear_selected(store, p['select'], ACTOR)
-            return out
-        return concierge.clear_matching(store, str(p.get('text') or ''), ACTOR, hint=str(p.get('hint') or ''))
+        # a SELECTOR names the set - the model's, checked by select_items - and nothing else clears: a word list matching the
+        # owner's sentence used to sweep whatever it hit (2026-10-08: "all these should not exist as hard coded rules")
+        if not p.get('select'): raise HTTPException(422, 'name the set to clear (select) - nothing was cleared')
+        return concierge.clear_selected(store, p['select'], ACTOR)
     raise HTTPException(501, f'{kind} has no shared handler yet')
 
 @app.post('/api/operations/{oid}/preview')

@@ -1769,18 +1769,6 @@ def known_repo(store, name: str, agent: str = 'coder') -> str:
     return hits[0] if len(hits) == 1 else ''
 
 
-def repo_named_in(store, text: str, agent: str = 'coder') -> str:
-    """The ONE known repository these words name outright - 'owner/name' or 'name' as a whole word - or ''."""
-    row = store.get_agent(agent) or {}
-    try: paths = json.loads(row.get('Config') or '{}').get('cwd_map') or {}
-    except (TypeError, ValueError, AttributeError): paths = {}
-    known = list(dict.fromkeys(list(repo_map(store)) + list(paths)))
-    said = str(text or '')
-    hits = {r for r in known for n in (r, r.split('/')[-1])
-            if len(n) >= 4 and re.search(rf'(?<![\w/-]){re.escape(n)}(?![\w-])', said, re.I)}
-    return hits.pop() if len(hits) == 1 else ''
-
-
 def repo_tag(task: dict) -> str | None:
     """The `repo:` tag on a task, if it has one - the override that always wins over the guess."""
     # a whole token: triage's own `triage-repo:` note must never read as the owner's override (PW-093)

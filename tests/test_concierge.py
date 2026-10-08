@@ -35,6 +35,12 @@ def decided(s, text, verb, key=None, arg=None, on=None):
     return concierge.say(s, text, key=key, llm=lambda *a, **k: line)
 
 
+def cleared_by(s, text, select):
+    """The model named the SET to clear - pipe.clear `select` - the only road to a clear (2026-10-08: no word list sweeps)."""
+    line = 'Ok.\n' + 'CALL: ' + json.dumps({'kind': 'pipe.clear', 'params': {'select': select}})
+    return concierge.say(s, text, llm=lambda *a, **k: line)
+
+
 def run(s, p, version=None):
     """The confirmation button: the structured proposal by id and version, through the shared execute road (PW-124/125)."""
     with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]):
@@ -696,8 +702,9 @@ class SweepTests(unittest.TestCase):
                            'FromEmail': 'omar@vendor.example', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(len(funnel.build(s)['items']), 4)
-        out = decided(s, "all the reports for paula vance you can remove. I don't need them", 'clear')
-        p = out['proposal']; self.assertEqual((p['kind'], p['label']), ('pipe.clear', 'Clear them from the pipe'))
+        out = cleared_by(s, "all the reports for paula vance you can remove. I don't need them", {'sender': 'Paula Vance'})
+        p = out['proposal']; self.assertEqual((p['kind'], p['label']), ('pipe.clear', 'Clear 3 from the pipe'))
+        self.assertIn('Northwind Financial Report', p['summary'], 'the card names which ones before the yes')
         self.assertEqual(len(funnel.build(s)['items']), 4)                                       # nothing swept on the words
         o = run(s, p).json()['outcome']
         self.assertEqual(o['cleared'], 3)
@@ -705,8 +712,8 @@ class SweepTests(unittest.TestCase):
         self.assertIn('Cleared 3 - ', line); self.assertIn('Read, not deleted', line)
         self.assertEqual((funnel.mutes(s), s.list_memories(active_only=True)), ([], []))   # clearing is all it does (R8)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])                # Omar stays
-        again = decided(s, 'same for all resident refunds', 'clear')
-        self.assertEqual(run(s, again['proposal']).json()['outcome']['cleared'], 0); self.assertIn('Nothing waiting matches', last_receipt(s))
+        again = cleared_by(s, 'same for all resident refunds', {'contains': 'resident refund'})
+        self.assertIsNone(again.get('proposal')); self.assertIn('Nothing waiting matches', again['say'])
         al = funnel.alerts(s, funnel.build(s)['items'])
         self.assertEqual([(a['kind'], a['text']) for a in al], [('asked', 'Omar Keller asked you: RE: Payworth')] if any(i['lane'] == 'asked' for i in funnel.build(s)['items']) else [])
 
@@ -724,7 +731,8 @@ class SweepPronounTests(unittest.TestCase):
         keep = s.add_message({'ExternalId': 'k', 'ConversationId': 'k', 'Channel': 'email', 'Subject': 'RE: Payworth', 'FromName': 'Omar Keller',
                               'FromEmail': 'omar@vendor.example', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
         s.add_route(keep, None, 'file', None, 'triage: fyi', [], 'triage')
-        first = decided(s, 'skip all the northwind financial reports. Those are part of the financials process, taken care of.', 'clear')
+        first = cleared_by(s, 'skip all the northwind financial reports. Those are part of the financials process, taken care of.',
+                           {'contains': 'Northwind Financial Report'})
         self.assertEqual(first['proposal']['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])      # no rule on the words
         self.assertEqual(run(s, first['proposal']).json()['outcome']['cleared'], 3)
         line = last_receipt(s)

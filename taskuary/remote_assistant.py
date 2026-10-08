@@ -799,11 +799,10 @@ def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: 
     """
     from . import workerstate as ws
     if not item or item.get('kind') != 'agent': return ''
-    # ...and TYPED words too, while the agent on the table is asking (the owner, 2026-10-02: "if agent asks you a question
-    # in whatsapp and you respond it should go directly to the agent") - the card says it goes straight in, so it does;
-    # several questions are one typed line, split by workerstate.answer_open
-    if picked and words not in agent_answers(item): return ''
-    if not picked and not item.get('asking'): return ''
+    # TYPED words are the AI's to read, as on the desktop (the owner, 2026-10-08: "why is it different if you type next ... ai should
+    # match to pill action"): typed "next" over an asking agent went to the agent as its answer. The AI matches them - an answer is
+    # answer_agent, which runs at once (concierge.AUTO), so it still goes straight in (2026-10-02); Next is Next.
+    if not picked or words not in agent_answers(item): return ''
     out = ws.answer_open(store, int(item['tid']), words, actor) if item.get('tid') else {'delivered': False, 'state': 'no_request'}
     who = item.get('agent') or 'the agent'
     if out.get('delivered'):

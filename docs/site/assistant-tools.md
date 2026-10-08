@@ -9,7 +9,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
-| **table** | decide about the item on the table | reply(text), approve, redraft(text), mine, regular_agent(text, as?, new?), coder(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), clear(text), confirm, cancel |
+| **table** | decide about the item on the table | reply(text), approve, redraft(text), mine, regular_agent(text, as?, new?), coder(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel |
 | **task** | change any task - the one on the table or one named with ref | task.update(priority/title/assignee), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject |
 | **agents** | start, continue, answer or stop the agent on a task, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
@@ -147,14 +147,6 @@ Keep a fact.
 Build a report, a connection to another system or an automation. Never a to-do.
 
 - `text` - the request
-
-<p class="runs">Waits for your yes on a card.</p>
-
-### `clear`
-
-Clear these from the pipe.
-
-- `text` - which
 
 <p class="runs">Waits for your yes on a card.</p>
 

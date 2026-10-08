@@ -111,6 +111,72 @@ class WorkflowRunsAsItsWorkerTests(unittest.TestCase):
         self.assertFalse(self.run_it(s, 'coder').get('Assignee'))
 
 
+class ANestedBillIsProposedTests(unittest.TestCase):
+    """An Intacct bill nests its record and line items. The lazy `{.*?}` that read proposals stopped at the first
+    inner brace, so every such bill was dropped without a word and a stray `}` was left in the agent's report
+    (found driving the portal workflow live)."""
+    REPLY = ('Trainly TR-2209 is missing, proposed below.\n'
+             'TASKUARY-PROPOSE {"action": "run_tool", "type": "intacct_create", "object": "APBILL", "record": {"VENDORID": "V-TRN", '
+             '"RECORDID": "TR-2209", "APBILLITEMS": [{"ACCOUNTNO": "6400", "TRX_AMOUNT": "450.00"}]}, "why": "missing from the ledger"}\n'
+             'Nothing is posted until you approve it.')
+
+    def test_the_whole_record_is_read_and_cut_from_the_report(self):
+        from taskuary import proposals
+        [p] = proposals.parse(self.REPLY)
+        self.assertEqual(p['record']['APBILLITEMS'][0]['TRX_AMOUNT'], '450.00')
+        left = proposals.strip(self.REPLY)
+        self.assertNotIn('}', left); self.assertNotIn('TASKUARY-PROPOSE', left)
+        self.assertIn('Nothing is posted until you approve it.', left)
+
+    def test_it_lands_on_the_task_as_a_pending_review(self):
+        from taskuary import proposals
+        s, _ = setup()
+        s.save_connector({'Type': 'intacct', 'Name': 'Intacct', 'Active': 1, 'Scope': 'read'}, 'o')
+        tid = s.create_task({'Title': 'bills', 'Kind': 'general', 'Status': 'open'}, 'o')
+        got = proposals.collect(s, tid, self.REPLY, 'assistant')
+        self.assertEqual([g['action'] for g in got], ['run_tool'])
+        self.assertEqual(json.loads(s.list_reviews('pending')[0]['DraftText'])['record']['VENDORID'], 'V-TRN')
+
+    def test_a_seed_example_with_placeholders_is_still_skipped_quietly(self):
+        from taskuary import proposals
+        self.assertEqual(proposals.parse('TASKUARY-PROPOSE {"action": "run_tool", "type": "<one of its tools>", ...}'), [])
+
+
+class AFinishedAgentLeavesItsProposalForTheOwnerTests(unittest.TestCase):
+    """The agent's own finish closed the task, and closing supersedes every pending review: the bill it had just
+    proposed was cancelled before the owner saw it (live AP portal run). It now waits on the owner instead."""
+    def finished(self):
+        from taskuary import coder, proposals
+        s, _ = setup()
+        s.save_connector({'Type': 'intacct', 'Name': 'Intacct', 'Active': 1, 'Scope': 'read'}, 'o')
+        tid = s.create_task({'Title': 'bills', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        proposals.collect(s, tid, ANestedBillIsProposedTests.REPLY, 'assistant')
+        coder.finish(s, tid, {'summary': 'one bill proposed'}, None, 'assistant')
+        return s, tid, s.list_reviews('pending')
+
+    def test_the_task_waits_and_the_proposal_stays_pending(self):
+        s, tid, pending = self.finished()
+        self.assertEqual(s.get_task(tid)['Status'], 'waiting')
+        self.assertEqual(len([r for r in pending if r['TaskId'] == tid and r['Kind'] == 'action']), 1)
+
+    def test_answering_the_last_proposal_closes_it_yes_or_no(self):
+        from taskuary import proposals
+        for verb, status in (('reject', 'rejected'), ('approve', 'approved')):
+            s, tid, pending = self.finished()
+            rv = next(r for r in pending if r['TaskId'] == tid and r['Kind'] == 'action')
+            s.decide_review(rv['ReviewId'], status, None, 'owner', '')
+            proposals.settle(s, rv, verb, 'owner')
+            self.assertEqual(s.get_task(tid)['Status'], 'done', verb)
+
+    def test_the_owners_own_done_still_closes_at_once(self):
+        from taskuary import coder, proposals
+        s, _ = setup()
+        tid = s.create_task({'Title': 'bills', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        proposals.collect(s, tid, ANestedBillIsProposedTests.REPLY, 'assistant')
+        coder.finish(s, tid, {'summary': 'x'}, None, 'owner', owner_done=True)
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+
+
 class IntacctNegativeFiltersTests(unittest.TestCase):
     def test_notin_and_notlike_reach_the_gateway(self):
         q = ET.Element('query')

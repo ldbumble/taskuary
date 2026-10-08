@@ -337,7 +337,12 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     due = None if ((keep_open and not mid) or no_reply or owner_done) else proposals.closeout_due(store, task_id)
     # ...and its emails (slots.py): `done` supersedes every pending draft, so a run that leaves some owed waits instead
     from . import slots
-    if not keep_open: store.update_task(task_id, {'Status': 'waiting' if (mid or due or slots.open_(store, task_id)) else 'done'}, actor)
+    # ...and its proposals: `done` supersedes every pending review, so a bill the agent proposed for the owner's yes was
+    # cancelled by the agent's own finish before anyone saw it (the AP portal workflow, live, 2026-10-08). The owner's Mark
+    # done is still the owner's decision and closes as it always did; the last proposal answered closes it (settle).
+    asks = not owner_done and not keep_open and proposals.owed(store, task_id)
+    if asks: store.audit('task', task_id, 'awaits_proposals', actor)
+    if not keep_open: store.update_task(task_id, {'Status': 'waiting' if (mid or due or asks or slots.open_(store, task_id)) else 'done'}, actor)
     # the newest pending review is the one shown first: a merge leads its reply (the reply can then say it is merged),
     # a comment on an issue leads its close - and when a reply carries the comment, the close adds none
     if due and due['action'] == 'close_issue': proposals.closeout(store, task_id, due, '' if mid else resolution_text(rep), actor)
@@ -432,6 +437,8 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
                 from . import selfclose; selfclose.unclaim(store, tid, actor)
         store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
                           + (' The reply to whoever asked is drafted for you to approve.' if fin.get('drafting')
+                             # say what the task IS: a proposal left for the owner keeps it waiting (finish), not done
+                             else ' The task waits for your answer to what the agent proposed.' if close and (store.get_task(tid) or {}).get('Status') == 'waiting'
                              else ' Marked the task done.' if close else ''))
         _ended(store, tid, close, actor)
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [],

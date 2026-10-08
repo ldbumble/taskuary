@@ -20,7 +20,31 @@ import json, re
 from loguru import logger
 
 MARK = 'TASKUARY-PROPOSE'
-BLOCK = re.compile(MARK + r'\s*(\{.*?\})', re.S)
+BLOCK = re.compile(MARK + r'\s*(\{.*?\})', re.S)     # only for cutting junk a decode could not read (strip)
+_DEC = json.JSONDecoder()
+
+
+def spans(text: str):
+    """(start, end, proposal-or-None) for every marker followed by a `{`. DECODED, not matched: a record nests
+    objects ({"record": {"APBILLITEMS": [{...}]}}), and the lazy `{.*?}` this replaced stopped at the FIRST inner
+    brace - every Intacct bill an agent proposed failed to parse and was dropped without a word, leaving a stray
+    `}` in its report (found driving the AP portal workflow live, 2026-10-08). None = a marker nobody can read -
+    still skipped, not reported: the seeds' own examples (`{"type": "<one of its tools>", ...}`) are such markers."""
+    for m in re.finditer(re.escape(MARK) + r'\s*(?=\{)', text or ''):
+        try: obj, end = _DEC.raw_decode(text, m.end())
+        except ValueError: yield m.start(), m.end(), None; continue
+        yield m.start(), end, obj if isinstance(obj, dict) else None
+
+
+def strip(text: str) -> str:
+    """The text with every proposal cut out - whole, nested braces and all - so none of it reaches a report."""
+    text, out, at = text or '', [], 0
+    for a, b, obj in spans(text):
+        if obj is None: continue
+        out.append(text[at:a]); at = b
+    return BLOCK.sub('', ''.join(out) + text[at:])
+
+
 MAX = 5                      # per transcript: a loop proposing 200 pushes is a bug, not intent
 
 # action -> (what it does in words, required keys, the switch that must be ON for it to be
@@ -88,9 +112,8 @@ def _switch_ok(store, name) -> bool:
 def parse(text: str) -> list:
     """Every well-formed proposal in a transcript. Junk is skipped, not guessed at."""
     out = []
-    for m in BLOCK.finditer(text or ''):
-        try: j = json.loads(m.group(1))
-        except ValueError: continue
+    for _, _, j in spans(text):
+        if j is None: continue
         a = str(j.get('action') or '').strip()
         # a merge is the owner's close-out, never an agent's ask - and no agent may mark its own ask as one
         if a in ACTIONS and a != 'merge_pr': out.append({**{k: v for k, v in j.items() if k != 'closeout'}, 'action': a})
@@ -310,7 +333,12 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
         if due and due['action'] == 'merge_pr' and closeout(store, tid, due, _report(store, tid), actor):
             store.update_task(tid, {'Status': 'waiting'}, actor)
         return
-    if _action(rv) not in CLOSEOUT: return
+    if _action(rv) not in CLOSEOUT:
+        # a proposal a finished agent left waiting (coder.finish): once the last one is answered, yes or no, the task ends
+        if (store.get_task(tid) or {}).get('Status') == 'waiting' and not owed(store, tid) and \
+                store._one("SELECT 1 x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='awaits_proposals' LIMIT 1", (tid,)):
+            closed_out(store, tid, actor, 'Every proposal is answered.')
+        return
     if verb not in ('approve', 'edit'):
         store.update_task(tid, {'Status': 'open'}, actor)
         return

@@ -237,3 +237,13 @@ test("a draft waiting under the card holds the move: the bar fills nothing - not
   assert.deepEqual(filled(r), []);
   assert.equal(r.next.tone, "s");
 });
+
+test("how long it has waited on you: owed lanes only, from an hour, in the rail's own bands", async () => {
+  const { waitedText } = await import("../src/funnelPile.js");
+  const now = Date.parse("2026-10-07T12:00:00"), at = (h) => new Date(now - h * 3600e3).toISOString();
+  assert.equal(waitedText({ lane: "blocked", since: at(3) }, now), "waiting 3h");
+  assert.equal(waitedText({ lane: "approve", when: at(50) }, now), "waiting 2d");
+  assert.equal(waitedText({ lane: "approve", when: at(0.2) }, now), "");          // new is not "waiting"
+  assert.equal(waitedText({ lane: "report", when: at(5) }, now), "");             // a report owes nobody
+  assert.equal(waitedText({ lane: "theirs", when: at(5) }, now), "");             // waiting on THEM is not on you
+});

@@ -131,6 +131,23 @@ class SettleTests(unittest.TestCase):
         self.assertEqual(learnedgraph.lines(spent), [])
         self.assertIn('# LEARNED.md', spent)                                      # only the line goes
 
+    def test_what_changed_says_a_merge_and_a_fade_apart_from_a_removal(self):
+        """The history the owner reads (What changed): a line merged into its twin and a line that faded for want of evidence
+        were indistinguishable from a deletion - or, for the merge, not there at all (the row-bot comparison, 2026-10-07)."""
+        s = self.store(50)
+        d = self.doc('- Alex answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01 | k: vendor-mail]',
+                     '- Alex replies to vendors personally. [s:5 | ev: mem2 | seen: 2026-09-04 | k: vendor-mail]',
+                     '- Alex files newsletters. [s:3 | ev: mem4 | seen: 2026-06-01 | k: news]',
+                     '- Alex likes short replies. [s:9 | ev: mem5 | seen: 2026-09-04 | k: short]')
+        out = learn.settle(s, d, d, today='2026-09-05')
+        learnedgraph.record(s, d, out, 'reflect')
+        learnedgraph.record(s, out, out.replace('- Alex likes short replies.', '- REMOVED').replace('k: short]', 'k: gone]'), 'owner')
+        said = {(c['action'], c['text']) for c in learnedgraph.changes(s, days=36500)}
+        self.assertIn(('merged', 'Alex replies to vendors personally.'), said)
+        self.assertIn(('faded', 'Alex files newsletters.'), said)
+        self.assertIn(('deleted', 'Alex likes short replies.'), said)
+        self.assertEqual(learnedgraph.SAYS['faded'], 'Faded - nothing confirmed it for a while')
+
     def test_years_of_silence_cost_a_live_rule_and_an_owner_line_nothing(self):
         d = self.doc('- Alex answers vendors himself. [s:5 | ev: mem1 | seen: 2026-01-01 | k: vendor-mail]',
                      '- Never open a task for payroll.',

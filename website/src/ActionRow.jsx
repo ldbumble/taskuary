@@ -5,7 +5,7 @@ import React, { useState } from "react";
 import { Menu, MenuItem } from "@mui/material";
 import { press, rowOf, useHosted, useRowVerbs } from "./actionRow.js";
 
-export default function ActionRow({ inline = false }) {
+export default function ActionRow({ inline = false, waited = "" }) {
   const { ref, decide, agent, more, next, why } = rowOf(useRowVerbs());
   const hosted = useHosted();
   const [at, setAt] = useState(null);
@@ -31,7 +31,7 @@ export default function ActionRow({ inline = false }) {
                 onClick={(e) => { const a = at; setAt(null); press(v.id, e, a); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
             ))}
           </Menu></>}
-        {ref && <span className="tq-arow-ref" data-tq-row-ref="">{ref}</span>}
+        {ref && <span className="tq-arow-ref" data-tq-row-ref="">{ref}{waited && <span className="waited" data-tq-row-waited=""> · {waited}</span>}</span>}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}
     </div>

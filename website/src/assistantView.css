@@ -187,6 +187,8 @@
 /* the start of the walk on the empty chat: the rows read left to right, whatever the welcome centres */
 .tq-welcome-sum { margin: 6px 0 4px; text-align: left; }
 .tq-welcome-why { display: block; margin: 4px 0; font-size: 12px; color: #7d7468; }
+.tq-welcome-since { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 2px; font-size: 12.5px; color: #6f6a61; }
+.tq-linkish { border: 0; background: none; padding: 0; font: inherit; color: #55697a; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* the day's opener: a card per band, paper and a hairline; the band is the label's DOT, never a tinted card */
 /* ONE ROW, however many bands: auto-fit at 170px held four across 822px, so a fifth band (an agent still working at launch)
    dropped FYI alone under the rest, and the row snapped back to four when that band left (the owner, 2026-10-07). A narrow
@@ -512,6 +514,7 @@
 .tq-arow { display: flex; flex-direction: column; align-items: center; gap: 2px; width: min(980px, 100%); margin: 0 auto 5px; }
 .tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }   /* a narrow screen wraps, still centred */
 .tq-arow-ref { font: 600 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; color: #a09b92; margin-left: 4px; }
+.tq-arow-ref .waited { font: 500 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: 0; color: #6f6a61; }
 .tq-arow-sep { width: 1px; height: 22px; background: #ddd6cb; flex: 0 0 auto; margin: 0 2px; }
 .tq-arow-why { font-size: 11px; line-height: 1.25; color: #8a6d1f; text-align: center; }
 .tq-ab { font: 600 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; min-height: 26px; border-radius: 99px; padding: 0 12px; border: 1px solid #d8d1c5; background: #fff; color: #262521; white-space: nowrap; cursor: pointer; }

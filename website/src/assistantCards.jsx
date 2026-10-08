@@ -876,14 +876,39 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const doc = useFetched(card.tid ? `/api/tasks/${card.tid}` : null, card.presentation_revision);
   const shut = useClose(card, onDone);
   const [back, setBack] = useState(null);
-  if (card.kind === "connection") return (
-    <CardShell card={card} kicker="a connection stopped answering" title={card.title} err={err}>
-      {card.why && <div className="tq-card-excerpt">{card.why}</div>}
-      <Foot verb={<Button size="small" variant="contained" disableElevation sx={primary}
-          onClick={() => { window.location.hash = `connector=${card.channel}`; onNavigate?.("Connections"); }}>Open the connection</Button>}
-        then={<><b>Open the connection</b> takes you to its card; once it answers again this clears by itself. Next puts it down until the error changes.</>} />
-    </CardShell>
-  );
+  if (card.kind === "connection") {
+    // THE FIX ON THE CARD, not a trip to Connections (the row-bot comparison, 2026-10-07): most of these are a server that was down
+    // for a while, and Check again is the whole repair. A Microsoft sign-out is not - that one needs the sign-in, so it leads.
+    const cid = String(card.key || "").split(":")[1], signin = /signed you out/i.test(card.title || "");
+    const openIt = () => { window.location.hash = `connector=${card.channel}`; onNavigate?.("Connections"); };
+    const check = async () => {
+      setBusy("check"); setErr("");
+      try {
+        const { data } = await api.post(`/api/connectors/${cid}/test`);
+        if (data?.ok) onDone?.(`${card.who || "The connection"} answers again - that row is gone.`);
+        else {
+          setErr(`Still not answering: ${data?.detail || "no reason given"}`);
+          // ...and the error you are reading NOW is the one you have seen: a changed error counts as new (its sig), so without
+          // this the very next Next brought the same card straight back under its new words
+          await api.post("/api/funnel/settle", { key: card.key, verb: "surfaced", read: true }).catch(() => {});
+        }
+      } catch (e) { setErr(errText(e)); }
+      setBusy("");
+    };
+    return (
+      <CardShell card={card} kicker="a connection stopped answering" title={card.title} err={err}>
+        {card.why && <div className="tq-card-excerpt">{card.why}</div>}
+        {/* Check again IS the walk's own "Test it" chip, answered on the card at once - so the chip steps aside (the phone keeps it) */}
+        <Foot covers={["test_connection"]} verb={signin
+          ? <Button size="small" variant="contained" disableElevation sx={primary} onClick={openIt}>Sign in again</Button>
+          : <>{cid && <Button size="small" variant="contained" disableElevation sx={primary} disabled={!!busy} onClick={check}>
+                {busy === "check" ? "Checking…" : "Check again"}</Button>}
+              <Button size="small" variant="outlined" sx={quiet} onClick={openIt}>Open the connection</Button></>}
+          then={signin ? <><b>Sign in again</b> opens its card; once you are signed in this clears by itself.</>
+            : <><b>Check again</b> tests it now - if it answers, this row clears. <b>Open the connection</b> when it needs a new password or key.</>} />
+      </CardShell>
+    );
+  }
   const own = card.kind === "todo" || card.channel === "own";
   // WORK YOU STARTED has nobody behind it (the owner, 2026-09-28: "the cards of tasks I started looked wrong"): no
   // reply to yourself, no "not ours", and a New task - no message at all - still gets its button

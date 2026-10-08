@@ -18,7 +18,7 @@ What the doc does NOT keep is history: a line that lost a point or died simply c
 exact verdict that demoted or deleted a line - the thing discussion #27 asked for.
 """
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 TAG = re.compile(r'^\s*[-*] (?P<text>.*?)\s*\[s:(?P<s>\d+) \| ev: (?P<ev>[^|\]]*)\| seen: (?P<seen>[^|\]]*?)(?: \| k: (?P<k>[^|\]]*?))?\s*\]\s*$')
 HEADER = re.compile(r'^## (.+?)\s*$')
@@ -114,8 +114,11 @@ def record(store, old_doc: str, new_doc: str, actor: str = 'learn'):
                 act = ('promoted' if l['status'] == 'live' and o['status'] != 'live' else
                        'demoted' if l['score'] < o['score'] else 'strengthened')
                 store.add_learned_event(k, l['text'], l['status'], l['score'], ','.join(new_ev), act, actor)
+        # a line that went because nothing confirmed it for long enough FADED (learn.settle drops it at effective 0); one that was
+        # simply removed - by the owner, or by a reflection that rewrote it away - was deleted. The history says which.
+        log = reflect_log(store)
         for k, o in before.items():
-            if k not in after: store.add_learned_event(k, o['text'], o['status'], 0, '', 'deleted', actor)
+            if k not in after: store.add_learned_event(k, o['text'], o['status'], 0, '', 'faded' if effective(o, log) <= 0 else 'deleted', actor)
     except Exception:
         pass
 
@@ -193,3 +196,18 @@ def soul_rules(store, limit: int = 5) -> list:
         if header.lower().startswith(('connected', 'repository')): continue
         if raw.strip().startswith('- ') and len(out) < limit: out.append({'section': header, 'text': raw.strip()[2:].strip()[:160]})
     return out
+
+
+# WHAT CHANGED, as sentences (the LEARNED.md "What changed" view): the history the Visualize chart draws as dots, read as a list -
+# what was learned, what grew stronger, what merged into what, what faded for want of evidence (the row-bot comparison, 2026-10-07)
+SAYS = {'born': 'New guess', 'strengthened': 'Seen again', 'promoted': 'Now a rule', 'demoted': 'Weaker',
+        'merged': 'Merged into a line that says the same', 'faded': 'Faded - nothing confirmed it for a while', 'deleted': 'Removed'}
+
+
+def changes(store, days: int = 30) -> list:
+    """The history of the last `days`, newest first: [{at, action, says, text, status, score}]."""
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    rows = [h for h in store.learned_history() if str(h.get('At') or '') >= since]
+    return [{'at': h['At'], 'action': h['Action'], 'says': SAYS.get(h['Action'], h['Action']), 'text': h['Text'],
+             'status': h['Status'], 'score': h['Score']} for h in reversed(rows)]
+

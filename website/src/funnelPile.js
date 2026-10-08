@@ -339,6 +339,16 @@ export const railAge = (iso, now = Date.now()) => {
   return `${Math.floor(a / 1440)}d`;
 };
 
+// HOW LONG IT HAS WAITED ON YOU, beside the item's ref on the action row: the rail's gutter says it per row, but the eye is on the
+// buttons when deciding, and an old ask looked the same there as a new one (the row-bot comparison, 2026-10-07). Only the lanes that
+// owe the owner something, and only once it is an hour old - under that it is simply new, and saying so is noise.
+const OWED = new Set(["blocked", "approve", "asked", "yours"]);
+export const waitedText = (item, now = Date.now()) => {
+  if (!item || !OWED.has(item.lane)) return "";
+  const a = railAge(item.since || item.when, now);
+  return !a || a.startsWith("<") || a.startsWith("in ") ? "" : `waiting ${a}`;
+};
+
 // ...and the same age as a SENTENCE. `ageText` answers "how far", which is why four cards appended
 // " ago" to it and read "now ago" on anything under two minutes - and "in 3 min ago" on a stamp the
 // server clocked a moment ahead of the browser (2026-09-10 audit).

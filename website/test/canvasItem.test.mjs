@@ -94,7 +94,7 @@ test("a task's Next is the row's button: registered by the view, drawn above the
   assert.match(item, /useVerbs\("next", \[\{ id: "next", group: "next", label: "Next", disabled: !!busy, run: \(\) => onNext\(\)/);
   assert.doesNotMatch(item, /data-tq-next/);
   assert.match(src("ActionRow.jsx"), /data-tq-next=""/);
-  assert.match(view, /<ActionRow \/>/);
+  assert.match(view, /<ActionRow waited=\{currentItem\?\.ref \? waitedText\(currentItem\) : ""\} \/>/);   // ...carrying how long it has waited (2026-10-07)
   assert.doesNotMatch(src("TaskPage.jsx"), /data-tq-next/);
 });
 

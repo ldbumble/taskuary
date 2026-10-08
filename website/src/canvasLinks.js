@@ -22,6 +22,8 @@ export function canvasRequestFromHash(hash, n = 0) {
   }
   // the connector's own card reads the hash when it loads (ConnectorsView), so the link opens its detail in place
   if (/^#(?:connector=|cli-agents)/.test(h)) return { kind: "browse", area: "connections", state: {}, n };
+  // one document, and the view to open it on (the opening screen's "learned this week" -> LEARNED.md, What changed)
+  if ((m = /^#settings=docs&doc=(\w+)(?:&view=(\w+))?/.exec(h))) return { kind: "browse", area: "settings", state: { section: "docs", open: `d:${m[1]}`, ...(m[2] ? { view: m[2] } : {}) }, n };
   if ((m = /^#settings=([^&]*)(?:&group=([^&]*))?/.exec(h))) {
     const page = decodeURIComponent(m[1] || "config") || "config", group = m[2] ? decodeURIComponent(m[2]) : "";
     // Profiles and Playbooks are sections of their own now (2107f0d2): their link opens that section's list, where it fell to the

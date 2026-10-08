@@ -3252,7 +3252,7 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
     ses = start_session(store, task_id, body.agent, body.model)
     return {'released': True, 'session': ses}
 
-class AgentDoneBody(BaseModel): task_id: int; summary: str = ''; agent: str = 'agent'
+class AgentDoneBody(BaseModel): task_id: int; summary: str = ''; agent: str = 'agent'; no_reply: bool = False
 
 def _own_task_only(request: Request, tid: int):
     """One agent token is shared by every session, so the allow list alone let any of them draft or
@@ -3273,7 +3273,7 @@ def agent_done(body: AgentDoneBody, request: Request):
     from . import selfclose
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return selfclose.declare(store, body.task_id, body.summary, body.agent)
+    return selfclose.declare(store, body.task_id, body.summary, body.agent, no_reply=body.no_reply)
 
 class AgentFile(BaseModel): name: str; data: str                  # data is base64: the CLI reads the file, the server never opens a path it is handed
 class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []

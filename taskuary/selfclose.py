@@ -142,7 +142,7 @@ def forget(tid: int) -> None:
 OWNER_ENDS = 'the owner opened this session, so they complete the task - your summary is filed on it for them'
 
 
-def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
+def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: bool = False) -> dict:
     """The agent ran `taskuary --done`. It said so, so no judge is consulted - only the gates that stop
     a double close or a task already shut, and the task's own say. A `stay:open` task is the owner's
     to complete: the agent's sentence is filed as a comment and nothing closes (the owner, 2026-09-25 -
@@ -161,8 +161,12 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     result = _finished(store, tid, term.session_for(tid), line)
     store.add_comment(tid, agent, 'agent',
-                      f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
-    return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else ''), result)
+                      (f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
+                      # NO REPLY IS THE AGENT'S CALL TO MAKE, said where the owner reads it (the owner, 2026-10-08: "allow done with
+                      # no reply") - told "not ours, don't answer", --done could only draft the reply anyway
+                      + (' It says no reply is owed, so none was drafted.' if no_reply else ''))
+    return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else '')
+                 + (' (no reply owed)' if no_reply else ''), result, no_reply=no_reply)
 
 
 def _finished(store, tid: int, s, line: str) -> str:
@@ -181,14 +185,20 @@ def _finished(store, tid: int, s, line: str) -> str:
         logger.debug(f'finished event skipped: {e}'); return line
 
 
-def _wrap(store, tid: int, agent: str, why: str, final_message: str = '') -> dict:
+def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_reply: bool = False) -> dict:
     """The same ending the Done button gets. A failure here must not take the hook (or the CLI)
     with it, and it must not leave the task looking closed when it is not - so the mark is
     dropped and the reason is written where the owner reads it."""
     from . import coder
     from .store import task_ref
     try:
-        out = coder.wrap(store, tid, close=True, actor=agent or 'coder', final_message=final_message)
+        out = coder.wrap(store, tid, close=True, actor=agent or 'coder', final_message=final_message, no_reply=no_reply)
+        # ...and a reply already waiting (triage's early draft, one the agent saved) goes down with it: nobody hears back
+        if no_reply:
+            for rv in (store.pending_review(tid, 'draft_reply', live_only=False), store.pending_review(tid, 'draft', live_only=False),
+                       store.held_review(tid)):
+                if rv and rv.get('Status') in ('pending', 'held'):
+                    store.decide_review(rv['ReviewId'], 'no_reply', None, agent or 'coder', 'the agent said no reply is owed')
     except Exception as e:
         forget(tid)
         logger.warning(f'self-close failed for task {tid}: {e}')
@@ -210,7 +220,8 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '') -> dic
 # 1024 bytes, so the WHOLE rule lives in CODER.md (which rides in as RULES) and this is only the
 # part that must survive a blanked document: the command, and what pressing it does.
 SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it. '
-             'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and drafts the reply unless you saved one.')
+             'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and drafts the reply unless you saved one; '
+             'add `--no-reply` when nobody should hear back.')
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
 # agent must NOT do is end it. Said in the prompt, because CODER.md's finishing rules say the
 # reverse and an agent reading both without this line picks the one with a command in it. It says

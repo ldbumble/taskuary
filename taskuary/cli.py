@@ -137,6 +137,9 @@ def main():
                          'this transcript, and draft the reply the sender gets (you are not '
                          'sending it - the owner approves it). Give one sentence on what you did '
                          'or found. Do not run this while waiting on the owner.')
+    ap.add_argument('--no-reply', action='store_true',
+                    help='with --done: nobody should hear back (the owner said not to answer, or there is nothing '
+                         'for the sender) - the task closes with no reply drafted, and your sentence says why'),
     ap.add_argument('--reply', metavar='TEXT',
                     help="write the reply the person who asked will get, in your own words - it becomes this "
                          "task's pending reply for the owner to approve (you are not sending it), and "
@@ -215,7 +218,7 @@ def main():
         hdr = _session_headers(srv)
         try:
             r = requests.post(f'{base}/api/agent/done', timeout=120, headers=hdr,
-                              json={'task_id': int(tid), 'summary': args.done,
+                              json={'task_id': int(tid), 'summary': args.done, 'no_reply': bool(args.no_reply),
                                     'agent': os.environ.get('TASKUARY_AGENT') or 'agent'})
             out = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
         except Exception as e:
@@ -223,7 +226,7 @@ def main():
         if out.get('closed'):
             print('task closed. Report filed from this session.'
                   + (' A reply to the sender is drafted and waiting on the owner.' if out.get('drafting')
-                     else ' No reply was needed.'))
+                     else ' No reply drafted, as you said.' if args.no_reply else ' No reply was needed.'))
         elif out.get('held'):
             print('noted, not closed: the owner opened this session to work in, so they end it. Your summary is on '
                   'the task and they have been told; stay at the prompt in case they have more.')

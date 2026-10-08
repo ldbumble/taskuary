@@ -41,6 +41,7 @@ coding-specific ones on top. The task brief in your prompt is your context and y
 - When the work is over, say so plainly with `taskuary --done "<one sentence>"`: Taskuary saves the
   result, writes the report from the session and drafts any reply for John to approve - unless you
   wrote the reply yourself with `taskuary --reply "<text>"`, which is kept as you wrote it. A file it
-  promises rides only if you add `--attach <path>`.
+  promises rides only if you add `--attach <path>`. When nobody should hear back - John said not to answer, or there
+  is nothing for the sender - add `--no-reply`: the task closes with no reply drafted.
 - "Nothing to do here" is also an ending - say it. Never close on an open question; a session
   John opened is theirs to end.

@@ -87,7 +87,9 @@ def parse_table(name: str, data: bytes, cfg: dict) -> list:
         wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
         ws = wb[cfg['sheet']] if cfg.get('sheet') else wb.active
         it = ws.iter_rows(values_only=True)
-        head = [str(h) if h is not None else f'col{i}' for i, h in enumerate(next(it, []) or [])]
+        from .sheets import _heads
+        first = next(it, []) or []
+        head = _heads(['' if h is None else h for h in first], len(first))
         rows = [dict(zip(head, [('' if v is None else v) for v in r])) for r in it]
         wb.close(); return rows
     text = data.decode('utf-8', errors='replace')

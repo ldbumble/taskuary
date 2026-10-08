@@ -643,7 +643,9 @@ def run_local_file(cfg):
         wb = load_workbook(p, read_only=True, data_only=True)      # data_only: values, not formulae
         ws = wb[cfg['sheet']] if cfg.get('sheet') else wb.active
         it = ws.iter_rows(values_only=True)
-        head = [str(h) if h is not None else f'col{i}' for i, h in enumerate(next(it, []) or [])]
+        from .sheets import _heads
+        first = next(it, []) or []
+        head = _heads(['' if h is None else h for h in first], len(first))
         rows = [dict(zip(head, [('' if v is None else v) for v in r])) for r in it]
         wb.close()
         return rows_out(rows, lim, unit=f'rows from {p.name}', mine=mine)

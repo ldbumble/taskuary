@@ -44,6 +44,35 @@ const NAMES = Object.keys(DOCS);
 // than being retyped beside the sidebar that lists it.
 export const OPERATOR_DOCS = NAMES.map((n) => ({ name: n, label: DOCS[n].label, blurb: DOCS[n].blurb }));
 
+// WHAT CHANGED IN LEARNED.md, newest first: every line it learned, strengthened, merged into another, or let fade for want of
+// evidence - the history the Visualize chart draws as dots, as a list you can read (the row-bot comparison, 2026-10-07)
+function LearnedChanges() {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.get("/api/learned/changes").then(({ data }) => live && setRows(data.data || [])).catch(() => live && setRows([]));
+    return () => { live = false; };
+  }, []);
+  if (rows === null) return <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={20} /></Box>;
+  if (!rows.length) return <Typography sx={{ color: FAINT, fontSize: 13, py: 3 }}>Nothing changed in the last 30 days.</Typography>;
+  const day = (at) => new Date(String(at).replace(" ", "T")).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return (
+    <Box sx={{ overflow: "auto", flex: 1, minHeight: 0 }} data-tq-learned-changes="">
+      <Typography sx={{ color: FAINT, fontSize: 12, mb: 1 }}>The last 30 days. Lines fade when nothing confirms them for a while; ones that say the same thing are merged.</Typography>
+      {rows.map((r, i) => (
+        <Box key={i} sx={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 1.25, py: 0.85, borderTop: i ? "1px solid #eee8e0" : "none" }}>
+          <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.2 }}>{day(r.at)}</Typography>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#55697a" }}>{r.says}</Typography>
+            <Typography sx={{ fontSize: 13, color: INK, textDecoration: ["faded", "deleted"].includes(r.action) ? "line-through" : "none",
+              textDecorationColor: "#c9c1b6" }}>{r.text}</Typography>
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 // The Assistant, and the gates a message passes in order. Shipped markdown (templates/how-it-works.md),
 // read-only: it describes what the code does, so it is reference rather than an operator document -
 // editing it would only make the description wrong (the owner, 2026-09-03: "add section in the /docs
@@ -286,7 +315,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   // navigation - nothing in the page header, like every other settings page - so a click there is
   // what moves the document. An `action` entry (New playbook, Manage profiles, Import skills)
   // arrives down the same channel, because the shelf those buttons lived on is gone.
-  const selKey = sel ? `${sel.action || ""}|${sel.group || ""}|${sel.doc || ""}|${sel.n || ""}` : "";
+  const selKey = sel ? `${sel.action || ""}|${sel.group || ""}|${sel.doc || ""}|${sel.n || ""}|${sel.view || ""}` : "";
   useEffect(() => {
     if (!sel) return;
     const { action, group, doc } = sel;
@@ -295,7 +324,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     if (action === "new-playbook") { setSection("playbooks"); setNewPlaybook({ connectorType: "" }); return; }
     if (group === "profiles" && doc) { openProf(doc); return; }
     if (group === "playbooks" && doc) { openPb(doc); return; }
-    if (doc) { setSection("documents"); setDocName(doc); return; }
+    // ...and a link can name the VIEW too: the opening screen's "learned this week" lands on LEARNED.md's What changed
+    if (doc) { setSection("documents"); setDocName(doc); if (sel.view) setView(sel.view); return; }
     // a group with no document named: the rail's own header, which behaves like the tab it replaced
     if (group) chooseSection(group);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -592,8 +622,9 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
               }}>{genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}</Button>
           )}
           {docName === "learned" && (
-            <Box sx={{ display: "flex", border: "1px solid #e1dcd5", borderRadius: 99, overflow: "hidden", fontSize: 11.5, fontWeight: 600, alignSelf: "center" }}>
-              {[["text", "Text"], ["viz", "Visualize"]].map(([k, label]) => (
+            <Box sx={{ display: "flex", border: "1px solid #e1dcd5", borderRadius: 99, overflow: "hidden", fontSize: 11.5, fontWeight: 600, alignSelf: "center",
+              flexShrink: 0, whiteSpace: "nowrap" }}>
+              {[["text", "Text"], ["changes", "What changed"], ["viz", "Visualize"]].map(([k, label]) => (
                 <Box key={k} onClick={() => setView(k)} sx={{ px: 1.5, py: 0.55, cursor: "pointer",
                   color: view === k ? "#fff" : "#4d4a43", background: view === k ? "linear-gradient(90deg, #55697a, #7d9a7c)" : "#fffdfb" }}>{label}</Box>
               ))}
@@ -667,7 +698,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             </Box>
           </Box>
         )}
-        {docName === "learned" && view === "viz" ? <LearnedView onChanged={load} /> : (
+        {docName === "learned" && view === "viz" ? <LearnedView onChanged={load} />
+          : docName === "learned" && view === "changes" ? <LearnedChanges /> : (
         /* It FILLS what is left of the column and scrolls inside itself. minRows 22/maxRows 40 sized
            the field to the DOCUMENT, so SOUL.md pushed the footer - and the whole left column with
            it - past the bottom of the screen. minRows stays as the floor for the stacked phone

@@ -113,6 +113,11 @@ def settle(store, old_doc: str, doc: str, today: str = None) -> str:
         prev = kept.get(l['key'])
         if prev is None:
             kept[l['key']] = dict(l, _at=len(out)); out.append(raw); continue
+        # ...and the merge is SAID, in the history the owner can read (What changed): a line that vanished into another
+        # was invisible there, since its key lived on (the row-bot comparison, 2026-10-07)
+        if l['text'] != prev['text']:
+            try: store.add_learned_event(l['key'], l['text'], l['status'], l['score'], ','.join(l['ev']), 'merged', 'settle')
+            except Exception as e: logger.debug(f'learn: the merge went unrecorded - {e}')
         prev['score'] = max(prev['score'], l['score'])                    # the stronger of two claims about one pattern
         prev['ev'] += [e for e in l['ev'] if e not in prev['ev']]
         prev['seen'] = max(prev['seen'], l['seen'])

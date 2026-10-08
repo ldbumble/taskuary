@@ -45,7 +45,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
-import { coveredByReload, heldSince } from "./funnelPile.js";
+import { coveredByReload, heldSince, waitedText } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { BriefCard, CardNav, DayCards, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
@@ -115,6 +115,27 @@ export const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `re
 // ── the pipe: the top of the rail ────────────────────────────────────────────────────────────
 // An assistant that has just woken up says hello like one (the owner, 2026-09-04: "it should be
 // good morning/afternoon or whatever it is and should say how can i help").
+// WHAT ALREADY HAPPENED, under the tiles that say what waits (the row-bot comparison, 2026-10-07): the mail read and filed,
+// the reports that ran, the agents that finished, and what was learned this week - counted on the server, no model, so the
+// opening screen never waits on one. Nothing to say says nothing.
+function SinceLines() {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.get("/api/since").then(({ data }) => live && setD(data)).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const night = d?.overnight?.line, learned = d?.learned;
+  if (!night && !learned?.line) return null;
+  return (
+    <div className="tq-welcome-since" data-tq-since="">
+      {night && <span>{night}</span>}
+      {learned?.line && <span title={learned.latest ? `Latest: ${learned.latest}` : undefined}>{learned.line}{" "}
+        <button type="button" className="tq-linkish" onClick={() => { window.location.hash = "settings=docs&doc=learned&view=changes"; }}>See what changed</button></span>}
+    </div>
+  );
+}
+
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -1918,6 +1939,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               <div className="tq-welcome-sum"><TodayMeetingsStrip /></div>
               {items.length ? <DayCards groups={summarize(railPile?.items || items).groups} onSection={walkSection} />
                 : <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
+              <SinceLines />
               {/* greyed with no reason read as broken: say why, and where the rows are */}
               {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
                 Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
@@ -2009,7 +2031,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <RetryVerbs item={currentItem} failed={(pile?.items || []).filter((i) => i.lane === "unjudged").length}
             onSaid={(text, status) => setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: status || "done", text }])}
             onDone={() => loadPile(true)} />
-          <ActionRow />
+          <ActionRow waited={currentItem?.ref ? waitedText(currentItem) : ""} />
           <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
           <div className="tq-compose-box">
             <AttachImage pics={pics} sx={{ color: DIM }} />

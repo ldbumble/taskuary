@@ -30,11 +30,12 @@ is worse than none: an agent runs as the same operating-system user as Taskuary,
 run `curl` without the token and be treated as the owner unless a token is configured. Two
 things follow. First, set [server].token - `ensure_tokens` writes one on first run and the
 browser is handed it, so this costs the owner nothing and closes the anonymous door. Second,
-real credential isolation needs the secrets out of the database and behind the OS keychain
-(DPAPI on Windows, Keychain on macOS) with only a separate sender able to decrypt them; that is
-not built, and until it is, an agent that goes looking for the file can find the keys. What IS
-built is that no prompt, no API response and no tool result ever hands them over, and that the
-one road from "an agent wants this sent" to "it is sent" runs through a person.
+the connector secrets are SEALED in the database now (vault.py: DPAPI on Windows, the keychain
+elsewhere), so the file alone - a copy, a backup - no longer carries the keys. That is not
+isolation: DPAPI opens for any program running as this user, an agent included. Real isolation
+needs a separate sender that alone can decrypt them; that is not built. What IS built is that no
+prompt, no API response and no tool result ever hands them over, and that the one road from "an
+agent wants this sent" to "it is sent" runs through a person.
 """
 import hashlib
 import hmac

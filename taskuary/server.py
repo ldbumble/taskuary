@@ -4606,6 +4606,10 @@ def connector_test(cid: int):
     if not store.get_connector(cid): raise HTTPException(404, 'connector not found')
     out = test_connector(store, cid)
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
+    # the test rewrote LastError, which the rail does not count as a change (touch_connector): without this the pile kept the old
+    # error, Next put the row down under it, and the new one raised it again the moment Next was pressed (the card's Check again)
+    from . import funnel
+    funnel.invalidate()
     return out
 
 # ── Voice (taskuary/voice.py): speech to text for the funnel and for the prompt box ──
@@ -5938,6 +5942,17 @@ def learned_graph():
     """LEARNED.md as a picture: lines, the verdicts that fed them, each line's score over time,
     the lines that died - the Docs section's Visualize view (discussion #27)."""
     return learnedgraph.graph(store)
+
+@app.get('/api/since')
+def since_summary():
+    """The opening screen's two lines: what happened since last night, and what was learned this week (since.py - no model)."""
+    from . import since
+    return since.summary(store)
+
+@app.get('/api/learned/changes')
+def learned_changes(days: int = 30):
+    """LEARNED.md's history as a list - what it learned, merged and let fade - the Docs section's What changed view."""
+    return {'data': learnedgraph.changes(store, max(1, min(days, 365)))}
 
 class AdoptBody(BaseModel): key: str
 

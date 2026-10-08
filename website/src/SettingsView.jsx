@@ -1078,6 +1078,15 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     goTo(m[1], (SECTIONS[m[1]] || []).includes(want) ? want : "");
   }, [goTo]);
 
+  // A LINK TO ONE DOCUMENT (canvasLinks: #settings=docs&doc=learned&view=changes) opens it the way its card would - the
+  // browse state names the card, and the document it stands for is picked here, before the detail draws it
+  const linked = browse && /^d:/.test(String(browseState?.open || "")) ? `${browseState.open}|${browseState.view || ""}` : "";
+  useEffect(() => {
+    if (!linked) return;
+    const [doc, view] = [linked.split("|")[0].slice(2), linked.split("|")[1]];
+    setDocSel({ group: "documents", doc, ...(view ? { view } : {}) });
+  }, [linked]);
+
   if (browse) {
     // a page or a group this install does not have (an old link) opens the list, and says why - never a crash or a blank card
     // PROFILES AND PLAYBOOKS ARE SECTIONS OF THEIR OWN up here, beside Docs - not shelves inside it (the owner, 2026-10-07: "separate

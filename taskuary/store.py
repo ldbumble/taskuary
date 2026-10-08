@@ -5,6 +5,7 @@ the audit log is a Buzz-style tamper-evident hash chain (each row hashes the pre
 import contextlib, copy, hashlib, json, os, re, sqlite3, threading, uuid
 from datetime import datetime, timedelta
 from loguru import logger
+from . import vault
 
 _LIVE_UNSET = object()
 _POLL_UNSET = object()
@@ -1067,6 +1068,10 @@ class SQLiteStore:
                 self.cx.execute('UPDATE connector SET Roles=? WHERE Type=? AND Roles IS NULL', (r, t))
             # Product rename without touching a name the owner customised.
             self.cx.execute("UPDATE connector SET Name='Company Hub' WHERE Type='handbook' AND Name='Company handbook'")
+            # SECRETS ARE SEALED (vault.py): a database from before kept them as text - seal those in place, once each
+            for cid, sec in self.cx.execute("SELECT ConnectorId, Secret FROM connector WHERE Secret IS NOT NULL AND Secret != '' "
+                                            "AND Secret NOT LIKE 'vault:%'").fetchall():
+                if vault.sealed(new := vault.seal(sec)): self.cx.execute('UPDATE connector SET Secret=? WHERE ConnectorId=?', (new, cid))
             # The handbook ships ON - handbook.enabled has said so since it was written - but its
             # card is seeded like every other, at Active 0, and enabled() reads the card when one
             # exists. So the feature was off on every install that ever ran: coder.wrap skipped
@@ -1437,7 +1442,8 @@ class SQLiteStore:
                 current = json.loads(row['ConfigJson']) if row.get('ConfigJson') else {}
                 if not isinstance(current, dict):
                     raise ValueError('poll checkpoint requires an object ConfigJson')
-                if (any(row[k] != value for k, value in fields.items()) or
+                # a caller holds the secret OPENED (get_connector with_secret); the column holds it sealed (vault.py)
+                if (any((vault.unseal(row[k]) if k == 'Secret' else row[k]) != value for k, value in fields.items()) or
                         any(current.get(k) != value for k, value in expected.items())):
                     self.cx.rollback()
                     return False
@@ -4414,17 +4420,28 @@ class SQLiteStore:
     # channel connectors (secrets are write-only: list/get never return them)
     _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, LastSyncAt, LastError, LastErrorAt, (Secret IS NOT NULL AND Secret != '') HasSecret"
     def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
+    @staticmethod
+    def _opened(r):
+        """A with_secret row carries the secret itself: the column holds it sealed (vault.py)."""
+        if r and r.get('Secret'): r['Secret'] = vault.unseal(r['Secret'])
+        return r
     def get_connector(self, cid, with_secret=False):
-        return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
+        r = self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
+        return self._opened(r) if with_secret else r
     def connectors_by_type(self, ctype, with_secret=False):
-        return self._rows(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector "
+        rows = self._rows(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector "
                           'WHERE Type=? ORDER BY Active DESC, ConnectorId', (ctype,))
+        return [self._opened(r) for r in rows] if with_secret else rows
     def get_connector_by_type(self, ctype, with_secret=False):
         """Compatibility/default lookup for code that needs one connection: prefer an active
         instance, then the original catalog row. Instance-aware paths use ConnectorId."""
         rows = self.connectors_by_type(ctype, with_secret)
         return rows[0] if rows else None
     def save_connector(self, fields, actor):
+        if fields.get('Secret'):
+            old = (self._one('SELECT Secret FROM connector WHERE ConnectorId=?', (fields['ConnectorId'],)) or {}).get('Secret')                 if fields.get('ConnectorId') else None
+            fields = {**fields, 'Secret': vault.seal(fields['Secret'])}
+            if old and old != fields['Secret']: vault.forget(old)
         cid = fields.get('ConnectorId')
         cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope') if c in fields and fields[c] is not None]
         if cid:
@@ -4434,6 +4451,7 @@ class SQLiteStore:
         return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope'))
     def reset_connector(self, cid):
         """'Remove connection': wipe creds/config/test state, deactivate it and its sources."""
+        vault.forget((self._one('SELECT Secret FROM connector WHERE ConnectorId=?', (cid,)) or {}).get('Secret'))
         self._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL, Scope=NULL WHERE ConnectorId=?', (cid,))
         self._exec('UPDATE source SET Active=0 WHERE ConnectorId=?', (cid,))
     def set_connector_config(self, cid, cfg: dict):

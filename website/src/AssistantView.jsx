@@ -142,7 +142,7 @@ function SinceBlock({ onOpen }) {
   const counts = [[o.mail, "came in"], [o.reports, o.reports === 1 ? "report ran" : "reports ran"],
     [o.sessions, o.sessions === 1 ? "agent finished" : "agents finished"], [o.closed, o.closed === 1 ? "task closed" : "tasks closed"]]
     .filter(([n]) => n).map(([n, w]) => `${n} ${w}`).join(" · ");
-  if (!counts && !cards.length && !dg.at) return null;
+  if (!counts && !cards.length && !dg.at && !d?.learned?.line) return null;
   return (
     <div className="tq-since" data-tq-since="">
       <div className="tq-since-head"><span className="tq-day-h" style={{ margin: 0 }}>Since last night · 6 PM</span>{counts && <span>{counts}</span>}</div>
@@ -153,6 +153,12 @@ function SinceBlock({ onOpen }) {
             <span className="lbl"><i />{c.label}</span><span className="txt">{c.text}</span>
           </button>
         ))}
+      </div>}
+      {/* WHAT WAS LEARNED - the memory - always its own line, never squeezed out of the cards (2026-10-08: "did you remove the memory section?") */}
+      {d?.learned?.line && <div className="tq-since-digest" data-tq-learned="">
+        <span className="tag" style={{ color: "#6e685f" }}>MEMORY</span>
+        <span title={d.learned.latest ? `Latest: ${d.learned.latest}` : undefined}>{d.learned.line}</span>
+        <button type="button" className="tq-linkish" onClick={() => { window.location.hash = "settings=docs&doc=learned&view=changes"; }}>See what changed</button>
       </div>}
       {dg.source_id && <div className="tq-since-digest" data-tq-digest="">
         <span className="tag">MORNING DIGEST</span>

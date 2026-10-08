@@ -1077,7 +1077,7 @@ class GeneralSession:
             if proposals.MARK in reply and self.store.get_setting('proposals_enabled', '1') == '1':
                 try: proposals.collect(self.store, self.task_id, reply, 'assistant')
                 except Exception as e: logger.warning(f'proposal collection failed for task {self.task_id}: {e}')
-                reply = proposals.BLOCK.sub('', reply).strip() or 'Proposed - it waits on the task for your yes.'
+                reply = proposals.strip(reply).strip() or 'Proposed - it waits on the task for your yes.'
             reply, closing = selfclose.chat_marker(reply)
             reply, asks = selfclose.ask_markers(reply)
             asked = asks[0][0] if asks else None

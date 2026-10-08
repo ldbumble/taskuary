@@ -1024,7 +1024,7 @@ export function DayCards({ groups, onSection }) {
 // No meetings: the waiting side alone; nothing waiting: the meetings alone; neither: nothing.
 const atLocal = (s) => new Date(String(s).replace(" ", "T")).getTime();
 const firstNames = (who = []) => who.slice(0, 2).map((w) => String(w).split(/[ @]/)[0]).join(", ") + (who.length > 2 ? ` +${who.length - 2}` : "");
-export function DayOpener({ groups = [], onSection }) {
+export function DayOpener({ groups = [], onSection, top = null }) {
   const today = useCalendarToday();
   const [, tick] = useState(0);
   useEffect(() => { const id = setInterval(() => tick((v) => v + 1), 60000); return () => clearInterval(id); }, []);
@@ -1033,7 +1033,7 @@ export function DayOpener({ groups = [], onSection }) {
   // the now line sits between what is behind you and what is ahead - not above a day that has not started
   const nowAt = next === -1 ? (evs.length ? evs.length : -1) : next > 0 ? next : -1;
   const total = groups.reduce((n, g) => n + (g.n ?? g.rows.length), 0);
-  if (!all.length && !groups.length) return null;
+  if (!all.length && !groups.length && !top) return null;
   const line = (e, i) => {
     const end = e.end ? atLocal(e.end) : atLocal(e.start) + 30 * 60000, past = end < now, live = !past && atLocal(e.start) <= now;
     return (
@@ -1043,8 +1043,11 @@ export function DayOpener({ groups = [], onSection }) {
       </div>
     );
   };
+  // ...and what CHANGED while you were away rides on top of the same card (SinceBlock - the owner picked "A +", 2026-10-08)
   return (
-    <div className={`tq-day${all.length && groups.length ? "" : " solo"}`}>
+    <div className="tq-day-box">
+    {top}
+    {(!!all.length || !!groups.length) && <div className={`tq-day${all.length && groups.length ? "" : " solo"}`}>
       {!!all.length && (
         <div className="tq-day-agenda">
           <div className="tq-day-h">Your day · {evs.length} meeting{evs.length === 1 ? "" : "s"}</div>
@@ -1068,6 +1071,7 @@ export function DayOpener({ groups = [], onSection }) {
           ))}
         </div>
       )}
+    </div>}
     </div>
   );
 }

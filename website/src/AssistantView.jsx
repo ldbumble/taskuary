@@ -48,6 +48,7 @@ import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentio
 import { coveredByReload, heldSince, waitedText } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
+import DigestText from "./DigestText.jsx";
 import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
@@ -117,20 +118,51 @@ export const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `re
 // WHAT ALREADY HAPPENED, under the tiles that say what waits (the row-bot comparison, 2026-10-07): the mail read and filed,
 // the reports that ran, the agents that finished, and what was learned this week - counted on the server, no model, so the
 // opening screen never waits on one. Nothing to say says nothing.
-function SinceLines() {
+function SinceBlock({ onOpen }) {
   const [d, setD] = useState(null);
-  useEffect(() => {
-    let live = true;
-    api.get("/api/since").then(({ data }) => live && setD(data)).catch(() => {});
-    return () => { live = false; };
-  }, []);
-  const night = d?.overnight?.line, learned = d?.learned;
-  if (!night && !learned?.line) return null;
+  const [open, setOpen] = useState(false);
+  const [writing, setWriting] = useState("");
+  const read = useCallback(() => api.get("/api/since").then(({ data }) => { setD(data); return data; }), []);
+  useEffect(() => { let live = true; read().catch(() => {}); return () => { live = false; }; }, [read]);
+  const o = d?.overnight || {}, cards = d?.cards || [], dg = d?.digest || {};
+  // "Write a fresh one" runs the report now (about twenty seconds) and the folded line follows it until the new one is in
+  const fresh = async () => {
+    if (!dg.source_id || writing) return;
+    const was = dg.at;
+    setWriting("Writing a fresh one…");
+    try { await api.post(`/api/reports/${dg.source_id}/rerun`); }
+    catch (e) { setWriting(`It could not start - ${errText(e)}`); return; }
+    for (let i = 0; i < 30; i += 1) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const now = await read().catch(() => null);
+      if (now?.digest?.at && now.digest.at !== was) { setWriting(""); setOpen(true); return; }
+    }
+    setWriting("Still writing - it lands here and on the Timeline when it is done.");
+  };
+  const counts = [[o.mail, "came in"], [o.reports, o.reports === 1 ? "report ran" : "reports ran"],
+    [o.sessions, o.sessions === 1 ? "agent finished" : "agents finished"], [o.closed, o.closed === 1 ? "task closed" : "tasks closed"]]
+    .filter(([n]) => n).map(([n, w]) => `${n} ${w}`).join(" · ");
+  if (!counts && !cards.length && !dg.at) return null;
   return (
-    <div className="tq-welcome-since" data-tq-since="">
-      {night && <span>{night}</span>}
-      {learned?.line && <span title={learned.latest ? `Latest: ${learned.latest}` : undefined}>{learned.line}{" "}
-        <button type="button" className="tq-linkish" onClick={() => { window.location.hash = "settings=docs&doc=learned&view=changes"; }}>See what changed</button></span>}
+    <div className="tq-since" data-tq-since="">
+      <div className="tq-since-head"><span className="tq-day-h" style={{ margin: 0 }}>Since last night · 6 PM</span>{counts && <span>{counts}</span>}</div>
+      {!!cards.length && <div className="tq-since-cards">
+        {cards.map((c, i) => (
+          <button key={c.key || c.link || i} type="button" className={`tq-since-card ${c.kind}`} data-tq-since-card={c.key || c.link}
+            onClick={() => { if (c.key) onOpen?.(c.key); else if (c.link) window.location.hash = c.link; }} title={c.key ? "Open it" : "See what changed"}>
+            <span className="lbl"><i />{c.label}</span><span className="txt">{c.text}</span>
+          </button>
+        ))}
+      </div>}
+      {dg.source_id && <div className="tq-since-digest" data-tq-digest="">
+        <span className="tag">MORNING DIGEST</span>
+        {dg.at ? <span>written {agoText(dg.at)}</span> : <span>not written yet today</span>}
+        {dg.at && <button type="button" className="tq-linkish" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? "Fold it ▴" : "See the full digest ▾"}</button>}
+        <span className="sep">|</span>
+        <button type="button" className="tq-linkish" disabled={!!writing && writing.startsWith("Writing")} onClick={fresh}>Write a fresh one</button>
+        {writing && <span>{writing}</span>}
+      </div>}
+      {open && dg.text && <div className="tq-since-body"><DigestText text={dg.text} sourceId={dg.source_id} /></div>}
     </div>
   );
 }
@@ -1800,9 +1832,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <span>{new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })} · {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span></div>
       {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
           digest, on the screen the day opens on (2026-09-23) */}
-      <DayOpener groups={items.length ? summarize(railPile?.items || items).groups : []} onSection={walkSection} />
+      <DayOpener groups={items.length ? summarize(railPile?.items || items).groups : []} onSection={walkSection}
+        top={<SinceBlock onOpen={(k) => pull(k, null)} />} />
       {!items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
-      <SinceLines />
       {/* greyed with no reason read as broken: say why, and where the rows are */}
       {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
         Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}

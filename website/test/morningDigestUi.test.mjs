@@ -29,3 +29,14 @@ test("Settings has no empty Agents destination and profile links go straight to 
   assert.doesNotMatch(settings, /"memory", "agents", "audit"/);
   assert.match(settings, /where === "agents"[\s\S]*window\.location\.hash = "profiles";[\s\S]*onNavigate\?\.\("Docs"\)/);
 });
+
+// "A +" (the owner, 2026-10-08): what changed while you were away rides on top of the opening card, with the Morning digest folded
+// under it - the digest used to wait in Reports and was stale by the time the walk reached it
+test("the opening card carries what changed and the digest, folded, on its top", () => {
+  const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
+  assert.match(view, /top=\{<SinceBlock onOpen=\{\(k\) => pull\(k, null\)\} \/>\}/);
+  assert.match(view, /See the full digest ▾/);
+  assert.match(view, /api\.post\(`\/api\/reports\/\$\{dg\.source_id\}\/rerun`\)/, "Write a fresh one runs the digest now");
+  assert.match(view, /<DigestText text=\{dg\.text\} sourceId=\{dg\.source_id\} \/>/);
+  assert.match(cards, /export function DayOpener\(\{ groups = \[\], onSection, top = null \}\)/);
+});

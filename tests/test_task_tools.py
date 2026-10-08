@@ -88,21 +88,24 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text[:300])
         return r.json()
 
-    def test_a_follow_up_naming_an_agents_task_continues_it_instead_of_opening_a_new_one(self):
-        # the coder reported on a task and closed it; "now just null those two accounts" came back as a NEW coding hand-off that
-        # named the task - it opened a second task with a cold agent beside the session that had the answer (2026-10-08)
+    def test_a_finished_agents_card_tells_the_model_its_session_is_there_and_offers_continue(self):
+        # "can you do that? just null those two" on a finished agent's card was read as a new job and opened a second task:
+        # the model had only the summary. It is told the session exists - it decides (2026-10-08: never code in front of it)
         s, tid, mid, item = table()
         s.add_transcript(tid, 'sid-1', 'found the two accounts', agent='coder', ext_id='abc-123', brain='claude')
-        s.update_task(tid, {'Status': 'done'}, 'o')
-        n = len(s.list_tasks()) if hasattr(s, 'list_tasks') else None
-        p, _ = call(s, 'task.create_from_text', kind='coding', text=f'Following up on TQ-{tid:04d}: set the two credentials to NULL')
-        self.assertEqual(p['kind'], 'agent.continue', p)
-        self.assertEqual(p['target'], tid)
-        self.assertIn('set the two credentials to NULL', p['params'].get('note', ''))
-        if n is not None: self.assertEqual(len(s.list_tasks()), n, 'nothing new is made')
+        done = {**item, 'kind': 'agentdone', 'lane': 'agent', 'summary': 'found the two accounts', 'tid': tid, 'ref': f'TQ-{tid:04d}'}
+        said = concierge.facts(s, done)
+        self.assertIn('AGENT SESSION', said)
+        self.assertIn('agent.continue', said)
+        self.assertIn('continue', [c['verb'] for c in concierge.chips_for(s, done)])
 
-    def test_a_new_job_naming_a_task_no_agent_touched_is_still_a_new_task(self):
+    def test_a_card_with_no_saved_session_says_nothing_about_one(self):
         s, tid, mid, item = table()
+        self.assertNotIn('AGENT SESSION', concierge.facts(s, {**item, 'tid': tid}))
+
+    def test_the_model_choosing_a_new_task_is_left_to_be_a_new_task(self):
+        s, tid, mid, item = table()
+        s.add_transcript(tid, 'sid-1', 'x', agent='coder', ext_id='abc-123', brain='claude')
         p, _ = call(s, 'task.create_from_text', kind='coding', text=f'Like TQ-{tid:04d} but for the portal: fix the export')
         self.assertEqual(p['kind'], 'task.create_from_text', p)
 

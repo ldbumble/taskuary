@@ -499,8 +499,8 @@ def facts(store, item: dict, whole: bool = False) -> str:
     # batch all became "read", and "remember this sender" taught nothing. The model is told; it chooses
     if item['kind'] == 'fyis':
         lines.append(f"BATCH: these {len(item.get('items') or [])} notices are one card. Its own button is done (All read, next) - for the "
-                     "whole set. A verb meant for ONE of them names it with `on` (its m-number, below): not_ours, not_ours_remember "
-                     "(teaches triage about that sender), archive.")
+                     "whole set. A verb meant for ONE of them names it with `on` (its m-number, below): not_ours (just this one), "
+                     "not_ours_sender (that sender's mail is filed from now on), block_sender (a rule: never reaches triage again).")
     if item['kind'] == 'meeting':
         e = item.get('event') or {}
         lines.append(f"meeting {e.get('start')} - {e.get('end') or ''}" + (f" with {', '.join(e.get('who') or [])}" if e.get('who') else '')
@@ -1818,6 +1818,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # an instant kind (the tiers) runs as soon as it is proposed - the desktop and the phone both carry
     # out an `auto` proposal at once - and its receipt carries the undo; the rest wait for the click
     instant = toolcatalog.is_instant(kind)
+    # ...and the ANSWER to the agent asking on the table, whichever road the model took to it (the tool, or the answer_agent verb in
+    # AUTO): it goes straight in, as the agent's Answer pill does - a real-brain check found the tool road waiting for a confirm the
+    # verb road skips (2026-10-08; the owner's 2026-10-02 rule: an answer to an asking agent goes directly to it)
+    if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and it.get('tid') and int(target or 0) == int(it['tid']):
+        instant = True
     tail = 'Doing it now.' if instant else 'Nothing has been started - confirm below, or tell me what to change.'
     prop = _propose_raw(store, tid, kind, int(target or 0), params, label, named or _where(it) or kind, tail, actor, item)
     if instant: prop = {**prop, 'auto': True}

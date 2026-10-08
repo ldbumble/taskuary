@@ -90,6 +90,14 @@ def _match(conv, sender, toks, own, convs, senders, title_toks):
     return None
 
 
+def _threads(convs: set) -> dict:
+    """WHICH pull request or issue a task came from, said to triage: a task's own title ("Portal docs upload example fix") did not
+    say it was #120, so "one pull request is never another one's task" could not be applied - it joined #121 into #120's task in 2
+    runs of 3 (real-brain check, 2026-10-08). Evidence for the model, not a rule."""
+    gh = sorted(c[3:] for c in convs if c.startswith('gh:'))[:3]
+    return {'pull_request_or_issue': gh} if gh else {}
+
+
 def recent_open(store, msg: dict, limit: int = RECENT) -> list:
     """The OPEN work this arrival touches - the same thread, the same sender, or two words of the same
     subject - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job
@@ -105,7 +113,7 @@ def recent_open(store, msg: dict, limit: int = RECENT) -> list:
         if not hit: continue
         why, rank = hit
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),
-                    'why': why, '_rank': rank})
+                    'why': why, **_threads(convs), '_rank': rank})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 
@@ -164,7 +172,7 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
         why, rank = hit
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),
                     'closed': str(t.get('Closed') or '')[:16], 'summary': t.get('Summary') or '',
-                    'how': 'done' if t.get('Status') == 'done' else 'dropped', 'why': why, '_rank': rank})
+                    'how': 'done' if t.get('Status') == 'done' else 'dropped', 'why': why, **_threads(convs), '_rank': rank})
     out.sort(key=lambda r: -r['_rank'])          # the query is newest-first and sort is stable: recency breaks ties
     # ...and only NOW read the reports: _report is a comment scan per task, and a chatty sender can
     # match twenty closures for the three this hands over. This runs inside the triage funnel.

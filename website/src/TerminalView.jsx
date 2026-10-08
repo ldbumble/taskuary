@@ -638,7 +638,7 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
 // narrow for two panes (a Wall tile three across) gets a chip instead, which opens the browser
 // OVER the terminal until dismissed.
 export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true, expectBrowser = false,
-                             canFull = false }) => {
+                             canFull = false, yourTurn = false }) => {
   const slot = useRef(null);
   const [browser, setBrowser] = useState({ open: false, url: "" });
   const [width, setWidth] = useState(0);
@@ -734,14 +734,14 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
             <Box sx={{ width: 2, height: 36, borderRadius: 99, bgcolor: BORDER, transition: "background .15s" }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
-            <BrowserPane sid={sid} url={browser.url} open={browser.open} onFold={() => fold(true)} />
+            <BrowserPane sid={sid} url={browser.url} open={browser.open} yourTurn={yourTurn} onFold={() => fold(true)} />
           </Box>
         </>
       )}
       {/* peek is the CHIP layout's browser. Left standing when the box grew into a split - a wider
           window, the full-screen button - it mounted a second pane on the same session: two sockets,
           two decodes, two screencast clients on one Chrome, for one page. */}
-      {peek && layout === "chip" && showingBrowser && <BrowserPane sid={sid} url={browser.url} open={browser.open} overlay onFold={() => setPeek(false)} />}
+      {peek && layout === "chip" && showingBrowser && <BrowserPane sid={sid} url={browser.url} open={browser.open} yourTurn={yourTurn} overlay onFold={() => setPeek(false)} />}
     </Box>
   );
 };

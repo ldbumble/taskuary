@@ -3062,6 +3062,8 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'review.approve' and o.get('watching'): return f" {o['watching']}"
     if kind == 'item.settle' and o.get('says') and not o.get('closed'): return f" {o['says']}"
     # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
+    if kind in ('report.run', 'report.rerun') and o.get('ref'):
+        return f" {o.get('title') or 'It'} started as {o['ref']} - open it to watch the agent, and its browser if it uses one."
     if kind in ('report.run', 'report.rerun'):
         return f" {o.get('title') or 'It'} is running. {o.get('lands') or 'If it fails, the bell says why.'}"
     if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."

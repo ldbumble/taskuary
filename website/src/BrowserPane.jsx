@@ -19,7 +19,7 @@ const btn = { ...mono, fontSize: 10.5, lineHeight: 1, px: 0.9, py: 0.45, borderR
 
 // `open`: the parent's poll of browserview.state - the relay refuses a session with no browser, so this
 // connects only while that says open (a caller that does not poll leaves it true and always tries).
-export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false }) {
+export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false, yourTurn = false }) {
   const box = useRef(null), canvas = useRef(null), sendRef = useRef(null), img = useRef(null), fit = useRef(null);
   const [live, setLive] = useState(false);
   const [url, setUrl] = useState(url0);
@@ -139,6 +139,16 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   // must not click the agent's page out from under it
   const forward = (m) => m && drivingRef.current && sendRef.current?.(m);
   const takeOver = () => { setAsked(false); setDriving(true); fitViewport(true); requestAnimationFrame(() => canvas.current?.focus()); };
+  /* THE AGENT WAITING ON YOU HANDS YOU THE PAGE. Take over exists so a stray click does not land on a page an agent is
+     driving; an agent that asked for a sign-in has stopped and said it will not touch the page, so asking for Take over
+     as well was a second gate on one door (the owner, 2026-10-08: "if it asks me to put in info i should be able to do
+     that without taking over"). The page is yours while it waits, and goes back to it when you answer - unless you
+     took it yourself, which only you hand back. */
+  const handed = useRef(false);
+  useEffect(() => {
+    if (yourTurn && !drivingRef.current) { handed.current = true; setAsked(false); setDriving(true); }
+    if (!yourTurn && handed.current) { handed.current = false; setDriving(false); }
+  }, [yourTurn]);
   // THE OWNER CAN OPEN A PAGE. The pane had no address bar, so when the agent handed the keyboard
   // over - which it is told to do for a password or a 2FA code - there was nowhere to hand it to:
   // Take over only forwards clicks, and there is nothing to click on about:blank. The task the
@@ -156,7 +166,12 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
     } catch (e) { say(e?.response?.data?.detail || "could not open that page", true, 6000); }
     setGoing(false);
   };
-  const onMouse = (e) => { if (!drivingRef.current) return void (e.type === "mousedown" && setAsked(true)); e.preventDefault(); forward(mouseMessage(e.type, e.nativeEvent, fit.current)); };
+  const onMouse = (e) => {
+    if (!drivingRef.current) return void (e.type === "mousedown" && setAsked(true));
+    e.preventDefault();                      // ...which also stops the click focusing the canvas, so focus it: the keys follow the click
+    if (e.type === "mousedown") canvas.current?.focus();
+    forward(mouseMessage(e.type, e.nativeEvent, fit.current));
+  };
   const onWheel = (e) => { if (!drivingRef.current) return; e.preventDefault(); forward(wheelMessage(e.nativeEvent, fit.current)); };
   // the page asked for a password, the agent said to type it here, and the keystroke went nowhere
   // and said nothing (the owner, 2026-09-14). Dropping it is right; dropping it in silence is not.
@@ -244,7 +259,7 @@ Take over to drive it yourself; close the session to close it."
         {driving && (
           <Typography sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
-            you are driving — the agent's next command still runs; hand back when done
+            {handed.current ? "your turn — the agent is waiting on you; click the page and type" : "you are driving — the agent's next command still runs; hand back when done"}
           </Typography>
         )}
         {asked && !driving && (

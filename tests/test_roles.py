@@ -288,4 +288,40 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
         self.assertIn('ap (accounts payable)', d); self.assertIn('route_mail', d); self.assertIn('a card the owner confirms', d)
 
 
+class RunNowOpensTheWorkflowsTaskTests(unittest.TestCase):
+    """The owner, 2026-10-08: "when you hit run now it should not be like report that runs in background but the task
+    should show up in assistant canvas". The task is made before the call returns; the agent starts on its own thread."""
+    def test_run_now_hands_back_the_task_and_the_agent_starts_off_the_request(self):
+        import threading
+        from fastapi.testclient import TestClient
+        from taskuary import ingest, server
+        s, _ = setup()
+        s.upsert_agent('ap', 'accounts-payable', 'cli', '{}')
+        sid = s.save_source({'Channel': 'report', 'Address': 'Bills', 'Owner': 'o', 'Active': 0,
+                             'ConfigJson': json.dumps({'type': 'agent', 'title': 'Bills', 'agent': 'ap', 'browser': True, 'prompt': 'go'})}, 'o')
+        started, gate = [], threading.Event()
+        def slow_start(store, tid, text=None): gate.wait(5); started.append(tid)
+        with mock.patch.object(server, 'store', s), mock.patch.object(ingest, '_auto_general', side_effect=slow_start):
+            r = TestClient(server.app).post(f'/api/reports/{sid}/rerun').json()
+            self.assertEqual(started, [])                       # the call did not wait for the agent
+            gate.set()
+        t = s.get_task(r['task_id'])
+        self.assertEqual((r['workflow'], r['ref'], r['link']), (True, f"TQ-{r['task_id']:04d}", f"#task={r['task_id']}"))
+        self.assertEqual((t['Assignee'], t['Tags']), ('agent:ap', 'needs:browser'))
+        for _ in range(50):
+            if started: break
+            threading.Event().wait(0.05)
+        self.assertEqual(started, [r['task_id']])
+
+    def test_a_plain_report_still_runs_in_the_background(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s, _ = setup()
+        sid = s.save_source({'Channel': 'report', 'Address': 'Counts', 'Owner': 'o', 'Active': 1,
+                             'ConfigJson': json.dumps({'type': 'rest', 'title': 'Counts', 'url': 'https://x.example'})}, 'o')
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_spawn_rerun'):
+            r = TestClient(server.app).post(f'/api/reports/{sid}/rerun').json()
+        self.assertTrue(r['queued']); self.assertNotIn('task_id', r)
+
+
 if __name__ == '__main__': unittest.main()

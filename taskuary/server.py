@@ -3888,6 +3888,14 @@ def _rerun_report(sid: int, asked: dict | None = None) -> dict:
     if not src or src.get('Channel') != 'report': raise HTTPException(404, 'no such report')
     try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
     except ValueError: title = src.get('Address')
+    # A WORKFLOW RUN IS A TASK, not a report landing later (the owner, 2026-10-08: "when you hit run now it should not
+    # be like report that runs in background but the task should show up in assistant canvas"): it is made now, its
+    # agent starts on its own thread, and the page is handed the task to open. Asked from a phone, the phone road stays.
+    from . import workflows
+    if not asked and workflows.is_workflow(src) and workflows.definition(store, src)['type'] == 'agent':
+        out = workflows.run(store, src, actor=ACTOR, trigger='manual', background=True)
+        return {'queued': True, 'sourceId': sid, 'title': title, 'workflow': True, 'task_id': out['task_id'], 'ref': out['ref'],
+                'link': f"#task={out['task_id']}"}
     def work():
         # the one road (reports.run_one): a manual run is extra - it never uses up the report's schedule
         try: out = run_one(store, src, _llm(), trigger='manual')

@@ -367,8 +367,10 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     setRunning(sid); setNote(null);
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
-      // where it lands is the report's own routing, and a failure is the bell's alone (reports.run_lands)
-      setNote({ ok: true, detail: `${data.title || "Report"} is running in the background — you can leave this tab. ${data.lands || "If it fails, the bell says why."}` });
+      // a workflow run IS a task: open it where the agent and its browser can be watched (the owner, 2026-10-08)
+      if (data.task_id) { setNote({ ok: true, detail: `${data.title || "Workflow"} started as ${data.ref} — opening it.` }); window.location.hash = `task=${data.task_id}`; }
+      // where a report lands is its own routing, and a failure is the bell's alone (reports.run_lands)
+      else setNote({ ok: true, detail: `${data.title || "Report"} is running in the background — you can leave this tab. ${data.lands || "If it fails, the bell says why."}` });
     } catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "report could not be queued" }); }
     setRunning(null); load();
   };
@@ -449,7 +451,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
               "&:hover": { bgcolor: "#faf8f4" } }}>
             <StatusDot ok={!!s.Active} />
-            <ChannelIcon channel="report" />
+            <ChannelIcon channel={isWorkflowConfig(c) ? "workflow" : "report"} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT }}>

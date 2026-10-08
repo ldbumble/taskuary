@@ -15,6 +15,7 @@ import { RepoPicker } from "./RepoPicker.jsx";
 import { Md } from "./md.jsx";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import GitHubIcon from "@mui/icons-material/GitHub";
 // the assistant wears TASKUARY's own mark, not a robot head: it is this app talking, and a
 // generic bot glyph read as some third party bolted on the side
@@ -63,7 +64,8 @@ export const TaskuaryMark = ({ size = 18, sx }) => (
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue - and
 // amber for scheduled reports, the one row that is ours and not a person, so it has to read
 // from across the room rather than blend into the paper the way sage did.
-export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b2a26", report: "#c47d1a", assistant: ASSISTANT.solid,
+// a workflow is a report's sibling that WRITES - its own mark, in the rail's sage, never the report's amber
+export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b2a26", report: "#c47d1a", workflow: "#6f8a6e", assistant: ASSISTANT.solid,
   followup: "#6f8a6e", promise: "#55697a", prep: "#8a7a5c", cold: "#8a3646", idea: "#55697a",     // the assistant's producers (Settings)
   slack: "#611f69", telegram: "#229ED9", whatsapp: "#25D366", imessage: "#34C759", ai: "#55697a",
   jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF", clickup: "#7b68ee", todoist: "#e44332",
@@ -75,7 +77,7 @@ export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b
 // here rather than falling through to the grey everything-else takes.
 const BRAND_COLORS = { outlook: "#0F6CBD", gmail: "#EA4335", imap: "#41525f", calendar: "#55697a" };
 export const channelColor = (ch) => BRAND_COLORS[ch] || CHANNEL_COLORS[ch] || "#a9a294";
-const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon,
+const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon, workflow: AccountTreeOutlinedIcon,
   followup: SendIcon, promise: ChecklistIcon, prep: GroupsIcon, cold: ErrorOutlineIcon, idea: AutoAwesomeIcon,
   email: MailOutlineIcon, slack: TagIcon, telegram: SendIcon, whatsapp: WhatsAppIcon, imessage: SendIcon,
   ai: AutoAwesomeIcon, jira: BugReportIcon, asana: ChecklistIcon, monday: ViewKanbanIcon,

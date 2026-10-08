@@ -7472,8 +7472,12 @@ def metric_check(mid: int):
 def terminal_browser(sid: str):
     """Is a browser open for this session, and on what page - read from agent-browser's state
     files, so the pane can appear when the agent opens a page and fold when it closes."""
-    from . import browserview
-    return browserview.state(sid)
+    from . import browserview, terminal
+    st = browserview.state(sid)
+    # ...and the page it is on is kept against its task, so a restart reopens it (browserview.keep_page)
+    tid = getattr(terminal.SESSIONS.get(sid), 'task_id', None)
+    if tid and st.get('url'): browserview.keep_page(tid, st['url'])
+    return st
 
 class SnapBody(BaseModel): task_id: int | None = None
 

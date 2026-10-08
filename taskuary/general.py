@@ -913,7 +913,7 @@ class GeneralSession:
                 browser_env = {**terminal.session_env('assistant', self.task_id, sid=self.sid), **browserview.env(self.sid)}
                 # ...but Chrome is only LAUNCHED, and the shell only granted, for a task that asked
                 # for one. A chat that did not is a research session: it reads, it does not run.
-                if self.browser_wanted and browserview.start(self.sid):
+                if self.browser_wanted and browserview.start(self.sid, browserview.last_page(self.task_id) or 'about:blank'):
                     browser_tools = True
                     system = f'{system}\n\n{browserview.brief()}'
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
@@ -1078,6 +1078,10 @@ class GeneralSession:
                 try: proposals.collect(self.store, self.task_id, reply, 'assistant')
                 except Exception as e: logger.warning(f'proposal collection failed for task {self.task_id}: {e}')
                 reply = proposals.strip(reply).strip() or 'Proposed - it waits on the task for your yes.'
+            # the page the turn ended on is where a restarted session's browser reopens (browserview.keep_page)
+            if browser_tools:
+                try: browserview.keep_page(self.task_id, browserview.state(self.sid, fresh=True).get('url'))
+                except Exception as e: logger.debug(f'could not keep the page of task {self.task_id}: {e}')
             reply, closing = selfclose.chat_marker(reply)
             reply, asks = selfclose.ask_markers(reply)
             asked = asks[0][0] if asks else None
@@ -1175,6 +1179,8 @@ class GeneralSession:
         self.alive, self.ended = False, time.time()
         if was_alive:
             from . import browserview
+            try: browserview.keep_page(self.task_id, browserview.state(self.sid, fresh=True).get('url'))
+            except Exception as e: logger.debug(f'could not keep the page of task {self.task_id}: {e}')
             browserview.close(self.sid)
         self._emit('\r\n\x1b[2msession closed\x1b[0m\r\n')
         for loop, q in list(self.subs):
@@ -1270,5 +1276,7 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     if task.get('Status') == 'open': store.update_task(tid, {'Status': 'in_progress'}, actor)
     if session.browser_wanted:
         from . import browserview
-        threading.Thread(target=browserview.start, args=(session.sid,), daemon=True).start()
+        # on the page the task's browser was last on: after a restart the agent's ask ("sign in on the page beside us")
+        # still points somewhere real
+        threading.Thread(target=browserview.start, args=(session.sid, browserview.last_page(tid) or 'about:blank'), daemon=True).start()
     return session

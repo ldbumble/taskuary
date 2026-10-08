@@ -57,7 +57,8 @@ class SharedSessionTests(unittest.TestCase):
             session = general.start_session(store, tid)
         self.assertEqual(session.pick, 'cli:my-claude')     # the saved API chat cannot drive a browser
         self.assertIs(thread.call_args.kwargs['target'], browserview.start)
-        self.assertEqual(thread.call_args.kwargs['args'], (session.sid,))
+        # ...on the page the task's browser was last on - none yet, so a blank tab (browserview.keep_page)
+        self.assertEqual(thread.call_args.kwargs['args'], (session.sid, 'about:blank'))
 
     def test_setup_cli_gets_the_same_visible_browser_without_a_checkout(self):
         store = MemoryStore()

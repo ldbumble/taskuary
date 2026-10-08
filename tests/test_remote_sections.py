@@ -17,7 +17,7 @@ def later(minutes):
 # "back in 2h" (2026-10-01)
 def pile():
     return [{'key': 'msg:1', 'lane': 'asked', 'order_band': 2, 'title': 'Approve the Q3 invoice', 'who': 'Paula Vance'},
-            {'key': 'msg:2', 'lane': 'yours', 'order_band': 2, 'surfaced': True, 'back_at': later(185), 'title': 'Lease renewal', 'who': 'Ray Colton'},
+            {'key': 'msg:2', 'lane': 'yours', 'order_band': 2, 'surfaced': True, 'put_down': True, 'back_at': later(185), 'title': 'Lease renewal', 'who': 'Ray Colton'},
             {'key': 'msg:3', 'lane': 'fyi', 'order_band': 4, 'title': 'Quarterly newsletter', 'who': 'Marcus Reed'},
             {'key': 'msg:4', 'lane': 'fyi', 'order_band': 4, 'title': 'Back Tuesday', 'who': 'Gail Moreno'}]
 

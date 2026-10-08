@@ -441,11 +441,16 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     if passed:
         unread = True
         card.update(unread=True, surfaced=True, surfaced_at=(shown or {}).get('At') or read.get('read_at'))
+    # ...and WALKED PAST is not the same as shown: only a mark Next left (it carries when the row is back) or Remind me files it
+    # under For later. A card merely put up, then another row clicked, stays where it was (the owner, 2026-10-08: "i had this
+    # task open and then hit another task in work rail and it moved 1003 automatically to later?")
+    mark = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
+    card['put_down'] = bool(card.get('surfaced') and mark and mark.get('Until'))
     # FOR LATER SAYS WHEN IT COMES BACK (the canvas redesign, 2026-09-29): the rail's gutter counts down to it. A row
     # walked past returns when its read is task_return_minutes old (`back`, above); one merely shown, when its mark ages
     # out; one put away with Remind me, on its date.
     if card.get('deferred'): card['back_at'] = card.get('defer_until')
-    elif card.get('surfaced'):
+    elif card.get('put_down'):
         base = read_at if passed else processing_all._stamp(card.get('surfaced_at'))
         if base: card['back_at'] = (base + timedelta(minutes=quiet)).strftime('%Y-%m-%d %H:%M:%S')
     if card['lane'] == 'fyi' and not card.get('sig'):

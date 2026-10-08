@@ -9,7 +9,7 @@ import { asPressed, levelOf } from "../src/funnelPile.js";
 
 const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 const rows = [
-  { key: "processing:a", tid: 19, lane: "saved", order_band: 2, surfaced: true, kind: "agent" },
+  { key: "processing:a", tid: 19, lane: "saved", order_band: 2, surfaced: true, put_down: true, kind: "agent" },
   { key: "processing:b", tid: 4, lane: "yours", order_band: 2 },
   { key: "processing:c", tid: null, mid: 7, lane: "fyi", order_band: 4 },
 ];

@@ -85,16 +85,21 @@ class LegacyPileForLaterTests(unittest.TestCase):
         now = datetime.now()
         at = (now - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
         until = (now + timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')
+        back = (now + timedelta(minutes=170)).strftime('%Y-%m-%d %H:%M:%S')
         items = [{'key': 'msg:1', 'lane': 'yours', 'tid': 4}, {'key': 'msg:2', 'lane': 'fyi'},
-                 {'key': 'msg:3', 'lane': 'yours', 'tid': 5}]
-        states = {'msg:1': {'Status': 'surfaced', 'At': at}, 'msg:2': {'Status': 'surfaced', 'At': at},
-                  'msg:3': {'Status': 'later', 'Until': until}}
+                 {'key': 'msg:3', 'lane': 'yours', 'tid': 5}, {'key': 'msg:4', 'lane': 'yours', 'tid': 6}]
+        # Next leaves a mark carrying when it is back (concierge.move_on, put_down); a card merely SHOWN leaves one without
+        states = {'msg:1': {'Status': 'surfaced', 'At': at, 'Until': back}, 'msg:2': {'Status': 'surfaced', 'At': at},
+                  'msg:3': {'Status': 'later', 'Until': until}, 'msg:4': {'Status': 'surfaced', 'At': at}}
         out = {i['key']: i for i in funnel._apply_states(items, states, now, quiet=180)}
-        self.assertEqual(set(out), {'msg:1', 'msg:3'}, 'a read fyi is gone; open work is not')
+        self.assertEqual(set(out), {'msg:1', 'msg:3', 'msg:4'}, 'a read fyi is gone; open work is not')
         self.assertTrue(out['msg:1']['surfaced'])
         self.assertEqual(out['msg:1']['back_at'], (now - timedelta(minutes=10) + timedelta(minutes=180)).strftime('%Y-%m-%d %H:%M:%S'))
         self.assertEqual((out['msg:3']['deferred'], out['msg:3']['back_at']), (True, until))
-        self.assertEqual({funnel.level_of(i | {'order_band': 2}) for i in out.values()}, {'later'})
+        self.assertEqual({k: funnel.level_of(i | {'order_band': 2}) for k, i in out.items()},
+                         {'msg:1': 'later', 'msg:3': 'later', 'msg:4': 'task'},
+                         'shown and clicked away from stays On you (2026-10-08: "it moved 1003 automatically to later?")')
+        self.assertNotIn('back_at', out['msg:4'])
 
 
 class ServedRailTests(unittest.TestCase):

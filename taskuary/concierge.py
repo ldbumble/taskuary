@@ -2209,7 +2209,7 @@ def move_on(store, key: str, actor: str = 'owner') -> dict:
     except Exception as e:
         logger.debug(f'concierge: nothing to put down for {key} - {e}'); return {}
     if not item: return {}
-    funnel.settle(store, key, 'surfaced', actor, note=item.get('sig'), read=True)
+    funnel.settle(store, key, 'surfaced', actor, note=item.get('sig'), read=True, put_down=True)
     return {'key': key, 'read': True, 'reviews_ended': []}
 
 
@@ -2249,12 +2249,21 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
             # ...in ONE order for the line and its buttons - what waits on the owner first, then the soonest back: the line named
             # TQ-0001 and TQ-0002 over buttons that opened TQ-0003..5 (the UX review, 2026-10-07)
+            # the pile was read before Next put `leaving` down: that row is put aside now, back after the quiet hours
+            if leaving:
+                from .processing_unread import return_minutes
+                back = (datetime.now() + timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
+                waiting = [i | {'put_down': True, 'back_at': i.get('back_at') or back} if leaving in (i['key'], *i.get('aliases', ())) else i
+                           for i in waiting]
             n, waiting = len(waiting), sorted(waiting, key=lambda i: (not funnel.on_you(i), str(i.get('back_at') or '')))
-            when = ', '.join(f"{i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40)} {_back_words(i.get('back_at'))}"
+            when = ', '.join(f"{i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40)}{' ' + _back_words(i['back_at']) if i.get('back_at') else ''}"
                              for i in waiting[:4])
             # "Nothing new right now" opened a line about nine things still waiting: say the walk is through, then where they are
-            say = (f"That's everything for now. {n} thing{'s' if n != 1 else ''} you put aside wait{'s' if n == 1 else ''} under For later"
-                   f" - {when}{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
+            # ...and only what Next or Remind me put there is "under For later": one you looked at and left is still On you
+            aside = all(i.get('put_down') or i.get('deferred') for i in waiting)
+            say = (f"That's everything for now. {n} thing{'s' if n != 1 else ''} you "
+                   + (f"put aside wait{'s' if n == 1 else ''} under For later" if aside else f"already saw still wait{'s' if n == 1 else ''} on you")
+                   + f" - {when}{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
             # What waits on the owner first - a close-out, an agent's question - then the rest.
             # ...each saying WHAT it is, not a bare number (the owner, 2026-09-30: "have to write what they are about a little")

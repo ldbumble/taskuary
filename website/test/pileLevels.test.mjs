@@ -45,7 +45,9 @@ test("the ends of the list are one level each", () => {
   assert.equal(levelOf({ lane: "working", order_band: 5 }), "agents");
   assert.equal(levelOf({}), "task", "a row with no band still lands in one, so the dock never reads empty");
   // work you pressed Next on waits at the bottom, beside the agents - still yours, not at the top
-  assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true }), "later");
+  assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true, put_down: true }), "later");
+  // shown and clicked away from is not put aside (2026-10-08: "it moved 1003 automatically to later?")
+  assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true }), "task");
   assert.equal(levelOf({ lane: "stopped", order_band: 2 }), "task");
   assert.equal(levelOf({ lane: "time", order_band: 1, surfaced: true }), "urgent", "a meeting about to start never moves down");
 });
@@ -110,9 +112,9 @@ test("For later's gutter says how long until it comes back, soonest first", asyn
   assert.equal(backAt({ defer_until: "2026-10-02 08:00" }), "2026-10-02 08:00");
   assert.equal(backAt({}), null);
   const rows = [
-    { key: "b", lane: "yours", order_band: 2, surfaced: true, back_at: at(300) },
+    { key: "b", lane: "yours", order_band: 2, surfaced: true, put_down: true, back_at: at(300) },
     { key: "a", lane: "yours", order_band: 2, deferred: true, defer_until: at(60) },
-    { key: "c", lane: "yours", order_band: 2, surfaced: true },
+    { key: "c", lane: "yours", order_band: 2, surfaced: true, put_down: true },
   ];
   assert.deepEqual(bandsOf(rows).find((b) => b.level === "later").items.map((i) => i.key), ["a", "b", "c"]);
 });

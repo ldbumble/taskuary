@@ -108,9 +108,12 @@ def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:
     return '\n'.join(lines)
 
 
-def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context: dict = None) -> dict:
+def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context: dict = None, background: bool = False) -> dict:
     """A triggered workflow goes straight to its worker: a task with the definition and this run's context,
-    through the same capacity and retry gates as any unattended start - never through message triage."""
+    through the same capacity and retry gates as any unattended start - never through message triage.
+
+    `background`: the task is made now and the worker starts on a thread, so a Run now pressed by the owner can
+    take them TO the task - a general session's first turn holds the call for as long as the agent works."""
     from . import ingest
     defn = definition(store, src)
     when = datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -129,6 +132,9 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
                              **({'Assignee': who} if who else {})}, actor)
     store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent with the workflow definition - no triage.")
     logger.info(f"workflow {defn['title']!r} ({trigger}) -> {task_ref(tid)} on the {kind} agent")
-    if kind == 'coding': ingest._auto_code(store, tid)
-    else: ingest._auto_general(store, tid, text)
+    start = (lambda: ingest._auto_code(store, tid)) if kind == 'coding' else (lambda: ingest._auto_general(store, tid, text))
+    if background:
+        import threading
+        threading.Thread(target=start, daemon=True, name=f'workflow-{tid}').start()
+    else: start()
     return {'task_id': tid, 'ref': task_ref(tid), 'kind': kind, 'title': defn['title'], 'trigger': trigger}

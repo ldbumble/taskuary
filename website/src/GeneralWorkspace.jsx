@@ -811,7 +811,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* ALWAYS inside the pane, session or not: a session that arrives mid-turn (`started`) must not
             change the tree around the thread, or the answer streaming into it is remounted away */}
-        <SessionPane sid={session?.sid || null} height="100%" expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
+        <SessionPane sid={session?.sid || null} height="100%" yourTurn={!!asking} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
       </Box>
     </Box>
   );

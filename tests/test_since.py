@@ -65,3 +65,11 @@ class WhatChangedTests(unittest.TestCase):
         s.add_report_run(self.digest, {'at': '2026-10-08 08:00:45', 'type': 'digest', 'title': 'Morning digest', 'message_id': mid})
         self.assertEqual(since.digest(s), {'source_id': self.digest, 'at': '2026-10-08 08:00:45', 'text': 'People want\n1. Erin wants the export.'})
         self.assertNotIn('digest', [c.get('text', '').lower() for c in since.cards(s)], 'the digest is the line under the cards, not a card')
+
+    def test_a_report_whose_subject_is_only_a_heading_shows_its_first_real_line(self):
+        s = self.store()
+        mid = s.add_message({'ExternalId': 'r2', 'Channel': 'report', 'Subject': 'Export check — Errors:', 'BodyText': 'x'})
+        s.add_report_run(self.check, {'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': 'taskuary', 'title': 'Export check',
+                                      'subject': 'Export check — Errors:', 'message_id': mid,
+                                      'summary': 'Errors:\n- The ledger export failed twice: read timed out after 600s.\n- More detail'})
+        self.assertEqual(since.cards(s)[0]['text'], 'Export check: The ledger export failed twice: read timed out after 600s.')

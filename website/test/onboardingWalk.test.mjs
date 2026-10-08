@@ -172,9 +172,10 @@ test("the walk is reachable on a phone", () => {
 // chip reading "Set up a report or workflow" opened the fourteen-stop tour of the app instead.
 test("setting something up and walking the app are two different doors", () => {
   const view = read("AssistantView.jsx");
-  const at = view.lastIndexOf("Set up a report or workflow");     // the button, not the comment above askSetup
+  // the welcome's second door RUNS what exists - it opens Reports (2026-10-08); setting up is Set up Taskuary's
+  const at = view.lastIndexOf("Run a report or workflow");
   const chip = view.slice(view.lastIndexOf("<button", at), at);
-  assert.ok(chip.includes("onClick={askSetup}"), "it asks what to set up");
+  assert.ok(chip.includes('onClick={() => onNavigate?.("Reports")}'), "it opens Reports");
   assert.match(view, /const askSetup = \(\) =>/);
   assert.match(view, /kind: "setup"/, "and the card it pushes still exists");
 });

@@ -1854,6 +1854,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     }
     return null;
   }, [shown]);
+  // NEVER LEFT HANGING (the owner, 2026-10-08: "assistant is leaving user hanging. We need Next button on bottom at least and say hit
+  // next to continue"): a Next the server refused because the list moved under it said so in red and left nothing to press - every
+  // card above folded, so no card had a row to register. With nothing on the table and the walk able to go on (or a press just
+  // refused), the row's floor is Next.
+  const onTable = !!currentItem && foldedKey !== currentItem.key;
+  const hanging = !!state && !old && !walk && shown.length > 0 && !busy && !starting && !onTable && !browsing && (canAdvance || !!err);
+  useVerbs("floor", [{ id: "floor:next", group: "next", label: "Next", tone: "p", title: "Bring the next one up",
+    run: () => { setErr(""); surface(null, null); } }], hanging);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";
   // WHAT THE PAGE ASKS THE CANVAS TO OPEN (TaskHubPage canvasReq): once each, and only once the chat has loaded - the
   // first load replaces the conversation, and a card posted before it would be wiped
@@ -2015,6 +2023,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             </div>
           )}
           {err && <Typography sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}</Typography>}
+          {hanging && <Typography sx={{ color: "#6e685f", fontSize: 12.5, mb: 1 }} data-tq-hanging="">Press <b>Next</b> below to continue.</Typography>}
         </div>
       </div>
       )}

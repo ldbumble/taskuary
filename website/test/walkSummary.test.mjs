@@ -12,7 +12,7 @@ test("the groups are the rail's bands, in the rail's order, under the rail's nam
   assert.deepEqual(GROUPS.map((g) => g.key), LEVEL_ORDER);
   for (const g of GROUPS) assert.equal(g.word, SECTION_WORDS[g.key]);
   const rows = [it("approve", "review", { order_band: 2 }), it("working", "agent", { order_band: 5 }), it("report", "report", { order_band: 3 }),
-    it("fyi", "fyi", { order_band: 4 }), it("asked", "asked", { order_band: 2, surfaced: true })];
+    it("fyi", "fyi", { order_band: 4 }), it("asked", "asked", { order_band: 2, surfaced: true, put_down: true })];
   for (const r of rows) assert.equal(groupOf(r), levelOf(r));
   assert.deepEqual(summarize(rows).groups.map((g) => [g.key, g.n]), bandsOf(rows).map((b) => [b.level, b.items.length]));
 });
@@ -24,7 +24,7 @@ test("a finished agent's task is On you, as on the rail - not an agent waiting (
 });
 
 test("the lead counts each band as the rail does", () => {
-  const s = summarize([it("approve", "review", { order_band: 2 }), it("asked", "asked", { order_band: 2, surfaced: true }),
+  const s = summarize([it("approve", "review", { order_band: 2 }), it("asked", "asked", { order_band: 2, surfaced: true, put_down: true }),
     it("report", "report", { order_band: 3 }), it("fyi", "fyi", { order_band: 4 }), it("fyi", "fyi", { order_band: 4, title: "Other" })]);
   assert.equal(s.lead, "5 things: 1 on you, 1 for later, 1 reports, 2 FYI.");
   assert.equal(summarize([]).lead, "Nothing is waiting on you.");

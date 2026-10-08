@@ -112,7 +112,7 @@ class PipeListSaysForLaterTests(unittest.TestCase):
         later is a section (funnel.level_of), so the model never saw the heading the owner was looking at (2026-09-30)."""
         from taskuary import lookups
         items = [{'key': 'a', 'lane': 'asked', 'order_band': 2, 'title': 'Invoice', 'who': 'Paula Vance', 'tid': 3},
-                 {'key': 'b', 'lane': 'yours', 'order_band': 2, 'surfaced': True, 'back_at': '2099-01-01 09:00:00', 'title': 'Lease', 'tid': 4}]
+                 {'key': 'b', 'lane': 'yours', 'order_band': 2, 'surfaced': True, 'put_down': True, 'back_at': '2099-01-01 09:00:00', 'title': 'Lease', 'tid': 4}]
         with mock.patch.object(funnel, 'pile', return_value={'items': items}):
             out = lookups.pipe_list(MemoryStore(), {})
         self.assertIn('FOR LATER (1):', out)

@@ -351,7 +351,7 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
         self.assertIn('ON YOU · 1', remote_assistant.who_wants_what([done]))
 
     def test_what_you_passed_is_for_later_as_on_the_rail(self):
-        items = [{'key': 'a', 'lane': 'stopped', 'kind': 'agent', 'who': 'Erin Blake', 'title': 'Budget tab', 'surfaced': True, 'order_band': 2},
+        items = [{'key': 'a', 'lane': 'stopped', 'kind': 'agent', 'who': 'Erin Blake', 'title': 'Budget tab', 'surfaced': True, 'put_down': True, 'order_band': 2},
                  {'key': 'b', 'lane': 'asked', 'kind': 'asked', 'who': 'Gail Moreno', 'title': 'Q3 numbers', 'order_band': 2}]
         text = remote_assistant.who_wants_what(items)
         self.assertTrue(text.startswith('2 things: 1 on you, 1 for later.'), text)

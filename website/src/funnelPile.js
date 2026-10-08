@@ -402,7 +402,7 @@ export const LEVEL_META = {
 // A grouping of the rail only: the walk's own order is the server's (funnel.level_of mirrors this for a section walk).
 export const LEVEL_ORDER = ["urgent", "task", "agents", "later", "reports", "ideas", "fyi"];
 const LEVEL_OF_BAND = { 1: "urgent", 2: "task", 3: "reports", 4: "fyi", 5: "agents" };
-export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "unread", "kind", "working", "state"];
+export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "put_down", "unread", "kind", "working", "state"];
 export const placed = (row, card) => {
   const out = { ...row, ...card };
   for (const k of PLACEMENT) { if (k in row) out[k] = row[k]; else delete out[k]; }
@@ -414,10 +414,11 @@ export const placed = (row, card) => {
 export const asPressed = (items, { leaving = null, continuing = null } = {}) => (!leaving && !continuing ? items
   : items.filter((i) => !leaving || i.tid !== leaving)
     .map((i) => (continuing && i.tid === continuing
-      ? { ...i, lane: "working", order_band: 5, surfaced: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
+      ? { ...i, lane: "working", order_band: 5, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
 export const levelOf = (item) => {
   const band = attentionBand(item);
-  if (band === 2 && (item?.surfaced || item?.deferred)) return "later";
+  // For later is what you PUT there - Next or Remind me - never a card merely shown and clicked away from (funnel.level_of)
+  if (band === 2 && (item?.put_down || item?.deferred)) return "later";
   if (band === 4 && item?.kind === "idea") return "ideas";
   return LEVEL_OF_BAND[band] || "fyi";
 };

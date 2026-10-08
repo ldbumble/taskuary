@@ -847,7 +847,9 @@ def level_of(item: dict) -> str:
         if item.get('kind') == 'meeting' and (item.get('calendar_ready') is False or (item.get('mins') or 0) > 15): band = 2
         elif item.get('kind') == 'agentdone': band = 2
         else: band = _BAND_FALLBACK.get(item.get('lane'), 2)
-    if band == 2 and (item.get('surfaced') or item.get('deferred')): return 'later'
+    # FOR LATER IS WHAT YOU PUT THERE - Next or Remind me - never a card merely shown: clicking another row on the rail moved the
+    # task on the table under For later for three hours (the owner, 2026-10-08: "it moved 1003 automatically to later?")
+    if band == 2 and (item.get('put_down') or item.get('deferred')): return 'later'
     if band == 4 and item.get('kind') == 'idea': return 'ideas'
     return _LEVEL_OF_BAND.get(band, 'fyi')
 
@@ -933,8 +935,8 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                 back = (_ts_dt(st.get('At')) + timedelta(minutes=quiet)) if st.get('At') else None
                 later = bool(i.get('tid') and i['lane'] in _LATER_LANES and back and back > now)
                 if not keep_surfaced and i['lane'] not in ('blocked', 'approve', 'working') and not later: continue
-                i = i | {'surfaced': True, 'surfaced_at': st.get('At')}
-                if back and i['lane'] != 'working': i = i | {'back_at': back.strftime('%Y-%m-%d %H:%M:%S')}
+                i = i | {'surfaced': True, 'surfaced_at': st.get('At'), 'put_down': bool(st.get('Until'))}
+                if back and i['put_down'] and i['lane'] != 'working': i = i | {'back_at': back.strftime('%Y-%m-%d %H:%M:%S')}
                 # an fyi's shown-state note is the summary the assistant wrote for it (PW-151); a sig'd item's note is its sig
                 if i.get('lane') == 'fyi' and not i.get('sig') and st.get('Note'): i = i | {'summary': st['Note']}
         out.append(i)
@@ -1515,7 +1517,7 @@ def showing(revisions):
 
 
 def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False,
-           shown=None) -> dict:
+           shown=None, put_down: bool = False) -> dict:
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
     default). skip: back tomorrow morning. surfaced: shown in this walk - and, with `read`, READ: once
     it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen.
@@ -1534,7 +1536,7 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         # every open Assistant answers with a forced rebuild, so four fyi settled together set four
         # rebuilds of a 60-item pile racing each other in front of the Next that follows.
         with store.one_poke():
-            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read, shown=shown) for k in key[5:].split(',') if k]
+            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read, shown=shown, put_down=put_down) for k in key[5:].split(',') if k]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
     until = None
     # NEXT ON A MEETING HOLDS IT UNTIL IT STARTS (the owner, 2026-09-28: "i should not have to dismiss invite a
@@ -1545,6 +1547,10 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         if start and start > datetime.now(): verb, until = 'later', start.strftime('%Y-%m-%d %H:%M:%S')
         else: verb = 'done'
     says = ''
+    # WALKED PAST (Next), not merely shown: the shown mark carries when it comes back, which is what files it under For later
+    if verb == 'surfaced' and put_down and until is None:
+        from .processing_unread import return_minutes
+        until = (datetime.now() + timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
     if verb == 'later' and until is None:
         back, says = later_until(store, hours=hours)
         until = back.strftime('%Y-%m-%d %H:%M:%S')

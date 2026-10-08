@@ -47,7 +47,7 @@ class NavigationStale(ValueError):
             'navigation_in_progress': 'Another navigation is still running. Wait for it to finish.',
             'already_completed': 'This navigation already completed. Review the current conversation.',
             'outcome_uncertain': 'This navigation may have partly completed. Review the conversation before continuing.',
-        }.get(detail.get('reason'), 'The next item changed. Review the refreshed list and try again.')
+        }.get(detail.get('reason'), 'The list changed while you pressed Next - nothing was skipped. Press Next again.')
         super().__init__(message)
         self.detail = {'code': 'selection_stale', 'retryable': True, **detail}
         self.detail['message'] = message

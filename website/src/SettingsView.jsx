@@ -1155,7 +1155,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
         : SHELF[section] && !open ? <>
           {/* the one-click road to a whole role - worker, playbooks, where the mail goes (roles.py) - offered beside the workers */}
           {section === "profiles" && !needle && <Box sx={{ mt: 1.5 }}><RoleStart onApplied={() => setCatN((n) => n + 1)} /></Box>}
-          <Box sx={{ display: "none" }}><DocsView key={catN} onCatalog={onCatalog} catalogOnly /></Box></> : null,
+          <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></> : null,
       detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),

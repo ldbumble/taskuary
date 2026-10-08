@@ -14,7 +14,7 @@ const lines = (v) => String(v || "").split("\n").map((x) => x.trim()).filter(Boo
 const failure = (e) => e?.response?.data?.detail || e?.message || "Could not save changes";
 const BLANK_CONNECTION = { name: "", cmd: "", args: "", resumeArgs: "", timeout: 1500, modelArg: "" };
 const BLANK_PROFILE = { name: "", purpose: "", kind: "general", rulesDoc: "", triageEnabled: true, provider: "", model: "" };
-const PROFILE_KINDS = ["general", "coding", "research", "analysis", "coordination", "marketing", "markets"];
+const PROFILE_KINDS = ["general", "coding", "research", "analysis", "coordination", "marketing", "markets", "accounts-payable"];
 
 export const CliConnectionsPage = ({ onBack }) => {
   const [clis, setClis] = useState(null), [draft, setDraft] = useState(null);

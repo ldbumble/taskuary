@@ -177,6 +177,13 @@
       "desc": "The CLI agent that works tasks when nothing names one.",
       "help": "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary."
     },
+    "default_profile": {
+      "group": "Triage & routing",
+      "label": "Your mail goes to",
+      "type": "profile",
+      "desc": "The worker that takes a non-coding task when triage names no specialist for it. Blank leaves it unassigned for you to pick.",
+      "help": "Set this to the role you do, and the mail you get lands on the worker built for it. An accounts-payable rep picks `ap`: a vendor asking where a payment is becomes a task for the AP worker, which looks it up in the ledger and drafts the answer for you to approve.\n\nTriage still names a specialist when one fits better (a researcher for outside information), and coding tasks always go to the coding agent. Docs → Profiles → Start from a role sets this for you."
+    },
     "general_agent_hands": {
       "group": "Agent permissions",
       "label": "General agents can",

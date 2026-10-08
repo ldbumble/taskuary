@@ -572,8 +572,10 @@ class ResponseTests(unittest.TestCase):
                       email='omar@vendor.example', hours=1, llm=brain('fyi', None))
         self.assertEqual(len(pile(s)), 4)
         words = "skip all the northwind financial reports, that is taken care of"
-        p = decide(s, words, 'clear', key=pile(s)[0]['key'])['proposal']
-        self.assertEqual((p['kind'], p['params']['text'], p['label']), ('pipe.clear', words, 'Clear them from the pipe'))
+        # the model names the SET (2026-10-08: no word list sweeps the owner's sentence)
+        p = say(s, words, key=pile(s)[0]['key'], model='Ok.' + chr(10) + 'CALL: ' + json.dumps(
+            {'kind': 'pipe.clear', 'params': {'select': {'contains': 'Northwind Financial Report'}}}))['proposal']
+        self.assertEqual((p['kind'], p['params']['select'], p['label']), ('pipe.clear', {'contains': 'Northwind Financial Report'}, 'Clear 3 from the pipe'))
         self.assertEqual(len(pile(s)), 4)                              # nothing swept on the words
         r = run(s, p)
         self.assertEqual(r.json()['outcome']['cleared'], 3)
@@ -1338,7 +1340,7 @@ class WhichCheckoutTests(unittest.TestCase):
         s.upsert_agent('coder', 'coding', 'cli', json.dumps(self.PROFILE))
         dock = general.dock_task(s, 'owner')[0]['TaskId']
         brief = 'Fix the login crash in the fan mobile app on older phones'
-        prop = concierge.propose_for(s, dock, {'verb': 'coder', 'text': brief}, None, brief)
+        prop = concierge.propose_for(s, dock, {'verb': 'coder', 'text': brief, 'as': 'northwind/ledger'}, None, brief)   # the model names it
         self.assertEqual(prop['params']['repo'], 'northwind/ledger')
         self.assertIn(prop['label'], prop['say'])                       # a phone chat, with no card, gets it all
         self.assertNotIn(prop['label'], prop['say_card'])

@@ -70,12 +70,12 @@ def test_nothing_is_pushed_while_the_chat_is_talking():
 
 def test_telling_the_agent_is_never_the_last_word():
     store, _c = armed_store()
-    item = {'kind': 'agent', 'tid': 7, 'key': 'agent:7', 'agent': 'coder', 'asking': True}
+    item = {'kind': 'agent', 'tid': 7, 'key': 'agent:7', 'agent': 'coder', 'asking': True, 'choices': ['hand it off to Gail']}
     ra._ASKING.chat = {'channel': 'whatsapp', 'chat': JID, 'connector_id': 1}
     try:
         with mock.patch('taskuary.workerstate.answer_open', return_value={'delivered': True}), \
              mock.patch.object(funnel, 'pile', return_value=pile({'key': 'agent:7', 'tid': 7, 'lane': 'blocked'})):
-            said = ra.answer_the_agent(store, item, 'hand it off to Gail', False)
+            said = ra.answer_the_agent(store, item, 'hand it off to Gail', True)        # the agent's own answer, picked
     finally: ra._ASKING.chat = None
     assert said.startswith('Told coder: "hand it off to Gail".') and ra.PROMISE_LINE in said
     assert concierge.CHIP_WORDS['next'] in said

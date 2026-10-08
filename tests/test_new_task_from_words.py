@@ -19,8 +19,7 @@ class NewTaskFromWordsTests(unittest.TestCase):
                       'tid': self.table_tid, 'ref': 'TQ-%04d' % self.table_tid}
 
     def propose(self, text, d_text=''):
-        with mock.patch('taskuary.terminal.known_repo', return_value=None), mock.patch('taskuary.terminal.repo_named_in', return_value=None), \
-             mock.patch('taskuary.terminal.repo_for_text', return_value=None), mock.patch('taskuary.terminal.known_repos', return_value=[]):
+        with mock.patch('taskuary.terminal.known_repo', return_value=None), mock.patch('taskuary.terminal.known_repos', return_value=[]):
             return concierge.propose_for(self.s, self.dock, {'verb': 'coder', 'text': d_text}, self.table, text)
 
     def test_words_make_a_proposal_that_names_none_of_the_table(self):

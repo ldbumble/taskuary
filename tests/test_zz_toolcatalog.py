@@ -63,7 +63,7 @@ class SelectorTests(unittest.TestCase):
         s = self._pile()
         cat, members = self._class_of(s)
         # only ONE of them carries the word in its subject; they are all the same class
-        word_hits = concierge._sweep(s, ['digest'], 'owner')[0]
+        word_hits = len(concierge.select_items(s, {'contains': 'digest'}))     # the model's word, in its select (no word-list sweep, 2026-10-08)
         s2 = self._pile()
         class_hits = concierge.select_items(s2, {'category': cat})
         print(f"  class under test: {cat!r} - {len(members)} item(s) in the pile")
@@ -337,13 +337,13 @@ class ReadsTests(unittest.TestCase):
         # the press like every hand-off typed in words (the owner, 2026-10-01)
         _s, out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the fan mobile app", "as": "ledger"}}', soul=soul)
         self.assertEqual((prop.get('auto'), prop.get('clear'), prop['params']['repo']), (None, True, 'northwind/ledger'))
+        # NOT named by the model: the picker, nothing guessed onto it from the words - "ledger" in the brief is the model's to read
+        # off the list it is shown, never a regex's (2026-10-08)
         _s, out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the ledger app"}}', soul=soul)
-        self.assertEqual((prop.get('auto'), prop.get('clear')), (None, True))
-        # only MATCHED by the description: a guess, shown on the card for a yes - a weak best match once pointed at
-        # a checkout the job was not in
+        self.assertEqual((prop.get('auto'), prop.get('clear'), prop['params'].get('repo')), (None, False, None))
         _s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the fan mobile app"}}', soul=soul)
         self.assertFalse(prop.get('auto'))
-        self.assertEqual(prop['params']['repo'], 'northwind/ledger')
+        self.assertIsNone(prop['params'].get('repo'))
         _s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "tidy up the code", "as": "nowhere"}}', soul=soul)          # not on the map
         self.assertFalse(prop.get('auto'))
 
@@ -362,23 +362,32 @@ class ReadsTests(unittest.TestCase):
         prof = {'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger', 'northwind/portal': 'C:/x/portal'}}
         self.assertEqual(terminal.guess_repo(s, made['taskId'], prof)[0], 'northwind/portal')
 
-    def test_a_checkout_the_owner_wrote_is_kept_even_when_the_model_rewords_it_away(self):
-        """"if i ask for coding agent on taskuary (explicitly write it) will it start right away" - the model's
-        brief can drop the name; the owner's own message still has it."""
+    def test_the_model_sees_every_repository_and_its_named_one_is_the_one_used(self):
+        """"if i ask for coding agent on taskuary (explicitly write it) will it start right away" - the MODEL names the checkout
+        (`as`), off the list it is shown; code checks it is one of them (2026-10-08: no regex reads the owner's sentence for it)."""
         import json
         soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
                 + '- **northwind/portal**: the expense portal' + chr(10))
         s = T.store()
         s.save_doc('soul', soul, 'owner')
         s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/l', 'northwind/portal': 'C:/x/p'}}))
+        seen = []
+        def model(system, user, **kw):
+            seen.append(system)
+            return 'CALL: {"kind": "coder", "params": {"text": "fix the receipt upload", "as": "portal"}}'
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload',
-                                llm=lambda system, user, **kw: 'CALL: {"kind": "coder", "params": {"text": "fix the receipt upload"}}')
+            out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload', llm=model)
+        self.assertIn('REPOSITORIES a coding job can open in', seen[0]); self.assertIn('northwind/portal', seen[0])
         prop = out.get('proposal') or {}
         self.assertFalse(prop.get('auto'), prop)
         self.assertTrue(prop.get('clear'), prop)
         self.assertEqual(prop['params']['repo'], 'northwind/portal')
-        self.assertEqual(terminal.repo_named_in(s, 'the portal and the ledger'), '')          # two named: ask
+        # ...and naming none is the picker, nothing guessed onto it from the words
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload',
+                                llm=lambda system, user, **kw: 'CALL: {"kind": "coder", "params": {"text": "fix the receipt upload"}}')
+        prop = out.get('proposal') or {}
+        self.assertFalse(prop.get('clear'), prop); self.assertIsNone(prop['params'].get('repo'))
         # ...and the model names a checkout by its FULL name, slash and all - a bracket that could not hold a '/'
         # left the whole DECIDE line unread and printed it to the owner as the reply
         self.assertEqual(concierge.parse_decision('On it.' + chr(10) + 'CALL: {"kind": "coder", "params": {"text": "fix it", "as": "northwind/portal"}}')[1]['as'], 'northwind/portal')

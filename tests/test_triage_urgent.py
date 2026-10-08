@@ -102,12 +102,14 @@ class SelectorTests(unittest.TestCase):
 
 
 class SweepOnlyClearsTests(unittest.TestCase):
-    def test_a_reason_in_the_words_writes_no_rule_and_silences_nobody(self):
-        """R8: a phrase list decided a sweep was a standing rule; "from now on" is the model's to call as a tool."""
+    def test_a_clear_writes_no_rule_and_silences_nobody(self):
+        """R8: a phrase list decided a sweep was a standing rule; "from now on" is the model's to call as a tool. And a clear
+        is the model's named set only (2026-10-08): no word-list sweep of the owner's sentence exists to call."""
         s = MemoryStore()
-        out = concierge.clear_matching(s, "skip all the vendor reports, that is taken care of from now on")
-        self.assertEqual(set(out), {'cleared', 'titles', 'mid', 'words'})
+        out = concierge.clear_selected(s, {'contains': 'vendor report'})
+        self.assertEqual(out['cleared'], 0)
         self.assertEqual(s.list_memories(active_only=True), [])
+        self.assertFalse(hasattr(concierge, 'clear_matching'))
         self.assertIn('preference.exclude_sender', concierge.toolcatalog.PURPOSE['pipe.clear'] if hasattr(concierge, 'toolcatalog') else
                       __import__('taskuary.toolcatalog', fromlist=['PURPOSE']).PURPOSE['pipe.clear'])
 

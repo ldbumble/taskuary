@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="260" viewBox="0 0 880 260"
      font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif"
-     role="img" aria-label="Daily installs of taskuary from PyPI, mirrors excluded. 348 yesterday   ·   1,496 in the last 7 days   ·   7,479 in 30">
+     role="img" aria-label="Daily installs of taskuary from PyPI, mirrors excluded. 361 yesterday   ·   1,526 in the last 7 days   ·   7,293 in 30">
   <style>
     text { font-size: 11px; }
     .title { font-size: 13px; font-weight: 600; fill: #1f2328; }
@@ -17,11 +17,11 @@
     }
   </style>
   <text x="52" y="22" class="title">taskuary · installs from PyPI</text>
-  <text x="52" y="38" class="dim">348 yesterday   ·   1,496 in the last 7 days   ·   7,479 in 30</text>
+  <text x="52" y="38" class="dim">361 yesterday   ·   1,526 in the last 7 days   ·   7,293 in 30</text>
   <line x1="52" y1="230.0" x2="802" y2="230.0" class="grid"/><text x="42" y="233.5" class="dim" text-anchor="end">0</text><line x1="52" y1="141.0" x2="802" y2="141.0" class="grid"/><text x="42" y="144.5" class="dim" text-anchor="end">375</text><line x1="52" y1="52.0" x2="802" y2="52.0" class="grid"/><text x="42" y="55.5" class="dim" text-anchor="end">750</text>
-  <path d="M52.0,230 L52.0,196.5 L69.4,226.0 L86.9,207.2 L104.3,226.0 L121.8,211.5 L139.2,222.2 L156.7,228.1 L174.1,174.0 L191.5,176.4 L209.0,107.1 L226.4,185.4 L243.9,107.1 L261.3,203.7 L278.7,226.0 L296.2,100.2 L313.6,169.0 L331.1,219.6 L348.5,115.1 L366.0,138.4 L383.4,219.3 L400.8,225.7 L418.3,160.0 L435.7,143.8 L453.2,122.5 L470.6,177.8 L488.0,122.7 L505.5,212.4 L522.9,132.9 L540.4,216.9 L557.8,165.9 L575.3,187.0 L592.7,124.9 L610.1,113.7 L627.6,207.9 L645.0,226.2 L662.5,169.2 L679.9,198.7 L697.3,151.4 L714.8,170.7 L732.2,169.2 L749.7,210.8 L767.1,212.7 L784.6,192.7 L802.0,147.4 L802.0,230 Z" class="area"/>
-  <polyline points="52.0,196.5 69.4,211.3 86.9,209.9 104.3,213.9 121.8,213.4 139.2,214.9 156.7,216.8 174.1,213.6 191.5,206.5 209.0,192.2 226.4,186.4 243.9,171.4 261.3,168.8 278.7,168.5 296.2,158.0 313.6,156.9 331.1,173.0 348.5,162.9 366.0,167.4 383.4,169.6 400.8,169.6 418.3,178.2 435.7,174.6 453.2,160.7 470.6,169.6 488.0,167.4 505.5,166.4 522.9,153.2 540.4,161.3 557.8,164.5 575.3,173.7 592.7,166.1 610.1,164.8 627.6,164.2 645.0,177.5 662.5,170.7 679.9,175.4 697.3,170.3 714.8,176.8 732.2,184.8 749.7,185.2 767.1,183.2 784.6,186.6 802.0,179.3" class="line"/>
-  <circle cx="802.0" cy="147.4" r="3.5" class="dot"/><text x="811.0" y="150.9" class="key">daily</text><text x="811.0" y="182.8" class="key">7-day mean</text>
-  <text x="52.0" y="250" class="dim" text-anchor="middle">Aug 24</text><text x="209.0" y="250" class="dim" text-anchor="middle">Sep 2</text><text x="348.5" y="250" class="dim" text-anchor="middle">Sep 10</text><text x="505.5" y="250" class="dim" text-anchor="middle">Sep 19</text><text x="645.0" y="250" class="dim" text-anchor="middle">Sep 27</text><text x="802.0" y="250" class="dim" text-anchor="middle">Oct 6</text>
+  <path d="M52.0,230 L52.0,196.5 L69.0,226.0 L86.1,207.2 L103.1,226.0 L120.2,211.5 L137.2,222.2 L154.3,228.1 L171.3,174.0 L188.4,176.4 L205.4,107.1 L222.5,185.4 L239.5,107.1 L256.5,203.7 L273.6,226.0 L290.6,100.2 L307.7,169.0 L324.7,219.6 L341.8,115.1 L358.8,138.4 L375.9,219.3 L392.9,225.7 L410.0,160.0 L427.0,143.8 L444.0,122.5 L461.1,177.8 L478.1,122.7 L495.2,212.4 L512.2,132.9 L529.3,216.9 L546.3,165.9 L563.4,187.0 L580.4,124.9 L597.5,113.7 L614.5,207.9 L631.5,226.2 L648.6,169.2 L665.6,198.7 L682.7,151.4 L699.7,170.7 L716.8,169.2 L733.8,210.8 L750.9,212.7 L767.9,192.7 L785.0,147.4 L802.0,144.3 L802.0,230 Z" class="area"/>
+  <polyline points="52.0,196.5 69.0,211.3 86.1,209.9 103.1,213.9 120.2,213.4 137.2,214.9 154.3,216.8 171.3,213.6 188.4,206.5 205.4,192.2 222.5,186.4 239.5,171.4 256.5,168.8 273.6,168.5 290.6,158.0 307.7,156.9 324.7,173.0 341.8,162.9 358.8,167.4 375.9,169.6 392.9,169.6 410.0,178.2 427.0,174.6 444.0,160.7 461.1,169.6 478.1,167.4 495.2,166.4 512.2,153.2 529.3,161.3 546.3,164.5 563.4,173.7 580.4,166.1 597.5,164.8 614.5,164.2 631.5,177.5 648.6,170.7 665.6,175.4 682.7,170.3 699.7,176.8 716.8,184.8 733.8,185.2 750.9,183.2 767.9,186.6 785.0,179.3 802.0,178.3" class="line"/>
+  <circle cx="802.0" cy="144.3" r="3.5" class="dot"/><text x="811.0" y="147.8" class="key">daily</text><text x="811.0" y="181.8" class="key">7-day mean</text>
+  <text x="52.0" y="250" class="dim" text-anchor="middle">Aug 24</text><text x="205.4" y="250" class="dim" text-anchor="middle">Sep 2</text><text x="358.8" y="250" class="dim" text-anchor="middle">Sep 11</text><text x="495.2" y="250" class="dim" text-anchor="middle">Sep 19</text><text x="648.6" y="250" class="dim" text-anchor="middle">Sep 28</text><text x="802.0" y="250" class="dim" text-anchor="middle">Oct 7</text>
   <text x="802" y="22" class="dim" text-anchor="end">mirrors excluded</text>
 </svg>

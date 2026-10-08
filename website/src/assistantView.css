@@ -181,7 +181,7 @@
 .tq-welcome > span { display: block; }
 .tq-welcome { color: #6e685f; padding-top: 2px; }
 .tq-welcome > b { display: block; font-size: 20px; font-weight: 600; color: #262521; margin: 0 0 4px; line-height: 1.3; }
-.tq-welcome .tq-modes { justify-content: center; flex-wrap: wrap; }        /* the way in, centred under the summary */
+.tq-welcome .tq-modes { justify-content: flex-start; flex-wrap: wrap; }    /* the way in, under the card's left edge (mock-up A) */
 @media (max-width: 760px) { .tq-welcome .tq-modes { flex-wrap: wrap; } }
 .tq-welcome span { font-size: 12.5px; line-height: 1.5; }
 /* the start of the walk on the empty chat: the rows read left to right, whatever the welcome centres */
@@ -189,6 +189,46 @@
 .tq-welcome-why { display: block; margin: 4px 0; font-size: 12px; color: #7d7468; }
 .tq-welcome-since { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 2px; font-size: 12.5px; color: #6f6a61; }
 .tq-linkish { border: 0; background: none; padding: 0; font: inherit; color: #55697a; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+/* THE DAY'S OPENER, mock-up A (the owner, 2026-10-08): a greeting with the date beside it, then ONE paper card - the day's
+   meetings as plain lines on the left, a row per band on the right. No tinted box: the hairlines carry it. */
+.tq-welcome-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+.tq-welcome-head > b { font-size: 20px; font-weight: 600; color: #262521; line-height: 1.3; }
+.tq-welcome .tq-welcome-head > span { font: 500 10.5px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; color: #6e685f; white-space: nowrap; }
+.tq-day { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; padding: 18px 22px; text-align: left;
+  background: #fffdfb; border: 1px solid #e6e0d6; border-radius: 12px; }
+.tq-day.solo { grid-template-columns: minmax(0, 1fr); }
+@container (max-width: 640px) { .tq-day { grid-template-columns: minmax(0, 1fr); gap: 16px; } }
+.tq-welcome .tq-day-h { display: block; margin: 0 0 8px; font: 600 10.5px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6e685f; }
+.tq-day-agenda { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.tq-day-agenda .ev { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.tq-welcome .tq-day-agenda .t { font: 500 11.5px 'IBM Plex Mono', Consolas, monospace; color: #262521; white-space: nowrap; }
+.tq-welcome .tq-day-agenda .s { font-size: 13px; line-height: 1.4; color: #6e685f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tq-day-agenda .s b { font-weight: 600; color: #262521; }
+.tq-day-agenda .ev.past .t, .tq-day-agenda .ev.past .s, .tq-day-agenda .ev.past .s b { color: #a09b92; font-weight: 400; }
+.tq-day-agenda .ev.past .s { text-decoration: line-through; text-decoration-color: #d8d1c5; }
+.tq-welcome .tq-day-agenda .ev.live .t { color: #8a3646; font-weight: 600; }
+.tq-welcome .tq-day-agenda .ev.now .t { font-weight: 600; text-transform: uppercase; color: #8a3646; }
+.tq-day-agenda .ev.now i { height: 1px; background: #8a3646; align-self: center; }
+.tq-welcome .tq-day-agenda .ev.allday .t { color: #6e685f; }
+.tq-day-wait { display: flex; flex-direction: column; min-width: 0; border-left: 1px solid #ece7de; padding-left: 22px; }
+.tq-day.solo .tq-day-wait { border-left: 0; padding-left: 0; }
+@container (max-width: 640px) { .tq-day-wait { border-left: 0; padding-left: 0; } .tq-day-row { grid-template-columns: 8px 76px minmax(0, 1fr) auto; } }
+.tq-day-row { display: grid; grid-template-columns: 8px 104px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px;
+  border: 0; border-bottom: 1px solid #f0ebe3; border-radius: 0; background: none; text-align: left; font: inherit; color: #262521; cursor: pointer; transition: background .15s; }
+.tq-day-row:last-child { border-bottom: 0; }
+.tq-day-row:hover { background: #fbf9f6; }
+.tq-day-row:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
+.tq-day-row .dot { width: 8px; height: 8px; border-radius: 50%; background: #b8afa1; }
+.tq-day-row .lbl { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-welcome .tq-day-row .who { font-size: 12.5px; color: #4d4a43; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-day-row .n { font: 600 18px/1 'IBM Plex Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; text-align: right; min-width: 24px; }
+.tq-day-row.lvl-urgent .dot { background: #8a3646; }
+.tq-day-row.lvl-urgent .n { color: #8a3646; }
+.tq-day-row.lvl-task .dot { background: #5f7a5f; }
+.tq-day-row.lvl-agents .dot { background: #55697a; }
+.tq-day-row.lvl-reports .dot, .tq-day-row.lvl-ideas .dot { background: #827356; }
+.tq-day-row.lvl-fyi .dot { background: #7b7366; }
+.tq-day-row.lvl-later .dot { background: transparent; border: 1px dashed #7b7366; }
 /* the day's opener: a card per band, paper and a hairline; the band is the label's DOT, never a tinted card */
 /* ONE ROW, however many bands: auto-fit at 170px held four across 822px, so a fifth band (an agent still working at launch)
    dropped FYI alone under the rest, and the row snapped back to four when that band left (the owner, 2026-10-07). A narrow
@@ -536,5 +576,5 @@
 @media (prefers-reduced-motion: reduce) {
   .tq-typing i { animation: none; opacity: .7; }
   .tq-chat-body { scroll-behavior: auto; }
-  .tq-walk-progress i, .tq-day-card, .tq-chip { transition: none; }
+  .tq-walk-progress i, .tq-day-card, .tq-day-row, .tq-chip { transition: none; }
 }

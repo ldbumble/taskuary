@@ -48,9 +48,8 @@ import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentio
 import { coveredByReload, heldSince, waitedText } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
-import { BriefCard, CardNav, DayCards, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
+import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
-import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
@@ -525,10 +524,12 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
   return null;
 }
 
-function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
+function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
       <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />))}</div>}</div></div>;
+  // the day's opener draws the welcome, once - an earlier day's sits under it as nothing (actions.welcome)
+  if (m.card?.kind === "brief") return lastBrief ? actions.welcome() : null;
   // BROWSING (the canvas redesign, 2026-09-29): Connections, Settings, Reports or Hub, walked by clicks on this line
   if (m.role === "browse") return (
     <div className={`tq-browse-line${canvas?.browsing === m.id ? " tq-canvas-live" : ""}`} data-tq-browse-line={m.area}>
@@ -624,7 +625,9 @@ function Line({ m, live, last, actions, fresh, tableChips = [], barHolds = false
   return (
     <>
       {/* the item on the table takes the canvas's whole width, whatever card it wears (the owner, 2026-09-29) */}
-      <div className={passed ? "tq-msg tq-step" : live && card ? "tq-msg tq-live-card" : "tq-msg"}>
+      {/* ...a PROPOSAL is not the item: it is a line of the chat, and full width beside narrow lines read as a glitch (the owner,
+          2026-10-08: "why are some wide and some narrow?") */}
+      <div className={passed ? "tq-msg tq-step" : live && card && kind !== "proposal" ? "tq-msg tq-live-card" : "tq-msg"}>
         {!passed && <div className="avatar"><AssistantMark /></div>}
         <div className="body">
           {/* NOT OVER A LIVE CARD: the card's lead says who wants what, and the sentence above it said
@@ -1785,7 +1788,47 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     pull(key, asUser);
   };
 
-  const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, items,
+  // THE DAY'S OPENER, one drawing: the empty chat's welcome, and the "Today" card the chat records when the owner sits down
+  // (welcome.arrive) - that card drew a row list of its own, which was not the opener (the owner, 2026-10-08)
+  const welcome = () => (
+    <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
+    <div className="tq-welcome">
+      {/* TASKUARY SPEAKING, the way every line of the chat is: the mark is the speaker's avatar in
+          the left column, never inline with the greeting (the owner, 2026-09-23: "it should be the
+          person talking"), and the whole day fits one screen without scrolling */}
+      <div className="tq-welcome-head"><b>{greeting()}</b>
+        <span>{new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })} · {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span></div>
+      {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
+          digest, on the screen the day opens on (2026-09-23) */}
+      <DayOpener groups={items.length ? summarize(railPile?.items || items).groups : []} onSection={walkSection} />
+      {!items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
+      <SinceLines />
+      {/* greyed with no reason read as broken: say why, and where the rows are */}
+      {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
+        Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
+      <div className="tq-modes">
+        <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
+          title="Everything waiting, most important first - mail, reports, agents, meetings">{starting ? "Getting your first one..." : "Walk me through my tasks"}</button>
+        {/* the same walk the header chip opens. It lives here as well because the header
+            hides its chip on a phone, and this block is what a phone shows - without it the
+            one door to the set-up guidance was absent on the device it is most needed on. */}
+        <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={setup}
+          title="A walk through every part of Taskuary — one step at a time, no AI needed">Set up Taskuary</button>
+        <button type="button" className="tq-chip" disabled={resetting} onClick={askSetup}
+          title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>
+        {/* the same walk, on your phone - offered only for a chat that is already connected and
+            names an Assistant chat, because this talks to the assistant, it does not set one up */}
+        {(state?.doorways || []).map((d) => (
+          <button key={d.channel} type="button" className="tq-chip tq-chip-chat" disabled={busy || resetting || !canAdvance}
+            onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab locks until you take it back`}>
+            <ChannelIcon channel={d.channel} sx={{ fontSize: 14 }} />
+            Walk me through them in {d.label}
+          </button>
+        ))}
+      </div>
+    </div></div>
+  );
+  const actions = { done, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
@@ -1802,6 +1845,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
   const shown = old ? old.messages : msgs;
+  const lastBriefId = [...shown].reverse().find((m) => m.card?.kind === "brief")?.id;
   // the live browse card: the newest one, unless the walk has put an item on the table since
   const browsing = useMemo(() => {
     for (let i = shown.length - 1; i >= 0; i -= 1) {
@@ -1927,45 +1971,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       <div className={`tq-chat-body${expanded ? " expanded" : ""}`} ref={bodyRef}>
         <div className={`tq-chat-inner${expanded ? " expanded" : ""}`}>
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
-          {state && !shown.length && !busy && (
-            <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
-            <div className="tq-welcome">
-              {/* TASKUARY SPEAKING, the way every line of the chat is: the mark is the speaker's avatar in
-                  the left column, never inline with the greeting (the owner, 2026-09-23: "it should be the
-                  person talking"), and the whole day fits one screen without scrolling */}
-              <b>{greeting()}</b>
-              {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
-                  digest, on the screen the day opens on (2026-09-23) */}
-              <div className="tq-welcome-sum"><TodayMeetingsStrip /></div>
-              {items.length ? <DayCards groups={summarize(railPile?.items || items).groups} onSection={walkSection} />
-                : <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
-              <SinceLines />
-              {/* greyed with no reason read as broken: say why, and where the rows are */}
-              {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
-                Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
-              <div className="tq-modes">
-                <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
-                  title="Everything waiting, most important first - mail, reports, agents, meetings">{starting ? "Getting your first one..." : "Walk me through my tasks"}</button>
-                {/* the same walk the header chip opens. It lives here as well because the header
-                    hides its chip on a phone, and this block is what a phone shows - without it the
-                    one door to the set-up guidance was absent on the device it is most needed on. */}
-                <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={setup}
-                  title="A walk through every part of Taskuary — one step at a time, no AI needed">Set up Taskuary</button>
-                <button type="button" className="tq-chip" disabled={resetting} onClick={askSetup}
-                  title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>
-                {/* the same walk, on your phone - offered only for a chat that is already connected and
-                    names an Assistant chat, because this talks to the assistant, it does not set one up */}
-                {(state?.doorways || []).map((d) => (
-                  <button key={d.channel} type="button" className="tq-chip tq-chip-chat" disabled={busy || resetting || !canAdvance}
-                    onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab locks until you take it back`}>
-                    <ChannelIcon channel={d.channel} sx={{ fontSize: 14 }} />
-                    Walk me through them in {d.label}
-                  </button>
-                ))}
-              </div>
-            </div></div>
-          )}
-          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
+          {state && !shown.length && !busy && welcome()}
+          {shown.map((m, i) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (

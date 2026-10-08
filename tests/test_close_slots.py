@@ -603,3 +603,31 @@ def test_drafts_a_restart_wrongly_retired_come_back(tmp_path):
     b = SQLiteStore(db)
     try: assert b.get_review(r1)['Status'] == 'pending'
     finally: b.close()
+
+
+def _finish_with_a_written_email(s, written=None):
+    """A mail task whose agent wrote the email it was asked for (to someone else), then finished."""
+    tid, mid, rid = mail_task(s)
+    s.decide_review(rid, 'no_reply', None, 'owner', 'cleared for the test')
+    slots.draft(s, tid, 'Passing you the import failure.', to='gail@northwind.example', agent='coder')
+    prev, coder.REFRESH = coder.REFRESH, None
+    try:
+        with mock.patch.object(coder, 'raise_reply') as raised:
+            if written is None: coder.finish(s, tid, {'summary': 'handed it to Gail', 'outcome': 'did_work'})
+            else:
+                with mock.patch.object(slots, 'written', return_value=written): coder.finish(s, tid, {'summary': 'x', 'outcome': 'did_work'})
+    finally: coder.REFRESH = prev
+    return tid, raised
+
+
+def test_an_email_the_agent_wrote_is_the_answer_no_reply_all_beside_it(s):
+    # "hand it off to her" came back as the agent's email AND a reply-all to the first sender - two drafts on one task (2026-10-08)
+    tid, raised = _finish_with_a_written_email(s)
+    raised.assert_not_called()
+    assert s.get_task(tid)['Status'] == 'waiting'
+    assert any('no reply to the original sender' in c['Body'] for c in s.list_comments(tid))
+
+
+def test_without_a_written_email_the_reply_is_still_drafted(s):
+    tid, raised = _finish_with_a_written_email(s, written=[])
+    raised.assert_called_once()

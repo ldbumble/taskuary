@@ -218,6 +218,10 @@ Updated daily from PyPI with mirror traffic excluded. The raw series is
 
 The documentation is at **[taskuary.com/docs](https://taskuary.com/docs/)**.
 
+Excel (`.xlsx`) reports from local files and SharePoint preserve columns with repeated or blank
+headers. Blank headers use zero-based names such as `col0`; repeated names gain `_2`, `_3`, and
+so on until each column has a unique name, matching Google Sheets reports.
+
 - [Start here](https://taskuary.com/docs/)—installation, first run, Docker, and where your data lives
 - [How it works](https://taskuary.com/docs/how-it-works)—the Timeline, the five roads, what triage decides, the operator documents
 - [Connections](https://taskuary.com/docs/connections)—channels, AI providers, work systems, and report sources

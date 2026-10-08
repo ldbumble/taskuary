@@ -36,7 +36,7 @@ class RoleTests(unittest.TestCase):
         self.assertEqual(cfg['agents']['ap']['cmd'], 'claude')          # runnable on day one
         self.assertIn('vendor asks where their money is', s.get_doc('ap'))
         self.assertIn('- ap: ACCOUNTS PAYABLE', agents.roster(s))
-        self.assertEqual(sorted(r['playbooks_added']), ['bill-portal-to-ledger', 'vendor-payment-inquiry'])
+        self.assertEqual(sorted(r['playbooks_added']), ['portal-bill-approvals', 'vendor-payment-inquiry'])
         self.assertEqual(s.get_setting('default_profile'), 'ap')
         self.assertEqual(s.get_connector_by_type('intacct')['Scope'], 'read')
         src = s.get_source(r['workflow_id'])
@@ -71,7 +71,10 @@ class RoleTests(unittest.TestCase):
             self.assertIn('intacct', playbooks.uses_of(pb))
             self.assertFalse(playbooks.about_code(pb))
         self.assertIn('bank', playbooks.parse(roles.playbook_text('vendor-payment-inquiry'))['ask first'])
-        self.assertIn('EVERY bill', playbooks.parse(roles.playbook_text('bill-portal-to-ledger'))['ask first'])
+        # the portal posts approved bills itself: the job is approving, and only on the owner's named yes
+        pb = playbooks.parse(roles.playbook_text('portal-bill-approvals'))
+        self.assertIn('EVERY approval', pb['ask first']); self.assertIn('owner named', pb['ask first'])
+        self.assertIn('never write to the ledger', roles.ROLES['ap']['workflow']['ask_first'])
 
 
 class DefaultProfileTests(unittest.TestCase):

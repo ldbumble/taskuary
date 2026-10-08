@@ -15,7 +15,7 @@ who is not technical never assembled them. The missing part was putting them tog
 | "Where is payment for invoice 4471?" from a known vendor | triage: a task, the `vendor-payment-inquiry` playbook, the `ap` worker → the worker reads VENDOR / APBILL / APPYMT through the Intacct card → a drafted reply on the task | the rep approves the reply |
 | A statement of account | same road; the reply lists only the open items | the rep approves |
 | "We changed banks, please update" | the playbook puts it under *ask first*: flagged for a call-back, and no confirming reply is drafted | the rep phones a number already on file |
-| 08:00, the daily portal job (once switched on) | the `ap` worker opens the portal in the browser it was signed into, lists approved bills, looks each up in Intacct, and posts **one proposal per missing bill** plus a table of what disagrees | the rep approves each bill proposal; approving it posts the bill |
+| 08:00, the daily portal job (once switched on) | the `ap` worker opens the portal in the browser it was signed into, lists the bills waiting for approval, checks each against Intacct (vendor exists, not already entered, amount and coding normal for that vendor) and gives each a verdict: **looks good** or **needs a look** | the rep says which to approve; the worker approves exactly those in the portal, which posts them to Intacct itself |
 
 ## What one click lays out (`taskuary/roles.py`)
 
@@ -24,7 +24,8 @@ who is not technical never assembled them. The missing part was putting them tog
 1. **The worker:** an `ap` profile with `AP.md` (`templates/ap.md`), on the triage roster, running
    on the same CLI as the coding agent.
 2. **Two playbooks**, copied into `~/.taskuary/playbooks`: `vendor-payment-inquiry` (read-only, a
-   drafted reply) and `bill-portal-to-ledger` (reads the portal and proposes bills).
+   drafted reply) and `portal-bill-approvals` (checks the bills waiting in the portal and approves the
+   ones the rep names). The portal posts approved bills to the ledger itself, so the ledger is only read.
 3. **Where the mail goes:** `default_profile = ap`, a new setting (Settings → Triage & routing →
    *Your mail goes to*). `agents.routed_role` uses it when triage judges a message to be general
    work and names no better-suited worker. Triage still picks a researcher for outside
@@ -44,9 +45,9 @@ Applying twice changes nothing, and nothing the owner already wrote is overwritt
 
 - **A browser click is not gated by code.** The agent drives agent-browser from its own shell.
   Nothing in Taskuary sits between it and the portal's *Approve* button except the playbook's
-  wording. That is why the portal side is read-only and every change goes through an Intacct
-  proposal. Keeping it safe means keeping it that way. A browser action that waits for approval
-  would be a new kind of proposal, and it is not built.
+  wording. That is why each approval waits for the rep to name the bill in the conversation, after
+  seeing the table, and the worker re-reads each bill on screen before clicking. A browser action
+  gated in code (a proposal that clicks) is not built.
 - **Sign-ins expire.** The saved sign-in is kept only when the browser closes cleanly, and SSO or
   2FA prompts are never answered automatically. When the portal turns the run away, it stops on the
   sign-in page and asks. Expect that on some mornings.

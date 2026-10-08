@@ -26,21 +26,24 @@ TEMPLATES = Path(__file__).parent / 'templates'
 ROLES = {
     'ap': {
         'title': 'Accounts payable',
-        'blurb': 'Vendor mail answered from the ledger; bills from the approval portal proposed into it.',
+        'blurb': 'Vendor mail answered from the ledger; bills waiting in the approval portal checked against it, approved on your yes.',
         'profile': 'ap', 'kind': 'accounts-payable',
         'purpose': 'ACCOUNTS PAYABLE - a vendor asking about an invoice, a bill, a statement or a payment; bills to '
                    'enter or reconcile. Looks them up in the accounting system and drafts the answer',
-        'playbooks': ('vendor-payment-inquiry', 'bill-portal-to-ledger'),
+        'playbooks': ('vendor-payment-inquiry', 'portal-bill-approvals'),
         'ledger': 'intacct',
-        'workflow': {'type': 'agent', 'title': 'Approved bills from the portal into the ledger', 'agent': 'ap',
+        # the portal posts what is approved to the ledger by itself (the owner, 2026-10-08: "stampli syncs to Intacct. we
+        # just need to approve them if they look good") - so the job is the approval, the ledger only checks it
+        'workflow': {'type': 'agent', 'title': 'Bills waiting for approval in the portal', 'agent': 'ap',
                      'browser': True, 'access': 'write', 'daily_at': '08:00', 'uses': ['intacct'],
-                     'prompt': 'Follow the playbook "Bring approved bills from the bill-approval portal into the ledger": '
-                               'open the portal at {portal}, read the bills waiting and the bills approved since the last '
-                               'run, look each approved one up in the ledger, and propose every missing bill.',
-                     'ask_first': 'every bill posted to the ledger (propose it with run_tool intacct_create, never post it); '
-                                  'approving, rejecting or coding anything in the portal; a vendor the ledger does not have',
-                     'done_when': 'a table of waiting / already in the ledger / disagree is on the task, and every bill to '
-                                  'post is a proposal carrying the full record'},
+                     'prompt': 'Follow the playbook "Review the bills waiting for approval in the bill-approval portal": '
+                               'open the portal at {portal}, list every bill waiting for approval, check each against the '
+                               'ledger, give each a verdict, and ask the owner which to approve.',
+                     'ask_first': 'EVERY approval: approve only the bills the owner names in this conversation after seeing '
+                                  'your table; never reject, re-code or edit a bill; never touch vendor or bank details; never '
+                                  'write to the ledger',
+                     'done_when': 'the table of waiting bills with a verdict for each is on the task, and every bill the owner '
+                                  'named is approved in the portal and listed - or the owner said approve none'},
     },
 }
 

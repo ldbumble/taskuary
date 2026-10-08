@@ -112,3 +112,24 @@ class ExplicitFinishTests(Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class NoReplyTests(Base):
+    """`taskuary --done --no-reply` (the owner, 2026-10-08: "allow done with no reply"): told "not ours, don't answer", the agent
+    could only finish with --done, which drafted the reply anyway. Saying none is owed is the agent's call; it is carried out."""
+    def test_done_with_no_reply_drafts_none_and_puts_a_waiting_draft_down(self):
+        term.SESSIONS['run1'] = live(self.tid)
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, on it.'})
+        out = selfclose.declare(self.s, self.tid, 'not ours - the owner chose no reply', 'coder', no_reply=True)
+        self.assertTrue(out.get('closed'))
+        self.assertTrue(coder.finish.call_args.kwargs.get('no_reply'), 'finish is told no reply is owed')
+        self.assertEqual(self.s.get_review(rid)['Status'], 'no_reply')
+        self.assertIn('no reply is owed', ' '.join(c['Body'] for c in self.s.list_comments(self.tid)))
+
+    def test_plain_done_still_drafts_as_before(self):
+        term.SESSIONS['run1'] = live(self.tid)
+        selfclose.declare(self.s, self.tid, 'fixed the cron', 'coder')
+        self.assertFalse(coder.finish.call_args.kwargs.get('no_reply'))
+
+    def test_the_agent_is_told_the_flag_exists(self):
+        self.assertIn('--no-reply', selfclose.SEED_LINE)

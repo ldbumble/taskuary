@@ -135,8 +135,8 @@ except the few that can be undone, which run at once with an undo on the receipt
 </tr>
 <tr>
 <td><strong>app</strong></td>
-<td>settings, connections, scripts and kept facts</td>
-<td>setting.set(setting, value), connection.create(type, name), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?)</td>
+<td>settings, connections, roles, scripts and kept facts</td>
+<td>setting.set(setting, value), connection.create(type, name), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?)</td>
 </tr>
 <tr>
 <td><strong>look</strong></td>
@@ -433,7 +433,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>title</code></li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h2 id="app">App<a class="anchor" href="#app" aria-label="Link to this section">#</a></h2>
-<p>Settings, connections, scripts and kept facts.</p>
+<p>Settings, connections, roles, scripts and kept facts.</p>
 <h3 id="setting-set"><code>setting.set</code><a class="anchor" href="#setting-set" aria-label="Link to this section">#</a></h3>
 <p>Change one setting; the schema says what it takes.</p>
 <ul>
@@ -445,6 +445,13 @@ except the few that can be undone, which run at once with an undo on the receipt
 <ul>
 <li><code>type</code></li>
 <li><code>name</code></li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="role-apply"><code>role.apply</code><a class="anchor" href="#role-apply" aria-label="Link to this section">#</a></h3>
+<p>Set Taskuary up for the owner&#39;s job in one go - its worker, playbooks and daily workflow. Before calling, ASK the owner, one question at a time: the address of their bill-approval portal (<code>portal</code>; fine to leave out), and whether their own non-coding mail should go to that worker (<code>route_mail</code>: true or false - when they are only trying it out, false). The workflow is created OFF: after the yes, offer to run it once (report.run), and say they sign in to the portal themselves in the browser pane.</p>
+<ul>
+<li><code>role</code> - ap (accounts payable)</li>
+<li><code>portal</code> (optional)</li>
+<li><code>route_mail</code> (optional) - true or false - when they are only trying it out</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="connection-test"><code>connection.test</code><a class="anchor" href="#connection-test" aria-label="Link to this section">#</a></h3>
 <p>Test a connection now and say what it answered.</p>

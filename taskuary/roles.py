@@ -60,13 +60,13 @@ def catalog(store) -> list:
              'portal_needed': bool(r.get('workflow'))} for k, r in ROLES.items()]
 
 
-def _profile(store, cfg, r) -> bool:
-    """The worker, on the roster, inheriting the coding agent's CLI the way the shipped roles do
-    (agents.seed_profiles). An existing one is the owner's and is left as it is."""
+def _profile(store, cfg, r, routed: bool = True) -> bool:
+    """The worker, inheriting the coding agent's CLI the way the shipped roles do (agents.seed_profiles) - on the
+    triage roster only when the owner's mail is to reach it. An existing one is the owner's and is left as it is."""
     from . import agents, cli_connections
     name = r['profile']
     if name in (cfg.get('agents') or {}) or store.get_agent(name): return False
-    prof = {**agents.cli_inheritance(cfg), 'kind': r['kind'], 'purpose': r['purpose'], 'triage_enabled': True}
+    prof = {**agents.cli_inheritance(cfg), 'kind': r['kind'], 'purpose': r['purpose'], 'triage_enabled': bool(routed)}
     cfg.setdefault('agents', {})[name] = prof
     store.upsert_agent(name, r['kind'], 'cli', json.dumps(prof))
     try: cli_connections.sync(cfg, store, name)
@@ -100,20 +100,26 @@ def _workflow(store, r, portal: str):
                               'ConfigJson': json.dumps(c)}, 'role')
 
 
-def apply(store, cfg, name: str, portal: str = '') -> dict:
-    """Lay the role out. Returns what changed, so the page can say it in plain words."""
+def apply(store, cfg, name: str, portal: str = '', route_mail: bool = True) -> dict:
+    """Lay the role out. Returns what changed, so the page and the chat can say it in plain words.
+
+    `route_mail` False sets up the worker and its job WITHOUT moving the owner's mail: no default route, and the
+    worker stays off triage's roster - trying a role out (the owner, 2026-10-08) is not handing over the inbox."""
     from . import config
     r = ROLES.get(name)
     if not r: raise ValueError(f'unknown role {name!r} - one of {", ".join(ROLES)}')
-    made = _profile(store, cfg, r)
+    made = _profile(store, cfg, r, route_mail)
     if made: config.save(cfg)
     books = _playbooks(r)
     was = store.get_setting('default_profile') or ''
-    if was != r['profile']: store.set_setting('default_profile', r['profile'], 'role')
+    if route_mail and was != r['profile']: store.set_setting('default_profile', r['profile'], 'role')
     narrowed = _ledger(store, r)
     wid = _workflow(store, r, portal.strip())
     out = {'role': name, 'profile': r['profile'], 'profile_added': made, 'playbooks_added': books,
-           'default_profile': r['profile'], 'default_was': was, 'ledger_narrowed': narrowed, 'workflow_id': wid}
+           'default_profile': r['profile'] if route_mail else was, 'default_was': was, 'mail_routed': bool(route_mail),
+           # a worker that was already here keeps its own roster setting - so triage may still hand it mail
+           'on_roster': bool(json.loads((store.get_agent(r['profile']) or {}).get('Config') or '{}').get('triage_enabled', True)),
+           'ledger_narrowed': narrowed, 'workflow_id': wid, 'workflow_title': (r.get('workflow') or {}).get('title', '')}
     store.audit('role', 0, 'apply', 'owner', detail=out)
     logger.info(f'role {name}: {out}')
     return out

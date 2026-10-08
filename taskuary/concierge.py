@@ -1831,6 +1831,13 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # The composer builds it from the owner's words, exactly as a DECIDE setup does; the model already said "report".
     if kind == 'report.create':
         return setup_turn(store, tid, text, text, item, actor, sorted_as='report')
+    if kind == 'role.apply':
+        from . import roles
+        want = str(params.get('role') or '').strip().lower()
+        hit = want if want in roles.ROLES else next((k for k, v in roles.ROLES.items() if want and want in v['title'].lower()), None)
+        if not hit: raise CallMiss('The roles I can set up: ' + '; '.join(f"{k} ({v['title']})" for k, v in roles.ROLES.items()) + '. Nothing was set up.')
+        # a yes/no the model may write as words: anything but an explicit yes keeps the owner's mail where it goes today
+        return role_card(store, tid, hit, params.get('portal'), str(params.get('route_mail')).strip().lower() in ('true', 'yes', '1'), item, actor)
     if kind == 'pipe.clear':
         sel = params.get('select') or {}
         hits = select_items(store, sel)
@@ -2719,7 +2726,12 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
 SECRET_WORDS = re.compile(r'(secret|token|password|passwd|api[_ -]?key|refresh|private[_ -]?key|client[_ -]?secret|bearer)', re.I)
 SETUP_QUESTIONS = 'setup_questions'
 SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
-                     '{"kind": "report" | "connection" | "investigate", "provider": "<connector type or null>", "why": "<one sentence>"}. '
+                     '{"kind": "report" | "connection" | "role" | "investigate", "provider": "<connector type or null>", '
+                     '"role": "<a key from roles, or null>", "why": "<one sentence>"}. '
+                     # (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work")
+                     'A ROLE is the owner naming their JOB and asking for Taskuary to be set up for it ("I am an AP rep, set me '
+                     'up", "I do accounts payable") - answer role, with its key from roles, when the job is one of them; a job '
+                     'that is not in roles is investigate. '
                      'A REPORT reads connected systems on a schedule and files what it found (a check, a digest, a scheduled agent job). '
                      'A CONNECTION adds or configures a system Taskuary talks to (mail, chat, a database, a books system, an AI provider) - '
                      'name its type from connector_types when you can. INVESTIGATE is a set-up that needs real digging first - a portal to '
@@ -2762,12 +2774,17 @@ def sort_setup(store, text: str, llm) -> dict:
     """What kind of set-up the words ask for, by the model: a report, a connection (and to what), or digging."""
     from . import compose
     types = sorted(store_mod.DEFAULT_ROLES)
-    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, 'connector_types': types}), max_tokens=300)) or {}
+    from . import roles
+    have = {k: r['title'] for k, r in roles.ROLES.items()}
+    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, 'connector_types': types, 'roles': have}), max_tokens=300)) or {}
     except Exception as e:
         logger.warning(f'concierge: the set-up sort failed - {e}'); out = {}
     kind = str(out.get('kind') or 'report').lower(); prov = str(out.get('provider') or '').lower().strip()
-    return {'kind': kind if kind in ('report', 'connection', 'investigate') else 'report', 'provider': prov if prov in types else None,
-            'why': str(out.get('why') or '')[:300]}
+    role = str(out.get('role') or '').lower().strip()
+    # a role nobody ships is still a real ask - it is digging, never a report built from nothing
+    if kind == 'role' and role not in have: kind = 'investigate'
+    return {'kind': kind if kind in ('report', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
+            'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300]}
 
 
 def _pending_setup(store, tid: int) -> dict | None:
@@ -2879,6 +2896,8 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     pending, answers = _pending_setup(store, tid), None
     if pending:
         ask, answers = pending['ask'], {'questions': pending.get('questions') or [], 'reply': text}
+        # a role's questions were asked about THAT role: the answer is to them, not a new request to sort
+        if pending.get('role'): return _propose_role(store, tid, ask, pending['role'], item, actor, cllm, answers)
         sort = sort_setup(store, f"{ask}. The owner answered: {text}", cllm)
     elif sorted_as: sort = {'kind': sorted_as, 'provider': None, 'why': ''}      # the chat model already named it
     else: sort = sort_setup(store, ask, cllm)
@@ -2886,6 +2905,8 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
         return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.")
     if sort['kind'] == 'connection':
         return _propose_connection(store, tid, ask, sort.get('provider'), item, actor)
+    if sort['kind'] == 'role':
+        return _propose_role(store, tid, ask, sort['role'], item, actor, cllm)
     from . import compose
     out = compose.compose(store, ask, cllm, answers=answers)
     if out.get('questions'):
@@ -2914,6 +2935,48 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
 # that level - a hundred report types printed on a Todoist card as its "permissions" (2026-09-23)
 SCOPE_SAYS = {'read': 'it can read, never change or send', 'write': 'it can read and make changes',
               'admin': 'it can read, make changes and administer the account'}
+
+
+ROLE_READ_SYSTEM = ('You read the owner\'s answer to set-up questions. Answer JSON only: {"portal": "<the web address they gave, '
+                    'or empty>", "route_mail": true | false}. route_mail is true only when they clearly want their own non-coding '
+                    'mail to go to the new worker from now on; trying it out, testing, not yet, or no answer is false.')
+
+
+def _propose_role(store, tid: int, ask: str, role: str, item: dict | None, actor: str, llm, answers: dict = None) -> dict:
+    """A role (roles.py), walked: the questions it needs, asked once as a numbered list; the answer read for intent by the
+    model (never by matching words); then the whole set-up on ONE card - worker, playbooks, workflow, where the mail goes."""
+    from . import compose, roles
+    r = roles.ROLES[role]
+    rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
+    if answers is None:
+        qs = ((['What is the address of your bill-approval portal? Say skip to add it later.'] if r.get('workflow') else [])
+              + [f"Should your own non-coding mail go to the {r['profile'].upper()} worker from now on, or are you only trying it out?"])
+        say_ = f"To set Taskuary up for {r['title'].lower()}:\n" + '\n'.join(f"{n}. {q}" for n, q in enumerate(qs, 1)) + '\n\nNothing is set up yet.'
+        rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': qs, 'role': role})
+        return {'say': say_, 'options': [], 'decision': None}
+    try: got = compose._json(llm(ROLE_READ_SYSTEM, json.dumps(answers), max_tokens=200)) or {}
+    except Exception as e:
+        logger.warning(f'concierge: reading the role answers failed - {e}'); got = {}
+    return role_card(store, tid, role, got.get('portal'), got.get('route_mail') is True, item, actor)
+
+
+def role_card(store, tid: int, role: str, portal, route: bool, item: dict | None, actor: str) -> dict:
+    """The Set it up card for a role - what it lays out, line by line, before the owner's yes."""
+    from . import playbooks, roles
+    r = roles.ROLES[role]
+    portal = str(portal or '').strip()
+    if portal and '://' not in portal: portal = 'https://' + portal
+    params = {'role': role, 'portal': portal, 'route_mail': bool(route)}
+    wf = r.get('workflow') or {}
+    lines = [f"Worker: {r['profile'].upper()}.md",
+             'Playbooks: ' + '; '.join(playbooks.parse(roles.playbook_text(b))['title'] for b in r['playbooks']),
+             'Your mail: ' + ('non-coding mail goes to the worker' if route else 'goes where it goes today'),
+             *([f"Ledger: {(store.get_connector_by_type(r['ledger']) or {}).get('Name') or r['ledger']} set to read if nobody chose its "
+                'authority, so nothing reaches it without your click'] if r.get('ledger') else []),
+             *([f"Workflow: \"{wf['title']}\", daily at {wf.get('daily_at', '')}, created switched off" + (f" - {portal}" if portal else '')] if wf else [])]
+    tail = '\n' + '\n'.join(lines) + '\n\nNothing is set up yet - confirm below, or tell me what to change.'
+    prop = _propose_raw(store, tid, 'role.apply', 0, params, 'Set it up', r['title'], tail, actor, item)
+    return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
 
 def _propose_connection(store, tid: int, ask: str, provider: str | None, item: dict | None, actor: str) -> dict:
@@ -2952,6 +3015,7 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'item.settle': label = {'later': 'Push it back', 'skip': 'Skip until tomorrow'}.get(str(p.get('verb')), 'Mark done' if p.get('tid') else 'Mark it handled')
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
+    if kind == 'role.apply': label = 'Set it up'
     if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
     label = {'hub.publish': 'Save it to the Hub', 'task.update': 'Change the task', 'task.set_kind': 'Change what kind of work it is', 'task.set_repo': 'Put it in that repository',
              'task.check': 'Tick the checklist item', 'task.checklist': 'Change the checklist', 'task.watch': 'Watch it for you', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
@@ -2981,6 +3045,9 @@ def describe_op(store, op: dict) -> tuple:
         elif tk == 'source' and target: ref = f'report {target}'
         elif tk == 'report': ref = str(p.get('title') or '')
         elif tk == 'connector': ref = str(p.get('name') or '')
+        elif tk == 'role':
+            from . import roles
+            ref = (roles.ROLES.get(str(p.get('role') or '')) or {}).get('title', '')
     except Exception: ref = ''
     return label, ref
 
@@ -3044,6 +3111,18 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'connection.create' and o.get('connectorId'):
         return (f" The {o.get('type')} card \"{o.get('name')}\" is {o.get('state')} - finish it on the card (sign in or paste the secret there), "
                 'then Test; it stays off until you turn it on.')
+    if kind == 'role.apply' and o.get('role'):
+        bits = [f"the {o['profile'].upper()}.md worker is {'added' if o.get('profile_added') else 'already here'}"]
+        if o.get('playbooks_added'): bits.append(f"{len(o['playbooks_added'])} playbook{'s' if len(o['playbooks_added']) != 1 else ''} added")
+        bits.append('your non-coding mail goes to it' if o.get('mail_routed') else
+                    "nothing is routed to it by default, though it is on triage's list, so mail triage judges to be its work can still "
+                    'reach it - turn off "Available to triage" on its profile to stop that' if o.get('on_roster') else
+                    'your mail goes where it went before')
+        if o.get('ledger_narrowed'): bits.append(f"{o['ledger_narrowed']} is set to read, so nothing reaches it without your click")
+        flow = (f" \"{o['workflow_title']}\" is on the Reports tab, switched off. Say run it and I'll start it once - "
+                'when it stops at the sign-in, sign in yourself in the browser beside the chat.') if o.get('workflow_id') else ''
+        said = '; '.join(bits)
+        return f' {said[0].upper()}{said[1:]}.{flow}'
     if kind == 'task.complete' and o.get('already'): return ' It was closed already.'
     return ''
 

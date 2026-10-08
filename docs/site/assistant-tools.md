@@ -15,7 +15,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
-| **app** | settings, connections, scripts and kept facts | setting.set(setting, value), connection.create(type, name), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
+| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type, name), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
 | **look** | look-ups - they run at once and change nothing | task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
@@ -520,7 +520,7 @@ Delete a report or workflow for good; asks first.
 
 ## App
 
-Settings, connections, scripts and kept facts.
+Settings, connections, roles, scripts and kept facts.
 
 ### `setting.set`
 
@@ -537,6 +537,16 @@ Add a system Taskuary talks to; created OFF and never carrying a secret, which t
 
 - `type`
 - `name`
+
+<p class="runs">Waits for your yes on a card.</p>
+
+### `role.apply`
+
+Set Taskuary up for the owner's job in one go - its worker, playbooks and daily workflow. Before calling, ASK the owner, one question at a time: the address of their bill-approval portal (`portal`; fine to leave out), and whether their own non-coding mail should go to that worker (`route_mail`: true or false - when they are only trying it out, false). The workflow is created OFF: after the yes, offer to run it once (report.run), and say they sign in to the portal themselves in the browser pane.
+
+- `role` - ap (accounts payable)
+- `portal` (optional)
+- `route_mail` (optional) - true or false - when they are only trying it out
 
 <p class="runs">Waits for your yes on a card.</p>
 

@@ -64,6 +64,10 @@ def cards(store, now: datetime = None) -> list:
         run = store.get_report_run(int(r['rid'])) or {}
         title, subj = run.get('title') or 'Report', str(run.get('subject') or '')
         said = subj.split(' — ', 1)[1] if ' — ' in subj else subj.split(' - ', 1)[1] if subj.startswith(f'{title} - ') else subj
+        # a subject that is only a heading ("Errors:") says nothing on a card - its first real line does
+        if not said.strip() or said.rstrip().endswith(':'):
+            said = next((l.strip().lstrip('-•* ').strip() for l in str(run.get('summary') or '').splitlines()
+                         if l.strip() and not l.strip().endswith(':')), said)
         out.append({'kind': 'report', 'label': f"{'Report failed' if run.get('failed') else 'Report ran'} · {str(run.get('at') or '')[11:16]}",
                     'text': f"{title}: {said}" if said and said != title else title, 'key': f"report:{run['messageId']}", 'at': run.get('at')})
     # what was LEARNED is not a card: it lost its slot to agents and reports on any busy morning (the owner, 2026-10-08: "did you remove

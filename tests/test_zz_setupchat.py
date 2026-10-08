@@ -108,7 +108,7 @@ class SetupInChatTests(unittest.TestCase):
         """A fresh chat offers it as a button; after that it is typed. Both must still be there."""
         import io, os
         view = io.open(os.path.join('website', 'src', 'AssistantView.jsx'), encoding='utf-8').read()
-        self.assertIn('Set up a report or workflow', view)     # the welcome block's own button
+        self.assertIn('Run a report or workflow', view)        # the welcome block's own button (opens Reports, 2026-10-08)
         self.assertIn('const setup = ', view)                  # ...and it opens the scripted walk now (was
                                                                  # the SetupCard - loose enough to survive async)
         self.assertNotIn('tq-quick', view)                     # the strip over the composer is gone

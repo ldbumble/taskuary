@@ -14,7 +14,7 @@ jobs:
     name: ci-required
     if: always()
     needs: [test, build-web, browser, docker]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Require every CI job to pass
         env:
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
         python: ["3.10", "3.12"]
     runs-on: ${{ matrix.os }}
     steps:
@@ -54,7 +54,7 @@ jobs:
   build-web:
     # the built UI is committed into taskuary/web; this proves the source still builds,
     # and the node:test suite covers the view logic that has no Python behind it
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -102,7 +102,7 @@ jobs:
 
   browser:
     # Real Chromium + the disposable fixture backend; never targets the owner's server.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -120,7 +120,7 @@ jobs:
     # proves the image builds, serves the UI, persists across restart, and the
     # token gate still works when TASKUARY_TOKEN is set. The regression desk is
     # seeded into the regression volume first so /api/feed is a real Timeline.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - run: docker compose build

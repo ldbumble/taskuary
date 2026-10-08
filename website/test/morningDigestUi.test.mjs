@@ -40,3 +40,9 @@ test("the opening card carries what changed and the digest, folded, on its top",
   assert.match(view, /<DigestText text=\{dg\.text\} sourceId=\{dg\.source_id\} \/>/);
   assert.match(cards, /export function DayOpener\(\{ groups = \[\], onSection, top = null \}\)/);
 });
+
+test("what was learned is its own line on the opening card, never a card that loses its slot", () => {
+  const view = read("AssistantView.jsx");
+  assert.match(view, /\{d\?\.learned\?\.line && <div className="tq-since-digest" data-tq-learned="">/);
+  assert.match(view, /settings=docs&doc=learned&view=changes/);
+});

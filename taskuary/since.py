@@ -48,7 +48,7 @@ CARDS = 3
 
 def cards(store, now: datetime = None) -> list:
     """What CHANGED while you were away, as up to three cards above what waits (the owner picked "A +", 2026-10-08): agents that
-    finished, then the reports that ran with something in them, then what was learned. Each names the row it opens."""
+    finished, then the reports that ran with something in them. Each names the row it opens."""
     from .store import task_ref
     since = _start(now or datetime.now()).strftime('%Y-%m-%d %H:%M:%S')
     out = []
@@ -66,10 +66,8 @@ def cards(store, now: datetime = None) -> list:
         said = subj.split(' — ', 1)[1] if ' — ' in subj else subj.split(' - ', 1)[1] if subj.startswith(f'{title} - ') else subj
         out.append({'kind': 'report', 'label': f"{'Report failed' if run.get('failed') else 'Report ran'} · {str(run.get('at') or '')[11:16]}",
                     'text': f"{title}: {said}" if said and said != title else title, 'key': f"report:{run['messageId']}", 'at': run.get('at')})
-    got = learned(store, now)
-    if got['n'] and len(out) < CARDS:
-        out.append({'kind': 'learned', 'label': 'Learned this week', 'text': f"{_plural(got['n'], 'new thing')}" + (f" · {got['latest']}" if got['latest'] else ''),
-                    'link': 'settings=docs&doc=learned&view=changes'})
+    # what was LEARNED is not a card: it lost its slot to agents and reports on any busy morning (the owner, 2026-10-08: "did you remove
+    # the memory section?") - it is its own line on the opening card, always (summary's `learned`)
     return out[:CARDS]
 
 

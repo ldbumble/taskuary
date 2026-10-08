@@ -75,3 +75,14 @@ test("a band's box names an agent's task, never the profile running it", () => {
   assert.ok(!/\bcoder\b/.test(g), g);
   assert.match(g, /^Investigate the missing ledger exports…, Erin Blake$/);
 });
+
+test("a row with no sender but the agent names its task too, never the profile", () => {
+  const g = gistOf({ rows: [{ key: "t", lane: "yours", kind: "task", agent: "coder", who: "", title: "Recurring export timeout" }] });
+  assert.equal(g, "Recurring export timeout");
+});
+
+test("an agent's finished work names the task, whatever field holds the agent", () => {
+  // the live shape: kind agentdone, who is the profile, no agent field
+  const g = gistOf({ rows: [{ key: "p", kind: "agentdone", lane: "report", who: "coder", agent: null, title: "Recurring export timeout failures" }] });
+  assert.equal(g, "Recurring export timeout failures");
+});

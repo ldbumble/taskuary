@@ -552,6 +552,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
                     # which CLI agent works tasks when nothing names one - pickers list it first
                     'default_agent': 'coder',
+                    # the worker general work lands on when triage names none - an AP rep's `ap` (roles.py)
+                    'default_profile': '',
                     # WHICH CLI runs a worker session - coding and general alike. Blank derives
                     # it from default_agent's profile, so an upgrade changes nothing until the
                     # owner picks one. `profile_brains` is an optional {role: brain} override:

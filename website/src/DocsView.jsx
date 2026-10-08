@@ -18,6 +18,7 @@ import { AgentsPage } from "./AgentsPanel.jsx";
 import SoulInterview from "./SoulInterview.jsx";
 import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
 import SkillImport from "./SkillImport.jsx";
+import RoleStart from "./RoleStart.jsx";
 import { FAINT, INK, ROLES, mono } from "./theme.jsx";
 import { ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 
@@ -485,6 +486,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
               Edit its instructions here, or manage its name, provider and model above.
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>
+            <RoleStart onApplied={() => { loadProfs(); loadBooks(); }} />
             {!profs.length && <Typography sx={{ fontSize: 12, color: FAINT }}>No profiles yet — use Manage profiles to add one.</Typography>}
             {profs.map((pr) => (
               <Box key={pr.name} onClick={() => openProf(pr.name)}

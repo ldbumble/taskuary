@@ -173,6 +173,11 @@ is what you see if those cards cannot load.</li>
 <p>Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.</p>
 <p>Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, &#39;Not a task&#39; / &#39;Not our task&#39; — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.</p>
 <p>Rules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc&#39;s &#39;Proposed rules&#39; for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected.</p>
+<h3 id="your-mail-goes-to">Your mail goes to<a class="anchor" href="#your-mail-goes-to" aria-label="Link to this section">#</a></h3>
+<p><code>default_profile</code> · type: profile · default: blank</p>
+<p>The worker that takes a non-coding task when triage names no specialist for it. Blank leaves it unassigned for you to pick.</p>
+<p>Set this to the role you do, and the mail you get lands on the worker built for it. An accounts-payable rep picks <code>ap</code>: a vendor asking where a payment is becomes a task for the AP worker, which looks it up in the ledger and drafts the answer for you to approve.</p>
+<p>Triage still names a specialist when one fits better (a researcher for outside information), and coding tasks always go to the coding agent. Docs → Profiles → Start from a role sets this for you.</p>
 <h2 id="replies">Replies<a class="anchor" href="#replies" aria-label="Link to this section">#</a></h2>
 <h3 id="draft-replies-on">Draft replies on<a class="anchor" href="#draft-replies-on" aria-label="Link to this section">#</a></h3>
 <p><code>reply_channels</code> · type: channels · default: <code>email,teams,slack,telegram,whatsapp,imessage,discord,github</code></p>

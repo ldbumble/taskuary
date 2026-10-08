@@ -119,8 +119,14 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
     # a browser job's run task asks for a browser the way the walk that taught it did: the tag is what
     # general.py reads to launch one, bound to this session and restored from the owner's profile
     tags = browserview.WANTS if kind == 'general' and defn.get('browser') else ''
+    # ...and it runs AS the worker it names, wearing that worker's rules (an AP workflow gets AP.md).
+    # Only a general one: a coding name on a general run is a brain picked long ago, not a role.
+    from .agents import CODING_KINDS
+    row = store.get_agent(defn['agent']) if kind == 'general' and defn.get('agent') else None
+    who = f"agent:{defn['agent']}" if row and str(row.get('Kind') or '').lower() not in CODING_KINDS else None
     tid = store.create_task({'Title': f"{defn['title']} - {when}", 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal',
-                             'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}", 'Tags': tags}, actor)
+                             'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}", 'Tags': tags,
+                             **({'Assignee': who} if who else {})}, actor)
     store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent with the workflow definition - no triage.")
     logger.info(f"workflow {defn['title']!r} ({trigger}) -> {task_ref(tid)} on the {kind} agent")
     if kind == 'coding': ingest._auto_code(store, tid)

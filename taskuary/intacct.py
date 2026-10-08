@@ -36,7 +36,7 @@ CREDS = ('sender_id', 'sender_password', 'user_id', 'user_password', 'company_id
 # '=' is what a person writes; these are what the gateway calls them.
 OPS = {'=': 'equalto', '!=': 'notequalto', '>': 'greaterthan', '<': 'lessthan',
        '>=': 'greaterthanorequalto', '<=': 'lessthanorequalto',
-       'like': 'like', 'in': 'in', 'isnull': 'isnull', 'isnotnull': 'isnotnull'}
+       'like': 'like', 'notlike': 'notlike', 'in': 'in', 'notin': 'notin', 'isnull': 'isnull', 'isnotnull': 'isnotnull'}
 
 _sessions = {}               # company_id -> (session_id, endpoint, when)
 
@@ -133,7 +133,7 @@ def _filter_xml(parent, filters):
         if not name: raise IntacctError(f'unknown filter operator {op!r} - use one of {", ".join(OPS)}')
         cond = _el(tgt, name)
         _el(cond, 'field', field)
-        if name == 'in':
+        if name in ('in', 'notin'):
             for v in (val if isinstance(val, (list, tuple)) else [val]): _el(cond, 'value', v)
         elif name not in ('isnull', 'isnotnull'):
             _el(cond, 'value', val)

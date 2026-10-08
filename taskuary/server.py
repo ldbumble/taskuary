@@ -5809,6 +5809,21 @@ def put_agent(name: str, body: dict):
     store.audit('agent', 0, 'save', ACTOR, detail=name)
     return {'ok': True, 'rules_doc': rules_doc, 'triage_available': profile.get('triage_enabled', True) is not False and bool(profile['purpose'])}
 
+@app.get('/api/roles')
+def roles_list():
+    """The roles one click sets Taskuary up for (roles.py): a worker, its playbooks, where mail goes."""
+    from . import roles
+    return {'data': roles.catalog(store)}
+
+class RoleBody(BaseModel):
+    portal: str = ''
+
+@app.post('/api/roles/{name}')
+def roles_apply(name: str, body: RoleBody):
+    from . import roles
+    try: return roles.apply(store, cfg, name, body.portal)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 @app.delete('/api/agents/{name}')
 def delete_agent(name: str):
     if name not in cfg.get('agents', {}): raise HTTPException(404, 'agent not found')

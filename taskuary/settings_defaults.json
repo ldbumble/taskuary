@@ -17,6 +17,7 @@
     "backup_brains": "*",
     "profile_brains": "",
     "default_agent": "coder",
+    "default_profile": "",
     "general_agent_hands": "cli",
     "answer_to_agent": "ask",
     "git_flow": "pr",

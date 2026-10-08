@@ -876,15 +876,21 @@ def routed_role(store, kind: str, profile: str) -> str:
     unstamped coding task reads as one that needs the owner.
 
     General takes the specialist triage named, if it names a general one that exists. Naming none
-    is a real answer and leaves the task unassigned for the owner to pick at start. `kind: task`
-    leaves the job on the owner's list, so no worker at all."""
+    falls to `default_profile` - the worker the owner said their mail is for (an AP rep's `ap`,
+    roles.py) - and with that blank, leaves the task unassigned for the owner to pick at start.
+    `kind: task` leaves the job on the owner's list, so no worker at all."""
     if str(kind or '') == 'coding': return coding_role(store)
-    name = str(profile or '').strip()
-    if str(kind or '') != 'general' or not name: return ''
-    row = store.get_agent(name)
+    if str(kind or '') != 'general': return ''
     # the two groups never mix: a coding role reaching general work means triage invented a name
     # the roster could not have offered, and an invented worker must not route anything
-    return name if row and str(row.get('Kind') or '').lower() not in CODING_KINDS else ''
+    def general(n):
+        row = store.get_agent(n) if n else None
+        return n if row and str(row.get('Kind') or '').lower() not in CODING_KINDS else ''
+    named = general(str(profile or '').strip())
+    if named: return named
+    # the default is the owner's standing choice, so a worker they have since switched off is not it
+    fallback = str(store.get_setting('default_profile') or '').strip()
+    return fallback if general(fallback) and (store.get_agent(fallback) or {}).get('Active', 1) else ''
 
 
 def repair_role_assignees(store) -> int:

@@ -33,6 +33,7 @@ import { normalizeBrainOptions } from "./brainOptions.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
+import RoleStart from "./RoleStart.jsx";
 
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
@@ -369,6 +370,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const [brains, setBrains] = useState([]);
   const [agentNames, setAgentNames] = useState([]);
   const [agentOptions, setAgentOptions] = useState([]);
+  const [profileNames, setProfileNames] = useState([]);   // the general workers default_profile may name
   const [agentModels, setAgentModels] = useState({});
   const [connectors, setConnectors] = useState([]);
 
@@ -380,6 +382,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       api.get("/api/agents").then(({ data }) => {
         const rows = data.data || [], models = data.models || {}, seen = new Set();
         setAgentNames(rows.map((a) => a.Name));
+        setProfileNames(rows.filter((a) => !["coding", "cli"].includes(String(a.Kind || "").toLowerCase())).map((a) => a.Name));
         setAgentModels(models);
         // Settings asks which coding CLI runs, not which instruction profile it wears.
         // The endpoint puts the saved default first; keep that order and collapse profiles
@@ -469,6 +472,13 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
         onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
         {codingOptions.map((o) => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 12.5 }}>{o.label}</MenuItem>)}
         {!codingOptions.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no coding CLI yet — add one under Connections</MenuItem>}
+      </Select>
+    );
+    if (m.type === "profile") return (
+      <Select size="small" displayEmpty value={profileNames.includes(s.Value) ? s.Value : ""}
+        onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 160, fontSize: 12.5, bgcolor: "#fff" }}>
+        <MenuItem value="" sx={{ fontSize: 12.5 }}>nobody - leave it for me to pick</MenuItem>
+        {profileNames.map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12.5 }}>{n}</MenuItem>)}
       </Select>
     );
     if (m.type === "agents") {
@@ -970,6 +980,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   // catalog they draw comes from DocsView, which already fetches and derives both lists.
   const [docSel, setDocSel] = useState({ group: "documents", doc: OPERATOR_DOCS[0].name });
   const [docCat, setDocCat] = useState({ profiles: [], playbooks: [] });
+  const [catN, setCatN] = useState(0);    // a role just laid out new profiles and playbooks: read the catalogue again
   const onCatalog = useCallback((c) => setDocCat((cur) =>
     (cur.profiles === c.profiles && cur.playbooks === c.playbooks ? cur : c)), []);
   // WHICH RAIL ENTRIES SHOW THEIR SECTIONS. The page you are in shows its own - it has to, or the
@@ -1141,7 +1152,10 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       // what the assistant changed here, and the way to undo it - the tab drew it over Configuration
       tools: section === "config" && !open && !needle ? <Box sx={{ mt: 1.5 }}><AssistantChanges /></Box>
         // the shelf's profiles and playbooks come from DocsView's own reads - mounted unseen, as the tab's rail had it
-        : SHELF[section] && !open ? <Box sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box> : null,
+        : SHELF[section] && !open ? <>
+          {/* the one-click road to a whole role - worker, playbooks, where the mail goes (roles.py) - offered beside the workers */}
+          {section === "profiles" && !needle && <Box sx={{ mt: 1.5 }}><RoleStart onApplied={() => setCatN((n) => n + 1)} /></Box>}
+          <Box sx={{ display: "none" }}><DocsView key={catN} onCatalog={onCatalog} catalogOnly /></Box></> : null,
       detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),

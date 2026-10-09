@@ -1,7 +1,7 @@
 import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useLocalRuntime,
+  AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime,
 } from "@assistant-ui/react";
 import { Alert, Box, Button, Chip, CircularProgress, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
@@ -24,6 +24,7 @@ import { pickFor } from "./assistantProvider.js";
 import { agentName, workOf, doingNow, trailText, turnStart, elapsedText } from "./agentWork.js";
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
+import { placeShown } from "./shownPages.js";
 import { SessionPane } from "./TerminalView.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
@@ -175,15 +176,21 @@ const UserMessage = () => (
     <div className="tq-aui-user-bubble"><MessagePrimitive.Parts /></div>
   </MessagePrimitive.Root>
 );
-const AssistantMessage = () => (
-  <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
-    <div className="tq-aui-role">{React.useContext(AgentNameCtx)}</div>
-    <div className="tq-aui-agent-body">
-      <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: AssistantReasoning,
-        tools: { Fallback: AssistantTool } }} />
-    </div>
-  </MessagePrimitive.Root>
-);
+// what each answer published or showed, by the answer's id (the server's `after`): drawn under it, open - the agent chose it
+const ShownCtx = React.createContext({});
+const AssistantMessage = () => {
+  const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)];
+  return (
+    <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
+      <div className="tq-aui-role">{React.useContext(AgentNameCtx)}</div>
+      <div className="tq-aui-agent-body">
+        <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: AssistantReasoning,
+          tools: { Fallback: AssistantTool } }} />
+        {!!shown?.length && <PublishedPages pages={shown} open />}
+      </div>
+    </MessagePrimitive.Root>
+  );
+};
 
 const mentioned = (messages, kind) => {
   const text = (messages || []).slice(-6).map(textOf).filter(Boolean).join("\n");
@@ -712,9 +719,10 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const asking = data?.asking && data.asking.request_id !== answered ? data.asking : null;
   const answerAsk = (text) => { setAnswered(asking.request_id); setOwnPrompt({ id: `ask:${asking.request_id}`, text }); };
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
+  const placed = placeShown(data?.published, shownMessages);     // no hook: this sits below the loading return
   const thread = (
-    <AgentNameCtx.Provider value={name}>
-      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages} published={data?.published}
+    <AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
+      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages} published={placed.foot}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
@@ -722,7 +730,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         asking={asking} onAnswer={answerAsk}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} />
-    </AgentNameCtx.Provider>
+    </ShownCtx.Provider></AgentNameCtx.Provider>
   );
   return (
     <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,

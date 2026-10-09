@@ -415,17 +415,36 @@ def _task_files(store, tid: int) -> list[dict]:
     return out
 
 
-def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
-    """The (name, bytes) of each file the chat named to send. Only its own working folder (where a CLI brain's hands
-    write) or a file this turn was handed: the reply goes to someone outside, so a path an injected mail talks the
-    model into naming - a key file, another task's attachments - is refused, and the task says so."""
+def _own_file(raw: str, paths: list):
+    """The file a chat named, if it may: its own working folder (where a CLI brain's hands write) or a file this turn
+    was handed. A path an injected mail talks the model into naming - a key file, another task's attachments - is not."""
     from . import config
     root, handed = (config.home() / 'scratch').resolve(), {str(Path(p).resolve()) for p in paths or []}
+    try: p = Path(raw).expanduser().resolve()
+    except (OSError, ValueError): return None
+    return p if str(p) in handed or p.is_relative_to(root) else None
+
+
+def _show_files(store, tid: int, named: list, paths: list, actor='assistant'):
+    """Each file the chat chose to show (selfclose.SHOW_LINE) goes on the task as its own copy, drawn in the chat under
+    the turn that showed it; one that cannot be shown says why instead of vanishing."""
+    from . import session_artifacts
+    for raw in named or []:
+        p = _own_file(raw, paths)
+        why = 'only a file from the working folder can be shown' if p is None else '' if p.is_file() else 'there is no such file'
+        if not why:
+            try: session_artifacts.shown(store, tid, p, actor); continue
+            except (OSError, ValueError) as e: why = str(e)
+        store.add_comment(tid, 'assistant', 'agent', f'Not shown - {raw}: {why}')
+
+
+def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
+    """The (name, bytes) of each file the chat named to send (_own_file - the reply goes to someone outside); the task
+    says why one was refused."""
     out = []
     for raw in named or []:
-        try: p = Path(raw).expanduser().resolve()
-        except (OSError, ValueError): p = None
-        if p is None or not (str(p) in handed or p.is_relative_to(root)):
+        p = _own_file(raw, paths)
+        if p is None:
             store.add_comment(tid, 'assistant', 'agent', f'Not attached to the reply - {raw}: only a file from the working folder or one that came with this task can go'); continue
         try: out.append((p.name, p.read_bytes()))
         except OSError as e: store.add_comment(tid, 'assistant', 'agent', f'Not attached to the reply - {raw}: {e.strerror or e}')
@@ -919,7 +938,8 @@ class GeneralSession:
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
             if self.pick.startswith('cli:'):
-                system = f'{system}\n\n{POST_LINE}'
+                from . import selfclose
+                system = f'{system}\n\n{POST_LINE}\n\n{selfclose.SHOW_LINE}'      # a CLI has hands to make the file it shows
                 from . import handbook as hub
                 if hub.enabled(self.store): system = f'{system}\n\n{HUB_LINE}'
             else:
@@ -1015,7 +1035,8 @@ class GeneralSession:
                     system = f'{system}\n\n{str(delivery_instructions).strip()}'
                 from . import handbook as hub
                 if self.pick.startswith('cli:'):
-                    system = f'{system}\n\n{POST_LINE}'
+                    from . import selfclose
+                    system = f'{system}\n\n{POST_LINE}\n\n{selfclose.SHOW_LINE}'
                     if hub.enabled(self.store): system = f'{system}\n\n{HUB_LINE}'
                 elif hub.enabled(self.store):
                     system = f'{system}\n\n{hub.ASSISTANT_LINE}'
@@ -1059,6 +1080,8 @@ class GeneralSession:
             from . import selfclose
             reply, named = selfclose.attach_markers(reply)
             reply, drafted = selfclose.reply_marker(reply)
+            reply, showing = selfclose.show_markers(reply)
+            _show_files(self.store, self.task_id, showing, paths)
             files = _files_to_attach(self.store, self.task_id, named, paths)
             if drafted or files:
                 from . import coder

@@ -1165,7 +1165,13 @@ def _assistant_payload(task_id: int, session=None):
     if not general.handles(task):
         raise HTTPException(422, 'assistant view is available for general, research, marketing, and triage tasks')
     session = session or general.session_for(task_id)
-    return {'messages': general.history(store, task_id),
+    messages = general.history(store, task_id)
+    # each page or picture belongs to the answer that made it: the turn files its answer after what it published or showed,
+    # so it is the first answer stamped at or after it (both stamps are store._now()); one with none yet waits at the foot
+    answers = [(str(m.get('createdAt') or ''), m['id']) for m in messages if m['role'] == 'assistant']
+    published = [{**r, 'after': next((mid for at, mid in answers if at >= str(r.get('created_at') or '')), None)}
+                 for r in (_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') in ('claude_artifact', 'shown'))]
+    return {'messages': messages,
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
             # profile, so five profiles on Claude read as five brains (the owner, 2026-09-18).
             'providers': general.brain_options(store, keep=general.default_pick(store, task)),
@@ -1179,8 +1185,9 @@ def _assistant_payload(task_id: int, session=None):
             # the prose ("tell me when you're signed in") and the two choices it named were never
             # clickable anywhere (2026-09-15). The chip said "needs you"; the question did not.
             'asking': _workerstate().asking_of(store, session) if session else None,
-            # pages its Claude session published (claude_artifacts) - the foot of the conversation lists them
-            'published': [_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') == 'claude_artifact'],
+            # pages its Claude session published (claude_artifacts) and files it chose to show (selfclose.SHOW_LINE) - the
+            # conversation draws each under the answer that made it, and lists any it cannot place at its foot
+            'published': published,
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')
@@ -2138,10 +2145,18 @@ def task_artifact(aid: int, download: bool = False):
     if not artifact: raise HTTPException(404, 'artifact not found')
     path = session_artifacts.confined(artifact.get('Path'))
     if not path: raise HTTPException(404, 'this artifact is no longer on disk')
+    # a picture the chat SHOWED (session_artifacts.shown) is drawn by <img> as itself; anything that could run - SVG, a page -
+    # comes back as text like a Claude page below, for the sandboxed frame or the reader to draw (_NOSCRIPT)
+    kind = str(artifact.get('ContentType') or '')
+    if artifact.get('Kind') == 'shown' and kind.startswith('image/') and kind not in _NOSCRIPT:
+        response = Response(path.read_bytes(), media_type=kind)
+        response.headers['Content-Disposition'] = f'{"attachment" if download else "inline"}; filename="{_att_filename(artifact.get("Name"))}"'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response
     text = path.read_text(encoding='utf-8', errors='replace')
     # a page a Claude session published: the task page draws it in a sandboxed frame from this TEXT -
     # served as plain text, so opening the url itself never runs the page as Taskuary (_NOSCRIPT)
-    if artifact.get('Kind') == 'claude_artifact': media = 'text/plain; charset=utf-8'
+    if artifact.get('Kind') in ('claude_artifact', 'shown'): media = 'text/plain; charset=utf-8'
     else:
         # Old artifacts copied the raw PTY stream after the useful result. Keep that durable source
         # file intact, but do not make the in-app reader render terminal repaints and tool chatter.

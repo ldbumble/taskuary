@@ -415,6 +415,19 @@ def _task_files(store, tid: int) -> list[dict]:
     return out
 
 
+def report_note(store, tid: int):
+    """What the agent did, for a general session as for a coding one (the owner, 2026-10-09: "general agent should also have
+    the summary like cli no? ... that's all people want to see, it's the core thing what the agent did"). A coding session
+    ends with a CODER REPORT note - its summary and LAST MESSAGE - and that note is what the task card shows; a chat ended
+    with nothing but its turns unless the owner pressed Save and end session (coder.wrap) - closed by the agent or put away, it
+    left no result. Its last answer, filed verbatim (no model boils the conversation down), once: the same answer is not filed twice."""
+    last = next((str(c.get('Body') or '').strip() for c in reversed(chat_rows(store, tid)) if c.get('ActorType') == ASSISTANT_TYPE), '')
+    if not last: return None
+    body = f'CODER REPORT\n{last}'
+    filed = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').startswith('CODER REPORT')), '')
+    return None if filed.strip() == body else store.add_comment(tid, 'assistant', 'agent', body)
+
+
 def _own_file(raw: str, paths: list):
     """The file a chat named, if it may: its own working folder (where a CLI brain's hands write) or a file this turn
     was handed. A path an injected mail talks the model into naming - a key file, another task's attachments - is not."""
@@ -1199,6 +1212,7 @@ class GeneralSession:
                     hub.learn_from_session(self.store, self.task_id, transcript, 'assistant', llm=brain)
                 except Exception as e:
                     logger.debug(f'hub: assistant conversation {self.task_id} learned nothing - {e}')
+        if was_alive and not is_dock(task): report_note(self.store, self.task_id)
         self.alive, self.ended = False, time.time()
         if was_alive:
             from . import browserview

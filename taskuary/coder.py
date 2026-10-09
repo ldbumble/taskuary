@@ -416,11 +416,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         # It is still not a SUMMARY: nothing is asked of a model here, and no transcript is boiled
         # down. The answer the assistant already gave is filed verbatim, under the one marker every
         # reader shares, which is exactly what the button's words promise.
-        if last.strip():
-            body = f'CODER REPORT\n{last.strip()}'
-            filed = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid))
-                          if str(c.get('Body') or '').startswith('CODER REPORT')), '')
-            if filed.strip() != body: store.add_comment(tid, 'assistant', 'agent', body)
+        general.report_note(store, tid)          # ...the same note a chat that ends any other way files (general.close)
         # ...and then the SAME ending every other worker gets. This branch used to return
         # `drafting: False` without ever calling finish(), so a task somebody WROTE IN about closed
         # with them unanswered - while selfclose.CHAT_LINE promises the assistant that ending it

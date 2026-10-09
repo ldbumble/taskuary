@@ -132,7 +132,7 @@ OWNER_ONLY = (
     (r'POST|PATCH', r'^/api/tasks(/purge-dropped|/\d+)?$', 'making, editing and purging tasks'),
     (r'POST|PUT|PATCH', r'^/api/tasks/\d+/(agent/stop|assistant/(browser|cancel|messages|report|session|stream)|checklist(/\d+)?'
                         r'|code|comments|continue|continue-work|discussion|dispatch|merge|not-a-task|not-coding|pause|remind|repo'
-                        r'|split|wrap|answer)$', 'steering a task - and a comment here is written as the owner'),
+                        r'|split|wrap|answer|read-ask)$', 'steering a task - and a comment here is written as the owner'),
     (r'POST|DELETE', r'^/api/tasks/\d+/waitroom(/bulk|/image|/\d+)?$', 'the waiting room is what the owner tells the agent'),
     (r'POST', r'^/api/tasks/\d+/emails$', "an email the owner starts from a task - an agent drafts one through --draft"),
     (r'POST', r'^/api/messages/\d+/(attachments/fetch|chat|discussion|dispatch|file|ignore-sender|mine|not-mine|reclassify'

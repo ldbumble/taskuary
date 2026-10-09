@@ -576,6 +576,28 @@ def _rail_tids() -> set:
     except Exception as e:
         logger.warning(f'tasks: the rail could not be read for OnWorkToday: {e}'); return set()
 
+def _read_hand_task(tid: int, text: str):
+    """A task typed into + New skips triage, so it had no checklist - one block of words with no boxes (the owner, 2026-10-09:
+    "when i create task the task list looks weird?? (no checkboxes?)"). The same reading a promoted message gets
+    (triage.extract_ask), off the request: each distinct thing asked becomes a box, an email it asks for becomes one of the
+    task's emails. The owner's own words stay the summary. A brain that fails leaves the task as typed."""
+    try:
+        from . import concierge, slots, triage
+        ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True))
+        if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
+        if ask.get('outputs'): slots.add(store, tid, ask['outputs'], 'triage')
+    except Exception as e: logger.info(f'could not read the checklist of {task_ref(tid)}: {e}')
+
+
+@app.post('/api/tasks/{task_id}/read-ask')
+def read_hand_task(task_id: int, background: BackgroundTasks):
+    """+ New asks for its task to be read once it exists (_read_hand_task) - answered at once, read behind it."""
+    t = store.get_task(task_id)
+    if not t: raise HTTPException(404, 'task not found')
+    background.add_task(_read_hand_task, task_id, t.get('Summary') or t.get('Title') or '')
+    return {'ok': True}
+
+
 @app.post('/api/tasks')
 def create_task(body: TaskBody):
     if not body.Title: raise HTTPException(422, 'Title is required')

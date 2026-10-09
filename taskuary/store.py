@@ -140,6 +140,11 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
     return out
 
 
+# A TQ number is the owner's: one per piece of work they can be handed. A row that only borrows the task
+# table - the guide chat keeps its conversation and model session on one - takes its id from up here
+# instead, or every New chat used a TQ number (125 of 261 in two weeks, 2026-10-09) and the owner's
+# numbering read as skipping.
+INTERNAL_TASK_BASE = 1_000_000_000
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def auto_code_enabled(src) -> bool:
     """Does new coding work start its agent by itself? ONE read of `coder_auto_enabled` (a store or its settings
@@ -1218,8 +1223,9 @@ class SQLiteStore:
                                            "AND Kind IN ('outbound','action') AND Status IN ('pending','held') ORDER BY ReviewId").fetchall()
                 if stranded:
                     mark = self.cx.execute("SELECT Value FROM setting WHERE Name='task_id_mark'").fetchone()
-                    nxt = max(self.cx.execute('SELECT MAX(TaskId) m FROM task').fetchone()['m'] or 0,
-                              self.cx.execute("SELECT MAX(EntityId) m FROM audit WHERE EntityType='task'").fetchone()['m'] or 0,
+                    nxt = max(self.cx.execute('SELECT MAX(TaskId) m FROM task WHERE TaskId<?', (INTERNAL_TASK_BASE,)).fetchone()['m'] or 0,
+                              self.cx.execute("SELECT MAX(EntityId) m FROM audit WHERE EntityType='task' AND EntityId<?",
+                                              (INTERNAL_TASK_BASE,)).fetchone()['m'] or 0,
                               int((mark['Value'] if mark else 0) or 0))
                     for rv in stranded:
                         nxt += 1
@@ -1523,7 +1529,7 @@ class SQLiteStore:
             pass
 
     # tasks
-    def create_task(self, fields, actor):
+    def create_task(self, fields, actor, numbered=True):
         # TaskId is a rowid, and SQLite hands a DELETED one straight back to the next insert.
         # TQ-0034 was three different tasks in one morning: a refund thread at 08:19 (with a
         # live agent on it), deleted at 10:11, the id reused twice more by lunchtime - and the
@@ -1534,18 +1540,24 @@ class SQLiteStore:
         # statement lock on its own, so a poll and a click creating tasks together computed the same
         # id and one of them hit the primary key (audit 2026-09-02)
         with self.idlock:
-            tid = self._insert('task', {**fields, 'TaskId': self._next_task_id()},
+            tid = self._insert('task', {**fields, 'TaskId': self._next_task_id() if numbered else self._next_internal_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
         self._bump_snapshots()
         self._poke('task-changed', task_id=tid)
         return tid
 
+    def _next_internal_id(self) -> int:
+        """The same never-reused rule, in the range no TQ number reaches (INTERNAL_TASK_BASE)."""
+        live = self._one('SELECT MAX(TaskId) m FROM task WHERE TaskId>=?', (INTERNAL_TASK_BASE,))['m'] or 0
+        ever = self._one("SELECT MAX(EntityId) m FROM audit WHERE EntityType='task' AND EntityId>=?", (INTERNAL_TASK_BASE,))['m'] or 0
+        return max(live, ever, INTERNAL_TASK_BASE) + 1
+
     def _next_task_id(self) -> int:
         """One past the highest id ever ISSUED - not the highest still present. The audit log
         is the record of what was issued (its rows outlive the task, by design), so the two
         together survive a deleted tail that the table alone forgets."""
-        live = self._one('SELECT MAX(TaskId) m FROM task')['m'] or 0
-        ever = self._one("SELECT MAX(EntityId) m FROM audit WHERE EntityType='task'")['m'] or 0
+        live = self._one('SELECT MAX(TaskId) m FROM task WHERE TaskId<?', (INTERNAL_TASK_BASE,))['m'] or 0
+        ever = self._one("SELECT MAX(EntityId) m FROM audit WHERE EntityType='task' AND EntityId<?", (INTERNAL_TASK_BASE,))['m'] or 0
         mark = int(self.get_setting('task_id_mark') or 0)
         nxt = max(live, ever, mark) + 1
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) '

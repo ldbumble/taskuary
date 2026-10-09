@@ -309,7 +309,7 @@ def dock_task(store, actor='owner') -> tuple[dict, bool]:
         'Summary': 'An always-available walkthrough of the Timeline, outstanding work, reviews, and agent output.',
         'Kind': 'general', 'Status': 'open', 'Priority': 'normal',
         'Source': 'assistant', 'SourceRef': DOCK_TAG,
-    }, actor)
+    }, actor, numbered=False)        # a conversation, not work: it takes no TQ number (store.INTERNAL_TASK_BASE)
     store.set_setting('assistant_dock_task_id', str(tid), actor)
     store.audit('task', tid, 'create_assistant_dock', actor)
     return store.get_task(tid), True

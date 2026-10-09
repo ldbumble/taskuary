@@ -80,6 +80,18 @@ class RecentClosureTests(unittest.TestCase):
         _closed_task(s, 'Invoice approval for the Roanoke lease', ago(1))
         self.assertEqual(context.recent_closures(s, {'subject': 'Roanoke plumbing quote'}), [])
 
+    def test_a_reports_own_earlier_task_outranks_another_sources_task_that_shares_its_words(self):
+        """The run said "Viv ... timed out", its tasks said "Viventium timeout"; three mails sharing "export" and
+        "check" with the run took every seat, and a recurring timeout opened a task on every run (2026-10-09)."""
+        s = MemoryStore()
+        for i, t in enumerate(('Approve the export check batch', 'Export check for the bills portal', 'Phishing check export due')):
+            _closed_task(s, t, ago(0, 2 + i), sender=f'p{i}@northwind.example')
+        want = _closed_task(s, 'Recurring Viventium timeout failures', ago(1), conv='report:4')
+        run = {'channel': 'report', 'conversation_id': 'report:4', 'subject': 'Process Error Check - Errors',
+               'body': 'Viv Employee Changes Export failed: timed out. Export check run 12.'}
+        hits = context.recent_closures(s, run)
+        self.assertEqual((hits[0]['ref'], hits[0]['why']), (f'TQ-{want:04d}', 'the same report'))
+
 
 class JudgeSeesItTests(unittest.TestCase):
     def test_the_arrival_carries_the_closure_and_the_field_is_explained(self):

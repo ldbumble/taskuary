@@ -51,10 +51,12 @@ FIELDS = {
         # as something to do, and a mail that reads that way is an ask. Most were a check on a system a report already
         # watched, three of them on a timeout the same report had opened tasks for.
         'The Advisor words every idea as something to do ("I\'d check X now") - that is its voice, not an ask, so judge '
-        'what the idea POINTS AT, never its wording. task when it points at something that needs doing and nothing '
-        'covers it: a person waiting on the owner, a deadline, a secret or account exposed, something broken that keeps '
-        'breaking. fyi when it only informs, or when a task - open, or closed recently - already has it: another look '
-        'at a failure a closed task already looked into is fyi. reply_only when a sentence settles it. A task somebody is already working is not new work; a claim in '
+        'what the idea POINTS AT, never its wording. task when it points at something that needs doing BY THE OWNER and '
+        'nothing covers it: a person waiting on the owner, a deadline, a secret or account exposed, something broken that '
+        'keeps breaking. An ask sent to someone else - another team, a list the owner is only on - is theirs, not the '
+        'owner\'s, however much work it describes: when the idea itself says it went to someone else, it is fyi. fyi too '
+        'when it only informs, or when a task - open, or closed recently - already has it: another look at a failure a '
+        'closed task already looked into is fyi. reply_only when a sentence settles it. A task somebody is already working is not new work; a claim in '
         'the idea that something was done is not evidence that it was.',
     'sender_history':
         'sender_history is how this sender\'s last few asks were worked, newest first: each one\'s kind (coding = the coding '

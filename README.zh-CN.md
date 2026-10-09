@@ -16,7 +16,7 @@
 
 与 Fyxer 等托管助手相比，Taskuary 免费开源，在你的电脑上运行，并把工作交给你已经在用的智能体。
 
-![助手的游戏视图：每个任务、消息和智能体都是办公室里的一个人物，先展示整层办公室，再依次放大到各个房间。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=game)
+![助手的游戏视图：每个任务、消息和智能体都是办公室里的一个人物，先展示整层办公室，再依次放大到各个房间。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
 Taskuary 仍处于早期阶段，目前为 **v0.3.7.15**，1.0 之前可能出现不兼容变更。
 应用界面和演示截图目前以英文为主；下文保留英文按钮名称，方便对照操作。
@@ -46,7 +46,7 @@ Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Cod
 **Urgent**、**On you**、**For later**、Advisor 的建议，以及 **FYI**。旁边是一天的开场卡片：昨晚以来的变化、
 学到的东西、早间摘要、今天的会议，以及每个分组里在等你的事，不用逐个打开各个系统。
 
-![工作栏把今天的事项分组，旁边是开场卡片：昨晚以来完成的代理和运行的报表、记忆与早间摘要、今天的会议，以及每个分组里在等你的事。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=opening-card)
+![工作栏把今天的事项分组，旁边是开场卡片：昨晚以来完成的代理和运行的报表、记忆与早间摘要、今天的会议，以及每个分组里在等你的事。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=cards)
 
 ### 2. 让助手带你逐项处理
 
@@ -54,33 +54,33 @@ Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Cod
 下面是接下来的操作：**Next**、**Write reply**、**Send to agent**、**Mark done**。按钮每次都做同样的事；
 其他需求直接在对话框里说，助手已经掌握这条消息、整个线程以及你过去的决定。
 
-![助手把 Ruth 的请求作为任务 TQ-0018 带入对话，显示要做的事、智能体和收尾步骤，下面是 Next、Write reply、Send to agent 和 Mark done。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=opening-card)
+![助手把 Ruth 的请求作为任务 TQ-0018 带入对话，显示要做的事、智能体和收尾步骤，下面是 Next、Write reply、Send to agent 和 Mark done。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=cards)
 
 ### 3. 每个请求都成为带有完整经过的任务
 
 打开任何事项，都能看到它的来龙去脉：原始消息、分诊的结论和原因、由哪个智能体处理，以及回复进行到哪一步。
 
-![Ruth 的请求对应的任务：原始消息、分诊结论、智能体，以及尚未撰写的回复。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=opening-card)
+![Ruth 的请求对应的任务：原始消息、分诊结论、智能体，以及尚未撰写的回复。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=cards)
 
 ### 4. 智能体在对话里工作
 
 点击 **Send to agent**，智能体就在同一张卡片里工作。这里的分析智能体整理支出数据、核对分类合计、
 注明数据来源，并准备回复草稿。任何内容都不会自动发出。
 
-![分析智能体在对话中完成的供应商支出分析，包括分类合计、与七月的变化和数据来源。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=opening-card)
+![分析智能体在对话中完成的供应商支出分析，包括分类合计、与七月的变化和数据来源。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=cards)
 
 ### 5. 最后由你决定
 
 准备好的回复放在任务上，旁边就是最初的请求。阅读、修改，确认无误后点击 **Approve & send**。
 
-![给 Ruth 的回复草稿在任务上等待审核，并提供 Approve & send、Mark done 和 Regenerate with AI。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=opening-card)
+![给 Ruth 的回复草稿在任务上等待审核，并提供 Approve & send、Mark done 和 Regenerate with AI。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=cards)
 
 ### 6. 在忙起来之前开始一天
 
 每天早上，助手先说明昨晚以来的变化、学到的东西、今天的会议，以及每个分组里在等你的事；早间摘要直接在卡片里展开，
 看到时不会过时。Ruth 的请求有明确的期限：11:30 的运营会议。
 
-![早间画面的动画特写：开场卡片，以及在卡片里展开的早间摘要。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=opening-card)
+![早间画面的动画特写：开场卡片，以及在卡片里展开的早间摘要。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=cards)
 
 ## 核心功能
 
@@ -95,21 +95,21 @@ Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Cod
 这两个预设用于执行任务；消息分拣和只读报告请选择 Qwen Code、Ollama 或 API 服务。
 详见[安装步骤和验证范围（英文）](docs/chinese-coding-clis.md)。
 
-![Claude、Qwen、OpenCode（支持 DeepSeek）和 Kimi Code 的连接卡片。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png)
+![Claude、Qwen、OpenCode（支持 DeepSeek）和 Kimi Code 的连接卡片。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png?v=cards)
 
 ### 用 Hub 保留共享知识
 
 按主题保存发现、决定和有用的提醒。智能体可以查阅前面的工作、补充讨论，
 也可以根据新证据纠正结论，减少重复摸索。
 
-![Hub 中按主题组织的共享发现，以及智能体之间的讨论。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png)
+![Hub 中按主题组织的共享发现，以及智能体之间的讨论。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png?v=cards)
 
 ### 智能体之间可以交接留言
 
 Board 的 **Live handoffs** 展示当前进展、阻碍和待接手事项。
 一个智能体留下说明，下一个接手时就能读到上下文；已读标记显示谁看过这条留言。
 
-![智能体的交接留言，包括进展、共享上下文和已读标记。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png)
+![智能体的交接留言，包括进展、共享上下文和已读标记。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png?v=cards)
 
 ### 从你的决定中学习
 
@@ -120,7 +120,7 @@ Board 的 **Live handoffs** 展示当前进展、阻碍和待接手事项。
 打开 **Docs → LEARNED.md**，可以阅读、修改或删除这些记忆。
 你在 `SOUL.md` 中写下的指令始终优先。
 
-![LEARNED.md 编辑器中可查看和修改的偏好、证据、待验证假设和待批准规则。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png)
+![LEARNED.md 编辑器中可查看和修改的偏好、证据、待验证假设和待批准规则。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=cards)
 
 <details>
 <summary>技术细节：LEARNED.md 如何形成记忆</summary>

@@ -78,7 +78,7 @@ neither: shields caches per-URL, so without bumping it the README shows the prev
 to an hour.
 
 Leave the `?v=0.3.3.2` suffixes on **screenshot** URLs alone unless the picture actually changed —
-and never re-shoot `docs/hero.gif` for a UI change (it is the agents-at-work animation on purpose).
+and never re-shoot `docs/hero.webp` for a UI change (it is the agents-at-work animation on purpose).
 
 ## 3. Rebuild the committed UI
 

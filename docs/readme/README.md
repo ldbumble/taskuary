@@ -1,8 +1,10 @@
 # README walkthrough images
 
 The README and product guide share these images. The hero is kept separately at
-`docs/hero.gif`: the Assistant's Game view, opening on the whole office and zooming into each room.
-Regenerate it with `npm exec --yes --package=node@22 -- node website/capture-hero.mjs` (FFmpeg as below). These images follow one invented
+`docs/hero.webp`: the Assistant's Game view, opening on the whole office and zooming into each room.
+Regenerate it with `npm exec --yes --package=node@22 -- node website/capture-hero.mjs` (FFmpeg as below). It is an
+animated WebP because smooth camera flights cost 20 MB as a GIF; the capture steps the scene's clock one frame per
+screenshot, so every frame is exactly 50 ms apart. `--encode` re-encodes the last frames without a browser. These images follow one invented
 vendor-spend request through the current React interface, then show a few key
 features. The calendar GIF replays the app's meeting entrance and clock pulse.
 `06-morning.png` is its static alternative. The privacy SVG is an illustrated flow.
@@ -23,8 +25,10 @@ Timeline response format, CLI cards, and Hub comments. No live account is read,
 connected, or changed. The fixture clock is September 3, 2026, at 10:24 local time.
 
 Raw screenshots and animation frames stay in ignored `.codex-tmp/readme/`.
-Framing and crops live in `website/render-readme.mjs`; screenshots are captured at
-double resolution and framed at 1200 pixels wide. The capture widens the Timeline
+Framing lives in `website/render-readme.mjs`: a plain white page with neutral grey type, so the only colour is the
+app's own. Most pictures are cropped to a whole card by `card()` in the capture (the smallest box holding given words,
+the window grown until none of it is scrolled away, the rest of the chat hidden), so no frame cuts a card's edge;
+the rest keep a clip in the shot list. Screenshots are captured at double resolution and framed at 1200 pixels wide. The capture widens the Timeline
 rail, narrows the Review column, and expands its reply editor for readability.
 Product source files and the deployed demo are unchanged.
 
@@ -36,6 +40,7 @@ The LEARNED.md image uses authored example lessons in the real document editor.
 To recapture and frame just those two images, add `--memory-update` to both commands.
 For just the Timeline image, use `--timeline-only` instead.
 For just the CLI connections image (including Qwen Code), use `--cli-only`.
+For the four key-feature images (CLI, Hub, handoffs, LEARNED.md), capture with `--extras-only` (all of them: `--extras`).
 For just the first image (the opening card in the full demo, on a fresh chat), use `--home-only` with both commands.
 
 Review every final image at README width after regenerating: titles, amounts,

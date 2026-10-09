@@ -17,7 +17,7 @@
 
 Compared with hosted assistants like Fyxer, Taskuary is free and open source, runs on your machine, and hands the work to agents you already use.
 
-![The Assistant's Game view: an office where every task, message and agent is a figure, opening on the whole floor and zooming into each room - the Agent Floor, the Meeting Room where people wait on you, the Gym, the Coffee Room, the Memory Archive, and the Assistant Core.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=game)
+![The Assistant's Game view: an office where every task, message and agent is a figure, opening on the whole floor and zooming into each room - the Agent Floor, the Meeting Room where people wait on you, the Gym, the Coffee Room, the Memory Archive, and the Assistant Core.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
 Taskuary is early—currently **v0.3.7.15**—so breaking changes are still possible before 1.0.
 
@@ -43,7 +43,7 @@ Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by w
 one card: what changed since last night, what was learned, the morning digest, your meetings, and
 what waits in each section - so you never open each system in turn.
 
-![The work rail sorting today's items into Urgent, On you, Agents working, Reports, Advisor ideas, and FYI, beside the opening card: agents that finished and a report that ran since last night, the memory and morning digest lines, today's meetings, and what waits in each section.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=opening-card)
+![The work rail sorting today's items into Urgent, On you, Agents working, Reports, Advisor ideas, and FYI, beside the opening card: agents that finished and a report that ran since last night, the memory and morning digest lines, today's meetings, and what waits in each section.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=cards)
 
 ### 2. Let the Assistant walk you through it
 
@@ -52,28 +52,28 @@ same task card you would open yourself, with the next actions under it: **Next**
 **Send to agent**, **Mark done**. The buttons always do the same thing; the chat line is for everything else,
 and the Assistant already has the message, the thread, and your past decisions to answer from.
 
-![The Assistant bringing Ruth's request into the chat as task TQ-0018 - what needs doing, its agent and close-out steps - with Next, Write reply, Send to agent, and Mark done under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=opening-card)
+![The Assistant bringing Ruth's request into the chat as task TQ-0018 - what needs doing, its agent and close-out steps - with Next, Write reply, Send to agent, and Mark done under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=cards)
 
 ### 3. Every request becomes a task with its whole story
 
 Open any item to see how it got here: the message, what triage decided and why, which agent
 has it, and where the reply stands.
 
-![Ruth's request on its task: the message, the triage decision, the agent, and the reply still to write.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=opening-card)
+![Ruth's request on its task: the message, the triage decision, the agent, and the reply still to write.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=cards)
 
 ### 4. The agent works inside the chat
 
 **Send to agent** and it works in the same card. Here the analyst prepares the numbers, checks
 that the categories add up, names its source, and drafts the reply. Nothing is sent.
 
-![The analyst's finished vendor spend analysis inside the chat, with category totals, the change from July, and its source.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=opening-card)
+![The analyst's finished vendor spend analysis inside the chat, with category totals, the change from July, and its source.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=cards)
 
 ### 5. The last word is yours
 
 The prepared reply waits on the task, beside the request that started it. Read it, edit it,
 and choose **Approve & send** when it is ready.
 
-![The drafted reply to Ruth waiting on its task, with Approve & send, Mark done, and Regenerate with AI.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=opening-card)
+![The drafted reply to Ruth waiting on its task, with Approve & send, Mark done, and Regenerate with AI.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=cards)
 
 ### 6. Start your day before it gets busy
 
@@ -81,7 +81,7 @@ Each morning the Assistant opens on what changed since last night, what it learn
 and what waits in each section - and the morning digest unfolds in place, so it is never stale by the
 time you reach it. Ruth's request has a clear deadline: the 11:30 operations review.
 
-![An animated close-up of the morning: the opening card, then its morning digest unfolding - who wants what, what is in flight, and today's meetings.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=opening-card)
+![An animated close-up of the morning: the opening card, then its morning digest unfolding - who wants what, what is in flight, and today's meetings.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=cards)
 
 ## Key features
 
@@ -95,21 +95,21 @@ For Qwen Code, see the [setup and compatibility guide](docs/qwen-code.md).
 Use DeepSeek, GLM, or MiniMax through OpenCode, or connect Moonshot's Kimi Code:
 [setup steps and supported roles](docs/chinese-coding-clis.md).
 
-![AI CLI connections for Claude, Qwen, OpenCode with DeepSeek, and Kimi Code.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png)
+![AI CLI connections for Claude, Qwen, OpenCode with DeepSeek, and Kimi Code.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png?v=cards)
 
 ### A shared Hub for what agents learn
 
 Keep discoveries, decisions, and useful warnings by topic. Agents can find what earlier work
 uncovered, discuss it, and correct it instead of starting from scratch.
 
-![The Hub's topics and shared discoveries, including an expanded discussion between agents.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png)
+![A discovery in the Hub, with the discussion two agents had under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png?v=cards)
 
 ### Agents leave notes for each other
 
 The Board's **Live handoffs** show what agents are working on, what is blocked, and what is ready.
 An agent leaves a note; the next one reads it before picking up the work.
 
-![Live handoff notes on the agent wall, showing progress, shared context, and who has read each note.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png)
+![Live handoff notes on the agent wall, showing progress, shared context, and who has read each note.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png?v=cards)
 
 ### Memory that learns how you work
 
@@ -121,7 +121,7 @@ it to lead with the total next time.
 Open **Docs → LEARNED.md** to read, edit, or delete those lessons. Your written instructions
 in `SOUL.md` take precedence.
 
-![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png)
+![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=cards)
 
 <details>
 <summary>Technical details: how LEARNED.md becomes memory</summary>

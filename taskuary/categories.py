@@ -19,8 +19,9 @@ a mailing list, and they must not wear the same tag.
 """
 import re
 
+# microsoftexchange<hex>@<tenant>.onmicrosoft.com is Exchange's own bounce sender ("Undeliverable: ...")
 FROM_AUTOMATED = re.compile(r'^(no-?reply|do-?not-?reply|notifications?|alerts?|reports?|system|mailer-daemon|postmaster|'
-                            r'bounce|automated|auto|noreply-[\w.-]+|[\w.-]*-noreply|[\w.-]*-alerts?|[\w.-]*-notifications?)@', re.I)
+                            r'bounce|automated|auto|microsoftexchange[0-9a-f]*|no-?reply-[\w.-]+|[\w.-]*-noreply|[\w.-]*-alerts?|[\w.-]*-notifications?)@', re.I)
 FROM_PROMO = re.compile(r'^(news(letter)?s?|marketing|promo(tions)?|offers?|deals?|hello|hi|team|updates?|community|digest|'
                         r'insights?|events?|webinars?|info|contact|success|growth|product|announcements?)@', re.I)
 BODY_PROMO = re.compile(r'unsubscribe|manage (your )?(email )?preferences|view (this )?(email )?in (your )?browser|'

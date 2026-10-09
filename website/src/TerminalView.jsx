@@ -21,7 +21,7 @@ import { terminalOutputBatcher } from "./terminalOutput.js";
 import { createPool, paneCap } from "./terminalPool.js";
 import api from "./api.js";
 import BrowserPane from "./BrowserPane.jsx";
-import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser,
+import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser, isLocalPage,
   splitRatio } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
@@ -647,6 +647,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const [seen, setSeen] = useState(false);
   const [ratio, setRatio] = useState(savedRatio);
   const [peek, setPeek] = useState(false);
+  const [localOk, setLocalOk] = useState(false);          // the owner unfolded a local page: it stays shown (isLocalPage)
   // A Wall tile is one of four across and a drawer pane is 480px tall: enough to notice an agent
   // working, not enough to watch one - and far too little once a browser is beside the terminal.
   // The chat workspace runs this itself, from its own strip, so it asks for no button here.
@@ -655,7 +656,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // session, so the conversation sits inside the same tree it will sit in once one exists - swapping the
   // wrapper in mid-turn would remount the thread that is streaming the answer (GeneralWorkspace.started).
   useEffect(() => {
-    setBrowser({ open: false, url: "" }); setSeen(false); setFolded(!!sid && savedFold(sid));
+    setBrowser({ open: false, url: "" }); setSeen(false); setLocalOk(false); setFolded(!!sid && savedFold(sid));
     if (!sid) return undefined;
     let stop = false;
     const tick = async () => {
@@ -676,8 +677,8 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
     return () => ro.disconnect();
   }, []);
   const showingBrowser = !!sid && showsBrowser(browser.open, expectBrowser, seen);
-  const layout = layoutFor(width, showingBrowser, folded);
-  const fold = (f) => { setFolded(f); rememberFold(f, sid); };
+  const layout = layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk));
+  const fold = (f) => { setFolded(f); rememberFold(f, sid); if (!f) setLocalOk(true); };
   // the handle: the pointer's place across the slot IS the split, remembered on release
   const startDrag = (e) => {
     e.preventDefault();

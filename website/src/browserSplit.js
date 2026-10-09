@@ -128,5 +128,10 @@ export const showsBrowser = (open, expect, seen) => !!open || (!!expect && !seen
 // (`claim`: a click in the pane, Take over, the window coming back) - never a background tab's resize.
 export const mayShape = (hidden, focused, claim = false) => !hidden && (!!claim || !!focused);
 
+// ONLY BROWSING TAKES ROOM (the owner, 2026-10-09: "only browser use should take up space in the chat box"). An agent
+// that opens a file of its own in its browser - rendering a mock receipt to test against - is not out on the web: the
+// pane stays folded to its chip, one click from showing, and unfolds by itself once the agent goes to a real address.
+export const isLocalPage = (url) => /^file:/i.test(String(url || "").trim());
+
 // Should this slot hold the split, or just a chip? The Wall tiles three or four sessions across.
 export const layoutFor = (width, open, folded) => (!open ? "none" : width < CHIP_BELOW ? "chip" : folded ? "folded" : "split");

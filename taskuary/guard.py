@@ -134,6 +134,7 @@ OWNER_ONLY = (
                         r'|code|comments|continue|continue-work|discussion|dispatch|merge|not-a-task|not-coding|pause|remind|repo'
                         r'|split|wrap|answer)$', 'steering a task - and a comment here is written as the owner'),
     (r'POST|DELETE', r'^/api/tasks/\d+/waitroom(/bulk|/image|/\d+)?$', 'the waiting room is what the owner tells the agent'),
+    (r'POST', r'^/api/tasks/\d+/emails$', "an email the owner starts from a task - an agent drafts one through --draft"),
     (r'POST', r'^/api/messages/\d+/(attachments/fetch|chat|discussion|dispatch|file|ignore-sender|mine|not-mine|reclassify'
               r'|retriage|split|transcribe)$', "what a message is and where it goes is the owner's call"),
     (r'POST', r'^/api/messages/retriage-failed$', "re-judging every message triage failed on is the owner's call, as one is"),

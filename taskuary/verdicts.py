@@ -158,7 +158,8 @@ def _send_snapshot(store, snapshot):
         scopes.require(c, 'zoho_invoice_send')
         return zoho.send_invoice(zoho.connection(store, c['ConnectorId']), env.get('invoice_id'),
                                  env.get('to'), env.get('subject'), body)
-    return outbound.send_out(store, env.get('channel'), env.get('to'), env.get('subject'), body, cc=env.get('cc'))
+    return outbound.send_out(store, env.get('channel'), env.get('to'), env.get('subject'), body, cc=env.get('cc'),
+                             attachments=env.get('attachments'))
 
 
 def _reconcile_snapshot(store, snapshot):

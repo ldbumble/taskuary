@@ -329,7 +329,7 @@ def _no_placeholder(body, subject=''):
         raise RuntimeError(GUARD.format(mark=redact.MARK))
 
 
-def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) -> dict:
+def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, attachments: list = None) -> dict:
     """Send something nobody asked for: a report going OUT, to an address the owner chose.
 
     reply_to_message answers a message - it reads the mailbox, thread id and chat id off the row
@@ -343,6 +343,10 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) 
     ch, cc = (channel or 'email').lower(), addrs(cc)
     if cc and ch != 'email':
         raise RuntimeError(f'{ch} has no cc - only mail can copy somebody in')
+    # the files on the draft go with it: a message the owner STARTED (outbox, a task's own emails) sent here without them
+    # while its card listed them as attached (2026-10-09) - and a channel that cannot carry a file says so, before sending
+    if attachments and ch != 'email':
+        raise RuntimeError(f'{ch} cannot carry the attached files from here - remove them, or send this one by email')
     # a channel with no sender at all falls through to the line below that names what DOES work - not "switched off"
     if ch not in NO_SENDER and not can_reply(store, ch):
         raise RuntimeError(f'sending on {ch} is off - Settings → Replies decides which channels '
@@ -352,12 +356,12 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) 
         # Graph when the Outlook card is connected, otherwise the IMAP mailbox's own SMTP
         c = store.get_connector_by_type('outlook')
         if c and c.get('Active'):
-            return send_email(store, to, subject or '(no subject)', body, cc=cc)
+            return send_email(store, to, subject or '(no subject)', body, cc=cc, attachments=attachments)
         from .imapmail import send_smtp
         box = next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.list_connectors()
                     if x['Type'] in ('gmail', 'imap') and x['Active']), None)
         if not box: raise RuntimeError('no mailbox is connected to send from')
-        return send_smtp(store, box, to, subject or '(no subject)', body, cc=cc)
+        return send_smtp(store, box, to, subject or '(no subject)', body, cc=cc, attachments=attachments)
     if ch == 'teams':
         if not to: raise RuntimeError('no chat id - a Teams message needs one to land in')
         return send_teams(store, to[0], f'**{subject}**\n\n{body}' if subject else body)

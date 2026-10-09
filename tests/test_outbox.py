@@ -52,7 +52,7 @@ class OutboxEmailTests(unittest.TestCase):
         made = outbox.compose(self.s, 'email', ['to@example.com'], 'say hello', subject='Hello',
                               cc=['copy@example.com'], llm=lambda *_a, **_k: 'Hello')
         sent = {}
-        def send(_store, channel, to, subject, body, cc=None):
+        def send(_store, channel, to, subject, body, cc=None, attachments=None):
             sent.update(channel=channel, to=to, subject=subject, body=body, cc=cc)
             return {'channel': channel, 'to': to, 'cc': cc}
         with mock.patch('taskuary.outbound.send_out', side_effect=send):

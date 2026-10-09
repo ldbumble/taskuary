@@ -213,34 +213,48 @@ def work_of(store, tid: int) -> str:
 
 
 def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: str = None, files: list = None,
-               actor: str = 'owner', llm=None) -> dict:
-    """An email from inside a task - to tell someone it is done, or anything else the work owes them - whoever started it
+               actor: str = 'owner', llm=None, channel: str = 'email', mailbox: str = None, name: str = '') -> dict:
+    """A message from inside a task - to tell someone it is done, or anything else the work owes them - whoever started it
     (the owner, 2026-10-09: "even though i started it from the new button i want to be able to create email to send to
-    someone and notify it's done"). The AI writes it from the owner's words and what the work actually found; it becomes one
-    of the task's emails (slots.py), so it waits in Close out like any of them, and the task closes once it is sent.
-    `files` are (name, bytes) pairs that ride on it. Nothing is sent here."""
+    someone and notify it's done"; then "add from mailbox picker and teams/chat too"). The AI writes it from the owner's words
+    and what the work actually found; it becomes one of the task's outputs (slots.py), so it waits in Close out like any of
+    them, and the task closes once it is sent. An email can carry `files` ((name, bytes) pairs), CC and the mailbox it goes
+    FROM; a chat message (`to` is the chat id, `name` what to call it) carries only its words. Nothing is sent here."""
     from . import outbound, slots, verdicts
     task = store.get_task(tid)
     if not task: raise ValueError('no such task')
     if task.get('Status') in ('done', 'dropped'): raise ValueError('that task is closed - reopen it first')
-    who = outbound.addrs([to])
-    if not who: raise ValueError(f'not a valid email address: {to}')
-    cc = [a for a in outbound.addrs(cc or []) if a.lower() != who[0].lower()]
+    channel = str(channel or 'email').lower()
+    if channel not in slots.KINDS: raise ValueError(f'{channel} cannot be sent from a task')
+    if not outbound.can_reply(store, channel):
+        raise ValueError(f'{channel} cannot send from here - turn its replies on in Connections, or pick another channel')
+    if channel == 'email':
+        who = outbound.addrs([to])
+        if not who: raise ValueError(f'not a valid email address: {to}')
+        cc = [a for a in outbound.addrs(cc or []) if a.lower() != who[0].lower()]
+        if mailbox and not any(m['address'].lower() == str(mailbox).lower() for m in outbound.mailboxes(store)):
+            raise ValueError(f'{mailbox} is not a connected mailbox')
+    else:
+        who = [' '.join(str(to or '').split())]
+        if not who[0]: raise ValueError('pick the chat it goes to')
+        if cc: raise ValueError(f'{slots.CHAT_NAMES[channel]} has no CC - only an email copies somebody in')
+        if files: raise ValueError(f'a {slots.CHAT_NAMES[channel]} message cannot carry files from here - send an email to attach them')
+        mailbox = None
     about = str(about or '').strip() or f"Let them know this is done: {task.get('Title') or ''}"
-    if not outbound.can_reply(store, 'email'): raise ValueError('email cannot send from here - turn replies on for a mailbox in Connections')
-    draft = draft_message(store, 'email', who, about, resolution=work_of(store, tid) or None, llm=llm, cc=cc)
-    subject = (subject or '').strip() or subject_for(store, about, llm)
-    out = slots.draft(store, tid, draft, to=who[0], subject=subject, agent=actor)
-    if not out.get('ok'): raise ValueError(out.get('why') or 'the email could not be saved on the task')
+    draft = draft_message(store, channel, [name or who[0]] if channel != 'email' else who, about,
+                          resolution=work_of(store, tid) or None, llm=llm, cc=cc)
+    subject = ((subject or '').strip() or subject_for(store, about, llm)) if channel == 'email' else ''
+    out = slots.draft(store, tid, draft, to=who[0], subject=subject, agent=actor, channel=channel, name=name)
+    if not out.get('ok'): raise ValueError(out.get('why') or 'the message could not be saved on the task')
     rid = out['review_id']
-    # the slot keeps no CC and no brief: they ride in the envelope, the brief so "Regenerate with AI" writes from it again
+    # the slot keeps no CC, mailbox or brief: they ride in the envelope - the brief so "Regenerate with AI" writes from it again
     rv = store.get_review(rid)
     env = json.loads(rv.get('Deliver') or '{}') or {}
-    env.update({'cc': cc, 'about': about})
+    env.update({'cc': cc or [], 'about': about, **({'mailbox': mailbox} if mailbox else {}), **({'name': name} if name else {})})
     store.set_review_deliver(rid, json.dumps(env))
     attached, refused = [], []
-    for name, data in files or []:
-        try: verdicts.attach(store, rid, name, data, actor); attached.append(name)
-        except ValueError as e: refused.append(f'{name}: {e}')
-    store.audit('task', tid, 'task_email', actor, detail={'to': who, 'cc': cc, 'attached': attached})
+    for fname, data in files or []:
+        try: verdicts.attach(store, rid, fname, data, actor); attached.append(fname)
+        except ValueError as e: refused.append(f'{fname}: {e}')
+    store.audit('task', tid, 'task_email', actor, detail={'channel': channel, 'to': who, 'cc': cc, 'from': mailbox, 'attached': attached})
     return {'ok': True, 'review_id': rid, 'subject': subject, 'draft': draft, 'attached': attached, 'not_attached': refused}

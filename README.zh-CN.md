@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文**
 
 [![CI](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml/badge.svg)](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.7.15&asof=2026-10-08T1819)](https://pypi.org/project/taskuary/)
+[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.7.16&asof=2026-10-08T1819)](https://pypi.org/project/taskuary/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://www.python.org/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/ldbumble/taskuary?style=flat&color=d4a72c&label=%E2%98%85%20stars)](https://github.com/ldbumble/taskuary/stargazers)
@@ -18,7 +18,7 @@
 
 ![助手的游戏视图：每个任务、消息和智能体都是办公室里的一个人物，先展示整层办公室，再依次放大到各个房间。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
-Taskuary 仍处于早期阶段，目前为 **v0.3.7.15**，1.0 之前可能出现不兼容变更。
+Taskuary 仍处于早期阶段，目前为 **v0.3.7.16**，1.0 之前可能出现不兼容变更。
 应用界面和演示截图目前以英文为主；下文保留英文按钮名称，方便对照操作。
 
 <p align="center">

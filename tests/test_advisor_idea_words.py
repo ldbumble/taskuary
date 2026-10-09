@@ -23,6 +23,31 @@ def _say(key, text='Erin still needs the reconciled ledger.', **kw):
     return json.dumps({'say': [{'key': key, 'text': text, 'why': 'she asked twice', **kw}]})
 
 
+class FindingApartTests(unittest.TestCase):
+    """The finding, whose move it is and what the Advisor would do, said apart (2026-10-09). One first-person line -
+    "the fact and what I would do" - read as an order: triage made a task of "I'd read it through" on a mail sent to
+    another team, and the card could not show what was true apart from what was advised."""
+    def test_whose_move_and_the_suggestion_ride_on_the_idea_and_reach_triage(self):
+        s = MemoryStore(); mid = _mail(s)
+        [line] = assistant.parse(s, _say('idea:ops-review', text='Erin asked the Ops Team to review the P&Ls line by line.', mid=mid,
+                                         whose='the Ops Team', suggest='Skim it once before Monday for anything aimed at you.'), [])
+        self.assertEqual((line['action']['whose'], line['action']['suggest']), ('the Ops Team', 'Skim it once before Monday for anything aimed at you.'))
+        i = s.upsert_idea(line, ago(minutes=1))
+        msg, _, _ = assistant._idea_message(s, i, line['action'])
+        self.assertIn('whose move: the Ops Team', msg['body'])
+        self.assertIn("the Advisor's suggestion: Skim it once", msg['body'])
+
+    def test_a_null_suggestion_is_no_suggestion(self):
+        s = MemoryStore()
+        [line] = assistant.parse(s, _say('idea:quiet', whose='nobody yet', suggest='null'), [])
+        self.assertNotIn('suggest', line['action'])
+        self.assertEqual(line['action']['whose'], 'nobody yet')
+
+    def test_the_contract_asks_for_them_apart_from_the_finding(self):
+        self.assertIn('"whose"', assistant.CONTRACT); self.assertIn('"suggest"', assistant.CONTRACT)
+        self.assertNotIn('the fact and what I would do', assistant.CONTRACT)
+
+
 class KeyTests(unittest.TestCase):
     def test_a_thought_put_down_keeps_its_key_under_a_new_slug(self):
         """I2: the same-subject key was looked up among OPEN ideas only, so a dismissed thought came back reworded."""

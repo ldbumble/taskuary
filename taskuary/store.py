@@ -1205,18 +1205,29 @@ class SQLiteStore:
             # one guide written as questions and signs, and the judgement code used to append lives in it. A document only
             # a template, a migration or the history generator ever wrote takes the guide whole, keeping its generated
             # "Learned from your mail history" block; one the owner wrote is theirs and is left as it is.
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_guide_2026_10_09'").fetchone():
-                row = self.cx.execute("SELECT Content, UpdatedBy FROM doc WHERE Name='triage'").fetchone()
-                if row and row['UpdatedBy'] != 'owner':
-                    from .histgen import HIST_END, HIST_START, TITLES, _splice
-                    guide = (Path(__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
-                    body = row['Content'] or ''
-                    hist = body.split(HIST_START, 1)[1].split(HIST_END, 1)[0] if HIST_START in body and HIST_END in body else ''
+            # ...and it KEEPS tracking the guide: a generated history block makes the document differ from the template, so
+            # the plain "untouched template" rule would freeze it at the first guide. The guide part is updated while it is
+            # still exactly the guide last put there (triage_guide_sha); an edit to it, by anyone, ends that.
+            row = self.cx.execute("SELECT Content, UpdatedBy FROM doc WHERE Name='triage'").fetchone()
+            if row and row['UpdatedBy'] != 'owner':
+                from .histgen import HIST_END, HIST_START, TITLES, _splice
+                guide = (Path(__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
+                body = row['Content'] or ''
+                hist = body.split(HIST_START, 1)[1].split(HIST_END, 1)[0] if HIST_START in body and HIST_END in body else ''
+                head = body.split(f'## {TITLES["triage"]}\n{HIST_START}', 1)[0].strip()
+                sha = lambda t: hashlib.sha256(t.strip().encode()).hexdigest()
+                last = self.cx.execute("SELECT Value FROM setting WHERE Name='triage_guide_sha'").fetchone()
+                first = not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_guide_2026_10_09'").fetchone()
+                if (first or (last and sha(head) == last['Value'])) and sha(head) != sha(guide):
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedBy=?, UpdatedAt=? WHERE Name='triage'",
                                     (_splice(guide, hist, TITLES['triage']) if hist.strip() else guide,
                                      'migration' if hist.strip() else 'template', _now()))
-                    logger.info('triage: TRIAGE.md is now the triage guide' + (' (your mail-history section kept)' if hist.strip() else ''))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_guide_2026_10_09', '1', 'migration')")
+                    logger.info('triage: TRIAGE.md follows the triage guide' + (' (your mail-history section kept)' if hist.strip() else ''))
+                    head = guide
+                if first or (last and sha(head) == sha(guide)):
+                    self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_guide_sha', ?, 'migration') "
+                                    "ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value", (sha(guide),))
+            self.cx.execute("INSERT OR IGNORE INTO setting (Name, Value, UpdatedBy) VALUES ('triage_guide_2026_10_09', '1', 'migration')")
             # THE WHATSAPP CATCH-ALL IS GONE, so the row for it goes too. '*' admitted every direct
             # chat on an account that is the owner's own phone; nothing honours it now (messengers
             # .poll_whatsapp skips it, the door refuses a new one), and a dead row with a live-looking

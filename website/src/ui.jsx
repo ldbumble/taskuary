@@ -13,7 +13,6 @@ import { onLive } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Md } from "./md.jsx";
-import { answerOutline } from "./agentAnswer.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
@@ -552,60 +551,30 @@ export const ChoiceList = ({ children }) => (
 );
 
 export const CoderReport = ({ body, artifacts: all = [] }) => {
-  // THE AGENT'S ANSWER IS THE RESULT (the owner, 2026-10-09: "still too many duplicates ... I like the 7 items the agent did.
-  // that's main thing. show small list then click more and then show artifact if there is one"). One line on top, the answer's
-  // items as a short list, the whole answer behind Show more, then any page the session published. What it found / did, the
-  // last message and the session records each said the answer again, so they are not on the card.
+  // THE AGENT'S LAST WORD, AND THAT'S ALL (the owner, 2026-10-09: "Just show the last message/summary and that's all"). Its last
+  // message when the session left one, else the report's summary, else the answer it saved - and a page it published, the one
+  // thing that is not the same account again.
   const answer = all.find((a) => a.kind === "agent_result");
-  const pages = all.filter(isPublished);
-  const text = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim();
-  // ^ anchored per line, and the label eats spaces but NOT the newline - letting \s* run on
-  // swallowed the separator, so an all-empty report rendered "TRIAGE -> Determination:"
-  const parts = text.split(/^(Triage|Determination|Actions|Summary|Found|Did|Next):[ \t]*/m);
-  const rows = [];
-  for (let i = 1; i < parts.length; i += 2) {
-    const t = (parts[i + 1] || "").trim();
-    if (t) rows.push({ label: parts[i], text: t });
-  }
-  const summary = rows.find((r) => r.label === "Summary")?.text ?? (rows.length ? "" : text);
-  const [lead, last] = String(summary || "").split(/\n+LAST MESSAGE\n/);
+  // ...and what it MADE: pages it published, files a chat showed (the owner, 2026-10-09: "agent work ... should reflect what it
+  // did. simple task and any related artifacts it creates. replies, actions should be on the close out tab")
+  const pages = all.filter((a) => isPublished(a) || a.kind === "shown");
+  // the session's last message rides at the END of the report (coder.finish: CODER REPORT ... LAST MESSAGE ...)
+  const [report, last] = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim().split(/\n+LAST MESSAGE\n/);
+  const lead = (/^Summary:[ \t]*([\s\S]*?)(?=^(?:Triage|Determination|Actions|Found|Did|Next):|(?![\s\S]))/m.exec(report)?.[1] ?? report).trim();
   const [said, setSaid] = useState(null);
-  const [more, setMore] = useState(false);
+  const need = !last?.trim() && !lead?.trim() && !!answer?.url;
   useEffect(() => {
     let live = true;
-    if (answer?.url) api.get(answer.url, { responseType: "text", transformResponse: (x) => x })
-      .then(({ data }) => live && setSaid(String(data || ""))).catch(() => live && setSaid(""));
-    else setSaid("");
+    if (need) api.get(answer.url, { responseType: "text", transformResponse: (x) => x })
+      .then(({ data }) => live && setSaid(String(data || "").replace(/^# [\s\S]*?(\n\s*\n|$)/, "").trim())).catch(() => live && setSaid(""));
     return () => { live = false; };
-  }, [answer?.url]);
-  // the saved answer, else the session's last message: either is the agent's own account
-  const outline = said == null ? null : answerOutline(said || last || "");
-  const findings = !outline?.items.length && !outline?.intro ? rows.filter((r) => ["Determination", "Found"].includes(r.label)) : [];
-  if (!lead && !outline?.full && !findings.length && !pages.length) return null;
+  }, [need, answer?.url]);
+  const words = (last || lead || said || "").trim();
+  if (!words && !pages.length) return need && said == null ? <CircularProgress size={12} /> : null;
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15 }}>
-      {lead?.trim() && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.55,
-        whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{lead.trim()}</Typography>}
-      {outline == null && <CircularProgress size={12} sx={{ mt: 1 }} />}
-      {!!outline?.items.length && (
-        <Box component="ol" sx={{ m: 0, mt: lead ? 0.8 : 0, pl: 2.6, color: DIM, "& li": { fontSize: 13, lineHeight: 1.6 } }}>
-          {outline.items.map((i) => <li key={i.n} value={i.n}>{i.short}</li>)}
-        </Box>
-      )}
-      {!outline?.items.length && outline?.intro && (
-        <Typography variant="body2" sx={{ color: DIM, mt: lead ? 0.6 : 0, lineHeight: 1.55 }}>{outline.intro}</Typography>
-      )}
-      {findings.map((r, i) => (
-        <Typography key={i} variant="body2" sx={{ color: DIM, mt: 0.6, lineHeight: 1.55, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{r.text}</Typography>
-      ))}
-      {!!outline?.full && (
-        <>
-          <Button size="small" onClick={() => setMore((m) => !m)} sx={{ mt: 0.5, px: 0, minWidth: 0, textTransform: "none" }}>
-            {more ? "Show less" : "Show more"}</Button>
-          {more && <Box sx={{ mt: 0.5, pt: 0.8, borderTop: `1px solid ${BORDER}`, fontSize: 13 }}><Md text={outline.full} /></Box>}
-        </>
-      )}
-      {!!pages.length && <Box sx={{ mt: 1 }}><PublishedPages pages={pages} /></Box>}
+      {words && <Box sx={{ fontSize: 13, color: INK }}><Md text={words} /></Box>}
+      {!!pages.length && <Box sx={{ mt: words ? 1 : 0 }}><PublishedPages pages={pages} /></Box>}
     </Box>
   );
 };

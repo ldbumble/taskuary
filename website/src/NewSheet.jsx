@@ -189,6 +189,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         const plan = planTask(chat ? NO_REPO : pickd?.repo || null, chat ? "live" : "terminal", false, !chat);
         const { data } = await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: withImages(about, pics.paths),
           Kind: plan.kind, Tags: plan.tags });
+        // it skipped triage, so nothing gave it a checklist: read the words behind the answer (server._read_hand_task)
+        api.post(`/api/tasks/${data.taskId}/read-ask`).catch(() => null);
         // a folder typed for a repository the agent had none for is saved on the agent first - the session refuses to open without one
         if (pickd?.repo && pickd.path) await api.put(`/api/tasks/${data.taskId}/repo`, { repo: pickd.repo, path: pickd.path, agent });
         if (plan.chat) {

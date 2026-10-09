@@ -19,7 +19,7 @@ const btn = { ...mono, fontSize: 10.5, lineHeight: 1, px: 0.9, py: 0.45, borderR
 
 // `open`: the parent's poll of browserview.state - the relay refuses a session with no browser, so this
 // connects only while that says open (a caller that does not poll leaves it true and always tries).
-export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false, yourTurn = false }) {
+export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false, yourTurn = false, clearRight = false }) {
   const box = useRef(null), canvas = useRef(null), sendRef = useRef(null), img = useRef(null), fit = useRef(null);
   const [live, setLive] = useState(false);
   const [url, setUrl] = useState(url0);
@@ -189,7 +189,9 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
       flexDirection: "column", minHeight: 0, minWidth: 0, border: `1px solid ${driving ? CATPPUCCIN.yellow : BORDER}`,
       borderRadius: 2, overflow: "hidden", bgcolor: "#101010", transition: "border-color .15s" }}>
       {/* toolbar: what page, whether frames are flowing, who is driving */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1, py: 0.5, bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+      {/* clearRight: the session's full-screen button floats over this corner, and it sat on the fold arrow - the one way
+          to put the browser away was under it (2026-10-09) */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1, pr: clearRight ? 5 : 1, py: 0.5, bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <Box title={live ? "live - frames are flowing" : "connecting…"}
           sx={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, bgcolor: live ? CATPPUCCIN.green : "#5a554d",
             boxShadow: live ? `0 0 0 3px ${CATPPUCCIN.green}33` : "none", transition: "background .3s" }} />
@@ -221,7 +223,7 @@ Take over to drive it yourself; close the session to close it."
           {driving ? "Hand back" : "Take over"}
         </Box>
         <Box component="button" onClick={snapshot} title="keep this frame on the task as an attachment" sx={btn}>Snapshot</Box>
-        {onFold && <Box component="button" onClick={onFold} title={overlay ? "back to the terminal" : "fold the browser away"} sx={btn}>{overlay ? "✕" : "›"}</Box>}
+        {onFold && <Box component="button" onClick={onFold} title={overlay ? "back to the terminal" : "fold the browser away - the browser chip above the terminal brings it back"} sx={btn}>{overlay ? "✕" : "›"}</Box>}
       </Box>
       {/* the page. tabIndex so keystrokes land here while driving; the canvas swallows the wheel
           the same way the terminal does, so scrolling the page never scrolls the app */}

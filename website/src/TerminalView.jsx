@@ -734,7 +734,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
             <Box sx={{ width: 2, height: 36, borderRadius: 99, bgcolor: BORDER, transition: "background .15s" }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
-            <BrowserPane sid={sid} url={browser.url} open={browser.open} yourTurn={yourTurn} onFold={() => fold(true)} />
+            <BrowserPane sid={sid} url={browser.url} open={browser.open} yourTurn={yourTurn} onFold={() => fold(true)} clearRight={canFull} />
           </Box>
         </>
       )}

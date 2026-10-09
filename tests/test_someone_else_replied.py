@@ -206,7 +206,7 @@ class RepoWorkTests(unittest.TestCase):
         from pathlib import Path
         import taskuary
         doc = (Path(taskuary.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
-        self.assertIn('A PULL REQUEST is a task, and its kind is coding', doc)
+        self.assertIn('A pull request from a person is a request for a review and a merge on the owner\'s repository - a task of kind coding whoever opened it', doc)
         self.assertNotIn("A stranger's pull request or issue is fyi", doc)
 
     def test_somebody_elses_issue_is_still_the_models_call(self):

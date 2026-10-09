@@ -110,17 +110,13 @@ class AddressingTests(unittest.TestCase):
         # (2026-09-25), which defines a kind and weighs no signal
         self.assertTrue(seen['system'].startswith('My own rules. Answer JSON only.'))
         added = seen['system'][len('My own rules. Answer JSON only.'):]
-        # ...and the "urgent" field's definition (2026-09-25: urgent is triage's call), asked of a document that never
-        # names it - a field every verdict answers, like the shape; the one exception, and only that exact line
-        self.assertIn('\n\n' + triage.URGENT, added)
-        added = added.replace('\n\n' + triage.URGENT, '')
-        # ...and "due" the same way (2026-10-06: the day the work is due, a field every verdict answers)
-        self.assertIn('\n\n' + triage.DUE, added)
-        added = added.replace('\n\n' + triage.DUE, '')
-        kind_block, _, rest = added.strip().partition('\n\nWHATEVER ELSE')
-        self.assertTrue(kind_block.startswith('KIND, DECIDED FIRST') and '\n\n' not in kind_block, kind_block[:120])
-        self.assertEqual(('WHATEVER ELSE' + rest).strip(), ('WHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + triage.TASK_FIELDS).strip())
-        for judgement in ('cc', 'weigh', 'prefer fyi', 'escalate', 'urgent'):
+        # ...and only the shape, in the guide's own words (sections 5 and 7) - which carries "urgent" and "due" too, so
+        # they are not sent a second time on their own. "Is it coding, first" was a code-written block here until
+        # 2026-10-09; it is the guide's section 4 now, so nothing else may be added.
+        self.assertEqual(added, '\n\n' + triage.TASK_FIELDS)
+        self.assertEqual(seen['system'].count(triage.URGENT), 1)
+        self.assertNotIn('KIND, DECIDED FIRST', seen['system'])
+        for judgement in ('prefer fyi', 'escalate', 'addressed_to_you'):
             self.assertNotIn(judgement, added.lower(), f'a rule about {judgement} was appended')
         self.assertIn('"addressed_to_you": "cc"', seen['user'])               # the signal is there
         # and a cc CAN be the owner's work: nothing in the pipeline overrides that verdict
@@ -129,11 +125,12 @@ class AddressingTests(unittest.TestCase):
     def test_the_shipped_document_carries_the_signal_as_a_signal(self):
         from pathlib import Path
         doc = (Path(__file__).parent.parent / 'taskuary' / 'templates' / 'triage.md').read_text(encoding='utf-8')
-        self.assertIn('SIGNALS to weigh, not rules to obey', doc)
-        self.assertIn('a cc can plainly be yours', doc)
-        self.assertIn('never decide on them alone', doc)
-        # the fallback for a blanked document says the same thing
-        self.assertIn('never rules to obey', triage.INTENT_SYSTEM)
+        self.assertIn('Everything below is signs to weigh, not rules to obey', doc)
+        self.assertIn('the owner is only copied (`addressed_to_you` "cc")', doc)        # a sign it is someone else's...
+        self.assertIn('A cc that names the owner or asks them something is theirs', doc)  # ...that the words can overrule
+        self.assertIn('Read the words, then the lines', doc)
+        # the fallback for a blanked document IS the same text
+        self.assertIn('A cc that names the owner or asks them something is theirs', triage.INTENT_SYSTEM)
 
 
 class RecipientsOffTheWireTests(unittest.TestCase):

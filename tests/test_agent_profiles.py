@@ -237,7 +237,9 @@ class ProfileEditingTests(unittest.TestCase):
 
 class TriageNamesTheProfileTests(unittest.TestCase):
     def test_the_contract_asks_for_a_profile_and_explains_it(self):
-        self.assertIn('"profile"', triage.INTENT_SYSTEM)
+        # the guide asks for it (section 4, "Which worker") and its answer line names the field
+        self.assertIn('**Which worker.**', triage.INTENT_SYSTEM)
+        self.assertIn('`profile`', triage.INTENT_SYSTEM)
 
     def _classify(self, answer, profiles):
         msg = {'Subject': 'Look into the vendor', 'BodyText': 'Can you find out who they are?',

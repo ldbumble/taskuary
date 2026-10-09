@@ -49,7 +49,8 @@ class VisionTests(unittest.TestCase):
                               llm=llm, images=[('image/png', 'AAAA')])
         self.assertEqual(out['intent'], 'task')
         self.assertEqual(seen['images'], [('image/png', 'AAAA')])
-        self.assertIn('screenshot of the error IS the request', seen['system'])
+        self.assertIn('Images from the message are attached.', seen['system'])               # the code says they are there
+        self.assertIn('a screenshot of the error is the request', seen['system'])            # the guide says what they mean
 
     def test_graph_attachments_are_read_for_triage_before_the_message_row_exists(self):
         """They used to be saved AFTER ingest, so whatever classified "See below." never saw what

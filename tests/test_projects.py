@@ -86,7 +86,8 @@ class ProjectRelationshipTests(unittest.TestCase):
         self.assertEqual(out['intent'], 'task')
         self.assertEqual(seen['user']['project_context']['project'], 'noble/app')
         self.assertEqual(seen['user']['project_context']['repositories'], ['noble/app'])
-        self.assertIn('PROJECT RELATIONSHIP CONTEXT', seen['system'])
+        # how much it counts for is the guide's (section 4): supporting evidence, not proof
+        self.assertIn("`project_context` (the sender's past repository choices) is supporting evidence, not proof", seen['system'])
 
     def test_soul_lists_people_and_channels_but_not_private_identifiers(self):
         for i in range(2):

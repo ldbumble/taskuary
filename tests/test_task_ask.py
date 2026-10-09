@@ -89,7 +89,7 @@ class AutomaticRoadTests(unittest.TestCase):
 
         The shape is asked for on EVERY verdict now (2026-09-16), which is strictly stronger: an fyi
         and a report are rows the owner reads too, and a mail header is not a sentence."""
-        self.assertIn('WHATEVER the verdict', triage.TASK_FIELDS)
+        self.assertIn('for every verdict (an fyi and a report are rows the owner reads too)', triage.TASK_FIELDS)
         self.assertIn('"title"', triage.TASK_FIELDS)
         self.assertIn('"summary"', triage.TASK_FIELDS)
         s = MemoryStore()
@@ -302,7 +302,9 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn('answer', seen['user'])
 
     def test_the_shipped_prompt_carries_it_once(self):
-        self.assertIn(triage.TASK_FIELDS, triage.INTENT_SYSTEM)
+        # the shape IS the guide's sections 5 and 7, so the shipped prompt carries it without a second copy
+        self.assertIn(triage.shipped_section('## 5.'), triage.INTENT_SYSTEM)
+        self.assertIn(triage.shipped_section('## 7.'), triage.INTENT_SYSTEM)
         self.assertEqual(self._system_for(None).count('one distinct requested outcome each'), 1)
 
 

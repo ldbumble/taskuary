@@ -109,7 +109,7 @@ class TriageNamesThePlaybook(unittest.TestCase):
     def test_no_playbooks_no_paragraph(self):
         llm, seen = _llm_saying({'intent': 'fyi', 'why': 'x'})
         triage.classify_intent(self.msg, llm=llm, playbooks='')
-        self.assertNotIn('PLAYBOOKS', seen['system'])
+        self.assertNotIn("PLAYBOOKS - the owner's written procedures", seen['system'])   # the guide names playbooks; the menu label is absent
 
     def test_ingest_tags_the_task_and_says_so(self):
         s = MemoryStore()

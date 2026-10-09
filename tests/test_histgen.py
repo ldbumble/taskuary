@@ -49,7 +49,7 @@ class HistgenTests(unittest.TestCase):
         self.assertIn('2 inbound + 1 sent', detail)
         self.assertIn(histgen.HIST_START, doc)
         self.assertIn('vendor newsletters', doc)
-        self.assertIn('Classify one inbound work message', doc)   # the shipped prompt survives
+        self.assertIn('# How to triage what arrives', doc)   # the shipped guide survives
 
     def test_regenerate_replaces_not_duplicates(self):
         s = MemoryStore()

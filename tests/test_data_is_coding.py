@@ -11,12 +11,8 @@ from taskuary import triage
 
 
 def kind_rule():
-    seen = {}
-    def llm(system, user, **kw): seen['system'] = system; return '{"intent": "task", "kind": "coding", "why": "x"}'
-    triage.classify_intent({'from_email': 'erin@northwind.example', 'subject': 'Facility', 'body': 'Can we update the facility?'},
-                           llm=llm, system='My own rules. Answer JSON only.')
-    s = seen['system']
-    return s[s.index('KIND, DECIDED FIRST'):].split('\n\n')[0]
+    """The kind question, as triage is told it: the guide's section 4 (it was a code-written block until 2026-10-09)."""
+    return triage.shipped_section('## 4.')
 
 
 class DataIsCodingTests(unittest.TestCase):
@@ -27,6 +23,6 @@ class DataIsCodingTests(unittest.TestCase):
 
     def test_reading_and_checking_stay_off_the_coding_agent(self):
         rule = kind_rule()
-        self.assertIn('changes nothing', rule)
-        self.assertIn('is not coding', rule)
-        self.assertIn('never a reason to call it coding', rule)
+        self.assertIn('**general** - no change, but reading, checking or thinking helps', rule)
+        self.assertIn('the work only reads from a system (a query, a report, a look-up)', rule)
+        self.assertIn('a repository whose topic matches the message, without a change to make there', rule)

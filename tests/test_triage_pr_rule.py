@@ -42,13 +42,15 @@ class PrRuleTests(unittest.TestCase):
         return SQLiteStore(str(self.path))
 
     def test_the_migration_says_what_the_template_says(self):
-        """_PR_RULE_NOW is a copy of a paragraph in templates/triage.md - the doc is the wording
-        everyone else reads, so a rewording there that forgot this constant would leave every
-        edited install on the old rule for ever."""
+        """_PR_RULE_NOW is what an owner-edited doc is swapped to; the shipped guide (2026-10-09) says the same thing in
+        its own words - a PR is coding work whoever opened it, a stranger's issue keeps the skepticism - so the two may
+        not drift apart in MEANING, and neither may go back to the old rule."""
         for sentence in ('A PULL REQUEST is a task, and its kind is coding - whoever opened it.',
                          "A stranger's ISSUE is a different thing and keeps the skepticism"):
             self.assertIn(sentence, store_mod._PR_RULE_NOW)
-            self.assertIn(sentence, TEMPLATE)
+        self.assertIn("A pull request from a person is a request for a review and a merge on the owner's repository - a task of kind coding "
+                      'whoever opened it', TEMPLATE)
+        self.assertIn("A stranger's issue deserves skepticism", TEMPLATE)
         self.assertNotIn(store_mod._PR_RULE_WAS, TEMPLATE)
 
     def test_a_doc_that_stopped_tracking_the_template_still_gets_the_fix(self):

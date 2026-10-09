@@ -43,5 +43,8 @@ coding-specific ones on top. The task brief in your prompt is your context and y
   wrote the reply yourself with `taskuary --reply "<text>"`, which is kept as you wrote it. A file it
   promises rides only if you add `--attach <path>`. When nobody should hear back - John said not to answer, or there
   is nothing for the sender - add `--no-reply`: the task closes with no reply drafted.
+- When something is easier to show than to tell - a table to sort, a chart, a dashboard, a comparison - you
+  may publish it with your own artifact tool if you have one (Claude's Artifact tool); Taskuary keeps what
+  you publish on the task. Never make one for its own sake.
 - "Nothing to do here" is also an ending - say it. Never close on an open question; a session
   John opened is theirs to end.

@@ -437,6 +437,16 @@ def _send_state(memo: dict, channel, has_message=True) -> tuple:
     return memo[k]
 
 
+def _review_send_state(memo: dict, r: dict) -> tuple:
+    """(CanSend, SendBlock) for one draft. A message the owner STARTED - one of a task's own emails or chats (slots.py), or
+    + New's Send something - answers nothing, so its channel and recipient are in its envelope, not on a message: read off
+    the message alone it was "nothing arrived to reply to", and the card offered Copy & close instead of Send (2026-10-09)."""
+    try: env = json.loads(r.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError, AttributeError): env = {}
+    if env.get('kind') == 'zoho_invoice': return True, ''
+    return _send_state(memo, r.get('Channel') or env.get('channel'), bool(r.get('MessageId')) or bool(env.get('to')))
+
+
 @app.get('/api/feed')
 def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None, source: str = None,
          request: Request = None):
@@ -1097,10 +1107,7 @@ def task_detail(task_id: int):
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo = {}
     for r in d.get('reviews') or []:
-        try: special = json.loads(r.get('Deliver') or '{}').get('kind') == 'zoho_invoice'
-        except (TypeError, ValueError, AttributeError): special = False
-        ok, why = _send_state(memo, r.get('Channel'), bool(r.get('MessageId')))
-        r['CanSend'] = special or ok; r['SendBlock'] = '' if r['CanSend'] else why
+        r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
@@ -2924,11 +2931,7 @@ def reviews(status: str = None):
     rows = store.list_reviews(status)
     memo = {}
     for r in rows:
-        try: special = json.loads(r.get('Deliver') or '{}').get('kind') == 'zoho_invoice'
-        except (TypeError, ValueError): special = False
-        ok, why = _send_state(memo, r.get('Channel'), bool(r.get('MessageId')))
-        r['CanSend'] = special or ok
-        r['SendBlock'] = '' if r['CanSend'] else why
+        r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
         r['Stale'] = bool(moved)
         if r['Stale'] and latest:
@@ -4189,13 +4192,14 @@ def draft_review(rid: int, body: DraftBody = None):
     try: deliver = json.loads(rv.get('Deliver') or '{}') or {}
     except (TypeError, ValueError): deliver = {}
     # ...unless the owner started it from the task (outbox.task_email): it keeps their brief, and is written from it again
-    if rv.get('Kind') == 'slot' and not deliver.get('about'): raise HTTPException(422, 'the agent writes this email - ask it again, or edit it here')
+    if rv.get('Kind') == 'slot' and deliver.get('by') != 'owner': raise HTTPException(422, 'the agent writes this email - ask it again, or edit it here')
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob
             chat = (deliver.get('channel') or 'email') != 'email'
-            draft = ob.draft_message(store, deliver.get('channel') or 'email', [deliver['name']] if chat and deliver.get('name') else deliver.get('to'), '\n\n'.join(filter(None, [deliver['about'], _reply_nudge(body and body.instruction)])),
-                                     resolution=ob.work_of(store, rv['TaskId']) or None, cc=deliver.get('cc'))
+            draft = ob.draft_message(store, deliver.get('channel') or 'email', [deliver['name']] if chat and deliver.get('name') else deliver.get('to'), ob.results_brief('\n\n'.join(filter(None, [deliver.get('about'), _reply_nudge(body and body.instruction)]))),
+                                     resolution=ob.work_of(store, rv['TaskId']) or None, cc=deliver.get('cc'),
+                                     attached=None if chat else [f.get('name') for f in deliver.get('attachments') or []])
             store.update_review_draft(rid, draft, rv.get('RunId'))
         elif deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
             from . import outbox as ob

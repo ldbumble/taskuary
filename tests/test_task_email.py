@@ -44,7 +44,7 @@ def test_the_ai_writes_it_from_the_words_and_the_work_and_it_waits_on_the_task(s
     rv = s.get_review(out['review_id'])
     env = json.loads(rv['Deliver'])
     assert (rv['Kind'], rv['Status'], rv['DraftText']) == (slots.KIND, 'pending', 'Hi Erin,\n\nThe supervisor upload is live.')
-    assert (env['to'], env['cc'], env['about']) == (['erin@northwind.example'], ['gail@northwind.example'], 'tell her it is done')
+    assert (env['to'], env['cc'], env['about'], env['by']) == (['erin@northwind.example'], ['gail@northwind.example'], 'tell her it is done', 'owner')
     assert [i['out']['to'] for i in slots.open_(s, tid)] == ['erin@northwind.example']
     assert s.get_task(tid)['Status'] == 'open'                                                 # nothing is sent here
 
@@ -157,3 +157,46 @@ def test_a_chat_message_takes_no_cc_and_no_files(s):
     tid = work(s)
     with pytest.raises(ValueError, match='no CC'): email(s, tid, to='19:ops@thread.v2', channel='teams', cc=['gail@northwind.example'])
     with pytest.raises(ValueError, match='cannot carry files'): email(s, tid, to='19:ops@thread.v2', channel='teams', files=[('a.xlsx', b'x')])
+
+
+# ── then "send out results ... the AI is dumb here (wrong name as well). it should be summary of the results" (2026-10-09) ─────
+
+def test_it_is_the_results_never_the_original_ask_put_back(s):
+    tid = work(s, title='1. Upload the supervisor sheet 2. Pull supervisors from the HR feed (is the app on the HR data or only the directory?)')
+    _, seen = email(s, tid, about='')
+    assert 'RESULTS of this work' in seen['user'] and 'Do not repeat the original request' in seen['user']
+    assert 'is the app on the HR data' not in seen['user']                 # the title is not the brief
+    assert '180 tests pass' in seen['user']                                 # the work is
+
+
+def test_it_is_told_what_is_attached_and_when_nothing_is(s):
+    tid = work(s)
+    _, bare = email(s, tid)
+    assert 'NOTHING IS ATTACHED' in bare['user']
+    _, sheet = email(s, tid, to='gail@northwind.example', files=[('supervisors.xlsx', b'PK')])
+    assert 'ATTACHED TO THIS MESSAGE: supervisors.xlsx' in sheet['user']
+
+
+def test_it_signs_with_the_owners_own_name(s):
+    s.set_setting('owner_name', 'Alex Doyle', 'test'); s.set_setting('owner_title', 'Head of Operations', 'test')
+    seen = {}
+    def llm(system, user, max_tokens=0):
+        seen['system'] = system
+        return 'Done.'
+    outbox.draft_message(s, 'email', ['erin@northwind.example'], 'tell her', llm=llm)
+    assert 'You ARE Alex Doyle' in seen['system']
+    assert 'YOUR NAME, for any signature: Alex Doyle - Head of Operations' in seen['system']
+
+
+def test_a_task_email_with_no_message_behind_it_still_offers_send(s):
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    tid = work(s)
+    out, _ = email(s, tid)
+    old, server.store = server.store, s
+    try:
+        with mock.patch.object(outbound, 'can_reply', return_value=True):
+            d = TestClient(server.app).get(f'/api/tasks/{tid}').json()
+    finally: server.store = old
+    rv = next(r for r in d['reviews'] if r['ReviewId'] == out['review_id'])
+    assert rv['CanSend'] is True                                             # Send, not "Copy & close - nothing arrived"

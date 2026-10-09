@@ -15,6 +15,24 @@ written here either way, so the sender always hears one voice.
 import re
 from loguru import logger
 
+
+def owner_of(store, soul: str = None) -> str:
+    """Who the draft is written AS: the name the owner gave Taskuary (About you), else SOUL.md's "You work for **name**",
+    else "the owner". Read off SOUL alone, a SOUL written another way made every draft "the owner"'s - and its signature,
+    which STYLE.md says carries a "full name" it never spells, got a surname the model made up (2026-10-09)."""
+    name = ' '.join(str(store.get_setting('owner_name') or '').split())
+    if name: return name
+    soul = (store.doc('soul') or '') if soul is None else soul
+    return soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner'
+
+
+def signature_line(store) -> str:
+    """The name and title a signature uses, spelled out - never left for the model to fill in."""
+    name, title = (' '.join(str(store.get_setting(k) or '').split()) for k in ('owner_name', 'owner_title'))
+    if not name: return ''
+    return (f'\nYOUR NAME, for any signature: {name}' + (f' - {title}' if title else '')
+            + '. Sign with exactly this name; never another name or spelling.\n')
+
 SYSTEM = (
     # "You write {owner}'s replies" made the model {owner}'s ASSISTANT, and it wrote like one:
     # "I can't suggest times by email alone; the owner will need to handle scheduling directly." -
@@ -234,7 +252,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if not msgs: raise RuntimeError('nothing to reply to on this task')
     last = msgs[-1]
     soul = store.doc('soul') or ''
-    owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
+    owner = owner_of(store, soul)
     # the mail's own words rank the notes, so pass them: a note quoting this subject is the
     # one most likely to change how the reply should read
     # only explicit writing instructions ride into a reply (PW-060); the routing verdicts stay with triage
@@ -244,7 +262,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # The 60-word rule is useful for ordinary mail, but destructive for a completed eight-part
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
     length_rule = '' if resolution else BREVITY
-    system = (SYSTEM.format(owner=owner) + length_rule + (CHAT if chat else EMAIL) + '\n'
+    system = (SYSTEM.format(owner=owner) + signature_line(store) + length_rule + (CHAT if chat else EMAIL) + '\n'
               + (OWNER_SAYS if nudge else DONE if resolution else NOT_YET)
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
@@ -390,10 +408,10 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     llm = llm or build_llm(store)
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
     soul = store.doc('soul') or ''
-    owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
+    owner = owner_of(store, soul)
     chat = written_as_chat(m.get('Channel'))
     sty = style_doc(store)
-    system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
+    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.

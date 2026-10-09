@@ -26,7 +26,7 @@ def test_an_address_is_never_a_name():
 def test_triage_is_handed_the_name_and_told_to_use_it():
     src = inspect.getsource(triage)
     assert "'from_name': person_name(msg.get('from_name'))" in src
-    assert 'named by from_name' in triage.TASK_FIELDS
+    assert 'by `from_name`' in triage.TASK_FIELDS
 
 
 def test_the_phone_names_the_asker_the_same_way():

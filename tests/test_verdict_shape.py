@@ -45,11 +45,12 @@ class DocumentSaysTheShapeTests(unittest.TestCase):
         return SQLiteStore(str(self.path))
 
     def test_the_shipped_contract_line_names_every_field_the_code_reads(self):
-        line = next(l for l in TEMPLATE.splitlines() if l.startswith('Classify one inbound work message'))
+        # the guide's answer line (section 7, 2026-10-09) names every field the code reads, as the swap for an
+        # owner-edited doc (_SHAPE_NOW) does
+        line = next(l for l in TEMPLATE.splitlines() if l.startswith('JSON only:'))
         for field in ('"title"', '"summary"', '"checklist"'):
             self.assertIn(field, store_mod._SHAPE_NOW, field)
-            self.assertIn(field, line, field)                             # in the contract line itself
-        self.assertIn(store_mod._SHAPE_NOW, TEMPLATE)                     # the migration says what the template says
+            self.assertIn(field, line, field)                             # in the answer line itself
         self.assertNotIn(store_mod._SHAPE_WAS, TEMPLATE)
 
     def test_a_document_that_stopped_tracking_the_template_gets_the_line_back(self):
@@ -70,7 +71,7 @@ class DocumentSaysTheShapeTests(unittest.TestCase):
     def test_the_summary_leads_with_who_wants_what_on_a_document_the_old_fix_already_reached(self):
         """Installs the shape fix already ran on hold the old summary wording; the walk's cards lead with
         that sentence, so it asks who wants what now (2026-09-23) - swapped once, the rest untouched."""
-        self.assertIn(store_mod._SUMMARY_NOW, TEMPLATE)
+        self.assertIn('The first says who wants what from the owner, the asker first', TEMPLATE)   # the guide, in its own words
         self.assertNotIn(store_mod._SUMMARY_WAS, TEMPLATE)
         old = store_mod._SHAPE_NOW.replace(store_mod._SUMMARY_NOW, store_mod._SUMMARY_WAS)
         s = SQLiteStore(str(self.path))

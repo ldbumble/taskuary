@@ -140,7 +140,9 @@ class ConsistencyTests(unittest.TestCase):
             # repository that only matches the topic is not a reason (TQ-0694)
             self.assertNotIn('almost every task goes to the coding agent', low, name)
             self.assertNotIn('this is the default', low, name)
-            self.assertIn('never coding', low, name)
+            # ...said as a sign against it, not a "never" (the guide, 2026-10-09)
+            self.assertIn('signs against coding', low, name)
+            self.assertIn('a repository whose topic matches the message, without a change to make there', low, name)
             # the two claims that used to contradict the rest of the document
             self.assertNotIn('and every task goes to the coding agent', low, name)
             self.assertNotIn('not a routing decision', low, name)
@@ -226,8 +228,10 @@ class CodingIsNotTheDefaultMigrationTests(unittest.TestCase):
         after = SQLiteStore(p).doc('triage')
         self.assertIn(store_mod._CODING_NOW, after); self.assertNotIn('a query against one of their databases', after)
         self.assertIn('Mine first.', after); self.assertIn('The test is where.', after)
+        # the shipped guide says the same in its own words (section 4): a CHANGE is coding, a read is not
         tmpl = open(os.path.join(os.path.dirname(store_mod.__file__), 'templates', 'triage.md'), encoding='utf-8').read()
-        self.assertIn(store_mod._CODING_NOW, tmpl)
+        self.assertIn('does the work CHANGE something inside a system this install holds the code or the credentials for', tmpl)
+        self.assertIn('the work only reads from a system (a query, a report, a look-up)', tmpl)
 
     def test_an_unnamed_kind_is_the_owners_list(self):
         from taskuary.routing import draft_task_fields

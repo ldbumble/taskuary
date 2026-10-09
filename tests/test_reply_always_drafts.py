@@ -161,7 +161,7 @@ class GeneralDefaultTests(unittest.TestCase):
 
     def test_the_classifier_instructions_default_to_general(self):
         self.assertNotIn('Cannot tell? Say coding', triage.INTENT_SYSTEM)
-        self.assertIn('Cannot tell? Say task', triage.INTENT_SYSTEM)                  # 2026-09-23: unsure is the owner's list
+        self.assertIn('When you cannot tell, say task', triage.INTENT_SYSTEM)         # 2026-09-23: unsure is the owner's list
         from pathlib import Path
         doc = (Path(__file__).parent.parent / 'taskuary' / 'templates' / 'triage.md').read_text(encoding='utf-8')
         self.assertNotIn('say coding', doc.lower()); self.assertIn('say task', doc.lower())

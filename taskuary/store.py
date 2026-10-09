@@ -1200,6 +1200,23 @@ class SQLiteStore:
                 if _CODING_WAS in body:
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'", (body.replace(_CODING_WAS, _CODING_NOW), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_reading_not_coding', '1', 'migration')")
+            # ...and THE GUIDE REPLACES THE PATCHWORK (the owner, 2026-10-09: "make it clear how to triage things, what to
+            # look for, signs that would suggest things"). The sentence swaps above each fixed one rule; the template is now
+            # one guide written as questions and signs, and the judgement code used to append lives in it. A document only
+            # a template, a migration or the history generator ever wrote takes the guide whole, keeping its generated
+            # "Learned from your mail history" block; one the owner wrote is theirs and is left as it is.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_guide_2026_10_09'").fetchone():
+                row = self.cx.execute("SELECT Content, UpdatedBy FROM doc WHERE Name='triage'").fetchone()
+                if row and row['UpdatedBy'] != 'owner':
+                    from .histgen import HIST_END, HIST_START, TITLES, _splice
+                    guide = (Path(__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
+                    body = row['Content'] or ''
+                    hist = body.split(HIST_START, 1)[1].split(HIST_END, 1)[0] if HIST_START in body and HIST_END in body else ''
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedBy=?, UpdatedAt=? WHERE Name='triage'",
+                                    (_splice(guide, hist, TITLES['triage']) if hist.strip() else guide,
+                                     'migration' if hist.strip() else 'template', _now()))
+                    logger.info('triage: TRIAGE.md is now the triage guide' + (' (your mail-history section kept)' if hist.strip() else ''))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_guide_2026_10_09', '1', 'migration')")
             # THE WHATSAPP CATCH-ALL IS GONE, so the row for it goes too. '*' admitted every direct
             # chat on an account that is the owner's own phone; nothing honours it now (messengers
             # .poll_whatsapp skips it, the door refuses a new one), and a dead row with a live-looking

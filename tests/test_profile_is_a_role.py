@@ -165,13 +165,15 @@ class TheWorkersBlockTests(unittest.TestCase):
         return seen[0]
 
     def test_the_block_asks_on_general_not_coding(self):
+        # the roster rides as labelled data; WHEN to name one is the guide's (section 4, 2026-10-09)
         p = self.prompt()
-        self.assertIn('THE WORKERS', p)
+        self.assertIn('THE WORKERS -', p)
+        self.assertIn('- analyst: our figures', p)
         self.assertNotIn('(kind: coding)', p)
-        self.assertIn('"kind": "general"', p)
+        self.assertIn('When the kind is general and one of THE WORKERS listed below plainly fits the job', p)
 
     def test_the_block_says_coding_needs_no_profile(self):
-        self.assertRegex(self.prompt(), r'[Cc]oding needs no profile')
+        self.assertRegex(self.prompt(), r'Coding needs no worker')
 
     def test_the_block_survives_an_operator_document(self):
         """The owner's store holds a TRIAGE.md that REPLACES INTENT_SYSTEM (triage.py:408). The

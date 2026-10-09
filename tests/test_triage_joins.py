@@ -56,7 +56,7 @@ class SameAsTests(unittest.TestCase):
         first = mail(s, 'pr120', brain('task'), conv='gh:northwind/portal#120', channel='github', subject='northwind/portal#120 docs: fix the example')
         other = mail(s, 'pr121', brain('task', seen=seen), conv='gh:northwind/portal#121', channel='github',
                      subject='northwind/portal#121 docs: fill in the descriptions')
-        self.assertIn("One pull request or issue is never another one's task", seen[-1]['sys'])
+        self.assertIn('a different pull request or issue number', seen[-1]['sys'])    # a sign it is new (the guide, section 3)
         self.assertNotEqual(other['task_id'], first['task_id'])
         again = mail(s, 'pr120-push', brain('task', same_as=first['task_id']), conv='gh:northwind/portal#120', channel='github',
                      subject='northwind/portal#120 docs: fix the example')
@@ -85,7 +85,7 @@ class SameAsTests(unittest.TestCase):
         # the rule is TRIAGE's to apply (2026-10-08) - told, it answers null; code no longer unjoins its answer
         seen = []
         today = run('report:7:tue', brain('fyi', title='Morning digest', seen=seen))
-        self.assertIn('never joins a CLOSED task - every run shares one', seen[-1]['sys'])
+        self.assertIn('a report run that needs nothing from the owner is better as its own quiet row than filed on a closed task', seen[-1]['sys'])
         self.assertEqual((today['status'], today['task_id']), ('filed', None), 'today\'s run vanished into the closed task')
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         s.update_task(tid, {'Status': 'open'}, 'owner')
@@ -114,7 +114,7 @@ class SomeoneElsesAskTests(unittest.TestCase):
         mail(s, 'p', brain('task', seen=seen), conv='gh:northwind/ledger#65', frm='ray@vendor.example',
              subject='Send long Discord replies without truncation', body='Discord replies are cut off at 2,000 characters. Closes #53.')
         self.assertIn('"from": "someone else: alex@northwind.example - not this sender"', seen[-1]['usr'])
-        self.assertIn('is from someone else and this message is a new thread', seen[-1]['sys'])
+        self.assertIn("someone else's new thread about a similar subject", seen[-1]['sys'])
 
     def test_the_same_sender_again_is_told_so(self):
         s = MemoryStore()

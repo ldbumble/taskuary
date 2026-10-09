@@ -127,7 +127,9 @@ class FollowUpVerdictTests(unittest.TestCase):
         ingest.ingest_message(s, reply(), llm=fake)
         self.assertIn('THE PAYLOAD ALSO CARRIES:', seen['system'])
         self.assertIn('exchange is the recent back-and-forth', seen['system'])
-        self.assertIn('STILL THE ASK', seen['system'])            # and how to read it
+        # ...what it CONTAINS, and nothing about how to weigh it: that is the guide's (2026-10-09), and an owner's
+        # document that leaves it out has chosen not to say
+        self.assertNotIn('STILL THE ASK', seen['system'])
         # ...while the shipped document, which explains the field itself, is left alone
         s2 = store(); opened(s2); seen.clear()
         ingest.ingest_message(s2, reply(), llm=fake)

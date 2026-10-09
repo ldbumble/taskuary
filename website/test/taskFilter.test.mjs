@@ -163,6 +163,8 @@ test("remindWaiting is true only for an open task whose RemindAt is still ahead"
 test("remindDay is empty without a day and names the day it has", () => {
   assert.equal(remindDay(""), "");
   assert.equal(remindDay(null), "");
-  const expected = new Date(2026, 9, 9).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-  assert.equal(remindDay("2026-10-09 07:00:00"), expected);
+  // a fixed date that is never today: "2026-10-09" was, on 2026-10-09, and read "today at 7:00"
+  const expected = new Date(2020, 0, 15).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  assert.equal(remindDay("2020-01-15 07:00:00"), expected);
+  assert.equal(remindDay(`${localStamp().slice(0, 10)} 19:05:00`), "today at 7:05");
 });

@@ -72,6 +72,13 @@ fixture['/api/cli/connections'] = { data: [
     ['kimi', 'Kimi Code (Moonshot AI)', ['--output-format', 'stream-json'], 'Use /login to connect Kimi or Moonshot. Windows requires Git Bash. Task execution only; choose another provider for triage and reports.'],
   ].map(([name,label,args,description]) => ({ name, label, description, installed: false, configured: false, installable: true, install: name, config: { cmd: name, args, timeout: 1500 } })),
 ] };
+// the wall a working morning leaves: who holds a file, what one agent found for the next, what is safe to build on
+fixture['/api/board/notes'].data = [
+  [4, 'the wall', 'summary', 'the AP importer needs pyodbc installed before its tests mean anything; the census sync is behind a VPN and will not run from a laptop'],
+  [3, 'coder', 'ready', 'export fixed, 14 tests green - safe to build on'],
+  [2, 'codex', 'note', 'the bank feed keeps inter-company transfers; the export drops them. That is the 4,180'],
+  [1, 'coder', 'working', 'on the month-end export - tools/gl_export.py is mine for the next hour'],
+].map(([NoteId, Agent, Kind, Body]) => ({ NoteId, TaskId: null, Agent, Cwd: '', Kind, Body, Files: '', CreatedAt: '2026-09-03T10:20:00', ReadBy: null, Rolled: null }));
 fixture['/api/board/notes'].data.forEach(n => { if (n.Agent === 'codex') n.ReadBy = 'coder'; if (n.Agent === 'coder') n.ReadBy = 'codex'; });
 fixture['/api/hub'].data[0].comments = [
   { CommentId: 1, Author: 'coder', CreatedAt: '2026-09-03 10:12:00', Body: 'I can add a dry-run check that reports missing account mappings before anything is written.' },
@@ -104,6 +111,7 @@ const browser = await launch();
 const page = await browser.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
+if (process.env.PROBE) page.on('console', m => console.log('page:', m.text()));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
 await page.evaluateOnNewDocument(() => {
@@ -119,7 +127,13 @@ const click = async (text, selector = 'button', includes = false) => {
   await page.evaluate(({text,selector,includes}) => [...document.querySelectorAll(selector)].find(e => e.getBoundingClientRect().height && (includes ? e.textContent.includes(text) : e.textContent.trim() === text)).click(), args);
   await delay(500);
 };
-const nav = text => click(text, '#tqTopNav div');
+// the smallest visible thing that says exactly this - the side menu, the Board button, a Settings section
+const nav = async text => {
+  const find = t => { const hits = [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().height && e.textContent.trim() === t);
+    return hits.find(e => !hits.some(o => o !== e && e.contains(o))); };
+  await page.waitForFunction(`!!(${find})(${JSON.stringify(text)})`);
+  await page.evaluate(`(${find})(${JSON.stringify(text)}).click()`); await delay(1200);
+};
 const clickRow = async text => {
   // the smallest box on the rail that holds the words - the row itself, not the lane around it
   const find = t => { const hits = [...document.querySelectorAll('[data-tq-rail] *')].filter(e => e.textContent.includes(t) && e.getBoundingClientRect().height > 24);
@@ -136,6 +150,34 @@ const shot = async name => {
   await page.screenshot({ path: path.join(scratch, name + '.png') });
   await writeFile(path.join(scratch, name + '.txt'), content);
   console.log('Captured ' + name);
+};
+// THE PICTURE IS THE CARD: the smallest box holding all these words ('$words': a text box holding them), the window grown until none of it is scrolled out of
+// sight, so a frame never cuts a card's edge (2026-10-09: hand-set clips cut the CLI and Hub cards off at the sides)
+const card = async (name, texts, pad = 12) => {           // pad: one margin, or [top, right, bottom, left]
+  const find = `(() => { const want = ${JSON.stringify(texts)};
+    const hits = [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().height && want.every(t => t[0] === '$' ? [...e.querySelectorAll('textarea')].some(x => x.value.includes(t.slice(1))) : e.textContent.includes(t)));
+    return hits.find(e => !hits.some(o => o !== e && e.contains(o))); })()`;
+  await page.waitForFunction(`!!${find}`);
+  for (let h = 1000, i = 0; i < 6; i++) {
+    // the chat keeps every card it opened; the picture shows this one alone, so everything beside it on the way up is hidden
+    const r = await page.evaluate(`(() => { const e = ${find}, stop = e.closest('.tq-chat-body');
+      if (stop) for (let a = e; a && a !== stop.parentElement; a = a.parentElement)
+        for (const s of a.parentElement?.children || []) if (s !== a && !s.dataset.readmeHid && stop.contains(s)) { s.dataset.readmeHid = s.style.display || '-'; s.style.display = 'none'; }
+      e.scrollIntoView({ block: 'nearest' });
+      const b = e.getBoundingClientRect(), ask = [...document.querySelectorAll('textarea,input')].find(x => /Ask Taskuary/.test(x.placeholder));
+      const floor = ask ? ask.getBoundingClientRect().top - 70 : innerHeight;
+      return { x: b.left, y: b.top, w: b.width, h: b.height, short: Math.max(b.bottom - floor, 64 - b.top) }; })()`);
+    if (r.short <= 0 || i === 5) {
+      await page.mouse.move(2, 2); await delay(400);
+      const [t, rt, b, l] = [pad].flat().length === 4 ? pad : [pad, pad, pad, pad], x = Math.max(0, r.x - l), y = Math.max(0, r.y - t);
+      await page.screenshot({ path: path.join(scratch, name + '.png'), clip: { x, y, width: r.w + l + rt, height: r.h + t + b } });
+      await writeFile(path.join(scratch, name + '.txt'), await page.evaluate(() => document.body.innerText));
+      await page.evaluate(() => document.querySelectorAll('[data-readme-hid]').forEach(s => { s.style.display = s.dataset.readmeHid === '-' ? '' : s.dataset.readmeHid; delete s.dataset.readmeHid; }));
+      console.log('Captured ' + name); break;
+    }
+    h = Math.min(3200, h + Math.ceil(r.short) + 60); await page.setViewport({ width: 1200, height: h, deviceScaleFactor: 2 }); await delay(900);
+  }
+  await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 }); await delay(500);
 };
 const captureTimeline = async () => {
   await click('timeline', 'div');
@@ -190,14 +232,25 @@ const guided = async () => {
   await page.addStyleTag({ content: '[data-tq-demo-journey]{display:none!important}' }); await delay(800);
 };
 const captureLearned = async () => {
-  await nav('Docs'); await click('LEARNED.md','p,span,div');
+  await nav('Settings'); await nav('Docs'); await nav('LEARNED.md');
   await page.waitForFunction(()=>[...document.querySelectorAll('textarea')].some(e=>e.value.includes('# LEARNED.md')));
   await page.setViewport({width:1200,height:1160,deviceScaleFactor:2});
   await page.evaluate(()=>{
     const editor=[...document.querySelectorAll('textarea')].find(e=>e.value.includes('# LEARNED.md'));
-    editor.style.fontSize='14px'; editor.style.lineHeight='1.55';
+    editor.style.fontSize='14px'; editor.style.lineHeight='1.55'; editor.dataset.readme='';
+    // the editor sizes itself to the window; the picture wants it the size of the words
+    for (let a = editor.parentElement; a && !a.classList.contains('tq-chat-body'); a = a.parentElement) a.dataset.readme = '';
+    document.head.insertAdjacentHTML('beforeend',`<style>textarea[data-readme]{overflow:hidden!important;min-height:0!important;max-height:none!important}
+      [data-readme]{flex:none!important;height:auto!important;min-height:0!important}</style>`);
+    const cs = getComputedStyle(editor), m = document.createElement('div');     // a twin of the box measures the words' height
+    for (const k of ['font','letterSpacing','padding','boxSizing','borderWidth','borderStyle']) m.style[k] = cs[k];
+    Object.assign(m.style, { position:'absolute', visibility:'hidden', whiteSpace:'pre-wrap', overflowWrap:'break-word', width:editor.getBoundingClientRect().width+'px' });
+    m.textContent = editor.value + ' '; document.body.append(m); const h = m.getBoundingClientRect().height + 'px'; m.remove();
+    // the editor re-sizes itself whenever the window does; it is held at the words' height through every resize
+    const hold = () => { if (editor.style.getPropertyPriority('height') !== 'important' || editor.style.height !== h) editor.style.setProperty('height', h, 'important'); };
+    hold(); new MutationObserver(hold).observe(editor, { attributes: true, attributeFilter: ['style'] });
   });
-  await shot('learned');
+  await card('learned', ['Reflect now', '$# LEARNED.md']);
   await page.setViewport({width:1200,height:1000,deviceScaleFactor:2});
 };
 const captureCli = async () => {
@@ -205,7 +258,15 @@ const captureCli = async () => {
   const search = await page.waitForSelector('input[placeholder^="Search connectors"]');
   await search.type('AI CLI agents'); await click('AI CLI agents', 'p');
   await page.waitForSelector('[data-connection="qwen"]');
-  await shot('cli');
+  await card('cli', ['AI CLI agents', 'Add CLI connection', 'Kimi Code']);
+};
+// THE KEY FEATURES (07-11): the CLI cards, the Hub, the Board's handoffs, LEARNED.md
+const captureExtras = async () => {
+  await page.goto(origin + '/?demo=explore', { waitUntil: 'networkidle0', timeout: 120000 }); await delay(1500);
+  await captureCli();
+  await nav('Hub'); await delay(800); await click('2 comments'); await card('hub', ['Give every customer launch', 'Include the rollback steps', 'Post']);
+  await nav('Board'); await nav('Live handoffs'); await card('handoffs', ['show note history', 'tools/gl_export.py'], 6);
+  await nav('Assistant'); await captureLearned();
 };
 try {
   await page.goto(origin + '/?workflow=numbers', { waitUntil: 'networkidle0', timeout: 120000 });
@@ -214,6 +275,8 @@ try {
   await delay(1000);
   if (process.argv.includes('--cli-only')) {
     await captureCli();
+  } else if (process.argv.includes('--extras-only')) {
+    await captureExtras();
   } else if (process.argv.includes('--home-only')) {
     await captureHome();
   } else if (process.argv.includes('--timeline-only')) {
@@ -226,10 +289,18 @@ try {
   await captureHome();
   // THE MORNING (06): the opening card, then its Morning digest unfolding in place - the grey meetings strip this GIF used to
   // replay is gone (2026-10-08). Frames 0-9 the card as it opens, 10-24 with the digest open.
+  // a tall window holds the card whole once the digest opens; the frame is the card at its biggest, so nothing is cut
+  await page.setViewport({ width: 1200, height: 1700, deviceScaleFactor: 2 }); await delay(1200); await page.mouse.move(2, 2);
+  const dayCard = () => page.evaluate(() => { let e = document.querySelector('.tq-day-box'); while (e && !e.textContent.includes('Good morning')) e = e.parentElement;
+    const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; });
+  const rects = [await dayCard()];
   for (let i = 0; i < 25; i++) {
-    if (i === 10) { await page.evaluate(() => [...document.querySelectorAll('[data-tq-digest] .tq-linkish')].find(b => /full digest/.test(b.textContent))?.click()); await delay(600); }
+    if (i === 10) { await page.evaluate(() => [...document.querySelectorAll('[data-tq-digest] .tq-linkish')].find(b => /full digest/.test(b.textContent))?.click()); await delay(600); rects.push(await dayCard()); }
     await page.screenshot({ path: path.join(scratch, `morning-${String(i).padStart(2,'0')}.png`) });
   }
+  const [x, y] = [Math.min(...rects.map(r => r[0])), Math.min(...rects.map(r => r[1]))], pad = 12;
+  await writeFile(path.join(scratch, 'morning.json'), JSON.stringify([x - pad, y - pad, Math.max(...rects.map(r => r[0] + r[2])) - x + 2 * pad, Math.max(...rects.map(r => r[1] + r[3])) - y + 2 * pad]));
+  await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
   await guided();
   await click('Task', 'button'); await clickRow('Latest vendor spend');
   await page.waitForFunction(() => document.body.innerText.includes('talk it through with the assistant'));
@@ -247,19 +318,12 @@ try {
   await page.evaluate(() => [...document.querySelectorAll('button')].find(b => b.getBoundingClientRect().height && /^(Send to agent|Start|Send)$/.test(b.textContent.trim()) && b.closest('[role="dialog"],[role="presentation"],.MuiPopover-root'))?.click());
   await delay(800); await page.screenshot({ path: path.join(scratch, 'after-send.png') });
   await page.waitForFunction(() => document.body.innerText.includes('August vendor spend is ready for review'), { timeout: 30000 });
-  await delay(1500); await shot('agent');
+  await delay(1500); await card('agent', ['Prepare the latest vendor spend numbers', 'analyst is working', 'Make recurring report']);
   await click('Task', 'button'); await clickRow('Latest vendor spend');
   await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some(e => e.value.includes('August vendor spend was')));
-  await page.setViewport({ width: 1200, height: 1300, deviceScaleFactor: 2 }); await delay(800);
-  await page.evaluate(() => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Approve & send')?.scrollIntoView({ block: 'center' }));
-  await shot('review');
+  await card('review', ['waiting on you', 'Approve & send', 'Regenerate with AI'], [10, 12, 12, 30])   // the step dot sits left of the box;
   await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
-  if (process.argv.includes('--extras')) {
-    await captureCli();
-    await nav('Hub'); await delay(800); await click('2 comments'); await shot('hub');
-    await nav('Board'); await click('Live handoffs', 'div'); await shot('handoffs');
-    await captureLearned();
-  }
+  if (process.argv.includes('--extras')) await captureExtras();
   }
   assert.deepEqual(errors, []);
 } catch (error) {

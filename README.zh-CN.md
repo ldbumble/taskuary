@@ -16,7 +16,7 @@
 
 与 Fyxer 等托管助手相比，Taskuary 免费开源，在你的电脑上运行，并把工作交给你已经在用的智能体。
 
-![工作到来时，Taskuary 的工作室逐渐展开，AI 智能体就位。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=workspace)
+![助手的游戏视图：每个任务、消息和智能体都是办公室里的一个人物，先展示整层办公室，再依次放大到各个房间。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=game)
 
 Taskuary 仍处于早期阶段，目前为 **v0.3.7.15**，1.0 之前可能出现不兼容变更。
 应用界面和演示截图目前以英文为主；下文保留英文按钮名称，方便对照操作。

@@ -13,6 +13,7 @@ import { onLive } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Md } from "./md.jsx";
+import { answerOutline } from "./agentAnswer.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
@@ -447,10 +448,6 @@ export const DiffFiles = ({ files, cwd, branch }) => {
   );
 };
 
-// The stored fields stay structured for reply drafting and future agents, but the owner should
-// not have to read an internal three-row agent form every time a task finishes.
-const REPORT_LABELS = { Triage: "Triage", Determination: "What it found", Actions: "What it did",
-  Found: "What it found", Did: "What it did", Next: "What comes next" };
 /* The four things you can do with a timeline item were four buttons of four different sizes
    and colours, two rows apart, half of them right-aligned - so the reader had to hunt for
    the set. One list, one shape per row: what it is, and what it does. */
@@ -554,53 +551,13 @@ export const ChoiceList = ({ children }) => (
   <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden" }}>{children}</Box>
 );
 
-// what time an artifact was written, for the run it belongs to
-const artifactTime = (a) => {
-  const at = a?.created_at || a?.createdAt || a?.at;
-  if (!at) return "";
-  const d = new Date(String(at).replace(" ", "T"));
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-};
 export const CoderReport = ({ body, artifacts: all = [] }) => {
-  // what the agent ANSWERED (session_artifacts.result) is the thing the owner asked for - one click, never inside the details
-  const answers = all.filter((a) => a.kind === "agent_result");
-  const artifacts = all.filter((a) => !isPublished(a) && a.kind !== "agent_result");
-  // ...and the pages the session PUBLISHED stay with its summary once the agent is gone - what it made, one click away
-  const pages = <PublishedPages pages={all.filter(isPublished)} />;
-  const [reader, setReader] = useState(null);
-  const [readerBusy, setReaderBusy] = useState(false);
-  const [readerError, setReaderError] = useState("");
-  const openArtifact = async (artifact) => {
-    setReader({ artifact, text: "" }); setReaderBusy(true); setReaderError("");
-    try {
-      const { data } = await api.get(artifact.url, { responseType: "text" });
-      setReader({ artifact, text: String(data || "") });
-    } catch (e) {
-      setReaderError(e?.response?.data?.detail || "Could not open this session result.");
-    } finally { setReaderBusy(false); }
-  };
-  const readerBox = (
-    <Dialog open={!!reader} onClose={() => !readerBusy && setReader(null)} fullWidth maxWidth="md"
-      PaperProps={{ sx: { borderRadius: 2.5, maxHeight: "88vh" } }}>
-      <DialogTitle sx={{ pb: 0.75 }}>
-        {reader?.artifact?.kind === "agent_result" ? "The agent's answer" : "Session result"}
-        <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25, fontWeight: 400 }}>
-          {reader?.artifact?.name || "Agent session"}
-        </Typography>
-      </DialogTitle>
-      <DialogContent dividers sx={{ bgcolor: "#fffdfb" }}>
-        {readerBusy ? <Box sx={{ py: 5, display: "grid", placeItems: "center" }}><CircularProgress size={24} /></Box>
-          : readerError ? <Alert severity="error">{readerError}</Alert>
-            : <Md text={reader?.text || "Nothing was saved for this session."} />}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setReader(null)}>Close</Button>
-      </DialogActions>
-    </Dialog>
-  );
-  const answer = !!answers.length && (
-    <Button onClick={() => openArtifact(answers[0])} size="small" variant="outlined" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
-      title={answers[0].name || ""} sx={{ textTransform: "none" }}>Read the agent's answer</Button>);
+  // THE AGENT'S ANSWER IS THE RESULT (the owner, 2026-10-09: "still too many duplicates ... I like the 7 items the agent did.
+  // that's main thing. show small list then click more and then show artifact if there is one"). One line on top, the answer's
+  // items as a short list, the whole answer behind Show more, then any page the session published. What it found / did, the
+  // last message and the session records each said the answer again, so they are not on the card.
+  const answer = all.find((a) => a.kind === "agent_result");
+  const pages = all.filter(isPublished);
   const text = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim();
   // ^ anchored per line, and the label eats spaces but NOT the newline - letting \s* run on
   // swallowed the separator, so an all-empty report rendered "TRIAGE -> Determination:"
@@ -610,68 +567,45 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
     const t = (parts[i + 1] || "").trim();
     if (t) rows.push({ label: parts[i], text: t });
   }
-  // free prose (a shell session, a note written by hand) - show it as written
-  if (!rows.length) {
-    return text || all.some(isPublished) || answer ? <>
-      {text && <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, overflowWrap: "anywhere" }}>{text}</Typography>}
-      {answer && <Box sx={{ mt: text ? 1 : 0 }}>{answer}</Box>}
-      <Box sx={{ mt: text || answer ? 1 : 0 }}>{pages}</Box>
-      {readerBox}
-    </> : null;
-  }
-  // ONE RESULT, NOT TWO (the owner, 2026-10-09: "what's the first section vs the second? they should be combined"). The
-  // summary used to carry the agent's whole last message inline, and "Work details" under it said the same things again. Now:
-  // the one-line result, what it found and did beneath it, and the agent's own last message one click away - one block.
-  const result = rows.find((r) => r.label === "Summary");
-  const [lead, last] = String(result?.text || "").split(/\n+LAST MESSAGE\n/);
-  const detailRows = rows.filter((r) => r !== result);
-  const fold = { borderTop: `1px solid ${BORDER}`, "&[open] > summary": { borderBottom: `1px solid ${BORDER}` } };
-  const foldHead = { px: 1.35, py: 0.7, cursor: "pointer", color: DIM, fontSize: 11.5, fontWeight: 600, listStylePosition: "inside",
-    "&:hover": { color: INK, bgcolor: PANEL2 } };
+  const summary = rows.find((r) => r.label === "Summary")?.text ?? (rows.length ? "" : text);
+  const [lead, last] = String(summary || "").split(/\n+LAST MESSAGE\n/);
+  const [said, setSaid] = useState(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    let live = true;
+    if (answer?.url) api.get(answer.url, { responseType: "text", transformResponse: (x) => x })
+      .then(({ data }) => live && setSaid(String(data || ""))).catch(() => live && setSaid(""));
+    else setSaid("");
+    return () => { live = false; };
+  }, [answer?.url]);
+  // the saved answer, else the session's last message: either is the agent's own account
+  const outline = said == null ? null : answerOutline(said || last || "");
+  const findings = !outline?.items.length && !outline?.intro ? rows.filter((r) => ["Determination", "Found"].includes(r.label)) : [];
+  if (!lead && !outline?.full && !findings.length && !pages.length) return null;
   return (
-    <Box sx={{ width: "100%", bgcolor: PANEL }}>
-      {(lead || detailRows.length > 0) && (
-        <Box sx={{ px: 1.35, py: 1.15 }}>
-          {lead && <Typography variant="body2" sx={{ color: INK, fontWeight: 500, lineHeight: 1.55,
-            whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{lead.trim()}</Typography>}
-          {detailRows.map((r, i) => (
-            <Box key={`${r.label}-${i}`} sx={{ mt: lead || i ? 1.15 : 0 }}>
-              <Typography sx={{ ...mono, color: FAINT, fontWeight: 600, fontSize: 9.5,
-                letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>
-                {REPORT_LABELS[r.label] || r.label}
-              </Typography>
-              <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
-                overflowWrap: "anywhere" }}>{r.text}</Typography>
-            </Box>
-          ))}
+    <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15 }}>
+      {lead?.trim() && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.55,
+        whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{lead.trim()}</Typography>}
+      {outline == null && <CircularProgress size={12} sx={{ mt: 1 }} />}
+      {!!outline?.items.length && (
+        <Box component="ol" sx={{ m: 0, mt: lead ? 0.8 : 0, pl: 2.6, color: DIM, "& li": { fontSize: 13, lineHeight: 1.6 } }}>
+          {outline.items.map((i) => <li key={i.n} value={i.n}>{i.short}</li>)}
         </Box>
       )}
-      {answer && <Box sx={{ px: 1.35, pb: 1.15 }}>{answer}</Box>}
-      {all.some(isPublished) && <Box sx={{ px: 1.35, pb: 1.15 }}>{pages}</Box>}
-      {last?.trim() && (
-        <Box component="details" sx={fold}>
-          <Box component="summary" sx={foldHead}>The agent's last message</Box>
-          <Box sx={{ px: 1.35, py: 1, fontSize: 13 }}><Md text={last.trim()} /></Box>
-        </Box>
+      {!outline?.items.length && outline?.intro && (
+        <Typography variant="body2" sx={{ color: DIM, mt: lead ? 0.6 : 0, lineHeight: 1.55 }}>{outline.intro}</Typography>
       )}
-      {!!artifacts.length && (
-        <Box component="details" sx={fold}>
-          <Box component="summary" sx={foldHead}>Session records</Box>
-          <Box sx={{ px: 1.35, py: 1 }}>
-            {artifacts.slice(0, 3).map((artifact, i, all) => (        /* newest first, numbered by run, each with its own time */
-              <Button key={artifact.id} onClick={() => openArtifact(artifact)}
-                size="small" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
-                title={artifact.name || artifact.path || ""}
-                sx={{ mr: 0.75, mb: 0.4, px: 0, justifyContent: "flex-start", textTransform: "none" }}>
-                {all.length > 1
-                  ? `Run ${all.length - i}${artifactTime(artifact) ? ` · ${artifactTime(artifact)}` : ""}${i ? "" : " · latest"}`
-                  : "Read session result"}
-              </Button>
-            ))}
-          </Box>
-        </Box>
+      {findings.map((r, i) => (
+        <Typography key={i} variant="body2" sx={{ color: DIM, mt: 0.6, lineHeight: 1.55, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{r.text}</Typography>
+      ))}
+      {!!outline?.full && (
+        <>
+          <Button size="small" onClick={() => setMore((m) => !m)} sx={{ mt: 0.5, px: 0, minWidth: 0, textTransform: "none" }}>
+            {more ? "Show less" : "Show more"}</Button>
+          {more && <Box sx={{ mt: 0.5, pt: 0.8, borderTop: `1px solid ${BORDER}`, fontSize: 13 }}><Md text={outline.full} /></Box>}
+        </>
       )}
-      {readerBox}
+      {!!pages.length && <Box sx={{ mt: 1 }}><PublishedPages pages={pages} /></Box>}
     </Box>
   );
 };

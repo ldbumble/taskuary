@@ -76,8 +76,9 @@ PROMPT = (
     '1. WHAT PEOPLE SAID, who is out of office, what arrived, and what waits on somebody:\n[taskuary.messages]\n'
     'The actual words, by thread: the ask buried in a chat ("can you fill out the form?") that got a '
     'reply but not the thing itself; the colleague mentioning in passing that a system fails "every day 4-5"; the person '
-    'answering a question nobody asked me; the thread where the last word is theirs and it wants something from me. Say who, '
-    'what, and what I would do - "Marcus asked for X on Thursday; I would send it before his Monday 1pm". '
+    'answering a question nobody asked me; the thread where the last word is theirs and it wants something from me. Say who '
+    'and what, and whose move it is - "Marcus asked on Thursday for X and it has not gone; it is mine, before his Monday 1pm". '
+    'What you would do about it is a suggestion, said apart from the finding, and only when it adds something. '
     'What I am waiting on and have not chased (CANDIDATES followup) - but check OUT OF OFFICE first: a chase to someone '
     'who is away is worse than silence; say when they are back instead. What I promised and have not done (promise): the date '
     'I gave, and whether it has passed. What the machines are telling me, read not counted: a report marked FAILED says WHY '
@@ -119,14 +120,17 @@ SYSTEMS_PROMPT = (
     'every run they set that on the report, not in your answer.')
 SYSTEMS_CONTRACT = (
     '\n\nAnswer JSON only: {"say": [{"key": "idea:<short stable slug>", "text": "<one line, '
-    'under 30 words, first person: the finding and what I would do>", "section": "systems", '
+    'under 30 words: the finding - what is true, with the row or value>", "whose": "<whose move it is: the owner, someone '
+    'else by name, or nobody yet>", "suggest": "<what I would do about it, one short line, or null>", "section": "systems", '
     '"why": "<the exact row, value, threshold or failure behind it>", "mid": null, "task": null}], '
     '"notes": ""}. At most {max_lines} entries. Use only CONFIGURED DATA SOURCES. If nothing '
     'needs attention, return {"say": []}.')
 # a stock prompt still starting like one of these is healed to PROMPT (store.__init__)
 # ...and the shipped prompts that open like today's, by their sha256: an unedited copy saved on the seeded row is healed
 # to PROMPT (store.py) - 2026-09-25, the one before the automation card [taskuary.automation] joined it
-OLD_PROMPT_SHA = ('06a4ec48fcec9d8bbc9fc6f423f52360aa1b0a2e7f5affe31582e7da56d1e302',)
+OLD_PROMPT_SHA = ('06a4ec48fcec9d8bbc9fc6f423f52360aa1b0a2e7f5affe31582e7da56d1e302',
+                  # 2026-10-09, before the finding and the suggestion were said apart ("what I would do")
+                  'e37ca9e1a91e6880a304306482a0a682b5260bc402639cc94a9cc6e0f8a6ef3c')
 OLD_PROMPT_HEADS = ('You are my assistant. Once an hour,', 'You are my assistant. Every 20 minutes you check in;',
                     'You are my assistant. Every 30 minutes you check in;',
                     'You are my assistant; every 30 minutes you check in.',
@@ -590,7 +594,13 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'CANDIDATES the hub found itself (each with a key), WHAT PEOPLE SAID (the words, by thread), who is OUT OF OFFICE, the '
             'CALENDAR, what arrived (with each report\'s schedule, when it last ran and what that run did, and each failure\'s cause), what got done, what is open, and WHAT '
             'YOU ALREADY SAID. Answer JSON only: {"say": [{"key": "<a candidate key, or idea:<short-slug> for a thought of your own>", '
-            '"text": "<one line, under 30 words, first person: the fact and what I would do - quote the phrase or name the cause when there is one>", '
+            # THE FINDING, THEN WHOSE MOVE, THEN ANY SUGGESTION - apart (the owner, 2026-10-09). "The fact and what I would do"
+            # in one first-person line made every idea read as an order: triage took "I'd read it through" as work for the owner
+            # on a mail sent to another team (TQ-1028), and the card could not show what was true apart from what was advised.
+            '"text": "<one line, under 30 words: the finding - what is true, quoting the phrase or naming the cause when there is one; '
+            'not what to do about it>", '
+            '"whose": "<whose move it is: the owner, someone else by name (\'the Ops Team\', \'Erin\'), or nobody yet>", '
+            '"suggest": "<what I would do about it, one short line - or null when the finding says enough>", '
             '"section": "<people|loose|ideas|systems - which part of the post this belongs under: people = what somebody said '
             'or asked, loose = something waiting on somebody (a chase, a promise, work gone quiet), systems = a threshold, a '
             'failure or a number out of a connected system, ideas = your own thought. A candidate the hub found has a section '
@@ -910,9 +920,13 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
         if not isinstance(s, dict): continue
         key, txt, why = str(s.get('key') or '').strip(), _short(s.get('text'), 240), _short(s.get('why'), 400)
         if not key or key in seen or not txt: continue
+        # whose move it is and what the Advisor would do, kept apart from the finding (CONTRACT)
+        said = {k: v for k, v in (('whose', _short(s.get('whose'), 80)), ('suggest', _short(s.get('suggest'), 200)))
+                if v and str(v).strip().lower() not in ('null', 'none')}
         if key in by:
             # the first line of the facts: prep's line carries a 1200-char dossier under it that belongs in 'skipped', not under a button
-            out.append({**by[key], 'text': txt, 'why': (by[key].get('plain') or by[key]['facts']).split('\n', 1)[0] + (f"\nThe model's read: {why}" if why else '')})
+            out.append({**by[key], 'text': txt, 'action': (by[key].get('action') or {}) | said,
+                        'why': (by[key].get('plain') or by[key]['facts']).split('\n', 1)[0] + (f"\nThe model's read: {why}" if why else '')})
         elif key.startswith('idea:') and len(key) > 5:
             mid = s.get('mid') if isinstance(s.get('mid'), int) else None
             title = _short(s.get('task'), 120) or None
@@ -940,6 +954,7 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             # where in the post it goes. Only an idea gets to choose: a candidate the hub found is
             # placed by the producer that found it, and no model answer overrides that.
             act['section'] = section_of({'section': s.get('section'), 'kind': 'idea'})
+            act |= said
             key = aimed.get(('tid', act.get('tid'))) or aimed.get(('mid', act.get('mid'))) or key
             if key in seen: continue
             for f in ('tid', 'mid'):
@@ -1362,7 +1377,9 @@ def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
     # one arrival per idea: the stamp in the id made every re-say a fresh message, and a fresh task once the first closed
     msg = {'external_id': f"idea:{i['IdeaId']}", 'channel': CHANNEL, 'from_name': who, 'source_name': who,
            'conversation_id': str(i.get('Key') or f"idea:{i['IdeaId']}"), 'subject': f"Advisor idea: {_cut(i.get('Text'), 100)}",
-           'sent_at': stamp, 'body': str(i.get('Text') or '') + (f"\n\nwhy: {a.get('why')}" if a.get('why') else ''),
+           'sent_at': stamp, 'body': str(i.get('Text') or '') + (f"\n\nwhose move: {a['whose']}" if a.get('whose') else '')
+                                    + (f"\nthe Advisor's suggestion: {a['suggest']}" if a.get('suggest') else '')
+                                    + (f"\n\nwhy: {a.get('why')}" if a.get('why') else ''),
            'idea_context': {'report': report_title, 'kind': i.get('Kind'),
                             'linked_task': f"{task_ref(tid)} [{task.get('Status')}] {_short(task.get('Title'), 80)}" if task else None,
                             'worker': 'an agent is working that task now' if working else ('nobody has that task' if task else None)}}
@@ -1691,10 +1708,12 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # assistant post as its plain text, so a provenance that lived only in the React card was
     # invisible exactly where the owner reads the post
     def _said_line(i, s_):
-        src = source_of(s_, mids, blocks)
-        if not src: return f"- {i['Text']}\n    why: {s_['why']}"
+        src, a_ = source_of(s_, mids, blocks), s_.get('action') or {}
+        head = (f"- {i['Text']}" + (f"\n    whose move: {a_['whose']}" if a_.get('whose') else '')
+                + (f"\n    suggestion: {a_['suggest']}" if a_.get('suggest') else '') + f"\n    why: {s_['why']}")
+        if not src: return head
         win = f" ({src['window']})" if src['window'] else ''
-        return f"- {i['Text']}\n    why: {s_['why']}\n    from: {src['label']}{win}"
+        return f"{head}\n    from: {src['label']}{win}"
     body = ('\n'.join(_said_line(i, s_) for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
             + (f"\nNote to my next check: {note}" if note else ''))
     # the row's one line: the first idea, cut at a word, and how many more wait behind it

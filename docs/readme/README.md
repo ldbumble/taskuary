@@ -35,6 +35,7 @@ The LEARNED.md image uses authored example lessons in the real document editor.
 To recapture and frame just those two images, add `--memory-update` to both commands.
 For just the Timeline image, use `--timeline-only` instead.
 For just the CLI connections image (including Qwen Code), use `--cli-only`.
+For just the first image (the opening card in the full demo, on a fresh chat), use `--home-only` with both commands.
 
 Review every final image at README width after regenerating: titles, amounts,
 source context, action buttons, and the ends of cards must remain visible.

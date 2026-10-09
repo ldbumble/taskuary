@@ -39,10 +39,11 @@ numbers through the real app, using fictional demo data.
 ### 1. Everything lands in one place
 
 Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by what they need:
-**Urgent**, **On you**, **For later**, the Advisor's ideas, and **FYI**. Beside it, the Assistant
-says what came in and who is waiting, so you never open each system in turn.
+**Urgent**, **On you**, **For later**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
+one card: what changed since last night, what was learned, the morning digest, your meetings, and
+what waits in each section - so you never open each system in turn.
 
-![The work rail sorting today's items into Urgent, On you, Advisor ideas, and FYI, beside the Assistant's morning summary of who is waiting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=95295dd)
+![The work rail sorting today's items into Urgent, On you, Agents working, Reports, Advisor ideas, and FYI, beside the opening card: agents that finished and a report that ran since last night, the memory and morning digest lines, today's meetings, and what waits in each section.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=opening-card)
 
 ### 2. Let the Assistant walk you through it
 

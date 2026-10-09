@@ -329,7 +329,24 @@ def _no_placeholder(body, subject=''):
         raise RuntimeError(GUARD.format(mark=redact.MARK))
 
 
-def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, attachments: list = None) -> dict:
+def mailboxes(store) -> list:
+    """The mailboxes a new email can be sent FROM: each active email source, then any mail card's own address - one row per
+    address, the connector that sends as it beside it (the owner, 2026-10-09: "add from mailbox picker")."""
+    from .channels import _cfg
+    out, seen = [], set()
+    cards = {c['ConnectorId']: c for c in store.list_connectors() if c['Active'] and c['Type'] in MAILBOXES}
+    def add(address, cid):
+        a = str(address or '').strip()
+        if '@' not in a or a.lower() in seen or cid not in cards: return
+        seen.add(a.lower()); out.append({'address': a, 'connector_id': cid, 'kind': cards[cid]['Type'], 'card': cards[cid]['Name']})
+    for s_ in store.list_sources():
+        if s_.get('Channel') == 'email': add(s_.get('Address'), s_.get('ConnectorId'))
+    for cid, c in cards.items(): add(_cfg(c).get('address') or _cfg(c).get('account'), cid)
+    return out
+
+
+def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, attachments: list = None,
+             mailbox: str = None) -> dict:
     """Send something nobody asked for: a report going OUT, to an address the owner chose.
 
     reply_to_message answers a message - it reads the mailbox, thread id and chat id off the row
@@ -353,6 +370,16 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, 
                            'Taskuary may write to, and it governs outbound reports too')
     if ch == 'email':
         if not to: raise RuntimeError('no recipient - an outbound email needs an address')
+        # the mailbox the owner picked to send FROM: through the card that owns that address, never a guess at another one
+        if mailbox:
+            box = next((m for m in mailboxes(store) if m['address'].lower() == str(mailbox).lower()), None)
+            if not box: raise RuntimeError(f'{mailbox} is not a connected mailbox any more - pick another one to send from')
+            if box['kind'] == 'outlook':
+                return send_email(store, to, subject or '(no subject)', body, mailbox=box['address'], connector_id=box['connector_id'],
+                                  cc=cc, attachments=attachments)
+            from .imapmail import send_smtp
+            return send_smtp(store, store.get_connector(box['connector_id'], with_secret=True), to, subject or '(no subject)', body,
+                             cc=cc, attachments=attachments)
         # Graph when the Outlook card is connected, otherwise the IMAP mailbox's own SMTP
         c = store.get_connector_by_type('outlook')
         if c and c.get('Active'):

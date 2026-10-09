@@ -894,9 +894,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // it OPENS the step where the harness, model and prompt are chosen - nothing starts until that step's own Start button
         title: ranBefore ? "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
           : "Opens the agent step so you can choose a harness, a model and a prompt. Nothing starts until you press Start there." }] : []),
-      // EMAIL SOMEONE, whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
-      ...(!liveSession ? [{ id: "email", group: "agent", label: "Email someone", run: () => setEmailOpen(true),
-        title: "Write an email about this task to anyone - the AI drafts it from your words and the work. It waits in Close out for your approval; the task closes once it is sent." }] : []),
+      // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
+      ...(!liveSession ? [{ id: "email", group: "agent", label: "Message someone", run: () => setEmailOpen(true),
+        title: "An email or a chat message about this task, to anyone - the AI drafts it from your words and the work. It waits in Close out for your approval; the task closes once it is sent." }] : []),
       ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: "Ask sender", run: () => setAskSenderOpen(true),
         title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
       { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;

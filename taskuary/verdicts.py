@@ -159,7 +159,7 @@ def _send_snapshot(store, snapshot):
         return zoho.send_invoice(zoho.connection(store, c['ConnectorId']), env.get('invoice_id'),
                                  env.get('to'), env.get('subject'), body)
     return outbound.send_out(store, env.get('channel'), env.get('to'), env.get('subject'), body, cc=env.get('cc'),
-                             attachments=env.get('attachments'))
+                             attachments=env.get('attachments'), mailbox=env.get('mailbox'))
 
 
 def _reconcile_snapshot(store, snapshot):
@@ -436,7 +436,9 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     # ...and approving an EMPTY draft sent nothing, marked the review approved and closed the task
     # anyway: the person never got an answer and nothing was left in the pipe to say so.
     # ...and an email to a name nobody has resolved to an address goes nowhere: the provider is never handed a bare name
-    if verb_in in ('approve', 'edit') and rv.get('Kind') == 'slot' and not all('@' in str(x) for x in (_envelope(rv).get('to') or [''])):
+    # (a chat message's recipient is a chat id, never an address - slots.KINDS)
+    if verb_in in ('approve', 'edit') and rv.get('Kind') == 'slot' and (_envelope(rv).get('channel') or 'email') == 'email' \
+            and not all('@' in str(x) for x in (_envelope(rv).get('to') or [''])):
         return {'ok': False, 'status': 'pending', 'sent': None,
                 'send_error': 'this email has no address yet - the agent fills it with --to, or drop it'}
     if verb_in in ('approve', 'edit') and not (final_text or '').strip() and not (rv.get('DraftText') or '').strip():

@@ -3231,9 +3231,15 @@ def outbox(body: OutboxBody):
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e: raise HTTPException(422, str(e)[:400])
 
+@app.get('/api/mailboxes')
+def mailboxes():
+    """The mailboxes a new email can go FROM (outbound.mailboxes) - Email someone's From picker."""
+    return {'data': outbound.mailboxes(store)}
+
 class TaskEmailBody(BaseModel):
     to: str; about: str = ''; cc: list[str] = []; subject: str | None = None
     attach: list[dict] = []          # [{kind: 'artifact' | 'attachment', id}] - files already on the task
+    channel: str = 'email'; mailbox: str | None = None; name: str = ''     # a chat: `to` is its id, `name` what to call it
 
 @app.post('/api/tasks/{task_id}/emails')
 def task_email(task_id: int, body: TaskEmailBody):
@@ -3249,7 +3255,8 @@ def task_email(task_id: int, body: TaskEmailBody):
         path = (sa.confined(row.get('Path')) if kind == 'artifact' else _attachment_path(row.get('Path'))) if mine else None
         if not path: raise HTTPException(422, f'that file is not on this task any more ({kind} {fid})')
         files.append((row.get('Name') or path.name, path.read_bytes()))
-    try: return ob.task_email(store, task_id, body.to, body.about, body.cc, body.subject, files, ACTOR)
+    try: return ob.task_email(store, task_id, body.to, body.about, body.cc, body.subject, files, ACTOR,
+                              channel=body.channel, mailbox=body.mailbox, name=body.name)
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e: raise HTTPException(422, str(e)[:400])
 
@@ -4186,7 +4193,8 @@ def draft_review(rid: int, body: DraftBody = None):
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob
-            draft = ob.draft_message(store, 'email', deliver.get('to'), '\n\n'.join(filter(None, [deliver['about'], _reply_nudge(body and body.instruction)])),
+            chat = (deliver.get('channel') or 'email') != 'email'
+            draft = ob.draft_message(store, deliver.get('channel') or 'email', [deliver['name']] if chat and deliver.get('name') else deliver.get('to'), '\n\n'.join(filter(None, [deliver['about'], _reply_nudge(body and body.instruction)])),
                                      resolution=ob.work_of(store, rv['TaskId']) or None, cc=deliver.get('cc'))
             store.update_review_draft(rid, draft, rv.get('RunId'))
         elif deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':

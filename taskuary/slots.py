@@ -11,7 +11,10 @@ import json
 import re
 from email.utils import parseaddr
 
-KINDS = ('email',)            # what a slot can be - a new kind is a new entry here, never a branch elsewhere
+# what a slot can be - a new kind is a new entry here, never a branch elsewhere. A chat (the owner, 2026-10-09: "teams/chat
+# too") is one message into one chat id, sent by outbound.send_out like any of these: no CC, no files, no subject.
+KINDS = ('email', 'teams', 'whatsapp', 'telegram', 'imessage', 'discord')
+CHAT_NAMES = {'teams': 'Teams', 'whatsapp': 'WhatsApp', 'telegram': 'Telegram', 'imessage': 'Messages', 'discord': 'Discord'}
 KIND = 'slot'                 # the review kind of a slot's draft
 
 
@@ -22,10 +25,11 @@ def clean(outputs) -> list:
         if not isinstance(o, dict): continue
         to, about, kind = ' '.join(str(o.get('to') or '').split())[:200], ' '.join(str(o.get('about') or '').split())[:200], o.get('kind') or 'email'
         if not to or kind not in KINDS: continue
-        name, to = split(to)
+        name, to = split(to) if kind == 'email' else (' '.join(str(o.get('name') or '').split())[:120], to)
         # `by: agent` - an address the agent added on its own: never swept up by Approve all (a prompt-injected agent
         # must not get an email out under one bulk press)
-        out.append({'text': f'Email {name or to}' + (f' - {about}' if about else ''),
+        verb = 'Email' if kind == 'email' else f'Message on {CHAT_NAMES[kind]}'
+        out.append({'text': f'{verb} {name or to}' + (f' - {about}' if about else ''),
                     'out': {'kind': kind, 'to': to, 'subject': str(o.get('subject') or '')[:200], **({'name': name} if name else {}),
                             **({'by': 'agent'} if o.get('by') == 'agent' else {})}})
     return out
@@ -63,7 +67,7 @@ def add(store, tid: int, outputs, actor: str, sender: dict = None) -> list:
     new = []
     for i in clean(outputs):
         if is_sender(sender, i['out']['to'], i['out'].get('name', '')): continue
-        if '@' not in i['out']['to']:
+        if i['out']['kind'] == 'email' and '@' not in i['out']['to']:      # a chat id is never a person's name to look up
             found = people.resolve(store, i['out']['to'])
             if found.get('address'): i['out']['to'] = found['address']
             elif found.get('candidates'): i['out']['candidates'] = found['candidates']
@@ -128,13 +132,14 @@ def seen(store, tid: int):
     return (store.last_material_inbound_on_task(tid) or {}).get('MessageId')
 
 
-def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent') -> dict:
+def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
+          channel: str = 'email', name: str = '') -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
     else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it."""
     text = str(text or '').strip()
     if not text: return {'ok': False, 'why': 'no email text'}
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
-    to = split(to)[1]
+    to = split(to)[1] if channel == 'email' else ' '.join(str(to or '').split())
     want = ' '.join(str(to or '').split()).casefold()
     hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
           next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None)
@@ -148,19 +153,20 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         store._write_checklist(tid, items, f'agent:{agent}')
     if not hit:
         if not want: return {'ok': False, 'why': 'name the slot (--slot) or who it goes to (--to)'}
-        made = add(store, tid, [{'to': to, 'about': subject, 'by': 'agent'}], f'agent:{agent}')
+        made = add(store, tid, [{'to': to, 'about': subject, 'kind': channel, **({} if agent == 'owner' else {'by': 'agent'}), **({'name': name} if name else {})}], f'agent:{agent}')
         if not made: return {'ok': False, 'why': f'could not add an email to {to}'}
         hit, added = made[0], True
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what closes this task.')
-    o = hit['out']; subj = str(subject or o.get('subject') or (store.get_task(tid) or {}).get('Title') or '')[:200]
-    deliver = json.dumps({'channel': 'email', 'to': [o['to']], 'cc': [], 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid)})
+    o = hit['out']; kind = o.get('kind') or 'email'
+    subj = str(subject or o.get('subject') or (store.get_task(tid) or {}).get('Title') or '')[:200] if kind == 'email' else ''
+    deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': [], 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid)})
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']
         if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
     else:
         rid = store.add_review({'TaskId': tid, 'Kind': KIND, 'Status': 'pending', 'Deliver': deliver,
-                                'Reason': f"{agent} wrote this email - approve to send"})       # who it goes to is on the card once
+                                'Reason': 'your email - approve to send' if agent == 'owner' else f"{agent} wrote this email - approve to send"})       # who it goes to is on the card once
         mark(store, tid, hit['id'], rid=rid, actor=f'agent:{agent}')
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}

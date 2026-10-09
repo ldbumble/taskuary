@@ -110,3 +110,50 @@ def test_the_endpoint_sends_only_this_tasks_files(s):
     finally: server.store = old
     assert bad.status_code == 422 and good.status_code == 200
     assert [n for n, _ in made.call_args.args[6]] == [s.get_task_artifact(mine)['Name']]
+
+
+# ── then "add from mailbox picker and teams/chat too" (the owner, 2026-10-09) ────────────────────────────────────────────────
+
+def two_mailboxes(s):
+    a = s.save_connector({'Type': 'outlook', 'Name': 'Outlook', 'Active': 1, 'ConfigJson': json.dumps({'address': 'alex@northwind.example'})}, 't')
+    b = s.save_connector({'Type': 'imap', 'Name': 'Ops IMAP', 'Active': 1, 'ConfigJson': json.dumps({'address': 'ops@northwind.example'})}, 't')
+    return a, b
+
+
+def test_every_connected_mailbox_is_one_from_choice(s):
+    a, b = two_mailboxes(s)
+    assert [(m['address'], m['connector_id']) for m in outbound.mailboxes(s)] == [('alex@northwind.example', a), ('ops@northwind.example', b)]
+
+
+def test_the_mailbox_picked_is_the_one_it_is_sent_from(s):
+    a, b = two_mailboxes(s)
+    tid = work(s)
+    out, _ = email(s, tid, mailbox='ops@northwind.example')
+    assert json.loads(s.get_review(out['review_id'])['Deliver'])['mailbox'] == 'ops@northwind.example'
+    with mock.patch('taskuary.imapmail.send_smtp', return_value=SENT) as smtp, mock.patch.object(outbound, 'send_email') as graph:
+        outbound.send_out(s, 'email', ['erin@northwind.example'], 'Done', 'It is live.', mailbox='ops@northwind.example')
+    assert smtp.call_args.args[1]['ConnectorId'] == b and not graph.called
+    with mock.patch.object(outbound, 'send_email', return_value=SENT) as graph:
+        outbound.send_out(s, 'email', ['erin@northwind.example'], 'Done', 'It is live.', mailbox='alex@northwind.example')
+    assert (graph.call_args.kwargs['mailbox'], graph.call_args.kwargs['connector_id']) == ('alex@northwind.example', a)
+    with pytest.raises(ValueError, match='not a connected mailbox'): email(s, tid, to='paula@northwind.example', mailbox='who@else.example')
+
+
+def test_a_chat_message_goes_to_the_chat_and_closes_the_task_when_sent(s):
+    tid = work(s)
+    out, seen = email(s, tid, to='19:ops@thread.v2', channel='teams', name='Ops channel')
+    env = json.loads(s.get_review(out['review_id'])['Deliver'])
+    assert (env['channel'], env['to'], env['subject']) == ('teams', ['19:ops@thread.v2'], '')
+    assert 'TO: Ops channel' in seen['user'] and 'CHANNEL: teams' in seen['user']
+    [slot] = slots.open_(s, tid)
+    assert slot['text'].startswith('Message on Teams Ops channel') and 'by' not in slot['out']     # the owner's, not an agent's
+    with mock.patch('taskuary.outbound.send_out', return_value={'channel': 'teams', 'to': ['19:ops@thread.v2']}) as sent, \
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+        verdicts.decide(s, s.get_review(out['review_id']), 'approve')
+    assert sent.call_args.args[1:3] == ('teams', ['19:ops@thread.v2']) and s.get_task(tid)['Status'] == 'done'
+
+
+def test_a_chat_message_takes_no_cc_and_no_files(s):
+    tid = work(s)
+    with pytest.raises(ValueError, match='no CC'): email(s, tid, to='19:ops@thread.v2', channel='teams', cc=['gail@northwind.example'])
+    with pytest.raises(ValueError, match='cannot carry files'): email(s, tid, to='19:ops@thread.v2', channel='teams', files=[('a.xlsx', b'x')])

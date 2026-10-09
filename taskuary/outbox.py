@@ -198,3 +198,49 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
     store.audit('task', tid, 'outbox', actor, detail={'channel': channel, 'to': to, 'cc': cc, 'mode': mode})
     return {'taskId': tid, 'ref': task_ref(tid), 'messageId': mid, 'reviewId': rid,
             'mode': mode, 'subject': subject, 'draft': draft}
+
+
+def work_of(store, tid: int) -> str:
+    """What was actually done on a task, for a message about it: the coding session's final word, else the newest answer
+    an agent saved (session_artifacts.result), else nothing - the brief alone, and the drafter asks for what it lacks."""
+    from .responder import resolution_of
+    from . import session_artifacts as sa
+    done = resolution_of(store, tid)
+    if done: return str(done)[:6000]
+    ans = [a for a in store.list_task_artifacts(tid) if a.get('Kind') == 'agent_result']
+    path = sa.confined(max(ans, key=lambda a: (str(a.get('CreatedAt') or ''), a.get('ArtifactId') or 0)).get('Path')) if ans else None
+    return path.read_text(encoding='utf-8', errors='replace')[:6000] if path else ''
+
+
+def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: str = None, files: list = None,
+               actor: str = 'owner', llm=None) -> dict:
+    """An email from inside a task - to tell someone it is done, or anything else the work owes them - whoever started it
+    (the owner, 2026-10-09: "even though i started it from the new button i want to be able to create email to send to
+    someone and notify it's done"). The AI writes it from the owner's words and what the work actually found; it becomes one
+    of the task's emails (slots.py), so it waits in Close out like any of them, and the task closes once it is sent.
+    `files` are (name, bytes) pairs that ride on it. Nothing is sent here."""
+    from . import outbound, slots, verdicts
+    task = store.get_task(tid)
+    if not task: raise ValueError('no such task')
+    if task.get('Status') in ('done', 'dropped'): raise ValueError('that task is closed - reopen it first')
+    who = outbound.addrs([to])
+    if not who: raise ValueError(f'not a valid email address: {to}')
+    cc = [a for a in outbound.addrs(cc or []) if a.lower() != who[0].lower()]
+    about = str(about or '').strip() or f"Let them know this is done: {task.get('Title') or ''}"
+    if not outbound.can_reply(store, 'email'): raise ValueError('email cannot send from here - turn replies on for a mailbox in Connections')
+    draft = draft_message(store, 'email', who, about, resolution=work_of(store, tid) or None, llm=llm, cc=cc)
+    subject = (subject or '').strip() or subject_for(store, about, llm)
+    out = slots.draft(store, tid, draft, to=who[0], subject=subject, agent=actor)
+    if not out.get('ok'): raise ValueError(out.get('why') or 'the email could not be saved on the task')
+    rid = out['review_id']
+    # the slot keeps no CC and no brief: they ride in the envelope, the brief so "Regenerate with AI" writes from it again
+    rv = store.get_review(rid)
+    env = json.loads(rv.get('Deliver') or '{}') or {}
+    env.update({'cc': cc, 'about': about})
+    store.set_review_deliver(rid, json.dumps(env))
+    attached, refused = [], []
+    for name, data in files or []:
+        try: verdicts.attach(store, rid, name, data, actor); attached.append(name)
+        except ValueError as e: refused.append(f'{name}: {e}')
+    store.audit('task', tid, 'task_email', actor, detail={'to': who, 'cc': cc, 'attached': attached})
+    return {'ok': True, 'review_id': rid, 'subject': subject, 'draft': draft, 'attached': attached, 'not_attached': refused}

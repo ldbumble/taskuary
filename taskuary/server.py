@@ -3231,6 +3231,28 @@ def outbox(body: OutboxBody):
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e: raise HTTPException(422, str(e)[:400])
 
+class TaskEmailBody(BaseModel):
+    to: str; about: str = ''; cc: list[str] = []; subject: str | None = None
+    attach: list[dict] = []          # [{kind: 'artifact' | 'attachment', id}] - files already on the task
+
+@app.post('/api/tasks/{task_id}/emails')
+def task_email(task_id: int, body: TaskEmailBody):
+    """The task bar's Email someone: the AI writes it from the owner's words and the work, it waits in Close out (outbox.task_email)."""
+    from . import outbox as ob, session_artifacts as sa
+    files = []
+    for f in body.attach or []:
+        kind, fid = str(f.get('kind') or ''), int(f.get('id') or 0)
+        row = store.get_task_artifact(fid) if kind == 'artifact' else store.get_attachment(fid) if kind == 'attachment' else None
+        # only a file of THIS task: the ids come from the page, and another task's file is not this one's to send
+        mine = row and (row.get('TaskId') == task_id if kind == 'artifact'
+                        else any(a.get('AttachmentId') == fid for a in (store.task_detail(task_id) or {}).get('attachments') or []))
+        path = (sa.confined(row.get('Path')) if kind == 'artifact' else _attachment_path(row.get('Path'))) if mine else None
+        if not path: raise HTTPException(422, f'that file is not on this task any more ({kind} {fid})')
+        files.append((row.get('Name') or path.name, path.read_bytes()))
+    try: return ob.task_email(store, task_id, body.to, body.about, body.cc, body.subject, files, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    except Exception as e: raise HTTPException(422, str(e)[:400])
+
 class NoteBody(BaseModel): title: str; body: str = ''; when: str | None = None
 
 @app.post('/api/notes')
@@ -4157,11 +4179,17 @@ def draft_review(rid: int, body: DraftBody = None):
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
     # one of the task's emails (slots.py) is the agent's words: every redrafter here writes a reply to the sender
-    if rv.get('Kind') == 'slot': raise HTTPException(422, 'the agent writes this email - ask it again, or edit it here')
+    try: deliver = json.loads(rv.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): deliver = {}
+    # ...unless the owner started it from the task (outbox.task_email): it keeps their brief, and is written from it again
+    if rv.get('Kind') == 'slot' and not deliver.get('about'): raise HTTPException(422, 'the agent writes this email - ask it again, or edit it here')
     try:
-        try: deliver = json.loads(rv.get('Deliver') or '{}') or {}
-        except (TypeError, ValueError): deliver = {}
-        if deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
+        if rv.get('Kind') == 'slot':
+            from . import outbox as ob
+            draft = ob.draft_message(store, 'email', deliver.get('to'), '\n\n'.join(filter(None, [deliver['about'], _reply_nudge(body and body.instruction)])),
+                                     resolution=ob.work_of(store, rv['TaskId']) or None, cc=deliver.get('cc'))
+            store.update_review_draft(rid, draft, rv.get('RunId'))
+        elif deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
             from . import outbox as ob
             draft = ob.redraft_review(store, rv)
         elif rv.get('TaskId'):

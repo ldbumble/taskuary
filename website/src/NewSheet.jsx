@@ -48,7 +48,7 @@ const Fork = ({ on, title, hint, onClick }) => (
   </Box>
 );
 
-const EmailRecipients = ({ value, onChange, options, placeholder }) => (
+export const EmailRecipients = ({ value, onChange, options, placeholder }) => (
   <Autocomplete multiple freeSolo autoHighlight openOnFocus size="small" fullWidth
     options={options}
     value={value}

@@ -69,6 +69,7 @@ import { completionFact, completionLine, waitingEmails,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
+import EmailSomeone from "./EmailSomeone.jsx";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -230,6 +231,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // to one line; the session keeps running, and the terminal comes back on a click or a new pick.
   const [peek, setPeek] = useState(false);
   const [askSenderOpen, setAskSenderOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);          // Email someone (EmailSomeone.jsx)
   const [senderQuestion, setSenderQuestion] = useState("");
   // "this one is mine" - the verdict that used to be a silent dropdown (TQ-0501)
   const [askingSender, setAskingSender] = useState(false);
@@ -892,6 +894,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // it OPENS the step where the harness, model and prompt are chosen - nothing starts until that step's own Start button
         title: ranBefore ? "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
           : "Opens the agent step so you can choose a harness, a model and a prompt. Nothing starts until you press Start there." }] : []),
+      // EMAIL SOMEONE, whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
+      ...(!liveSession ? [{ id: "email", group: "agent", label: "Email someone", run: () => setEmailOpen(true),
+        title: "Write an email about this task to anyone - the AI drafts it from your words and the work. It waits in Close out for your approval; the task closes once it is sent." }] : []),
       ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: "Ask sender", run: () => setAskSenderOpen(true),
         title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
       { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
@@ -1981,6 +1986,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           </Button>
         </DialogActions>
       </Dialog>
+      {t && <EmailSomeone open={emailOpen} task={t} detail={detail} onClose={() => setEmailOpen(false)}
+        onDrafted={() => { setEmailOpen(false); loadDetail(selected); loadTasks(); onChanged?.(); setOpenStage("reply"); }} />}
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
       {nextRunSlot && createPortal(<Box data-tq-run-card sx={{ border: "1px solid #d5d0c7", borderRadius: "12px", bgcolor: "#fffdfb", p: 1.5,
         "& > div": { mt: 0, pt: 0, borderTop: 0 } }}>{nextRunForm}</Box>, nextRunSlot)}

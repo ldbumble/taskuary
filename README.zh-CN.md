@@ -51,36 +51,36 @@ Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Cod
 ### 2. 让助手带你逐项处理
 
 选择 **Walk me through my tasks**。助手每次把一件事带到对话里，形式就是你自己打开时看到的同一张任务卡片，
-下面是接下来的操作：**Next**、**Write reply**、**Start an agent**。按钮每次都做同样的事；
+下面是接下来的操作：**Next**、**Write reply**、**Send to agent**、**Mark done**。按钮每次都做同样的事；
 其他需求直接在对话框里说，助手已经掌握这条消息、整个线程以及你过去的决定。
 
-![助手把 Ruth 的请求作为任务 TQ-0018 带入对话，下面是 Next、Write reply 和 Start an agent。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=95295dd)
+![助手把 Ruth 的请求作为任务 TQ-0018 带入对话，显示要做的事、智能体和收尾步骤，下面是 Next、Write reply、Send to agent 和 Mark done。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=opening-card)
 
 ### 3. 每个请求都成为带有完整经过的任务
 
 打开任何事项，都能看到它的来龙去脉：原始消息、分诊的结论和原因、由哪个智能体处理，以及回复进行到哪一步。
 
-![Ruth 的请求对应的任务：原始消息、分诊结论、智能体，以及尚未撰写的回复。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=95295dd)
+![Ruth 的请求对应的任务：原始消息、分诊结论、智能体，以及尚未撰写的回复。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=opening-card)
 
 ### 4. 智能体在对话里工作
 
-点击 **Start an agent**，智能体就在同一张卡片里工作。这里的分析智能体整理支出数据、核对分类合计、
+点击 **Send to agent**，智能体就在同一张卡片里工作。这里的分析智能体整理支出数据、核对分类合计、
 注明数据来源，并准备回复草稿。任何内容都不会自动发出。
 
-![分析智能体在对话中完成的供应商支出分析，包括分类合计、与七月的变化和数据来源。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=95295dd)
+![分析智能体在对话中完成的供应商支出分析，包括分类合计、与七月的变化和数据来源。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=opening-card)
 
 ### 5. 最后由你决定
 
 准备好的回复放在任务上，旁边就是最初的请求。阅读、修改，确认无误后点击 **Approve & send**。
 
-![给 Ruth 的回复草稿在任务上等待审核，并提供 Approve & send、Reject 和 Regenerate with AI。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=95295dd)
+![给 Ruth 的回复草稿在任务上等待审核，并提供 Approve & send、Mark done 和 Regenerate with AI。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png?v=opening-card)
 
 ### 6. 在忙起来之前开始一天
 
-每天早上，助手先在时间轴上列出今天的会议，再告诉你谁需要你回复。
-Ruth 的请求有明确的期限：11:30 的运营会议。
+每天早上，助手先说明昨晚以来的变化、学到的东西、今天的会议，以及每个分组里在等你的事；早间摘要直接在卡片里展开，
+看到时不会过时。Ruth 的请求有明确的期限：11:30 的运营会议。
 
-![早间画面的动画特写：时间轴上的今日会议，以及正在等你的人和智能体。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=95295dd)
+![早间画面的动画特写：开场卡片，以及在卡片里展开的早间摘要。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif?v=opening-card)
 
 ## 核心功能
 

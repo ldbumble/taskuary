@@ -24,7 +24,7 @@ import api from "./api.js";
 import { openReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import DemoJourney from "./DemoJourney.jsx";
-import { useVerbs } from "./actionRow.js";
+import { useRowVerbs, useVerbs } from "./actionRow.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
@@ -1898,8 +1898,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // next to continue"): a Next the server refused because the list moved under it said so in red and left nothing to press - every
   // card above folded, so no card had a row to register. With nothing on the table and the walk able to go on (or a press just
   // refused), the row's floor is Next.
-  const onTable = !!currentItem && foldedKey !== currentItem.key;
-  const hanging = !!state && !old && !walk && shown.length > 0 && !busy && !starting && !onTable && !browsing && (canAdvance || !!err);
+  // ...and only when the ROW IS EMPTY without it: a task card on the table already registers its own Next and verbs, and the floor's
+  // "Press Next below" over them read as a bug (README capture, 2026-10-08). What the owner can press is the test, not which card is up
+  const rowVerbs = useRowVerbs();
+  const rowEmpty = !rowVerbs.list.some((v) => !String(v.id).startsWith("floor:"));
+  const hanging = !!state && !old && !walk && shown.length > 0 && !busy && !starting && rowEmpty && (canAdvance || !!err);
   useVerbs("floor", [{ id: "floor:next", group: "next", label: "Next", tone: "p", title: "Bring the next one up",
     run: () => { setErr(""); surface(null, null); } }], hanging);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";

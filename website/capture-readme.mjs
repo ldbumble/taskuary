@@ -175,6 +175,20 @@ const captureTimeline = async () => {
     document.querySelector('[data-tq-timeline-stage]').parentElement.style.gridTemplateColumns='';
   });
 };
+// SECTION 1 and the morning: the opening card in the full demo, on a fresh chat (2026-10-08). The guided one-request journey has a
+// banner and a single row; the full demo opens on a scripted conversation, and the opening card is what an empty chat shows
+const captureHome = async () => {
+  await page.goto(origin + '/?demo=explore', { waitUntil: 'networkidle0', timeout: 120000 });
+  await click('Chat', 'button'); await delay(1500);
+  await page.waitForSelector('button[aria-label^="New chat"]'); await page.click('button[aria-label^="New chat"]'); await delay(2000);
+  await page.waitForSelector('.tq-day-box'); await delay(800);
+  await shot('home');
+};
+// THE STORY (02-05): Ruth's request, in the guided demo - its banner is the demo's own frame, not the app, and is hidden here only
+const guided = async () => {
+  await page.goto(origin + '/?workflow=numbers', { waitUntil: 'networkidle0', timeout: 120000 });
+  await page.addStyleTag({ content: '[data-tq-demo-journey]{display:none!important}' }); await delay(800);
+};
 const captureLearned = async () => {
   await nav('Docs'); await click('LEARNED.md','p,span,div');
   await page.waitForFunction(()=>[...document.querySelectorAll('textarea')].some(e=>e.value.includes('# LEARNED.md')));
@@ -201,14 +215,7 @@ try {
   if (process.argv.includes('--cli-only')) {
     await captureCli();
   } else if (process.argv.includes('--home-only')) {
-    // section 1 alone: the opening card - what changed since last night, the day, and what waits (2026-10-08). The full demo, not
-    // the guided one-request journey, whose banner and single row are not the day
-    await page.goto(origin + '/?demo=explore', { waitUntil: 'networkidle0', timeout: 120000 });
-    await click('Chat', 'button'); await delay(1500);
-    // ...and a fresh chat: the full demo opens on a scripted conversation, and the opening card is what an empty one shows
-    await page.waitForSelector('button[aria-label^="New chat"]'); await page.click('button[aria-label^="New chat"]'); await delay(2000);
-    await page.waitForSelector('.tq-day-box'); await delay(800);
-    await shot('home');
+    await captureHome();
   } else if (process.argv.includes('--timeline-only')) {
     await captureTimeline();
   } else if (process.argv.includes('--memory-update')) {
@@ -216,31 +223,29 @@ try {
   } else {
   // The walkthrough (01-06): Ruth's request through the Chat and Task views. The rail on the left is the Timeline;
   // the chat on the right is the assistant, and a task opens INSIDE it as a card.
-  await click('Chat', 'button'); await delay(1500);
-  await page.waitForSelector('[data-tick]');
-  await shot('home');
-  // Replay the meeting strip's entrance and clock pulse at fixed times for the morning GIF.
-  await page.evaluate(() => {
-    window.readmeAnimations = document.querySelector('[data-tick]').getAnimations({ subtree: true });
-    window.readmeAnimations.forEach(a => a.pause());
-  });
+  await captureHome();
+  // THE MORNING (06): the opening card, then its Morning digest unfolding in place - the grey meetings strip this GIF used to
+  // replay is gone (2026-10-08). Frames 0-9 the card as it opens, 10-24 with the digest open.
   for (let i = 0; i < 25; i++) {
-    await page.evaluate(t => window.readmeAnimations.forEach(a => { a.currentTime = t; }), i * 80);
+    if (i === 10) { await page.evaluate(() => [...document.querySelectorAll('[data-tq-digest] .tq-linkish')].find(b => /full digest/.test(b.textContent))?.click()); await delay(600); }
     await page.screenshot({ path: path.join(scratch, `morning-${String(i).padStart(2,'0')}.png`) });
   }
-  await page.evaluate(() => window.readmeAnimations.forEach(a => a.play()));
+  await guided();
   await click('Task', 'button'); await clickRow('Latest vendor spend');
   await page.waitForFunction(() => document.body.innerText.includes('talk it through with the assistant'));
   await shot('task');
   // a pinned task keeps the pane; the demo starts over on a reload, so the walk begins from the morning
-  await page.goto(origin + '/?workflow=numbers', { waitUntil: 'networkidle0', timeout: 120000 });
+  await guided();
   await click('Chat', 'button'); await delay(1500);
   await click('Walk me through my tasks');
   await page.waitForFunction(() => document.body.innerText.includes('Where this came from') && document.body.innerText.includes('TQ-0018'));
   // a shorter window keeps the card and the action row under it in one frame
   await page.setViewport({ width: 1200, height: 760, deviceScaleFactor: 2 }); await delay(800); await shot('assistant');
   await page.setViewport({ width: 1200, height: 1000, deviceScaleFactor: 2 });
-  await click('Start an agent'); await delay(1000); await click('Send to agent');
+  // the row's own "Send to agent" (it was "Start an agent" on the card); a second Send/Start, if a picker asks, confirms it
+  await click('Send to agent'); await delay(1500);
+  await page.evaluate(() => [...document.querySelectorAll('button')].find(b => b.getBoundingClientRect().height && /^(Send to agent|Start|Send)$/.test(b.textContent.trim()) && b.closest('[role="dialog"],[role="presentation"],.MuiPopover-root'))?.click());
+  await delay(800); await page.screenshot({ path: path.join(scratch, 'after-send.png') });
   await page.waitForFunction(() => document.body.innerText.includes('August vendor spend is ready for review'), { timeout: 30000 });
   await delay(1500); await shot('agent');
   await click('Task', 'button'); await clickRow('Latest vendor spend');

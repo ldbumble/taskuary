@@ -619,56 +619,55 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
       {readerBox}
     </> : null;
   }
-  // Lead with one normal paragraph. The supporting fields are evidence, not the main reading
-  // experience, so keep them one click away instead of laying them out like a spreadsheet.
+  // ONE RESULT, NOT TWO (the owner, 2026-10-09: "what's the first section vs the second? they should be combined"). The
+  // summary used to carry the agent's whole last message inline, and "Work details" under it said the same things again. Now:
+  // the one-line result, what it found and did beneath it, and the agent's own last message one click away - one block.
   const result = rows.find((r) => r.label === "Summary");
+  const [lead, last] = String(result?.text || "").split(/\n+LAST MESSAGE\n/);
   const detailRows = rows.filter((r) => r !== result);
+  const fold = { borderTop: `1px solid ${BORDER}`, "&[open] > summary": { borderBottom: `1px solid ${BORDER}` } };
+  const foldHead = { px: 1.35, py: 0.7, cursor: "pointer", color: DIM, fontSize: 11.5, fontWeight: 600, listStylePosition: "inside",
+    "&:hover": { color: INK, bgcolor: PANEL2 } };
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL }}>
-      {result && (
+      {(lead || detailRows.length > 0) && (
         <Box sx={{ px: 1.35, py: 1.15 }}>
-          <Typography variant="body2" sx={{ color: INK, fontWeight: 500, lineHeight: 1.55,
-            whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{result.text}</Typography>
+          {lead && <Typography variant="body2" sx={{ color: INK, fontWeight: 500, lineHeight: 1.55,
+            whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{lead.trim()}</Typography>}
+          {detailRows.map((r, i) => (
+            <Box key={`${r.label}-${i}`} sx={{ mt: lead || i ? 1.15 : 0 }}>
+              <Typography sx={{ ...mono, color: FAINT, fontWeight: 600, fontSize: 9.5,
+                letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>
+                {REPORT_LABELS[r.label] || r.label}
+              </Typography>
+              <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere" }}>{r.text}</Typography>
+            </Box>
+          ))}
         </Box>
       )}
-      {answer && <Box sx={{ px: 1.35, pb: 1.15, pt: result ? 0 : 1.15 }}>{answer}</Box>}
-      {all.some(isPublished) && <Box sx={{ px: 1.35, pb: 1.15, pt: result || answer ? 0 : 1.15 }}>{pages}</Box>}
-      {!!(detailRows.length || artifacts.length) && (
-        <Box component="details" sx={{ borderTop: result ? `1px solid ${BORDER}` : "none",
-          "&[open] > summary": { borderBottom: `1px solid ${BORDER}` } }}>
-          <Box component="summary" sx={{ px: 1.35, py: 0.7, cursor: "pointer", color: DIM,
-            fontSize: 11.5, fontWeight: 600, listStylePosition: "inside",
-            "&:hover": { color: INK, bgcolor: PANEL2 } }}>
-            Work details
-          </Box>
+      {answer && <Box sx={{ px: 1.35, pb: 1.15 }}>{answer}</Box>}
+      {all.some(isPublished) && <Box sx={{ px: 1.35, pb: 1.15 }}>{pages}</Box>}
+      {last?.trim() && (
+        <Box component="details" sx={fold}>
+          <Box component="summary" sx={foldHead}>The agent's last message</Box>
+          <Box sx={{ px: 1.35, py: 1, fontSize: 13 }}><Md text={last.trim()} /></Box>
+        </Box>
+      )}
+      {!!artifacts.length && (
+        <Box component="details" sx={fold}>
+          <Box component="summary" sx={foldHead}>Session records</Box>
           <Box sx={{ px: 1.35, py: 1 }}>
-            {detailRows.map((r, i) => (
-              <Box key={`${r.label}-${i}`} sx={{ mt: i ? 1.15 : 0 }}>
-                <Typography sx={{ ...mono, color: FAINT, fontWeight: 600, fontSize: 9.5,
-                  letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>
-                  {REPORT_LABELS[r.label] || r.label}
-                </Typography>
-                <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
-                  overflowWrap: "anywhere" }}>{r.text}</Typography>
-              </Box>
+            {artifacts.slice(0, 3).map((artifact, i, all) => (        /* newest first, numbered by run, each with its own time */
+              <Button key={artifact.id} onClick={() => openArtifact(artifact)}
+                size="small" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
+                title={artifact.name || artifact.path || ""}
+                sx={{ mr: 0.75, mb: 0.4, px: 0, justifyContent: "flex-start", textTransform: "none" }}>
+                {all.length > 1
+                  ? `Run ${all.length - i}${artifactTime(artifact) ? ` · ${artifactTime(artifact)}` : ""}${i ? "" : " · latest"}`
+                  : "Read session result"}
+              </Button>
             ))}
-            {!!artifacts.length && (
-              <Box sx={{ mt: detailRows.length ? 1.15 : 0 }}>
-                <Typography sx={{ ...mono, color: FAINT, fontWeight: 600, fontSize: 9.5,
-                  letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>Session result</Typography>
-                {/* Newest first, numbered by run, each with its own time. */}
-                {artifacts.slice(0, 3).map((artifact, i, all) => (        /* newest first, as the API sends them */
-                  <Button key={artifact.id} onClick={() => openArtifact(artifact)}
-                    size="small" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
-                    title={artifact.name || artifact.path || ""}
-                    sx={{ mr: 0.75, mb: 0.4, px: 0, justifyContent: "flex-start", textTransform: "none" }}>
-                    {all.length > 1
-                      ? `Run ${all.length - i}${artifactTime(artifact) ? ` · ${artifactTime(artifact)}` : ""}${i ? "" : " · latest"}`
-                      : "Read session result"}
-                  </Button>
-                ))}
-              </Box>
-            )}
           </Box>
         </Box>
       )}

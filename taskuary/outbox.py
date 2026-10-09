@@ -22,6 +22,7 @@ approved review carrying `Deliver`), which is what keeps "the owner approves eve
 leaves" true no matter how many doors open onto the drafting.
 """
 import json
+import re
 from datetime import datetime
 from loguru import logger
 
@@ -49,15 +50,14 @@ def _voice(store) -> str:
     """The same three documents every outgoing reply is written from, so a message the owner
     starts and a message the owner answers sound like the same person. Assembled here rather
     than imported from responder because that module's blocks are all about a thread."""
-    from .responder import BREVITY, CHAT, EMAIL, SYSTEM, style_doc, writing_notes
+    from .responder import BREVITY, CHAT, EMAIL, SYSTEM, owner_of, signature_line, style_doc, writing_notes
     soul = store.doc('soul') or ''
-    owner = soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner'
     # STYLE for voice, SOUL for identity, explicit writing instructions - and no LEARNED.md, which is triage's (PW-058/059)
-    return (SYSTEM.format(owner=owner), soul, style_doc(store), '\n'.join(f'- {n}' for n in writing_notes(store)), BREVITY, CHAT, EMAIL)
+    return (SYSTEM.format(owner=owner_of(store, soul)) + signature_line(store), soul, style_doc(store), '\n'.join(f'- {n}' for n in writing_notes(store)), BREVITY, CHAT, EMAIL)
 
 
 def draft_message(store, channel: str, to, about: str, resolution: str = None, llm=None,
-                  cc: list = None) -> str:
+                  cc: list = None, attached: list = None) -> str:
     """The message itself. `resolution` is what an agent found, when one was sent to find out
     first - the brief says what to write about, the resolution says what is true."""
     from .knowledge import block as kb_block
@@ -75,6 +75,10 @@ def draft_message(store, channel: str, to, about: str, resolution: str = None, l
     user = f'TO: {recipients}' + (f'\nCC: {copies}' if copies else '') + \
            f'\nCHANNEL: {channel}\n\nWHAT THIS IS ABOUT (the owner\'s own words to you):\n{about}'
     if resolution: user += f'\n\nWHAT WAS ACTUALLY FOUND (an agent looked into this first - write from THESE facts):\n{resolution}'
+    # what really rides on it: a draft wrote "the attached template" over an email with nothing attached (2026-10-09)
+    if attached is not None:
+        user += (f"\n\nATTACHED TO THIS MESSAGE: {', '.join(attached)}" if attached
+                 else '\n\nNOTHING IS ATTACHED to this message - never say or imply that something is attached.')
     # what the company already has written down on this subject: quoted as facts to draw on,
     # never as instructions (knowledge.block says so in the block itself)
     kb = kb_block(store, f'{about} {resolution or ""}')
@@ -209,7 +213,22 @@ def work_of(store, tid: int) -> str:
     if done: return str(done)[:6000]
     ans = [a for a in store.list_task_artifacts(tid) if a.get('Kind') == 'agent_result']
     path = sa.confined(max(ans, key=lambda a: (str(a.get('CreatedAt') or ''), a.get('ArtifactId') or 0)).get('Path')) if ans else None
-    return path.read_text(encoding='utf-8', errors='replace')[:6000] if path else ''
+    if not path: return ''
+    # its '# TQ-0001 - <title>' heading is the task's title, not a finding: a title quoting the ask is not a result
+    return re.sub(r'^# .*\n+', '', path.read_text(encoding='utf-8', errors='replace'), count=1)[:6000]
+
+
+# SEND OUT RESULTS (the task bar's button): the message IS the results, told to the person who needs them. The task's own
+# title stood in as the brief when the owner wrote none - and a title quoting the original ask ("... (is the app on X or Y?)")
+# had the draft put the ask's question back to the recipient and say nothing of what was done (2026-10-09).
+RESULTS = ('Send them the RESULTS of this work: a short summary of what was done and what it means for them - the outcome, '
+           'not the internals (commits, hashes, pipelines, health checks, the steps a tool took). Do not repeat the original '
+           'request or put its questions back to them; ask them something only if the work below says it still needs them.')
+
+
+def results_brief(said: str) -> str:
+    said = str(said or '').strip()
+    return f'{said}\n\n({RESULTS})' if said else RESULTS
 
 
 def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: str = None, files: list = None,
@@ -240,9 +259,11 @@ def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: s
         if cc: raise ValueError(f'{slots.CHAT_NAMES[channel]} has no CC - only an email copies somebody in')
         if files: raise ValueError(f'a {slots.CHAT_NAMES[channel]} message cannot carry files from here - send an email to attach them')
         mailbox = None
-    about = str(about or '').strip() or f"Let them know this is done: {task.get('Title') or ''}"
+    said = str(about or '').strip()
+    about = results_brief(said)
     draft = draft_message(store, channel, [name or who[0]] if channel != 'email' else who, about,
-                          resolution=work_of(store, tid) or None, llm=llm, cc=cc)
+                          resolution=work_of(store, tid) or None, llm=llm, cc=cc,
+                          attached=[n for n, _ in files or []] if channel == 'email' else None)
     subject = ((subject or '').strip() or subject_for(store, about, llm)) if channel == 'email' else ''
     out = slots.draft(store, tid, draft, to=who[0], subject=subject, agent=actor, channel=channel, name=name)
     if not out.get('ok'): raise ValueError(out.get('why') or 'the message could not be saved on the task')
@@ -250,7 +271,7 @@ def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: s
     # the slot keeps no CC, mailbox or brief: they ride in the envelope - the brief so "Regenerate with AI" writes from it again
     rv = store.get_review(rid)
     env = json.loads(rv.get('Deliver') or '{}') or {}
-    env.update({'cc': cc or [], 'about': about, **({'mailbox': mailbox} if mailbox else {}), **({'name': name} if name else {})})
+    env.update({'cc': cc or [], 'about': said, 'by': 'owner', **({'mailbox': mailbox} if mailbox else {}), **({'name': name} if name else {})})
     store.set_review_deliver(rid, json.dumps(env))
     attached, refused = [], []
     for fname, data in files or []:

@@ -1,4 +1,4 @@
-// MESSAGE SOMEONE, from inside a task - whoever started it (the owner, 2026-10-09: "even though i started it from the new button
+// SEND OUT RESULTS, from inside a task - whoever started it (the owner, 2026-10-09: "even though i started it from the new button
 // i want to be able to create email to send to someone and notify it's done ... choose sender/attachments/draft message with
 // ai"; then "add from mailbox picker and teams/chat too"). An email - From, To, CC, which of the task's files ride on it - or a
 // chat message into one chat; and what it should say. The AI writes it from those words AND what the work found
@@ -58,11 +58,11 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
   };
   return (
     <Dialog open={open} onClose={() => !busy && onClose?.()} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: 3 } }}>
-      <DialogTitle>Message someone · {detail?.ref || ""}</DialogTitle>
+      <DialogTitle>Send out results · {detail?.ref || ""}</DialogTitle>
       <DialogContent sx={{ pt: "8px !important", display: "flex", flexDirection: "column", gap: 1.6 }}>
         <Typography variant="body2" sx={{ color: DIM }}>
-          The AI writes it from what you say here and what the work on this task found. It waits in Close out for you to edit and
-          approve - nothing is sent now - and the task closes once it is sent.
+          The AI writes a short summary of what this task's work delivered, for the person you pick. It waits in Close out for you
+          to edit and approve - nothing is sent now - and the task closes once it is sent.
         </Typography>
         {targets.length > 1 && (
           <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
@@ -110,10 +110,10 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
           </Box>
         )}
         <Box>
-          <Label>What should it say?</Label>
+          <Label>Anything to add?</Label>
           <TextField fullWidth multiline minRows={3} value={about} onChange={(e) => setAbout(e.target.value)}
-            placeholder={email ? "Let them know it's done, and that the template is attached" : "Let them know it's done"} sx={field} />
-          <Typography variant="caption" sx={{ color: FAINT }}>Left empty, it tells them the task is done.</Typography>
+            placeholder="Optional - e.g. the template is attached; they can start using it Monday" sx={field} />
+          <Typography variant="caption" sx={{ color: FAINT }}>Left empty, it is just the results.</Typography>
         </Box>
         {email && (
           <Box>

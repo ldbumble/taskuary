@@ -895,7 +895,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         title: ranBefore ? "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
           : "Opens the agent step so you can choose a harness, a model and a prompt. Nothing starts until you press Start there." }] : []),
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
-      ...(!liveSession ? [{ id: "email", group: "agent", label: "Message someone", run: () => setEmailOpen(true),
+      ...(!liveSession ? [{ id: "email", group: "agent", label: "Send out results", run: () => setEmailOpen(true),
         title: "An email or a chat message about this task, to anyone - the AI drafts it from your words and the work. It waits in Close out for your approval; the task closes once it is sent." }] : []),
       ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: "Ask sender", run: () => setAskSenderOpen(true),
         title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
@@ -1733,13 +1733,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       ) : (
                         <>
                           {/* THE ENVELOPE over what was sent, read from the same Deliver blob
-                              (replyDelivery.js). Read-only: this one is history, not a decision. */}
+                              (replyDelivery.js). Read-only: this one is history, not a decision. Only where there is a reply:
+                              a task with nobody to answer read "To You" under its own emails (2026-10-09) */}
+                          {(replyMessage || sentReview) && (
                           <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
                             <Typography sx={{ ...label, flexShrink: 0 }}>To</Typography>
                             <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>
                               {replyContext(sentReview || sourceMessage)}
                             </Typography>
-                          </Box>
+                          </Box>)}
                           {replyCc.length > 0 && (
                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mt: 0.6, flexWrap: "wrap", minWidth: 0 }}>
                               <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>

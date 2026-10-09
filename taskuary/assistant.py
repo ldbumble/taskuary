@@ -279,7 +279,10 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
     settings = store.get_settings(); team = team_domains_of(settings); me = (settings.get('owner_email') or '').lower()
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     pend = {r['TaskId'] for r in store.list_reviews('pending')}
-    mine = lambda c: c.get('Status') == 'context' or c.get('Direction') == 'out' or (c.get('FromEmail') or '').lower() == me
+    # a note the owner handed an agent (channel `own`) is their own word, not an ask of them - it put
+    # "You asked ... no answer from you" under People want for two handoffs the agents had already done
+    mine = lambda c: (c.get('Status') == 'context' or c.get('Direction') == 'out' or c.get('Channel') == 'own'
+                      or (c.get('FromEmail') or '').lower() == me)
     seen, out, away = set(), [], None
     for r in store.recent_messages(_since(days), limit=500):
         cid = r.get('ConversationId')
@@ -294,6 +297,8 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
         if not _ASKS.search(body): continue
         tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
         t = store.get_task(tid) if tid else None
+        # a task closed AFTER the ask is what answered it; an ask that came after the close is new work
+        if t and t.get('Status') in ('done', 'dropped') and _ts(t.get('ClosedAt')) >= _ts(last.get('SentAt')): continue
         cover = ('a draft waits for you on the task' if tid in pend else
                  f"{task_ref(tid)} is {t.get('Status')}" + (', an agent is on it' if t.get('RunStatus') == 'running' else '') if t else 'no task, no draft')
         who = last.get('FromName') or last.get('FromEmail') or 'someone'

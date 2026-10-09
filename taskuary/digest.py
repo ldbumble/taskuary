@@ -145,9 +145,25 @@ PROMPT = (
     'in the data with the same title and its link. A block reading "(none)" has nothing to say. Say what '
     'matters, not your reasoning. Never invent facts; no preamble, no sign-off, and nothing outside the sections.')
 
+# 2026-10-09: People want ran to three items for one real ask - a bounce notice, and the owner's own
+# notes to agents that were finished - and the same TQ-ref then came back under In flight and Follow up.
+# People want is only a person still waiting on me, and every item gets ONE section.
+_PROMPT_2026_09_15 = PROMPT
+PROMPT = _PROMPT_2026_09_15.replace(
+    '\U0001F64B People want - asks from people I have not answered and replies awaiting approval: who, what, '
+    'since when, and what already covers it; check OUT OF OFFICE before suggesting a chase\n',
+    '\U0001F64B People want - a PERSON still waiting on me: their ask I have not answered, or a reply of mine awaiting '
+    'approval. Who, what, since when; check OUT OF OFFICE before suggesting a chase. Never a machine notice, never my '
+    'own ask, never work a closed task already handled\n').replace(
+    'A block reading "(none)" has nothing to say.',
+    'A block reading "(none)" has nothing to say. Each person, thread or TQ-ref goes in ONE section only - the first '
+    'one it fits - and never comes back in a later section.')
+assert 'a PERSON still waiting' in PROMPT and 'ONE section only' in PROMPT
+
 # every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
 # from "the owner wrote this" (never touch) - same deal the template docs get
 OLD_PROMPTS = (
+    _PROMPT_2026_09_15,
     _PROMPT_WITHOUT_STANDING_MEMORY, _PROMPT_2026_09_02_MEMORY,
     _PROMPT_2026_08_31, _PROMPT_2026_08_31_MEMORY,
     (

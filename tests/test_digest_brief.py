@@ -53,6 +53,29 @@ class UnansweredTests(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertIn('a draft waits for you on the task', got[0]['facts'])
 
+    def test_a_task_closed_after_the_ask_answered_it_but_an_ask_after_the_close_is_new(self):
+        s = _store()
+        tid = s.create_task({'Title': 'Budget', 'Kind': 'task'}, 't')
+        _mail(s, DANA, 'Budget', 'Could you send the Q3 budget?', days=2, conv='u1', tid=tid)
+        s._exec("UPDATE task SET Status='done', ClosedAt=? WHERE TaskId=?", (_ago(1), tid))
+        self.assertEqual(assistant.unanswered(s, days=3), [])
+        _mail(s, DANA, 'Budget', 'Thanks - could you also send Q4?', days=0.5, conv='u1', tid=tid)
+        self.assertEqual([c['key'] for c in assistant.unanswered(s, days=3)], ['asked:u1'])
+
+    def test_a_note_the_owner_handed_an_agent_is_not_their_ask(self):
+        s = _store()
+        tid = s.create_task({'Title': 'Check the export', 'Kind': 'coding'}, 'owner')
+        s.add_message({'TaskId': tid, 'ExternalId': 'own:1', 'ConversationId': f'own:{tid}', 'Channel': 'own', 'Subject': 'Check the export',
+                       'FromName': 'You', 'SentAt': _ago(1), 'BodyText': 'Can you check which sites fail the export?', 'Status': 'routed'})
+        self.assertEqual(assistant.unanswered(s, days=3), [])
+
+    def test_an_exchange_bounce_is_a_machine(self):
+        s = _store()
+        _mail(s, 'MicrosoftExchange0a1b2c@northwind.onmicrosoft.example', 'Undeliverable: Budget',
+              "Your message couldn't be delivered. Action required: please check the recipient address.", days=1, conv='u1')
+        _mail(s, 'no-reply-x7Yq2@mail.vendor.example', 'Your sign-in link', 'Can you click the button below to sign in?', days=1, conv='u2')
+        self.assertEqual(assistant.unanswered(s, days=3), [])
+
     def test_a_fresh_ask_is_not_yet_missed(self):
         s = _store()
         _mail(s, DANA, 'Budget', 'Could you send it over?', days=0, conv='u1')      # minutes old

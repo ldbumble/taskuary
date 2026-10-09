@@ -5,6 +5,7 @@ import {
   clampRatio,
   fitFrame,
   keyMessage,
+  isLocalPage,
   layoutFor,
   MIN_CHAT_PX,
   mayShape,
@@ -132,4 +133,12 @@ test("only the tab the owner is at shapes the page, so a phone tab cannot reshap
   assert.equal(mayShape(false, false), false);             // a background window's resize
   assert.equal(mayShape(false, false, true), true);        // a press in the pane, Take over, the window coming back
   assert.equal(mayShape(true, true, true), false);         // a hidden tab never does
+});
+
+test("a file the agent opened in its browser is not browsing, so it takes no room until asked", () => {
+  assert.equal(isLocalPage("file:///C:/Users/a/AppData/Local/Temp/receipt-15-handwritten.html"), true);
+  assert.equal(isLocalPage(" FILE:///tmp/x.html"), true);
+  assert.equal(isLocalPage("https://example.com/login"), false);
+  assert.equal(isLocalPage("about:blank"), false);
+  assert.equal(isLocalPage(""), false);
 });

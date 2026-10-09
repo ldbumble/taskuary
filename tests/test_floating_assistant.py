@@ -23,6 +23,20 @@ class FloatingAssistantTests(unittest.TestCase):
         self.assertEqual(first.json()['task']['SourceRef'], general.DOCK_TAG)
         self.assertEqual(visible, [])
 
+    def test_a_chat_takes_no_tq_number(self):
+        """Every New chat used the next TQ number - 125 of 261 in two weeks - and the owner's tasks read as
+        skipping numbers (2026-10-09). A chat's id comes from its own range; the next task is the next number."""
+        from taskuary.store import INTERNAL_TASK_BASE
+        store = MemoryStore()
+        before = store.create_task({'Title': 'Budget'}, 'owner')
+        for _ in range(3):
+            chat, _ = general.dock_task(store)
+            store.update_task(chat['TaskId'], {'Status': 'done'}, 'owner')
+        after = store.create_task({'Title': 'Payroll'}, 'owner')
+        self.assertEqual(after, before + 1)
+        self.assertGreater(chat['TaskId'], INTERNAL_TASK_BASE)
+        self.assertEqual(general.dock_task(store)[0]['TaskId'], chat['TaskId'] + 1, 'chats never reuse an id either')
+
     def test_new_chat_archives_the_old_dock_and_returns_an_empty_one(self):
         store = MemoryStore()
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True):

@@ -80,12 +80,18 @@ def _who(sender, senders) -> str:
 
 def _match(conv, sender, toks, own, convs, senders, title_toks):
     """(why, rank) this task touches the arrival, or None. For a report or an idea the shared conversation is only
-    "the same report" and ranks BELOW a task its words name, so last week's other failures of one report cannot
-    crowd out the one this run is about - but it still counts when nothing names it better."""
+    "the same report": among those, the one its words name comes first, so last week's other failures of one report
+    cannot crowd out the one this run is about.
+
+    ...and the same report outranks ANOTHER source's task that merely shares two words with it. Below them, a
+    report's own earlier tasks lost all three seats to a bills mail and a phishing notice that shared "export" or
+    "check" with the run's text, while the run said "Viv ... timed out" and its tasks said "Viventium timeout":
+    triage never saw that the failure had been looked at, and one recurring timeout opened eight tasks in three
+    days (2026-10-09)."""
     shared = toks & title_toks
     if conv and conv in convs and not own: return 'the same thread', 3.0
+    if conv and conv in convs: return 'the same report', 2.0 + len(shared) / max(1, len(title_toks))
     if len(shared) >= 2: return 'the same subject', 1.0 + len(shared) / max(1, len(title_toks))
-    if conv and conv in convs: return 'the same report', 0.8
     if sender and sender in senders: return 'the same sender', 0.5
     return None
 

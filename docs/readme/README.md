@@ -1,7 +1,8 @@
 # README walkthrough images
 
 The README and product guide share these images. The hero is kept separately at
-`docs/hero.gif`. These images follow one invented
+`docs/hero.gif`: the Assistant's Game view, opening on the whole office and zooming into each room.
+Regenerate it with `npm exec --yes --package=node@22 -- node website/capture-hero.mjs` (FFmpeg as below). These images follow one invented
 vendor-spend request through the current React interface, then show a few key
 features. The calendar GIF replays the app's meeting entrance and clock pulse.
 `06-morning.png` is its static alternative. The privacy SVG is an illustrated flow.

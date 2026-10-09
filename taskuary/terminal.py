@@ -53,7 +53,11 @@ SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 # characters, a trap for whoever next touches that doc), while the ceiling stays reachable only in a
 # genuinely maximal seed, where the trim below cuts the ask and nothing else.
 DOC_CHARS = 5600
-AGENT_CHARS = 2600                  # ...and of AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead
+# AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead. At 2600 it cut the doc's own
+# 3,087 characters mid-sentence (2026-10-09), so no coding session ever read how to end with --done/--reply/
+# --no-reply - DOC_CHARS's trap again. 4000 holds the 3,358 it measures now, with room for an edit; past the
+# ceiling the ask still gives, never the rules.
+AGENT_CHARS = 4000
 SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune

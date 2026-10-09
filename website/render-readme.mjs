@@ -12,7 +12,7 @@ const out = path.join(root, 'docs/readme');
 await mkdir(out, { recursive: true });
 const shots = [
   // 01-06 walk Ruth's request through the Chat and Task views; the rail on the left is the Timeline
-  ['01-timeline-sources-and-times','home','Everything lands in one place.',[14,58,1160,570],'01 / ARRIVE'],
+  ['01-timeline-sources-and-times','home','Everything lands in one place.',[14,58,1160,690],'01 / ARRIVE'],
   ['02-task','task','A request becomes a task.',[350,66,835,360],'02 / ORGANIZE'],
   ['03-agent','agent','The agent works inside the chat.',[372,136,795,592],'03 / WORK'],
   ['04-review','review','The last word is yours.',[350,340,835,408],'04 / APPROVE'],
@@ -29,6 +29,7 @@ const escape = text => text.replaceAll('&','&amp;').replaceAll('<','&lt;');
 try {
   for (const [name,source,title,clip,kicker] of shots) {
     if (process.argv.includes('--cli-only') && source !== 'cli') continue;
+    if (process.argv.includes('--home-only') && !name.startsWith('01-')) continue;
     if (process.argv.includes('--timeline-only') && source !== 'timeline') continue;
     if (process.argv.includes('--walk') && !/^0[1-6]-/.test(name)) continue;
     if (process.argv.includes('--memory-update') && !['timeline','learned'].includes(source)) continue;

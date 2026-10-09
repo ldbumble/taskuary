@@ -43,10 +43,10 @@ Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Cod
 ### 1. 所有工作汇集到一处
 
 邮件、聊天、工单、提醒和报表都进入同一条工作栏，并按需要处理的方式分组：
-**Urgent**、**On you**、**For later**、Advisor 的建议，以及 **FYI**。旁边的助手会说明刚到了什么、谁在等你，
-不用逐个打开各个系统。
+**Urgent**、**On you**、**For later**、Advisor 的建议，以及 **FYI**。旁边是一天的开场卡片：昨晚以来的变化、
+学到的东西、早间摘要、今天的会议，以及每个分组里在等你的事，不用逐个打开各个系统。
 
-![工作栏把今天的事项分为 Urgent、On you、Advisor ideas 和 FYI，旁边是助手的早间摘要，列出谁在等你。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=95295dd)
+![工作栏把今天的事项分组，旁边是开场卡片：昨晚以来完成的代理和运行的报表、记忆与早间摘要、今天的会议，以及每个分组里在等你的事。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=opening-card)
 
 ### 2. 让助手带你逐项处理
 

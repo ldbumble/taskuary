@@ -53,6 +53,17 @@ const digestText = 'NOW: Thursday, September 3 · Your morning brief\n\n🙋 Peo
 const digest = { ...fixture['/api/feed'].data.find(r => r.Channel === 'report'), MessageId: 939, Subject: 'Morning digest', SourceName: 'Morning digest', FromName: 'Taskuary', SentAt: '2026-09-03 10:23:00', CreatedAt: '2026-09-03 10:23:00', ConversationId: 'report:readme-morning', Preview: digestText, BodyText: digestText, TaskId: null, Category: 'report' };
 fixture['/api/feed'].data.unshift(digest);
 fixture['/api/messages/one'][939] = digest;
+// THE OPENING CARD'S TOP (since.py): what changed since last night, counted - the same fictional morning as the rest
+fixture['/api/since'] = {
+  overnight: { line: '', mail: 23, reports: 3, closed: 4, sessions: 2 },
+  learned: { line: 'Learned this week: 3 new things about how you work.', n: 3, latest: 'Lead with the number, then explain the change.' },
+  cards: [
+    { kind: 'agent', label: 'Agent finished · TQ-0006', text: 'Reconciled the August GL export - two entries need a look', key: 'task:6' },
+    { kind: 'agent', label: 'Agent finished · TQ-0011', text: 'Updated the vendor list for the September close', key: 'task:11' },
+    { kind: 'report', label: 'Report ran · 06:00', text: 'Process Error Check: 1 real failure overnight', key: 'report:939' },
+  ],
+  digest: { source_id: 3, at: '2026-09-03T08:00:00', text: digestText },      // ISO on purpose: the demo clock moves "YYYY-MM-DD HH:MM:SS" stamps
+};
 fixture['/api/cli/connections'] = { data: [
   ...fixture['/api/cli/detect'].data.filter(c => c.name === 'claude').map(c => ({ ...c, configured: true, setup: c.name, config: { cmd: c.cmd, args: c.args, timeout: c.timeout } })),
   ...[
@@ -189,6 +200,15 @@ try {
   await delay(1000);
   if (process.argv.includes('--cli-only')) {
     await captureCli();
+  } else if (process.argv.includes('--home-only')) {
+    // section 1 alone: the opening card - what changed since last night, the day, and what waits (2026-10-08). The full demo, not
+    // the guided one-request journey, whose banner and single row are not the day
+    await page.goto(origin + '/?demo=explore', { waitUntil: 'networkidle0', timeout: 120000 });
+    await click('Chat', 'button'); await delay(1500);
+    // ...and a fresh chat: the full demo opens on a scripted conversation, and the opening card is what an empty one shows
+    await page.waitForSelector('button[aria-label^="New chat"]'); await page.click('button[aria-label^="New chat"]'); await delay(2000);
+    await page.waitForSelector('.tq-day-box'); await delay(800);
+    await shot('home');
   } else if (process.argv.includes('--timeline-only')) {
     await captureTimeline();
   } else if (process.argv.includes('--memory-update')) {

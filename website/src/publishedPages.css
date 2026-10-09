@@ -9,3 +9,11 @@
 .tq-published-frame { display: block; width: 100%; height: min(70vh, 640px); border: 0; border-top: 1px solid #e3ddd2; background: #fff; }
 .tq-published-md { border-top: 1px solid #e3ddd2; padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 13px; }
 .tq-published-note { border-top: 1px solid #e3ddd2; padding: 10px 14px; color: #8a8d86; font-size: 12px; }
+/* what a chat SHOWED (selfclose.SHOW_LINE): a picture at its own size up to the column, a CSV as a table that scrolls */
+.tq-published-picture { border-top: 1px solid #e3ddd2; padding: 8px; background: #fff; text-align: center; }
+.tq-published-picture img { max-width: 100%; max-height: min(70vh, 640px); height: auto; }
+.tq-published-table { border-top: 1px solid #e3ddd2; max-height: min(70vh, 640px); overflow: auto; font-size: 12.5px; }
+.tq-published-table table { border-collapse: collapse; min-width: 100%; }
+.tq-published-table th, .tq-published-table td { border-bottom: 1px solid #eee9df; padding: 4px 10px; text-align: left; white-space: nowrap; }
+.tq-published-table th { position: sticky; top: 0; background: #faf8f4; color: #4d514b; font-weight: 600; }
+.tq-aui-agent-body .tq-published { margin: 8px 0 2px; }

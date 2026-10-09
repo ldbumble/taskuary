@@ -275,6 +275,21 @@ def attach_markers(text: str) -> tuple:
     return _ATTACH_RE.sub('', text or '').strip(), [m.strip().strip('"\'') for m in _ATTACH_RE.findall(text or '')]
 
 
+# ...and what it SHOWS the owner. Words are the answer; a picture, a chart or a page only when it makes the answer easier
+# to understand (the owner, 2026-10-09: "only if the agent thinks it's a good way to understand things - random scratch
+# stuff not"). Nothing it writes on the way is shown: only a file it names this way lands in the chat, under this turn.
+_SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)
+SHOW_LINE = ('SHOWING YOUR ANSWER: when a chart, an image, a table or a small page makes your answer easier to understand than '
+             'words alone, make it as a file in your working folder (.png .jpg .svg .html .md .csv) and name it on its own line: '
+             '[[TASKUARY-SHOW: <full path>]] - it appears in the chat under this answer and stays on the task. Only when it truly '
+             'helps; never your working files, test data or drafts. An .html page runs with no network: put its data and scripts in it.')
+
+
+def show_markers(text: str) -> tuple:
+    """(text with every show line taken out, [the paths it named])."""
+    return _SHOW_RE.sub('', text or '').strip(), [m.strip().strip('"\'') for m in _SHOW_RE.findall(text or '')]
+
+
 # ...and the emails that close a task (slots.draft): one block per email, its attributes say which slot or who.
 DRAFT_OPEN, DRAFT_CLOSE = '[[TASKUARY-DRAFT', '[[/TASKUARY-DRAFT]]'
 _DRAFT_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?DRAFT\b([^\]]*)\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?DRAFT\s*\]\]', re.I | re.S)

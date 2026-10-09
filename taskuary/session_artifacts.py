@@ -52,6 +52,26 @@ def result(store, tid: int, text: str, actor='agent') -> dict:
     return _write(store, tid, 'agent-result', f'# {task_ref(tid)} — {task.get("Title") or "Agent result"}\n\n{str(text).strip()}', 'agent_result', actor)
 
 
+# what a chat may put in front of the owner (selfclose.SHOW_LINE): pictures, pages and tables
+SHOWN_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+               '.svg': 'image/svg+xml', '.html': 'text/html', '.htm': 'text/html', '.md': 'text/markdown', '.csv': 'text/csv'}
+SHOWN_MAX = 16 * 1024 * 1024
+
+
+def shown(store, tid: int, src: Path, actor='assistant') -> dict:
+    """Copy a file the agent chose to show onto the task - its own copy, so the chat keeps it after the scratch folder is cleared."""
+    kind = SHOWN_TYPES.get(src.suffix.lower())
+    if not kind: raise ValueError(f'{src.suffix or "a file with no extension"} cannot be shown - only {" ".join(sorted(SHOWN_TYPES))}')
+    if src.stat().st_size > SHOWN_MAX: raise ValueError('it is over 16 MB')
+    folder = root() / str(int(tid)); folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"shown-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{_safe(src.stem)}{src.suffix.lower()}"
+    path.write_bytes(src.read_bytes())
+    aid = store.add_task_artifact({'TaskId': tid, 'Name': src.name, 'ContentType': kind, 'Size': path.stat().st_size,
+                                   'Path': str(path), 'Kind': 'shown', 'CreatedBy': actor})
+    store.audit('task_artifact', aid, 'create', actor, detail={'task_id': tid, 'kind': 'shown', 'type': kind})
+    return store.get_task_artifact(aid)
+
+
 def answer_since(store, tid: int) -> str:
     """The newest answer the agent saved since the last session record, so a run's record carries what it answered."""
     arts = store.list_task_artifacts(tid)

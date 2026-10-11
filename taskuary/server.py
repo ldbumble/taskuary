@@ -6969,6 +6969,9 @@ def catch_up_on_startup():
         return t
     hours = _catchup_hours(days)
     logger.info(f"startup: {'incremental poll (closed under an hour)' if hours == 0 else f'catching up on the {hours:.1f} hour(s) it was closed'}")
+    from . import welcome
+    # the greeting waits for the mail: said mid catch-up it was "nothing new came in" on a Monday, spent and never corrected (B4)
+    welcome.catch_up_began()
     def _catch_up():
         _heal_ended()
         # the bridge's launch grace, spent here instead of in front of the owner's first request
@@ -6980,7 +6983,8 @@ def catch_up_on_startup():
         # startup and six reports were the other 165 s, all of it behind one 'catching up on
         # the 27 hour(s)' banner (measured on the owner's box, 2026-09-19). So the catch-up
         # ENDS when the mail is in and judged...
-        _poll_reports(hours, what=f'catching up on {hours:.0f}h closed' if hours else 'syncing')   # fits the sidebar's one sync line
+        try: _poll_reports(hours, what=f'catching up on {hours:.0f}h closed' if hours else 'syncing')   # fits the sidebar's one sync line
+        finally: welcome.catch_up_ended()      # the held greeting is said now, with the mail in
         # ...and the reports that were due take their own pass, on their own lock
         report_pass(startup=True)
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by

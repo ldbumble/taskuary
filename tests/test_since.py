@@ -2,22 +2,33 @@
 counted from the store, said only when there is something to say."""
 import unittest
 from datetime import datetime
-from taskuary import since
+from taskuary import since, welcome
 from taskuary.store import MemoryStore
 
 NOW = datetime(2026, 10, 7, 9, 0)
 
 
 class SinceTests(unittest.TestCase):
-    def test_overnight_counts_what_happened_after_six_last_evening_and_nothing_before(self):
+    def test_overnight_counts_mail_sent_since_last_here_and_reports_run_since(self):
         s = MemoryStore()
-        for at, ch in (('2026-10-06 19:00:00', 'email'), ('2026-10-07 07:00:00', 'teams'), ('2026-10-06 17:00:00', 'email'),
-                       ('2026-10-07 06:00:00', 'report')):
-            mid = s.add_message({'ExternalId': f'x{at}{ch}', 'Channel': ch, 'Subject': 's', 'BodyText': 'b'})
-            s._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', (at, mid))
+        s.set_setting(welcome.SEEN_KEY, '2026-10-06 18:00:00', 't')
+        for sent, ch in (('2026-10-06 19:00:00', 'email'), ('2026-10-07 07:00:00', 'teams'), ('2026-10-06 17:00:00', 'email'),
+                         ('2026-10-07 06:00:00', 'report')):
+            mid = s.add_message({'ExternalId': f'x{sent}{ch}', 'Channel': ch, 'Subject': 's', 'BodyText': 'b', 'SentAt': sent, 'Status': 'routed'})
+            s._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', (sent, mid))
         out = since.overnight(s, NOW)
-        self.assertEqual((out['mail'], out['reports']), (2, 1))                     # 17:00 was the day before
-        self.assertEqual(out['line'], 'Since last night: 2 messages read, 1 report ran.')
+        self.assertEqual((out['mail'], out['reports']), (2, 1))                     # 17:00 was before they left
+        self.assertEqual(out['line'], 'Overnight: 2 messages read, 1 report ran.')
+        self.assertEqual(out['heading'], 'Overnight · since Tue 6:00 PM')
+
+    def test_a_backfill_read_this_morning_is_not_what_came_in_last_night(self):
+        """B5 (2026-10-11): counted by CreatedAt, a first install's 14-day backfill was "since last night"."""
+        s = MemoryStore()
+        for n in range(5):
+            mid = s.add_message({'ExternalId': f'b{n}', 'Channel': 'email', 'Subject': 's', 'BodyText': 'b', 'SentAt': f'2026-09-2{n} 10:00:00', 'Status': 'routed'})
+            s._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', ('2026-10-07 08:30:00', mid))
+        s.add_message({'ExternalId': 'h', 'Channel': 'email', 'Subject': 's', 'BodyText': 'b', 'SentAt': '2026-10-07 07:00:00', 'Status': 'history'})
+        self.assertEqual(since.overnight(s, NOW)['mail'], 0)
 
     def test_only_a_session_that_finished_counts_as_finished(self):
         # a transcript row is filed when a hook names the session and again when a close kills it - neither is a finish (B3)

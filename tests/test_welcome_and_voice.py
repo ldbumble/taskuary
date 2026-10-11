@@ -295,4 +295,79 @@ class RepeatsTests(unittest.TestCase):
         self.assertEqual(got['line'], 'Payworth Billing wrote twice about the same thing - every one is kept here. All they need now: They need the signed W-9.')
 
 
+class CatchUpTests(unittest.TestCase):
+    """The greeting waits for the startup catch-up (B4, 2026-10-11): on a Monday it fired while the weekend's mail was still being
+    read, said "Over the weekend: nothing new came in", spent itself, and was never corrected."""
+    def setUp(self): welcome._CATCHUP.clear(); welcome._HELD.clear()
+    tearDown = setUp
+
+    def arrive(self, s, now, items=ITEMS, **kw):
+        with mock.patch.object(funnel, 'pile', return_value={'items': items}):
+            return welcome.arrive(s, now, **kw)
+
+    def test_a_greeting_asked_for_mid_catch_up_is_held_then_said_with_the_real_counts(self):
+        s = store(); now = datetime(2026, 10, 5, 8, 0)                                  # a Monday
+        s.set_setting(welcome.SEEN_KEY, stamp(datetime(2026, 10, 2, 17, 0)), 't')      # Friday evening
+        with mock.patch.object(welcome.threading, 'Timer'): welcome.catch_up_began(now)
+        out = self.arrive(s, now, [])
+        self.assertEqual((out['said'], out.get('pending')), ('', True))
+        self.assertNotEqual(s.get_setting(welcome.GREETED_KEY), '2026-10-05', 'a held greeting is not spent')
+        self.arrive(s, now + timedelta(seconds=20), leaving=True)                     # a blur meanwhile cannot shrink the gap
+        for n in range(3): mail(s, 'Erin Blake', 'erin@northwind.example', f'Weekend {n}', stamp(datetime(2026, 10, 3, 9 + n)))
+        with mock.patch('taskuary.live.emit') as emit: welcome.catch_up_ended()
+        emit.assert_called_once_with('arrive')
+        said = self.arrive(s, now + timedelta(minutes=2))['said']
+        self.assertIn('Over the weekend: 3 came in', said)
+        card = concierge.history(s, general.dock_task(s, 'owner')[0]['TaskId'])[-1]['card']
+        self.assertTrue(card['away'].startswith('Over the weekend: 3 came in'), 'the opening card draws the gap')
+        self.assertEqual(self.arrive(s, now + timedelta(minutes=9))['said'], '')        # and then it is spent
+
+    def test_a_catch_up_that_outlives_the_wait_is_said_honestly(self):
+        s = store(); now = datetime(2026, 10, 5, 8, 0)
+        s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')
+        s.set_setting(welcome.SEEN_KEY, stamp(datetime(2026, 10, 2, 17, 0)), 't')
+        with mock.patch.object(welcome.threading, 'Timer'): welcome.catch_up_began(now)
+        self.assertTrue(self.arrive(s, now, [])['pending'])
+        said = self.arrive(s, now + timedelta(seconds=welcome.CATCHUP_WAIT + 5), [])['said']
+        self.assertIn("I'm still reading Outlook", said); self.assertEqual(banned(said), [])
+
+
+class AwayWindowTests(unittest.TestCase):
+    """One "while you were away" for every reader (B5, 2026-10-11): the greeting, the opening screen, "did I miss anything?" and
+    the Morning digest all count from when the owner was last here - not from six last evening, not from two days back."""
+    def setUp(self): welcome._CATCHUP.clear(); welcome._HELD.clear()
+
+    def test_a_nine_day_absence_is_not_the_weekend(self):
+        self.assertEqual(welcome.away_word(datetime(2026, 9, 26, 17, 0), datetime(2026, 10, 5, 8, 0)), 'Over the last nine days')
+        self.assertEqual(welcome.away_word(datetime(2026, 10, 2, 17, 0), datetime(2026, 10, 5, 8, 0)), 'Over the weekend')
+
+    def test_the_window_is_since_last_here_and_never_past_three_weeks(self):
+        s, now = store(), datetime(2026, 10, 5, 8, 0)
+        self.assertEqual(welcome.away_window(s, now), (datetime(2026, 10, 4, 18, 0), 'Since last night'))   # nobody here before
+        s.set_setting(welcome.SEEN_KEY, stamp(datetime(2026, 10, 2, 17, 0)), 't')
+        self.assertEqual(welcome.away_window(s, now), (datetime(2026, 10, 2, 17, 0), 'Over the weekend'))
+        s.set_setting(welcome.SEEN_KEY, stamp(datetime(2026, 6, 1, 9, 0)), 't')
+        self.assertEqual(welcome.away_window(s, now)[0], now - timedelta(days=welcome.AWAY_MAX_DAYS))
+
+    def test_the_greeted_gap_holds_all_day_after_the_greeting(self):
+        s = store(); now = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+        gone = now - timedelta(days=3, hours=15)
+        s.set_setting(welcome.SEEN_KEY, stamp(gone), 't')
+        with mock.patch.object(funnel, 'pile', return_value={'items': []}): self.assertTrue(welcome.arrive(s, now)['said'])
+        self.assertEqual(welcome.away_window(s, now + timedelta(hours=2))[0], gone, 'the opening screen counts the gap it greeted')
+
+    def test_monday_did_i_miss_anything_reaches_back_to_friday(self):
+        s = store(); now = datetime.now()
+        s.set_setting(welcome.SEEN_KEY, ago(70, now=now), 't')                       # gone since Friday afternoon
+        mail(s, 'Erin Blake', 'erin@northwind.example', 'Staffing sheet', ago(66, now=now), 'Could you send the staffing sheet?', conv='e1')
+        answer = welcome.missed_says(welcome.missed(s, now))
+        self.assertIn('One person is still waiting on an answer from you: Erin', answer)
+
+    def test_the_morning_brief_reads_from_when_the_owner_was_last_here(self):
+        from taskuary import digest
+        s = store(); gone = datetime.now().replace(microsecond=0) - timedelta(days=3, hours=15)
+        s.set_setting(welcome.SEEN_KEY, stamp(gone), 't')
+        self.assertIn(f"the window is since {stamp(gone)[:16]}", digest.gather(s, 1))
+
+
 if __name__ == '__main__': unittest.main()

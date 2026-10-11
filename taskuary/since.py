@@ -7,11 +7,15 @@ so the opening screen never waits on one.
 """
 from datetime import datetime, timedelta
 
-EVENING = 18          # "last night" starts at six the evening before
+
+def _start(store, now: datetime) -> tuple:
+    """(start, word) - welcome.away_window, the one "while you were away" every reader shares. A fixed six-last-evening window
+    called a first install's backfill "since last night" and a week away "last night" too (B5, 2026-10-11)."""
+    from .welcome import away_window
+    return away_window(store, now)
 
 
-def _start(now: datetime) -> datetime:
-    return (now - timedelta(days=1)).replace(hour=EVENING, minute=0, second=0, microsecond=0)
+def _clock(d: datetime) -> str: return f"{d.strftime('%a')} {d.hour % 12 or 12}:{d.minute:02d} {'AM' if d.hour < 12 else 'PM'}"
 
 
 def _n(store, q, p): return int((store._one(q, p) or {}).get('n') or 0)
@@ -21,10 +25,14 @@ def _plural(n, one, many=None): return f"{n} {one if n == 1 else (many or one + 
 
 
 def overnight(store, now: datetime = None) -> dict:
-    """{line, mail, reports, closed, sessions} since six last evening. line is '' when nothing happened."""
-    since = _start(now or datetime.now()).strftime('%Y-%m-%d %H:%M:%S')
-    mail = _n(store, "SELECT COUNT(*) n FROM message WHERE CreatedAt>=? AND IFNULL(Direction,'in')!='out' "
-                     "AND IFNULL(Channel,'') NOT IN ('report','assistant')", (since,))
+    """{line, heading, mail, reports, closed, sessions} since the owner was last here. line is '' when nothing happened. Mail is
+    counted the way the greeting counts it (welcome.came_in: by when it was SENT, history and context left out), so the
+    opening screen and the greeting say one number."""
+    from .welcome import came_in
+    now = now or datetime.now()
+    start, word = _start(store, now)
+    since = start.strftime('%Y-%m-%d %H:%M:%S')
+    mail = came_in(store, start)
     reports = _n(store, "SELECT COUNT(*) n FROM message WHERE CreatedAt>=? AND Channel='report'", (since,))
     closed = _n(store, "SELECT COUNT(*) n FROM task WHERE ClosedAt>=? AND Status='done'", (since,))
     # FINISHED IS THE RUN SAYING SO (workerstate 'finished'), never a transcript row: one is filed the moment a hook names the CLI's
@@ -37,7 +45,7 @@ def overnight(store, now: datetime = None) -> dict:
     parts = [p for n, p in ((mail, _plural(mail, 'message') + ' read'), (reports, _plural(reports, 'report') + ' ran'),
                             (sessions, _plural(sessions, 'agent session') + ' finished'), (cut, (f'{cut}' if sessions else _plural(cut, 'agent session')) + ' stopped before finishing'),
                             (closed, _plural(closed, 'task') + ' closed')) if n]
-    return {'line': ('Since last night: ' + ', '.join(parts) + '.') if parts else '',
+    return {'line': (f'{word}: ' + ', '.join(parts) + '.') if parts else '', 'heading': word if word.startswith('Since') else f'{word} · since {_clock(start)}',
             'mail': mail, 'reports': reports, 'closed': closed, 'sessions': sessions, 'stopped': cut}
 
 
@@ -57,7 +65,7 @@ def cards(store, now: datetime = None) -> list:
     """What CHANGED while you were away, as up to three cards above what waits (the owner picked "A +", 2026-10-08): agents that
     finished, then the reports that ran with something in them. Each names the row it opens."""
     from .store import task_ref
-    since = _start(now or datetime.now()).strftime('%Y-%m-%d %H:%M:%S')
+    since = _start(store, now or datetime.now())[0].strftime('%Y-%m-%d %H:%M:%S')
     out = []
     for r in store._rows("SELECT EntityId, MAX(CreatedAt) at FROM audit WHERE EntityType='task' AND Action='self_close' AND CreatedAt>=? "
                          "GROUP BY EntityId ORDER BY at DESC LIMIT 2", (since,)):

@@ -288,7 +288,8 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
     mine = lambda c: (c.get('Status') == 'context' or c.get('Direction') == 'out' or c.get('Channel') == 'own'
                       or (c.get('FromEmail') or '').lower() == me)
     seen, out, away = set(), [], None
-    for r in store.recent_messages(_since(days), limit=500):
+    # 500 rows was two quiet days; the away window reaches back up to three weeks (welcome.away_days), so the page grows with it
+    for r in store.recent_messages(_since(days), limit=max(500, min(5000, int(days * 250)))):
         cid = r.get('ConversationId')
         if not cid or cid in seen or r.get('Channel') in ('report', CHANNEL) or _OOO.match(str(r.get('Subject') or '')): continue
         seen.add(cid)

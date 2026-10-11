@@ -124,6 +124,8 @@ function SinceBlock({ onOpen }) {
   const [writing, setWriting] = useState("");
   const read = useCallback(() => api.get("/api/since").then(({ data }) => { setD(data); return data; }), []);
   useEffect(() => { let live = true; read().catch(() => {}); return () => { live = false; }; }, [read]);
+  // read once on mount, it kept the counts from before the startup catch-up had read a message (B5, 2026-10-11)
+  useEffect(() => onLive(["arrive"], () => { read().catch(() => {}); }), [read]);
   const o = d?.overnight || {}, cards = d?.cards || [], dg = d?.digest || {};
   // "Write a fresh one" runs the report now (about twenty seconds) and the folded line follows it until the new one is in
   const fresh = async () => {
@@ -145,7 +147,7 @@ function SinceBlock({ onOpen }) {
   if (!counts && !cards.length && !dg.at && !d?.learned?.line) return null;
   return (
     <div className="tq-since" data-tq-since="">
-      <div className="tq-since-head"><span className="tq-day-h" style={{ margin: 0 }}>Since last night · 6 PM</span>{counts && <span>{counts}</span>}</div>
+      <div className="tq-since-head"><span className="tq-day-h" style={{ margin: 0 }}>{o.heading || "Since last night"}</span>{counts && <span>{counts}</span>}</div>
       {!!cards.length && <div className="tq-since-cards">
         {cards.map((c, i) => (
           <button key={c.key || c.link || i} type="button" className={`tq-since-card ${c.kind}`} data-tq-since-card={c.key || c.link}
@@ -567,7 +569,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
       <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />))}</div>}</div></div>;
   // the day's opener draws the welcome, once - an earlier day's sits under it as nothing (actions.welcome)
-  if (m.card?.kind === "brief") return lastBrief ? actions.welcome() : null;
+  if (m.card?.kind === "brief") return lastBrief ? actions.welcome(m) : null;
   // BROWSING (the canvas redesign, 2026-09-29): Connections, Settings, Reports or Hub, walked by clicks on this line
   if (m.role === "browse") return (
     <div className={`tq-browse-line${canvas?.browsing === m.id ? " tq-canvas-live" : ""}`} data-tq-browse-line={m.area}>
@@ -1088,7 +1090,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     arrive(false);
     window.addEventListener("focus", back); window.addEventListener("blur", away);
     document.addEventListener("visibilitychange", back);
-    return () => { window.removeEventListener("focus", back); window.removeEventListener("blur", away); document.removeEventListener("visibilitychange", back); };
+    // a greeting held for the startup catch-up (welcome.py: it said "nothing new came in" while the mail was still being read, B4):
+    // the server says when the mail is in, and the page asks again - past the minute's throttle, which the catch-up can beat
+    const off = onLive(["arrive"], (ev) => { if (ev?.type === "arrive") { last = 0; arrive(false); } });
+    return () => { off(); window.removeEventListener("focus", back); window.removeEventListener("blur", away); document.removeEventListener("visibilitychange", back); };
   }, [active, readChat]);
   // Writes push an event and force one fresh rebuild. The timer is only a disconnected-socket
   // safety net: rebuilding this multi-source pile every five seconds starved Board, Tasks and
@@ -1828,7 +1833,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
 
   // THE DAY'S OPENER, one drawing: the empty chat's welcome, and the "Today" card the chat records when the owner sits down
   // (welcome.arrive) - that card drew a row list of its own, which was not the opener (the owner, 2026-10-08)
-  const welcome = () => (
+  const welcome = (m = null) => (
     <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
     <div className="tq-welcome">
       {/* TASKUARY SPEAKING, the way every line of the chat is: the mark is the speaker's avatar in
@@ -1836,6 +1841,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           person talking"), and the whole day fits one screen without scrolling */}
       <div className="tq-welcome-head"><b>{greeting()}</b>
         <span>{new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })} · {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span></div>
+      {/* what came in while they were away - welcome.arrive counted it and the card dropped it, so a week away opened like any morning (B5) */}
+      {m?.card?.away && <span className="tq-welcome-away" data-tq-away="">{m.card.away}</span>}
       {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
           digest, on the screen the day opens on (2026-09-23) */}
       <DayOpener groups={items.length ? summarize(railPile?.items || items).groups : []} onSection={walkSection}

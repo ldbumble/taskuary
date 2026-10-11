@@ -11,6 +11,7 @@ anything. All of it is code - counts and facts already recorded - so none of it 
 
 The voice is COUNSEL.md's calm rule: what happened, that nothing is lost, and what (if anything) is theirs to do.
 """
+import threading
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -18,6 +19,9 @@ from .general import DOCK_TAG
 
 SEEN_KEY, CLOSED_KEY, GREETED_KEY = 'assistant_seen_at', 'assistant_closed_at', 'assistant_greeted_on'
 GAP_HOURS, DAY_STARTS = 16, 5          # "welcome back" after this long away; no "good morning" before 5am
+AWAY_KEY = 'assistant_away_from'       # where the gap the day's greeting covered began: the opening screen counts from it all day
+AWAY_MAX_DAYS, EVENING = 21, 18        # never reach back past three weeks; with nobody here before, "away" is since six last evening
+CATCHUP_WAIT = 300                     # a greeting waits this long (seconds) for the startup catch-up, then says it is still reading
 MAIL_APPS = {'outlook': 'Outlook', 'gmail': 'Gmail', 'imap': 'your mailbox'}
 _WORDS = ('no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve')
 
@@ -109,11 +113,30 @@ def needs_you(items: list) -> list:
 def _arrived(i, since): return (_at(i.get('since') or i.get('when')) or datetime.min) >= since
 
 def away_word(since: datetime, now: datetime) -> str:
-    """'Over the weekend' when Saturday fell inside the gap, 'Overnight' across midnight, else 'While you were away'."""
-    d, sat = since.date(), False
+    """'Over the weekend' when Saturday fell inside a gap of three days at most, 'Over the last nine days' for a longer one (a week
+    away was "Over the weekend" too, 2026-10-11), 'Overnight' across midnight, else 'While you were away'."""
+    d, sat, days = since.date(), False, (now.date() - since.date()).days
+    if days > 3: return f'Over the last {num(days)} days'
     while d < now.date():
         d += timedelta(days=1); sat = sat or d.weekday() == 5
     return 'Over the weekend' if sat else 'Overnight' if since.date() < now.date() else 'While you were away'
+
+def away_window(store, now: datetime = None) -> tuple:
+    """(start, word): where "while you were away" begins, for EVERY reader of it - the greeting, the opening screen's counts,
+    "did I miss anything?", the Morning digest. Each used to keep its own clock (six last evening, two days back, midnight), so on
+    a Monday the asks of Friday afternoon fell between them and the counts disagreed (B5, 2026-10-11). The gap a greeting is held
+    for or already covered today, else the last time the owner was here; never past AWAY_MAX_DAYS. Nobody here before: last night."""
+    now = now or datetime.now()
+    greeted = _at(store.get_setting(AWAY_KEY)) if str(store.get_setting(GREETED_KEY) or '') == now.strftime('%Y-%m-%d') else None
+    got = _HELD.get('prev') or greeted or last_here(store)
+    if not got: return (now - timedelta(days=1)).replace(hour=EVENING, minute=0, second=0, microsecond=0), 'Since last night'
+    got = max(got, now - timedelta(days=AWAY_MAX_DAYS))
+    return got, away_word(got, now)
+
+def away_days(store, now: datetime = None) -> float:
+    """How far back an ask can still be one nobody answered: the whole gap and the day before it, two days at the least."""
+    now = now or datetime.now()
+    return min(AWAY_MAX_DAYS, max(2.0, (now - away_window(store, now)[0]).total_seconds() / 86400 + 1))
 
 def next_meeting(store, now: datetime, fetch: bool = True) -> str:
     """'Your next meeting is Budget review at 2:00 PM.' - from the calendar's cache unless `fetch` (never on a button)."""
@@ -151,7 +174,21 @@ def three_things(items: list, today: bool = True) -> str:
     elif len(items or []) > len(top): out.append("I'm holding the rest.")
     return ' '.join(out)
 
-def opening(store, now: datetime = None, since=None, items: list = None, new_day: bool = True, back: bool = False, fetch: bool = True) -> str:
+def away_lines(store, now: datetime, since, items: list, back: bool = False, reading: bool = False) -> list:
+    """What came in while they were gone, what was settled without them, and - when the catch-up outlived CATCHUP_WAIT - that the
+    count is not the whole of it yet. Its own piece so the opening card can draw it (it was computed and never shown, 2026-10-11)."""
+    if not since: return []
+    n, word, out = came_in(store, since), away_word(since, now), []
+    fresh = sum(1 for i in needs_you(items) if _arrived(i, since))
+    out.append(f"{word}: {n} came in{' so far' if reading else ''}, {fresh} need{'s' if fresh == 1 else ''} you." if n
+               else f"{word}: nothing new came in{' yet' if reading else ''}.")
+    done = settled(store, since) if word == 'Over the weekend' or back else 0
+    if done: out.append(f"{_cap(num(done))} {'was' if done == 1 else 'were'} settled without you.")
+    if reading: out.append(f"I'm still reading {mail_home(store) or 'what came in'} - I'll put the rest in front of you as it lands.")
+    return out
+
+def opening(store, now: datetime = None, since=None, items: list = None, new_day: bool = True, back: bool = False, fetch: bool = True,
+            reading: bool = False) -> str:
     """The day in a breath, in the calm voice: hello, what came in while away, three things, the next meeting, and a promise
     only when one is due today. Facts only - every number is counted here."""
     from . import funnel
@@ -162,13 +199,7 @@ def opening(store, now: datetime = None, since=None, items: list = None, new_day
             logger.warning(f'welcome: no pile - {e}'); items = []
     hello = greeting(now)
     out = [f"{hello}, and welcome back." if new_day and back else f"{hello}." if new_day else 'Welcome back.']
-    if since:
-        n, word = came_in(store, since), away_word(since, now)
-        fresh = sum(1 for i in needs_you(items) if _arrived(i, since))
-        out.append(f"{word}: {n} came in, {fresh} need{'s' if fresh == 1 else ''} you." if n
-                   else f"{word}: nothing new came in.")
-        done = settled(store, since) if word == 'Over the weekend' or back else 0
-        if done: out.append(f"{_cap(num(done))} {'was' if done == 1 else 'were'} settled without you.")
+    out += away_lines(store, now, since, items, back, reading)
     out.append(three_things(items, today=new_day))
     out += [x for x in (next_meeting(store, now, fetch), promise_today(store, now)) if x]
     return ' '.join(x for x in out if x)
@@ -178,15 +209,43 @@ def due(store, now: datetime) -> tuple:
     """(a new day, back after a gap, when they were last here). A new day is the first look since the day began at
     DAY_STARTS - not merely an ungreeted one: a look at 8 after one at 7 is the same morning, and a brand-new install has
     nobody to welcome back (its welcome block says hello)."""
-    prev = last_here(store)
+    prev = _HELD.get('prev') or last_here(store)           # a held greeting keeps its gap, whatever a blur wrote meanwhile
     began = now.replace(hour=DAY_STARTS, minute=0, second=0, microsecond=0)
     new_day = bool(prev and prev < began <= now and str(store.get_setting(GREETED_KEY) or '') != now.strftime('%Y-%m-%d'))
     back = bool(prev and now - prev >= timedelta(hours=GAP_HOURS))
     return new_day, back, prev
 
-def _spend(store, now: datetime):
+def _spend(store, now: datetime, prev: datetime = None):
+    _HELD.clear()
+    if prev: store.set_setting(AWAY_KEY, _stamp(prev), 'assistant')
     store.set_setting(GREETED_KEY, now.strftime('%Y-%m-%d'), 'assistant')
     store.set_setting(SEEN_KEY, _stamp(now), 'assistant')
+
+
+# ── the startup catch-up: the greeting waits for the mail ────────────────────────────────────────────
+# On a Monday the greeting fired while the catch-up was still reading the weekend (91 s on the owner's box), said "Over the
+# weekend: nothing new came in", spent itself, and was never corrected (B4, 2026-10-11). In memory on purpose: a crash mid
+# catch-up must not leave a greeting held into the next launch.
+_CATCHUP, _HELD = {}, {}
+
+def catch_up_began(now: datetime = None):
+    """The startup catch-up started reading. A greeting asked for meanwhile is held, not spent; past CATCHUP_WAIT the page is
+    woken anyway, to say honestly that it is still reading."""
+    _CATCHUP['at'] = now or datetime.now()
+    t = threading.Timer(CATCHUP_WAIT + 1, _wake); t.daemon = True; t.start()
+
+def catch_up_ended():
+    """The mail is in and judged: wake the page, so a held greeting is said with the real counts."""
+    _CATCHUP.clear(); _wake()
+
+def _wake():
+    from . import live
+    if _HELD: live.emit(live.ARRIVE)
+
+def _reading(now: datetime):
+    """None when no catch-up runs, 'wait' inside CATCHUP_WAIT, 'late' past it."""
+    at = _CATCHUP.get('at')
+    return None if not at else 'wait' if now - at < timedelta(seconds=CATCHUP_WAIT) else 'late'
 
 def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = False) -> dict:
     """The owner is in front of the desktop chat (it opened, or the window got focus). Once a day - or after GAP_HOURS
@@ -197,16 +256,21 @@ def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = Fa
     new_day, back, prev = due(store, now)
     if leaving or not (new_day or back) or remote_assistant.handoff(store):
         store.set_setting(SEEN_KEY, _stamp(now), 'assistant'); return {'said': ''}
+    reading = _reading(now)
+    if reading == 'wait':
+        _HELD.setdefault('prev', prev); return {'said': '', 'pending': True}
     from . import funnel
     try: items = funnel.pile(store).get('items') or []
     except Exception as e:
         logger.warning(f'welcome: no pile - {e}'); items = []
-    say = opening(store, now, prev, items, new_day=new_day, back=back)
-    _spend(store, now)
+    say = opening(store, now, prev, items, new_day=new_day, back=back, reading=bool(reading))
+    away = ' '.join(away_lines(store, now, prev, items, back, bool(reading)))
+    _spend(store, now, prev)
     tid = general.dock_task(store, actor)[0]['TaskId']
     chips = concierge.walk_chips(len(items))
     concierge.record(store, tid, 'assistant', say, {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(items),
-                                                     'mail': sum(1 for i in items if i.get('kind') in funnel.MAIL_KINDS), 'chips': chips})
+                                                     'mail': sum(1 for i in items if i.get('kind') in funnel.MAIL_KINDS), 'chips': chips,
+                                                     'away': away})
     return {'said': say, 'chips': chips}
 
 def phone_lead(store, now: datetime = None) -> str:
@@ -216,8 +280,11 @@ def phone_lead(store, now: datetime = None) -> str:
     new_day, back, prev = due(store, now)
     if not (new_day or back):
         store.set_setting(SEEN_KEY, _stamp(now), 'assistant'); return ''
-    say = opening(store, now, prev, new_day=new_day, back=back, fetch=False)
-    _spend(store, now)
+    reading = _reading(now)
+    if reading == 'wait':                     # the next message hears it, with the mail in
+        _HELD.setdefault('prev', prev); return ''
+    say = opening(store, now, prev, new_day=new_day, back=back, fetch=False, reading=bool(reading))
+    _spend(store, now, prev)
     return say
 
 def mark_greeted(store, now: datetime = None): _spend(store, now or datetime.now())
@@ -247,7 +314,7 @@ def missed(store, now: datetime = None) -> dict:
     the owner, what could not be seen - plus whether anything open is marked urgent."""
     from . import assistant
     now = now or datetime.now()
-    try: asked = assistant.unanswered(store)
+    try: asked = assistant.unanswered(store, away_days(store, now))     # two days back lost Friday's asks on a Monday (B5)
     except Exception as e:
         logger.warning(f'missed: unanswered failed - {e}'); asked = []
     try: waiting = assistant.followups(store, 24, ('followup',))

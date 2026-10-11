@@ -335,11 +335,25 @@ def _midnight_since(days: int) -> datetime:
     return (datetime.now() - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def _window(store, days: int) -> datetime:
+    """Midnight `days` back - or further, to the last brief that went out or to when the owner was last here (welcome.away_window),
+    whichever is earlier, never past three weeks. Midnight alone started Monday's brief at midnight Sunday, and the asks of Friday
+    afternoon were in no brief at all (B5, 2026-10-11)."""
+    from . import welcome
+    now, start = datetime.now(), _midnight_since(days)
+    try:
+        r = store._one("SELECT MAX(At) at FROM report_run WHERE Type='digest' AND MessageId IS NOT NULL AND IFNULL(Failed,0)=0") or {}
+        got = [d for d in (welcome._at(r.get('at')), welcome.away_window(store, now)[0]) if d]
+    except Exception as e:
+        logger.debug(f'digest: away window skipped - {e}'); got = []
+    return max(min([start, *got]), now - timedelta(days=welcome.AWAY_MAX_DAYS))
+
+
 def gather(store, days: int = DAYS) -> str:
     """The raw material, compact enough to hand the model whole: what the Timeline assistant reads
     (assistant.py), plus what only a morning brief needs. Block headers are what PROMPT names."""
     from . import assistant as A
-    start = _midnight_since(days)
+    start = _window(store, days)
     since = start.isoformat(sep=' ', timespec='seconds')
     span = max(0.5, (datetime.now() - start).total_seconds() / 86400)     # the fractional window the assistant's readers take
     out = [f"NOW: {datetime.now().strftime('%A %d %B %Y %H:%M')} - the window is since {since[:16]}", '']

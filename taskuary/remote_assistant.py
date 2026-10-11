@@ -441,6 +441,30 @@ def keep_promises(store, force: bool = False) -> int:
     return kept
 
 
+CLOSING_SECS = 10.0         # the whole goodbye to the phones - the lifespan's cleanup is bounded, and these are network calls
+
+
+def promises_closing(store, secs: float = CLOSING_SECS) -> int:
+    """Taskuary is shutting down: each open promise gets ONE honest line, then the list is cleared. "I will tell you here when
+    it finishes" was the last thing the chat heard - the close stopped the agent, nothing was sent, and the promise lapsed
+    twelve hours later in silence (B3, 2026-10-11). Run after the sessions are closed, so the task says what the close did."""
+    from .terminal import INTERRUPTED
+    ps = [p for p in _promises(store) if time.time() - float(p.get('at') or 0) <= PROMISE_HOURS * 3600]
+    end, told = time.time() + secs, 0
+    for p in ps:
+        if time.time() > end: logger.warning(f'closing: {len(ps) - told} phone promise(s) left unsaid - out of time'); break
+        tid = int(p['tid']); ref, t = f'TQ-{tid:04d}', store.get_task(tid) or {}
+        if t.get('Status') in ('done', 'dropped'): text = f'{ref} is finished. Taskuary is closing now - I will catch up when it opens again.'
+        elif INTERRUPTED in str(t.get('Tags') or ''):
+            text = (f'Taskuary is closing, so the work on {ref} stopped before it finished. It is back on your list, and nothing '
+                    'starts again until you say so.')
+        else: text = f'Taskuary is closing, so I cannot follow {ref} here any more. Look for it when Taskuary opens again.'
+        try: send(store, p['channel'], p['chat'], text, p.get('connector_id')); told += 1
+        except Exception as e: logger.warning(f'closing: the phone was not told about {ref} - {e}')
+    store.set_setting(PROMISES_KEY, '[]', 'assistant')
+    return told
+
+
 def _now() -> str:
     from datetime import datetime
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')

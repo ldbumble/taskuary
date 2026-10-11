@@ -27,11 +27,18 @@ def overnight(store, now: datetime = None) -> dict:
                      "AND IFNULL(Channel,'') NOT IN ('report','assistant')", (since,))
     reports = _n(store, "SELECT COUNT(*) n FROM message WHERE CreatedAt>=? AND Channel='report'", (since,))
     closed = _n(store, "SELECT COUNT(*) n FROM task WHERE ClosedAt>=? AND Status='done'", (since,))
-    sessions = _n(store, 'SELECT COUNT(*) n FROM transcript WHERE CreatedAt>=?', (since,))
+    # FINISHED IS THE RUN SAYING SO (workerstate 'finished'), never a transcript row: one is filed the moment a hook names the CLI's
+    # session id, and again when a close kills the pane - so sessions the window's X cut off read "finished" (B3, 2026-10-11).
+    # The ones whose run ended any other way are said apart.
+    sessions = _n(store, "SELECT COUNT(DISTINCT TaskId || ':' || Sid) n FROM worker_event WHERE Kind='finished' AND CreatedAt>=?", (since,))
+    cut = _n(store, "SELECT COUNT(DISTINCT TaskId || ':' || Sid) n FROM worker_event w WHERE Kind IN ('disconnected','failed','stopped') "
+                    "AND CreatedAt>=? AND NOT EXISTS (SELECT 1 FROM worker_event f WHERE f.TaskId=w.TaskId AND f.Sid=w.Sid AND f.Kind='finished')",
+             (since,))
     parts = [p for n, p in ((mail, _plural(mail, 'message') + ' read'), (reports, _plural(reports, 'report') + ' ran'),
-                            (sessions, _plural(sessions, 'agent session') + ' finished'), (closed, _plural(closed, 'task') + ' closed')) if n]
+                            (sessions, _plural(sessions, 'agent session') + ' finished'), (cut, (f'{cut}' if sessions else _plural(cut, 'agent session')) + ' stopped before finishing'),
+                            (closed, _plural(closed, 'task') + ' closed')) if n]
     return {'line': ('Since last night: ' + ', '.join(parts) + '.') if parts else '',
-            'mail': mail, 'reports': reports, 'closed': closed, 'sessions': sessions}
+            'mail': mail, 'reports': reports, 'closed': closed, 'sessions': sessions, 'stopped': cut}
 
 
 def learned(store, now: datetime = None) -> dict:

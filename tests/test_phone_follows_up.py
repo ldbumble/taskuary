@@ -80,3 +80,23 @@ def test_telling_the_agent_is_never_the_last_word():
     assert said.startswith('Told coder: "hand it off to Gail".') and ra.PROMISE_LINE in said
     assert concierge.CHIP_WORDS['next'] in said
     assert [p['tid'] for p in json.loads(store.get_setting(ra.PROMISES_KEY))] == [7]
+
+
+def test_closing_taskuary_tells_each_promised_chat_once_what_happened():
+    # "I will tell you here when it finishes" - then the window closed, the agent stopped, and the chat heard nothing (B3, 2026-10-11)
+    from taskuary import terminal
+    store, _c = armed_store()
+    stopped = store.create_task({'Title': 'Fix the ledger export', 'Summary': 'x'}, 'owner')
+    other = store.create_task({'Title': 'Draft the vendor reply', 'Summary': 'x'}, 'owner')
+    with mock.patch.object(funnel, 'pile', return_value=pile({'key': f'agent:{stopped}', 'tid': stopped, 'lane': 'working'})):
+        from_the_chat(store, stopped); from_the_chat(store, other)
+    store.tag_task(stopped, terminal.INTERRUPTED, True, 'shutdown')
+    with mock.patch.object(messengers, 'wa_send') as sent:
+        assert ra.promises_closing(store) == 2
+    said = [c.args[2] for c in sent.call_args_list]
+    assert any(f'TQ-{stopped:04d} stopped before it finished' in t for t in said), said
+    assert any(f'TQ-{other:04d}' in t and 'closing' in t for t in said), said
+    assert json.loads(store.get_setting(ra.PROMISES_KEY)) == []
+    with mock.patch.object(messengers, 'wa_send') as sent:
+        assert ra.promises_closing(store) == 0                                   # said once
+    sent.assert_not_called()

@@ -110,6 +110,64 @@ class GoodbyeTests(unittest.TestCase):
         self.assertTrue(handler())                                         # the second close goes straight through
         self.assertTrue(desktop.closing_handler(mock.Mock(), lambda: None)())   # nothing booted: nothing to say
 
+    # Closing stopped every running agent three seconds after a goodbye that said "Nothing is lost" (B3, 2026-10-11)
+    def working_store(self):
+        from taskuary import terminal
+        s = store(); tid = s.create_task({'Title': 'Fix the ledger export', 'Summary': 'x'}, 'owner')
+        s.update_task(tid, {'Status': 'in_progress'}, 'agent:coder')
+        idle = s.create_task({'Title': 'Not being worked', 'Summary': 'x'}, 'owner')
+        s.update_task(idle, {'Status': 'in_progress'}, 'owner')                     # in progress, but no worker has it
+        live = mock.Mock(task_id=tid, alive=True)
+        return s, tid, mock.patch.dict(terminal.SESSIONS, {'s1': live}, clear=True)
+
+    def test_the_goodbye_names_the_work_the_close_stops(self):
+        s, tid, sessions = self.working_store()
+        with sessions:
+            self.assertEqual([t['TaskId'] for t in welcome.working(s)], [tid])
+            said = welcome.goodbye(s)
+        self.assertIn(f'Closing stops the work on {task_ref(tid)}', said); self.assertNotIn('Nothing is lost', said)
+        self.assertEqual(banned(said), [])
+
+    def test_with_work_running_the_close_asks_first_and_keep_working_goes_back(self):
+        s, tid, sessions = self.working_store()
+        win = mock.Mock(); win.get_current_url.return_value = 'http://127.0.0.1:7787/'
+        with sessions, mock.patch.object(desktop.threading, 'Thread') as th:
+            handler = desktop.closing_handler(win, lambda: s, secs=0)
+            keep, anyway = win.expose.call_args.args
+            self.assertFalse(handler())                                    # held: it asks
+            th.call_args.kwargs['target'](*th.call_args.kwargs.get('args', ()))
+            page = win.load_html.call_args.args[0]
+            self.assertIn('Keep working', page); self.assertIn('Close anyway', page); self.assertIn(task_ref(tid), page)
+            self.assertIsNone(welcome.last_here(s))                        # nothing closed yet
+            keep()
+            win.load_url.assert_called_once_with('http://127.0.0.1:7787/'); win.destroy.assert_not_called()
+            self.assertFalse(handler())                                    # asks again on the next close
+            th.call_args.kwargs['target'](*th.call_args.kwargs.get('args', ()))
+            anyway()                                                       # ...and Close anyway says goodbye, then closes
+            th.call_args.kwargs['target']()
+        self.assertIn('Closing stops the work', win.load_html.call_args.args[0]); win.destroy.assert_called_once()
+        self.assertIsNotNone(welcome.last_here(s))
+        self.assertTrue(handler())
+
+    def test_closing_again_while_it_asks_is_the_answer(self):
+        s, tid, sessions = self.working_store()
+        win = mock.Mock(); win.get_current_url.return_value = 'http://127.0.0.1:7787/'
+        with sessions, mock.patch.object(desktop.threading, 'Thread') as th:
+            handler = desktop.closing_handler(win, lambda: s, secs=0)
+            self.assertFalse(handler()); th.call_args.kwargs['target'](*th.call_args.kwargs.get('args', ()))
+            self.assertFalse(handler()); th.call_args.kwargs['target']()
+        win.destroy.assert_called_once()
+
+    def test_without_a_page_to_go_back_to_the_toolkits_own_box_asks(self):
+        s, tid, sessions = self.working_store()
+        win = mock.Mock(); win.get_current_url.return_value = None; win.create_confirmation_dialog.return_value = False
+        with sessions, mock.patch.object(desktop.threading, 'Thread') as th:
+            handler = desktop.closing_handler(win, lambda: s, secs=0)
+            self.assertFalse(handler()); th.call_args.kwargs['target'](*th.call_args.kwargs.get('args', ()))
+            self.assertIn('Cancel keeps it working', win.create_confirmation_dialog.call_args.args[1])
+            win.destroy.assert_not_called()                                # Cancel: it stays open
+            self.assertFalse(handler())                                    # ...and asks again next time
+
 
 class ArrivalTests(unittest.TestCase):
     def arrive(self, s, now, items=ITEMS):
@@ -151,6 +209,16 @@ class ArrivalTests(unittest.TestCase):
         said = self.arrive(s, now, [])['said']
         self.assertIn('Over the weekend: nothing new came in.', said); self.assertIn('One was settled without you.', said)
         self.assertIn('Nothing needs you yet.', said)
+
+    def test_a_stopped_agent_and_a_failed_check_need_you(self):
+        # the morning after a close: what it stopped, and a check that broke, are the owner's on the rail - so they are here (B3)
+        items = [{'key': 'agent:7', 'lane': 'stopped', 'kind': 'agent', 'who': '', 'title': 'Fix the ledger export'},
+                 {'key': 'check:2', 'lane': 'broken', 'kind': 'check', 'who': '', 'title': 'Nightly build'},
+                 {'key': 'msg:9', 'lane': 'theirs', 'kind': 'todo', 'who': 'Gail Moreno', 'title': 'Waiting on the lease'},
+                 {'key': 'idea:1', 'lane': 'forgotten', 'kind': 'idea', 'who': '', 'title': 'An idea'}]
+        self.assertEqual([i['key'] for i in welcome.needs_you(items)], ['agent:7', 'check:2'])
+        self.assertTrue(welcome.three_things(items).startswith('Two things today'), welcome.three_things(items))
+        self.assertEqual([i['key'] for i in welcome.needs_you(ITEMS)], ['msg:1', 'msg:2', 'msg:3'])
 
     def test_the_phone_hears_it_once_on_its_first_message_and_never_after_the_desk(self):
         s = store(); now = datetime.now().replace(hour=8, minute=0)

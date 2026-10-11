@@ -2364,20 +2364,22 @@ def shutdown_sessions():
     """Close every in-memory agent session during an orderly application shutdown."""
     sessions = list(SESSIONS.items())
     for sid, session in sessions:
-        SESSIONS.pop(sid, None)
         try:
             # Do this synchronously before process teardown. Waiting for a dying PTY's pump thread
             # can lose the state transition when the interpreter exits immediately afterward.
+            # ...and while the session is still listed: the run's ending is written against ITS sid, so a session the
+            # close cut off reads as cut off, never as one that finished (B3, 2026-10-11)
             if getattr(session, 'store', None) and getattr(session, 'task_id', None):
                 release_task(session.store, session.task_id, 'shutdown',
                              'Taskuary closed the agent session. The task is open again - nobody is working it.')
+            SESSIONS.pop(sid, None)
             # Shutdown is cleanup, not a new AI job. General task close normally mines useful
             # learning, but launching a headless model while the process is exiting can only
             # become an orphan itself.
             if getattr(session, 'mode', '') == 'assistant': session.close(learn=False)
             else: session.close()
         except Exception as e:
-            logger.debug(f'could not close session {sid} during shutdown: {e}')
+            SESSIONS.pop(sid, None); logger.debug(f'could not close session {sid} during shutdown: {e}')
     return len(sessions)
 
 

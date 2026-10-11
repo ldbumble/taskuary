@@ -171,6 +171,10 @@ async def _lifespan(_app):
         # that can keep consuming resources after there is no UI capable of reaching them.
         hub_term.shutdown_sessions()
         hub_agents.shutdown_cli_children()
+        # ...and a chat that was promised a follow-up hears what the close did to it, instead of nothing (B3, 2026-10-11)
+        from . import remote_assistant
+        try: remote_assistant.promises_closing(store)
+        except Exception as e: logger.warning(f'closing: the phone promises were not told - {e}')
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
 ACTOR = 'owner'

@@ -19,6 +19,17 @@ class SinceTests(unittest.TestCase):
         self.assertEqual((out['mail'], out['reports']), (2, 1))                     # 17:00 was the day before
         self.assertEqual(out['line'], 'Since last night: 2 messages read, 1 report ran.')
 
+    def test_only_a_session_that_finished_counts_as_finished(self):
+        # a transcript row is filed when a hook names the session and again when a close kills it - neither is a finish (B3)
+        s = MemoryStore()
+        for sid, kinds in (('a', ('working', 'finished')), ('b', ('working', 'disconnected')), ('c', ('working',))):
+            s.note_session_id(7, sid, f'ext-{sid}', 'coder')
+            for k in kinds: s.add_worker_event({'TaskId': 7, 'Sid': sid, 'Kind': k})
+        s._exec("UPDATE transcript SET CreatedAt='2026-10-07 01:00:00'"); s._exec("UPDATE worker_event SET CreatedAt='2026-10-07 01:00:00'")
+        out = since.overnight(s, NOW)
+        self.assertEqual((out['sessions'], out['stopped']), (1, 1))
+        self.assertEqual(out['line'], 'Since last night: 1 agent session finished, 1 stopped before finishing.')
+
     def test_a_quiet_night_says_nothing(self):
         self.assertEqual(since.overnight(MemoryStore(), NOW)['line'], '')
         self.assertEqual(since.learned(MemoryStore(), NOW)['line'], '')

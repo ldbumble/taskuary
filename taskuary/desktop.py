@@ -81,16 +81,61 @@ def farewell(store) -> str:
         logger.warning(f'closing: no goodbye - {e}'); return ''
 
 
+# CLOSING STOPS WORK THAT IS RUNNING, so it asks first. The X used to kill every live agent three seconds after a goodbye that
+# never mentioned them (B3, 2026-10-11). The question is a page in the window rather than a native box: pywebview's own
+# confirmation dialog only says OK / Cancel, and the owner should not have to work out which of those keeps the work going.
+ASK = """<!doctype html>
+<meta charset="utf-8">
+<title>Taskuary</title>
+<style>
+  :root { color-scheme: light dark }
+  body { margin:0; height:100vh; display:grid; place-items:center; background:#faf9f7; color:#3a3a38;
+         font:14px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif }
+  @media (prefers-color-scheme: dark) { body { background:#1b1b1a; color:#e7e5e1 } button { background:#262624; color:inherit } }
+  .b { text-align:center; max-width:440px; padding:0 16px }
+  .t { font-size:15px; font-weight:600; letter-spacing:.01em }
+  .s { margin-top:6px; opacity:.7 }
+  .r { margin-top:20px; display:flex; gap:10px; justify-content:center }
+  button { font:inherit; padding:7px 16px; border-radius:6px; border:1px solid #b9b5ad; background:#fff; color:#3a3a38; cursor:pointer }
+  button.p { font-weight:600 }
+</style>
+<div class="b">
+  <div class="t">Work is still running</div>
+  <div class="s">{text}</div>
+  <div class="r">
+    <button class="p" autofocus onclick="window.pywebview && pywebview.api.keep_working()">Keep working</button>
+    <button onclick="window.pywebview && pywebview.api.close_anyway()">Close anyway</button>
+  </div>
+</div>"""
+ASK_NATIVE = '{text}\n\nOK closes Taskuary anyway. Cancel keeps it working.'
+
+
+def ask_html(text: str) -> str:
+    import html
+    return ASK.replace('{text}', html.escape(text))
+
+
+def busy(store) -> list:
+    """The tasks the close would stop; [] when that cannot be said - a question never holds a window shut for good."""
+    if store is None: return []
+    try:
+        from taskuary import welcome
+        return welcome.working(store)
+    except Exception as e:
+        logger.warning(f'closing: could not count running work - {e}'); return []
+
+
 def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS):
-    """pywebview's `closing` event. The first close puts the goodbye in the window and closes it `secs` later - returning
-    False holds the window for that moment; the second close (that one, or an impatient click) goes straight through.
-    The work runs on its own thread: the event may arrive on the GUI thread, which load_html also needs."""
-    said = []
-    def on_closing():
-        if said: return True
-        said.append(1)
+    """pywebview's `closing` event. With work running, the first close ASKS (Keep working / Close anyway) and holds the window;
+    a second close while it asks is the answer. Then - or straight away when nothing runs - the goodbye goes in the window and
+    it closes `secs` later; returning False holds it for that moment, and a close after that goes straight through. The work
+    runs on its own thread: the event may arrive on the GUI thread, which load_html also needs."""
+    st = {'said': False, 'asking': None}
+    def bye():
+        """Say goodbye and close - False when there is nothing to say and the window may simply go."""
+        st['said'], st['asking'] = True, None
         text = farewell(store_of())
-        if not text: return True
+        if not text: return False
         def show():
             try:
                 window.load_html(goodbye_html(text)); time.sleep(secs)
@@ -99,7 +144,42 @@ def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS):
                 try: window.destroy()
                 except Exception as e: logger.debug(f'closing: the window was already gone - {e}')
         threading.Thread(target=show, daemon=True).start()
-        return False
+        return True
+    def keep_working():
+        back, st['asking'] = st['asking'], None
+        if back:
+            try: window.load_url(back)
+            except Exception as e: logger.debug(f'closing: could not go back to the app - {e}')
+    def close_anyway():
+        if st['asking'] is None or st['said']: return
+        if not bye():
+            try: window.destroy()
+            except Exception as e: logger.debug(f'closing: the window was already gone - {e}')
+    try: window.expose(keep_working, close_anyway)
+    except Exception as e: logger.debug(f'closing: this pywebview cannot take the answer from the page - {e}')
+    def ask(text):
+        try: back = window.get_current_url()
+        except Exception: back = None
+        if back:                                  # the page asks, and Keep working goes back to where they were
+            st['asking'] = back
+            try: window.load_html(ask_html(text)); return
+            except Exception as e: logger.debug(f'closing: the question was not shown - {e}')
+        st['asking'] = ''                         # ...else the toolkit's own box: OK / Cancel, said in words beside it
+        try: ok = window.create_confirmation_dialog('Work is still running', ASK_NATIVE.format(text=text))
+        except Exception as e:
+            logger.debug(f'closing: no question could be asked - {e}'); ok = True
+        if ok: close_anyway()
+        else: st['asking'] = None
+    def on_closing():
+        if st['said']: return True
+        if st['asking'] is not None: return not bye()      # closed again while asked: that is the answer
+        work = busy(store_of())
+        if work:
+            from taskuary import welcome          # busy() has imported it already - nothing is imported on this thread
+            st['asking'] = ''
+            threading.Thread(target=ask, args=(welcome.still_working(work),), daemon=True).start()
+            return False
+        return not bye()
     return on_closing
 
 

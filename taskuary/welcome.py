@@ -18,7 +18,6 @@ from .general import DOCK_TAG
 
 SEEN_KEY, CLOSED_KEY, GREETED_KEY = 'assistant_seen_at', 'assistant_closed_at', 'assistant_greeted_on'
 GAP_HOURS, DAY_STARTS = 16, 5          # "welcome back" after this long away; no "good morning" before 5am
-NEEDS = ('blocked', 'approve', 'asked', 'yours', 'forgotten')    # the lanes that wait on the owner, not on anybody else
 MAIL_APPS = {'outlook': 'Outlook', 'gmail': 'Gmail', 'imap': 'your mailbox'}
 _WORDS = ('no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve')
 
@@ -47,11 +46,33 @@ def mail_home(store) -> str:
         if c.get('Active') and c.get('Type') in MAIL_APPS: return MAIL_APPS[c['Type']]
     return ''
 
-def goodbye(store) -> str:
-    """What is true once the window closes: nothing watches, nothing is lost, and the catch-up runs at the next open."""
+def working(store) -> list:
+    """The tasks a worker has RIGHT NOW - a live session or a headless run - which closing the window stops (terminal.shutdown_sessions)."""
+    from . import terminal
+    live = {getattr(t, 'task_id', None) for t in list(terminal.SESSIONS.values()) if getattr(t, 'alive', False)}
+    try: live |= {r.get('TaskId') for r in store.running_runs()}
+    except Exception as e: logger.debug(f'welcome: no runs read - {e}')
+    return [t for t in store.list_tasks(status='in_progress') if t['TaskId'] in live and DOCK_TAG not in str(t.get('Tags') or '')]
+
+def _refs(tasks: list) -> str:
+    from .store import task_ref
+    r = [task_ref(t['TaskId']) for t in tasks]
+    if len(r) > 4: return ', '.join(r[:3]) + f' and {len(r) - 3} more'
+    return r[0] if len(r) == 1 else ', '.join(r[:-1]) + f' and {r[-1]}'
+
+def still_working(tasks: list) -> str:
+    """'TQ-0012 and TQ-0014 are still being worked on. ...' - what the close asks about first (desktop.closing_handler)."""
+    return f"{_refs(tasks)} {'is' if len(tasks) == 1 else 'are'} still being worked on. Closing Taskuary stops that work." if tasks else ''
+
+def goodbye(store, busy: list = None) -> str:
+    """What is true once the window closes: nothing watches, nothing is lost, and the catch-up runs at the next open. Work still
+    running is named first - the close stops it, and "Nothing is lost" said over a stopped run was the one untrue line (B3, 2026-10-11)."""
+    busy = working(store) if busy is None else busy
+    stop = (f"Closing stops the work on {_refs(busy)} - {'it goes' if len(busy) == 1 else 'they go'} back on your list, and nothing "
+            "starts again until you say so. ") if busy else ''
     home = mail_home(store)
-    if home: return f"While I'm closed I can't watch your mail, but it waits safely in {home}. I'll catch up the moment you open me."
-    return "While I'm closed I can't watch for anything new. Nothing is lost - I'll catch up the moment you open me."
+    if home: return stop + f"While I'm closed I can't watch your mail, but it waits safely in {home}. I'll catch up the moment you open me."
+    return stop + "While I'm closed I can't watch for anything new. " + ('' if busy else 'Nothing is lost - ') + "I'll catch up the moment you open me."
 
 def closing(store, now: datetime = None) -> str:
     """The window is going: write down when (the next arrival counts from here), and say goodbye."""
@@ -78,7 +99,12 @@ def settled(store, since: datetime) -> int:
                       "AND COALESCE(Tags,'') NOT LIKE ?", (_stamp(since), f'%{DOCK_TAG}%'))
     return int((row[0] if row else {}).get('n') or 0)
 
-def needs_you(items: list) -> list: return [i for i in items or [] if i.get('lane') in NEEDS and not i.get('settling')]
+# WHAT NEEDS YOU IS THE RAIL'S OWN ANSWER: Urgent, On you and For later - never "waiting on them", which is on somebody else.
+# A lane list of its own here drifted from the funnel: a stopped agent and a failed check were the owner's on the rail and
+# missing from the greeting, so the morning after a close said "Nothing needs you yet" over both (B3, 2026-10-11).
+def needs_you(items: list) -> list:
+    from .funnel import level_of
+    return [i for i in items or [] if level_of(i) in ('urgent', 'task', 'later') and i.get('lane') != 'theirs' and not i.get('settling')]
 
 def _arrived(i, since): return (_at(i.get('since') or i.get('when')) or datetime.min) >= since
 

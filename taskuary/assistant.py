@@ -474,8 +474,8 @@ def candidates(store, c: dict) -> list:
 
 
 # ── the report proposes (the assistant-runs-the-app design, 2026-09-18) ──────────────────────────
-# Two idea kinds the REPORT raises and the chat assistant never invents: the app's own health, and a
-# system worth connecting. Deterministic reads, no model; each lands as a row like every other idea,
+# Two idea kinds the REPORT raises and the chat assistant never invents: the app's own health (a deterministic
+# read, no model) and a system worth connecting (the Advisor's own pass judges it, below). Each lands as a row like every other idea,
 # is taken or declined in the walk, and the decline is remembered on its key (fresh() below - a
 # constant `sig` means a dismissed idea never returns; a health sig is the failure's own stamp, so a
 # NEW failure comes back after the old one was seen).
@@ -517,57 +517,88 @@ def health_ideas(store, now: datetime = None) -> list:
     return out
 
 
-def connect_ideas(store, now: datetime = None, days: int = 30, floor: int = 3) -> list:
-    """The system the owner's own workflows name most, that nothing here reads. Evidence the app already
-    holds: the sender and subject of every inbound THREAD of the last month, the systems triage learned from corrections
-    (routing_fact field `system`), SOUL.md, and reports pointing at a type with no connection. At most ONE
-    new suggestion per run, and never one already raised (declined or not) - one row a day, not a catalogue."""
+# A SYSTEM WORTH CONNECTING is the Advisor's own call, made in its one pass (the owner, 2026-10-11: connector suggestions
+# "should be ai as well", and part of the Advisor, not a judge of their own). A name matcher used to pick the system and
+# count its threads - whole-word product names, a GENERIC blocklist, a title-splitting rule - and the model saw only the
+# card it had already picked: "Federal Holiday - Monday October 12th" was a thread about Monday.com until a veto sentence
+# asked the model to undo it. Now the month's thread subjects ride in the Advisor's prompt numbered (the `connectors`
+# block), beside the cards nothing here reads, and the model cites the threads really about one. Code only checks that
+# what it cited exists, clears the floor, and was never raised before.
+CONNECT_THREADS = 300      # newest inbound threads it reads - a month on a busy mailbox is more, and every run pays for them
+
+
+def connect_evidence(store, days: int = 30, floor: int = 3) -> dict:
+    """What the Advisor reads to judge a system worth connecting: one line per inbound THREAD of the last `days`
+    (sender's domain + subject, the owner's own domains blanked - three replies on one pull request are one thread, and
+    the app's own posts are no thread at all, TQ-0651 / store.inbound_threads), what the owner's routing facts and report
+    titles name, and the catalogue cards neither connected nor raised before. SOUL.md is already whole in the prompt."""
     from . import appfacts, connectorcatalog
     from .senders import own_domains
-    texts = []
+    threads = []
     try:
         mine = own_domains(store)
-        # ONE text per THREAD - the sender's domain and the subject together - so three replies on one
-        # pull request are one conversation and `floor` means three separate ones. The app's own posts
-        # are not in here: "3 threads this month were about Microsoft Planner" is a row the assistant
-        # wrote, and counting it made the next run read it as a thread about Microsoft (TQ-0651).
-        for m in store.inbound_threads(days=days):
-            dom = str(m.get('FromEmail') or '').rsplit('@', 1)[-1].lower()
-            texts.append(f"{dom.split('.')[0] if dom and dom not in mine else ''} {m.get('Subject') or ''}")
+        for m in sorted(store.inbound_threads(days=days), key=lambda r: -int(r.get('MessageId') or 0))[:CONNECT_THREADS]:
+            frm = str(m.get('FromEmail') or '')
+            dom = frm.rsplit('@', 1)[-1].lower() if '@' in frm else ''
+            threads.append(f"{dom if dom and dom not in mine else '-'} | {_short(m.get('Subject'), 120) or '(no subject)'}")
     except Exception as e: logger.debug(f'connect: the threads were not read - {e}')
-    written = []
-    try: written += [f['Value'] for f in store.routing_facts(field='system')]
+    named = []
+    try: named += [f"routing fact: {_short(f['Value'], 120)}" for f in store.routing_facts(field='system')]
     except Exception: pass
-    try: written += [ln for ln in str(store.get_doc('SOUL.md') or '').splitlines() if ln.strip()]
+    try: named += [f"report: {_short(r['title'], 120)}" for r in appfacts.reports(store)]
     except Exception: pass
-    written += [r['title'] for r in appfacts.reports(store)]
     connected = {c['type'] for c in appfacts.connections(store) if c['active']}
-    hits = connectorcatalog.mentions(texts + written, exclude_types=connected)
-    # the threads on their own, because that is what the sentence claims to have counted: a card
-    # raised by SOUL.md and two report titles must not say "3 threads this month"
-    threads = connectorcatalog.mentions(texts, exclude_types=connected)
-    # ...and WHICH threads, because a name match is not a judgement: "Federal Holiday - Monday October 12th" matched
-    # Monday.com (the owner, 2026-09-25: "it should understand that using AI"). The model reads these and decides.
-    seen = {}
-    for x in texts:
-        for typ in connectorcatalog.mentions([x], exclude_types=connected): seen.setdefault(typ, []).append(x.strip())
     raised = {i['Key'] for i in store.list_ideas() if str(i['Key']).startswith('connect:')}
-    best = sorted(((n, t) for t, n in hits.items() if n >= floor and f'connect:{t}' not in raised), reverse=True)
-    if not best: return []
-    n, t = best[0]
-    card = connectorcatalog.by_type(t) or {'title': t, 'planned': False}
-    said = threads.get(t, 0)
-    lead = (f"{said} threads this month were about {card['title']}" if said
-            else f"Your own reports and documents name {card['title']}")
-    subjects = '; '.join(f'"{_short(x, 90)}"' for x in seen.get(t, [])[:6]) or '(no thread - named only in your own documents and reports)'
-    return [{'key': f'connect:{t}', 'kind': 'connect', 'sig': t,
-             'facts': (f"{card['title']} is not connected, and its NAME matched {said} thread(s) this month: {subjects}. A word match is "
-                       f"not a subject - say it only if these threads are really about {card['title']} (a holiday on a Monday is "
-                       f"not Monday.com); otherwise skip it."),
-             'text': (f"{lead} and nothing here reads it. "
-                      + ('It is on the roadmap - say so and it moves up.' if card.get('planned') else f"Connect {card['title']}?")),
-             'action': {'type': 'connect', 'connector_type': t, 'title': card['title'], 'planned': bool(card.get('planned')), 'count': n,
-                        'why': 'the systems your own mail and tasks name are the ones worth reading'}}]
+    offer = {c['type']: c for c in connectorcatalog.cards() if c['type'] not in connected and f"connect:{c['type']}" not in raised}
+    return {'threads': threads, 'named': named, 'offer': offer, 'floor': floor, 'soul': bool(str(store.doc('soul') or '').strip())}
+
+
+def connect_text(ev: dict) -> str:
+    """The block's body: the cards, what the owner's own setup names, then the threads - numbered, because the numbers
+    are what the model cites and what the owner is told was counted. Nothing to offer or nothing to read prints nothing."""
+    if not ev or not ev['offer'] or not (ev['threads'] or ev['named'] or ev['soul']): return ''
+    # the card's group says what kind of system it is in two words; its desc is setup prose ("Paste a PAT...") and was
+    # two thirds of the block's tokens, paid on every run
+    cards = '\n'.join(f"{t}: {c['title']} ({c.get('group') or 'other'})" for t, c in ev['offer'].items())
+    named = '\n'.join(f'[N{i}] {x}' for i, x in enumerate(ev['named'], 1)) or '(none)'
+    threads = '\n'.join(f'[T{i}] {x}' for i, x in enumerate(ev['threads'], 1)) or '(none)'
+    return (f"NOT CONNECTED (type: name (kind of system)):\n{cards}\n\nNAMED IN THE OWNER'S OWN SETUP:\n{named}\n\n"
+            f"THREADS (sender's domain | subject; '-' is the owner's own company):\n{threads}")
+
+
+def _cited(vals, tag: str, n: int) -> list:
+    """The numbers the model cited that exist - T3, "3" and 3 alike; anything else is not a citation."""
+    out = set()
+    for v in vals if isinstance(vals, list) else []:
+        m = re.fullmatch(rf'{tag}?(\d+)', str(v).strip(), re.I)
+        if m and 1 <= int(m.group(1)) <= n: out.add(int(m.group(1)))
+    return sorted(out)
+
+
+def connect_line(store, ev: dict, s: dict, key: str, why: str) -> dict | None:
+    """The model's connect:<type> line, validated: the type is one of the cards it was offered (never one connected or
+    raised - read again, another run may have raised it meanwhile), the threads it cited exist, and they clear the
+    floor - or the owner's own setup (a routing fact, a report, SOUL.md) names it. The count said is the threads it
+    cited, never a word count."""
+    t = key[len('connect:'):].strip()
+    card = ((ev or {}).get('offer') or {}).get(t)
+    if not card or any(i['Key'] == key for i in store.list_ideas()): return None
+    cited = _cited(s.get('threads'), 'T', len(ev['threads']))
+    said = s.get('named_in') if isinstance(s.get('named_in'), list) else []
+    named = [ev['named'][i - 1] for i in _cited(said, 'N', len(ev['named']))]
+    if ev['soul'] and any(str(v).strip().upper() in ('SOUL', 'SOUL.MD') for v in said): named.append('SOUL.md')
+    n, title = len(cited), card['title']
+    if n < ev['floor'] and not named:
+        logger.info(f"assistant: dropped {key} - it cited {n} thread(s), under the floor of {ev['floor']}, and nothing of yours names it")
+        return None
+    subjects = '; '.join(f'"{_short(ev["threads"][i - 1].split(" | ", 1)[-1], 90)}"' for i in cited[:6])
+    lead = f"{n} thread{'s' if n != 1 else ''} this month {'were' if n != 1 else 'was'} about {title}" if n else f"Your own setup names {title}"
+    return {'key': key, 'kind': 'connect', 'sig': t,
+            'facts': f"{title} is not connected; the threads about it: {subjects or '(none)'}" + (f"; named in {', '.join(named)}" if named else '') + '.',
+            'text': f"{lead} and nothing here reads it. " + ('It is on the roadmap - say so and it moves up.' if card.get('planned') else f"Connect {title}?"),
+            'action': {'type': 'connect', 'connector_type': t, 'title': title, 'planned': bool(card.get('planned')), 'count': n,
+                       'why': 'the systems your own mail and tasks name are the ones worth reading'},
+            'why': why or f'{n} thread(s) about it' + (f", named in {', '.join(named)}" if named else '')}
 
 
 def fresh(state: dict, cand: dict, now: datetime) -> bool:
@@ -643,7 +674,9 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'this field is the ONLY thing that ties the line to a task, so a line about a task always names it here>", '
             '"task": "<idea:* only - a task title the owner could accept as-is, or null>", '
             '"kind": "<when task is not null: coding if it needs a repository/system changed, otherwise general>", '
-            '"premise_unanswered": <true when the line rests on nobody having replied or told them (no answer yet, nobody told X), else false>}], '
+            '"premise_unanswered": <true when the line rests on nobody having replied or told them (no answer yet, nobody told X), else false>, '
+            '"threads": [<connect:* only - the T numbers of every thread under SYSTEMS NOTHING HERE READS really about that system>], '
+            '"named_in": [<connect:* only - the N numbers there that name it, and "SOUL" when the owner\'s own document does>]}], '
             '"notes": "<your note to the next check, under 120 words: FACTS AND TIMINGS ONLY - what you looked at and found nothing in, '
             'the date or silence length at which something becomes worth raising, a fact you settled so it need not be worked out again. '
             'Never a standing rule about what to ignore or what is noise: the instruction decides that, and a note that says '
@@ -663,6 +696,10 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'copy of work they just finished (the owner, 2026-09-25: "it should not make another advice if we just did it"). '
             'Your own ideas are the point: a thread going in circles, a '
             'promise buried in a mail, two people asking the same thing, the thing to do now so the next ask never comes. '
+            # the system worth connecting is the model's call (the owner, 2026-10-11): a word match chose it before
+            'At most ONE line may suggest a system to connect, keyed connect:<type> with a type listed under SYSTEMS NOTHING HERE '
+            'READS - only when the owner\'s work clearly involves it, citing the threads really about it; a thread that only '
+            'shares a word with its name is not about it. None clearly is -> no connect line. '
             'Facts only from what you are given; never invent a name, a date or a number. Nothing new to say -> {"say": []}.')
 
 
@@ -925,7 +962,7 @@ def raised(store, days: float = 2) -> str:
     return '\n'.join(out) or '(the assistant raised nothing in this window)'
 
 
-def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=None) -> list:
+def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=None, connect: dict = None) -> list:
     """The model's list, kept honest: a key it invents must be idea:*, a candidate key keeps its
     kind and its buttons, and the text is the model's when it gave one. Every line keeps its WHY -
     the hub's facts for a candidate (plus the model's read on them), the model's own for an idea -
@@ -960,6 +997,10 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             # the first line of the facts: prep's line carries a 1200-char dossier under it that belongs in 'skipped', not under a button
             out.append({**by[key], 'text': txt, 'action': (by[key].get('action') or {}) | said,
                         'why': (by[key].get('plain') or by[key]['facts']).split('\n', 1)[0] + (f"\nThe model's read: {why}" if why else '')})
+        elif key.startswith('connect:'):
+            # one per run, and only what connect_line validates against the evidence the model was shown
+            if any(o.get('kind') == 'connect' for o in out) or not (line := connect_line(store, connect, s, key, why)): continue
+            out.append(line | {'action': line['action'] | said})
         elif key.startswith('idea:') and len(key) > 5:
             mid = s.get('mid') if isinstance(s.get('mid'), int) else None
             title = _short(s.get('task'), 120) or None
@@ -1162,7 +1203,7 @@ def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=
     return lead + ''.join(t for _, t in parts), mids
 
 
-def build_sections(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None, report_id=None) -> tuple:
+def build_sections(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None, report_id=None, connect=None) -> tuple:
     """(the lead - the clock and the candidates, [(block id, its section)], {message id: block}).
     The payload in parts, so a prompt that names a card (`[taskuary.messages]`) can be handed that
     card's sections where it asks for them and the rest underneath (think). Joined, the parts are
@@ -1181,6 +1222,8 @@ def build_sections(store, cands: list, head: str = 'CANDIDATES', watch_source_id
         # the run-time opts, stamped in ONE place the card prices through too (assistantblocks.stamp)
         o = blk.stamp(b, o, facts=' '.join(str(c.get('facts') or '') for c in cands)[:4000],
                       report_id=report_id, source_ids=watch_source_ids, inline=watch_sources)
+        # the connect evidence the run validates against is the evidence the model reads - built once, by think
+        if b.id == 'connectors' and connect is not None: o = o | {'evidence': connect}
         out, got = blk.render(store, b, o)
         said[b.id] = out
         for m in got: mids[int(m)] = b.id
@@ -1239,12 +1282,13 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
                  if systems_only else (instruction or PROMPT).strip())
     contract = SYSTEMS_CONTRACT if systems_only else CONTRACT
+    ev = None if systems_only else _connect_evidence_for(store, blocks)
     if systems_only: user, mids = systems_inputs(store, watch_source_ids, watch_sources), {}
     else:
         # a card the instruction names is placed in it, and the instruction then travels IN the
         # message with its data (one text: what the model reads, the run record, the Preview); the
         # rest of the payload follows it as it always did
-        lead, parts, mids = build_sections(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id)
+        lead, parts, mids = build_sections(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id, connect=ev)
         shaped, rest = placed(direction, lead, parts, blocks)
         if shaped is direction: user = rest
         else: direction, user = PLACED_SAYS, placed_message(shaped, rest)
@@ -1259,7 +1303,18 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
         from .llm import readable_images
         images = readable_images(store, _people_context(store)[1])
     text = llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {}))
-    return parse(store, text, cands, max_lines, report_id), _notes(text), user, mids
+    return parse(store, text, cands, max_lines, report_id, connect=ev), _notes(text), user, mids
+
+
+def _connect_evidence_for(store, blocks) -> dict | None:
+    """The connect evidence when this report reads the `connectors` block, with the report's own window and floor."""
+    from . import assistantblocks as blk
+    b = blk.by_id('connectors')
+    o = (blocks or {}).get('connectors') if blocks is not None else blk.defaults(store, b)
+    if not (o and o.get('on')): return None
+    try: return connect_evidence(store, o.get('days', 30), o.get('floor', 3))
+    except Exception as e:
+        logger.warning(f'assistant: the connect evidence was not read - {e}'); return None
 
 
 def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None,
@@ -1648,12 +1703,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # working even if the owner turns off the free-form "idea" producer in Settings.
     configured = bool(_ids(watch_source_ids) or _inline(watch_sources))
     used, note, read, mids = bool(llm and (configured if systems_only else ('idea' in c['producers'] or configured))), '', '', {}
-    # A SYSTEM WORTH CONNECTING is a candidate the MODEL judges, with the threads that matched its name - never a
-    # line the code posts off a word count. No model, no line: there is nothing to judge it with.
-    if used and not systems_only and (blocks is None or bool((blocks.get('connectors') or {}).get('on'))):
-        co = (blocks or {}).get('connectors') or {}
-        try: cands += [x for x in connect_ideas(store, now, days=co.get('days', 30), floor=co.get('floor', 3)) if fresh(state, x, now)]
-        except Exception as e: logger.warning(f'assistant: the connect check was skipped - {e}')
+    # A SYSTEM WORTH CONNECTING is no candidate: the model reads the `connectors` block in think() and raises it itself,
+    # or not (connect_line). No model, no line - there is nothing to judge it with, and no word match stands in.
     if used:
         try:
             say, note, read, mids = think(store, cands, llm, instruction, c['max'],
@@ -1704,8 +1755,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         rv = reviewed(cands, say, _recent(store), _open(store), _said(store, report_id=report_id), used, _week(store), _people(store)) | {
             'notes': note, 'blocks': read_blocks(blocks)}
     # ...and what the REPORT proposes on its own: the app's health. Read, not thought; fresh() keeps a declined one
-    # from coming back, and a raised one from repeating. A system worth connecting is NOT here any more: it is a
-    # candidate the model judges (above), because a name match raised Monday.com off three holiday notices.
+    # from coming back, and a raised one from repeating. A system worth connecting is NOT here: the model raises it
+    # in its own pass (connect_line), because a name match raised Monday.com off three holiday notices.
     if not systems_only:
         have = {s['key'] for s in say}
         # the report raises it as a block like any other: off in this report's choice, off here
@@ -1716,7 +1767,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             # (health rode on top of the cap, and a post said to hold 3 lines held 5 - I9, 2026-09-27)
             say = ([x | {'why': x['action'].get('why', '')} for x in props if x['key'] not in have and fresh(state, x, now)]
                    + list(say))[:c['max']]
-        except Exception as e: logger.warning(f'assistant: the health and connect checks were skipped - {e}')
+        except Exception as e: logger.warning(f'assistant: the health check was skipped - {e}')
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     # the report's routing card reads the lines BEFORE they post; a judge that fails leaves the run
     # unjudged, and an unjudged run reaches the owner (reports.decide's rule)

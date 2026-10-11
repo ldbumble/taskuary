@@ -5045,7 +5045,7 @@ class SQLiteStore:
 
     def inbound_threads(self, days=30):
         """One row per inbound CONVERSATION of the last `days` - the sender and the subject, nothing
-        else. What `connect_ideas` needs to say "N threads this month were about X", and the reason it
+        else. What the Advisor's connect evidence (assistant.connect_evidence) reads to say "N threads this month were about X", and the reason it
         does not read the Timeline for it: `feed` carries a dozen joins, so it was capped at 600 rows
         and saw under a third of a month on a busy mailbox, with whatever flooded the last week
         crowding the rest out (TQ-0651). The app's own posts are left out here - a row the assistant

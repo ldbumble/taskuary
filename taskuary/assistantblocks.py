@@ -123,8 +123,10 @@ def _gone_quiet(store, o):
     return cold(store, o['days']), []
 
 def _connectors(store, o):
-    from .assistant import connect_ideas
-    return connect_ideas(store, days=o['days'], floor=o['floor']), []
+    # CONTEXT, not a producer (the owner, 2026-10-11): the Advisor reads the threads and the cards and raises the
+    # system itself; a word match picked it before. The run hands in the evidence it will validate against.
+    from .assistant import connect_evidence, connect_text
+    return connect_text(o.get('evidence') or connect_evidence(store, o['days'], o['floor'])), []
 
 def _automation(store, o):
     from .assistant import automation_due
@@ -190,9 +192,12 @@ CATALOGUE = (
     Block('gone_quiet', 'Work gone quiet', 'view', ('task', 'comment', 'message', 'run'),
           None, _gone_quiet, window=('days', 3, 'Days of silence before work has gone quiet'),
           proposes=True, setting='assistant_cold_days'),
-    Block('connectors', 'Connectors mentioned', 'view', ('message', 'routing_fact', 'doc'),
-          None, _connectors, window=('days', 30, 'How far back to count the systems people name'),
-          knobs=(('floor', 3, 'Threads before it is worth saying'),), proposes=True),
+    # a context block among the producers: the catalogue order is the payload's order, and the page mirrors it
+    Block('connectors', 'Connectors mentioned', 'view', ('message', 'routing_fact', 'connector'),
+          'SYSTEMS NOTHING HERE READS (the systems the owner could connect, what their own setup names, and every thread of '
+          'the last {days} days by sender and subject - numbered, so a connect:* line cites the ones really about a system)',
+          _connectors, window=('days', 30, 'How far back to read the threads for a system worth connecting'),
+          knobs=(('floor', 3, 'Threads before it is worth saying'),)),
     Block('health', 'App health', 'view', ('source', 'report_run', 'connector'),
           None, _health, proposes=True),
 )
@@ -433,7 +438,7 @@ def _price(store, b: Block, o: dict) -> tuple:
 
 
 # One GET renders most of an Assistant payload - list_tasks twice, recent_messages(500) and their
-# thread chains, cold(), connect_ideas(30d), health_ideas - measured elsewhere at 1.6s p50 and 7s
+# thread chains, cold(), connect_evidence(30d), health_ideas - measured elsewhere at 1.6s p50 and 7s
 # p90. The card that reads this refreshes as the owner types, so an identical choice asked for again
 # within a breath is served from here. Task 3 debounces on top; this is the floor, not the fix.
 _WEIGHED, _WEIGH_TTL = {}, 20.0

@@ -1,5 +1,5 @@
 {
-  "_": "THE connector catalogue, once: every card the Connections tab shows - the working ones (seeded as connector rows on first launch, store.py) and the planned ones - with a group, a one-line desc and `match`: the words in mail, chats, tasks and reports that mean this system. The tab reads it (connectorCatalog.js); the Assistant report reads it to suggest what to connect (assistant.connect_ideas). Add `match` words by hand when a system is known by another name.",
+  "_": "THE connector catalogue, once: every card the Connections tab shows - the working ones (seeded as connector rows on first launch, store.py) and the planned ones - with a group, a one-line desc and `match`: the words in mail, chats, tasks and reports that mean this system. The tab reads it (connectorCatalog.js); the Advisor is handed the unconnected cards and judges which one the owner's threads are about (assistant.connect_evidence) - `match` decides nothing there any more.",
   "cards": [
     {
       "type": "outlook",

@@ -1,7 +1,7 @@
 """The REPORT proposes, the chat assistant never does (the assistant-runs-the-app design, 2026-09-18):
-the app's own health, and a system worth connecting - read off the tables, one row each, declined once
-and remembered."""
-import json, unittest
+the app's own health, read off the tables, and a system worth connecting, which the Advisor's own pass
+judges from the month's threads - one row each, declined once and remembered."""
+import json, re, unittest
 from datetime import datetime
 
 from taskuary import assistant, connectorcatalog
@@ -10,7 +10,7 @@ import tests.test_appfacts as A
 
 
 class CatalogueTests(unittest.TestCase):
-    def test_the_catalogue_is_one_file_with_every_card_grouped_and_matchable(self):
+    def test_the_catalogue_is_one_file_with_every_card_grouped(self):
         cards = connectorcatalog.cards()
         self.assertGreater(len(cards), 150)
         for c in cards:
@@ -19,50 +19,6 @@ class CatalogueTests(unittest.TestCase):
         self.assertTrue(connectorcatalog.by_type('adp')['planned'])
         self.assertFalse(connectorcatalog.by_type('outlook')['planned'])
         self.assertEqual(connectorcatalog.by_type('mssql')['group'], 'Databases')      # the tab's own section, not "Everything else"
-
-    def test_mentions_count_whole_words_once_per_text(self):
-        hits = connectorcatalog.mentions(['ADP hours export is late', 'adp again', 'the adapter broke', 'Payworth ESS link'])
-        self.assertEqual(hits.get('adp'), 2)                                            # "adapter" is not ADP
-        self.assertNotIn('adp', connectorcatalog.mentions(['adp'], exclude_types={'adp'}))
-
-    def test_a_generic_word_is_not_a_system_and_every_card_keeps_its_own_title(self):
-        """"can you share the file?" counted as a thread about the SMB share until the words a title
-        splits into were filtered - 26 of them, which is how this became an idea (TQ-0647)."""
-        ordinary = ['please share the file', 'the network is down again', 'any update on the data?',
-                    'card declined at the bank', 'search the web for it',
-                    # TQ-0650: an app about messages cannot read the bare word as a Mac-only channel
-                    '12 messages waiting', 'no messages from the vendor since Tuesday',
-                    'Your Apple ID was used to sign in', 'Apple sent a receipt for the subscription',
-                    # 2026-09-25: three holiday notices ("Federal Holiday - Monday October 12th") became
-                    # "3 threads this month were about Monday.com" - a weekday is not the product
-                    'Labor Day Holiday - Monday September 7th', 'Federal Holiday - Monday October 12th']
-        self.assertEqual(connectorcatalog.mentions(ordinary), {})
-        self.assertEqual(connectorcatalog.mentions(['moved the sprint board to monday.com']).get('monday'), 1)
-        self.assertEqual(connectorcatalog.mentions(['the network file share is full']).get('smb_file'), 1)
-        self.assertEqual(connectorcatalog.mentions(['SMB share on fileserv']).get('smb_file'), 1)
-        self.assertEqual(connectorcatalog.mentions(['can you read Apple Messages?']).get('imessage'), 1)
-        self.assertEqual(connectorcatalog.mentions(['it came over iMessage']).get('imessage'), 1)
-        for c in connectorcatalog.cards():
-            self.assertTrue(connectorcatalog.words(c), f"{c['type']} has no match word left")
-            self.assertIn(c['type'], connectorcatalog.mentions([c['title']]), f"{c['type']} no longer matches its own title")
-
-    def test_a_word_split_out_of_a_title_names_the_vendor_not_the_product(self):
-        """Three replies to "add Taskuary interactive demo" became "3 threads about Interactive
-        Brokers"; "you have new requests" became New Relic; every mail from microsoft.com became
-        Microsoft Planner AND Microsoft 365 files (TQ-0651). A blocklist could not keep up - it had
-        already taken 26 words and missed these."""
-        self.assertEqual(connectorcatalog.mentions([
-            'Re: [org/app] feat: add Taskuary interactive demo (PR #1736)',
-            'you have new requests from your team', 'microsoft Refresh succeeded with critical warnings',
-            'the brokers sent the renewal quote', 'sage advice from the planner', 'amazon your order has shipped',
-        ]), {})
-        # and the systems themselves still answer to their own names
-        for text, typ in [('Interactive Brokers margin call', 'ibkr'), ('open an IBKR account', 'ibkr'),
-                          ('New Relic alert: apdex below threshold', 'new_relic'), ('Charles Schwab statement', 'schwab'),
-                          ('Sage Intacct close is done', 'intacct'), ('the Intacct journal', 'intacct'),
-                          ('PointClickCare census export', 'pointclickcare'), ('Microsoft Planner board', 'ms_planner'),
-                          ('Replicate ran the model', 'replicate_image'), ('Elasticsearch is down', 'elastic')]:
-            self.assertEqual(connectorcatalog.mentions([text]).get(typ), 1, f"{typ} lost its own name in {text!r}")
 
 
 class HealthTests(unittest.TestCase):
@@ -111,75 +67,102 @@ class HealthTests(unittest.TestCase):
 
 
 class ConnectTests(unittest.TestCase):
-    def _mail(self, s, n, subject, email='hr@adp.com'):
+    """A system worth connecting is the Advisor's own call (the owner, 2026-10-11: "should be ai as well"). The month's
+    threads ride in its prompt numbered beside the cards nothing reads; it cites the threads really about one, and code
+    only checks the citation: an offered card, threads that exist, the floor, never one raised before, one a run."""
+    def _mail(self, s, n, subject, email='hr@payroll.example'):
         for i in range(n):
             s.add_message({'ExternalId': f'x:{subject}:{i}', 'Channel': 'email', 'SourceName': 'inbox', 'Subject': subject,
-                           'FromName': 'ADP', 'FromEmail': email, 'SentAt': '2026-09-17 09:00:00', 'BodyText': '.', 'Status': 'routed'})
+                           'FromName': 'Payroll', 'FromEmail': email, 'SentAt': '2026-09-17 09:00:00', 'BodyText': '.', 'Status': 'routed'})
 
-    def test_the_system_the_mail_names_most_is_suggested_once_and_not_after_a_no(self):
-        s = A.store()
-        self._mail(s, 4, 'ADP payroll register ready')
-        self._mail(s, 2, 'Salesforce weekly pipeline', email='noreply@salesforce.com')
-        ideas = assistant.connect_ideas(s)
-        self.assertEqual(len(ideas), 1)
-        self.assertEqual(ideas[0]['key'], 'connect:adp'); self.assertIn('ADP', ideas[0]['text'])
-        self.assertTrue(ideas[0]['action']['planned']); self.assertGreaterEqual(ideas[0]['action']['count'], 4)
-        row = s.upsert_idea(ideas[0], '2026-09-18 09:00:00'); s.set_idea_status(row['IdeaId'], 'done', 'owner')   # "not for us"
-        self.assertEqual([i['key'] for i in assistant.connect_ideas(s)], [])                # salesforce is under the floor
-        self._mail(s, 3, 'Salesforce case escalated', email='noreply@salesforce.com')
-        self.assertEqual(assistant.connect_ideas(s)[0]['key'], 'connect:salesforce')       # the next one, never adp again
-        state = {i['Key']: i for i in s.list_ideas()}
-        self.assertFalse(assistant.fresh(state, {'key': 'connect:adp', 'sig': 'adp'}, datetime.now()))
-
-    def test_a_system_worth_connecting_is_the_models_call_with_the_matching_threads_in_front_of_it(self):
-        """A name match is not a judgement (2026-09-25): three holiday notices "on Monday" became "3 threads this month
-        were about Monday.com", posted by the code with no model in the loop. It is a candidate now - the model sees
-        which threads matched and says it, or skips it."""
-        s = A.store()
-        self._mail(s, 4, 'ADP payroll register ready')
+    def _advise(self, s, say):
+        """Run the Advisor with a model that answers `say(user, nums)` - nums maps each subject to its T numbers."""
         seen = {}
-        def skips(system, user, **k): seen['user'] = user; return json.dumps({'say': []})
-        assistant.run(s, llm=skips, force=True)
-        self.assertIn('ADP payroll register ready', seen['user'])                           # the threads, not a count
-        self.assertNotIn('connect:adp', {i['Key'] for i in s.list_ideas()})                 # skipped: nothing posted
-        says = json.dumps({'say': [{'key': 'connect:adp', 'text': 'ADP payroll mail arrives weekly and nothing reads it.'}]})
-        assistant.run(s, llm=lambda *a, **k: says, force=True)
-        self.assertIn('connect:adp', {i['Key'] for i in s.list_ideas()})                   # kept: posted, with its buttons
+        def llm(system, user, **k):
+            if 'SYSTEMS NOTHING HERE READS' not in user: return json.dumps({'say': []})
+            seen['user'] = user
+            nums = {}
+            for n, subj in re.findall(r'^\[T(\d+)\] [^|]*\| (.*)$', user, re.M): nums.setdefault(subj.strip(), []).append(int(n))
+            return json.dumps({'say': say(user, nums)})
+        out = assistant.run(s, llm=llm, force=True)
+        return {i['Key']: i for i in s.list_ideas() if i['Key'].startswith('connect:')}, seen.get('user', ''), out
 
-    def test_a_connected_system_is_never_suggested(self):
+    def test_a_holiday_on_a_monday_is_not_monday_com_unless_the_model_cites_it(self):
+        """2026-09-25: three holiday notices became "3 threads this month were about Monday.com" off a name match."""
         s = A.store()
-        self._mail(s, 5, 'Outlook mail rules changed', email='admin@outlook.com')
-        self.assertNotIn('connect:outlook', [i['key'] for i in assistant.connect_ideas(s)])
+        self._mail(s, 3, 'Federal Holiday - Monday October 12th', 'hr@northwind.example')
+        self._mail(s, 3, 'Labor Day Holiday - Monday September 7th', 'news@calendar.example')
+        ideas, user, _ = self._advise(s, lambda u, nums: [{'key': 'connect:monday', 'text': 'x', 'threads': []}])
+        self.assertIn('Federal Holiday - Monday October 12th', user)                     # the model read the threads
+        self.assertIn('monday: ', user)                                                  # ...and the card it could raise
+        self.assertEqual(ideas, {})                                                      # nothing cited: nothing posted
 
-    def test_one_conversation_is_one_thread(self):
-        """Three replies on one pull request were three threads, so "add Taskuary interactive demo"
-        cleared a floor of three on its own (TQ-0651)."""
+    def test_the_count_is_the_threads_the_model_cited(self):
+        s = A.store()
+        self._mail(s, 1, 'ADP payroll register ready'); self._mail(s, 1, 'ADP hours export late')
+        self._mail(s, 1, 'ADP year-end forms'); self._mail(s, 1, 'Quarterly adapter recall', 'ops@parts.example')
+        cite = lambda u, nums: [{'key': 'connect:adp', 'text': 'Payroll mail arrives weekly.', 'why': 'three payroll threads',
+                                 'threads': nums['ADP payroll register ready'] + nums['ADP hours export late'] + nums['ADP year-end forms'] + [999]}]
+        ideas, _, _ = self._advise(s, cite)
+        i = ideas['connect:adp']; a = json.loads(i['ActionJson'])
+        self.assertTrue(i['Text'].startswith('3 threads this month were about ADP'), i['Text'])   # 999 does not exist: not counted
+        self.assertEqual(a['count'], 3); self.assertTrue(a['planned']); self.assertEqual(a['connector_type'], 'adp')
+
+    def test_under_the_floor_is_dropped_unless_the_owners_own_setup_names_it(self):
+        s = A.store()
+        self._mail(s, 2, 'ADP payroll register ready')
+        two = lambda u, nums: [{'key': 'connect:adp', 'text': 'x', 'threads': nums['ADP payroll register ready']}]
+        self.assertEqual(self._advise(s, two)[0], {})                                    # two threads, floor three
+        def named(u, nums):
+            n = re.search(r'^\[N(\d+)\] report: ADP hours export$', u, re.M).group(1)   # the fixture's own workflow
+            return [{'key': 'connect:adp', 'text': 'x', 'threads': nums['ADP payroll register ready'], 'named_in': [f'N{n}']}]
+        ideas = self._advise(s, named)[0]
+        self.assertTrue(ideas['connect:adp']['Text'].startswith('2 threads this month were about ADP'))
+
+    def test_an_invented_or_connected_type_is_dropped_and_one_a_run_is_kept(self):
+        s = A.store()
+        self._mail(s, 4, 'ADP payroll register ready'); self._mail(s, 4, 'Salesforce case escalated', 'noreply@crm.example')
+        ideas, user, _ = self._advise(s, lambda u, nums: [
+            {'key': 'connect:frobnicator', 'text': 'x', 'threads': nums['ADP payroll register ready']},
+            {'key': 'connect:outlook', 'text': 'x', 'threads': nums['ADP payroll register ready']},     # connected in the fixture
+            {'key': 'connect:adp', 'text': 'x', 'threads': nums['ADP payroll register ready']},
+            {'key': 'connect:salesforce', 'text': 'x', 'threads': nums['Salesforce case escalated']}])
+        self.assertEqual(list(ideas), ['connect:adp'])
+        self.assertNotIn('\noutlook: ', user)                                            # a connected card is never offered
+
+    def test_one_already_raised_is_never_offered_or_posted_again(self):
+        s = A.store()
+        self._mail(s, 4, 'ADP payroll register ready')
+        cite = lambda u, nums: [{'key': 'connect:adp', 'text': 'x', 'threads': nums['ADP payroll register ready']}]
+        ideas = self._advise(s, cite)[0]
+        s.set_idea_status(ideas['connect:adp']['IdeaId'], 'done', 'owner')              # "not for us"
+        ideas, user, _ = self._advise(s, cite)
+        self.assertNotIn('\nadp: ', user)
+        self.assertEqual(ideas['connect:adp']['Status'], 'done')                         # still the one the owner put down
+        self.assertFalse(assistant.fresh({i['Key']: i for i in s.list_ideas()}, {'key': 'connect:adp', 'sig': 'adp'}, datetime.now()))
+
+    def test_no_brain_no_suggestion(self):
+        s = A.store()
+        self._mail(s, 5, 'ADP payroll register ready')
+        assistant.run(s, llm=None, force=True)
+        self.assertEqual([i['Key'] for i in s.list_ideas() if i['Key'].startswith('connect:')], [])
+
+    def test_one_conversation_is_one_thread_and_my_own_post_is_none(self):
+        """Three replies on one pull request were three threads (TQ-0651), and the Advisor's own post was read as a thread
+        about the system it named."""
         s = A.store()
         for i in range(4):
             s.add_message({'ExternalId': f'pr:{i}', 'ConversationId': 'pr-1736', 'Channel': 'email', 'SourceName': 'inbox',
-                           'Subject': 'Re: ADP payroll register ready', 'FromName': 'ADP', 'FromEmail': 'hr@adp.com',
+                           'Subject': 'Re: ADP payroll register ready', 'FromName': 'Payroll', 'FromEmail': 'hr@payroll.example',
                            'SentAt': '2026-09-17 09:00:00', 'BodyText': '.', 'Status': 'routed'})
-        self.assertEqual([i['key'] for i in assistant.connect_ideas(s)], [])
-        self._mail(s, 3, 'ADP hours export late')                                    # three separate ones do clear it
-        self.assertEqual(assistant.connect_ideas(s)[0]['key'], 'connect:adp')
-
-    def test_my_own_post_is_not_a_thread_about_anything(self):
-        """The idea went onto the Timeline as a message, the next run counted it, and the count grew
-        by one a day off its own words (TQ-0651)."""
-        s = A.store()
-        for i in range(4):
             s.add_message({'ExternalId': f'a:{i}', 'Channel': 'assistant', 'SourceName': 'Assistant', 'FromName': 'Assistant',
                            'Subject': '6 threads this month were about ADP and nothing here reads it.',
                            'SentAt': '2026-09-17 09:00:00', 'BodyText': '.', 'Status': 'routed'})
-        self.assertEqual([i['key'] for i in assistant.connect_ideas(s)], [])
+        self.assertEqual(assistant.connect_evidence(s)['threads'], ['payroll.example | Re: ADP payroll register ready'])
 
-    def test_the_sentence_counts_threads_and_nothing_else(self):
-        """Raised by a report title and SOUL.md with no mail behind it, the row said "3 threads this
-        month" about threads that did not exist."""
-        s = A.store()
-        self._mail(s, 3, 'ADP payroll register ready')
-        idea = assistant.connect_ideas(s)[0]
-        self.assertTrue(idea['text'].startswith('3 threads this month'), idea['text'])
+    def test_the_word_matcher_is_gone(self):
+        for f in ('mentions', 'words', 'GENERIC', '_patterns', '_toks'): self.assertFalse(hasattr(connectorcatalog, f), f)
+        self.assertFalse(hasattr(assistant, 'connect_ideas'))
 
 
 class RunTests(unittest.TestCase):

@@ -53,9 +53,6 @@ TITLE_MAX, BODY_MAX = 140, 700
 # The vote is the moderation. An entry the room has voted below zero leaves the tab and the
 # agents' seed prompt, kept as 'downvoted' so it can be read back or restored - never deleted.
 RETIRE_BELOW = 0
-# How alike two titles must be, on their distinctive words, for the second to count as the first
-# said again rather than a new fact - which is an upvote, not a post
-SIMILAR = 0.6
 KINDS = ('new_idea', 'technical_solve', 'howto', 'gotcha', 'decision', 'system', 'people')
 KIND_HINT = {'new_idea': 'a developed new idea for the company and why it is promising',
              'technical_solve': 'a difficult technical problem and the reusable solution',
@@ -63,7 +60,6 @@ KIND_HINT = {'new_idea': 'a developed new idea for the company and why it is pro
              'decision': 'what was decided and why it stays decided', 'system': 'what a system is and who owns it',
              'people': 'who to ask, who owns what'}
 _SLUG = re.compile(r'[^a-z0-9]+')
-_STOP = {'the', 'a', 'an', 'and', 'of', 'for', 'to', 'in', 'on', 'is', 'it', 'this', 'that'}
 
 
 def topic_of(raw: str, cwd: str = '', task_repo: str = '') -> str:
@@ -76,93 +72,43 @@ def topic_of(raw: str, cwd: str = '', task_repo: str = '') -> str:
     return (t or 'general')[:TOPIC_MAX]
 
 
-# Tokens too generic to justify merging two shelves on their own: every system has an api and a
-# db, and snapping `payroll-api` onto a bare `api` shelf would be worse than the sprawl.
-TOPIC_GENERIC = {'api', 'app', 'web', 'db', 'data', 'test', 'tests', 'code', 'main', 'core',
-                 'misc', 'tool', 'tools', 'system', 'general', 'stuff', 'notes'}
-
-
-def _toks(t) -> list:
-    return [w for w in str(t or '').split('-') if w]
-
-
-def snap_topic(candidate: str, existing) -> str:
-    """The shelf this really belongs on, given the shelves there already are.
-
-    topic_of only slugifies, so it answers "Intacct", "intacct " and "Sage Intacct" with two
-    different shelves - which is the sprawl its own docstring promised to prevent. Left alone it
-    compounds: this install already had `payroll-api` and `payroll-reimbursements`, one system
-    on two shelves, after a single afternoon.
-
-    Conservative on purpose, because a WRONG merge is worse than a duplicate - it files a fact
-    where nobody looking for it will read it. Two rules only:
-
-      - the same word, singular or plural (`invoice` / `invoices`)
-      - an existing topic whose words are ALL in the new one (`payroll` already there, an agent
-        writes `payroll-api`) - the established, broader shelf wins, and ties go to the one
-        carrying more entries
-
-    Deliberately NOT the reverse: a new broader topic never gets filed under a narrower existing
-    one. `payroll` arriving while only `payroll-api` exists creates the broad shelf, and the
-    next specific topic snaps onto it. The sprawl unwinds itself rather than deepening.
-
-    `existing` is store.lore_topics() - rows of Topic and n."""
-    cand = str(candidate or '').strip('-')
-    ct = set(_toks(cand))
-    if not ct: return cand
-    rows = [(str(r['Topic'] or ''), int(r['n'] or 0)) for r in (existing or [])]
-    if any(t == cand for t, _ in rows): return cand           # it already is a shelf
-    stem = {w.rstrip('s') for w in ct}
-    best, best_n = None, -1
-    for topic, n in rows:
-        et = set(_toks(topic))
-        if not et: continue
-        if {w.rstrip('s') for w in et} == stem: return topic  # invoice / invoices
-        # the existing shelf is the broader one, and what they share is worth merging on
-        if et < ct and all(len(w) >= 4 and w not in TOPIC_GENERIC for w in et) and n > best_n:
-            best, best_n = topic, n
-    return best or cand
+# WHICH SHELF and WHETHER IT IS ALREADY SAID are the writer's calls (the owner, 2026-10-11: "everything should be ai").
+# Word rules used to decide both: snap_topic filed `payworth-api` under `payworth` unless a TOPIC_GENERIC word was in the
+# way, and similar() upvoted an older post when 60% of the title's non-stopword words matched - so "the export drops the
+# last row" and "the export keeps the last row" were one post. The model that writes the entry is handed the shelves and
+# the entries already there and answers `same_as`; code keeps only EXACT identity (same shelf, same title).
+def _norm(title: str) -> str: return ' '.join(re.findall(r'[a-z0-9]+', str(title or '').lower()))
 
 
 def sig_of(topic: str, title: str) -> str:
-    """What makes two posts THE SAME post. Topic plus the distinctive words of the title, so an
-    agent that re-learns the same thing next month updates the entry instead of adding a
-    near-duplicate - which is how a handbook becomes forty posts about one thing."""
-    words = sorted({w for w in re.findall(r'[a-z0-9]{3,}', str(title or '').lower()) if w not in _STOP})
-    return f"{topic}:{'-'.join(words[:8])}"
+    """Exact identity: the shelf plus the title, case and punctuation folded - nothing about meaning."""
+    return f"{topic}:{_norm(title).replace(' ', '-')}"[:300]
 
 
-def _words(title: str) -> set:
-    return {w for w in re.findall(r'[a-z0-9]{3,}', str(title or '').lower()) if w not in _STOP}
+def same_post(store, topic: str, title: str):
+    """The live entry with this exact title on this shelf, or None."""
+    want = _norm(title)
+    if not want: return None
+    return next((dict(p) for p in store.lore_posts(topic=topic, limit=500) if _norm(p['Title']) == want), None)
 
 
-def similar(store, topic: str, title: str):
-    """The live entry that already says this, or None. Same signature is the same post; failing
-    that, a title on the same shelf sharing most of its distinctive words (Jaccard >= SIMILAR).
-    Same shelf only: "the export drops the last row" is a different fact about payroll than about
-    the census, and merging across topics would file one of them where nobody looks."""
-    sig = sig_of(topic, title)
-    hit = store._one('SELECT * FROM lore WHERE Sig=? AND Status=\'live\'', (sig,)) if hasattr(store, '_one') else None
-    if hit: return dict(hit)
-    mine = _words(title)
-    if not mine: return None
-    best, score = None, 0
-    for p in store.lore_posts(topic=topic, q=title, limit=8, sort='top'):
-        theirs = _words(p['Title'])
-        j = len(mine & theirs) / max(1, len(mine | theirs))
-        if j > score: best, score = p, j
-    return dict(best) if best and score >= SIMILAR else None
+def entries_for_writer(store, limit: int = 60) -> str:
+    """The live entries a writer is shown so it can say `same_as` - by id, shelf and title. Top-ranked, no word filter."""
+    rows = store.lore_posts(limit=limit, sort='top')
+    return '\n'.join(f"#{r['LoreId']} [{r['Topic']}] {r['Title']}" for r in rows)
 
 
 def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto', author: str = 'agent',
-         task_id=None, cwd: str = '', repo: str = '', clip: bool = False, why_earned: str = '') -> dict:
+         task_id=None, cwd: str = '', repo: str = '', clip: bool = False, why_earned: str = '', same_as=None) -> dict:
     """One entry. Everything but the title is optional: an agent that knows only what it wants to
     say still gets to say it, and the topic falls back to the checkout it is standing in.
 
     Saying what the handbook already says is an UPVOTE, not a second post (the owner, 2026-09-01:
     "if an agent finds something similar it can upvote/comment"). The returned dict carries
     `merged: True` then, and the new wording lands as a comment when it adds anything. `clip`
-    shortens instead of refusing - for the on-close road, where nobody is there to retry."""
+    shortens instead of refusing - for the on-close road, where nobody is there to retry.
+
+    `same_as` is the writer's own answer to "is this entry N said again?" - honoured when N is a live entry."""
     title = ' '.join(str(title or '').split())
     body = ' '.join(str(body or '').split())
     if not title: raise ValueError('a Hub entry needs a title - one line saying what is true')
@@ -174,9 +120,10 @@ def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto'
                          'the fact, why it is so, what to do about it. If it needs more, it is two entries')
     kind = str(kind or 'howto').lower().strip()
     if kind not in KINDS: kind = 'howto'
-    # the shelf it belongs on, not merely the one the agent typed (snap_topic)
-    tp = snap_topic(topic_of(topic, cwd, repo), store.lore_topics())
-    have = similar(store, tp, title)
+    tp = topic_of(topic, cwd, repo)
+    try: said = store.lore_get(int(same_as)) if same_as not in (None, '', False) else None
+    except (TypeError, ValueError): said = None
+    have = (dict(said) if said and said['Status'] == 'live' else None) or same_post(store, tp, title)
     if have:
         vote(store, have['LoreId'], 1, author)
         if body and body != (have.get('Body') or '') and body not in (have.get('Body') or ''):
@@ -264,7 +211,10 @@ LEARN_SYSTEM = (
     '"kind": "new_idea|technical_solve|howto|gotcha|decision|system|people", "title": "<one line, under 120 characters, '
     'stating what is true - not what you did>", "body": "<two or three sentences, under 500 '
     'characters: the fact, why it is so, and what somebody should do about it. Name files, '
-    'systems, ids and people where they matter>"}]}.\n'
+    'systems, ids and people where they matter>", "same_as": <the id of an entry under ENTRIES ALREADY IN THE HUB that '
+    'already says this same fact, or null>}]}.\n'
+    'same_as is a judgement of MEANING, not wording: the same fact in other words is the same entry (it becomes an upvote '
+    'and your body a comment on it); a different fact about the same thing - even in nearly the same words - is not.\n'
     'At most two entries. Set earned true only when why_earned points to concrete effort visible '
     'in the transcript; Taskuary rejects entries without it. Zero is the right answer whenever the session only applied things '
     'that were already known, or only touched this one task. Never write an entry that restates '
@@ -282,7 +232,9 @@ def learn_from_session(store, task_id: int, transcript: str, agent: str = 'coder
         llm = llm or build_llm(store)
         if not llm: return []
         topics = ', '.join(t['Topic'] for t in (existing if existing is not None else store.lore_topics())[:30])
+        have = entries_for_writer(store)
         user = (f'Topics already in the handbook (reuse one where it fits): {topics or "(none yet - you are first)"}\n\n'
+                f'ENTRIES ALREADY IN THE HUB:\n{have or "(none yet)"}\n\n'
                 f"Task: {(store.get_task(task_id) or {}).get('Title') or ''}\n\nTranscript:\n{transcript[-12000:]}")
         j = json.loads(re.sub(r'^```(json)?|```$', '', str(llm(LEARN_SYSTEM, user, max_tokens=700) or '').strip(), flags=re.M))
         out = []
@@ -293,7 +245,7 @@ def learn_from_session(store, task_id: int, transcript: str, agent: str = 'coder
                     or not str(e.get('title') or '').strip()):
                 continue
             out.append(post(store, e['title'], e.get('body') or '', e.get('topic') or '', e.get('kind') or 'howto',
-                            agent, task_id, cwd, repo, clip=True, why_earned=why))
+                            agent, task_id, cwd, repo, clip=True, why_earned=why, same_as=e.get('same_as')))
         if out: logger.info(f'hub: {agent} wrote {len(out)} entry(ies) closing task {task_id}')
         return out
     except Exception as e:
@@ -312,7 +264,8 @@ ASSISTANT_LINE = (
     'to save a qualifying idea there, or this conversation clearly earns one, append one private '
     'envelope after your answer: <TASKUARY-HUB>{"earned":true,"why_earned":"specific effort or '
     'reasoning","topic":"company-area","kind":"new_idea|technical_solve|howto|gotcha|decision|system|people",'
-    '"title":"one durable claim","body":"why it matters and what to do"}</TASKUARY-HUB>. '
+    '"title":"one durable claim","body":"why it matters and what to do","same_as":<id of a FROM HUB entry that already '
+    'says this same fact, or null>}</TASKUARY-HUB>. '
     'Never show or explain the envelope. Do not emit it for a raw brainstorm, routine answer, or '
     'ordinary completed task. Existing relevant entries appear under FROM HUB.')
 
@@ -336,7 +289,7 @@ def publish_assistant_entries(store, task_id: int, reply: str, author: str = 'as
     clean, entries = assistant_entries(reply)
     for e in entries:
         post(store, e['title'], e.get('body') or '', e.get('topic') or '', e.get('kind') or 'new_idea',
-             author, task_id, clip=True, why_earned=e.get('why_earned') or '')
+             author, task_id, clip=True, why_earned=e.get('why_earned') or '', same_as=e.get('same_as'))
     return clean
 
 
@@ -390,14 +343,14 @@ def run_handbook_vote(cfg):
 
 def run_handbook_write(cfg):
     """{"title": "Adjustment rows take the first line's date", "topic": "payroll", "body": "...",
-    "kind": "gotcha"} - write one entry into the company Hub. For an agent that has worked
-    something out and wants the next one to know."""
+    "kind": "gotcha", "same_as": 12} - write one entry into the company Hub. For an agent that has worked
+    something out and wants the next one to know; `same_as` names an entry that already says it (an upvote then)."""
     why = ' '.join(str(cfg.get('why_earned') or '').split())
     if len(why) < 20:
         raise ValueError('Hub writes need why_earned: the concrete investigation, tests, or reasoning that earned this post')
     store = cfg['store']
     p = post(store, cfg.get('title') or '', cfg.get('body') or '', cfg.get('topic') or '',
-             cfg.get('kind') or 'howto', cfg.get('author') or 'agent', why_earned=why)
+             cfg.get('kind') or 'howto', cfg.get('author') or 'agent', why_earned=why, same_as=cfg.get('same_as'))
     head = (f"already in the Hub as #{p['LoreId']} - upvoted, now {p['Score']:+d}" if p.get('merged')
             else f"filed under {p['Topic']}: {p['Title']}")
     return head, json.dumps({k: p[k] for k in ('LoreId', 'Topic', 'Kind', 'Title', 'Score')}, indent=1)

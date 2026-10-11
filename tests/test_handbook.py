@@ -224,7 +224,9 @@ class VotedOn(unittest.TestCase):
     def test_saying_what_is_already_there_is_an_upvote_not_a_second_post(self):
         s = MemoryStore()
         first = handbook.post(s, 'Adjustment rows take the first line date, not the batch date', 'so they post to the wrong month', 'payroll', 'gotcha', 'coder')
-        again = handbook.post(s, 'Adjustment rows take the first line date rather than the batch date', 'check the batch header', 'payroll', 'gotcha', 'codex')
+        # the writer says it is the same fact (same_as) - code no longer guesses it from shared words (2026-10-11)
+        again = handbook.post(s, 'Adjustment rows take the first line date rather than the batch date', 'check the batch header', 'payroll', 'gotcha', 'codex',
+                              same_as=first['LoreId'])
         self.assertTrue(again['merged'])
         self.assertEqual(again['LoreId'], first['LoreId'])
         self.assertEqual(again['Score'], 1)

@@ -1,75 +1,72 @@
-"""One system, one shelf - or the handbook becomes a filing cabinet nobody can search.
+"""Which shelf an entry goes on, and whether it is already said, are the WRITER's calls.
 
-topic_of only slugifies, so "Intacct", "intacct " and "Sage Intacct" produced two shelves for one
-subject - the sprawl its own docstring promised to prevent. It compounds fast: a single afternoon
-on this install left `payworth-api` and `payworth-reimbursements`, one system on two shelves,
-and an agent looking up either would read half of what is known.
-
-snap_topic is deliberately conservative. A WRONG merge is worse than a duplicate: it files a fact
-where nobody looking for it will read it.
+Word rules used to decide both. snap_topic filed `payworth-api` under `payworth` unless a
+TOPIC_GENERIC word was in the way; similar() upvoted an older post when 60% of the title's
+non-stopword words matched, so "the export drops the last row" and "the export keeps the last row"
+were one post (the owner, 2026-10-11: "everything should be ai"). The model that writes the entry is
+handed the shelves and the entries already there and answers `same_as`; code keeps EXACT identity.
 """
+import json
 import unittest
 
-from taskuary.handbook import post, snap_topic
+from taskuary import handbook
+from taskuary.handbook import post
 from taskuary.store import MemoryStore
 
 
-def E(*pairs):
-    return [{'Topic': t, 'n': n} for t, n in pairs]
+class ExactIdentityOnly(unittest.TestCase):
+    def test_the_same_title_on_the_same_shelf_is_an_upvote(self):
+        s = MemoryStore()
+        a = post(s, 'Deductions are per-division', topic='payworth', author='coder')
+        b = post(s, 'deductions are per division.', topic='payworth', author='codex')
+        self.assertTrue(b['merged']); self.assertEqual(b['LoreId'], a['LoreId'])
 
+    def test_nearly_the_same_words_are_not_the_same_fact(self):
+        s = MemoryStore()
+        post(s, 'The export drops the last row', topic='census', author='coder')
+        other = post(s, 'The export keeps the last row', topic='census', author='codex')
+        self.assertFalse(other['merged'])
+        self.assertEqual(s.lore_count()['posts'], 2)
 
-class SnappingToAnExistingShelf(unittest.TestCase):
-    def test_a_narrower_topic_joins_the_shelf_that_exists(self):
-        self.assertEqual(snap_topic('payworth-api', E(('payworth', 5))), 'payworth')
-
-    def test_the_case_the_docstring_always_promised(self):
-        self.assertEqual(snap_topic('sage-intacct', E(('intacct', 3))), 'intacct')
-
-    def test_singular_and_plural_are_one_shelf(self):
-        self.assertEqual(snap_topic('invoices', E(('invoice', 2))), 'invoice')
-        self.assertEqual(snap_topic('invoice', E(('invoices', 2))), 'invoices')
-
-    def test_ties_go_to_the_shelf_carrying_more(self):
-        self.assertEqual(snap_topic('acme-payroll-api', E(('payroll', 1), ('acme-payroll', 9))),
-                         'acme-payroll')
-
-
-class WhenItMustNotMerge(unittest.TestCase):
-    def test_a_generic_word_is_not_enough_to_merge_on(self):
-        """Every system has an api. Filing payworth's api notes under `api` is worse than sprawl."""
-        self.assertEqual(snap_topic('payworth-api', E(('api', 9))), 'payworth-api')
-        self.assertEqual(snap_topic('billing-data', E(('data', 4))), 'billing-data')
-
-    def test_a_broad_topic_never_files_under_a_narrow_one(self):
-        """`payworth` arriving while only `payworth-api` exists makes the broad shelf - and the
-        NEXT specific topic snaps onto it. The sprawl unwinds instead of deepening."""
-        self.assertEqual(snap_topic('payworth', E(('payworth-api', 1))), 'payworth')
-        after = E(('payworth-api', 1), ('payworth', 1))
-        self.assertEqual(snap_topic('payworth-reimbursements', after), 'payworth')
-
-    def test_an_unrelated_topic_gets_its_own_shelf(self):
-        self.assertEqual(snap_topic('brand-new', E(('payroll', 4))), 'brand-new')
-
-    def test_a_shelf_that_already_exists_is_used_as_typed(self):
-        self.assertEqual(snap_topic('payroll', E(('payroll', 4))), 'payroll')
-
-    def test_no_shelves_yet_means_take_what_you_were_given(self):
-        self.assertEqual(snap_topic('payroll', []), 'payroll')
-        self.assertEqual(snap_topic('payroll', None), 'payroll')
-
-
-class ThroughTheRealWriter(unittest.TestCase):
-    def test_the_second_agent_lands_on_the_first_ones_shelf(self):
+    def test_a_shelf_is_what_the_writer_named_never_snapped_by_its_words(self):
         s = MemoryStore()
         post(s, 'Deductions are per-division', topic='Payworth', author='coder')
-        second = post(s, 'The import endpoint rejects blank cost centres',
-                      topic='Payworth API', author='coder')
-        self.assertEqual(second['Topic'], 'payworth')
-        self.assertEqual([r['Topic'] for r in s.lore_topics()], ['payworth'])
+        second = post(s, 'The import endpoint rejects blank cost centres', topic='Payworth API', author='coder')
+        self.assertEqual(second['Topic'], 'payworth-api')
+        self.assertFalse(hasattr(handbook, 'snap_topic') or hasattr(handbook, 'similar') or hasattr(handbook, 'TOPIC_GENERIC'))
 
     def test_it_still_falls_back_to_the_checkout_when_nothing_was_named(self):
         s = MemoryStore()
         self.assertEqual(post(s, 'the tests need pyodbc', cwd='C:/src/taskuary')['Topic'], 'taskuary')
+
+
+class TheWriterSaysSameAs(unittest.TestCase):
+    def test_same_as_upvotes_the_named_live_entry_and_keeps_the_new_words_as_a_comment(self):
+        s = MemoryStore()
+        first = post(s, 'Adjustment rows take the first line date', 'so they post to the wrong month', 'payroll', 'gotcha', 'coder')
+        again = post(s, 'Adjusting entries use line one for their posting day', 'check the batch header', 'payroll', 'gotcha', 'codex',
+                     same_as=first['LoreId'])
+        self.assertTrue(again['merged']); self.assertEqual(again['Score'], 1)
+        self.assertEqual([c['Body'] for c in s.lore_comments(first['LoreId'])], ['check the batch header'])
+
+    def test_a_same_as_that_names_nothing_live_is_a_new_post(self):
+        s = MemoryStore()
+        self.assertFalse(post(s, 'Payroll closes on the first Wednesday', topic='payroll', same_as=999)['merged'])
+
+    def test_the_closing_writer_is_shown_the_entries_and_its_same_as_is_used(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Fix the payroll import'}, 'owner')
+        first = post(s, 'Adjustment rows take the first line date', '', 'payroll', 'gotcha', 'coder')
+        seen = {}
+        def llm(system, user, **k):
+            seen['system'], seen['user'] = system, user
+            return json.dumps({'entries': [{'earned': True, 'why_earned': 'traced three batches through the importer to find it',
+                                            'topic': 'payroll', 'kind': 'gotcha', 'title': 'Adjusting entries post on line one\'s day',
+                                            'body': 'b', 'same_as': first['LoreId']}]})
+        out = handbook.learn_from_session(s, tid, 'a long transcript', 'coder', llm=llm)
+        self.assertIn(f"#{first['LoreId']} [payroll] Adjustment rows take the first line date", seen['user'])
+        self.assertIn('same_as', seen['system'])
+        self.assertTrue(out[0]['merged']); self.assertEqual(s.lore_count()['posts'], 1)
 
 
 if __name__ == '__main__':

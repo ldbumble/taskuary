@@ -187,17 +187,26 @@ def due(store, now: datetime = None) -> int:
 
 
 # ── deadlines kept: the day triage read from the mail (triage.DUE), said as it nears ──────
-# Triage recorded only urgent yes/no, so "the form is due Friday" was forgotten by Thursday (2026-10-06). The day before
+# Triage recorded only urgent yes/no, so "the form is due Friday" was forgotten by Thursday (2026-10-06). The working day before
 # it goes to the top of the list; on the day it says so; once it has passed it asks, once. In the app only - the phone
 # never speaks first (the owner, 2026-10-02), so none of this reaches a chat she did not open.
 STEPS = ('eve', 'today', 'late')
 
 
+def eve_of(due):
+    """The last working day before the due day - a Monday deadline's eve is the Friday, when someone is there to act on it
+    (B18, 2026-10-11: counted in calendar days it was warned on the Sunday, or not at all with the PC off)."""
+    d = due - timedelta(days=1)
+    while d.weekday() >= 5: d -= timedelta(days=1)
+    return d
+
+
 def step(due_at, now: datetime = None) -> str | None:
-    """Where a due day stands: 'eve' (tomorrow), 'today', 'late' - or None while it is further off."""
-    try: d = (datetime.strptime(str(due_at or '')[:10], '%Y-%m-%d').date() - (now or datetime.now()).date()).days
+    """Where a due day stands: 'eve' (from the last working day before it), 'today', 'late' - or None while further off."""
+    try: due = datetime.strptime(str(due_at or '')[:10], '%Y-%m-%d').date()
     except ValueError: return None
-    return 'late' if d < 0 else 'today' if d == 0 else 'eve' if d == 1 else None
+    today = (now or datetime.now()).date()
+    return 'late' if due < today else 'today' if due == today else 'eve' if today >= eve_of(due) else None
 
 
 def due_line(task: dict, now: datetime = None) -> str:
@@ -205,37 +214,60 @@ def due_line(task: dict, now: datetime = None) -> str:
     line, and what the Assistant says about it."""
     at, now = (task or {}).get('DueAt'), now or datetime.now()
     s = step(at, now)
-    if s == 'eve': return "This one's due tomorrow, so it's at the top of your list."
+    if s == 'eve':
+        due = datetime.strptime(str(at)[:10], '%Y-%m-%d')
+        return f"This one's due {'tomorrow' if (due.date() - now.date()).days == 1 else f'{due:%A}'}, so it's at the top of your list."
     if s == 'today': return "This one's today."
     if s != 'late': return ''
     yday = (now - timedelta(days=1)).strftime('%Y-%m-%d') == str(at)[:10]
-    return f"This was due {'yesterday' if yday else when(at, now)}. Want the note ready?"
+    # said as a fact: "Want the note ready?" was a question with nothing under it to press (B18) - late_chips are the answers
+    return f"This was due {'yesterday' if yday else when(at, now)} and it's still open."
+
+
+def late_chips(tid: int, task: dict, now: datetime = None) -> list:
+    """What to do about a day that has passed, under the late line: each is the owner's words naming the task, so the
+    assistant reads them as it reads anything typed (a chip's verb acts on whatever is on the table, and this line has
+    nothing on it)."""
+    from .store import task_ref
+    ref, at = task_ref(tid), when((task or {}).get('DueAt'), now)
+    return [{'label': 'Draft a note', 'ask': f"Draft a note on {ref} to say where it stands - it was due {at}"},
+            {'label': 'Move the due day', 'ask': f"Move the due day on {ref}"},
+            {'label': 'Mark done', 'ask': f"Mark {ref} done"}]
 
 
 def set_due(store, tid: int, day: str, actor: str = 'triage'):
-    """The day this work is due. A new day starts its steps again; a closed task is left alone."""
+    """The day this work is due ('' clears it). A new day starts its steps again; a closed task is left alone. Moved out
+    of the window, the urgent the due day raised goes back to what it was - only that one: DueRaised is cleared by any
+    other write of Priority, so an urgent from triage or the owner stays (B18, 2026-10-11: moved to the 30th, it sat at
+    the top of the list for two weeks)."""
     t = store.get_task(tid) or {}
-    if not t or not day or t.get('Status') in ('done', 'dropped') or str(t.get('DueAt') or '') == day: return
+    if not t or day is None or t.get('Status') in ('done', 'dropped') or str(t.get('DueAt') or '') == day: return
     store.update_task(tid, {'DueAt': day}, actor)
     store._exec('UPDATE task SET DueSaid=NULL WHERE TaskId=?', (tid,))
+    if t.get('DueRaised') and t.get('Priority') == 'urgent' and not (day and step(day)):
+        store.update_task(tid, {'Priority': t['DueRaised']}, 'assistant')
 
 
 def deadlines(store, now: datetime = None) -> int:
     """Each open task whose due day is near, said once per step: a note on the task (new activity, so it is back on the
-    rail unread) and a line in the desktop chat. The day before and on the day it is urgent - the top of the list."""
+    rail unread) and a line in the desktop chat. From the eve on it is urgent - the top of the list - and late too: a task
+    first seen past its day (the app off over it, or a date triage read that had gone) never reached the top (B18)."""
     now, n = now or datetime.now(), 0
     for t in store._rows("SELECT * FROM task WHERE IFNULL(DueAt,'')<>'' AND Status NOT IN ('done','dropped')"):
         s = step(t['DueAt'], now)
         if not s or (t.get('DueSaid') in STEPS and STEPS.index(t['DueSaid']) >= STEPS.index(s)): continue
         line = due_line(t, now)
-        if s in ('eve', 'today') and t.get('Priority') != 'urgent': store.update_task(t['TaskId'], {'Priority': 'urgent'}, 'assistant')
         # ...and a Remind me date further off gives way: "at the top of your list" while the row stayed under For later
         # until the remind day, and the due day passed unseen (B2, 2026-10-11). Once per step, so a reminder set again
         # after this note holds until the next step.
         if t.get('RemindAt'): store.update_task(t['TaskId'], {'RemindAt': ''}, 'assistant')
+        if t.get('Priority') != 'urgent':
+            # ...remembering what it was, so a day moved out puts it back (set_due); written after, as update_task clears it
+            store.update_task(t['TaskId'], {'Priority': 'urgent'}, 'assistant')
+            store._exec('UPDATE task SET DueRaised=? WHERE TaskId=?', (t.get('Priority') or 'normal', t['TaskId']))
         store.add_comment(t['TaskId'], 'assistant', 'agent', line)
         from . import asks
-        try: asks.say_due(store, t['TaskId'], line)
+        try: asks.say_due(store, t['TaskId'], line, late_chips(t['TaskId'], t, now) if s == 'late' else None)
         except Exception as e: logger.warning(f"due day on {t['TaskId']} not said: {e}")
         store._exec('UPDATE task SET DueSaid=? WHERE TaskId=?', (s, t['TaskId'])); n += 1
     return n

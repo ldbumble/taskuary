@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
   Assignee TEXT, Source TEXT DEFAULT 'manual', SourceRef TEXT, Tags TEXT,
   CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT, ClosedAt TEXT, RemindAt TEXT,
   AskedVia TEXT, AskedTold TEXT, AskedToldAt TEXT, AskedWatch TEXT, AskedSeenMid INTEGER, RemindVia TEXT, RemindOwed TEXT,
-  AskedWatchAt TEXT, AskedNudgedAt TEXT, DueAt TEXT, DueSaid TEXT);
+  AskedWatchAt TEXT, AskedNudgedAt TEXT, DueAt TEXT, DueSaid TEXT, DueRaised TEXT);
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
@@ -839,7 +839,9 @@ class SQLiteStore:
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
             # a watch counts its 30 days from when it began, not from the task's age, and says its nudge once (asks.py);
             # the day the work is due, as triage read it from the mail, and the last step of it already said (remind.py)
-            for col in ('AskedWatchAt', 'AskedNudgedAt', 'DueAt', 'DueSaid'):
+            # ...and the priority it had before the due day raised it to urgent (B18), so a day moved weeks out puts back
+            # only the assistant's own urgent - any other write of Priority clears it (update_task)
+            for col in ('AskedWatchAt', 'AskedNudgedAt', 'DueAt', 'DueSaid', 'DueRaised'):
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
             # an email slot an agent addressed as "Name <address>" handed the provider the whole string (TQ-0957): the
             # recipient is the address, the name rides beside it (slots.split) - repaired once, on start
@@ -1600,7 +1602,9 @@ class SQLiteStore:
         # different truth. A write that does not touch Status leaves the timestamp alone.
         closed = (", ClosedAt='" + _now() + "'" if fields.get('Status') in ('done', 'dropped')
                   else ', ClosedAt=NULL' if 'Status' in fields else '')
-        self._exec(f"UPDATE task SET {','.join(f'{c}=?' for c in cols)}, UpdatedBy=?, UpdatedAt=?{closed} WHERE TaskId=?",
+        # a priority anybody sets is theirs: the due day's raise is no longer the assistant's to put back (remind.set_due, B18)
+        raised = ', DueRaised=NULL' if 'Priority' in fields else ''
+        self._exec(f"UPDATE task SET {','.join(f'{c}=?' for c in cols)}, UpdatedBy=?, UpdatedAt=?{closed}{raised} WHERE TaskId=?",
                    [fields[c] for c in cols] + [actor, _now(), task_id])
         # closing a task IS the decision: its pending reviews (escalations, drafts) resolve
         # with it instead of haunting the review queue for a task that's already handled

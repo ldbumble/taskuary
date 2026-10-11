@@ -103,13 +103,13 @@ def test_on_the_day_and_then_late_each_said_once(s):
     assert any("This one's today." in l and 'TQ-' in l for l in dock_lines(s))
     tomorrow = datetime.now() + timedelta(days=1)
     assert remind.deadlines(s, tomorrow) == 1
-    assert s.list_comments(tid)[-1]['Body'] == 'This was due yesterday. Want the note ready?'
+    assert s.list_comments(tid)[-1]['Body'] == "This was due yesterday and it's still open."
     assert remind.deadlines(s, tomorrow + timedelta(days=3)) == 0              # late is asked once
 
 
 def test_long_past_names_the_day():
     now = datetime(2026, 10, 12, 9, 0)
-    assert remind.due_line({'DueAt': '2026-10-09'}, now) == 'This was due Fri 9 Oct. Want the note ready?'
+    assert remind.due_line({'DueAt': '2026-10-09'}, now) == "This was due Fri 9 Oct and it's still open."
 
 
 def test_a_new_day_starts_the_steps_again_and_a_closed_task_is_left_alone(s):
@@ -151,3 +151,60 @@ class OrderTests(unittest.TestCase):
              mock.patch('taskuary.remind.tick', side_effect=lambda st, *a: order.append('reminders')):
             server._poll_reports(0, what='syncing')
         self.assertEqual(order[:2], ['reminders', 'mail'])
+
+
+# ── B18 (2026-10-11): the urgent flag follows the day, the eve is a working day, and the late line has buttons ──────
+def test_moving_the_day_weeks_out_lowers_only_the_urgent_the_assistant_raised(s):
+    tid = due_task(s, 0); remind.deadlines(s)
+    assert s.get_task(tid)['Priority'] == 'urgent'
+    remind.set_due(s, tid, day(21))
+    assert s.get_task(tid)['Priority'] == 'normal'                              # back to what it was before the due day raised it
+    mine = due_task(s, 0, Priority='urgent'); remind.deadlines(s)               # urgent before the due day ever came near
+    remind.set_due(s, mine, day(21)); assert s.get_task(mine)['Priority'] == 'urgent'
+    later = due_task(s, 0); remind.deadlines(s)
+    s.update_task(later, {'Priority': 'urgent'}, 'owner')                      # the owner said urgent herself, after the raise
+    remind.set_due(s, later, day(21)); assert s.get_task(later)['Priority'] == 'urgent'
+
+
+def test_a_day_moved_but_still_near_keeps_it_at_the_top(s):
+    tid = due_task(s, 0); remind.deadlines(s)
+    remind.set_due(s, tid, day(1)); assert s.get_task(tid)['Priority'] == 'urgent'
+
+
+def test_first_seen_already_late_goes_to_the_top(s):
+    tid = due_task(s, -3)
+    assert remind.deadlines(s) == 1 and s.get_task(tid)['Priority'] == 'urgent'
+
+
+def test_the_eve_is_the_last_working_day_before_it():
+    mon = '2026-10-12'
+    assert remind.step(mon, datetime(2026, 10, 8, 9)) is None                  # Thursday: not yet
+    assert remind.step(mon, datetime(2026, 10, 9, 9)) == 'eve'                 # Friday is the day before, for work
+    assert remind.step(mon, datetime(2026, 10, 11, 9)) == 'eve'                # ...and the weekend is still before it
+    assert remind.step('2026-10-15', datetime(2026, 10, 13, 9)) is None
+    assert remind.step('2026-10-15', datetime(2026, 10, 14, 9)) == 'eve'       # midweek it is plain tomorrow
+    assert remind.due_line({'DueAt': mon}, datetime(2026, 10, 9, 9)) == "This one's due Monday, so it's at the top of your list."
+    assert remind.due_line({'DueAt': '2026-10-15'}, datetime(2026, 10, 14, 9)) == "This one's due tomorrow, so it's at the top of your list."
+
+
+def test_the_late_line_offers_what_to_do_about_it(s):
+    from taskuary import concierge
+    from taskuary.store import task_ref
+    tid = due_task(s, -1)
+    remind.deadlines(s)
+    assert s.list_comments(tid)[-1]['Body'] == "This was due yesterday and it's still open."
+    rows = general.chat_rows(s, general.dock_task(s, 'owner')[0]['TaskId'])
+    card = json.loads(concierge._MARK.search(rows[-1]['Body']).group(1))
+    assert [c['label'] for c in card['chips']] == ['Draft a note', 'Move the due day', 'Mark done']
+    assert all(task_ref(tid) in c['ask'] for c in card['chips'])               # each names the task: words the assistant reads
+    assert '?' not in concierge._MARK.sub('', rows[-1]['Body'])                 # a question nothing could answer is gone
+
+
+def test_the_assistant_can_move_the_due_day(s):
+    tid = due_task(s, 0); remind.deadlines(s)
+    with mock.patch.object(server, 'store', s):
+        out = server._run_operation({'kind': 'task.update', 'target': tid, 'params': {'due': '3 weeks'}}, None)
+    t = s.get_task(tid)
+    assert t['DueAt'] == day(21) and t['Priority'] == 'normal' and not t['DueSaid'] and out['changed']['DueAt'] == day(21)
+    with mock.patch.object(server, 'store', s), pytest.raises(server.HTTPException):
+        server._run_operation({'kind': 'task.update', 'target': tid, 'params': {'due': 'soonish'}}, None)

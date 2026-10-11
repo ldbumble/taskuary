@@ -136,7 +136,7 @@ def send_picked(store, sends: list) -> str:
     return '. '.join(s[:1].upper() + s[1:] for s in said) + '.'
 
 
-def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: str = '', desktop: bool = False) -> bool:
+def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: str = '', desktop: bool = False, card: dict = None) -> bool:
     """One line at the ask's door. The phone it was asked from - or, failing that, the phone the walk is handed to - only
     in a gap of the conversation (remote_assistant.quiet: never between a card and its answer); False = not now, try
     again. Everywhere else, the desktop Assistant chat. `via`: a door other than the ask's (a reminder's). `desktop`: a
@@ -161,7 +161,7 @@ def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: 
     # 2026-10-06: "Task they are working on should be the main thing, nothing else"). What the owner ASKED to hear - a
     # reply on a watched task, a reminder coming due - still comes here; a phone, which has no card, still hears it all.
     if lane: return True
-    concierge.record(store, general.dock_task(store, 'owner')[0]['TaskId'], 'assistant', line)
+    concierge.record(store, general.dock_task(store, 'owner')[0]['TaskId'], 'assistant', line, card)     # `card`: the chips under it
     live.emit(live.CHAT)                     # the open Assistant tab shows it now, not on its next tick
     return True
 
@@ -282,11 +282,13 @@ def stop_watching(store, t: dict, quiet: bool = False) -> str | None:
     return line
 
 
-def say_due(store, tid: int, line: str) -> bool:
-    """A due day's line (remind.deadlines), in the desktop chat only."""
+def say_due(store, tid: int, line: str, chips: list = None) -> bool:
+    """A due day's line (remind.deadlines), in the desktop chat only - with `chips` under it when there is something to
+    do about it (a day that has passed, remind.late_chips)."""
     from .store import task_ref
     t = store.get_task(tid) or {}
-    return bool(t) and _say(store, t, f"{task_ref(tid)} {_title(t)} - {line}", via='desktop', desktop=True)
+    return bool(t) and _say(store, t, f"{task_ref(tid)} {_title(t)} - {line}", via='desktop', desktop=True,
+                            card={'kind': 'words', 'key': None, 'chips': chips} if chips else None)
 
 
 WATCHES = ('done', 'reply', 'any', 'off')

@@ -10,7 +10,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
 | **table** | decide about the item on the table | reply(text), approve, redraft(text), mine, regular_agent(text, as?, new?), coder(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel |
-| **task** | change any task - the one on the table or one named with ref | task.update(priority/title/assignee), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject |
+| **task** | change any task - the one on the table or one named with ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject |
 | **agents** | start, continue, answer or stop the agent on a task, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule |
@@ -168,11 +168,12 @@ Change any task - the one on the table or one named with ref.
 
 ### `task.update`
 
-Change a task's priority, title or owner.
+Change a task's priority, title, owner or due day.
 
 - `priority` - low | normal | high | urgent
 - `title`
 - `assignee` - 'me', or an agent's role
+- `due` - the day the work is due (2026-10-30, "friday", "2 weeks", or "none")
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
 <p class="runs">Waits for your yes on a card.</p>

@@ -2951,7 +2951,10 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."
     if kind == 'report.delete': return f" {o.get('title') or 'It'} is deleted."
     if kind == 'setting.set': return f" {o.get('said') or ''}"
-    if kind == 'task.update': return ' ' + ', '.join(f"{k.lower()} is now {v}" for k, v in (o.get('changed') or {}).items()) + '.'
+    if kind == 'task.update':
+        from .remind import when
+        said = lambda k, v: (f"the due day is now {when(v)}" if v != 'none' else 'no due day now') if k == 'DueAt' else f"{k.lower()} is now {v}"
+        return ' ' + ', '.join(said(k, v) for k, v in (o.get('changed') or {}).items()) + '.'
     if kind == 'task.check' and o.get('item'): return f" Ticked: {o['item']}."
     if kind == 'task.watch': return (' Stopped watching it.' if o.get('watch') == 'off' else
                                      f" I'll tell you {'here ' if o.get('via') else ''}when " + {'done': 'it is done', 'reply': 'someone replies on it'}.get(o.get('watch'), 'anything happens on it') + '.')

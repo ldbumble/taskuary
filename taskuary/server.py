@@ -845,8 +845,16 @@ def _run_operation(op: dict, background: BackgroundTasks):
         who = str(p.get('assignee') or '').strip()
         if who: want['Assignee'] = ACTOR if who.lower() in ('me', 'mine', 'owner', 'myself', ACTOR.lower()) else (who if ':' in who else f'agent:{who}')
         want = {k: v for k, v in want.items() if v}
-        if not want: raise HTTPException(422, 'say what to change - priority, title or who owns it')
-        update_task(tid, TaskBody(**want), background)
+        # THE DUE DAY (B18, 2026-10-11): the late line's "Move the due day" had no road - triage was the only writer of it
+        due = str(p.get('due') or '').strip()
+        if due:
+            from . import remind
+            try: day = '' if due.lower() in remind.NONE_WORDS else f"{datetime.now():%Y-%m-%d}" if due.lower() == 'today' else remind.parse(due)[:10]
+            except ValueError as e: raise HTTPException(422, f'due: {e}')
+        if not want and not due: raise HTTPException(422, 'say what to change - priority, title, who owns it or the due day')
+        if want: update_task(tid, TaskBody(**want), background)
+        if due:
+            remind.set_due(store, tid, day, ACTOR); want['DueAt'] = day or 'none'
         return {'taskId': tid, 'changed': want}
     if kind == 'task.set_repo': return set_task_repo(tid, RepoBody(repo=str(p.get('repo') or '').strip() or None), background)
     if kind == 'task.check':

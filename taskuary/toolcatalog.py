@@ -54,8 +54,9 @@ PURPOSE = {
     'task.split':               'split one arrival into two jobs - `text`',
     # THE TASK PAGE, as tools (2026-09-25). A task tool acts on the task on the table, or on the one `ref` names
     # (TQ-0123) - never a guess. Each is the page's own button.
-    'task.update':              ("change a task's priority, title or owner - any of `priority`: low | normal | high | urgent, "
-                                 "`title`, `assignee` ('me', or an agent's role); `ref` when it is not the one on the table"),
+    'task.update':              ("change a task's priority, title, owner or due day - any of `priority`: low | normal | high | urgent, "
+                                 "`title`, `assignee` ('me', or an agent's role), `due`: the day the work is due (2026-10-30, "
+                                 "\"friday\", \"2 weeks\", or \"none\"); `ref` when it is not the one on the table"),
     'task.set_kind':            'say what kind of work a task is - `kind`: task (the owner does it) | general (a non-coding agent) | coding; `ref`',
     'task.set_repo':            'put a coding task in the repository it belongs in - `repo` (its name, as the repositories list says it); `ref`',
     'task.check':               'tick a checklist item on a task - `item`: its number (1 is the first) or words from it; `done`: false un-ticks; `ref`',
@@ -282,7 +283,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coder': 'text, as?, new?',
+HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coder': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 

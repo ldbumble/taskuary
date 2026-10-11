@@ -418,6 +418,16 @@ class ButtonTests(unittest.TestCase):
         self.assertEqual((task['Kind'], task['Status'], task['SourceRef']), ('general', 'open', f"assistant:idea:{idea['IdeaId']}"))
         self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_general'])
 
+    def test_closing_the_task_an_idea_became_closes_the_idea(self):
+        """2026-10-10: 96 ideas stayed open after the task made from them closed. One that only cites a task stays open."""
+        s, mid, idea = self._posted()
+        tid = s.create_task({'Title': 'Read this', 'Kind': 'general', 'Status': 'open'}, 'router')     # triage opened it, nobody pressed
+        s.update_task(tid, {'SourceRef': f"assistant:idea:{idea['IdeaId']}"}, 'assistant')
+        cite = s.upsert_idea({'key': 'idea:other', 'kind': 'idea', 'text': 'TQ follow-up', 'action': {'tid': tid}}, '2026-10-10T09:00:00')
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        self.assertEqual((s.get_idea(idea['IdeaId'])['Status'], s.get_idea(idea['IdeaId'])['DecidedBy']), ('done', 'task'))
+        self.assertEqual(s.get_idea(cite['IdeaId'])['Status'], 'open')
+
     def test_not_ours_teaches_nothing_and_stays_down_until_the_facts_change(self):
         """I10: Not ours only never repeats - the lesson it wrote went to a block no prompt reads."""
         s, mid, idea = self._posted()

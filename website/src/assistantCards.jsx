@@ -796,15 +796,22 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
 export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
   const a = card.action || {};
-  const words = { followup: "waiting on them", promise: "you promised", asked: "slipped", cold: "gone quiet", idea: "worth a thought",
+  const words = { followup: "waiting on them", promise: "you promised", asked: "slipped", cold: "gone quiet", idea: "advisor idea",
                   connect: "worth connecting", health: "needs a look" };
   // THE REPORT PROPOSES, THE CARD HAS THE DOORS (the assistant-runs-the-app design, 2026-09-18): a
   // system to connect opens its card on the Connections tab; a health finding opens the tab that fixes
   // it. Putting it down is the chips' Not ours, the same word every idea carries (C5, 2026-09-27).
   const go = (tab, hash) => { if (hash) window.location.hash = hash; onNavigate?.(tab); };
+  // THE FINDING, THEN WHOSE MOVE, THEN ANY SUGGESTION, apart (the owner, 2026-10-10): the chip is triage's verdict, the rows are
+  // the Advisor's own parts, and the evidence links to the mail it came from instead of sitting in a raw box
+  const mid = a.mid || card.mid, why = a.why || card.why;
+  const from = mid ? <a className="tq-card-link" href={`#msg=${mid}`} onClick={(e) => { e.preventDefault(); onTimeline?.(mid); }}>{card.who ? `${card.who}'s message` : "the message"} ↗</a>
+    : a.source?.label ? <span>{a.source.label}</span> : null;
+  const facts = [["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", why && <>{from}{from && ": "}{why}</>]].filter(([, v]) => v);
+  const chip = card.lane === "asked" ? "on you" : "not on you";
   return (
-    <CardShell card={card} kicker={words[card.idea_kind] || "slipped"} title={card.title}>
-      {card.why && <div className="tq-card-excerpt">{card.why}</div>}
+    <CardShell card={card} kicker={<>{words[card.idea_kind] || "slipped"}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
+      {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
       <Foot
         verb={card.idea_kind === "connect" && a.connector_type ? (
           <Button size="small" variant="contained" disableElevation sx={primary}
@@ -814,9 +821,8 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
         ) : null}
         then={card.idea_kind === "connect" && a.connector_type ? <><b>{a.planned ? "See" : "Connect"}</b> opens its card on Connections - nothing changes until you finish there.</>
           : card.idea_kind === "health" && a.tab ? <><b>Open {a.tab}</b> takes you to the tab that fixes it.</>
-          // the buttons are the short way; saying it is the real one (2026-09-04: "all the ideas
-          // should just say it and I will create it")
-          : <><b>Make a task</b> puts it on your list, <b>Send to agent</b> hands it off, <b>Not ours</b> puts it down - or say what you want done with it.</>}
+          // the buttons in the bar say what they do; the sentence that explained them is gone (2026-10-10)
+          : null}
         where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
     </CardShell>
   );

@@ -1607,6 +1607,11 @@ class SQLiteStore:
         if fields.get('Status') in ('done', 'dropped'):
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
+            # ...and so does the Advisor idea the task was MADE from: left open, 96 ideas outlived their closed tasks
+            # (2026-10-10). Only SourceRef - an idea that merely cites a task may name a separate follow-up (funnel.from_forgotten).
+            self._exec("UPDATE idea SET Status='done', DecidedBy='task', DecidedAt=? WHERE Status IN ('open','snoozed') AND "
+                       "IdeaId IN (SELECT CAST(substr(SourceRef,16) AS INTEGER) FROM task WHERE TaskId=? AND SourceRef LIKE 'assistant:idea:%')",
+                       (_now(), task_id))
         # ...and Done is the whole job. A coder finished TQ-0646 with `--done` and the card kept three
         # open boxes, as if the work were still owed (the owner, 2026-09-18: "part of --done should be
         # that, no? same if it's saved manually"). Dropped leaves them: nothing was done.

@@ -372,6 +372,10 @@
 .tq-card-context { margin-top: 8px; }
 .tq-card-kicker em { margin-left: auto; font-style: normal; letter-spacing: .04em; text-transform: none; color: #989188; }
 .tq-card-title { margin-top: 5px; font-size: 13px; font-weight: 600; color: #262521; line-height: 1.35; overflow-wrap: anywhere; }
+.tq-card-chip { margin-left: 4px; padding: 1px 7px; border: 1px solid #d9d2c6; border-radius: 9px; font: 500 10px/1.5 'IBM Plex Sans', sans-serif; letter-spacing: 0; text-transform: none; color: #5d574f; }
+.tq-card-facts { margin-top: 9px; display: grid; grid-template-columns: 86px minmax(0, 1fr); row-gap: 5px; column-gap: 10px; font-size: 12.5px; line-height: 1.45; color: #3a3833; overflow-wrap: anywhere; }
+.tq-card-facts > :nth-child(odd) { color: #8a837a; font-size: 11px; padding-top: 1px; }
+.tq-card-link { color: #3d5a80; text-decoration: underline; text-decoration-color: #b8c4d4; }
 .tq-card-sub { font-size: 11px; color: #6e685f; margin-top: 2px; overflow-wrap: anywhere; }
 .tq-card-excerpt { margin-top: 7px; padding: 8px 10px; border-radius: 8px; background: #f6f4f1; border: 1px solid #ebe6de; font-size: 12px; line-height: 1.5; color: #4d4a43; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow: auto; }
 .tq-card-tail { margin-top: 7px; padding: 8px 10px; border-radius: 8px; background: #22231f; color: #e8e4dc; font: 11px/1.5 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow: auto; }

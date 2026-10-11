@@ -184,7 +184,8 @@ class MissedTests(unittest.TestCase):
         self.assertTrue(answer.startswith('Nothing urgent.'), answer)
         self.assertIn('One person is still waiting on an answer from you: Erin', answer)
         self.assertIn('Payworth still hasn\'t answered you about "Invoice 114"', answer)
-        self.assertRegex(answer, r"I couldn't check Teams (this morning|today), so I can't vouch for that\.")
+        # an hour ago is yesterday in the first hour after midnight (CI runs on UTC)
+        self.assertRegex(answer, r"I couldn't check Teams (this morning|today|since yesterday), so I can't vouch for that\.")
         self.assertEqual(banned(answer), [])
 
     def test_nothing_missed_says_so(self):

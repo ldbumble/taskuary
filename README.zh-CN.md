@@ -204,7 +204,7 @@ pip install -e .
 taskuary
 ```
 
-消息分拣可以选择 Ollama，也可以在 **Settings → Triage brain** 中选择 Qwen。
+消息分拣可以选择 Ollama，也可以在 **Settings → Triage & agents → Triage brain** 中选择 Qwen。
 **Qwen Code 是本地 CLI，不等于本地模型**：选择云端服务时仍会发送提示词；
 希望本地推理时，需要另外配置本地模型端点。
 

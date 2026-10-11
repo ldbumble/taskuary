@@ -497,10 +497,20 @@ class StaysOnSubjectTests(unittest.TestCase):
         self.assertFalse(concierge.off_subject('TQ-0327 is parked', {'tid': 327}))
         self.assertFalse(concierge.off_subject('no refs at all', {'tid': 327}))
         self.assertFalse(concierge.off_subject('TQ-0312', {'tid': None}))
-        digest = {'tid': None, 'who': 'Morning digest', 'title': 'Morning digest — yesterday and today so far, distilled'}
-        self.assertTrue(concierge.off_subject('Ayush pushed a commit this morning on the WebSocket PR that fixes the flake.', digest))
-        self.assertFalse(concierge.off_subject('The Morning digest landed at 8:08 - read it with the button.', digest))
-        self.assertFalse(concierge.off_subject('Dana wrote asking for the export.', {'tid': None, 'who': 'Dana', 'title': 'Export still broken'}))
+        # no word-overlap half any more (the owner, 2026-10-11): an answer right in other words is not handed back
+        self.assertFalse(concierge.off_subject('The export is stuck on her end - one reply unblocks it.', {'tid': 327, 'who': 'Dana', 'title': 'Export still broken'}))
+        self.assertFalse(concierge.off_subject('Read it with the button.', {'tid': None, 'who': 'Morning digest', 'title': 'Morning digest'}))
+
+    def test_an_answer_that_mentions_access_or_data_is_never_thrown_away(self):
+        """A regex blanked any reply that "talked about its limits" - and blanked correct answers that said Erin needs access
+        to the data room. The rule is the prompt's now (IN_PART), and the reply stands (the owner, 2026-10-11)."""
+        s = store()
+        t, m, r = drafted(s)
+        right = "Erin can't access the data room until you approve her request - the draft says so."
+        out = concierge.surface(s, llm=lambda sy, u, **k: right)
+        self.assertEqual(out['say'], right)
+        self.assertFalse(hasattr(concierge, 'in_character'))
+        self.assertIn(concierge.IN_PART, concierge.CONTRACT); self.assertIn(concierge.IN_PART, concierge.PHONE_CONTRACT)
 
 
 class TaskNowTests(unittest.TestCase):
@@ -640,7 +650,8 @@ class SetupAndTroubleTests(unittest.TestCase):
             out = concierge.setup_task(s, 'set up a report that pulls last month\'s Zoho invoices every Monday')
         t = s.get_task(out['taskId'])
         self.assertEqual((t['Kind'], t['Status'], t['Source']), ('general', 'open', 'assistant'))
-        self.assertEqual(out['title'], "report that pulls last month's Zoho invoices every Monday"); self.assertEqual(t['Title'][:6], 'Report')
+        # with no title named, the owner's sentence as said - a regex used to cut the verb off it (the owner, 2026-10-11)
+        self.assertEqual(out['title'], "set up a report that pulls last month's Zoho invoices every Monday"); self.assertEqual(t['Title'][:6], 'Set up')
         self.assertIn('Zoho invoices', t['Summary'])
         self.assertEqual([i['text'] for i in s.task_checklist(out['taskId'])],
                          ["set up a report that pulls last month's Zoho invoices every Monday"])

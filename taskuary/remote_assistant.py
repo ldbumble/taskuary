@@ -1891,14 +1891,17 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     # THE CARD'S ORDER: the verb, then Next, then More, then the rest - the desktop's two buttons and its
     # Also line, as one numbered list (2026-09-23). A proposal's yes/no and an agent's own answers keep
     # theirs: those are the answer itself, not a choice of what to do.
+    # WHICH WORD IS NEXT is the chip's verb, or the vocabulary's own word - never a label that happens to contain "next"
+    # (the owner, 2026-10-11: no word matching decides what a word does)
+    from . import concierge as _c
+    next_words = {c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') == 'next'} | {_c.CHIP_WORDS['next']}
     if not out.get('proposal') and not agent_answers(item):
-        nxt = [w for w in words if str(w).strip().lower() == 'next']
+        nxt = [w for w in words if w in next_words]
         rest = [w for w in words if w not in nxt]
         lead_word = (primary(out) or {}).get('label')
         first_ = [w for w in rest if w == lead_word][:1] or rest[:1]
         # ...and the draft's own other word rides with it, ahead of Next - the screen draws Redraft beside the send, under the draft
         # (the owner, 2026-10-06: "on whatsapp" the same order)
-        from . import concierge as _c
         first_ += [w for w in rest if w == _c.CHIP_WORDS['redraft'] and w not in first_]
         more = [MORE] if store is not None and not (full and story) and more_text(store, item) else []
         words = first_ + nxt + more + [w for w in rest if w not in first_]
@@ -1913,7 +1916,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # card's button, and on the phone it arrives as a word like any other): two ways to say the
         # same move, numbered separately, is the thing that made the desktop drop a button in the
         # first place.
-        if not any('next' in str(w).lower() for w in words):
+        if not any(w in next_words for w in words):
             words = words + [concierge.CHIP_WORDS['next']]
             _offer([(concierge.CHIP_WORDS['next'], {'t': 'next', **_drawn_at(item)})])
     # ...and what a NUMBER does, said plainly. "Open one" describes a door on a screen that is not

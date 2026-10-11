@@ -110,13 +110,19 @@ CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'not_ours', 'next'), 
 # THE CONTRACT: where the voice is and what it must not do. The line code reads - CALL, or OPTIONS - is
 # toolcatalog.block's, the one place it is taught (2026-09-25: one format; the decisions are tools like any other).
 # How to behave is COUNSEL's - the owner's document, not this file (PW-248/256).
+# The voice never steps out of the part. A CLI brain answered "next" with "I don't have the queue data" and "yes go ahead" with
+# "I'm in Claude Code... I don't have access" (2026-09-03). A regex used to blank such a reply - and blanked correct answers that
+# happened to mention access or data; the rule is the model's to keep, so it is said here (the owner, 2026-10-11: everything AI).
+IN_PART = ("You are Taskuary. Never talk about yourself as a model or a CLI, or about your own access, tools or limits: answer from "
+           "the facts you were given, and when they do not say, say what they do say.\n")
+
 CONTRACT = (
     "WHERE YOU ARE\n"
     "You are speaking to {owner} in the chat on the Assistant tab. The action words under your line are the owner's "
     "buttons and they are already chosen for this item - never list them, and never end a line with an offer to do "
     "something. When you cannot tell which of two things the owner's words mean, say which two and ask - one short "
     "question, and OPTIONS instead of a CALL. When the words say what they want, act on them: a card is their "
-    "confirmation, so acting on a clear ask is not a guess.\n")
+    "confirmation, so acting on a clear ask is not a guess.\n" + IN_PART)
 SYSTEM = CONTRACT      # the old name, for one release
 
 # The same walk, read in a phone chat. There are no cards there and no action words under the line, so
@@ -133,7 +139,7 @@ PHONE_CONTRACT = (
     "one, and never end a line with an offer to do something. When you cannot tell which of two things the "
     "owner's words mean, say which two and ask - one short question, and OPTIONS instead of a CALL. When the "
     "words say what they want, act on them: the yes-or-no choices code adds under your line are their "
-    "confirmation, so acting on a clear ask is not a guess.\n")
+    "confirmation, so acting on a clear ask is not a guess.\n" + IN_PART)
 
 DESK, PHONE = 'desk', 'phone'
 # Where this turn will be READ. Ambient, not an argument: every path into the voice (surface, say, the
@@ -1049,32 +1055,12 @@ def _urgent_line(pile_items: list, item: dict | None) -> str:
 _REF = re.compile(r'\bTQ-0*(\d+)\b')
 
 def off_subject(say: str, item: dict | None) -> bool:
-    """The model wandered: it names a task that is not the one on the table, or names none of the item's
-    own words at all (2026-09-03: the words were Robin's TQ-0312, the card was TQ-0327; later the words were
-    Ayush's commit, the card the Morning digest - a resumed conversation narrating from memory)."""
-    if not item: return False
+    """The model named a task that is not the one on the table (2026-09-03: the words were TQ-0312, the card was TQ-0327).
+    A ref is an id - parsing, not meaning. The word-overlap half (no own word in the sentence = wandered) is gone: it decided
+    meaning from a stop-word list and handed back answers that were right in other words (the owner, 2026-10-11)."""
+    if not item or not item.get('tid'): return False
     named = {int(n) for n in _REF.findall(say or '')}
-    if item.get('tid') and named: return int(item['tid']) not in named
-    from .routing import tokens
-    own = {w for w in tokens(f"{item.get('who') or ''} {item.get('title') or ''}") if len(w) > 2} - {'the', 'and', 'for', 'with', 'from', 'morning', 'today', 'yesterday', 'tomorrow', 'week', 'this', 'that'}
-    if not own: return False
-    return not (own & set(tokens(say or '')))
-
-
-# The voice must never step out of the part. A CLI brain answered "next" with "I understand the
-# role, but I don't have the queue data" and "yes go ahead" with "I'm in Claude Code... I don't have
-# access to the systems Taskuary would need" - twice, in the owner's face (2026-09-03). It is not
-# the assistant's place to describe its own plumbing: the facts line is a better answer than that.
-_BROKE_CHARACTER = re.compile(r"\b(i (do ?n'?t|don't|cannot|can'?t) (have|see|access)\b.{0,40}\b(access|data|queue|pipe|systems|database|information|context)"
-                              r"|i'?m (in |running (in|on) )?(claude code|codex|gemini|an? (ai|llm|language model))"
-                              r"|as an ai\b|i am an ai\b|i (have|am) (no|not) (able to )?(access|connected)"
-                              r"|i (would|will) need (access|the) \w+ (to|before)|i'?m unable to access"
-                              r"|i (do ?n'?t|cannot) (actually )?(run|execute|call) (anything|tools|commands))", re.I)
-
-
-def in_character(say: str) -> bool:
-    """False when the answer talks about the model's own limits instead of the owner's work."""
-    return not _BROKE_CHARACTER.search(say or '')
+    return bool(named) and int(item['tid']) not in named
 
 
 def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: list) -> tuple[str, list, str]:
@@ -1085,8 +1071,8 @@ def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: 
             + (f"{facts(store, item)}\n\n" if not item else '') + instruction)
     system = _system(store, llm)
     # A CHECK HANDS IT BACK, it never answers for the model (the owner, 2026-10-08: no code in front of the AI): an introduction that
-    # named another task, or talked about the model's own plumbing, was swapped for the facts line in silence. The model is told
-    # why and answers again; only a second miss falls back to the facts.
+    # named another task (a TQ ref - an id, not meaning) was swapped for the facts line in silence. The model is told why and answers
+    # again; only a second miss falls back to the facts.
     for attempt in range(2):
         text = str(llm(system, user, max_tokens=MAX_TOKENS) or '').strip()
         # An INTRODUCTION is not a decision, but the model ends one with a DECIDE line anyway - and this pass
@@ -1095,8 +1081,7 @@ def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: 
         # owner, 2026-09-07). The line never reaches the screen; the verb it named becomes the primary chip.
         text, decision = parse_decision(text)
         say, options = parse_options(text)
-        why = (f"spoke about another task than {item.get('ref') or 'the one on the table'}" if off_subject(say, item)
-               else 'talked about your own access or limits instead of the owner\'s work' if not in_character(say) else '')
+        why = f"spoke about another task than {item.get('ref') or 'the one on the table'}" if off_subject(say, item) else ''
         if not why: return say, options, (decision or {}).get('verb') or ''
         logger.info(f'concierge: the introduction {why} - {"asking again" if not attempt else "using the facts instead"}')
         user += f"\n\nYour answer {why}. Answer again: only THE ITEM ON THE TABLE, in your own voice as Taskuary."
@@ -1636,6 +1621,45 @@ class CallMiss(Exception):
     """A CALL whose target could not be found - "no report by that name". Written for the model, which gets it back."""
 
 
+def task_contract(store, kind: str, tid: int, p: dict) -> dict:
+    """task.update's and task.check's values, checked against a strict contract - the same check when the model CALLs (a
+    CallMiss it fixes) and when the card runs (a 422). Raises ValueError naming what IS allowed. The words used to be guessed
+    at: 'me'/'mine'/'myself' read as the owner and any other word became agent:<word>, 'today' and four ways to say none were
+    special-cased, and a checklist item was "the first one containing the words" (the owner, 2026-10-11: no word lists - the
+    model reads intent, code validates). A date is data, so remind's date PARSER still reads "friday" or "2 weeks"."""
+    from . import remind
+    out = {}
+    if kind == 'task.update':
+        who = str(p.get('assignee') or '').strip()
+        if who:
+            allowed = ['owner'] + [f"agent:{a['Name']}" for a in store.list_agents()]
+            if who not in allowed: raise ValueError(f"task.update assignee is one of {', '.join(allowed)} - not {who!r}. Nothing was changed.")
+            out['assignee'] = who
+        due = str(p.get('due') or '').strip()
+        if due:
+            today = f"{datetime.now():%Y-%m-%d}"
+            bad = (f"task.update due is a date (YYYY-MM-DD; today is {today}), a day like \"friday\" or \"2 weeks\", or \"none\" to "
+                   f"clear it - not {due!r}. Nothing was changed.")
+            if due == 'none': out['due'] = ''
+            elif re.fullmatch(r'\d{4}-\d{2}-\d{2}', due):
+                try: day = datetime.strptime(due, '%Y-%m-%d').strftime('%Y-%m-%d')
+                except ValueError: raise ValueError(bad)
+                if day < today: raise ValueError(f'{bad} That day has gone.')
+                out['due'] = day
+            else:
+                try: day = (remind.parse(due) or '')[:10]
+                except ValueError as e: raise ValueError(f'{bad} ({e})')
+                if not day: raise ValueError(bad)
+                out['due'] = day
+    if kind == 'task.check':
+        items, want = store.task_checklist(tid), str(p.get('item') or '').strip()
+        hit = items[int(want) - 1] if want.isdigit() and 0 < int(want) <= len(items) else None
+        if not hit: raise ValueError(f"task.check item is the checklist item's number - not {want!r}. {task_ref(tid)} has: "
+                                     + ('; '.join(f"{n}. {i['text']}" for n, i in enumerate(items, 1)) or 'no checklist') + '. Nothing was ticked.')
+        out['item'] = hit
+    return out
+
+
 # the passes a turn gets to fix a missed call (a look-up for the right name, then the action again)
 LOOKUP_ROUNDS = 2
 
@@ -1766,6 +1790,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             params['target'] = rv['ReviewId']
         else: params['target'] = t
         named = task_ref(t)
+        if kind in ('task.update', 'task.check'):             # a value off the contract is the model's to fix before any card
+            try: task_contract(store, kind, t, params)
+            except ValueError as e: raise CallMiss(str(e))
         if kind == 'agent.stop': params.setdefault('wrap', True)    # the task page's Save and end session: written up, then stopped
     if tk in ('source', 'connector', 'setting', 'script'):
         from . import appfacts
@@ -2025,7 +2052,9 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     from . import asks, ingest
     text = str(text or '').strip()
     if not text: raise ValueError('say what to set up')
-    title = (title or '').strip()[:120] or re.sub(r'^\s*(please )?(set ?up|create|build|make|add|configure|automate)\s+(a |an |me a |me an )?', '', text, flags=re.I).strip(' .')[:120] or text[:120]
+    # the title the model named (the set-up sort's, the hand-off's), or the owner's sentence as said. A regex used to strip a
+    # leading verb off it, and "Add Erin to payroll" became "Erin to payroll" (the owner, 2026-10-11: no word lists)
+    title = _title_cut(title) or _title_cut(' '.join(text.split()))
     from . import browserview
     tid = store.create_task({'Title': title[:1].upper() + title[1:], 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal',
                              # a CODING hand-off is the owner's own job, not a Taskuary set-up: marked
@@ -2526,7 +2555,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         if not d_text: raise ValueError('remember what? Say the fact and I will keep it')
         target, params = 0, {'note': d_text}
     elif verb == 'split': target, params = it.get('tid'), {'text': text, 'key': it.get('key')}
-    elif verb == 'setup': target, params = 0, {'text': d_text or text}
+    elif verb == 'setup': target, params = 0, {'text': d_text or text, 'title': decision.get('title') or None}   # the set-up sort's (_walkthrough)
     if target is None: raise ValueError(f"there is nothing to {SAYS_VERB.get(verb, verb)} on this one")
     params = {k: v for k, v in params.items() if v is not None}
     # A NEW TASK FROM THE OWNER'S OWN WORDS is not about the item on the table (the owner, 2026-10-01: "why did it say starting coding
@@ -2607,7 +2636,8 @@ SECRET_WORDS = re.compile(r'(secret|token|password|passwd|api[_ -]?key|refresh|p
 SETUP_QUESTIONS = 'setup_questions'
 SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
                      '{"kind": "report" | "connection" | "role" | "investigate", "provider": "<connector type or null>", '
-                     '"role": "<a key from roles, or null>", "why": "<one sentence>"}. '
+                     '"role": "<a key from roles, or null>", "why": "<one sentence>", '
+                     '"title": "<what to call it on a task list - a few words naming the job, e.g. Add Erin Blake to payroll>"}. '
                      # (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work")
                      'A ROLE is the owner naming their JOB and asking for Taskuary to be set up for it ("I am an AP rep, set me '
                      'up", "I do accounts payable") - answer role, with its key from roles, when the job is one of them; a job '
@@ -2664,7 +2694,7 @@ def sort_setup(store, text: str, llm) -> dict:
     # a role nobody ships is still a real ask - it is digging, never a report built from nothing
     if kind == 'role' and role not in have: kind = 'investigate'
     return {'kind': kind if kind in ('report', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
-            'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300]}
+            'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or '')}
 
 
 def _pending_setup(store, tid: int) -> dict | None:
@@ -2755,9 +2785,9 @@ def report_lines(facts: dict) -> str:
     return '\n'.join(f"{w}: {facts[k]}" for k, w in FACT_WORDS.items() if facts.get(k))
 
 
-def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead: str) -> dict:
+def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead: str, title: str = '') -> dict:
     """The set-up needs digging: a walk-through with the regular agent, proposed with the reason (PW-197)."""
-    prop = propose_for(store, tid, {'verb': 'setup', 'text': ask}, item, ask, actor)
+    prop = propose_for(store, tid, {'verb': 'setup', 'text': ask, 'title': title}, item, ask, actor)
     prop['say'] = f"{lead} {prop['say']}"
     record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': None, 'title': prop['label'], 'op': prop['id'], 'tid': None, 'ref': None})
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
@@ -2782,7 +2812,8 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     elif sorted_as: sort = {'kind': sorted_as, 'provider': None, 'why': ''}      # the chat model already named it
     else: sort = sort_setup(store, ask, cllm)
     if sort['kind'] == 'investigate':
-        return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.")
+        return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.",
+                            title=sort.get('title') or '')
     if sort['kind'] == 'connection':
         return _propose_connection(store, tid, ask, sort.get('provider'), item, actor)
     if sort['kind'] == 'role':
@@ -3062,13 +3093,11 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
                        'only the owner can change (a permission, a setting), say where. Then recommend ONE of these moves:\n'
                        f'{moves}\nNever promise anything those moves do not do. End with a line PICK: <number>.')
         try:
-            # not _ask: its off-subject guard wants the item's own words in the sentence, and "their mail server bounced it"
-            # has none. What it guards against still holds here - another task named, the voice out of character.
+            # not _ask (this instruction is not an introduction); its one check still holds here - another task named is dropped
             said = str(b(_system(store, b), f"THE ITEM ON THE TABLE - speak only about this one:\n{facts(store, item)}\n\n{instruction}",
                          max_tokens=MAX_TOKENS) or '').strip()
             said = parse_decision(said)[0]
-            named = {int(n) for n in _REF.findall(said)}
-            if (named and item.get('tid') and int(item['tid']) not in named) or not in_character(said): said = ''
+            if off_subject(said, item): said = ''
             m = _PICK.search(said or '')
             say = _PICK.sub('', said or '').strip()
             k = int(m.group(1)) if m else 0
@@ -3272,18 +3301,6 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # ...and the words it wrote around that last call are a PREAMBLE, never the answer: "I'm handing it to the analyst -
         # you'll confirm it on the card" was shown with no card behind it (2026-10-06)
         if out_of_reads and not decision: reply, options = "I could not finish looking that up - ask me again, a little more narrowly.", []
-        if not in_character(reply):
-            # ...handed back once with the reason (2026-10-08), never swapped in silence; a second miss falls back to the facts
-            logger.info('concierge: the voice broke character - asking again')
-            try:
-                again = str(llm(system, f"{table}\n\nThe owner asked: {text}\nYour answer talked about your own access or limits "
-                                        'instead of the owner\'s work. Answer them again, in your own voice as Taskuary, from what you know.',
-                                max_tokens=MAX_TOKENS) or '').strip()
-                again, d2 = parse_decision(parse_call(again)[0])
-                reply, options = parse_options(again) if in_character(again) else ('', [])
-                decision = decision or d2
-            except Exception as e:
-                logger.warning(f'concierge: the second answer failed - {e}'); reply, options = '', []
         _remember_sid(store, tid, llm)
     except Exception as e:
         logger.warning(f'concierge: the model pass failed - {e}'); failed = e

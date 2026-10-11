@@ -214,6 +214,18 @@ class ConnectionSetupTests(unittest.TestCase):
             out = concierge.say(s, 'set up a report', llm=lambda *a, **k: 'On it.\nCALL: {"kind": "setup", "params": {"text": "set up a report"}}')
         self.assertIsNone(out.get('proposal')); self.assertIn("cannot set that up from the chat yet", out['say'])
 
+    def test_the_walk_through_is_called_what_the_model_named_and_never_a_verb_cut_off_the_words(self):
+        """A regex cut the leading verb off the owner's sentence for the title: "Add Erin to payroll" became "Erin to payroll"
+        (the owner, 2026-10-11: no word lists). The set-up sort names the title; with none, the sentence stands as said."""
+        s = store()
+        out = say(s, 'Add Erin Blake to payroll in the portal', composer(sort={'kind': 'investigate', 'provider': None, 'why': 'a portal',
+                                                                           'title': 'Add Erin Blake to payroll'}))
+        self.assertEqual(out['proposal']['params']['title'], 'Add Erin Blake to payroll')
+        self.assertEqual(run(s, out['proposal']).status_code, 200)
+        self.assertEqual([t['Title'] for t in s.list_tasks(active_only=True) if t.get('SourceRef') == 'assistant:setup'], ['Add Erin Blake to payroll'])
+        made = concierge.setup_task(s, 'Add Gail Moreno to the vendor portal')
+        self.assertEqual(made['title'], 'Add Gail Moreno to the vendor portal')
+
 
 if __name__ == '__main__':
     unittest.main()

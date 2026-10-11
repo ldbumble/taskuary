@@ -313,10 +313,21 @@ class InHandTests(unittest.TestCase):
     of working... so it's not in funnel. If it's actually done, waiting for you it will jump ahead")."""
 
     def _line_about(self, s, tid, text):
-        """The assistant's own follow-up line - as it writes them: a bare note that NAMES the task."""
+        """The assistant's own follow-up line - as it writes them: the task it is about carried as the action's `tid`."""
         return s.upsert_idea({'key': f'loose:{tid}', 'kind': 'loose', 'text': text, 'sig': text[:40],
-                              'action': {'type': 'note', 'section': 'loose',
+                              'action': {'type': 'task', 'tid': tid, 'section': 'loose',
                                          'why': f'OPEN WORK: TQ-{tid:04d} in_progress, 3h since anything happened'}}, ago(1))
+
+    def test_a_task_named_only_in_the_words_is_not_the_lines_task(self):
+        """The line's task is the structured `tid`, never a TQ ref read out of its text (the owner, 2026-10-11): a regex here
+        tied an idea to whichever task its words named first."""
+        s = store()
+        t = s.create_task({'Title': 'July 2026 financials', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
+        s.upsert_idea({'key': 'idea:loose-words', 'kind': 'idea', 'text': f"Like TQ-{t:04d}, the August close needs a look", 'sig': 'aug',
+                       'action': {'type': 'note', 'section': 'ideas', 'why': f'TQ-{t:04d} was the same shape'}}, ago(1))
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            items = [i for i in funnel.build(s)['items'] if i['kind'] == 'idea']
+        self.assertEqual([(i['tid'], i['action'].get('tid')) for i in items], [(None, None)])
 
     def test_a_line_about_a_task_an_agent_has_rides_on_the_shelf(self):
         s = store()

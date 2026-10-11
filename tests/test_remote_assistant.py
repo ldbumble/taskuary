@@ -190,6 +190,13 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         self.assertIn('Reply with a number to read that message in full, or:\n3 · All read, next', text)
         self.assertNotIn('4 · ', text, 'the walk already offered the way on under its own name')
 
+    def test_a_word_that_only_contains_next_is_not_the_way_on(self):
+        """Which word is Next is the chip's verb or the vocabulary's own word - a label match on "next" took "Plan next week"
+        for the way on and the batch offered none (the owner, 2026-10-11: no word matching)."""
+        batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [{'key': 'msg:7', 'who': 'Erin', 'title': 'Back Tuesday', 'channel': 'email'}]}
+        text = remote_assistant.turn_text({'say': 'x', 'options': ['Plan next week'], 'chips': [], 'item': batch})
+        self.assertIn('2 · Plan next week', text); self.assertIn(f"3 · {concierge.CHIP_WORDS['next']}", text)
+
     def test_a_number_on_an_fyi_batch_opens_that_one(self):
         """The desktop's "Talk about it" on one member; the chat had four lines and no door into any of
         them (the owner, 2026-09-20: "how do you dig into one specific one?")."""

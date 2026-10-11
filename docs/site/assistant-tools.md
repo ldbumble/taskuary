@@ -168,12 +168,12 @@ Change any task - the one on the table or one named with ref.
 
 ### `task.update`
 
-Change a task's priority, title, owner or due day.
+Change a task's priority, title, owner or due day. Any other value is refused with the allowed ones.
 
 - `priority` - low | normal | high | urgent
 - `title`
-- `assignee` - 'me', or an agent's role
-- `due` - the day the work is due (2026-10-30, "friday", "2 weeks", or "none")
+- `assignee` - exactly `owner` (the owner takes it) or `agent:<profile>` (a worker on the roster)
+- `due` - the day the work is due (2026-10-30, "friday", "2 weeks", or "none" to clear it)
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
 <p class="runs">Waits for your yes on a card.</p>
@@ -200,7 +200,7 @@ Put a coding task in the repository it belongs in.
 
 Tick a checklist item on a task.
 
-- `item` - its number (1 is the first) or words from it
+- `item` - its NUMBER (1 is the first; the facts list them numbered)
 - `done` (optional) - false un-ticks
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
@@ -391,6 +391,7 @@ Hand this message to an agent or put it on the list.
 Open a walk-through with the assistant, for a set-up that needs digging first.
 
 - `text`
+- `title` - a few words naming the job for the task list
 
 <p class="runs">Waits for your yes on a card.</p>
 

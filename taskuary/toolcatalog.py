@@ -55,11 +55,12 @@ PURPOSE = {
     # THE TASK PAGE, as tools (2026-09-25). A task tool acts on the task on the table, or on the one `ref` names
     # (TQ-0123) - never a guess. Each is the page's own button.
     'task.update':              ("change a task's priority, title, owner or due day - any of `priority`: low | normal | high | urgent, "
-                                 "`title`, `assignee` ('me', or an agent's role), `due`: the day the work is due (2026-10-30, "
-                                 "\"friday\", \"2 weeks\", or \"none\"); `ref` when it is not the one on the table"),
+                                 "`title`, `assignee`: exactly `owner` (the owner takes it) or `agent:<profile>` (a worker on the roster), "
+                                 "`due`: the day the work is due (2026-10-30, \"friday\", \"2 weeks\", or \"none\" to clear it); `ref` when "
+                                 "it is not the one on the table. Any other value is refused with the allowed ones"),
     'task.set_kind':            'say what kind of work a task is - `kind`: task (the owner does it) | general (a non-coding agent) | coding; `ref`',
     'task.set_repo':            'put a coding task in the repository it belongs in - `repo` (its name, as the repositories list says it); `ref`',
-    'task.check':               'tick a checklist item on a task - `item`: its number (1 is the first) or words from it; `done`: false un-ticks; `ref`',
+    'task.check':               'tick a checklist item on a task - `item`: its NUMBER (1 is the first; the facts list them numbered); `done`: false un-ticks; `ref`',
     'task.checklist':           ("change what a task's checklist asks for - `items`: the full list of item words in order (one left out "
                                  'is removed, emails untouched); `emails`: [{to, about}] to add emails that must go out before it closes; '
                                  '`drop`: recipients whose email is no longer owed; `ref`'),
@@ -83,7 +84,7 @@ PURPOSE = {
                                  'a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it'),
     'pipe.clear':               'clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. It only '
                                 'clears: when the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule',
-    'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`',
+    'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`; `title`: a few words naming the job for the task list',
     # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
     # taskuary setup. Include that as well"). Each goes down the same handler the tab's own form
     # uses - report.create through save_source, connection.create through save_connector.

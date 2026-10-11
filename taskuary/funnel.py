@@ -763,12 +763,9 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         cid = m.get('ConversationId')
         if cid and (cid in used_cids or cid in seen_cids): continue     # one line per conversation
         if cid: seen_cids.add(cid)
-        # a line that NAMES a task belongs to it even when the action does not say so (the older
-        # rows, and any the model writes as a bare note): without the tid the pipe cannot tell that
-        # an agent has the work, and "TQ-0329 hasn't moved" sat in 'slipped' (2026-09-03)
-        if not tid:
-            ref = re.search(r'\bTQ-?0*(\d+)\b', f"{i.get('Text') or ''} {a.get('why') or ''}", re.I)
-            if ref and store.get_task(int(ref.group(1))): tid = a['tid'] = int(ref.group(1))
+        # THE TASK IS THE ACTION'S OWN `tid`, written where the line was made (the Advisor's candidate, or the model's `about`).
+        # A TQ ref read out of the line's text and the model's `why` used to pick the task here - the same guess as the reverted
+        # _followed_up, and a line naming two tasks went to whichever matched first (the owner, 2026-10-11: no regex decides meaning)
         out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
                          who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
                          idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'),

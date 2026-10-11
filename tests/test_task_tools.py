@@ -111,7 +111,7 @@ class ToolTests(unittest.TestCase):
 
     def test_update_changes_priority_and_takes_it_for_me(self):
         s, tid, mid, item = table()
-        p, _ = call(s, 'task.update', key=item['key'], priority='urgent', assignee='me')
+        p, _ = call(s, 'task.update', key=item['key'], priority='urgent', assignee='owner')
         self.run_card(s, p)
         t = s.get_task(tid)
         self.assertEqual((t['Priority'], t['Assignee']), ('urgent', 'owner'))
@@ -121,15 +121,42 @@ class ToolTests(unittest.TestCase):
         self.run_card(s, call(s, 'task.comment', key=item['key'], text='Erin wants it by Friday')[0])
         self.assertIn('Erin wants it by Friday', [c['Body'] for c in s.list_comments(tid)])
 
-    def test_a_checklist_item_is_ticked_by_number_or_words(self):
+    def test_a_checklist_item_is_ticked_by_its_number(self):
         s, tid, mid, item = table()
         s.set_checklist(tid, ['Pull the export log', 'Fix the filter'], 'o') if hasattr(s, 'set_checklist') else \
             s._write_checklist(tid, [{'id': 'a', 'text': 'Pull the export log', 'done': False}, {'id': 'b', 'text': 'Fix the filter', 'done': False}], 'o')
         self.run_card(s, call(s, 'task.check', key=item['key'], item='1')[0])
         self.assertEqual([i['done'] for i in s.task_checklist(tid)], [True, False])
-        self.run_card(s, call(s, 'task.check', key=item['key'], item='filter')[0])
+        self.run_card(s, call(s, 'task.check', key=item['key'], item='2')[0])
         self.assertEqual([i['done'] for i in s.task_checklist(tid)], [True, True])
         self.assertNotEqual(s.get_task(tid)['Status'], 'done', 'Mark done is the close, never the last box (T16)')
+
+    def test_words_off_the_contract_are_the_models_to_fix_never_guessed(self):
+        """The owner, 2026-10-11: no word lists. 'me' was read as the owner, any word became agent:<word>, and a checklist
+        item was the first one containing the words. Now each is refused before a card, naming what IS allowed."""
+        s, tid, mid, item = table()
+        s._write_checklist(tid, [{'id': 'a', 'text': 'Pull the export log', 'done': False}, {'id': 'b', 'text': 'Fix the filter', 'done': False}], 'o')
+        for tool, kw, says in (('task.update', {'assignee': 'me'}, 'owner'), ('task.update', {'assignee': 'robot'}, 'owner'),
+                               ('task.update', {'due': 'soonish'}, 'YYYY-MM-DD'), ('task.check', {'item': 'filter'}, '2. Fix the filter')):
+            with self.subTest(tool=tool, kw=kw):
+                dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
+                with self.assertRaises(concierge.CallMiss) as e:
+                    concierge.call_turn(s, dock, {'kind': tool, 'params': {**kw, 'ref': f'TQ-{tid:04d}'}}, item, 'do it')
+                self.assertIn(says, str(e.exception))
+        self.assertEqual([i['done'] for i in s.task_checklist(tid)], [False, False])
+        self.assertNotEqual(s.get_task(tid)['Assignee'], 'agent:robot')
+
+    def test_the_card_run_holds_the_same_contract(self):
+        from taskuary import server
+        s, tid, mid, item = table()
+        with mock.patch.object(server, 'store', s):
+            for kw in ({'assignee': 'myself'}, {'due': 'whenever'}):
+                with self.assertRaises(server.HTTPException) as e: server._run_operation({'kind': 'task.update', 'target': tid, 'params': kw}, None)
+                self.assertEqual(e.exception.status_code, 422)
+            out = server._run_operation({'kind': 'task.update', 'target': tid, 'params': {'assignee': 'owner', 'due': 'friday'}}, None)
+            self.assertEqual(s.get_task(tid)['Assignee'], 'owner'); self.assertTrue(out['changed']['DueAt'])
+            server._run_operation({'kind': 'task.update', 'target': tid, 'params': {'due': 'none'}}, None)
+            self.assertFalse(s.get_task(tid)['DueAt'])
 
     def test_reopen_and_not_a_task(self):
         s, tid, mid, item = table()

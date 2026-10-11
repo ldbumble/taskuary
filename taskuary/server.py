@@ -842,26 +842,23 @@ def _run_operation(op: dict, background: BackgroundTasks):
         want = {'Priority': str(p.get('priority') or '').lower() or None, 'Title': str(p.get('title') or '').strip()[:200] or None}
         if want['Priority'] and want['Priority'] not in ('low', 'normal', 'high', 'urgent'):
             raise HTTPException(422, f"priority is low, normal, high or urgent - not {p.get('priority')!r}")
-        who = str(p.get('assignee') or '').strip()
-        if who: want['Assignee'] = ACTOR if who.lower() in ('me', 'mine', 'owner', 'myself', ACTOR.lower()) else (who if ':' in who else f'agent:{who}')
-        want = {k: v for k, v in want.items() if v}
-        # THE DUE DAY (B18, 2026-10-11): the late line's "Move the due day" had no road - triage was the only writer of it
-        due = str(p.get('due') or '').strip()
-        if due:
-            from . import remind
-            try: day = '' if due.lower() in remind.NONE_WORDS else f"{datetime.now():%Y-%m-%d}" if due.lower() == 'today' else remind.parse(due)[:10]
-            except ValueError as e: raise HTTPException(422, f'due: {e}')
+        # A STRICT CONTRACT (concierge.task_contract): a value off it is refused with the allowed ones, never guessed
+        # ...and the due day (B18, 2026-10-11): the late line's "Move the due day" had no road - triage was the only writer of it
+        from . import concierge, remind
+        try: c = concierge.task_contract(store, kind, tid, p)
+        except ValueError as e: raise HTTPException(422, str(e))
+        if c.get('assignee'): want['Assignee'] = c['assignee']
+        want, day = {k: v for k, v in want.items() if v}, c.get('due')
+        due = day is not None
         if not want and not due: raise HTTPException(422, 'say what to change - priority, title, who owns it or the due day')
         if want: update_task(tid, TaskBody(**want), background)
-        if due:
-            remind.set_due(store, tid, day, ACTOR); want['DueAt'] = day or 'none'
+        if due: remind.set_due(store, tid, day, ACTOR); want['DueAt'] = day or 'none'
         return {'taskId': tid, 'changed': want}
     if kind == 'task.set_repo': return set_task_repo(tid, RepoBody(repo=str(p.get('repo') or '').strip() or None), background)
     if kind == 'task.check':
-        items, want = store.task_checklist(tid), str(p.get('item') or '').strip()
-        hit = (items[int(want) - 1] if want.isdigit() and 0 < int(want) <= len(items) else
-               next((i for i in items if want.lower() in str(i.get('text') or '').lower()), None) if want else None)
-        if not hit: raise HTTPException(422, f"no checklist item {want!r} on {task_ref(tid)} - it has: " + '; '.join(f"{n}. {i['text']}" for n, i in enumerate(items, 1)))
+        from . import concierge
+        try: hit = concierge.task_contract(store, kind, tid, p)['item']
+        except ValueError as e: raise HTTPException(422, str(e))
         out = tick_checklist(tid, hit['id'], ChecklistTick(done=str(p.get('done', True)).lower() not in ('false', '0', 'no')))
         return {**(out if isinstance(out, dict) else {}), 'item': hit['text']}
     if kind == 'task.checklist':
@@ -914,7 +911,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
                                       repo=str(p.get('repo') or '') or None, profile=str(p.get('profile') or '') or None)
     if kind == 'task.setup':
         from . import concierge
-        return concierge.setup_task(store, str(p.get('text') or ''), ACTOR)
+        return concierge.setup_task(store, str(p.get('text') or ''), ACTOR, title=str(p.get('title') or ''))
     if kind == 'message.archive': return file_message(mid, NotATaskBody(learn=False, archive=True), background)
     if kind == 'preference.exclude_sender': return not_mine(mid, NotMineBody(scope=str(p.get('scope') or 'sender')), background)
     # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')

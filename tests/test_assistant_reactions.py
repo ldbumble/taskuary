@@ -1061,15 +1061,16 @@ class WalkFromWordsTests(unittest.TestCase):
             funnel.reset_walk(s)                                              # ...a new chat
             self.assertEqual(funnel.next_item(s)['key'], agent['key'])        # the thing that blocks work comes first
 
-    def test_the_voice_never_says_it_cannot_see_the_queue(self):
+    def test_the_voice_is_told_to_stay_in_the_part(self):
+        """Staying in character is the prompt's rule, not a regex over the reply (the owner, 2026-10-11): the regex blanked
+        right answers that mentioned access or data. Every turn's system prompt carries it."""
         s, tid, mid, item = ResponseTests()._asked()
-        for excuse in ("I understand the role, but I don't have the queue data to walk you through.",
-                       "I'm in Claude Code, so I don't have access to the systems Taskuary would need.",
-                       'As an AI, I cannot access your pipe.'):
-            self.assertFalse(concierge.in_character(excuse), excuse)
-            out = say(s, 'what is this one again?', key=item['key'], model=excuse)
-            self.assertNotIn('Claude Code', out['say']); self.assertNotIn('queue data', out['say'])
-            self.assertIn(item['title'][:12], out['say'])                     # the facts, instead
+        seen = []
+        right = 'Erin needs access to the shared drive before she can send the file.'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'what is this one again?', key=item['key'], llm=lambda sy, u, **k: seen.append(sy) or right)
+        self.assertTrue(seen and all(concierge.IN_PART in sy for sy in seen))
+        self.assertIn(right, out['say'])                                      # said, never swapped for the facts
 
 
 class PipeTruthTests(unittest.TestCase):

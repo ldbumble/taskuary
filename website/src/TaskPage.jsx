@@ -1465,14 +1465,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       )}
                     </Box>
                   )}
-                  {/* WHAT THE AGENT DID AND THOUGHT, one card for every CLI and the general agent (AgentRecord): the result once,
-                      what it made, and the full record - decided, changed, plan, files, every step - behind one button. It was
+                  {/* WHAT THE AGENT DID AND THOUGHT, one card for every CLI and the general agent (AgentRecord): what happened,
+                      its last message (named the reply only when the draft is in it), what it made, and every step behind one button. It was
                       two blocks (a saved answer with no report, or the report) reading two different stores. */}
                   {!wrapped && !sessionView && (report || detail?.transcript || (isGeneral && generalStarted)
                     || (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result")) && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
                       {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
                       <AgentRecord taskId={selected} pages={isGeneral ? [] : (detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
+                        draft={(() => { const r = pendingReview || unsentReview || sentReview; return r ? r.FinalText || r.DraftText || "" : ""; })()}
                         stamp={`${(detail?.comments || []).length}-${detail?.transcript?.at || ""}-${(detail?.artifacts || []).length}`} />
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                     </Box>

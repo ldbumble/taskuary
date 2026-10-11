@@ -14,25 +14,43 @@ export const recordSteps = (s) => {
     .map((x) => (x.k === "said" && res && norm(x.text) === res ? { ...x, k: "result" } : x));
 };
 
-// the report's parts that are not the result again
-export const reportParts = (s) => {
-  const r = s?.report || {}, res = norm(s?.result);
-  return [["Decided", r.decided], ["Changed", r.changed], ["Summary", r.summary]]
-    .filter(([, v]) => norm(v) && norm(v) !== res);
+// THE CARD'S ORDER (the owner, 2026-10-10: "decided/changed/summary ... should go first no, then full summary then files it
+// wrote/every step"): what happened leads - the report's summary, else the first paragraph of the agent's own last words -
+// with Decided and Changed as rows under it; then the last message, without whatever the lead already said.
+export const cardParts = (s, draft) => {
+  const r = s?.report || {}, res = String(s?.result || "").trim(), paras = res.split(/\n\s*\n/);
+  const lead = norm(r.summary) ? String(r.summary).trim() : paras[0] || "";
+  let message = norm(r.summary) ? res : paras.slice(1).join("\n\n").trim();
+  if (norm(message) === norm(lead)) message = "";
+  const rows = [["Decided", r.decided], ["Changed", r.changed]].filter(([, v]) => norm(v) && norm(v) !== norm(res));
+  // the last message is often the agent's own account of its work, and sometimes the reply it drafted: it is called the
+  // reply only when the draft on the task is IN it, never on a guess
+  const d = norm(draft).slice(0, 160);
+  return { lead, rows, message, isReply: !!(d && norm(res).includes(d)) };
+};
+
+// the files it saved in the project it worked in, as paths inside it; everything else (scratch, temp, notes) is counted apart
+export const splitFiles = (files, cwd) => {
+  const slash = (p) => String(p || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  const root = slash(cwd).toLowerCase(), mine = [], other = [];
+  for (const f of files || []) {
+    const p = slash(f);
+    if (root && p.toLowerCase().startsWith(root + "/")) mine.push(p.slice(root.length + 1)); else other.push(p);
+  }
+  return { mine, other };
 };
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
-// one line of facts: who, when, and how much it did - each only when there is some
+// one line of facts: who, when, and how much it did - each only when there is some (its files are under What it made)
 export const recordFacts = (s) => {
   const c = s?.counts || {};
   return [s?.cli || s?.by, s?.at && s.at.slice(0, 16),
-    c.thought ? plural(c.thought, "thought") : "", c.tool ? plural(c.tool, "step") : "",
-    s?.files?.length ? plural(s.files.length, "file") : ""].filter(Boolean);
+    c.thought ? plural(c.thought, "thought") : "", c.tool ? plural(c.tool, "step") : ""].filter(Boolean);
 };
 
-// is there anything behind "Full record" that the card does not already show?
-export const hasMore = (s) => !!(recordSteps(s).some((x) => x.k !== "result") || reportParts(s).length || s?.plan?.length || s?.files?.length);
+// is there anything behind "Every step" that the card does not already show?
+export const hasMore = (s) => !!(recordSteps(s).some((x) => x.k !== "result") || s?.plan?.length);
 
 const SOURCES = { conversation: "the conversation", screen: "what was on screen" };
 export const sourceLabel = (src) => SOURCES[src] || src || "";

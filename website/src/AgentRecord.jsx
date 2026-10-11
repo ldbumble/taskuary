@@ -1,15 +1,16 @@
 // THE AGENT WORK CARD: everything a session did and thought, in one shape for every CLI and the general agent (the owner,
 // 2026-10-10: "make sure the agent work section carries enough info to let user know everything the agent did and thought
 // about. You can do short the long version with more button maybe but make sure it's full and complete record but don't
-// duplicate sections"). Short: the result, once, and what it made. "Full record": what it decided and changed, its plan,
-// the files it wrote, then every step - told, thought, tool, said - in order. Earlier sessions fold under it.
+// duplicate sections"). In reading order (the owner, 2026-10-10): what happened - with what it decided and changed, and
+// the pages it made - then its last message, the files it saved in the project, and every step (told, thought, tool, said)
+// behind one button. Earlier sessions fold under it.
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { hasMore, recordFacts, recordSteps, reportParts, sourceLabel } from "./agentRecord.js";
+import { cardParts, hasMore, recordFacts, recordSteps, sourceLabel, splitFiles } from "./agentRecord.js";
 
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
 
@@ -59,43 +60,58 @@ const Step = ({ s }) => {
     </Box>);
 };
 
-const Full = ({ s }) => {
-  const steps = recordSteps(s), parts = reportParts(s);
+// its plan and every step, the one part kept behind a button
+const Steps = ({ s }) => {
+  const steps = recordSteps(s);
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.2, mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-      {parts.map(([k, v]) => <Box key={k}><Typography sx={head}>{k}</Typography><Box sx={{ fontSize: 12.5, color: INK }}><Md text={v} /></Box></Box>)}
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.2, mt: 0.8 }}>
       {!!s.plan?.length && <Box><Typography sx={head}>Its plan</Typography><Step s={{ k: "plan", items: s.plan }} /></Box>}
-      {!!s.files?.length && <Box><Typography sx={head}>Files it wrote · {s.files.length}</Typography>
-        {s.files.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}</Box>}
-      {!!steps.length && <Box>
-        <Typography sx={head}>{s.source === "conversation" ? "The working behind its answers" : "Every step"} · {steps.length}
-          {s.source && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> — from {sourceLabel(s.source)}</Box>}</Typography>
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6, maxHeight: 640, overflow: "auto", pr: 0.5 }}>
-          {steps.map((x, i) => <Step key={i} s={x} />)}
-        </Box>
+      {!!steps.length && <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6, maxHeight: 640, overflow: "auto", pr: 0.5 }}>
+        {steps.map((x, i) => <Step key={i} s={x} />)}
       </Box>}
     </Box>);
 };
 
-// one session: facts, the result (folded when long), what it made, and the full record behind one button
-export const SessionRecord = ({ s, pages = [], startOpen = false }) => {
+const sec = { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` };
+const rowsSx = { display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)", columnGap: 1.25, rowGap: 0.6, mt: 0.9, fontSize: 12.5, lineHeight: 1.45,
+  color: DIM, overflowWrap: "anywhere", "& > :nth-of-type(odd)": { color: FAINT, fontSize: 11, pt: "1px" } };
+
+// one session, in reading order: what happened, its last message, what it made, every step
+export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false }) => {
   const [full, setFull] = useState(startOpen), [more, setMore] = useState(false);
-  const [ref, tall] = useTall(220);
+  const [ref, tall] = useTall(150);
+  const { lead, rows, message, isReply } = cardParts(s, draft), { mine, other } = splitFiles(s.files, s.cwd);
+  const steps = recordSteps(s).filter((x) => x.k !== "result").length;
   return (
     <Box>
       <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 0.5 }}>{recordFacts(s).join(" · ")}</Typography>
-      {s.result ? <Box ref={ref} sx={{ fontSize: 13, color: INK, ...folded(tall, more, 220) }}><Md text={s.result} /></Box>
-        : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result{s.steps?.length ? " — its steps are in the full record." : "."}</Typography>}
-      {!!pages.length && <Box sx={{ mt: 1 }}><PublishedPages pages={pages} /></Box>}
-      {(tall || hasMore(s)) && <Box sx={{ display: "flex", gap: 2, mt: 0.6 }}>
-        {tall && <Button size="small" sx={link} onClick={() => setMore(!more)}>{more ? "Show less" : "Show more"}</Button>}
-        {hasMore(s) && <Button size="small" sx={link} onClick={() => setFull(!full)}>{full ? "Hide the full record" : "Full record"}</Button>}
+      {lead ? <Box><Typography sx={head}>What happened</Typography><Box sx={{ fontSize: 14, lineHeight: 1.45, color: INK }}><Md text={lead} /></Box></Box>
+        : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result{s.steps?.length ? " - its steps are below." : "."}</Typography>}
+      {!!rows.length && <Box sx={rowsSx}>{rows.map(([k, v]) => <React.Fragment key={k}><Box>{k}</Box><Box><Md text={v} /></Box></React.Fragment>)}</Box>}
+      {/* what it made to be LOOKED AT belongs with what happened (the owner, 2026-10-10: "it's important to see it") */}
+      {!!pages.length && <Box sx={{ mt: 0.9 }}><PublishedPages pages={pages} /></Box>}
+      {message && <Box sx={sec}>
+        <Typography sx={head}>Its last message{isReply && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · the reply it drafted, also in Close out</Box>}</Typography>
+        <Box ref={ref} sx={{ fontSize: 13, color: INK, ...folded(tall, more, 150) }}><Md text={message} /></Box>
+        {tall && <Button size="small" sx={{ ...link, mt: 0.4 }} onClick={() => setMore(!more)}>{more ? "Show less" : "Show more"}</Button>}
       </Box>}
-      {full && <Full s={s} />}
+      {s.files?.length > 0 && <Box sx={sec}>
+        <Typography sx={head}>Files it saved</Typography>
+        {!!mine.length && <Box>
+          {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}</Box>}
+        {!!other.length && <Typography title={other.join("\n")} sx={{ fontSize: 12, color: FAINT, mt: 0.4 }}>
+          {mine.length ? "and " : ""}{other.length} scratch file{other.length === 1 ? "" : "s"} it used while working</Typography>}
+      </Box>}
+      {hasMore(s) && <Box sx={sec}>
+        <Button size="small" sx={link} onClick={() => setFull(!full)}>
+          {s.source === "conversation" ? "The working behind its answers" : "Every step"} · {steps} {full ? "▾" : "▸"}</Button>
+        {s.source && <Box component="span" sx={{ fontSize: 11, color: FAINT, ml: 1 }}>from {sourceLabel(s.source)}</Box>}
+        {full && <Steps s={s} />}
+      </Box>}
     </Box>);
 };
 
-export const AgentRecord = ({ taskId, pages = [], stamp }) => {
+export const AgentRecord = ({ taskId, pages = [], draft = "", stamp }) => {
   const [rec, setRec] = useState(null);
   useEffect(() => {
     let live = true;
@@ -107,7 +123,7 @@ export const AgentRecord = ({ taskId, pages = [], stamp }) => {
   if (!now && !pages.length) return null;
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-      {now ? <SessionRecord s={now} pages={pages} /> : <PublishedPages pages={pages} />}
+      {now ? <SessionRecord s={now} pages={pages} draft={draft} /> : <PublishedPages pages={pages} />}
       {!!before.length && <Box sx={{ mt: 1.2, pt: 1, borderTop: `1px solid ${BORDER}` }}>
         <Typography sx={head}>Earlier sessions · {before.length}</Typography>
         {before.map((s) => <Earlier key={s.sid} s={s} />)}

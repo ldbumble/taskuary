@@ -365,14 +365,22 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
     # whatever "type something" field the list offers last. The owner's words stay the owner's words
     # everywhere they are READ (the comment below, the audit); only the keystroke changes.
     send = text
-    if req.get('source') == 'screen':
-        pick = next((i + 1 for i, c in enumerate(req.get('choices') or []) if str(c).strip().lower() == text.strip().lower()), None)
-        if pick: send = str(pick)
+    # a codex question asked in WORDS is answered through its own queue - a chooser or an approval is still a keystroke
+    words = req['kind'] == 'input_needed' and req.get('source') != 'screen' and (not req.get('choices') or _cli(sess) == 'codex')
+    # ...and so is a HOOK's chooser once its hold ran out and Claude drew the form (B12, the owner, 2026-10-11): its label
+    # typed + Enter submitted whichever option was highlighted, and the log said "delivered". An approval reports no
+    # options, so they are read off the pane; where none can be read the words go as they always did.
+    opts = None if hasattr(sess, 'send_prompt') or words else (req.get('choices') or (_on_screen(sess) if req['kind'] == 'approval_needed' else None))
+    if opts:
+        pick = pick_of(opts, text)
+        if not pick:
+            return {'delivered': False, 'state': 'not_a_choice', 'choices': opts,
+                    'why': f'{who} is waiting on a pick - say one of: ' + '; '.join(f'{i}. {c}' for i, c in enumerate(opts, 1))
+                           + ' - or answer it in the terminal'}
+        send = str(pick)
     try:
         if hasattr(sess, 'send_prompt'): sess.send_prompt(send)
-        # a codex question asked in WORDS is answered through its own queue - a chooser or an approval is still a keystroke
-        elif req['kind'] == 'input_needed' and req.get('source') != 'screen' and (not req.get('choices') or getattr(sess, 'cli', '') == 'codex') \
-                and term.queue_codex(sess, send): pass
+        elif words and term.queue_codex(sess, send): pass
         else: term.type_into(sess, send)
     except Exception as e:
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered to {who}: {str(e)[:200]}')
@@ -381,6 +389,29 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
     store.add_comment(tid, actor, 'human', f'Answered "{req["text"][:160]}": {text[:500]} - delivered to {who} (run {sess.sid}).')
     store.audit('task', tid, 'worker_answer', actor, detail={'request_id': request_id, 'sid': sess.sid})
     return {'delivered': True, 'state': 'delivered', 'sid': sess.sid}
+
+
+def _cli(sess) -> str:
+    from . import terminal as term
+    return getattr(sess, 'cli', '') or term.cli_of(getattr(sess, 'argv', None))
+
+
+def _on_screen(sess) -> list:
+    """The options of the chooser the pane is standing on - [] when it is not offering one (or cannot be read)."""
+    from . import terminal as term
+    try: return (term.screen_question(sess) or {}).get('choices') or []
+    except Exception: return []
+
+
+def pick_of(choices: list, text: str) -> int | None:
+    """The option the owner's words NAME, 1-based: its number, its whole label, or the label's lead before its first comma
+    or bracket ("No" for "No, and tell Claude what to do differently (esc)") - the lowest such option. The words are matched
+    against the agent's OWN options, never read for intent: "no, don't delete that" names none of them and gets None."""
+    said = ' '.join(str(text or '').split()).strip().rstrip('.!').lower()
+    cs = [' '.join(str(c).split()).lower() for c in choices or []]
+    if said.isdigit() and 1 <= int(said) <= len(cs): return int(said)
+    lead = lambda c: re.split(r'[,(]', c, 1)[0].strip()
+    return next((i for i, c in enumerate(cs, 1) if c == said), None) or next((i for i, c in enumerate(cs, 1) if said and lead(c) == said), None)
 
 
 def delivery_path(sess) -> str | None:

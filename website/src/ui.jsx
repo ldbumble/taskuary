@@ -1322,6 +1322,8 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
         : await api.post(`/api/tasks/${taskId}/waitroom`, { text: body });
       dropImgs(); setText(""); setMany(false);
       if (many) { setFlash(`${data.queued} prompts queued — they drip in one per stop`); setTimeout(() => setFlash(""), 5000); load(); onQueued?.(data); return; }
+      // words that name none of a chooser's options are kept, not typed into it - say why, not "queued" (B12)
+      if (data.state === "not_a_choice") { failed(`Kept, not sent - ${data.why}`); load(); onQueued?.(data); return; }
       setFlash(data.delivered ? (data.state === "restarted" ? "session reopened with it" : "typed in — the agent was parked") : "queued — goes in when the agent stops");
       setTimeout(() => setFlash(""), 4000);
       load(); onQueued?.(data);

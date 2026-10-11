@@ -946,8 +946,12 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'agent.answer':
         # the exact outstanding request of the run that asked (PW-138/139); nothing asked = the waiting room (PW-140)
         from . import workerstate as ws
-        out = ws.answer_open(store, tid, str(p.get('text') or 'yes'), ACTOR)
-        if out['state'] == 'no_request': return waitroom_add(tid, {'text': str(p.get('text') or 'yes')})
+        # ...in the owner's words, never a "yes" made up for them (B12, 2026-10-11): an empty answer reached a permission
+        # prompt as yes, and "which branch?" as the word yes
+        said = ' '.join(str(p.get('text') or '').split())
+        if not said: raise ValueError('say what to tell the agent')
+        out = ws.answer_open(store, tid, said, ACTOR)
+        if out['state'] == 'no_request': return waitroom_add(tid, {'text': said})
         if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
         return out
     # the page's "Save and end session" (TasksView.wrapUp posts close=False): the agent ends, the task stays

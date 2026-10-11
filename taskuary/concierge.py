@@ -2500,7 +2500,11 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb == 'approve':
         target = it.get('rid')
         label = closeout_label(it) or label          # "Send the reply" is not what a merge card's yes does
-    elif verb == 'answer_agent': target, params = it.get('tid'), {'text': d_text or 'yes'}
+    elif verb == 'answer_agent':
+        # the owner's own words when the model passed none - never a "yes" nobody said (B12, 2026-10-11)
+        said = d_text or (text or '').strip()
+        if not said: raise ValueError(f"What should I tell {it.get('agent') or 'the agent'}? Say it and it goes straight to the run that is waiting.")
+        target, params = it.get('tid'), {'text': said}
     elif verb == 'stop_agent':
         end = _agent_task(store, item, text)
         if not end: raise ValueError('no agent is running right now - nothing to stop')

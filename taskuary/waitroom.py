@@ -95,6 +95,13 @@ def state(store, tid: int) -> tuple:
     t = next((x for x in list(term.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     if t is None:
         return ('working', None) if any(r.get('TaskId') == tid for r in store.running_runs()) else ('no_session', None)
+    # A HELD ASK IS ASKING, WHATEVER THE SCREEN SAYS (B11, the owner, 2026-10-11): while hooks.ask holds a question
+    # Claude keeps its spinner up, so the screen read `working` and the owner's typed answer queued until the 540 s
+    # hold ran out - then went in as keystrokes on a form. The hold is waiting on exactly these words.
+    if ws.held_for(tid):
+        try: req = ws.asking_of(store, t)
+        except Exception: req = None
+        if req and ws.group_of(req['request_id']) in ws.held_for(tid): return 'asking', t
     parked = t.waiting() if hasattr(t, 'waiting') else term.waiting_of(t)
     if not parked: return 'working', t
     try: req = ws.asking_of(store, t)
@@ -141,7 +148,12 @@ def deliver(store, tid: int) -> dict:
         from . import workerstate as ws
         text = notes[0]['Note'] if len(notes) == 1 else batch(notes, remaining=left)
         who = notes[0].get('CreatedBy') or 'owner'
-        if not ws.answer_open(store, tid, text, who).get('delivered'):
+        out = ws.answer_open(store, tid, text, who)
+        # ...words that name none of a chooser's options are not typed into it: Enter would submit whatever is
+        # highlighted (B12). The note keeps its place and the owner is told why; it waits for the chooser to go.
+        if out.get('state') == 'not_a_choice':
+            return {'delivered': 0, 'state': 'not_a_choice', 'why': out.get('why') or '', 'left': len(pending)}
+        if not out.get('delivered'):
             term.type_into(t, text)
             store.add_comment(tid, who, 'human', f'Answered the agent: {text[:500]}')
         store.deliver_waiting([x['WId'] for x in notes], 'answered')

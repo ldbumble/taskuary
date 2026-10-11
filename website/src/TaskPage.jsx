@@ -6,6 +6,7 @@
 import { says, subState } from "./laneSays.js";
 import ContinueBox from "./ContinueBox.jsx";
 import QueuedStart from "./QueuedStart.jsx";
+import AgentAsks from "./AgentAsks.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -1636,6 +1637,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         terminal, and it goes in when the agent stops rather than on top of its work */}
                     {/* the waiting room IS the answer box: when the agent is parked on a question,
                         waitroom.deliver() types what you write straight in rather than queueing it */}
+                    {/* what it is asking, with its options - read off the polled detail, which is fresh where `term` is not (B11) */}
+                    {term.alive && <AgentAsks taskId={selected} session={detail?.session?.sid === term.sid ? detail.session : term}
+                      onAnswered={() => loadDetail(selected)} />}
                     {term.alive && <Box sx={{ mt: 0.75, flexShrink: 0, display: "flex", alignItems: "center", gap: 0.9 }}>
                       <Box sx={{ flex: 1, minWidth: 0, ...(agentWaiting ? { "& .MuiOutlinedInput-notchedOutline": { borderColor: "#dfc7cc" } } : {}) }}>
                         <TellAgent taskId={selected} taskRef={detail?.ref} compact onQueued={() => loadDetail(selected)} />

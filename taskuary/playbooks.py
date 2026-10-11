@@ -27,9 +27,10 @@ _FIELD = re.compile(r'^(' + '|'.join(FIELDS) + r'):\s*(.*)$', re.I)
 _TAG = re.compile(r'playbook:([\w-]+)')
 SEED_CHARS = 2200            # the whole playbook usually fits; the seed line is the operative rules
 MIN_SESSION = 600            # a session shorter than this did no job worth a playbook - no AI call for it
-# connections whose presence on `uses:` makes a playbook about code: CODER.md's repository rules apply
+# connections whose presence on `uses:` makes a playbook about code: CODER.md's repository rules apply. ONLY these - the
+# words of its steps decide nothing (2026-10-11, "everything should be ai"): "visit the branch office" and "commit the
+# journal entry" made a bookkeeping playbook a code change, and its agent was told the repository rules outranked it.
 CODE_SYSTEMS = {'github', 'gitlab', 'azdo', 'bitbucket'}
-CODE_WORDS = re.compile(r'\b(repo|repository|checkout|pull request|commit|branch)\b', re.I)
 
 
 def folder() -> Path:
@@ -143,7 +144,7 @@ def uses_of(pb: dict) -> list:
 
 
 def about_code(pb: dict) -> bool:
-    return bool(CODE_SYSTEMS & set(uses_of(pb))) or bool(CODE_WORDS.search(pb.get('steps') or ''))
+    return bool(CODE_SYSTEMS & set(uses_of(pb)))
 
 
 def read(slug: str) -> str | None:

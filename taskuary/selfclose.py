@@ -72,7 +72,7 @@ def blocked(store, tid: int, term=None) -> str:
     """'' when this task may close itself, else the reason it may not - which is written onto the
     task, because a self-close that silently declines is indistinguishable from one that is
     broken."""
-    from . import waitroom, workerstate as ws
+    from . import workerstate as ws
     if not tid: return 'no task'
     with _LOCK:
         if tid in _DONE: return 'a self-close already ran for this task'
@@ -87,10 +87,14 @@ def blocked(store, tid: int, term=None) -> str:
         age = time.time() - (getattr(term, 'started_ts', 0) or 0)
         if getattr(term, 'started_ts', 0) and age < MIN_AGE: return f'the session is younger than {int(MIN_AGE)}s'
         if getattr(term, 'n', 0) < MIN_CHARS: return 'the session has barely printed anything'
-        # the screen's own words beat any judge: a CLI parked at a question says so, in a
-        # phrasing waitroom already knows how to spot
-        if waitroom.looks_like_question(term.tail(waitroom.TAIL_LINES)):
-            return 'the last lines read as a question for you'
+        # A QUESTION THE RUN ITSELF RAISED and nobody has answered: one a hook holds (hooks.ask), or one the agent asked
+        # through its CLI's question tool or a [[TASKUARY-ASK]] marker (both recorded as requests by hooks/general). Not
+        # the words on its screen - a line ending in "?" read as a question and refused an agent's own --done (2026-10-11:
+        # "everything should be ai") - and not the model's read of a turn (source 'judge'): the agent declaring itself
+        # finished is the newer word on that.
+        if ws.held_for(tid): return 'a question to you is still held open'
+        if req and req['kind'] == 'input_needed' and req.get('source') in ('hook', 'api'):
+            return f'a question to you is still open: {req["text"][:160]}'
     return ''
 
 
@@ -152,8 +156,7 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
     from . import terminal as term
     if mode(store) == 'off': return {'closed': False, 'why': 'self-closing is switched off in Settings'}
     why = blocked(store, tid, term.session_for(tid))
-    # an explicit declaration outranks "it looks like a question": the agent just said otherwise
-    if why and 'question' not in why: return {'closed': False, 'why': why}
+    if why: return {'closed': False, 'why': why}
     line = ' '.join(str(summary or '').split())[:1200]
     if stays_open(store, tid):
         store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')

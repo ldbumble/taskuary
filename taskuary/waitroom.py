@@ -18,19 +18,9 @@ import re, threading, time
 from loguru import logger
 from .store import task_ref
 
-# What a parked agent's last lines look like when it is waiting on the OWNER rather than done: a
-# question, a y/n, a numbered chooser (Claude Code's permission and AskUserQuestion menus), a
-# "press enter". Judged on the tail only - a question in the middle of a report is not a stop.
-_QUESTION = re.compile(r'\?\s*$|\b(y/n|yes/no|do you want|would you like|should i|which (one|of these)|press enter|'
-                       r'choose an option|select an option|enter to (confirm|select))\b|^\s*[❯>]\s*\d+\.', re.I)
 TAIL_LINES = 6
 WATCH_EVERY = 10          # seconds between looks - delivery lands within IDLE_WAITING + this of the agent parking
 MAX_BATCH = 6000          # chars typed in one go; a TUI paste past this is asking for dropped frames
-
-
-def looks_like_question(tail) -> bool:
-    lines = [str(l) for l in (tail or []) if str(l).strip()][-TAIL_LINES:]
-    return any(_QUESTION.search(l) for l in lines)
 
 
 def batch(notes: list, after_restart: bool = False, remaining: int = 0) -> str:
@@ -110,7 +100,11 @@ def state(store, tid: int) -> tuple:
     # with a `stalled` request open, and a note was typed into it as if it had been asked - and marked the stall
     # answered. Nothing can be answered through a rate limit; the note waits until the limit lifts.
     if (req or {}).get('kind') == 'stalled': return 'working', t
-    return ('asking' if req or looks_like_question(_screen(t)) else 'parked'), t
+    # ASKING = the run's own word (a hook's question, a [[TASKUARY-ASK]], the model's read of its last message - hooks.
+    # judge_turn) or the CLI's own chooser chrome on screen. The words on the tail used to decide it (`looks_like_question`:
+    # "?" at a line's end, "should i", "do you want") - so a report closing on a rhetorical question took the next note as
+    # its ANSWER (the owner, 2026-10-11: "everything should be ai"). Parked without either is parked: the note is typed.
+    return ('asking' if req or term.chooser_in(_screen(t)) else 'parked'), t
 
 
 def add(store, tid: int, note: str, actor: str = 'owner') -> dict:

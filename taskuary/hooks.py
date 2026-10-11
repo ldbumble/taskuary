@@ -379,6 +379,8 @@ def _events(t, p: dict) -> None:
             for i, (q, choices) in enumerate(asks, 1):
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
                           text=q, choices=choices, source='hook')
+            # ...and a turn that asked only in PROSE is the model's to read, in the background - never a word list's
+            if not asks and said.strip() and not ws.open_requests(ws.events(st, tid, sid)): judge_turn(st, tid, sid, said)
             # the response ended, the WORK did not: a shell, a monitor or a subagent it left running and will be woken by
             # (background.py) - Claude's own list, else the jobs its hooks started (Copilot), else Claude's transcript.
             # Devin is not here on purpose: it does not wake for a background shell, so one left running is the owner's
@@ -391,6 +393,51 @@ def _events(t, p: dict) -> None:
             if str(p.get('reason') or 'other') not in SESSION_GOES_ON:
                 ws.record(st, tid, sid, 'disconnected', text=f"session ended ({p.get('reason') or 'other'})", source='hook')
     except Exception as e: logger.debug(f'worker event from hook skipped: {e}')
+
+
+# DID THE TURN ASK THE OWNER? (the owner, 2026-10-11: "everything should be ai".) A question asked through the CLI's
+# own tool, the [[TASKUARY-ASK]] marker or a chooser arrives as a request on its own. One asked only in the prose that
+# ended the turn has no such signal, and the screen used to be read for it with a word list - "?" at a line's end,
+# "should i", "do you want" - so a report closing on a rhetorical question became "asked you", and the owner's next
+# note went in as its answer. The light model reads the Stop's last message instead: once per turn (cached on the
+# words), on its own thread, so no hook and no button waits on it. Until it answers - or with no brain at all - the
+# session is what it honestly is: parked, waiting on you.
+JUDGE_SYSTEM = ('You read the last message a coding agent wrote before it stopped and handed the turn back to its owner. '
+                'Decide one thing: does the agent need the owner to ANSWER something before the work can go on - a decision, '
+                'a choice between options, a missing fact, a permission? A report of finished work, a rhetorical question, '
+                'or an offer of optional extra help after the work is done is not that. Reply with JSON only: '
+                '{"asks": true or false, "question": "the question in the agent\'s own words, one sentence; empty when asks is false"}')
+JUDGE_WANT = {'type': 'object', 'properties': {'asks': {'type': 'boolean'}, 'question': {'type': 'string'}}, 'required': ['asks']}
+_JUDGED, _JUDGED_MAX = {}, 256          # (sid, sha of the words) -> the question or '' - a Stop the spool replays costs nothing
+
+
+def judge_turn(store, tid: int, sid: str, said: str, brain=None, wait: bool = False):
+    "Read the turn's last message for a question to the owner; record it as an open request when there is one."
+    import hashlib
+    key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
+    def go():
+        from . import workerstate as ws
+        if key in _JUDGED: q = _JUDGED[key]
+        else:
+            try:
+                from .llm import build_llm, ask_json
+                b = brain or build_llm(store)
+                if not b: return
+                v = ask_json(b, JUDGE_SYSTEM, f"THE AGENT'S LAST MESSAGE:\n{said[-4000:]}", want=JUDGE_WANT, need=('asks',)).data or {}
+            except Exception as e: logger.debug(f'turn judge skipped for {sid}: {e}'); return
+            if not isinstance(v, dict) or not isinstance(v.get('asks'), bool): return     # unreadable is no verdict, and is not cached
+            q = ' '.join(str(v.get('question') or '').split())[:600] if v['asks'] else ''
+            if v['asks'] and not q: q = ' '.join(said.split())[-300:]
+            if len(_JUDGED) >= _JUDGED_MAX: _JUDGED.pop(next(iter(_JUDGED)))
+            _JUDGED[key] = q
+        if not q: return
+        # ...and only while that turn is still the newest word: a prompt the owner submitted while the model read has
+        # moved on past the question, and a request recorded after it would stand over the new turn
+        evs = ws.events(store, tid, sid)
+        if not evs or evs[-1]['Kind'] != 'turn_end' or evs[-1].get('Text') != said[:4000]: return
+        ws.record(store, tid, sid, 'input_needed', request_id=ws.request_id_for(q), text=q, source='judge')
+    if wait: return go()
+    threading.Thread(target=go, daemon=True, name=f'turn-judge-{sid}').start()
 
 
 def _cli(t) -> str:

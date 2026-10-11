@@ -2940,12 +2940,12 @@ def live_runs(lines: int = 3):
             # agent assigned to work. Do not put a duplicate of it on the Board or ring the
             # hand-raise bell while its answer is visible in the dock itself.
             if (store.get_task(t['taskId']) or {}).get('SourceRef') == 'assistant:dock': continue
-            # `asking` = the last lines look like a question for the owner (waitroom.looks_like_question):
-            # the hand-raise notification says "asked you something" instead of "stopped"
+            # `asking` = the session's own reading (terminal.worker_fields: a request, or the CLI's chooser on screen) - never
+            # the words on its tail (2026-10-11): the hand-raise notification says "asked you something" instead of "stopped"
             out.append({'RunId': None, 'TaskId': t['taskId'], 'AgentName': t['agent'] or t['label'],
                         'kind': 'session', 'StartedAt': t['started'], 'idle': t['idle'],
                         'waiting': (w := t['waiting'] if t.get('waiting') is not None else t['idle'] >= hub_term.IDLE_WAITING), 'phase': t.get('phase'),
-                        'asking': (ask := bool(w) and waitroom.looks_like_question(t.get('tail') or [])),
+                        'asking': (ask := bool(w) and t.get('state') == 'asking'),
                         # ...and the ONE sentence for the state (lanes.json via workerstate.says), so the card, the
                         # Wall and the hand-raise ping read it instead of composing their own from `asking`
                         'request': t.get('request'), 'state': (sub := _workerstate().sub_state(bool(w), ask, t.get('request'))),
@@ -3105,7 +3105,7 @@ def task_work(tid: int, diff: bool = True):
     by_path = {f.get('path'): f for f in (rev.get('files') or [])}
     files = [{**f, 'added': by_path.get(f['path'], {}).get('added'), 'removed': by_path.get(f['path'], {}).get('removed')} for f in (work or {}).get('files', [])]
     for p, f in by_path.items():                        # git saw it, the witness did not: still DID
-        if p not in {x['path'] for x in files}: files.append({'path': p, 'n': 0, 'last': None, 'stray': False, 'late': False, 'added': f.get('added'), 'removed': f.get('removed')})
+        if p not in {x['path'] for x in files}: files.append({'path': p, 'n': 0, 'last': None, 'late': False, 'added': f.get('added'), 'removed': f.get('removed')})
     d = store.task_detail(tid); m0 = (d.get('messages') or [None])[0] or {}
     approved = next((r for r in d.get('reviews') or [] if r.get('Status') in ('approved', 'sent')), None)
     prov = {'from': ' · '.join(x for x in (m0.get('Channel'), m0.get('FromName') or m0.get('FromEmail')) if x) or t.get('Source') or '',

@@ -1613,7 +1613,7 @@ export const WorkLine = ({ work, who = "agent", waiting = false, asking = false,
 };
 
 /* The task page's strip: the agent's own list beside the files it wrote, with git's +/- per file,
-   reconciled in plain sentences (taskuary/witness.py decides "late" and "stray"; nothing is
+   reconciled in plain sentences (taskuary/witness.py decides "late"; nothing is
    inferred). Provenance pills say where the task came from and who worked it - facts the audit
    chain already held and the card never showed. Polls only while the session is alive. */
 const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 600, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
@@ -1715,7 +1715,7 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
             const top = Math.max(1, ...files.map((x) => x.n || 1));
             return (
               <Box key={f.path} title={f.path} sx={{ display: "grid", gridTemplateColumns: "1fr auto auto 64px", gap: 1, alignItems: "center", py: 0.35, borderBottom: `1px dashed ${BORDER}`,
-                "&:last-of-type": { borderBottom: 0 }, color: f.stray ? ROLES.info.ink : INK, opacity: f.late || isHot(f.last) || f.n > 0 ? 1 : 0.7 }}>
+                "&:last-of-type": { borderBottom: 0 }, color: INK, opacity: f.late || isHot(f.last) || f.n > 0 ? 1 : 0.7 }}>
                 <Typography noWrap sx={{ ...mono, fontSize: 11.5 }}>{f.path}</Typography>
                 <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, fontVariantNumeric: "tabular-nums" }}>{f.n ? `×${f.n}` : ""}</Typography>
                 <Typography sx={{ ...mono, fontSize: 10.5, color: f.late ? ROLES.you.ink : FAINT, fontVariantNumeric: "tabular-nums" }}>

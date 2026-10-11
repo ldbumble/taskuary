@@ -64,23 +64,16 @@ class Witness:
                 files.setdefault(_rel(p, cwd), {'n': 0, 'first': None, 'last': None})
             todos = [dict(t) for t in self.todos]; tool = dict(self.tool) if self.tool else None
             done_at, said, source = self.done_at, self.said, self.source
-        words = ' '.join(t['text'] for t in todos).lower()
-        def named(p):
-            stem = re.sub(r'\.[^.]+$', '', p.rsplit('/', 1)[-1]).lower()
-            parent = p.rsplit('/', 2)[-2].lower() if '/' in p else ''
-            return bool(stem) and stem in words or bool(parent) and parent in words
-        # "stray" only means something when the list speaks in files at all - a list of intentions
-        # ("wire the card") names no file, and flagging every file against it would be noise
-        speaks_files = bool(todos) and any(named(p) for p in files)
-        rows = [{'path': p, 'n': v['n'], 'last': v['last'], 'stray': speaks_files and not named(p),
+        # NO "STRAY" FLAG (2026-10-11, "everything should be ai"): a file was marked "touched but not in the list" when its
+        # name was not a substring of the todo text - "wire the card" against website/src/Card.jsx read as stray, and
+        # "fix the server" against taskuary/server.py did not. Whether a file belongs to an item is meaning, not a fact
+        # the hooks gave us. What stays is a fact: written after the agent said it was done.
+        rows = [{'path': p, 'n': v['n'], 'last': v['last'],
                  'late': bool(done_at and v['last'] and v['last'] > done_at)} for p, v in files.items()]
         rows.sort(key=lambda r: (r['last'] or '', r['n']), reverse=True)
         flags = []
         for r in rows:
-            if r['late']: flags.append({'level': 'check', 'text': f"{r['path'].rsplit('/', 1)[-1]} written after the agent said done" + (' - in no item of its list' if r['stray'] else '')})
-        if done_at:
-            for r in rows:
-                if r['stray'] and not r['late']: flags.append({'level': 'note', 'text': f"{r['path'].rsplit('/', 1)[-1]} touched but not in the list"})
+            if r['late']: flags.append({'level': 'check', 'text': f"{r['path'].rsplit('/', 1)[-1]} written after the agent said done"})
         rung = 'tool' if tool else 'line' if last_line else 'files'
         return {'source': source, 'rung': rung, 'tool': tool, 'todos': todos, 'files': rows[:30], 'done_at': done_at,
                 'said': said[:300], 'last_line': (last_line or '')[:200], 'flags': flags[:3],

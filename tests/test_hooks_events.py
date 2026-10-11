@@ -139,6 +139,66 @@ class QuestionAndPermissionTests(Base):
         self.assertEqual(self.state()['requests'], [])
 
 
+class TurnJudgeTests(Base):
+    """A question asked only in the prose that ended a turn is the MODEL's to read (hooks.judge_turn) - never a word list's.
+    `looks_like_question` read "?" at a line's end as asking, so a report closing on a rhetorical question took the owner's
+    next note as its answer (the owner, 2026-10-11: "everything should be ai")."""
+    def setUp(self):
+        super().setUp(); hooks._JUDGED.clear()
+        self.calls = []
+        # the Stop hook's own judge runs on a thread with the store's brain; here every judge runs inline on a scripted one
+        real = hooks.judge_turn
+        self._sync = mock.patch.object(hooks, 'judge_turn', lambda st, tid, sid, said, brain=None, wait=False:
+                                       real(st, tid, sid, said, brain=brain or self.brain, wait=True)); self._sync.start()
+        self.verdict = '{"asks": false, "question": ""}'
+
+    def tearDown(self): self._sync.stop(); hooks._JUDGED.clear(); super().tearDown()
+
+    def brain(self, system, user, **kw):
+        self.calls.append(user); return self.verdict
+
+    def test_a_question_the_model_reads_in_the_last_message_is_an_open_request(self):
+        self.session()
+        self.verdict = '{"asks": true, "question": "Should the refund go to the card or the bank?"}'
+        self.fire('Stop', last_assistant_message='Two ways to refund this. Should it go to the card or the bank?')
+        st = self.state()
+        self.assertEqual(st['state'], 'input_needed')
+        self.assertEqual(st['requests'][0]['text'], 'Should the refund go to the card or the bank?')
+        self.assertEqual(st['requests'][0]['source'], 'judge')
+
+    def test_a_report_ending_in_a_rhetorical_question_is_not_asking(self):
+        self.session()
+        self.fire('Stop', last_assistant_message='Fixed the export. Why did it break? The cron ran as the wrong user.')
+        self.assertEqual(len(self.calls), 1)                                   # the model read it...
+        self.assertEqual(self.state()['requests'], [])                          # ...and said it asks nothing
+
+    def test_one_read_per_turn_and_none_when_the_turn_already_asked(self):
+        self.session()
+        self.fire('Stop', last_assistant_message='All done.')
+        self.fire('Stop', last_assistant_message='All done.')                  # the same Stop twice (the spool replays)
+        self.assertEqual(len(self.calls), 1)
+        self.fire('Stop', last_assistant_message='Need a pick. [[TASKUARY-ASK]] Which account? | Card | Bank')
+        self.assertEqual(len(self.calls), 1)                                   # the marker already asked - no judge
+
+    def test_a_prompt_the_owner_sent_while_the_model_read_wins(self):
+        self.session()
+        said = 'Should I also update the docs?'
+        ws.record(self.s, self.tid, 'run1', 'turn_end', text=said, source='hook')
+        ws.record(self.s, self.tid, 'run1', 'working', source='hook')            # the owner typed on before the verdict came
+        hooks.judge_turn(self.s, self.tid, 'run1', said, brain=lambda *a, **k: '{"asks": true, "question": "Docs too?"}')
+        self.assertEqual(self.state()['requests'], [])
+
+    def test_no_brain_leaves_the_session_honestly_parked(self):
+        self._sync.stop()
+        try:
+            self.session()
+            ws.record(self.s, self.tid, 'run1', 'turn_end', text='Which one should I use?', source='hook')
+            with mock.patch('taskuary.llm.build_llm', return_value=None):
+                hooks.judge_turn(self.s, self.tid, 'run1', 'Which one should I use?', wait=True)
+            self.assertEqual(self.state()['requests'], [])
+        finally: self._sync.start()
+
+
 class FailedToolTests(Base):
     def test_a_tool_that_failed_closes_its_approval(self):
         """The permission was decided and the run went on; only PostToolUse closed it, so a failed tool left the row

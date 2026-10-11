@@ -328,7 +328,7 @@ def test_watcher_events_write_no_chat_card_and_explicit_cards_carry_no_backgroun
         "idle": 2, "waiting": False, "tail": ["editing"],
     }]
     asking = [{
-        **working[0], "idle": 200, "waiting": True, "tail": ["Which cutoff should I use?"],
+        **working[0], "idle": 200, "waiting": True, "state": "asking", "tail": ["Which cutoff should I use?"],   # the session's own reading
     }]
     with mock.patch.object(funnel, "DWELL", 0), \
          mock.patch("taskuary.terminal.live_sessions", return_value=working):

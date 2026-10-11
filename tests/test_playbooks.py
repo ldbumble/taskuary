@@ -48,6 +48,20 @@ class ParseAndFile(unittest.TestCase):
         self.assertFalse(playbooks.about_code(pb))
         self.assertTrue(playbooks.about_code(playbooks.parse(ONBOARD)))     # github on uses = code rules apply
 
+    def test_the_words_of_its_steps_never_make_a_playbook_about_code(self):
+        """Only `uses:` decides (2026-10-11, "everything should be ai"): a bookkeeping job that visits the branch office and
+        commits a journal entry is not a code change, and its agent must not be told the repository rules outrank it."""
+        pb = playbooks.parse("""# Close the month for the branch office
+when:      the branch office mails its month-end pack
+uses:      quickbooks (write: journal entries)
+steps:     check out the pack from the branch office → commit the journal entry → reconcile the repository of receipts
+alone:     nothing
+ask first: everything
+done when: the journal entry is posted
+""")
+        self.assertFalse(playbooks.about_code(pb))
+        self.assertFalse(hasattr(playbooks, 'CODE_WORDS'))
+
     def test_write_list_read_delete(self):
         self.assertEqual(playbooks.list_all(), [])
         slug = playbooks.write('new', BILL)                                   # 'new' files it under its title

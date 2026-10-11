@@ -985,7 +985,11 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # branch further along (the owner, 2026-09-03: "sent the coding agent the wrong repo again").
     if not cwd and not repo and task_id and agent:
         paths = profile.get('cwd_map') or {}
-        if len(paths) > 1:
+        # ...and ONE path is not an answer either while the repo map knows others: "the only repo this agent has a path
+        # for" is how a reimbursement task opened in the integrations checkout. guess_repo no longer scores the words
+        # against the map (2026-10-11), so the owner picks - unless the task says it has no repository at all.
+        others = len(paths) == 1 and len(known_repos_of(store, profile)) > 1 and repo_tag(store.get_task(task_id) or {}) != NO_REPO
+        if len(paths) > 1 or others:
             raise ValueError('I could not tell which checkout this belongs in, and guessing would put an '
                              f"agent in {profile.get('cwd') or os.getcwd()}. Pick the repository on the task "
                              '- the chooser this refusal opens, or the repo chip beside its agent - and say '
@@ -1745,26 +1749,16 @@ def remember_path(store, agent: str, repo: str, path: str):
 NO_REPO = 'none'
 
 
-def repo_for_text(store, text: str, agent: str = 'coder') -> str:
-    """The checkout a coding job in these words would open in, or '' when no repository is clearly the one -
-    the same relative test guess_repo applies, run BEFORE the task exists so the confirmation card can name
-    it (the owner, 2026-09-24: "it doesn't say which repo it's in and it opened it in wrong one")."""
-    row = store.get_agent(agent) or {}
-    try: profile = json.loads(row.get('Config') or '{}')
-    except (TypeError, ValueError): profile = {}
-    ranked = rank_repos(store, None, profile, text=str(text or ''))
-    if not ranked: return ''
-    best, sc, _has = ranked[0]
-    runner = ranked[1][1] if len(ranked) > 1 else 0.0
-    return best if sc >= .05 and sc >= max(runner * 1.4, runner + .04) else ''
-
-
 def known_repos(store, agent: str = 'coder') -> list:
     """Every repository a coding job could open in: the SOUL.md map and the coder's checkouts, once each."""
     row = store.get_agent(agent) or {}
-    try: paths = json.loads(row.get('Config') or '{}').get('cwd_map') or {}
-    except (TypeError, ValueError, AttributeError): paths = {}
-    return list(dict.fromkeys(list(repo_map(store)) + list(paths)))
+    try: profile = json.loads(row.get('Config') or '{}')
+    except (TypeError, ValueError): profile = {}
+    return known_repos_of(store, profile if isinstance(profile, dict) else {})
+
+
+def known_repos_of(store, profile: dict) -> list:
+    return list(dict.fromkeys(list(repo_map(store)) + list(profile.get('cwd_map') or {})))
 
 
 def known_repo(store, name: str, agent: str = 'coder') -> str:
@@ -1806,11 +1800,11 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
     """Which checkout does this task belong in? The tag on the task wins - that is the override,
     and the only thing that always does what it says.
 
-    Otherwise the ask is matched against the SOUL.md repo map. A repo the ask clearly names is
-    returned even when this agent has no path for it, because open_session must then REFUSE
-    rather than quietly open the default folder - an agent editing the wrong checkout is far
-    worse than one that will not start. Only when the ask points nowhere at all does a single
-    configured repo become the default.
+    Then a GitHub item's own repository, then triage's verdict (a repository, or "choose one"). A
+    repo so named is returned even when this agent has no path for it, because open_session must
+    then REFUSE rather than quietly open the default folder - an agent editing the wrong checkout is
+    far worse than one that will not start. Without a verdict the owner chooses, unless the agent
+    has exactly one checkout; the task's words are never scored against the map (2026-10-11).
 
     Taskuary deciding this is the point: an agent left to work it out reads SOUL.md over the API,
     or guesses from the folder it happens to have started in."""
@@ -1838,38 +1832,21 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
     # no repo paths at all = this agent does not do repo routing. Naming one anyway would put a
     # REPO line in the prompt for a folder the session is not in.
     if not paths: return (None, None)
-    ranked = rank_repos(store, tid, profile)
-    if not ranked: return (None, None)
-    own = our_own_repo(store, tid, [r for r, _s, _h in ranked])
+    # NO GUESS FROM THE TASK'S WORDS (2026-10-11, "everything should be ai"; kind-routes-the-task): triage read the ask
+    # with the project map in front of it and named no repository, so a word-overlap score of the mail against SOUL.md -
+    # the old fallback here - was a second opinion nobody could argue with, and it is how a task that merely mentioned a
+    # topic opened in the checkout whose description shared its nouns. What is left is structure, not reading: our own
+    # machinery's checkout, a repository the OWNER's earlier choices tied to this work, the only path there is - and
+    # otherwise the owner chooses (open_session refuses with several paths; the dispatch answers needs_repo, RepoPicker).
+    known = known_repos_of(store, profile)
+    own = our_own_repo(store, tid, known)
     if own: return own, "Taskuary's own work - our own checkout"
-
-    # A relationship learned from repeated OWNER repo choices outranks word overlap. It does not
-    # learn from this answer, so a bad automatic route cannot reinforce itself. When one project
-    # spans several repositories, the task's words still have to distinguish which checkout.
     from .projects import repositories_for_task
     related, relation_why = repositories_for_task(store, tid)
-    known = {r for r, _score, _has in ranked}
     related = [r for r in related if r in known]
     if len(related) == 1: return related[0], relation_why
-    if len(related) > 1:
-        choices = [row for row in ranked if row[0] in related]
-        if choices:
-            best, sc, _has = choices[0]
-            runner = choices[1][1] if len(choices) > 1 else 0.0
-            if sc >= .05 and sc >= max(runner * 1.4, runner + .04):
-                return best, relation_why + '; message content selected this repository'
-        return None, relation_why + '; the project has several repositories, so choose one'
-
-    best, sc, _has = ranked[0]
-    runner = ranked[1][1] if len(ranked) > 1 else 0.0
-    # "clearly the one" is a RELATIVE test: it beats the alternatives. A fixed floor is the wrong
-    # question on a long mail, and the old fallback - take the only repo we have a path for - is
-    # what put a reimbursement task in the integrations checkout, against the evidence.
-    if sc >= .05 and sc >= max(runner * 1.4, runner + .04):
-        return best, ('named in the ask' if best.split('/')[-1].lower() in task_blob(store, tid).lower()
-                      else 'closest match in the SOUL.md repo map')
-    # the ask points nowhere in particular: one configured repo is a fair default, several is a guess
-    return (list(paths)[0], 'the only repo this agent has a path for') if len(paths) == 1 else (None, None)
+    if len(related) > 1: return None, relation_why + '; the project has several repositories, so choose one'
+    return (known[0], 'the only repository there is') if len(known) == 1 else (None, 'triage named no repository - choose one')
 
 
 def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,
@@ -1976,18 +1953,22 @@ PHASE_DWELL = 3.0
 # LAST line wins where both appear - a status line redrawn in place leaves old frames in the
 # scrollback, so an "esc to interrupt" three lines up is history, not now.
 _WORKING = re.compile(r'esc to interrupt|esc to cancel|\(thinking\)|[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]|\b(thinking|working|running)…', re.I)
+# Only the CLI's OWN chrome is read here - its footer, its prompt glyph, its key hints - never what the agent WROTE (the
+# owner, 2026-10-11: "everything should be ai"). A turn that ended on "Should I also update the tests?" read as parked from
+# its words alone, and so did a report closing on a rhetorical "?". A quiet unknown CLI still parks on the IDLE_WAITING
+# fallback, and whether the agent's last message ASKED the owner is the model's read of it (hooks.judge_turn).
 _PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions on|auto mode on|type your message|'
-                     r'\?\s*$|\b(y/n|yes/no|do you want|would you like|should i|which (one|of these)|press enter|'
-                     r'choose an option|select an option|enter to (confirm|select))\b|^\s*[›>❯](?:\s*\d+\.)?', re.I)
+                     r'\b(press enter|choose an option|select an option|enter to (confirm|select))\b|^\s*[›>❯](?:\s*\d+\.)?', re.I)
 # A QUESTION the owner has to answer, as opposed to a screen that is merely idle. A chooser names
 # its keys, and it is the one thing that outranks "working" within a line: Claude draws
 # "Enter to select - Tab/Arrow keys to navigate - Esc to cancel" under its options, and the cancel
 # there is the way out of the QUESTION, not a turn in flight the way "esc to interrupt" is. Working
 # won that line, so a coder parked on a choice read as busy on every surface at once (the owner,
-# 2026-09-17: "why does coder say is working, when it's waiting for answer?").
+# 2026-09-17: "why does coder say is working, when it's waiting for answer?"). The chooser's own layout counts too - the
+# selection cursor standing on a numbered option ("❯ 1. Yes") is drawn by the CLI, never typed by the agent - but the
+# "Do you want to proceed?" above it is prose and decides nothing (2026-10-11).
 _ASKING = re.compile(r'enter to (confirm|select)|(tab|arrow)[\w/ ]*keys? to navigate|[↑↓]+\s*to (select|navigate|choose)|'
-                     r'\b(y/n|yes/no|do you want|would you like|should i|which (one|of these)|'
-                     r'choose an option|select an option)\b', re.I)
+                     r'\b(choose an option|select an option)\b|^\s*[❯›]\s*\d{1,2}[.)]\s+\S', re.I)
 
 def _observed_phase(t) -> str:
     """One raw observation from the rendered screen, with a fallback for small test doubles."""
@@ -2074,14 +2055,17 @@ def screen_asking(t) -> bool:
     except (AttributeError, TypeError):
         try: lines = t.tail(4)
         except Exception: return False
-    # newest-first, exactly as phase_of reads it: a chooser has to be what the screen says NOW, not
-    # a question still legible above the frame that replaced it
-    asking = False
-    for l in reversed([str(x) for x in (lines or []) if str(x).strip()]):
-        if _ASKING.search(l): asking = True; break
-        if _WORKING.search(l) or _PARKED.search(l): break
     # ...and the latch, not the raw frame: one repaint of a menu must not become a hand raise
-    return asking and stable_phase_of(t) == 'parked'
+    return chooser_in(lines) and stable_phase_of(t) == 'parked'
+
+
+def chooser_in(lines) -> bool:
+    """Is the newest thing these screen lines say a CLI's own chooser chrome (_ASKING)? Newest-first, exactly as phase_of
+    reads it: a chooser has to be what the screen says NOW, not a question still legible above the frame that replaced it."""
+    for l in reversed([str(x) for x in (lines or []) if str(x).strip()]):
+        if _ASKING.search(l): return True
+        if _WORKING.search(l) or _PARKED.search(l): return False
+    return False
 
 def for_task(task_id, tail=0, details=True):
     """The live session working a task, if any - what makes a task 'agent working' even

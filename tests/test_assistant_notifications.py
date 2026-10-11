@@ -67,7 +67,7 @@ class WatcherTests(unittest.TestCase):
     def test_a_parked_agent_is_the_piles_own_alert_and_is_never_kept_twice(self):
         s = store(); t = task(s); dock = general.dock_task(s)[0]['TaskId']
         self._events(s, live(t))
-        asking = live(t, idle=200, waiting=True, tail=['Which cutoff should I use?'])
+        asking = live(t, idle=200, waiting=True, state='asking', tail=['Which cutoff should I use?'])     # the session's own reading
         ev = self._events(s, asking)
         self.assertEqual([e['kind'] for e in ev], ['asking']); self.assertIsNone(ev[0]['card'])
         self.assertEqual(concierge.history(s, dock), [])

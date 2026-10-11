@@ -664,16 +664,20 @@ class TerminalTests(unittest.TestCase):
         self.assertIn('Work ONLY in the repository', seed)
         self.assertNotIn('\\n', seed)                                   # one line - a newline submits
 
-    def test_repo_is_guessed_from_the_soul_map_when_the_task_has_no_tag(self):
+    def test_no_repo_is_guessed_from_the_task_words_when_triage_named_none(self):
+        """The task's words are never scored against the SOUL.md map (2026-10-11, "everything should be ai"): triage
+        read the ask with the map in front of it, and when it named no repository the owner picks one."""
         prof = {'cwd_map': {'northwind/Census': 'C:/src/Census', 'northwind/Reports': 'C:/src/Reports'}}
         server.store.save_doc('soul', '## Repository map\n'
                               '- **northwind/Census**: employee portal - PTO, payroll imports, timesheets\n'
                               '- **northwind/Reports**: nightly financial reporting pipeline\n', 'test')
         pto = c.post('/api/tasks', json={'Title': 'PTO import maps the wrong month',
                                          'Summary': 'the payroll timesheet import is off'}).json()['taskId']
-        self.assertEqual(terminal.guess_repo(server.store, pto, prof)[0], 'northwind/Census')
+        self.assertEqual(terminal.guess_repo(server.store, pto, prof), (None, 'triage named no repository - choose one'))
         named = c.post('/api/tasks', json={'Title': 'Reports is failing at 2am'}).json()['taskId']
-        self.assertEqual(terminal.guess_repo(server.store, named, prof), ('northwind/Reports', 'named in the ask'))
+        self.assertIsNone(terminal.guess_repo(server.store, named, prof)[0])
+        verdict = c.post('/api/tasks', json={'Title': 'PTO import', 'Tags': 'triage-repo:northwind/Census'}).json()['taskId']
+        self.assertEqual(terminal.guess_repo(server.store, verdict, prof)[0], 'northwind/Census')     # triage's verdict still routes
         tagged = c.post('/api/tasks', json={'Title': 'anything', 'Tags': 'repo:northwind/Reports'}).json()['taskId']
         self.assertEqual(terminal.guess_repo(server.store, tagged, prof), ('northwind/Reports', 'tagged on the task'))
         # nothing to match against, or nothing that matches: the agent's own folder, not a wrong repo
@@ -1178,18 +1182,18 @@ class RepoRoutingTests(unittest.TestCase):
     def _task(self, title, summary=''):
         return c.post('/api/tasks', json={'Title': title, 'Summary': summary, 'Kind': 'coding'}).json()['taskId']
 
-    def test_the_ask_beats_the_only_repo_that_happens_to_be_configured(self):
+    def test_the_only_configured_repo_is_not_taken_while_the_map_knows_others(self):
+        """No verdict from triage and no guess from the words (2026-10-11): the owner chooses, and the one checkout
+        with a path is not quietly taken for them - that is how the reimbursement task opened in the wrong tree."""
         prof = json.loads(server.store.get_agent('coder')['Config'])
         tid = self._task('Reimbursement app', 'approving reimbursements shows an error on each transaction')
-        repo, why = terminal.guess_repo(server.store, tid, prof)
-        self.assertEqual(repo, 'northwind/portal')           # NOT the one with a path
-        self.assertTrue(why)
+        self.assertEqual(terminal.guess_repo(server.store, tid, prof), (None, 'triage named no repository - choose one'))
+        with mock.patch.object(terminal, 'Term') as worker, self.assertRaisesRegex(ValueError, 'could not tell which checkout'):
+            terminal.open_session(server.store, 'coder', tid, None)
+        worker.assert_not_called()
+        # the picker still lists every repo, with whether it can be opened - ordering it is not choosing
         ranked = terminal.rank_repos(server.store, tid, prof)
-        self.assertEqual(ranked[0][0], 'northwind/portal')
-        self.assertFalse(ranked[0][2])                   # ...and we know we have no path for it
-        # a payroll task still goes to the integrations repo
-        pay = self._task('payroll import posts to the wrong month', 'the timesheets import is off')
-        self.assertEqual(terminal.guess_repo(server.store, pay, prof)[0], 'northwind/Census')
+        self.assertEqual({r for r, _s, _h in ranked}, {'northwind/portal', 'northwind/Census'})
 
     def test_a_repo_with_no_path_refuses_instead_of_opening_the_wrong_folder(self):
         # find_checkout scans the REAL disk now, so the refusal only fires on a genuine miss -
@@ -1214,7 +1218,7 @@ class RepoRoutingTests(unittest.TestCase):
     def test_the_api_lists_every_repo_with_whether_it_can_be_opened(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')
         out = c.get(f'/api/tasks/{tid}/repos').json()
-        self.assertEqual(out['picked'], 'northwind/portal')
+        self.assertIsNone(out['picked'])                                     # no verdict, no guess: the owner picks
         by = {r['repo']: r for r in out['data']}
         self.assertFalse(by['northwind/portal']['has_path'])
         self.assertTrue(by['northwind/Census']['has_path'])

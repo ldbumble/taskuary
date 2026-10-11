@@ -356,7 +356,6 @@ def task_now(store, tid: int) -> str:
     an agent that picked the work back up a minute ago."""
     t = store.get_task(tid) or {}
     if not t: return ''
-    from . import waitroom
     live = next((x for x in _live(store) if x.get('taskId') == tid), None)
     if live:
         tail = [str(l).strip() for l in (live.get('tail') or []) if str(l).strip()]
@@ -364,7 +363,7 @@ def task_now(store, tid: int) -> str:
         who, req, idle = live.get('agent') or live.get('label') or 'an agent', live.get('request'), int(live.get('idle') or 0)
         # the run's own word first (a stall is not a question, however the screen looks), then the screen
         state = (f"{ws.request_line(who, req)} (idle {idle}s)" if waiting and req else
-                 f"{who} is PARKED and ASKING you: {tail[-1][:200]}" if waiting and waitroom.looks_like_question(tail) else
+                 f"{who} is PARKED and ASKING you: {tail[-1][:200]}" if waiting and live.get('state') == 'asking' else
                  f"{who} is PARKED at its prompt, waiting on you (idle {idle}s)" if waiting else
                  f"{who} is WORKING right now (idle {idle}s) - nothing for the owner until it stops")
     elif t.get('RunStatus') == 'running': state = f"{t.get('RunAgent') or 'an agent'} is running headless - nothing for the owner until it stops"

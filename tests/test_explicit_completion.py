@@ -1,12 +1,12 @@
-"""Explicit completion: save the agent's own result, tick what it reported, then close its run (PW-230 to PW-234).
+"""Explicit completion: save the agent's own result, then close its run (PW-230 to PW-234).
 
 An agent that said it was finished had its result rebuilt by a second AI from terminal scrollback;
 a session the owner had opened stayed open after `taskuary --done` because a veto meant for the
 judge also stopped the explicit word; the terminal was closed before the report was written, so a
 failed save lost the session and still read as finished. Now the final answer is captured
 directly - the `--done` sentence and the Stop hook's last message, matched to the run - and
-persisted with the report and the reported checklist items BEFORE the run closes; only items the
-agent said it completed are ticked; an explicit finish ends a task only when the task allows it -
+persisted with the report BEFORE the run closes (no checklist box is ticked from its prose - 2026-10-11);
+an explicit finish ends a task only when the task allows it -
 on a session the owner opened (stay:open) it is refused and the owner completes it (2026-09-25); a save that
 fails neither closes the session nor claims finalisation, and a second finish for the same run
 does nothing twice.
@@ -56,8 +56,11 @@ class SaveBeforeCloseTests(Base):
              mock.patch.object(term, 'close', side_effect=lambda sid: order.append('closed') or True):
             coder.wrap(self.s, self.tid, close=True, actor='coder', final_message='Fixed: the cron ran as the wrong user.')
         self.assertEqual(order, ['saved', 'closed'])
+        # no box is ticked from a `- [x] ...` line in the prose (2026-10-11): nothing gives the agent an item id to report,
+        # and a substring match ticked items it never named; closing the TASK ticks every box (done-ticks-every-box)
         items = {i['text']: i['done'] for i in self.s.task_checklist(self.tid)}
-        self.assertEqual(items, {'Find why the cron fails': True, 'Fix it': True, 'Re-run tonight': False})   # only what the agent said it did
+        self.assertEqual(items, {'Find why the cron fails': False, 'Fix it': False, 'Re-run tonight': False})
+        self.assertFalse(hasattr(coder, 'tick_reported_checklist'))
 
     def test_the_final_answer_is_the_agents_own_and_matched_to_the_run(self):
         term.SESSIONS['run1'] = live(self.tid)
@@ -108,6 +111,33 @@ class ExplicitFinishTests(Base):
         self.assertFalse(a.get('closed')); self.assertTrue(any('could not' in c['Body'] for c in self.s.list_comments(self.tid)))
         b = selfclose.declare(self.s, self.tid, 'done', 'coder')
         self.assertTrue(b.get('closed') or b.get('closed_run')); self.assertEqual(len(self.artifacts()), 1)
+
+
+
+class QuestionGateTests(Base):
+    """`--done` is refused for a question the RUN raised and nobody answered - a held ask, or one asked through the CLI's
+    question tool or a [[TASKUARY-ASK]] marker - never for the words on its screen (2026-10-11, "everything should be ai")."""
+    def test_a_question_mark_on_the_screen_does_not_refuse_done(self):
+        sess = live(self.tid); sess.tail = lambda k=3: ['Fixed the cron. Why did it fail? It ran as the wrong user.', 'Should I also tidy the logs?']
+        term.SESSIONS['run1'] = sess
+        self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
+        self.assertTrue(selfclose.declare(self.s, self.tid, 'fixed the cron', 'coder').get('closed'))
+
+    def test_an_open_marker_question_refuses_done(self):
+        sess = live(self.tid); term.SESSIONS['run1'] = sess
+        ws.record(self.s, self.tid, 'run1', 'input_needed', text='Which account should the refund go to?', choices=['Card', 'Bank'], source='hook')
+        self.assertIn('Which account should the refund go to?', selfclose.blocked(self.s, self.tid, sess))
+        self.assertFalse(selfclose.declare(self.s, self.tid, 'done', 'coder').get('closed'))
+
+    def test_the_models_read_of_a_turn_does_not_refuse_done(self):
+        sess = live(self.tid); term.SESSIONS['run1'] = sess
+        ws.record(self.s, self.tid, 'run1', 'input_needed', text='Want me to tidy the logs too?', source='judge')
+        self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
+
+    def test_a_held_ask_refuses_done(self):
+        sess = live(self.tid); term.SESSIONS['run1'] = sess
+        with mock.patch.object(ws, 'held_for', return_value=['g1']):
+            self.assertIn('held open', selfclose.blocked(self.s, self.tid, sess))
 
 
 if __name__ == '__main__':

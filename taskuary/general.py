@@ -1231,7 +1231,7 @@ class GeneralSession:
     def info(self, tail=0, details=True):
         # ...and the ONE sentence for its state, as a pty session carries it (terminal.worker_fields):
         # without it the Timeline row of a chat waiting on the owner had AgentWaiting and no AgentLine
-        from . import waitroom, workerstate as ws
+        from . import workerstate as ws
         waiting = self.waiting()
         # ...and WHAT IT ASKED: a [[TASKUARY-ASK]] is recorded as an open request with its choices, and `request` was
         # hardcoded None here - so a regular agent's question and its answer pills never reached the rail or the chat
@@ -1239,7 +1239,9 @@ class GeneralSession:
         try: req = ws.asking_of(self.store, self) if waiting and self.store is not None else None
         except Exception as e:
             logger.debug(f'general: no request read for {self.sid}: {e}'); req = None
-        sub = ws.sub_state(waiting, bool(waiting) and not req and waitroom.looks_like_question(self.tail(waitroom.TAIL_LINES)), req)
+        # ...and nothing else: a reply that merely ENDS in a question mark is not a request (2026-10-11, "everything should be
+        # ai") - a question the owner must answer arrives as a [[TASKUARY-ASK]] or not at all, and without one it is parked
+        sub = ws.sub_state(waiting, False, req)
         base = {'sid': self.sid, 'label': self.label, 'cwd': '', 'taskId': self.task_id,
                 'agent': self.agent, 'cli': 'taskuary', 'mode': self.mode, 'alive': self.alive,
                 'busy': self.busy,

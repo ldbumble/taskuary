@@ -625,7 +625,7 @@ def paused_conversation(store, item: dict) -> dict:
 
 def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
     """Live sessions parked on a question - whatever the feed window, an agent waiting is waiting."""
-    from . import terminal as term, waitroom
+    from . import terminal as term
     out = []
     fresh_setup = ((now or datetime.now()) - timedelta(minutes=SETUP_GRACE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     if live_state is _LIVE_UNSET:
@@ -663,9 +663,9 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
             continue
         # ONE READING of "is it asking" (A15, 2026-09-25): the session's own state and sentence (terminal.worker_fields,
         # general.info) - the rail read the screen with a question regex of its own, and could say "asked you" where the
-        # Timeline, reading the session, said "is waiting on you". The screen is the fallback only where there is none.
-        state = t.get('state')
-        asking = state == 'asking' if state else waitroom.looks_like_question(tail)
+        # Timeline, reading the session, said "is waiting on you". No words on the tail decide it any more (2026-10-11):
+        # a session with no state of its own is parked, never "asked you" from a "?" in what it wrote.
+        asking = t.get('state') == 'asking'
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
                          why=t.get('line') or agent_says('asking' if asking else 'parked', agent)))
@@ -1235,7 +1235,7 @@ def _present_one(store, item: dict | None) -> dict | None:
 
 def agent_states(store) -> dict:
     """Every task an agent has, or had: what it is doing now. {tid: (state, agent)}"""
-    from . import terminal as term, waitroom
+    from . import terminal as term
     out = {}
     try: live = term.live_sessions(tail=6)
     except Exception: live = []
@@ -1243,8 +1243,7 @@ def agent_states(store) -> dict:
         tid = t.get('taskId')
         if not tid or (store.get_task(tid) or {}).get('SourceRef') == 'assistant:dock': continue
         waiting = t.get('waiting') if t.get('waiting') is not None else (t.get('idle') or 0) >= term.IDLE_WAITING
-        tail = [str(x).strip() for x in (t.get('tail') or []) if str(x).strip()]
-        out[tid] = (sub_state(waiting, waitroom.looks_like_question(tail), t.get('request')) or 'working', t.get('agent') or t.get('label') or 'the agent')
+        out[tid] = (sub_state(waiting, t.get('state') == 'asking', t.get('request')) or 'working', t.get('agent') or t.get('label') or 'the agent')
     for r in store.running_runs():
         if r.get('TaskId') and r['TaskId'] not in out: out[r['TaskId']] = ('working', r.get('AgentName') or 'the agent')
     for tid in list(_STATE):

@@ -30,7 +30,7 @@ class ParserTests(unittest.TestCase):
         self.assertEqual([t['status'] for t in s['todos']], ['done', 'now']); self.assertEqual(s['n_done'], 1)
         self.assertTrue(s['done_at']); self.assertIn('tests green', s['said']); self.assertEqual(s['source'], 'rollout')
 
-    def test_claude_hooks_late_and_stray_are_facts_not_verdicts(self):
+    def test_claude_hooks_late_is_a_fact_and_no_file_is_called_stray(self):
         w = witness.Witness()
         feed = lambda p: [w.note(n) for n in witness.claude_notes(p)]
         feed({'hook_event_name': 'UserPromptSubmit', 'prompt': 'go'})
@@ -39,7 +39,9 @@ class ParserTests(unittest.TestCase):
         feed({'hook_event_name': 'PostToolUse', 'tool_name': 'Edit', 'tool_input': {'file_path': r'C:\repo\taskuary\server.py', 'old_string': 'a', 'new_string': 'b'}})
         s = w.snapshot([r'C:\repo\website\src\App.jsx'], CWD, '')
         self.assertEqual(s['tool']['name'], 'Edit'); self.assertEqual(s['rung'], 'tool')
-        self.assertEqual({f['path']: f['stray'] for f in s['files']}, {'taskuary/server.py': False, 'website/src/App.jsx': True})   # the list names server.py, not App
+        # whether a file belongs to an item is meaning, not a fact the hooks gave: no file is flagged by its name (2026-10-11)
+        self.assertEqual({f['path'] for f in s['files']}, {'taskuary/server.py', 'website/src/App.jsx'})
+        self.assertFalse(any('stray' in f for f in s['files']))
         self.assertEqual(s['flags'], [])                                                    # nothing is late while the agent still works
         feed({'hook_event_name': 'Stop', 'last_assistant_message': 'All done.'})
         time.sleep(1.1)                                                                     # a write AFTER done, a second later
@@ -47,10 +49,7 @@ class ParserTests(unittest.TestCase):
         s = w.snapshot([], CWD, '')
         late = next(f for f in s['files'] if f['path'] == 'taskuary/store.py')
         self.assertTrue(late['late']); self.assertEqual(s['flags'][0]['level'], 'check'); self.assertIn('store.py written after the agent said done', s['flags'][0]['text'])
-        # a list that never names a file cannot make anything stray - that would be noise, not a fact
-        w2 = witness.Witness()
-        w2.note({'k': 'todos', 'items': [{'text': 'wire the card', 'status': 'now'}]}); w2.note({'k': 'file', 'path': 'x.py'})
-        self.assertFalse(w2.snapshot([], '', '')['files'][0]['stray'])
+        self.assertFalse(any('not in the list' in f['text'] or 'no item' in f['text'] for f in s['flags']))
 
     def test_rung_says_what_the_card_stands_on(self):
         w = witness.Witness()

@@ -453,15 +453,17 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     if not text.strip(): raise ValueError('nothing to wrap up - this task has no session transcript')
     rep = report_from_transcript(store, tid, text, agent)
     report = resolution_text(rep)
-    # SAVE FIRST, close after (PW-231/233): the result, the final answer and the checklist items the agent
-    # reported land before the pty goes. A save that fails raises here - the session stays, the report is
+    # SAVE FIRST, close after (PW-231/233): the result and the final answer land before the pty goes. A save that fails raises here - the session stays, the report is
     # not written, nothing reads as finalised - and the caller may retry.
     from . import session_artifacts
     try:
         artifact = session_artifacts.coding(store, tid, report, text, agent or actor, final_message=final_message)
     except Exception as e:
         raise ValueError(f'the result could not be saved ({str(e)[:160]}) - the session was left open; try again')
-    tick_reported_checklist(store, tid, final_message + '\n' + text, agent or actor)
+    # NO BOX IS TICKED FROM PROSE (2026-10-11, "everything should be ai"): a `- [x] ...` line anywhere in the transcript
+    # ticked whichever item's words it contained or was contained by - "- [x] Fix it" ticked "Fix it" and also "Fix it
+    # tomorrow after the review". Nothing in the brief gives the agent an item id to report, so there is no honest match;
+    # a close ticks every box (store.update_task, done-ticks-every-box) and a wrap that leaves the task open leaves them.
     store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}' + (f'\n\nLAST MESSAGE\n{final_message}' if final_message else ''))
     if found: term.close(found)              # done means done - the pty and its shells go too, once the result is safe
     store.add_comment(tid, actor, 'human', 'Closed the session - wrapped up from what was on screen.')
@@ -504,28 +506,6 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
             'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')), 'send_block': fin.get('send_block') or '',
             'freshness': fin.get('freshness') or 'unchecked', 'artifacts': [artifact] if artifact else []}
-
-
-_TICKED = re.compile(r'^\s*(?:[-*]\s*)?\[(x|X|✓|done)\]\s*(.+?)\s*$', re.M)
-
-
-def tick_reported_checklist(store, tid: int, text: str, actor: str = 'coder') -> list:
-    """Tick the checklist items the agent itself reported done - a `- [x] item` line in its result or transcript
-    that matches an item's words - and nothing else (PW-231). Item identities are kept; nothing is added, moved
-    or blindly completed; an item the agent did not name stays open."""
-    if not hasattr(store, 'task_checklist'): return []
-    items = store.task_checklist(tid)
-    if not items: return []
-    said = {' '.join(m.group(2).split()).lower().rstrip('.') for m in _TICKED.finditer(str(text or ''))}
-    ticked = []
-    for it in items:
-        if it.get('done'): continue
-        words = ' '.join(str(it.get('text') or '').split()).lower().rstrip('.')
-        if words and any(words == s or words in s or s in words for s in said):
-            try: store.tick_checklist_item(tid, it['id'], True, actor); ticked.append(it['text'])
-            except Exception as e: logger.debug(f'checklist tick skipped: {e}')
-    if ticked: store.add_comment(tid, actor, 'agent', 'Reported done:\n' + '\n'.join(f'- [x] {t}' for t in ticked))
-    return ticked
 
 
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,

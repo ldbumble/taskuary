@@ -46,9 +46,16 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(terminal.phase_of(['? for shortcuts', 'Editing foo.py (esc to interrupt)']), 'working')
 
     def test_permission_and_choice_prompts_are_parked_without_waiting_for_idle(self):
-        for tail in (['Do you want to allow this command?'], ['❯ 1. Yes', '  2. No'],
-                     ['Overwrite config.toml (y/n)'], ['Press enter to confirm']):
+        for tail in (['Do you want to allow this command?', '❯ 1. Yes', '  2. No'], ['❯ 1. Yes', '  2. No'],
+                     ['Press enter to confirm'], ['Yes, I trust this folder', 'Enter to confirm · Esc to cancel']):
             self.assertEqual(terminal.phase_of(tail), 'parked', tail)
+
+    def test_what_the_agent_wrote_decides_nothing(self):
+        """Only the CLI's own chrome is read (the owner, 2026-10-11: "everything should be ai"). A turn that ended on a
+        question, or a report that closed on a rhetorical one, is left to the clock and to the model's read of the turn."""
+        for tail in (['Should I also update the tests?'], ['Overwrite config.toml (y/n)'], ['Which of these files is the right one?'],
+                     ['Done. Why did it fail before? The cron ran as the wrong user.'], ['Do you want me to look at the export too?']):
+            self.assertEqual(terminal.phase_of(tail), 'unknown', tail)
 
     def test_an_unknown_screen_falls_back_to_the_clock(self):
         self.assertEqual(terminal.phase_of(['$ make test', 'ok 12 tests']), 'unknown')
@@ -92,14 +99,26 @@ class PhaseTests(unittest.TestCase):
 
 
 class QuestionTests(unittest.TestCase):
-    def test_a_question_on_the_tail_is_a_question(self):
-        for tail in (['Should I also update the tests?'], ['Do you want to proceed?', '❯ 1. Yes', '  2. No'],
-                     ['Which of these files is the right one?'], ['Overwrite config.toml (y/n)']):
-            self.assertTrue(waitroom.looks_like_question(tail), tail)
+    """A chooser on screen is the CLI's own chrome - its key hints, its cursor on a numbered option. A question mark in
+    the agent's prose is not (2026-10-11): `looks_like_question` and its word list are gone."""
+    def test_a_chooser_the_cli_draws_is_a_question(self):
+        for tail in (['Do you want to proceed?', '❯ 1. Yes', '  2. No'], ['Pick one', '↑↓ to select · enter to confirm'],
+                     ['› 1. Yes, proceed (y)', '  2. No, and tell Codex what to do differently']):
+            self.assertTrue(terminal.chooser_in(tail), tail)
 
-    def test_a_finished_report_is_not(self):
-        for tail in (['Done. Tests pass (12 passed).', 'Committed as 3f1a2c.'], ['I wondered whether x? No - it is y.', 'Finished.'], []):
-            self.assertFalse(waitroom.looks_like_question(tail), tail)
+    def test_a_question_in_prose_is_not(self):
+        for tail in (['Should I also update the tests?'], ['Overwrite config.toml (y/n)'], ['Which of these files is the right one?'],
+                     ['Done. Tests pass (12 passed).', 'Committed as 3f1a2c.'], ['I wondered whether x? No - it is y.', 'Finished.'], [],
+                     ['Plan:', '1. Read the export', '2. Fix it']):
+            self.assertFalse(terminal.chooser_in(tail), tail)
+        self.assertFalse(hasattr(waitroom, 'looks_like_question'))
+
+    def test_a_report_ending_in_a_rhetorical_question_is_parked_not_asking(self):
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Fixed the export. Why did it break? The cron ran as the wrong user.'])
+        t.sid = 'fake'
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            self.assertEqual(waitroom.state(s, tid)[0], 'parked')
 
 
 class ChooserTests(unittest.TestCase):
@@ -157,16 +176,23 @@ class DeliveryTests(unittest.TestCase):
     def test_a_question_for_the_owner_is_answered_by_what_they_write_next(self):
         """An agent parked on a question is asking the OWNER: their next words are the answer and go
         in at once, plainly - no "while you were working" preamble. They used to queue behind the
-        question and never arrive, while the card said "Told the agent" (2026-09-07 live check)."""
+        question and never arrive, while the card said "Told the agent" (2026-09-07 live check). The
+        question is the MODEL's read of the turn's last message (hooks.judge_turn), never a "?" on the tail."""
+        from taskuary import hooks, workerstate as ws
         s = MemoryStore(); tid = task(s)
-        t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Two repos match. Which one should I use?'])
+        said = 'Two repos match. Which one should I use?'
+        t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=[said]); t.sid = 'fake'
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            self.assertEqual(waitroom.state(s, tid)[0], 'parked')                     # the words alone ask nothing
+            ws.record(s, tid, 'fake', 'turn_end', text=said, source='hook')
+            hooks.judge_turn(s, tid, 'fake', said, brain=lambda *a, **k: '{"asks": true, "question": "Which repo should I use?"}', wait=True)
+            self.assertEqual(waitroom.state(s, tid)[0], 'asking')
             out = waitroom.add(s, tid, 'use the 8/17 file')
             self.assertEqual((out['delivered'], out['state']), (1, 'answered'))
             time.sleep(0.5)
         self.assertEqual(t.typed(), 'use the 8/17 file')               # the answer itself, nothing wrapped round it
         self.assertEqual(s.waiting_notes(tid), [])
-        self.assertIn('Answered the agent', ' '.join(c['Body'] for c in s.list_comments(tid)))
+        self.assertIn('Answered "Which repo should I use?"', ' '.join(c['Body'] for c in s.list_comments(tid)))   # bound to the request
 
     def test_no_session_reopens_one_with_the_notes_as_the_ask(self):
         s = MemoryStore(); tid = task(s)
@@ -266,17 +292,22 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(c.get('/api/tasks/9999/waitroom').status_code, 404)
 
     def test_live_runs_say_when_a_parked_agent_is_asking(self):
-        """The hand-raise notification reads this: a session quiet past IDLE_WAITING whose last
-        lines are a question is 'asking'; one still printing is neither."""
+        """The hand-raise notification reads this: a session quiet past IDLE_WAITING whose own reading
+        is 'asking' (terminal.worker_fields) is asking; one still printing is neither, and the words on
+        the tail alone never are (2026-10-11)."""
         from fastapi.testclient import TestClient
         from taskuary import server
         s = MemoryStore(); tid = task(s)
         asking = FakeTerm(tid, idle=terminal.IDLE_WAITING + 3, tail=['Which repo should I use?'])
         asking.cwd, asking.agent, asking.label, asking.started = 'x', 'coder', 'coder', ''
+        state = {'state': None}
         def info(tail=0): return {'sid': 'a', 'taskId': tid, 'alive': True, 'idle': asking._idle, 'files': [], 'agent': 'coder', 'label': 'coder',
-                                  'started': '', 'tail': asking.tail(tail)}
+                                  'started': '', 'tail': asking.tail(tail), **state}
         asking.info = info
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {'a': asking}, clear=True):
+            rows = TestClient(server.app).get('/api/runs/live').json()['data']
+            self.assertEqual((rows[0]['asking'], rows[0]['state']), (False, 'parked'))             # a "?" on the tail is not a question
+            state['state'] = 'asking'
             rows = TestClient(server.app).get('/api/runs/live').json()['data']
             self.assertEqual((rows[0]['asking'], rows[0]['Title']), (True, 'PTO import'))
             asking._idle = 2

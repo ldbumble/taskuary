@@ -452,7 +452,7 @@ class LanesTests(unittest.TestCase):
         mail(s, 'Export still broken', hours=1, tid=t1)
         t2 = s.create_task({'Title': 'Rename the flag', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         mail(s, 'Rename the flag please', hours=3, tid=t2)
-        live = [{'taskId': t1, 'agent': 'claude', 'label': 'claude', 'started': ago(hours=1), 'idle': 120, 'waiting': True,
+        live = [{'taskId': t1, 'agent': 'claude', 'label': 'claude', 'started': ago(hours=1), 'idle': 120, 'waiting': True, 'state': 'asking',
                  'tail': ['Edited export.py', 'Should I also update the tests? (y/n)']},
                 {'taskId': t2, 'agent': 'codex', 'label': 'codex', 'started': ago(minutes=5), 'idle': 2, 'waiting': False, 'tail': ['working…']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
@@ -500,8 +500,8 @@ class LanesTests(unittest.TestCase):
         s = store()
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         mail(s, 'PTO', hours=3, tid=t)
-        parked = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(hours=1), 'idle': 200, 'waiting': True, 'tail': ['import now? (y/n)']}]
-        working = [dict(parked[0], idle=2, waiting=False, tail=['editing…'])]
+        parked = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(hours=1), 'idle': 200, 'waiting': True, 'state': 'asking', 'tail': ['import now? (y/n)']}]
+        working = [dict(parked[0], idle=2, waiting=False, state=None, tail=['editing…'])]
         with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
             self.assertEqual(funnel.announce(s), [])                                  # the first look only remembers
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):

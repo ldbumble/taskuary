@@ -287,7 +287,7 @@ class ArrivalsTests(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=session(tid)):
             funnel.announce(s)                                         # working: remembered
             self.assertEqual(lanes(s, session(tid)), [('todo', 'working')])
-        asking = session(tid, idle=200, waiting=True, tail=['Remove the old rows too? (y/n)'])
+        asking = session(tid, idle=200, waiting=True, state='asking', tail=['Remove the old rows too? (y/n)'])     # the session's own reading
         with mock.patch.object(terminal, 'live_sessions', return_value=asking):
             ev = funnel.announce(s)
             self.assertEqual([e['kind'] for e in ev], ['asking'])

@@ -92,6 +92,25 @@ const RoadTag = ({ row }) => {
   return <span className="tq-pile-tag" title={meta.hint}
     style={{ color: "#6f6960", background: "#eee9e1", borderColor: "#ddd6cb" }}>{meta.label}</span>;
 };
+
+// A TIMELINE ROW'S FIRST LINE, and who gives way when the rail is too narrow for all of it: the sender
+// first (down to 28px, a few letters), the subject never below 72px, the chips never - they drop to a
+// second line as one block instead. A fixed-width sender pushed "task · in progress" and "coding" past
+// the card's border (the owner, 2026-09-30); that fix gave the subject flex 1 - basis 0 - so it got
+// only what the sender and the chips left, which in the 217px card was nothing: rows read "Erin Bl...
+// [task · open] [reply]" and never said what about (the 2026-10-11 walk). A grid track does what flex
+// cannot: the sender grows to its own width only out of what is left once the subject has its 72px.
+const ROW_LINE = { display: "flex", flexWrap: "wrap", columnGap: 0.85, rowGap: "3px", alignItems: "center", minWidth: 0, minHeight: 22 };
+const ROW_CHIPS = { display: "flex", gap: 0.85, alignItems: "center", flexShrink: 0, ml: "auto" };
+const ROW_TEXT = { fontSize: 11.5, letterSpacing: "-.1px" };
+const WhoWhat = ({ who, what, whoSx, whatSx, whoMax = 118 }) => (
+  // basis = 28 + gap + 72: the chips wrap only when even the narrowest sender and the shortest subject leave them no room
+  <Box sx={{ flex: "1 1 108px", minWidth: 0, display: "grid", gridTemplateColumns: `fit-content(${whoMax}px) minmax(72px, 1fr)`,
+    columnGap: 0.85, alignItems: "center" }}>
+    <Typography variant="body2" noWrap sx={{ ...ROW_TEXT, fontWeight: 600, minWidth: 28, ...whoSx }}>{who}</Typography>
+    <Typography variant="body2" noWrap sx={{ ...ROW_TEXT, fontWeight: 500, minWidth: 0, ...whatSx }}>{what}</Typography>
+  </Box>
+);
 import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
@@ -1775,23 +1794,18 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                               "&:hover": { borderColor: held ? ACCENT : "#d8cfbe", borderLeftColor: edgeOf(st),
                                 boxShadow: held ? `inset 0 0 0 1px ${ACCENT}, 0 2px 10px rgba(47,107,79,.14)`
                                                 : "0 2px 8px rgba(47,107,79,.10)", cursor: "pointer" } }}>
-                            <Box sx={{ display: "flex", gap: 0.85, alignItems: "center", minWidth: 0, minHeight: 22 }}>
+                            <Box sx={ROW_LINE}>
                               {/* where it came from stays a LOGO, not a glyph - the channel is an
                                   identity and the app already draws it everywhere else */}
                               <Box sx={{ display: "flex", flexShrink: 0 }}>
                                 <ChannelIcon channel={r.Channel} sx={{ fontSize: 16 }} />
                               </Box>
-                              {/* the sender gives way FIRST when the row is too narrow for its chips: a fixed-width sender pushed
-                                  "task · in progress" and "coding" past the card's border and clipped them (the owner, 2026-09-30).
-                              11.5px, the size the work rail sets its subjects in: the two rails
+                              {/* 11.5px, the size the work rail sets its subjects in: the two rails
                                   are one list read two ways, so they read at one size. */}
-                              <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: view !== "unread" && ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? DIM : INK,
-                                fontSize: 11.5, letterSpacing: "-.1px", maxWidth: 118, minWidth: 0, flexShrink: 1 }}>
-                                {r.FromName || r.FromEmail || "unknown"}
-                              </Typography>
-                              <Typography variant="body2" noWrap sx={{ color: view === "unread" ? INK : DIM, fontSize: 11.5, fontWeight: 500, letterSpacing: "-.1px", flex: 1, minWidth: 0 }}>
-                                {subjectOf(r) || ""}
-                              </Typography>
+                              <WhoWhat who={r.FromName || r.FromEmail || "unknown"} what={subjectOf(r) || ""}
+                                whoSx={{ color: view !== "unread" && ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? DIM : INK }}
+                                whatSx={{ color: view === "unread" ? INK : DIM }} />
+                              <Box sx={ROW_CHIPS}>
                               {r.Attachments > 0 && (
                                 <AttachFileIcon titleAccess={`${r.Attachments} attached`} sx={{ fontSize: 13, color: FAINT, flexShrink: 0 }} />
                               )}
@@ -1820,6 +1834,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                                   </Typography>
                                 ) : <RoadTag row={r} />}
                               {!generic && !rowWord && !tagMeta(r) && <StateMark row={r} state={st} />}
+                              </Box>
                             </Box>
                             {/* the second line, only on the row you are on: who has it and what
                                 it is waiting for, every clause from a field the server sent */}
@@ -2953,23 +2968,21 @@ const ThreadFold = ({ entry, open, onToggle, onOpenRow, sel }) => {
           borderRadius: "8px", px: "10px", pt: "3px", pb: "4px", ml: "8px", minWidth: 0, overflow: "hidden",
           cursor: "pointer", transition: "box-shadow .18s, border-color .18s",
           "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }}>
-        <Box sx={{ display: "flex", gap: 0.85, alignItems: "center", minWidth: 0, minHeight: 22 }}>
+        <Box sx={ROW_LINE}>
           <Box component="span" aria-hidden sx={{ display: "flex", flexShrink: 0, color: FAINT,
             transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }}>
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor"
               strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4" /></svg>
           </Box>
           <Box sx={{ display: "flex", flexShrink: 0 }}><ChannelIcon channel={head.Channel} sx={{ fontSize: 16 }} /></Box>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 11.5, letterSpacing: "-.1px", flexShrink: 1, minWidth: 56, maxWidth: 150 }}>
-            {who.slice(0, 2).join(", ")}{who.length > 2 ? ` +${who.length - 2}` : ""}
-          </Typography>
-          <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 11.5, fontWeight: 500, letterSpacing: "-.1px", flex: 1, minWidth: 0 }}>
-            {cleanText(String(head.Subject || "")) || "conversation"}
-          </Typography>
-          <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, fontWeight: 600, color: ROLES.info.ink,
-            bgcolor: ROLES.info.tint, border: `1px solid ${ROLES.info.bd}`, borderRadius: 99, px: 0.75,
-            lineHeight: "15px", flexShrink: 0 }}>{rows.length}</Typography>
-          <StateMark row={head} state={st} />
+          <WhoWhat whoMax={150} who={`${who.slice(0, 2).join(", ")}${who.length > 2 ? ` +${who.length - 2}` : ""}`}
+            what={cleanText(String(head.Subject || "")) || "conversation"} whoSx={{ color: INK }} whatSx={{ color: DIM }} />
+          <Box sx={ROW_CHIPS}>
+            <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, fontWeight: 600, color: ROLES.info.ink,
+              bgcolor: ROLES.info.tint, border: `1px solid ${ROLES.info.bd}`, borderRadius: 99, px: 0.75,
+              lineHeight: "15px", flexShrink: 0 }}>{rows.length}</Typography>
+            <StateMark row={head} state={st} />
+          </Box>
         </Box>
         <Box sx={{ display: "grid", gridTemplateRows: open ? "0fr" : "1fr", transition: "grid-template-rows .2s ease" }}>
           <Box sx={{ overflow: "hidden" }}>

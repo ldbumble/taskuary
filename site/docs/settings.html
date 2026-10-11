@@ -126,7 +126,7 @@ is what you see if those cards cannot load.</li>
 <h3 id="assistant-tab-brain">Assistant tab brain<a class="anchor" href="#assistant-tab-brain" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_ai</code> · type: brain · set on a card at the top of the page</p>
 <p>Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.</p>
-<p>THREE DEFAULTS, one place each: the triage brain (Triage &amp; routing), the default coding agent (Coder agent), and this one.</p>
+<p>THREE DEFAULTS, side by side in Triage &amp; agents: the triage brain, the default coding CLI, and this one.</p>
 <p>A CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent&#39;s own &#39;light model&#39; from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks.</p>
 <h3 id="assistant-tab-model">Assistant tab model<a class="anchor" href="#assistant-tab-model" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_model</code> · type: text · set on a card at the top of the page</p>
@@ -166,7 +166,7 @@ is what you see if those cards cannot load.</li>
 <h3 id="intent-triage">Intent triage<a class="anchor" href="#intent-triage" aria-label="Link to this section">#</a></h3>
 <p><code>intent_classify_enabled</code> · type: switch · default: on</p>
 <p>Classify every new message: a task to DO, a question to ANSWER, or FYI to file.</p>
-<p>The heart of the funnel. Every inbound message is read (by the triage brain below, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.</p>
+<p>The heart of the funnel. Every inbound message is read (by the triage brain in Triage &amp; agents, the section above, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.</p>
 <p>Off: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself.</p>
 <h3 id="learn-from-your-verdicts">Learn from your verdicts<a class="anchor" href="#learn-from-your-verdicts" aria-label="Link to this section">#</a></h3>
 <p><code>learn_enabled</code> · type: switch · default: on</p>

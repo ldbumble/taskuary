@@ -162,7 +162,7 @@ test("a stop you have walked past is a numbered step, not a message", () => {
 // The header chip is tq-phone-hide, and it was the only door to the whole of this guidance.
 test("the walk is reachable on a phone", () => {
   const view = read("AssistantView.jsx");
-  const welcome = view.slice(view.indexOf('className="tq-welcome"'), view.indexOf('className="tq-welcome"') + 2400);
+  const welcome = view.slice(view.indexOf('className="tq-welcome"'), view.indexOf('className="tq-welcome"') + 3200);
   const entry = welcome.slice(welcome.lastIndexOf("<button", welcome.indexOf("Set up Taskuary")), welcome.indexOf("Set up Taskuary"));
   assert.ok(entry.includes("onClick={setup}"), "the welcome block opens the same scripted walk");
   assert.doesNotMatch(entry, /tq-phone-hide/, "and it is not hidden on the device that needs it");

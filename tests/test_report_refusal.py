@@ -1,20 +1,18 @@
-"""A refused TOOL is a failed run, however long and however well laid out the excuse is.
+"""A run the agent could not do is a failed run - and the AGENT says so, not a phrase list.
 
-`_blocked` used to trust "short AND shapeless": a run that never reached its source was assumed
-to answer briefly, so a long or structured answer was never second-guessed. A capable agent does
-not fail briefly. Asked for a report it could not gather, Claude returned a 31-line document -
-headings, a table whose every Result cell read "Blocked - permission not granted", a "What is
-therefore missing" section and five numbered recommendations. Both halves of the guard passed it,
-so the apology filed as the morning report and triage sent it on as work (the owner, 2026-09-04:
-"the ai task said it fixed this, but it's not fixed").
-
-The body below is the real one from that run, trimmed and with the owner's path made generic.
+A phrase list (`_blocked`: BLOCKED/REFUSED) used to read the answer for "rate limit", "unable to
+fetch", "permission not granted". It missed the 31-line apology below once (2026-09-04), was patched
+to trust the CLI's own refusal words, and still filed a real short report that MENTIONED a rate
+limit as FAILED. The owner, 2026-10-11: "everything should be ai". AGENT_SYSTEM now asks the agent
+to end a run it could not do with `VERDICT: failed: <why>`, and run_agent reads that one line.
 """
 import unittest
+from unittest import mock
 
 from taskuary import reports
+from taskuary.store import MemoryStore
 
-# 31 lines: over REPORT_LINES, and _outline() finds both the headings and the table columns
+# the 31-line apology that once filed as the morning report - now with the line the contract asks for
 REAL_REFUSAL = """# Morning Report - GitHub Trending - 2026-09-04
 
 ## What happened
@@ -47,6 +45,8 @@ was not possible.
 3. **Consider the API instead of HTML scraping**.
 4. **Persist each run's top-15 to a snapshot file** so the next report has a baseline.
 5. **Fail loudly at schedule level** if the run produces zero repositories twice in a row.
+
+VERDICT: failed: WebFetch and WebSearch were not granted, so github.com could not be read.
 """
 
 # what a REAL report of the same size and shape looks like - it must never be flagged
@@ -82,55 +82,45 @@ Eight of the fifteen carried over from yesterday; the seven new ones are all age
 """
 
 
-class RefusedToolIsAFailedRunTests(unittest.TestCase):
-    def test_the_real_refusal_that_filed_as_a_report_is_now_a_failed_run(self):
-        self.assertGreater(len(REAL_REFUSAL.splitlines()), reports.REPORT_LINES)   # long...
-        self.assertTrue(reports._outline(REAL_REFUSAL))                            # ...and structured
-        self.assertEqual(reports._blocked(REAL_REFUSAL), 'permission not granted')
+# a REAL short report whose subject is limits - the phrase list filed exactly this as FAILED
+RATE_REPORT = """Vendor API usage, 2026-10-10
+
+- Payworth: 41,200 of 50,000 calls (82%) - the rate limit resets at 00:00 UTC.
+- Trainly: usage limit raised to 10,000/day last week; 3,100 used.
+- Spendly: quota exceeded once at 14:02 and recovered within the minute."""
+
+
+def _run(answer):
+    cfg = {'type': 'agent', 'agent': 'coder', 'prompt': 'fetch the trending page', 'title': 'GitHub Trending', 'store': MemoryStore()}
+    with mock.patch('taskuary.llm.make_cli_llm', return_value=lambda *a, **k: answer): return reports.run_agent(cfg)
+
+
+class AgentSaysItFailedTests(unittest.TestCase):
+    def test_the_contract_is_in_the_agents_instructions(self):
+        self.assertIn(reports.FAILED_MARK, reports.AGENT_SYSTEM)
+
+    def test_a_short_report_about_rate_limits_files_as_a_report(self):
+        subject, body = _run(RATE_REPORT)
+        self.assertIn('coder ran a prompt', subject)
+        self.assertIn('rate limit resets', body)
+
+    def test_the_agents_failure_line_makes_run_agent_raise(self):
+        with self.assertRaises(RuntimeError) as e: _run(REAL_REFUSAL)
+        self.assertIn('could not run this report', str(e.exception))
+        self.assertIn('WebFetch and WebSearch were not granted', str(e.exception))
 
     def test_a_real_report_of_the_same_size_and_shape_is_left_alone(self):
-        self.assertGreater(len(REAL_REPORT.splitlines()), reports.REPORT_LINES)
-        self.assertTrue(reports._outline(REAL_REPORT))
-        self.assertEqual(reports._blocked(REAL_REPORT), '')
-
-    def test_every_refusal_wording_is_conclusive_at_any_length(self):
-        """These are the CLI's own words, which no genuine report has reason to contain - so unlike
-        the generic BLOCKED phrases they are not held to short-and-shapeless."""
-        padding = '\n'.join(f'## Section {i}\n\nSome real looking prose here.' for i in range(12))
-        for phrase in reports.REFUSED:
-            body = f'# A Report\n\n{padding}\n\nThe run hit: {phrase} for WebFetch.\n'
-            self.assertGreater(len(body.splitlines()), reports.REPORT_LINES, phrase)
-            self.assertEqual(reports._blocked(body), phrase, phrase)
-
-    def test_a_generic_inability_still_needs_to_be_short_and_shapeless(self):
-        """"unable to fetch" is a phrase a real report may legitimately contain, so it keeps the
-        old guard - otherwise a database report mentioning one unreachable row would be binned."""
-        self.assertEqual(reports._blocked('unable to fetch the page'), 'unable to fetch')
-        long_real = REAL_REPORT + '\n(One row was unable to fetch its upstream and is omitted.)\n'
-        self.assertEqual(reports._blocked(long_real), '')
-
-    def test_a_refusal_makes_run_agent_raise_instead_of_filing_a_document(self):
-        """The point of the detector: run_agent RAISES, so the reports pipeline files a FAILED run
-        and the owner sees FAILED rather than an apology dressed as the morning report."""
-        from unittest import mock
-        from taskuary.store import MemoryStore
-        cfg = {'type': 'agent', 'agent': 'coder', 'prompt': 'fetch the trending page',
-               'title': 'GitHub Trending', 'store': MemoryStore()}
-        with mock.patch('taskuary.llm.make_cli_llm', return_value=lambda *a, **k: REAL_REFUSAL):
-            with self.assertRaises(RuntimeError) as e:
-                reports.run_agent(cfg)
-        self.assertIn('could not run this report', str(e.exception))
-        self.assertIn('permission not granted', str(e.exception))
-
-    def test_the_same_agent_answering_a_real_report_is_filed_normally(self):
-        from unittest import mock
-        from taskuary.store import MemoryStore
-        cfg = {'type': 'agent', 'agent': 'coder', 'prompt': 'fetch the trending page',
-               'title': 'GitHub Trending', 'store': MemoryStore()}
-        with mock.patch('taskuary.llm.make_cli_llm', return_value=lambda *a, **k: REAL_REPORT):
-            subject, body = reports.run_agent(cfg)
-        self.assertIn('coder ran a prompt', subject)
+        subject, body = _run(REAL_REPORT)
         self.assertIn('mattpocock/skills', body)
+
+    def test_only_the_last_line_counts_and_it_is_stripped(self):
+        quoted = f'# Report\n\nThe contract says to write {reports.FAILED_MARK} when blocked.\n\n- 3 rows'
+        self.assertEqual(reports.agent_failed(quoted)[0], '')
+        why, body = reports.agent_failed('partial notes\n**VERDICT: failed: the mailbox refused the login**')
+        self.assertEqual((why, body), ('the mailbox refused the login', 'partial notes'))
+
+    def test_the_phrase_lists_are_gone(self):
+        for name in ('BLOCKED', 'REFUSED', '_blocked'): self.assertFalse(hasattr(reports, name), name)
 
 
 if __name__ == '__main__':

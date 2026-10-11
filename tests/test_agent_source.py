@@ -94,10 +94,11 @@ class AgentSourceTests(unittest.TestCase):
     def test_an_agent_that_could_not_reach_its_source_is_a_failed_run(self):
         """The morning trending report, 2026-09-03: the web tool was refused, the agent narrated the
         refusal in 14 lines, and the apology filed as news - triage then read it as a defect and opened
-        a bug task on an unrelated repo. A run that never reached its source fails like the timeout does."""
-        blocked = ("I'll fetch the trending page now.\n\n**Tool Use: WebFetch**\n\n**Tool Result:**\n"
-                   'Web search is not available on this Claude account. Please try again later.\n\n'
-                   'I could not fetch the page, so there is no report today.')
+        a bug task on an unrelated repo. A run that never reached its source fails like the timeout does -
+        and the agent is the one that says so, with the contract's last line (the owner, 2026-10-11)."""
+        blocked = ("I'll fetch the trending page now.\n\n**Tool Use: WebFetch**\n\n"
+                   'I could not fetch the page, so there is no report today.\n\n'
+                   'VERDICT: failed: Web search is not available on this Claude account.')
         with mock.patch('taskuary.llm.make_cli_llm', lambda *a, **k: (lambda s, u, **kw: blocked)):
             with self.assertRaises(RuntimeError) as e:
                 reports.REGISTRY['agent'](reports.resolve_cfg(self.s, {'type': 'agent', 'prompt': 'top 15 trending'}))
@@ -105,7 +106,7 @@ class AgentSourceTests(unittest.TestCase):
         self.assertIn('Web search is not available', str(e.exception))              # the excuse is kept, visibly
 
     def test_a_real_report_that_mentions_a_failure_is_still_a_report(self):
-        """The guard is short AND shapeless. One unlucky sentence inside a document proves nothing."""
+        """No failure line, no failure: one unlucky sentence inside a document proves nothing."""
         real = ('# Trending\n\n| Repo | Lang | Stars today |\n|---|---|---|\n| a/b | Go | 900 |\n'
                 '| c/d | Rust | 400 |\n\nNote: total stars were unable to fetch for one row.')
         with mock.patch('taskuary.llm.make_cli_llm', lambda *a, **k: (lambda s, u, **kw: real)):

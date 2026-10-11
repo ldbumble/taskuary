@@ -202,6 +202,20 @@ def run_metric_check(cfg):
     return head, '\n'.join(out)
 
 
+FAILED_MARK = 'VERDICT: failed:'
+_FAILED_LINE = re.compile(r'^[ \t>*_`]*VERDICT\s*:\s*failed\s*:\s*(.*?)[ \t*_`]*$', re.I)
+
+
+def agent_failed(out: str) -> tuple:
+    """(why, body) - the agent's own failure verdict and the answer without it; why is '' for a run that worked.
+
+    Only the LAST non-blank line counts: an agent quoting the contract back mid-report has not failed."""
+    lines = str(out or '').rstrip().splitlines()
+    m = _FAILED_LINE.match(lines[-1]) if lines else None
+    if not m: return '', str(out or '').strip()
+    return (m.group(1).strip() or 'the agent said the run failed'), '\n'.join(lines[:-1]).strip()
+
+
 AGENT_SYSTEM = ('You are running a SCHEDULED REPORT for a busy operator. Do exactly what the instruction '
                 'says - use your tools, read what you need to read - and then answer with the report itself: '
                 'plain text or markdown, concrete (numbers, names, dates, deltas), no preamble and no '
@@ -209,54 +223,14 @@ AGENT_SYSTEM = ('You are running a SCHEDULED REPORT for a busy operator. Do exac
                 # THE RESULT LEADS (the owner, 2026-09-25: "don't care what happened ... main report should be the result"):
                 # a trending report opened with a table of the fetches and searches it made, and the list itself came second
                 'The result comes FIRST - what the instruction asked for, whole. How you got it (the fetches, searches and '
-                'cross-checks) goes LAST, under one short "How I got this" heading, or not at all.')
-
-
-BLOCKED = ('web search is not available', 'not available on this claude account', 'web search is not enabled',
-           'web search is disabled', 'rate_limit', 'rate limit', 'usage limit', 'quota exceeded',
-           'unable to fetch', 'unable to access', 'unable to retrieve', 'could not fetch', "couldn't fetch",
-           'cannot fetch', 'failed to fetch', 'permission denied', 'tool result:')
-REPORT_LINES = 25       # above this it is a document, and one unlucky phrase inside it proves nothing
-
-# The CLI's OWN words when a tool is refused. Unlike BLOCKED above these are not generic failure
-# words - a real report about GitHub, a mailbox or a database does not contain "permission not
-# granted for WebFetch" - so they are conclusive at any length and in any shape.
-#
-# That distinction is the whole fix. BLOCKED is guarded by "short AND shapeless", on the theory
-# that a run which never reached its source answers briefly. A capable agent does not: asked for a
-# report it could not gather, Claude returned a 31-line document with a table whose every Result
-# cell read "Blocked - permission not granted", a "What is therefore missing" section and five
-# numbered recommendations. Both halves of that guard passed it, so the apology filed as the
-# morning report and triage sent it on as work (the owner, 2026-09-04: "the ai task said it fixed
-# this, but it's not fixed"). Length and polish say nothing about whether the tools ran.
-REFUSED = ('permission not granted', 'permission_denied', 'requested permissions to use',
-           "haven't granted it yet", 'has not granted it yet', 'not allowed to use this tool',
-           'tool use was denied', 'permission to use webfetch', 'permission to use websearch')
-
-
-def _blocked(out: str) -> str:
-    """The agent's excuse, when what came back is the story of a failed run instead of a report - '' otherwise.
-
-    An agent whose tool is refused still ANSWERS: it narrates the refusal, and that narration used to
-    file as news. "Web search is not available on this Claude account" came back as a 14-line report,
-    triage read the apology as a defect and opened a bug task against a repo that has nothing to do
-    with the report (2026-09-03). A run that never reached its source is a FAILED run - exactly like
-    the 300s timeout and the rate-limit rejection the same report hit the day before, both of which
-    filed correctly because they raised.
-
-    Two different guards, because there are two different signals. A REFUSED tool (REFUSED) is the
-    agent quoting its own permission error - conclusive at any length, because a real report has no
-    reason to say "permission not granted for WebFetch". A generic inability (BLOCKED - "unable to
-    fetch") is only trusted when the answer is short AND shapeless, since a real report carries
-    headings, a table or fifteen rows and must not be second-guessed on one unlucky phrase."""
-    body = (out or '').strip()
-    low = body.lower()
-    # A REFUSED TOOL is conclusive however long and however well laid out the excuse is: the agent
-    # is quoting its own permission error, which no genuine report has reason to contain.
-    hard = next((m for m in REFUSED if m in low), '')
-    if hard: return hard
-    if len(body.splitlines()) > REPORT_LINES or _outline(body): return ''
-    return next((m for m in BLOCKED if m in low), '')
+                'cross-checks) goes LAST, under one short "How I got this" heading, or not at all.'
+                # THE AGENT SAYS WHEN IT FAILED (the owner, 2026-10-11: "everything should be ai"): a phrase list used to
+                # decide that an answer mentioning "rate limit" or "unable to fetch" was the story of a failed run, and a
+                # real short report about a vendor's rate limits filed as FAILED. The agent knows whether it reached its source.
+                ' If you could NOT do what the instruction asks - a tool or source was refused, unavailable or rate-limited, '
+                'so the report would be about the failure instead of the subject - end with one last line, exactly: '
+                f'{FAILED_MARK} <one sentence: what stopped you>. A report that did its job never writes that line, '
+                'even when its subject is outages, limits or errors.')
 
 
 def _outline(body: str) -> str:
@@ -327,10 +301,11 @@ def run_agent(cfg):
                       f'and how you got it last. Previous outline: {shape}')
     out = str(llm(AGENT_SYSTEM, ask) or '').strip()
     if not out: raise RuntimeError(f'{name} answered nothing')
-    excuse = _blocked(out)
+    why, out = agent_failed(out)
     # an answer ABOUT a failed run is not a report - file it as FAILED, the way the timeout and the
     # rate limit already do, instead of putting an apology on the timeline and through triage
-    if excuse: raise RuntimeError(f'{name} could not run this report ("{excuse}") - it answered: {out[:300]}')
+    if why: raise RuntimeError(f'{name} could not run this report ({why}) - it answered: {out[:300]}')
+    if not out: raise RuntimeError(f'{name} answered nothing')
     what = f'/{skill}' if skill else 'a prompt'
     return f'{name} ran {what} - {len(out.splitlines())} lines', out[:BODY_CHARS]
 

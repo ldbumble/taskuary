@@ -1129,6 +1129,8 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                             'tool_call_id': c.get('id') or f'tool-{len(raw)}', 'args': c.get('input') or {}})
                     elif c.get('type') == 'text' and str(c.get('text') or '').strip():
                         trace('progress', 'text', str(c['text']).strip())
+                    elif c.get('type') == 'thinking' and str(c.get('thinking') or '').strip():
+                        trace('progress', 'thinking', str(c['thinking']).strip())     # what it thought is part of the record
                 _published(j, trace)
             elif isinstance(j, dict) and j.get('type') == 'user':
                 for c in (j.get('message') or {}).get('content') or []:

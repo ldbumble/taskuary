@@ -17,6 +17,17 @@ import { DEMO_ASSISTANT_TIMELINE, createDemoAssistantState, installDemoAssistant
 import { fmtStamp, rebase } from "./demoClock.js";
 import { installNumbersWorkflow, finishNumbersWorkflow, isGuidedDemo, NUMBERS_TASK, NUMBERS_MESSAGE, NUMBERS_REVIEW, NUMBERS_REQUEST, NUMBERS_RESULT } from "./demoNumbers.js";
 
+const demoRecord = (detail) => {
+  const sessions = (detail?.comments || []).filter((c) => String(c.Body || "").startsWith("CODER REPORT")).map((c, i) => {
+    const [rep, last = ""] = String(c.Body).replace(/^CODER REPORT\n?/, "").split(/\n\nLAST MESSAGE\n/);
+    const part = (k) => (new RegExp(`^${k}:[ \\t]*(.*)$`, "m").exec(rep) || [])[1] || "";
+    const report = { decided: part("Determination"), changed: part("Actions"), summary: part("Summary"), last: last.trim() };
+    return { sid: `demo-${i}`, by: c.Actor, cli: detail.transcript?.brain || c.Actor, at: String(c.CreatedAt || "").replace("T", " ").slice(0, 19),
+      source: "", report, result: report.last || report.summary || rep.trim(), steps: [], files: [], plan: [], counts: {} };
+  });
+  return { sessions: sessions.reverse() };
+};
+
 export const DEMO = import.meta.env?.VITE_DEMO === "1";
 
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
@@ -147,6 +158,9 @@ const read = (url) => {
     files: [], added: 0, removed: 0, scope: "task",
     why: "This demo has no checkout to inspect. In your own Taskuary, this shows the agent's changes.",
   };
+  // the Agent work card's record (sessionrecord.py): the demo keeps no CLI logs, so each filed report is a session
+  const m0 = p.match(/^\/api\/tasks\/(\d+)\/record$/);
+  if (m0) return demoRecord(state["/api/tasks/detail"]?.[m0[1]]);
   let m = p.match(/^\/api\/tasks\/(\d+)\/assistant$/);
   if (m) return clone(state["/api/tasks/detail"]?.[`${m[1]}:assistant`]) || { messages: [], providers: [], session: null };
   m = p.match(/^\/api\/tasks\/(\d+)$/);

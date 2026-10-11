@@ -551,29 +551,43 @@ export const ChoiceList = ({ children }) => (
 );
 
 export const CoderReport = ({ body, artifacts: all = [] }) => {
-  // THE AGENT'S LAST WORD, AND THAT'S ALL (the owner, 2026-10-09: "Just show the last message/summary and that's all"). Its last
-  // message when the session left one, else the report's summary, else the answer it saved - and a page it published, the one
-  // thing that is not the same account again.
-  const answer = all.find((a) => a.kind === "agent_result");
+  // WHAT THE AGENT DID (the owner, 2026-10-09: "Just show the last message/summary and that's all"; then "the original summary
+  // was much more in detail? what happened to that?"). The detailed account is the ANSWER the agent saved for the task
+  // (session_artifacts.result - the seven items); a later session's last message is only that session's own news (the deploy),
+  // so showing it alone dropped the answer. The answer in full, the newest session's own account in full under it, and what
+  // it made.
+  // With no saved answer: the session's last message, else its summary.
+  const answer = all.find((a) => a.kind === "agent_result");             // newest first, as the API sends them
   // ...and what it MADE: pages it published, files a chat showed (the owner, 2026-10-09: "agent work ... should reflect what it
   // did. simple task and any related artifacts it creates. replies, actions should be on the close out tab")
   const pages = all.filter((a) => isPublished(a) || a.kind === "shown");
   // the session's last message rides at the END of the report (coder.finish: CODER REPORT ... LAST MESSAGE ...)
   const [report, last] = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim().split(/\n+LAST MESSAGE\n/);
   const lead = (/^Summary:[ \t]*([\s\S]*?)(?=^(?:Triage|Determination|Actions|Found|Did|Next):|(?![\s\S]))/m.exec(report)?.[1] ?? report).trim();
-  const [said, setSaid] = useState(null);
-  const need = !last?.trim() && !lead?.trim() && !!answer?.url;
+  const [said, setSaid] = useState(answer?.url ? null : "");
   useEffect(() => {
     let live = true;
-    if (need) api.get(answer.url, { responseType: "text", transformResponse: (x) => x })
+    // its '# TQ-0001 - <title>' heading is the task's title, not the answer
+    if (answer?.url) api.get(answer.url, { responseType: "text", transformResponse: (x) => x })
       .then(({ data }) => live && setSaid(String(data || "").replace(/^# [\s\S]*?(\n\s*\n|$)/, "").trim())).catch(() => live && setSaid(""));
+    else setSaid("");
     return () => { live = false; };
-  }, [need, answer?.url]);
-  const words = (last || lead || said || "").trim();
-  if (!words && !pages.length) return need && said == null ? <CircularProgress size={12} /> : null;
+  }, [answer?.url]);
+  if (said == null) return <CircularProgress size={12} />;
+  const words = (said || last || lead || "").trim();
+  // the newest session's own account, in full, under the answer it followed (the owner, 2026-10-09: "i want to see the full
+  // output of the session summary") - its last message, else its summary
+  const since = said ? (last || lead || "").trim() : "";
+  if (!words && !pages.length) return null;
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15 }}>
       {words && <Box sx={{ fontSize: 13, color: INK }}><Md text={words} /></Box>}
+      {since && since !== said && (
+        <Box sx={{ mt: 1.2, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+          <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: DIM, mb: 0.4 }}>Latest session</Typography>
+          <Box sx={{ fontSize: 13, color: INK }}><Md text={since} /></Box>
+        </Box>
+      )}
       {!!pages.length && <Box sx={{ mt: words ? 1 : 0 }}><PublishedPages pages={pages} /></Box>}
     </Box>
   );

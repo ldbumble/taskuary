@@ -1132,7 +1132,11 @@ class GeneralSession:
                     ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
                               text=q, choices=choices, source='api')
             except Exception as e: logger.debug(f'api worker event skipped: {e}')
-            self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
+            rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
+            # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now
+            from . import sessionrecord
+            try: sessionrecord.keep_turn(self.task_id, rid, self.trace)
+            except Exception as e: logger.debug(f'general turn steps not kept for task {self.task_id}: {e}')
             self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
                              {'provider': self.provider, 'model': self.model, 'chars': len(reply)})
             self._emit(f'\x1b[1;32massistant>\x1b[0m {reply}\r\n\r\n')

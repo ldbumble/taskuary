@@ -3100,6 +3100,15 @@ def task_work(tid: int, diff: bool = True):
     return {'work': work, 'files': files, 'prov': prov, 'diffstat': {'added': rev.get('added'), 'removed': rev.get('removed')},
             'session': {'sid': sess.sid, 'alive': sess.alive, 'agent': sess.agent, 'cli': hub_term.cli_of(sess.argv), 'started': sess.started, 'cwd': sess.cwd} if sess else None}
 
+@app.get('/api/tasks/{tid}/record')
+def task_record(tid: int):
+    """Everything each session did and thought, one shape for every CLI and the general agent (sessionrecord) -
+    what the Agent work card draws: the result once, then what it decided, changed, planned and wrote, then every step."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    from . import sessionrecord
+    return sessionrecord.record(store, tid)
+
+
 @app.post('/api/hooks/claude/ask')
 def cli_hook_ask(payload: dict):
     """Claude's AskUserQuestion, BEFORE it draws its form (hooks.ask): held here - a worker thread, up to hooks.ASK_WAIT -

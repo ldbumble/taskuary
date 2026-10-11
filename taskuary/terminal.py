@@ -307,8 +307,15 @@ class Term:
         buttons had nothing to read and quietly disappeared. Written on exit AND on close, because
         either can come first."""
         if not (self.store and self.task_id and self.keep_transcript): return
-        try: self.store.add_transcript(self.task_id, self.sid, harvest(self), self.agent, self.cwd, self.ext_id, brain=self.cli)
-        except Exception as e: logger.warning(f'could not file the transcript for {self.sid}: {e}')
+        try:
+            text = harvest(self)
+            self.store.add_transcript(self.task_id, self.sid, text, self.agent, self.cwd, self.ext_id, brain=self.cli)
+        except Exception as e: logger.warning(f'could not file the transcript for {self.sid}: {e}'); return
+        # ...and the CLI's own account of it - every thought, tool and answer - copied beside the task, so the record
+        # does not depend on the CLI keeping its logs (sessionrecord)
+        from . import sessionrecord
+        try: sessionrecord.save(self.store, self.task_id, self.sid, self.cli, self.ext_id, text)
+        except Exception as e: logger.debug(f'session record for {self.sid} not kept: {e}')
 
     def settle(self, cap: float) -> bool:
         """Wait until the TUI stops painting - that gap IS 'ready'. A fixed delay either typed

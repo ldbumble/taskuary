@@ -68,6 +68,7 @@ import { completionFact, completionLine, waitingEmails,
   AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
+import { AgentRecord } from "./AgentRecord.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 
@@ -1464,23 +1465,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       )}
                     </Box>
                   )}
-                  {/* pages a session published, kept even when it ended without a written summary */}
-                  {/* ...and an answer the agent saved (an owner-started task has nobody to reply to, so it is the result) */}
-                  {!report && !wrapped && !sessionView && (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result") && (
+                  {/* WHAT THE AGENT DID AND THOUGHT, one card for every CLI and the general agent (AgentRecord): the result once,
+                      what it made, and the full record - decided, changed, plan, files, every step - behind one button. It was
+                      two blocks (a saved answer with no report, or the report) reading two different stores. */}
+                  {!wrapped && !sessionView && (report || detail?.transcript || (isGeneral && generalStarted)
+                    || (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result")) && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
-                      <CoderReport body="" artifacts={detail.artifacts.filter((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result")} />
-                    </Box>
-                  )}
-                  {report && !wrapped && !sessionView && (
-                    <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
-                      <Typography sx={{ ...label }}>Latest saved result</Typography>
-                      <Box sx={{ mt: 0.35, bgcolor: PANEL2, border: `1px solid ${BORDER}`,
-                        borderRadius: 1.5, overflow: "hidden" }}>
-                        <CoderReport body={report.Body} artifacts={detail?.artifacts || []} />
-                      </Box>
-                      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                        Finished by {report.Actor || "the coding agent"}{report.CreatedAt ? ` · ${fmtDateTime(report.CreatedAt)}` : ""}
-                      </Typography>
+                      {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
+                      <AgentRecord taskId={selected} pages={isGeneral ? [] : (detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
+                        stamp={`${(detail?.comments || []).length}-${detail?.transcript?.at || ""}-${(detail?.artifacts || []).length}`} />
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                     </Box>
                   )}

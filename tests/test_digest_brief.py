@@ -163,19 +163,24 @@ class BriefMemoryTests(unittest.TestCase):
         self.assertIn('ruled out by your verdict "resident refunds are not ours"', ruled)
         self.assertLess(text.index('Bob asked'), text.index('Christine asked'))
 
-    def test_a_global_verdict_covers_an_ask_only_when_it_is_about_that_topic(self):
+    def test_a_global_verdict_goes_to_the_model_beside_the_asks_and_code_never_matches_its_words(self):
+        """A word-overlap test used to decide which ask a GLOBAL rule was "about" - "refunds" met "Refund
+        Request" and moved the ask out of People want, while "Payback for the resident" met nothing. Code
+        no longer reads the rule's words (the owner, 2026-10-11: "everything should be ai"): every global
+        rule sits right under the asks and the brief model holds each ask against it."""
         s = _store()
-        _mail(s, 'christine@ours.com', 'Re: Resident Refund Request Form Rejected - Sawyers, Donald R, Valley',
-              'Can you explain why rejected?', days=1, conv='sawyers')
-        _mail(s, 'bob@ours.com', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
+        _mail(s, 'erin@northwind.example', 'Re: Resident Refund Request Form Rejected - Unit 4',
+              'Can you explain why rejected?', days=1, conv='unit4')
+        _mail(s, 'gail@northwind.example', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
         s.add_memory({'Scope': 'global', 'Note': 'Resident refunds are not ours', 'Active': 1, 'CreatedBy': 'owner'})
         s.add_memory({'Scope': 'global', 'Note': 'Never chase a vendor before noon', 'Active': 1, 'CreatedBy': 'owner'})
         s._exec('UPDATE memory SET CreatedAt=?', (_ago(days=17),))
         text = digest.gather(s, 1)
-        asks = text[text.index('THEIR ASKS YOU HAVE NOT ANSWERED'):text.index('ASKS YOUR STANDING VERDICTS ALREADY COVER')]
-        self.assertIn('Bob asked', asks); self.assertNotIn('Christine asked', asks)
-        self.assertIn('ruled out by your verdict "Resident refunds are not ours"', text)
-        self.assertNotIn('vendor before noon"', text[text.index('ASKS YOUR STANDING'):text.index('MY OPEN LOOPS')])
+        self.assertNotIn('ASKS YOUR STANDING VERDICTS ALREADY COVER', text)        # nothing moved by word overlap
+        asks = text[text.index('THEIR ASKS YOU HAVE NOT ANSWERED'):text.index('MY OPEN LOOPS')]
+        rules = asks[asks.index('STANDING RULES THAT APPLY EVERYWHERE'):]
+        self.assertIn('Resident refunds are not ours', rules); self.assertIn('Never chase a vendor before noon', rules)
+        self.assertLess(asks.index('asked'), asks.index('STANDING RULES'))         # the asks first, the rules right under them
 
     def test_without_a_covering_verdict_no_ruled_out_block_is_written(self):
         s = _store()

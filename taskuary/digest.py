@@ -303,29 +303,28 @@ def _linked(text: str) -> str:
 
 
 def _ruled_out(store, c: dict) -> str:
-    """The owner's standing verdict that covers this ask (assistant.unanswered's candidate), or ''.
+    """The owner's SCOPED standing verdict that covers this ask (assistant.unanswered's candidate), or ''.
 
     The same memory triage reads (ingest.applicable_notes), applied to the ask's OWN sender, subject
-    and words rather than to the whole window: a sender-, domain-, subject- or source-scoped note
-    covers the ask by its scope; a GLOBAL note - "Resident refunds are not ours" - covers it only
-    when it is about the same topic, or every global rule would tag every ask. Words are folded to
-    their singular so "refunds" meets "Refund Request"; nothing else is inferred."""
-    from .ingest import applicable_notes, TOPIC_MATCH
-    from .routing import tokens
+    and source: a sender-, domain-, subject- or source-scoped note covers the ask by its scope. A
+    GLOBAL note - "Resident refunds are not ours" - is not decided here: a word-overlap test used to
+    say which asks it was "about" (the owner, 2026-10-11: "everything should be ai"), so it goes to the
+    brief model whole, beside the asks (global_rules), and the model judges which ask it covers."""
+    from .ingest import applicable_notes
     mid = (c.get('action') or {}).get('mid')
     m = store.get_message(mid) if mid else None
     if not m: return ''
-    subj, body = str(m.get('Subject') or ''), str(m.get('BodyText') or '')[:2000]
-    fold = lambda s: {t[:-1] if len(t) > 3 and t.endswith('s') else t for t in tokens(s)}
-    hay = fold(f'{subj} {body}')
-    def about(note):
-        k = fold(note)
-        return bool(k) and len(k & hay) / len(k) >= TOPIC_MATCH
-    try: notes = applicable_notes(store, [m.get('FromEmail')], subj, body)
+    try: notes = applicable_notes(store, [m.get('FromEmail')], str(m.get('Subject') or ''), str(m.get('BodyText') or '')[:2000])
     except Exception as e:
         logger.debug(f'digest: standing verdicts skipped for an ask - {e}'); return ''
-    return next(((n.get('Note') or '').strip() for n in notes
-                 if (n.get('Note') or '').strip() and (n['Scope'] != 'global' or about(n['Note']))), '')
+    return next(((n.get('Note') or '').strip() for n in notes if n['Scope'] != 'global' and (n.get('Note') or '').strip()), '')
+
+
+def global_rules(store) -> list:
+    """The owner's active GLOBAL verdicts, whole - for the model to hold each ask against."""
+    try: return [n['Note'].strip() for n in store.list_memories() if n['Scope'] == 'global' and str(n.get('Note') or '').strip()]
+    except Exception as e:
+        logger.debug(f'digest: global verdicts skipped - {e}'); return []
 
 
 def _midnight_since(days: int) -> datetime:
@@ -390,6 +389,10 @@ def gather(store, days: int = DAYS) -> str:
     if blank:
         _block(out, 'NOT JUDGED (triage failed on these or has not run, so whether they ask you anything is NOT KNOWN - while any are\n'
                     'here, never say nobody is waiting on you):', (f"  {c['facts']}" for c in blank[:10]))
+    if live and (rules := global_rules(store)):
+        _block(out, 'STANDING RULES THAT APPLY EVERYWHERE (hold every ask above against them: an ask one of these plainly covers is NOT\n'
+                    '"People want" - it ranks below everything, named with the rule; an ask none of them covers stays where it is):',
+               (f'  - {r[:200]}' for r in rules[:12]))
     # the owner's own open loops: what they asked for and never got, what they promised, what went cold
     c = A.cfg(store)
     try: loops = A.candidates(store, c | {'producers': {'followup', 'promise', 'cold'}})

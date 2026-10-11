@@ -715,6 +715,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         elif (follow or {}).get('urgent'): _mark_urgent(store, tid, follow, actor)
         if (follow or {}).get('due'): remind.set_due(store, tid, follow['due'], actor)
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
+        # Remind me holds a quiet task: the sender writing again with something that is not fyi brings it back now,
+        # not on the remind day (B2, the owner, 2026-10-11 - "the board needs it tomorrow" sat under For later for two weeks)
+        if remind.waiting(store.get_task(tid) or {}) and str(msg.get('from_email') or '').lower() not in mine:
+            store.update_task(tid, {'RemindAt': ''}, actor)
+            store.add_comment(tid, actor, 'agent', f"{msg.get('from_name') or msg.get('from_email') or 'They'} wrote again - brought back from For later.")
         # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
         # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
         behind = store.pending_review(tid, kind='draft')

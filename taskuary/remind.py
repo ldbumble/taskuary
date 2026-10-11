@@ -158,7 +158,12 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
     store.audit('task', tid, 'remind', actor, detail={'from': prev, 'to': at})
     # the undo keeps the hour too: a reminder for later today, put back as its date alone, was "today" with no time
     back = (prev[:10] if prev[11:19] in ('', MORNING) else prev[:16]) if prev else 'none'
-    return {'taskId': tid, 'remindAt': at, 'when': when(at) if at else '',
+    # a day after it is due is set - she may mean it - but said: the due day brings it back first anyway (B2, 2026-10-11)
+    due_at = str(t.get('DueAt') or '')[:10]
+    ahead = due_at > f"{datetime.now() + timedelta(days=1):%Y-%m-%d}"       # its "due tomorrow" step is still to come
+    warn = (f"That is after it is due ({when(due_at)})" + (' - it comes back the day before it is due.' if ahead else '.')
+            if at and due_at and at[:10] > due_at else '')
+    return {'taskId': tid, 'remindAt': at, 'when': when(at) if at else '', 'warn': warn,
             'undo': {'kind': 'task.defer', 'target': tid, 'params': {'until': back},
                      'label': f"Put the reminder back to {when(prev)}" if prev else 'Bring it back now'}}
 
@@ -224,6 +229,10 @@ def deadlines(store, now: datetime = None) -> int:
         if not s or (t.get('DueSaid') in STEPS and STEPS.index(t['DueSaid']) >= STEPS.index(s)): continue
         line = due_line(t, now)
         if s in ('eve', 'today') and t.get('Priority') != 'urgent': store.update_task(t['TaskId'], {'Priority': 'urgent'}, 'assistant')
+        # ...and a Remind me date further off gives way: "at the top of your list" while the row stayed under For later
+        # until the remind day, and the due day passed unseen (B2, 2026-10-11). Once per step, so a reminder set again
+        # after this note holds until the next step.
+        if t.get('RemindAt'): store.update_task(t['TaskId'], {'RemindAt': ''}, 'assistant')
         store.add_comment(t['TaskId'], 'assistant', 'agent', line)
         from . import asks
         try: asks.say_due(store, t['TaskId'], line)

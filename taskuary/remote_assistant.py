@@ -1221,7 +1221,7 @@ def _remind(store, act: dict, actor: str) -> str:
     except remind.AgentOpen as e: return str(e)
     operations.record_direct(store, 'task.defer', int(act['tid']), {'until': act['until']}, actor, out)
     if not out.get('remindAt'): return 'It is back on your rail now.'
-    said = f"Away until {out['when']} - it is under Upcoming in Tasks, and back on your rail that morning."
+    said = f"Away until {out['when']} - it is under Upcoming in Tasks, and back on your rail that morning." + (f" {out['warn']}" if out.get('warn') else '')
     back = [('Bring it back now', {'t': 'remind', 'tid': act['tid'], 'until': 'none'})]
     return _on(store, actor, [said], extra=back, done_with=(asking_key(store) or None))
 

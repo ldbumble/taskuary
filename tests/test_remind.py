@@ -136,3 +136,55 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual(e.exception.status_code, 409)
         self.assertIn('Save and end session', e.exception.detail)
         self.assertFalse(remind.waiting(s.get_task(t)))
+
+
+class WhatOutranksTheDayTests(unittest.TestCase):
+    """Remind me holds a QUIET task (B2, the owner, 2026-10-11): it sat under For later past its own due day, and past
+    the sender writing again, until the remind day - the walk said "at the top of your list" while the row stayed put away."""
+    def rail(self, s, t):
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            return [i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
+
+    def setUp(self):
+        from taskuary.ingest import ingest_message
+        self.ingest, self.s = ingest_message, store()
+        self.t = self.mail('m1', 'Budget', 'Can you send the budget next month?', 'task', hours=5)['task_id']
+        self.settle(); self.s.activate_processing_reads(fixed_now=ago(0), live_state=[]); self.settle()
+        remind.set_reminder(self.s, self.t, '2 weeks'); self.settle()
+        self.assertTrue(all(i['deferred'] and not i['actionable'] for i in self.rail(self.s, self.t)), 'not put away to begin with')
+
+    def settle(self): self.s.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
+
+    def mail(self, xid, subject, body, intent, hours=0):
+        brain = lambda *a, **k: json.dumps({'intent': intent, 'kind': 'task', 'why': 'invented for the test', 'title': subject})
+        return self.ingest(self.s, {'external_id': xid, 'channel': 'email', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake',
+                                    'conversation_id': 'conv-b2', 'subject': subject, 'body': body, 'sent_at': ago(hours)}, llm=brain)
+
+    def back(self):
+        self.settle(); rows = self.rail(self.s, self.t)
+        return bool(rows) and all(not i['deferred'] and i['actionable'] and i['unread'] for i in rows)
+
+    def test_its_due_day_coming_near_brings_it_back(self):
+        remind.set_due(self.s, self.t, (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'))
+        self.assertEqual(remind.deadlines(self.s), 1)
+        self.assertFalse(self.s.get_task(self.t).get('RemindAt'), 'the due day left the reminder standing')
+        self.assertTrue(self.back(), 'due tomorrow and still under For later')
+
+    def test_the_sender_writing_again_brings_it_back(self):
+        self.assertEqual(self.mail('m2', 'RE: Budget', 'Change of plan - the board needs it tomorrow.', 'task')['status'], 'attached')
+        self.assertFalse(self.s.get_task(self.t).get('RemindAt'), 'a new ask left the reminder standing')
+        self.assertTrue(self.back(), 'the sender wrote again and it stayed under For later')
+
+    def test_a_thanks_on_the_thread_leaves_it_away(self):
+        self.assertEqual(self.mail('m2', 'RE: Budget', 'Thanks!', 'fyi')['status'], 'filed')
+        self.assertTrue(remind.waiting(self.s.get_task(self.t)), 'an fyi lifted the reminder')
+
+
+class AfterTheDueDayTests(unittest.TestCase):
+    def test_a_reminder_past_the_due_day_is_set_and_says_so(self):
+        s = store(); t = asked(s)
+        remind.set_due(s, t, (datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d'))
+        out = remind.set_reminder(s, t, '2 weeks')
+        self.assertTrue(remind.waiting(s.get_task(t)), 'warn, never refuse')
+        self.assertIn('due', out.get('warn') or '')
+        self.assertFalse(remind.set_reminder(s, t, 'tomorrow').get('warn'), 'warned for a day before it is due')

@@ -2956,7 +2956,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'task.clarify': return ' The question is below for your yes - nothing has gone.'
     if kind == 'review.reject': return ' The draft is rejected; the task stays open.'
     if kind == 'task.defer': return (f" Away until {o['when']} - it is under Upcoming in Tasks, and back on your rail that morning."
-                                     if o.get('remindAt') else ' It is back on your rail now.')
+                                     + (f" {o['warn']}" if o.get('warn') else '') if o.get('remindAt') else ' It is back on your rail now.')
     if kind == 'connection.test': return f" {o.get('name') or 'It'} {'answered' if o.get('answered', o.get('ok')) else 'did not answer'}: {str(o.get('detail') or '')[:300]}"
     if kind in ('connection.pause', 'connection.resume'): return f" {o.get('name') or 'It'} is {'on' if o.get('active') else 'off'}."
     if kind == 'script.start': return f" Starting: {o.get('script')}."

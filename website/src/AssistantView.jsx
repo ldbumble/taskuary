@@ -1970,7 +1970,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} onClose={() => setRemindOn(null)}
         onDone={(out) => {
           setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: remindOn.path ? null : remindOn.task.TaskId, ref: remindOn.ref,
-            text: out?.remindAt ? `Away until ${out.when} - it is under For later on your rail, and back in front of you that morning.` : "It is back on your rail now." }]);
+            text: out?.remindAt ? `Away until ${out.when} - it is under For later on your rail, and back in front of you that morning.${out.warn ? ` ${out.warn}` : ""}` : "It is back on your rail now." }]);
           if (out?.remindAt) advance();
         }} />}
       <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}

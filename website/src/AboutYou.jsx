@@ -128,7 +128,7 @@ export default function AboutYou() {
       {/* honesty about the gap between "known here" and "told to the agents" */}
       <Typography id={secId("about", S_TOLD)} sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mt: 3, mb: 1 }}>WHAT THE AGENTS ARE TOLD ABOUT YOU</Typography>
       <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-        Agents read SOUL.md, where your name and email are filled in as tokens. The lines below are what it currently says about you; edit it on the Docs page.
+        Agents read SOUL.md, where your name and email are filled in as tokens. Below is all of it, exactly as they read it; edit it on the Docs page.
       </Typography>
       <Box component="pre" sx={{ ...mono, fontSize: 12, whiteSpace: "pre-wrap", color: INK, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2, p: 1.5, m: 0 }}>
         {p.told_to_agents}

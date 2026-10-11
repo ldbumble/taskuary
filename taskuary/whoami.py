@@ -78,7 +78,7 @@ def profile(store) -> dict:
     facts['owner_name'], facts['owner_email'] = own.get('owner') if own.get('owner') != 'the owner' else '', own.get('owner_email') or ''
     style, seed = st.get('owner_avatar_style') or 'monogram', st.get('owner_avatar_seed') or facts['owner_name'] or 'taskuary'
     return {'facts': facts, 'identities': ids, 'avatar': avatar_svg(facts['owner_name'], seed, style), 'styles': list(STYLES),
-            'told_to_agents': _told(store, facts, ids)}
+            'told_to_agents': _told(store)}
 
 
 # The card learns these on Discover / Test - which a connector set up before those existed never ran.
@@ -116,13 +116,12 @@ def _learn_telegram(store, tg):
     except Exception: pass
 
 
-def _told(store, facts, ids) -> str:
-    """What an agent actually reads about the owner - so this page is honest about the gap between
-    'known here' and 'told to the agents'."""
-    soul = str(store.doc('soul') or '')
-    lines = [l.strip() for l in soul.splitlines() if l.strip()]
-    hit = [l for l in lines if any(k in l.lower() for k in ('owner', 'you are', 'i am', facts['owner_name'].lower() or '\x00'))][:6]
-    return '\n'.join(hit) if hit else 'SOUL.md does not describe the owner yet - the name and email are filled in as {{owner}} tokens where the docs use them.'
+def _told(store) -> str:
+    """What an agent actually reads about the owner - SOUL.md WHOLE, as the agents get it ({{owner}} filled in), so this page is
+    honest about the gap between 'known here' and 'told to the agents'. It used to pick the lines holding "owner", "you are",
+    "i am" or the name - so a rule written without one of those words was told to every agent and missing here (2026-10-11)."""
+    soul = str(store.doc('soul') or '').strip()
+    return soul or 'SOUL.md is empty - the name and email are filled in as {{owner}} tokens where the docs use them.'
 
 
 def save(store, fields: dict, actor='owner') -> dict:

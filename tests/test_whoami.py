@@ -106,6 +106,18 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError): whoami.save(s, {'owner_avatar_style': 'neon'})
 
 
+    def test_the_page_shows_the_whole_soul_the_agents_read_not_word_picked_lines(self):
+        """Lines holding "owner", "you are", "i am" or the name were all it showed - a rule without one of those words
+        reached every agent and was missing here (2026-10-11)."""
+        s = MemoryStore()
+        s.save_doc('soul', '# Who\nYou are {{owner}}.\n\n## Rules\nNever promise a date before Gail confirms it.\n', 'test')
+        told = whoami.profile(s)['told_to_agents']
+        self.assertEqual(told, s.doc('soul').strip())
+        self.assertIn('Never promise a date before Gail confirms it.', told)
+        s.save_doc('soul', '', 'test')
+        self.assertIn('SOUL.md is empty', whoami.profile(s)['told_to_agents'])
+
+
 class EndpointTests(unittest.TestCase):
     def test_the_page_reads_saves_and_previews(self):
         r = c_api.get('/api/whoami').json()

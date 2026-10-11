@@ -31,6 +31,7 @@ from . import aisetup, cliinstall, config
 
 KIND = aisetup.KIND                   # a set-up is a setup task, and Done already knows it
 finish = aisetup.finish               # ...so its ending is aisetup's, unchanged
+open_task = aisetup.open_task         # ...and so is reusing the task a dead pane left (TQ-0726)
 
 # The CLIs whose first run Taskuary will open. Closed, and keyed by RECIPE name (cursor, not
 # cursor-agent) so this, cliinstall.RECIPES and clis.detect's `install` field all agree. A CLI
@@ -72,16 +73,6 @@ def live_for(store, name: str):
         if not (t.alive and t.task_id): continue
         tk = store.get_task(t.task_id) or {}
         if tk.get('Kind') == KIND and tag(name) in str(tk.get('Tags') or ''): return {**t.info(), 'taskId': t.task_id}
-    return None
-
-
-def open_task(store, tags: str, title: str):
-    """The still-open setup task this press belongs to, or None. A pane that died took its task with
-    it only in spirit: the row stayed in progress, went "interrupted" and landed on the owner, so a
-    CLI that crashed on launch left one more "Set up codex" per press (TQ-0726). Reuse it instead."""
-    for t in store.list_tasks(active_only=True):
-        if t.get('Kind') == KIND and t.get('Status') != 'done' and str(t.get('Tags') or '') == tags and t.get('Title') == title:
-            return t['TaskId']
     return None
 
 

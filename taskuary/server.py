@@ -4832,8 +4832,11 @@ def connector_ai_setup(cid: int, body: AiSetupBody):
 
 @app.get('/api/connectors/{cid}/ai-setup')
 def connector_ai_setup_live(cid: int):
-    """Reattach: the card reloads, the agent is still there."""
-    return {'session': aisetup.live_for(store, cid)}
+    """Reattach: the card reloads, the agent is still there. `ready` says whether an AI app could take a
+    new one, so the card can say where to get one instead of a button that only answers "not found" (B10)."""
+    try: aisetup.runner(store); why = ''
+    except ValueError as e: why = str(e)
+    return {'session': aisetup.live_for(store, cid), 'ready': not why, 'why': why}
 
 # ── Sign in with ChatGPT (taskuary/chatgptauth.py): the owner's ChatGPT plan as a brain, no API key ──
 def _chatgpt_card(cid):

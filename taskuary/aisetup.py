@@ -78,6 +78,36 @@ def prompt(c: dict, server: dict, guide: list, fields: list, secret_label: str, 
     return ' '.join(' '.join(p for p in parts if p).split())
 
 
+# Nothing to hand the setup to (B10, 2026-10-11): a new install without any AI CLI answered the card's
+# biggest button with "command not found: claude" - true, and nothing the owner could do with it.
+NO_AI = ("No AI app is set up on this computer yet, so there is nothing to hand this setup to. Set one up under "
+         "Connections > AI CLI agents and press this again - or follow the Guide tab and fill the card yourself.")
+
+
+def runner(store, agent: str = None) -> str:
+    """The agent that will run this setup, once its CLI is FOUND - or ValueError in words the owner can
+    act on. The same profile + brain open_session will start; asked before any task exists, because a
+    task made first and a spawn that failed after left one more empty "Set up X" per press (B10)."""
+    from . import agents as hub, terminal as term
+    agent = (agent or hub.default_agent(store)).strip()
+    row = store.get_agent(agent)
+    if not row: raise ValueError(f'no CLI agent named {agent!r} - add one under Connections > AI CLI agents first')
+    profile = term.with_brain(json.loads(row.get('Config') or '{}'), hub.brain_command(store, agent))
+    try: hub._resolve_cmd(profile.get('cmd') or 'claude')
+    except FileNotFoundError: raise ValueError(NO_AI) from None
+    return agent
+
+
+def open_task(store, tags: str, title: str):
+    """The still-open setup task this press belongs to, or None. A pane that died took its task with
+    it only in spirit: the row stayed in progress, went "interrupted" and landed on the owner, so a
+    CLI that crashed on launch left one more "Set up codex" per press (TQ-0726). Reuse it instead."""
+    for t in store.list_tasks(active_only=True):
+        if t.get('Kind') == KIND and t.get('Status') != 'done' and str(t.get('Tags') or '') == tags and t.get('Title') == title:
+            return t['TaskId']
+    return None
+
+
 def start(store, server: dict, cid: int, guide: list, fields: list = None, secret_label: str = '',
           agent: str = None, model: str = None, actor: str = 'owner', agent_steps: list = None) -> dict:
     from . import terminal as term
@@ -85,14 +115,19 @@ def start(store, server: dict, cid: int, guide: list, fields: list = None, secre
     if not c: raise ValueError('connector not found')
     live = live_for(store, cid)
     if live: return {**live, 'existing': True}
-    from . import agents as hub_agents
-    agent = (agent or hub_agents.default_agent(store)).strip()
-    if not store.get_agent(agent): raise ValueError(f'no CLI agent named {agent!r} - add one under Connections > AI CLI agents first')
-    tid = store.create_task({'Title': f"Set up {c.get('Name') or c.get('Type')}", 'Kind': KIND, 'Status': 'in_progress', 'Tags': tag(cid),
-                             'Summary': f"{agent} walks the owner through the {c.get('Type')} guide in a live session on the card and saves what they give it."}, actor)
+    agent, title = runner(store, agent), f"Set up {c.get('Name') or c.get('Type')}"     # resolve first: no task if no AI
+    reused = open_task(store, tag(cid), title)
+    tid = reused or store.create_task({'Title': title, 'Kind': KIND, 'Status': 'in_progress', 'Tags': tag(cid),
+                                       'Summary': f"{agent} walks the owner through the {c.get('Type')} guide in a live session on the card and saves what they give it."}, actor)
     # no repo: the session sits in Taskuary's own data folder, where there is no checkout to attribute dirt to
-    t = term.open_session(store, agent, tid, None, str(config.home()), 0, 0, actor, model,
-                          seed_fn=lambda cwd: prompt(c, server, guide, fields or [], secret_label or '', agent_steps))
+    try: t = term.open_session(store, agent, tid, None, str(config.home()), 0, 0, actor, model,
+                               seed_fn=lambda cwd: prompt(c, server, guide, fields or [], secret_label or '', agent_steps))
+    except Exception as e:
+        # found is not always runnable (a shim whose target went): the task this press made goes with it
+        if not reused: store.delete_task(tid)
+        if isinstance(e, OSError): raise ValueError(f"{agent} is set up here but would not start ({e}). Open Connections > AI CLI agents "
+                                                    "and press Test or Update on it, then press this again.") from None
+        raise
     t.keep_transcript = False
     store.add_comment(tid, actor, 'human', f"{agent} is helping set up {c.get('Name') or c.get('Type')} in a live session on its card.")
     store.audit('connector', cid, 'ai_setup', actor, detail={'task': tid, 'agent': agent})

@@ -3,7 +3,7 @@
 // setup WIZARD (stepper) plus Sources/management. All connectors live here - channel
 // connectors (Outlook, Teams, Slack, GitHub), cloud AI APIs (Anthropic, OpenAI, Azure
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step,
   StepButton, StepContent, Stepper, Switch, TextField, Typography,
@@ -34,15 +34,37 @@ import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource }
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
    the card through the API and runs Test until it passes - and it is a task on the Board meanwhile. ── */
+// opens Connections > AI CLI agents from inside a card - the door the "no AI app here" line points at
+const AgentsDoor = createContext(null);
 const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], reload }) => {
   const [sess, setSess] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [ready, setReady] = useState({ ok: true, why: "" });
+  const openAgents = useContext(AgentsDoor);
   useEffect(() => {           // the card reloads, the agent is still there: reattach
     let alive = true;
-    api.get(`/api/connectors/${conn.ConnectorId}/ai-setup`).then(({ data }) => { if (alive && data.session) setSess(data.session); }).catch(() => {});
+    api.get(`/api/connectors/${conn.ConnectorId}/ai-setup`).then(({ data }) => {
+      if (!alive) return;
+      if (data.session) setSess(data.session);
+      if (data.ready === false) setReady({ ok: false, why: data.why || "" });
+    }).catch(() => {});
     return () => { alive = false; };
   }, [conn.ConnectorId]);
+  // No AI app on this computer: the button could only answer "not found" (and used to leave an empty
+  // task per press - B10). Say what it needs and open the page that provides it instead.
+  if (!sess && !ready.ok) return (
+    <Box sx={{ mb: 2, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+      <TerminalIcon sx={{ fontSize: 18, color: FAINT }} />
+      <Box sx={{ flex: 1, minWidth: 240 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Get AI to set it up — needs an AI app on this computer</Typography>
+        <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
+          {ready.why || "Set one up under Connections > AI CLI agents, or follow the Guide tab and fill the card yourself."}
+        </Typography>
+      </Box>
+      {openAgents && <Button size="small" variant="outlined" onClick={openAgents}>Set up an AI app</Button>}
+    </Box>
+  );
   const start = async () => {
     setBusy(true); setErr("");
     try {
@@ -1565,7 +1587,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const back = () => { setOpen(null); onBrowseState?.({ ...browseState, open: null }); };
   const conn = open?.kind === "connector" ? connectors.find((c) => c.ConnectorId === open.id) : null;
   const shared = conn ? { conn, reload: load, onBack: back, onCreated: (id) => setOpen({ kind: "connector", id }) } : null;
-  const detail = open?.kind === "agents" ? <CliConnectionsPage onBack={back} />
+  const page = open?.kind === "agents" ? <CliConnectionsPage onBack={back} />
     : open?.kind === "voice-vocabulary" ? <VoiceVocabulary onBack={back} />
     : open?.kind === "alchemy-wallet" ? <AlchemyWalletGuide onBack={back}
       onData={() => { const c = byType.alchemy; if (c) setOpen({ kind: "connector", id: c.ConnectorId }); }} />
@@ -1574,6 +1596,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
     : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} />;
+  const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}>{page}</AgentsDoor.Provider>;
   if (!browse) {
     if (detail) return detail;
     if (open?.kind === "connector") return null;
@@ -2216,11 +2239,12 @@ function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack:
       {/* WhatsApp has no agent box: there is nothing for an agent to do that the pairing box does not do
           itself (install Node is the owner's; the bridge starts on its own; the QR is scanned from a phone).
           An agent handed this setup sat on the bridge process for five minutes on a tester's machine. */}
-      {conn.Type !== "whatsapp" && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
       {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
-          runs on a tenant app opens on Sources, and the one button most people need was folded away */}
+          runs on a tenant app opens on Sources, and the one button most people need was folded away.
+          It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
       {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
+      {conn.Type !== "whatsapp" && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={conn.Type === "whatsapp" ? ["Setup", "Guide"] : ["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />

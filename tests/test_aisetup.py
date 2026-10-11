@@ -47,9 +47,17 @@ class PromptTests(unittest.TestCase):
         self.assertNotIn('STEPS FOR YOU', q); self.assertIn('doing the machine-side parts yourself', q); self.assertIn('never hand the owner a command', q)
 
 
+def _setups(cid): return [t for t in server.store.list_tasks(active_only=True) if t.get('Kind') == 'setup' and t.get('Tags') == f'connector:{cid}']
+
+
 class EndpointTests(unittest.TestCase):
-    def setUp(self): terminal.SESSIONS.clear()
-    def tearDown(self): terminal.SESSIONS.clear()
+    def setUp(self):
+        terminal.SESSIONS.clear()
+        for t in server.store.list_tasks(active_only=True):
+            if t.get('Kind') == 'setup': server.store.delete_task(t['TaskId'])
+        # the CLI is "here" unless a test says otherwise: whether claude is on THIS box's PATH is not what these pin
+        self.found = mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']); self.found.start()
+    def tearDown(self): self.found.stop(); terminal.SESSIONS.clear()
 
     def test_the_button_opens_a_session_on_a_setup_task_and_reattaches_to_it(self):
         cid = _slack()['ConnectorId']
@@ -81,3 +89,46 @@ class EndpointTests(unittest.TestCase):
         r = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE, 'agent': 'nobody'})
         self.assertEqual(r.status_code, 422); self.assertIn('nobody', r.json()['detail'])
         self.assertEqual(c.post('/api/connectors/999999/ai-setup', json={'guide': GUIDE}).status_code, 422)
+
+    def test_no_ai_app_here_makes_no_task_and_says_where_to_get_one(self):
+        """A new install without any AI CLI: each press of the card's biggest button left one more
+        empty "Set up Outlook mail" in progress and answered "command not found: claude" (B10).
+        The CLI is resolved first now - nothing to hand the setup to, no task, and a sentence with
+        a next step. The card asks the same question up front and can hide the button."""
+        cid = _slack()['ConnectorId']
+        self.found.stop()
+        with mock.patch('taskuary.agents._resolve_cmd', side_effect=FileNotFoundError("'claude' not found on PATH - is the CLI installed?")), \
+             mock.patch.object(terminal, 'open_session', side_effect=AssertionError('nothing to start')):
+            for _ in range(2):
+                r = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE})
+                self.assertEqual(r.status_code, 422)
+                self.assertIn('AI CLI agents', r.json()['detail']); self.assertNotIn('PATH', r.json()['detail'])
+            self.assertEqual(_setups(cid), [])
+            g = c.get(f'/api/connectors/{cid}/ai-setup').json()
+            self.assertEqual((g['session'], g['ready']), (None, False)); self.assertIn('AI CLI agents', g['why'])
+        self.found.start()
+        self.assertEqual(c.get(f'/api/connectors/{cid}/ai-setup').json()['ready'], True)
+
+    def test_a_dead_session_s_task_is_reused_not_doubled(self):
+        """The pane died (the CLI crashed, the app restarted): the task stayed in progress, and the
+        next press made a second one beside it. clisetup reuses the open task (TQ-0726); so does this."""
+        cid = _slack()['ConnectorId']
+        n = iter(range(100))
+        def fake_open(store, agent, tid, repo, cwd, rows, cols, actor, model, seed_fn=None):
+            t = FakeTerm(f's{next(n)}', tid); terminal.SESSIONS[t.sid] = t; return t
+        with mock.patch.object(terminal, 'open_session', side_effect=fake_open):
+            a = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE}).json()
+            terminal.SESSIONS[a['sid']].alive = False
+            b = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE}).json()
+        self.assertEqual(b['taskId'], a['taskId']); self.assertNotEqual(b['sid'], a['sid'])
+        self.assertEqual(len(_setups(cid)), 1)
+
+    def test_a_cli_that_will_not_start_leaves_no_task_behind(self):
+        """Found is not always runnable - a shim whose target is gone fails in the spawn itself. The
+        task this press made goes with it, and the owner reads what to do rather than the pty's words."""
+        cid = _slack()['ConnectorId']
+        with mock.patch.object(terminal, 'open_session', side_effect=FileNotFoundError('The command was not found or was not executable: claude')):
+            for _ in range(2):
+                r = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE})
+                self.assertEqual(r.status_code, 422); self.assertIn('AI CLI agents', r.json()['detail'])
+        self.assertEqual(_setups(cid), [])

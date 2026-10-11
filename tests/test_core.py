@@ -999,13 +999,15 @@ class CoreTests(unittest.TestCase):
                                     ' "first": {"title": "Fix the import", "summary": "a"},'
                                     ' "second": {"title": "Add the employees", "summary": "b"}}')
         self.assertEqual((out['ai'], out['two'], out['second']['title']), (True, True, 'Add the employees'))
-        # no brain, or a brain that falls over: never claims a split, just offers the pieces
+        # no brain, or a brain that falls over: never claims a split and never GUESSES one - a word list
+        # used to pick "ask-shaped lines"; now the second job is empty and the mail is listed (2026-10-11)
         for llm in (None, lambda *a, **k: 'not json at all'):
             out = reshape.propose_split(s, tid, llm)
             self.assertFalse(out['two'])
-            self.assertTrue(out['first']['summary'])
-            self.assertIn('112 active employees', out['second']['title'])
-        self.assertEqual(len(reshape.propose_split(s, tid)['messages']), 1)
+            self.assertEqual(out['second'], {'title': '', 'summary': ''})
+            self.assertEqual(out['first']['title'], s.get_task(tid)['Title'])
+            self.assertEqual(len(out['messages']), 1)
+        self.assertFalse(hasattr(reshape, 'ask_lines'))
 
     # ── a report hands back the spreadsheet and the chart, not just prose about them ──
     def _report_rows(self):
@@ -1065,14 +1067,6 @@ class CoreTests(unittest.TestCase):
         # a body that mixes an AI summary with the rows still yields the rows
         mixed = 'Three employees posted to the wrong period.\n' + body
         self.assertEqual(len(artifacts.rows_from_body(mixed)), 3)
-
-    def test_ask_lines_finds_two_asks_whether_they_are_two_lines_or_one(self):
-        two = 'Please fix the PTO import mapping.\nAlso add the 112 active employees.'
-        one = 'Hi Dana,\nPlease fix the PTO import mapping. Also add the 112 active employees.\nThanks'
-        for body in (two, one):
-            self.assertEqual(len(reshape.ask_lines(body)), 2, body)
-        # one job described in two sentences is still one piece per line, and greetings never count
-        self.assertEqual(reshape.ask_lines('Hello there\nPlease fix the import mapping'), ['Please fix the import mapping'])
 
     def test_merge_moves_the_mail_appends_the_ask_and_drops_the_duplicate(self):
         s = MemoryStore()

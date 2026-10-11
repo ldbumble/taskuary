@@ -43,37 +43,14 @@ def task_text(store, tid: int, msgs=None) -> str:
                      + [f"{m.get('Subject') or ''}\n{sb(str(m.get('BodyText') or ''))[:2000]}" for m in ms])
 
 
-# An ask is a line that tells someone to do something. Two of them in one message is the
-# case this whole module exists for.
-_ASK_LINE = re.compile(r'\b(please|can you|could you|we need|i need|need you to|also|additionally|'
-                       r'as well|second(ly)?|and then|make sure|set up|add|fix|update|remove|send|create)\b', re.I)
-_GREET = re.compile(r'^(hi|hello|hey|dear|thanks|thank you|regards|good (morning|afternoon|evening))\b', re.I)
-_SENTENCE = re.compile(r'(?<=[.!?])\s+')
-
-
-def ask_lines(body: str) -> list:
-    """The ask-shaped pieces of a message. Lines first - two asks usually arrive as two lines -
-    but a whole mail on ONE line is common enough (Teams, clients that unwrap paragraphs) that
-    the sentences of an ask-shaped line count as pieces too."""
-    out = []
-    for l in (body or '').splitlines():
-        l = l.strip()
-        if len(l) <= 12 or _GREET.match(l) or not _ASK_LINE.search(l): continue
-        parts = [p.strip() for p in _SENTENCE.split(l) if len(p.strip()) > 12 and _ASK_LINE.search(p)]
-        out += parts if len(parts) > 1 else [l]
-    return out
-
-
-def heuristic_split(store, tid: int) -> dict:
-    """No AI connector, or the AI fell over: offer the two ask-shaped pieces of the mail and
-    let the owner fix them. Never claims a split - `two` stays false, so the drawer asks
-    rather than proposes."""
+def no_split(store, tid: int, why: str) -> dict:
+    """No AI connector, or the AI fell over: the task as it stands and an EMPTY second job for the
+    owner to name. Never claims a split and never guesses one - a word list used to pick "the
+    ask-shaped lines" (please, also, fix, send...) and offered a greeting's neighbour as the second
+    job (the owner, 2026-10-11: "everything should be ai"). The message list below it is the help."""
     t = store.get_task(tid) or {}
-    body = '\n'.join(str(m.get('BodyText') or '') for m in store.list_messages(tid)) or str(t.get('Summary') or '')
-    asks = ask_lines(body)
-    return {'two': False, 'why': 'no AI brain is connected - the pieces below are the ask-shaped lines of the mail',
-            'first': {'title': (t.get('Title') or '')[:200], 'summary': (asks[0] if asks else '')[:MAX_SUMMARY]},
-            'second': {'title': (asks[1][:120] if len(asks) > 1 else ''), 'summary': ''}}
+    return {'two': False, 'why': why, 'first': {'title': (t.get('Title') or '')[:200], 'summary': str(t.get('Summary') or '')[:MAX_SUMMARY]},
+            'second': {'title': '', 'summary': ''}}
 
 
 def propose_split(store, tid: int, llm=None) -> dict:
@@ -85,7 +62,7 @@ def propose_split(store, tid: int, llm=None) -> dict:
     out = {'ai': False, 'messages': [{'message_id': m['MessageId'], 'subject': m.get('Subject'),
                                       'from': m.get('FromName') or m.get('FromEmail'), 'sent_at': m.get('SentAt'),
                                       'preview': str(m.get('BodyText') or '')[:200]} for m in msgs],
-           **heuristic_split(store, tid)}
+           **no_split(store, tid, 'no AI brain is connected - name the second job yourself; the mail is listed below')}
     if not llm: return out
     try:
         user = json.dumps({'title': t.get('Title'), 'summary': str(t.get('Summary') or '')[:2000], 'kind': t.get('Kind'),

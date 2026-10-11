@@ -1981,7 +1981,7 @@ class MergeBody(BaseModel): into: int
 @app.get('/api/tasks/{task_id}/split/suggest')
 def split_suggest(task_id: int):
     """What are the two jobs in here? A proposal only - nothing is created until the owner
-    confirms, and with no AI brain connected it hands back the ask-shaped lines instead."""
+    confirms, and with no AI brain connected the second job is left empty for the owner to name."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     return reshape.propose_split(store, task_id, _llm())
 

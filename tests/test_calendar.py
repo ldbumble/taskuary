@@ -9,12 +9,41 @@ from taskuary import calendar as cal, responder
 from taskuary.store import MemoryStore
 
 
-class AboutTimeTests(unittest.TestCase):
-    def test_scheduling_talk_is_recognised_and_ordinary_mail_is_not(self):
-        for t in ('are you available Tuesday at 1:00pm?', 'can we meet next week', 'free tomorrow?', 'call me at 3pm', 'reschedule the 8/29'):
-            self.assertTrue(cal.about_time(t), t)
-        for t in ('please fix the export', 'attached is the refund paperwork', 'thanks!'):
-            self.assertFalse(cal.about_time(t), t)
+class NoWordListTests(unittest.TestCase):
+    """A word list decided whether a reply saw the calendar, and "the 14th", "noon" and "sync" were not on it - so
+    "Are you around on the 14th for a quick sync?" was answered "the 14th works" blind. The calendar now rides along
+    whenever the switch is on, and the drafting model judges whether the thread is about time (the owner, 2026-10-11)."""
+    AG = {'events': [{'start': '2026-10-14 10:00', 'end': '2026-10-14 11:00', 'subject': 'Board prep', 'all_day': False, 'status': 'busy',
+                      'where': '', 'mailbox': 'alex@northwind.example'}],
+          'errors': [], 'sources': ['outlook: alex@northwind.example'], 'start': '2026-10-11T09:00:00', 'end': '2026-10-25T09:00:00', 'tz': 'UTC'}
+
+    def test_there_is_no_word_list(self):
+        self.assertFalse(hasattr(cal, 'SCHEDULING') or hasattr(cal, 'about_time'))
+
+    def test_a_reply_to_one_message_sees_the_calendar_whatever_words_it_uses(self):
+        for body in ('Are you around on the 14th for a quick sync?', 'Does Oct 22 at noon work?', 'Can we push to the 3rd?'):
+            s = MemoryStore()
+            mid = s.add_message({'ExternalId': 'n1', 'Channel': 'email', 'Subject': 'Quick one', 'FromEmail': 'erin@northwind.example',
+                                 'FromName': 'Erin Blake', 'SentAt': '2026-10-11 09:30:00', 'Status': 'new', 'BodyText': body})
+            rid = s.add_review({'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
+            seen = {}
+            def llm(sys_, usr_, **k): seen['sys'] = sys_; return 'The 14th at 10 I am in board prep - 11 works.'
+            cal._REPLY.update(at=0.0, data=None)
+            with mock.patch('taskuary.calendar.agenda', return_value=self.AG):
+                responder.draft_for_message(s, s.get_message(mid), rid, llm=llm)
+            self.assertIn('YOUR CALENDAR', seen['sys'], body); self.assertIn('Board prep', seen['sys'], body)
+
+    def test_drafts_share_one_calendar_read_so_attaching_it_costs_no_call_per_draft(self):
+        s = MemoryStore()
+        with mock.patch('taskuary.calendar.agenda', return_value=self.AG) as ag:
+            for _ in range(3): self.assertIn('Board prep', cal.context_for(s))
+        self.assertEqual(ag.call_count, 1)
+
+    def test_a_read_that_raised_is_not_cached(self):
+        s = MemoryStore()
+        with mock.patch('taskuary.calendar.agenda', side_effect=[RuntimeError('down'), self.AG]) as ag:
+            self.assertEqual(cal.context_for(s), ''); self.assertIn('Board prep', cal.context_for(s))
+        self.assertEqual(ag.call_count, 2)
 
 
 def fake_graph(events):
@@ -56,17 +85,16 @@ class AgendaTests(unittest.TestCase):
         self.assertEqual(ag['events'], []); self.assertIn('Calendars.Read', ag['errors'][0])
         self.assertIn('COULD NOT READ', cal.render(ag))
 
-    def test_context_only_when_the_thread_is_about_time_and_the_switch_is_on(self):
+    def test_context_whenever_the_switch_is_on(self):
         s = self._store()
         with mock.patch('taskuary.calendar.agenda', return_value={'events': [], 'errors': [], 'sources': ['outlook: me@corp.example'],
                                                                    'start': '2026-08-28T09:00:00', 'end': '2026-08-29T09:00:00', 'tz': 'UTC'}):
-            self.assertIn('YOUR CALENDAR', cal.context_for(s, 'are you free Tuesday at 1?'))
-            self.assertEqual(cal.context_for(s, 'please fix the export'), '')
+            self.assertIn('YOUR CALENDAR', cal.context_for(s))
             s.set_setting('calendar_enabled', '0', 't')
-            self.assertEqual(cal.context_for(s, 'are you free Tuesday at 1?'), '')
+            self.assertEqual(cal.context_for(s), '')
 
     def test_no_calendar_source_means_no_paragraph(self):
-        self.assertEqual(cal.context_for(MemoryStore(), 'free Tuesday?'), '')
+        self.assertEqual(cal.context_for(MemoryStore()), '')
 
     def test_the_tool_reads_the_same_thing(self):
         s = self._store()

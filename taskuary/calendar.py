@@ -1,10 +1,10 @@
-"""The owner's calendar, read where a reply is about time.
+"""The owner's calendar, read wherever a reply is drafted.
 
 "Tuesday at 1 works for me too" was drafted with no idea whether Tuesday at 1 was free - the
 responder had the thread, the voice and the rules, and not the one fact the question turned
-on. So a reply whose thread talks about time gets the owner's busy slots for the next
-DAYS days in its prompt, with the rule that a busy slot is never offered and a clash is said
-out loud with the nearest free alternative.
+on. So every reply gets the owner's busy slots for the next DAYS days in its prompt - the
+drafting model judges whether the thread is about time (a word list did, and missed "the 14th") -
+with the rule that a busy slot is never offered and a clash is said out loud with the nearest free alternative.
 
 Two sources, both read-only, both riding credentials already on a connector card:
 - Outlook: Microsoft Graph `calendarView` on every mailbox the Outlook card polls, with the
@@ -26,13 +26,6 @@ from loguru import logger
 DAYS = 14
 MAX_EVENTS = 60
 GRAPH = 'https://graph.microsoft.com/v1.0'
-# words that make a thread about TIME - only then is the calendar fetched (a Graph call per draft otherwise)
-SCHEDULING = re.compile(r'\b(availab\w*|free|busy|meet\w*|call|schedul\w*|calendar|slot|appointment|'
-                        r'tomorrow|today|tonight|next week|this week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|'
-                        r'\d{1,2}(:\d{2})?\s*(am|pm)|\d{1,2}[/-]\d{1,2})\b', re.I)
-
-
-def about_time(text: str) -> bool: return bool(SCHEDULING.search(text or ''))
 
 
 def tz_of(store):
@@ -217,20 +210,29 @@ def render(ag: dict) -> str:
     return '\n'.join(lines)
 
 
-def context_for(store, text: str) -> str:
-    """The paragraph the responder gets when the thread is about time - or '' when it is not,
-    the switch is off, or no card can reach a calendar. A fetch that fails still returns a
-    paragraph: it says the calendar could not be read, so the draft does not claim a free slot."""
-    if store.get_setting('calendar_enabled', '1') != '1' or not about_time(text): return ''
-    try: ag = agenda(store)
-    except Exception as e:
-        logger.warning(f'calendar: {e}'); return ''
-    body = render(ag)
+_REPLY = {'at': 0.0, 'data': None}
+REPLY_TTL = 300             # seconds - every draft carries the agenda, so drafts share one read instead of one Graph call each
+
+def context_for(store) -> str:
+    """The paragraph every reply draft gets - or '' when the switch is off or no card can reach a calendar.
+
+    A word list used to decide whether the thread was "about time", and "Are you around on the 14th for a quick
+    sync?" was not, so the draft said "the 14th works" without looking (the owner, 2026-10-11). Now the agenda
+    always rides along and the drafting model judges whether it matters; the read is cached for REPLY_TTL so that
+    costs no network call per draft, and render() is bounded by MAX_EVENTS over DAYS days. A fetch that fails still
+    returns a paragraph: it says the calendar could not be read, so the draft does not claim a free slot."""
+    if store.get_setting('calendar_enabled', '1') != '1': return ''
+    if _REPLY['data'] is None or time.time() - _REPLY['at'] >= REPLY_TTL:
+        try: ag = agenda(store)
+        except Exception as e:
+            logger.warning(f'calendar: {e}'); return ''
+        _REPLY.update(at=time.time(), data=ag)
+    body = render(_REPLY['data'])
     if not body: return ''
-    return ('\n\nYOUR CALENDAR - this thread is about time, so check before you answer. A time that is '
-            'busy below is never offered or accepted; if the time asked about is busy, say so plainly and offer '
-            'the nearest free one. If the calendar could not be read, say you will confirm rather than '
-            'claiming availability.\n' + body)
+    return ('\n\nYOUR CALENDAR - if this thread asks about a time, a meeting or your availability, check here before '
+            'you answer; if it does not, ignore this. A time that is busy below is never offered or accepted; if the time '
+            'asked about is busy, say so plainly and offer the nearest free one. If the calendar could not be read, say '
+            'you will confirm rather than claiming availability.\n' + body)
 
 
 _UPCOMING = {'at': 0.0, 'data': None}

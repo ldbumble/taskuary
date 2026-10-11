@@ -293,7 +293,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     if nudge: user += f'\n\n--- WHAT THE OWNER WANTS THIS REPLY TO SAY (it outranks everything above)\n{nudge}'
     from . import calendar as cal
-    calendar = cal.context_for(store, f"{last.get('Subject') or ''} {thread}")     # "Tuesday at 1 works" only if Tuesday at 1 is free
+    calendar = cal.context_for(store)     # "Tuesday at 1 works" only if Tuesday at 1 is free
     from . import knowledge
     system += calendar + history_block(store, last) + knowledge.block(store, f"{last.get('Subject') or ''} {thread}")
     if calendar:   # said on the task, so the Review row can be trusted on what the draft knew
@@ -425,7 +425,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
             f"{sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=4000)[0]}")
     from . import calendar as cal
-    calendar = cal.context_for(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
+    calendar = cal.context_for(store)
     from . import knowledge
     system += calendar + history_block(store, m) + knowledge.block(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
     # the owner's words on what to say: "ask whether the office reopens Tuesday" reached this road and was dropped, so the

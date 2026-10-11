@@ -487,9 +487,9 @@ def no_calendar_carryover():
     """calendar._TODAY is a process-wide cache. A test that filled it with a 09:00 meeting today made every later
     "Nothing's waiting." read "...Your next meeting is Standup at 9:00 AM." - but only when the suite ran before 9."""
     from taskuary import calendar as cal
-    cal._TODAY.update(at=0.0, day='', data=None)
+    cal._TODAY.update(at=0.0, day='', data=None); cal._REPLY.update(at=0.0, data=None)
     yield
-    cal._TODAY.update(at=0.0, day='', data=None)
+    cal._TODAY.update(at=0.0, day='', data=None); cal._REPLY.update(at=0.0, data=None)
 
 
 @pytest.fixture

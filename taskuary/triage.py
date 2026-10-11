@@ -157,55 +157,32 @@ def addressed_to_you(msg: dict, mine=()) -> str:
     return 'to' if me & to else 'cc' if me & cc else 'not named'
 
 
-_ASK = re.compile(r'\b(can you|could you|are you|do you|would you|let me know|please confirm|any update)\b', re.I)
-_ACT = re.compile(r'\b(please (add|send|update|fix|remove|create|set up)|need you to|action required|please complete)\b', re.I)
-_FYI = re.compile(r'\b(fyi|for your (records|reference)|no action (needed|required)|auto-?generated|this is an automated|do not reply)\b', re.I)
-
-
-def heuristic_intent(msg: dict, mine=()) -> dict:
-    body = (msg.get('body') or '').strip()
-    low = f"{msg.get('subject') or ''} {body[:600]}"
-    if _FYI.search(low) and not body.rstrip().endswith('?'):
-        return {'intent': 'fyi', 'why': 'carries automated/no-action markers and asks no question (keyword heuristic)'}
-    if _ACT.search(low): return {'intent': 'task', 'why': 'explicitly asks for something to be done (keyword heuristic)'}
-    if body.rstrip().endswith('?') or _ASK.search(low):
-        return {'intent': 'reply_only', 'why': 'reads as a question an answer settles (keyword heuristic)'}
-    # A cc used to be FILED here, by keyword, before any model saw it - which is the one thing
-    # the To/Cc signal must not do. Plenty of cc'd mail is genuinely yours: the sender put the
-    # owner in cc and addressed them in the body, or they are the only person who can answer.
-    # Deciding that from the header alone is a guess wearing a rule's clothing, so the fields
-    # are handed to the classifier as evidence and the classifier decides. It costs one AI call
-    # on quiet cc mail that this used to settle for free; being right is worth more.
-    return {'intent': 'task', 'why': 'no fyi markers and no plain question - assumed real work (keyword heuristic, no AI read this)'}
+# NO KEYWORD VERDICT (the owner, 2026-10-11: "Everything should be ai"). heuristic_intent read _FYI/_ACT/_ASK word
+# lists when no model answered, so an ask with a "do not reply" footer under it read as fyi and anything else as
+# "assumed real work". With no AI there is no verdict: classify_intent says so (intent None) and ingest leaves the
+# row awaiting triage, visibly, until a brain can read it.
+NOT_JUDGED = 'not judged - no AI read this message'
 
 
 # ── the message, minus the wrapper ──────────────────────────────────────────────────────
 # Corporate mail arrives half signature: name, title, phone block, an inspirational quote,
-# and a confidentiality NOTICE longer than the ask. All of it rode into every AI call - the
-# triage, the seeded session, the reply drafts - spending context on boilerplate. The STORED
-# body stays whole (the panel shows the real mail); only what is fed to an AI is trimmed,
-# and always conservatively: when in doubt, keep.
-# the heading alternative is case-SENSITIVE (or title case with a colon): a footer shouts NOTICE;
-# "Notice the error at the top - can you fix it" is the ask, and a case-blind match threw it and
-# everything after it away before triage ever saw it (audit 2026-09-02)
-_LEGAL = _re.compile(r'^\s*(NOTICE|DISCLAIMER|CONFIDENTIALITY( NOTICE)?|LEGAL NOTICE)[:\s]'
-                     r'|^\s*(Notice|Disclaimer|Confidentiality Notice|Legal Notice):'
-                     r'|(?i:this (e-?mail|message|communication)[^.]{0,120}(confidential|privileged|intended (solely|only))'
-                     r'|if you (are not the intended|have received this[^.]{0,40}in error)'
-                     r'|unauthorized (use|review|disclosure|distribution))')
-_VALEDICTION = _re.compile(r'^\s*(thank(s| you)|best( regards| wishes)?|kind(est)? regards|regards|'
-                           r'sincerely|respectfully|warm(ly| regards)?|cheers|v/?r)\s*[,!.]*\s*$', _re.I)
-# ...and the shapes a mail client actually writes them in: Outlook's phone dash is U+2011, and it
-# pads a signature block with zero-width spaces (which str.strip() does not remove, so the block
-# read as ordinary text). The \b ending the first alternative had been eaten to a literal backspace,
-# so a bare 'Phone:' or 'Email:' line never matched and every signature rode into the prompt.
+# and a confidentiality NOTICE longer than the ask. The STORED body stays whole (the panel shows
+# the real mail); only what is fed to an AI or a screen is trimmed, and always conservatively.
+# ONLY SHAPES ARE TRIMMED (the owner, 2026-10-11: "Everything should be ai"). _VALEDICTION cut everything after a
+# bare "Thanks," line, so "P.S. can you also send the October numbers?" never reached the model; _LEGAL cut from
+# the first line saying "this message is confidential" to the end, the sender's own ask with it. Both decided
+# from English words where the sender's words end - so both went. What is left is parsing: a mail system's
+# banner and a client's stamp line (below), the quote head and the phone/address lines a signature is made of.
+# Outlook's phone dash is U+2011, and it pads a signature block with zero-width spaces (which str.strip() does
+# not remove, so the block read as ordinary text).
 _DASH = '\u2010\u2011\u2012\u2013\u2014\u2212-'
 _BLANKISH = _re.compile(r'^[\s\u200b\u200c\u200d\ufeff\u00a0]*$')
-# ...and Outlook writes the label AFTER the number - "(540) 776-7588 Office" - which the anchored
-# number pattern missed, so a signature stopped being trimmed one line early (TQ-0665)
-_CONTACT = _re.compile(r'^\s*(phone|tel|mobile|cell|fax|office|direct|email|e-?mail|web|www\.|address)\b'
-                       r'|^\s*\+?[\d(][\d\s().x' + _DASH + r']{6,}(\s*(office|direct|mobile|cell|fax|tel|phone|work|home))?\s*$'
-                       r'|^[^@\s]+@[^@\s]+\.[a-z]{2,}\s*$', _re.I)
+# a contact line is its DATA - a phone number, an address, a link - with at most a short label on either side
+# ("Phone: 555-0100", "(540) 776-7588 Office"). A label alone decided nothing: "Address the two flagged rows
+# before Friday" opened with one and was thrown away as a signature line (2026-10-11).
+_PHONE = r'\+?[\d(][\d\s().x' + _DASH + r']{6,}'
+_CONTACT = _re.compile(r'^\s*([a-z][a-z.\-]{0,11}[:.]?\s*)?(' + _PHONE + r'|[^@\s]+@[^@\s]+\.[a-z]{2,}|(https?://|www\.)\S+)'
+                       r'(\s*[a-z]{1,8})?\s*$', _re.I)
 _KEEP_MIN = 30          # never trim a message down past this - when in doubt, keep
 # the corporate wrapper AROUND a body, not the sender's words: the external-mail banner and the
 # "you don't often get email" hint (one pattern for every surface - assistant.py imports it)
@@ -232,8 +209,8 @@ def strip_banner(text: str) -> str:
 
 def read_text(body: str, own: str = None) -> str:
     """What the owner READS of a message: the sender's own words this time - the mailbox's own cut when
-    it gave one (Graph uniqueBody, message.OwnText), else split_own's - with the legal footer, the signature
-    block and the external-sender banner gone. The same cleaning triage already reads through, now on every
+    it gave one (Graph uniqueBody, message.OwnText), else split_own's - with the trailing contact lines
+    and the external-sender banner gone (a legal footer is the sender's text since 2026-10-11). The same cleaning triage already reads through, now on every
     screen (the owner, 2026-09-23: "NOTICE etc ... no one needs to see it"). The mail as stored is untouched;
     a screen that shows this offers the whole email beside it."""
     t = strip_boilerplate(str(own).strip()) if own and str(own).strip() else own_words(body or '')
@@ -241,21 +218,10 @@ def read_text(body: str, own: str = None) -> str:
 
 
 def strip_boilerplate(text: str) -> str:
-    """The words the sender actually typed: the legal footer and the signature block go,
-    everything before them stays byte-for-byte."""
+    """The words the sender actually typed: the mail system's banner, a client's stamp lines and the
+    trailing phone/address lines go, everything else stays byte-for-byte."""
     lines = [l for l in _BANNER.sub('', text or '').splitlines() if not _CLUTTER.match(l)]
-    # 1. the legal footer: from the first legalese line to the end
-    for i, l in enumerate(lines):
-        if _LEGAL.search(l) and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN:
-            lines = lines[:i]
-            break
-    # 2. the signature: a closing valediction in the tail, followed by the name/title/phone block
-    tail_from = max(1, len(lines) - 14)
-    for i in range(len(lines) - 1, tail_from - 1, -1):
-        if _VALEDICTION.match(lines[i]) and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN:
-            lines = lines[:i]
-            break
-    # 3. stray contact lines left at the very end (a block with no valediction above it)
+    # contact lines left at the very end - never a sign-off word, which is not where a message ends (P.S.)
     while lines and (_CONTACT.match(lines[-1]) or _BLANKISH.match(lines[-1])):
         if len(NL.join(lines[:-1]).strip()) < _KEEP_MIN: break
         lines.pop()
@@ -514,8 +480,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
 
     `system` is TRIAGE.md, the owner-editable classifier instructions - HTML comments are
     stripped (the doc's own how-to-edit note is for the owner, not the model), and a blanked
-    doc falls back to the shipped default. An edit that breaks the JSON contract degrades to
-    the keyword heuristics, never to a crash.
+    doc falls back to the shipped default. An edit that breaks the JSON contract comes back
+    degraded with no intent - never a crash, never a guess.
 
     `candidates` (chat only) are the lines of the SAME room on the SAME local calendar day as the
     message - [{id, who, when, text, task_id}] - and asking for them makes the verdict also answer
@@ -669,12 +635,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:
             parse_error = f'{type(e).__name__}: {e}'
-    # An LLM was supplied, answered, and the answer was not usable (bad JSON, an intent outside
-    # the contract). That is NOT "no AI configured": heuristic_intent's last branch assumes real
-    # work and reads none of the owner's standing notes, so a garbled answer opened a task the
-    # owner had already refused - repeatedly, since every retry garbled the same way. Say the
-    # verdict is degraded and let the caller file instead of guessing.
-    out = heuristic_intent(msg, mine)
+    # No model, or a model whose answer was not usable (bad JSON, an intent outside the contract): either way
+    # NOTHING read this message, and the answer says so - intent None, never a keyword guess (2026-10-11). A
+    # garbled answer is marked degraded so the caller shows an error with a retry; a guess here once opened a
+    # task the owner had already refused, every retry garbling the same way.
+    out = {'intent': None, 'why': NOT_JUDGED}
     if not llm:
         return out
     # A CLI can emit a whole transcript if an output flag changes. Preserve enough to diagnose

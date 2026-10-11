@@ -101,8 +101,7 @@ class FollowUpVerdictTests(unittest.TestCase):
         self.assertEqual(s.get_message(out['message_id'])['Status'], 'routed')
 
     def test_the_prior_thread_reaches_triage_as_the_exchange(self):
-        """The evidence the verdict needs: what was asked before, and what the owner already sent -
-        with the signature and the legal footer trimmed off both."""
+        """The evidence the verdict needs: what was asked before, and what the owner already sent."""
         s = store()
         opened(s, body=('Where are we holding with the AI generated comments?\n\nThank you!\n\nErin\n'
                         'Phone:\nEmail:\n\n732‑905‑6440 x505\nerin@vendor.example\n\n'
@@ -114,8 +113,7 @@ class FollowUpVerdictTests(unittest.TestCase):
         ex = seen['user']['exchange']
         self.assertEqual(len(ex), 2)
         self.assertIn('Where are we holding', ex[0]); self.assertIn('you ·', ex[1])
-        for junk in ('NOTICE:', '732', 'Phone:', 'erin@vendor.example'):
-            self.assertNotIn(junk, ex[0], junk)
+        # the footer rides along since 2026-10-11: a sentence is never cut on its words, and a NOTICE line reads as one
 
     def test_a_document_that_never_names_a_signal_is_told_what_it_means(self):
         """This install's TRIAGE.md was machine-generated before the exchange existed, and an

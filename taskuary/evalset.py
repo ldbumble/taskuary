@@ -11,7 +11,7 @@ Three uses, same rows:
             weakly labelled with the call the owner let stand) -> ~/.taskuary/eval/triage_cases.jsonl,
             FULL TEXT, local, private
   share     the same cases with the people and the prose taken out - pseudonymous addresses,
-            redacted subjects, the body reduced to the signals triage keys on - so a set can
+            redacted subjects, no body at all - so a set can
             leave the machine (tests/data/triage_cases.jsonl, which the tests replay)
   evaluate  run the CONFIGURED classifier over the local cases, with the thread and the
             standing notes it would have had, and print accuracy, the confusion table, and
@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .routing import norm_subject
-from .triage import _ASK, _ACT, _FYI, addressed_to_you
+from .triage import addressed_to_you
 
 LABELS = ('task', 'reply_only', 'fyi')
 RETRIES = 2                  # a model call that fails or garbles is retried this often before it counts as unusable
@@ -99,13 +99,6 @@ def _owner_ruled_before(store, conv, before_mid) -> bool:
 
 
 # ── the cases ───────────────────────────────────────────────────────────────────────────
-def body_signals(body: str) -> dict:
-    """The body as the keyword layer sees it - enough to replay heuristic_intent without the prose."""
-    b, low = (body or '').strip(), (body or '')[:600]
-    return {'chars': len(b), 'question': b.rstrip().endswith('?'), 'ask': bool(_ASK.search(low)),
-            'act': bool(_ACT.search(low)), 'fyi_marker': bool(_FYI.search(low))}
-
-
 def _kind_of(email: str, name: str, mine: set, domains: set) -> str:
     e = (email or '').lower()
     if e in mine or (name or '').strip().lower() == 'you': return 'owner'
@@ -142,7 +135,6 @@ def build(store, include_weak: bool = True) -> list:
             'thread_before': [{'from': p.get('FromEmail'), 'from_name': p.get('FromName'), 'sent_at': p.get('SentAt'),
                                'from_kind': _kind_of(p.get('FromEmail'), p.get('FromName'), mine, domains)} for p in prior[-12:]],
             'owner_ruled_thread_before': _owner_ruled_before(store, m.get('ConversationId'), m['MessageId']),
-            'body_signals': body_signals(m.get('BodyText') or ''),
             'triage': calls.get(m['MessageId']) or {'decision': None, 'intent': None, 'by': None},
             'label': label, 'label_source': source, 'weak': weak})
     return cases
@@ -161,7 +153,8 @@ def anonymise(cases: list) -> list:
     """People and prose out, signals in. Addresses become p<n>@<kind>.example (stable within
     the set, so a thread still reads as a thread); names become Person <n>; a subject keeps its
     common words and loses its proper nouns, its ' - Name, Name' tail and its digits; the body
-    is replaced by body_signals. Conversation ids are renumbered."""
+    goes. It used to leave body_signals behind - what the keyword layer saw - and that layer is gone
+    (2026-10-11). Conversation ids are renumbered."""
     people, convs = {}, {}
     def who(email, name, kind):
         key = (email or name or '').lower()
@@ -269,8 +262,8 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
             v = classify_intent(msg, llm=llm, soul=soul, thread=thread, learned=lrn, notes=ns,
                                 notes_left=left, system=system, mine=me)
         # the funnel FILES an answer it cannot read (ingest: 'degraded' -> filed, never assumed
-        # work); scored as the keyword fallback, a transient model error looked like a wrong verdict
-        got = 'fyi' if v.get('degraded') else v['intent']
+        # work); no model at all is no verdict - scored as such, never as a keyword guess (2026-10-11)
+        got = 'fyi' if v.get('degraded') else v.get('intent') or 'unjudged'
         conf[(c['label'], got)] += 1
         by_signal['colleague_replied' if thread.get('others_replied') else 'alone'][got == c['label']] += 1
         by_channel.setdefault(c.get('channel') or '?', Counter())[got == c['label']] += 1

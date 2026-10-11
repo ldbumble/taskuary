@@ -68,13 +68,10 @@ class AddressingTests(unittest.TestCase):
         and reading that off the header alone is a guess wearing a rule's clothing. The signal goes
         to the classifier as evidence; the classifier decides."""
         cc = {'source_name': ME, 'to': ['dana@vendor.com'], 'cc': [ME], 'subject': 'Ledger'}
-        quiet = triage.heuristic_intent({**cc, 'body': 'Attaching the reconciled ledger.'}, {ME})
-        self.assertNotEqual(quiet['intent'], 'fyi')
-        self.assertNotIn('cc', quiet['why'])
-        # the keyword pass still reads what the message SAYS - that part was never the problem
-        self.assertEqual(triage.heuristic_intent({**cc, 'body': 'Alex, please fix the export.'})['intent'], 'task')
-        self.assertEqual(triage.heuristic_intent({**cc, 'body': 'Any update on the export?'})['intent'], 'reply_only')
-        self.assertEqual(triage.heuristic_intent({**cc, 'body': 'FYI - no action needed.'})['intent'], 'fyi')
+        # ...and since 2026-10-11 there is no keyword pass at all: with no model, nothing is judged
+        for body in ('Attaching the reconciled ledger.', 'Alex, please fix the export.', 'FYI - no action needed.'):
+            quiet = triage.classify_intent({**cc, 'body': body}, mine={ME})
+            self.assertIsNone(quiet['intent'], body); self.assertNotIn('cc', quiet['why'])
 
     def test_the_classifier_is_told_the_relationship_and_never_the_mailbox(self):
         seen = {}
@@ -145,8 +142,7 @@ class RecipientsOffTheWireTests(unittest.TestCase):
         def classify(msg, **kw):
             seen.update(msg)
             return {'intent': 'fyi', 'why': 'you are only in cc'}
-        # a QUESTION, so the heuristic hands it on and the classifier is the one that sees the
-        # lines - the silent cc-only mail never gets that far, which is the next test
+        # the classifier is the one that sees the lines
         mail = _mail(['dana@vendor.com', 'lee@vendor.com'], [ME],
                      body='<html><body>Any update on the ledger?</body></html>')
         with mock.patch.object(channels, 'graph_token', return_value='tok'), \

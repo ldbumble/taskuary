@@ -849,23 +849,20 @@ class TerminalTests(unittest.TestCase):
             terminal.close(ses['sid'])
 
 
-    def test_the_seed_carries_the_message_not_the_signature(self):
-        """Corporate mail is half signature and legal footer, and all of it rode into every
-        session prompt - context spent on a confidentiality NOTICE instead of the ask."""
+    def test_the_seed_carries_the_message_not_the_contact_block(self):
+        """The trailing phone/address lines are a shape and stay out of the prompt; a sign-off is not where the
+        sender's words end - a P.S. comes after it - so nothing is cut on its words (2026-10-11)."""
         tid = c.post('/api/tasks', json={'Title': 'reimbursement error', 'Kind': 'coding'}).json()['taskId']
         server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:SIG1', 'Channel': 'email',
                                   'FromName': 'Dana Reyes', 'Subject': 'Reimbursement App',
                                   'BodyText': chr(10).join([
                                       'I am seeing ????? at the end of each transaction.', '',
-                                      'Thank you,', '', 'Dana Reyes', 'Director of Payroll',
-                                      'Phone: 555-0100', '',
-                                      'NOTICE: This confidential message contains information intended '
-                                      'for a specific individual and purpose.'])})
+                                      'Thank you,', '', 'P.S. it started after the October import.', '',
+                                      'Phone: 555-0100', 'dana@vendor.example'])})
         seed = terminal.seed_text(server.store, tid)
         self.assertIn('????? at the end of each transaction', seed)
-        self.assertNotIn('NOTICE', seed)
-        self.assertNotIn('Phone: 555-0100', seed)
-        self.assertNotIn('Director of Payroll', seed)
+        self.assertIn('started after the October import', seed)
+        self.assertNotIn('Phone: 555-0100', seed); self.assertNotIn('dana@vendor.example', seed)
 
     def test_agents_open_issues_only_when_the_setting_says_so(self):
         """Off (the default): the seed forbids tracker items and the SOUL.md tool blurb scopes

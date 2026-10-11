@@ -30,15 +30,9 @@ def cases():
     return evalset.read(DATA / 'triage_seed.jsonl') + [c for c in evalset.read(DATA / 'triage_cases.jsonl') if not c.get('weak')]
 
 
-def stand_in_body(sig: dict) -> str:
-    """A body that trips the same keyword checks the real one did - the shared set carries the
-    signals, not the prose (evalset.body_signals)."""
-    parts = ['Following up on the item below.']
-    if sig.get('fyi_marker'): parts.append('This is an automated message.')
-    if sig.get('act'): parts.append('Please add it to the system.')
-    if sig.get('ask'): parts.append('Can you take a look')
-    text = ' '.join(parts)
-    return text.rstrip('.') + '?' if sig.get('question') else text
+# the shared set carries no prose, and nothing in the funnel reads words to decide (2026-10-11): one neutral body
+# stands in for every case - the oracle answers with the owner's label whatever it says
+STAND_IN = 'Following up on the item below.'
 
 
 def replay(case: dict):
@@ -54,7 +48,7 @@ def replay(case: dict):
         s.add_memory({'Scope': n['scope'], 'ScopeKey': n.get('key'), 'Note': n['note'], 'Source': n.get('source', 'verdict'),
                       'Active': 1, 'CreatedBy': 'owner'})
     msg = evalset.as_message(case)
-    if not msg['body']: msg['body'] = stand_in_body(case.get('body_signals') or {})
+    if not msg['body']: msg['body'] = STAND_IN
     if case.get('owner_ruled_thread_before'):
         # the ruled line is this sender's own earlier one where there is one. A chat ruling no
         # longer decides anything either way (store.owner_verdict_on_thread); an email thread does
@@ -87,8 +81,6 @@ class ReplayTests(unittest.TestCase):
         self.assertGreaterEqual(len(cs), 10)
         for c in cs:
             self.assertIn(c['label'], evalset.LABELS, c['id'])
-            self.assertEqual(c['body_signals'] if 'body_signals' in c else evalset.body_signals(c['body']),
-                             evalset.body_signals(c['body']), c['id'])
 
     def test_the_outcome_follows_the_owners_verdict_when_the_model_agrees(self):
         """With the model answering as the owner did, everything else in the funnel has to get
@@ -222,7 +214,7 @@ class DatasetTests(unittest.TestCase):
         for c in evalset.anonymise(evalset.build(s)):
             self.assertIsNone(c['body']); self.assertIsNone(c['to']); self.assertIsNone(c['cc'])
             self.assertTrue(c['from'] is None or c['from'].endswith('.example'))
-            self.assertEqual(c['body_signals'], evalset.body_signals(next(x for x in evalset.build(s) if x['id'] == c['id'])['body']))
+            self.assertNotIn('body_signals', c)                              # the keyword layer it described is gone
 
     def test_a_name_in_lowercase_is_masked_too(self):
         # the per-name pass held a backspace where its word boundaries were, so it masked nothing: only the capitalised-word

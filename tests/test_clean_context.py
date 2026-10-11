@@ -30,9 +30,12 @@ class CleanerTests(unittest.TestCase):
         self.assertEqual(triage.strip_boilerplate('Please approve the invoice.\n\nGet Outlook for iOS\n').strip(), 'Please approve the invoice.')
         self.assertEqual(triage.strip_boilerplate('New prices below.\n\nUnsubscribe | Manage your email preferences | View this email in your browser\n').strip(), 'New prices below.')
 
-    def test_signature_and_legal_footer_still_go(self):
-        clean = triage.strip_boilerplate('Please fix the importer today, it drops the last row.' + SIG + LEGAL)
-        self.assertEqual(clean.strip(), 'Please fix the importer today, it drops the last row.')
+    def test_sign_off_and_legal_footer_stay_and_the_contact_lines_go(self):
+        # a sign-off word or a confidentiality sentence is not where the sender's words end - a P.S. comes after
+        # one - so neither is cut on its words any more (2026-10-11); the phone line is a shape and still goes
+        ask = 'Please fix the importer today, it drops the last row.'
+        self.assertEqual(triage.strip_boilerplate(ask + SIG).strip(), ask + '\n\nBest regards,\nDana Whitfield\nDirector of Finance')
+        self.assertIn('CONFIDENTIALITY NOTICE', triage.strip_boilerplate(ask + SIG + LEGAL))
 
     def test_a_phone_line_that_names_which_phone_still_goes(self):
         """Outlook writes the label after the number - "(540) 776-7588 Office" - and the contact
@@ -45,7 +48,7 @@ class CleanerTests(unittest.TestCase):
         body = ('Alex,\n\nCan you send me the link on the 2027 budgets?\n\nThanks,\n\nRay Colton\nVP Marketing\n\n'
                 'From: Barnes, Michael L. <m@northwind.example>\nSent: Thursday, September 17, 2026 2:07 PM\n'
                 'To: Colton, Ray <b@northwind.example>\nSubject: Fw: 2027 Budgets\n\nPeter Barnes\nVice President\n')
-        self.assertEqual(triage.own_words(body).strip(), 'Alex,\n\nCan you send me the link on the 2027 budgets?')
+        self.assertEqual(triage.own_words(body).strip(), 'Alex,\n\nCan you send me the link on the 2027 budgets?\n\nThanks,\n\nRay Colton\nVP Marketing')
         # a message with no chain under it is its own words, whole
         plain = 'The payroll export failed again overnight - same KeyError as last week.'
         self.assertEqual(triage.own_words(plain), plain)
@@ -140,7 +143,6 @@ class ExchangeBudgetTests(unittest.TestCase):
         s = MemoryStore(); self.chain(s, 20)
         lines = ingest.exchange_lines(s, {'conversation_id': 'AAQk-long', 'subject': 'Re: Export job', 'sent_at': '2026-09-06 12:00:00'})
         self.assertEqual(len(lines), 20)
-        self.assertTrue(all('CONFIDENTIALITY' not in l and 'Director of Finance' not in l for l in lines))
         self.assertIn('message 0:', lines[0]); self.assertIn('message 19:', lines[-1])
 
     def test_substantive_words_beyond_the_old_300_character_cut_survive(self):
@@ -177,7 +179,7 @@ class PayloadTests(unittest.TestCase):
         notes = ['2026-08-25: "Export" - NOT OURS: x', '2026-08-26: "Export" - NOT OURS: y']
         triage.classify_intent({'from_email': 'd@v.example', 'subject': 'Re: Export', 'body': body}, llm=llm, notes=notes)
         self.assertIn('item599', seen['usr']['body']); self.assertIn('confirm by Friday', seen['usr']['body'])
-        self.assertNotIn('outside of the organization', seen['usr']['body']); self.assertNotIn('CONFIDENTIALITY', seen['usr']['body'])
+        self.assertNotIn('outside of the organization', seen['usr']['body'])
         self.assertNotIn('body_truncated', seen['usr'])
         self.assertNotIn('SETTLED BY YOUR OWNER', seen['sys']); self.assertIn('EVIDENCE', seen['sys'])
 

@@ -7,8 +7,7 @@ from taskuary.store import MemoryStore, task_ref
 from taskuary.testing import inbound
 from taskuary import artifacts, reshape
 from taskuary.ingest import ingest_message
-from taskuary.routing import route
-from taskuary.triage import heuristic_intent
+from taskuary.triage import classify_intent
 from taskuary.agents import parse_cli_json
 from taskuary.reports import is_due, run_report_source, REGISTRY
 
@@ -719,9 +718,10 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(any(x['Active'] for x in s.list_sources(active_only=False)
                              if x['ConnectorId'] == c['ConnectorId']))
 
-    def test_triage_heuristics(self):
-        self.assertEqual(heuristic_intent({'subject': '', 'body': 'are you available tuesday?'})['intent'], 'reply_only')
-        self.assertEqual(heuristic_intent({'subject': 'fyi', 'body': 'this is an automated notice'})['intent'], 'fyi')
+    def test_no_ai_is_no_verdict(self):
+        # the keyword heuristic is gone (2026-10-11): with no model nothing is judged, whatever the words say
+        for body in ('are you available tuesday?', 'this is an automated notice'):
+            self.assertIsNone(classify_intent({'subject': 'fyi', 'body': body})['intent'], body)
 
     def test_resolve_cmd_wraps_npm_shims(self):
         from unittest import mock

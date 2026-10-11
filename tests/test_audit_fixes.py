@@ -77,9 +77,8 @@ class BrainTests(unittest.TestCase):
     def test_f08_notice_the_error_is_the_ask_not_a_footer(self):
         body = 'Hi Alex, see the screenshot below from the census app.\nNotice the error at the top - can you fix it before Friday?\nThanks'
         self.assertIn('fix it before Friday', triage.strip_boilerplate(body))
-        footer = 'Please fix the importer today, it drops the last row of every file we load.\n\nNOTICE: This email is confidential and intended solely for the addressee.'
-        self.assertNotIn('NOTICE', triage.strip_boilerplate(footer))
-        self.assertNotIn('Confidentiality Notice', triage.strip_boilerplate(footer.replace('NOTICE:', 'Confidentiality Notice:')))
+        # the footer itself is no longer cut on its words either (2026-10-11): nothing the sender's mail says is
+        # dropped because of the English it is written in
 
     def test_f07_the_question_survives_the_context_budget(self):
         s = MemoryStore()

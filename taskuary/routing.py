@@ -39,13 +39,11 @@ def subject_topic(s, min_words=2):
 # the channels where a conversation id names a ROOM and not a topic (store.CHAT_CHANNELS is the
 # same set; this module stays pure, so it keeps its own copy rather than importing the store)
 CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage'}
-GREETING = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b', re.I)
-
-def ask_line(body: str) -> str:
-    """The line that carries the ask - never the greeting it opens with."""
-    lines = [l.strip() for l in (body or '').splitlines() if l.strip()]
-    real = [l for l in lines if not GREETING.match(l) and len(l) > 12]
-    return (real or lines or [''])[0][:120]
+def first_line(body: str) -> str:
+    """The first line with words on it - no rule about which words a line may open with. GREETING skipped
+    "hi/hello/dear" lines and so skipped "Hi-res scans of the Q3 file are missing" too; triage's own title
+    is the name of an ask (the owner, 2026-10-11: "Everything should be ai"), this is only its fallback."""
+    return next((l.strip() for l in (body or '').splitlines() if l.strip()), '')[:120]
 
 def cosine(a, b):
     """Cosine similarity between two token lists (term-count vectors)."""
@@ -54,12 +52,12 @@ def cosine(a, b):
     dot = sum(ca[t]*cb[t] for t in ca.keys() & cb.keys())
     return dot / (math.sqrt(sum(v*v for v in ca.values())) * math.sqrt(sum(v*v for v in cb.values())))
 
-# Signal weights and the attach threshold. A live thread match alone clears the bar by design;
-# content-only matches need subject+body agreement.
+# Signal weights for ranking candidate tasks (reshape, context). route() and its attach threshold are gone
+# (2026-10-11): ingest imported it and never called it - identity_route and triage's same_as decide joins.
 #
 # THE RULE FOR A THREAD WHOSE TASK HAS CLOSED - written down because it is easy to break by
 # accident and the two halves look inconsistent until you see why they are not:
-#   THEIR reply on a closed thread is NEW WORK. route() only ever sees open tasks
+#   THEIR reply on a closed thread is NEW WORK. routing only ever sees open tasks
 #   (store.snapshots), so it opens a new task and triage judges the ask afresh - a closed task is
 #   a finished piece of work, and a thread that comes back to life is asking for another one.
 #   YOUR reply on a closed thread is RECORD, not work. channels.ingest_own_message attaches it to
@@ -68,7 +66,6 @@ def cosine(a, b):
 # A chat room is neither: its conversation id names the ROOM, so the thread signal is only a
 # candidate there and ingest.chat_continues decides whether the line joins (owner, 2026-09-02).
 WEIGHTS = {'thread': 1.0, 'subject': 0.45, 'sender': 0.15, 'body': 0.40}
-ATTACH_THRESHOLD = 0.42
 
 def score_candidate(msg, task):
     """Per-signal scores of one message against one task snapshot.
@@ -89,41 +86,6 @@ def score_candidate(msg, task):
     sig['body'] = cosine(tokens(msg.get('body')), tokens(task.get('text')))
     return sig
 
-def route(msg, tasks, threshold=ATTACH_THRESHOLD):
-    """Route a message against open-task snapshots.
-
-    Args:
-        msg: message dict (see score_candidate).
-        tasks: list of task snapshot dicts.
-        threshold: attach floor. NOT configurable - every caller takes the default. The
-            `attach_threshold` setting this once read has never been passed since, so the row
-            on the settings page did nothing; it is hidden rather than left there lying.
-    Returns:
-        dict: {decision: 'attach'|'create', task_id, score, reason, candidates:
-               [{task_id, score, signals}] sorted best-first} - the full routing trail.
-    """
-    cands = []
-    for t in tasks:
-        sig = score_candidate(msg, t)
-        total = min(1.0, sum(WEIGHTS[k]*v for k,v in sig.items()))
-        # A brand-new email (no RE:/FW:, per is_reply) shouldn't attach to an old task on
-        # mere subject/body similarity - only a real thread match keeps full weight.
-        if msg.get('is_reply') is False and not sig['thread']: total = round(total * 0.6, 4)
-        cands.append({'task_id': t['task_id'], 'score': round(total,4), 'signals': {k: round(v,4) for k,v in sig.items()}})
-    cands.sort(key=lambda c: -c['score'])
-    best = cands[0] if cands else None
-    # The reason is read by a person on the timeline, so it says what happened in words. The
-    # scores stay in `candidates` for anyone debugging the router - "0.31, attaching needs 0.42"
-    # on every card told the owner nothing they could act on.
-    if best and best['score'] >= threshold:
-        why = ('same conversation thread' if best['signals']['thread'] else
-               'reads like the same work' + (', from someone already on it' if best['signals']['sender'] else ''))
-        return {'decision':'attach', 'task_id':best['task_id'], 'score':best['score'],
-                'reason': f"attached: {why}", 'candidates':cands[:5]}
-    near = f" (TQ-{best['task_id']:04d} came closest, not close enough to join)" if best and best['score'] >= threshold * 0.6 else ''
-    return {'decision':'create', 'task_id':None, 'score':best['score'] if best else 0.0,
-            'reason': f'new task - nothing similar already open{near}', 'candidates':cands[:5]}
-
 # NOTHING HERE SCANS FOR CODE ANY MORE. `_CODE_HARD` / `_CODE_SOFT` used to decide `kind` from
 # the words in a message; 8b89e26a (2026-09-06) made an unnamed kind `general` outright and left
 # the two patterns behind, referenced by nobody, with the docstring below still calling them "the
@@ -131,7 +93,6 @@ def route(msg, tasks, threshold=ATTACH_THRESHOLD):
 # handled here (`_CODE_HARD` matches `pull request` and `github.com/`) while every PR was in fact
 # going to the assistant. Dead code that describes the behaviour you expect is worse than none:
 # `kind` is the model's, against TRIAGE.md, and this file no longer has an opinion about it.
-_ASKS = ('can you', 'could you', 'please send', 'let me know', 'would you mind', 'any chance')
 
 
 def draft_task_fields(msg, urgent: bool = False, kind: str = None):
@@ -153,8 +114,8 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     body = (msg.get('body') or '').strip()
     # A CHAT's "subject" is the ROOM - "Teams chat with Priya", the WhatsApp group's name - which
     # every line in it shares, so titling tasks with it produced a board of identical rows naming
-    # a person instead of a job. What the message ASKS is the title there.
-    if str(msg.get('channel') or '').lower() in CHAT_CHANNELS: subj = ask_line(body) or subj
+    # a person instead of a job. Triage's title replaces this (ingest); with none, the first line is the title.
+    if str(msg.get('channel') or '').lower() in CHAT_CHANNELS: subj = first_line(body) or subj
     head = subj + '\n' + body[:2000]           # a trace usually sits below the pleasantries
     low = head.lower()
     # the last branch used to be 'general', back when general MEANT the owner's list. It means

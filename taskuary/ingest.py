@@ -8,9 +8,9 @@ answering is the responder's job (reply_only), doing is the coder's.
 import contextlib, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
-from .routing import ask_line, route, draft_task_fields, tokens
+from .routing import first_line, draft_task_fields, tokens
 from .policy import evaluate
-from .triage import classify_intent, heuristic_intent
+from .triage import classify_intent
 from .store import task_ref, auto_code_enabled, _now
 from . import remind, senders
 
@@ -767,9 +767,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # sender and subject it was given on (judge), and the model judges how alike THIS message
         # really is. Only a saved policy (above) and a feed connection still decide mechanically.
         # AI-gated triage: without an active AI connector, nothing becomes a task on its
-        # own - messages FILE onto the timeline (visible, promotable by hand) instead of
-        # heuristics spraying tasks for every automated notification. Heuristics still
-        # short-circuit the obvious fyi noise before spending an AI call.
+        # own and nothing is filed - the row waits, visibly, for a brain to read it. No
+        # keyword verdict stands in for one (triage.NOT_JUDGED, 2026-10-11).
         if cfg.get('intent_classify_enabled', '1') == '1':
             # NO KEYWORD FYI (the owner, 2026-09-25: "let triage decide that - fyi can sometimes be tasks"). The one
             # verdict made without a model is a calendar invite: a meeting to be READY for (assistant.prep preps it),
@@ -1607,10 +1606,11 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
     parent = store.get_task(old) if old else None
     title = (m.get('Subject') or m.get('FromName') or 'message')[:200]
     body = str(m.get('BodyText') or '')
-    # the ask itself is the title when the subject is just the chat's name every message
-    # shares - and the ask is never the greeting line it opens with
+    # triage's own name for THIS message leads (message.TriageTitle); without one, the first line stands in when the
+    # subject is just the chat's name every message shares - never a greeting rule picking the line (2026-10-11)
     if parent and (parent.get('Title') or '').strip().lower() == title.strip().lower():
-        title = ask_line(body) or title
+        title = first_line(body) or title
+    title = (m.get('TriageTitle') or '').strip()[:200] or title
     # the split-off task gets the same treatment as the promoted one: the ask, not the mail - read after the press
     from . import triage as _triage
     plain = _triage.extract_ask(m)['summary']

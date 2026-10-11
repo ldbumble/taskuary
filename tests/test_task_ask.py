@@ -23,8 +23,8 @@ the HRs and I wanted to give them a heads up we'll be rolling it out.
 Best,
 J.D. Ellis
 Vice President, Workforce Enhancement
-Medical Facilities of America
-2917 Penn Forest Blvd, Roanoke, VA 24018
+Northwind
+100 Harbor Way, Springfield
 P: 540.776.7576  C: 804.776.5487
 
 This email and any files transmitted with it are confidential and intended solely for the use
@@ -46,11 +46,11 @@ Can you send me the link on the 2027 budgets?
 Thanks,
 
 Ray Colton
-Medical Facilities of America
+Northwind
 VP Marketing and Business Development
 (540) 776-7588 Office
 Ray.west@northwind.example
-www.lifeworksrehab.example
+www.northwindrehab.example
 
 From: Barnes, Michael L. <Michael.Barnes@NORTHWIND.EXAMPLE>
 Sent: Thursday, September 17, 2026 2:07 PM
@@ -67,14 +67,15 @@ class AutomaticRoadTests(unittest.TestCase):
         from taskuary.routing import draft_task_fields
         out = draft_task_fields({'subject': 'Re: Hosting', 'body': MAIL})
         self.assertIn('check back in on this', out['summary'])
-        for gone in ('Penn Forest', 'confidential', 'From: Alex', '540.776.7576'):
-            self.assertNotIn(gone, out['summary'], gone)
+        # the quoted chain is a different message; the sign-off and footer are the sender's own text since 2026-10-11
+        # (no word list decides where a sender stopped writing) - a verdict's summary is what replaces them
+        self.assertNotIn('From: Alex', out['summary'])
 
     def test_the_forwarded_chain_under_the_ask_is_not_the_ask(self):
         from taskuary.routing import draft_task_fields
         out = draft_task_fields({'subject': 'FW: 2027 Budgets', 'body': FORWARDED})
         self.assertIn('2027 budgets', out['summary'].lower())
-        for gone in ('From: Barnes', 'Vice President', 'lifeworksrehab', '776-7588'):
+        for gone in ('From: Barnes', 'Vice President', 'northwindrehab', '776-7588'):
             self.assertNotIn(gone, out['summary'], gone)
 
     def test_a_mail_that_is_only_the_senders_own_words_is_kept_whole(self):
@@ -99,13 +100,13 @@ class AutomaticRoadTests(unittest.TestCase):
             'summary': 'Maya Cohen asks which documentation you were referring to; she says the PAM and Review PDFs are all that is in use.'}))
         with mock.patch.object(ingest, '_spawn'):
             r = ingest.ingest_message(s, {'external_id': 'd', 'channel': 'email', 'from_email': 'dcohen@vendor.example',
-                                          'conversation_id': 'c-epr', 'subject': 'RE: Robin Gorelick Annual EPR- AUG 2026',
+                                          'conversation_id': 'c-epr', 'subject': 'RE: Erin Blake Annual EPR- AUG 2026',
                                           'body': MAIL, 'sent_at': '2026-09-14 09:02:00'}, llm=llm)
         task = s.get_task(r['task_id'])
         self.assertEqual(task['Kind'], 'reply')
         self.assertEqual(task['Title'], 'Answer Maya on the EPR documentation')
         self.assertIn('which documentation you were referring to', task['Summary'])
-        for gone in ('Penn Forest', 'confidential', 'From: Alex'):
+        for gone in ('Harbor Way', 'confidential', 'From: Alex'):
             self.assertNotIn(gone, task['Summary'], gone)
 
     def test_an_fyi_keeps_the_verdict_s_own_line_although_it_has_no_task(self):
@@ -166,12 +167,12 @@ class AutomaticRoadTests(unittest.TestCase):
 
 
 class ExtractTests(unittest.TestCase):
-    def test_without_a_brain_the_footer_and_the_quoted_thread_are_still_gone(self):
-        """The fallback must never be worse than the raw body it replaces."""
+    def test_without_a_brain_the_quoted_thread_is_still_gone(self):
+        """The fallback must never be worse than the raw body it replaces. The chain is a shape (a quote head) and
+        goes; the sign-off and footer stay, since no word list decides where the sender stopped (2026-10-11)."""
         out = triage.extract_ask({'Subject': 'Re: Hosting', 'BodyText': MAIL}, llm=None)
         self.assertIn('check back in on this', out['summary'])
-        for gone in ('Penn Forest', 'confidential', 'From: Alex', '540.776.7576', 'J.D. Ellis'):
-            self.assertNotIn(gone, out['summary'], gone)
+        self.assertNotIn('From: Alex', out['summary'])
         self.assertEqual(out['checklist'], [])
 
     def test_the_brain_supplies_the_summary_and_the_todos(self):
@@ -181,10 +182,9 @@ class ExtractTests(unittest.TestCase):
         out = triage.extract_ask({'Subject': 'Re: Hosting', 'BodyText': MAIL}, llm=llm)
         self.assertEqual(out['checklist'], ['Confirm the rollout date', 'Send HR a heads-up before the meeting'])
         self.assertIn('chasing the rollout', out['summary'])
-        # the model reads the CLEANED body - the footer is not worth paying tokens for, and the
-        # quoted thread is a different message's words
+        # the quoted thread is a different message's words; the rest of the sender's mail is the model's to read
         sent = llm.call_args[0][1]
-        self.assertNotIn('confidential', sent); self.assertNotIn('From: Alex', sent)
+        self.assertIn('rolling it out', sent); self.assertNotIn('From: Alex', sent)
 
     def test_a_fenced_answer_is_still_read(self):
         llm = mock.Mock(return_value='```json\n{"summary": "s", "checklist": ["a"]}\n```')
@@ -227,8 +227,7 @@ class PromoteTests(unittest.TestCase):
             tid = ingest.task_from_message(s, mid, 'owner')
         summary = s.get_task(tid)['Summary']
         self.assertIn('check back in on this', summary)
-        self.assertNotIn('Penn Forest', summary)          # the old code stored all of this
-        self.assertNotIn('From: Alex', summary)
+        self.assertNotIn('From: Alex', summary)           # the old code stored the whole chain
 
 
 class ContractTests(unittest.TestCase):
@@ -370,13 +369,13 @@ class BackfillTests(unittest.TestCase):
         r = next(x for x in ingest.backfill_asks(s, self._brain()) if x['task_id'] == tid)
         self.assertEqual(r['action'], 'skipped'); self.assertIn('no source message', r['why'])
 
-    def test_with_no_brain_it_still_strips_the_footer(self):
+    def test_with_no_brain_it_still_strips_the_chain(self):
         s = MemoryStore()
         tid = self._task(s, MAIL[:1000])
         ingest.backfill_asks(s, None, dry_run=False)
         summary = s.get_task(tid)['Summary']
         self.assertIn('check back in on this', summary)
-        self.assertNotIn('Penn Forest', summary); self.assertNotIn('From: Alex', summary)
+        self.assertNotIn('From: Alex', summary)
 
     def test_the_prefix_test_is_what_identifies_a_copy(self):
         self.assertTrue(ingest._is_raw_body(MAIL[:1000], MAIL))

@@ -528,6 +528,65 @@ def not_started_why(store, tid) -> str:
     return f'It was handed to {who} and nothing has started it.' + old
 
 
+# the worker's own events in the owner's words - one line each on the agent step's timeline
+_EVENT_SAYS = {'turn_end': 'Finished a turn', 'input_needed': 'Asked you something', 'approval_needed': 'Asked for your approval',
+               'answered': 'Got your answer', 'background': 'Kept working in the background', 'stalled': 'Stalled',
+               'finished': 'Said it was done', 'failed': 'Failed', 'stopped': 'Stopped'}
+
+
+def _said(text, n=700) -> str:
+    """The agent's last message, cut on a word; its own line breaks kept, since it is often a list."""
+    t = '\n'.join(x.rstrip() for x in str(text or '').strip().splitlines() if x.strip())
+    return t if len(t) <= n else t[:n].rsplit(' ', 1)[0] + '…'
+
+
+def agent_story(store, tid) -> dict | None:
+    """What the agent step says when nothing is live on it: WHY it never started, or WHAT it did before it went.
+
+    The step showed a Start button and nothing else, both on a pull request held because its author was new and on a
+    session a restart cut off mid-turn - the page could not tell "never started" from "did half and was killed" (the
+    owner, 2026-10-11: "it should say what the agent did so far and was interrupted or it never started"). Facts only:
+    not_started_why's sentence, and for work that went, the run's own worker events - no model. None when no agent
+    was ever meant to have the task. The caller hides it behind a live session."""
+    from . import terminal
+    t = store.get_task(tid) or {}
+    if not t or t.get('Status') in ('done', 'dropped'): return None
+    tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
+    who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
+    left, q, why = agent_left(store, tid), store.get_dispatch(tid), not_started_why(store, tid)
+    held = why.startswith('Triage did not start it')
+    if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held): return None
+    # the page leads a hold with "<agent> did not start:", so triage's own lead-in is not said twice
+    if not left: return {'kind': 'held' if held else 'queued' if q else 'idle', 'line': why.split(': ', 1)[1] if held else why}
+    evs = store.worker_events(tid) or []
+    sid = str(evs[-1]['Sid']) if evs else None
+    run = [e for e in evs if str(e['Sid']) == sid]
+    cut = next((e for e in reversed(run) if e['Kind'] == 'disconnected' and e.get('Source') in terminal.INTERRUPTING), None)
+    interrupted = terminal.INTERRUPTED in tags
+    # a restart that finds the session already dead writes no worker event - release_task's note on the task is the cut
+    if interrupted and not cut:
+        n = next((c for c in reversed(store.list_comments(tid) or []) if c.get('Actor') in terminal.INTERRUPTING), None)
+        if n: cut = {'Kind': 'disconnected', 'Source': n['Actor'], 'CreatedAt': n['CreatedAt'], 'Sid': sid}; run = [*run, cut]
+    how = 'restarted' if cut and cut.get('Source') == 'startup' else 'closed'
+    line = why
+    if interrupted and cut:
+        t0, t1 = _dt(run[0]['CreatedAt']), _dt(cut['CreatedAt'])
+        mins = int((t1 - t0).total_seconds() // 60) if t0 and t1 else None
+        into = f', {mins} minute{"" if mins == 1 else "s"} in,' if mins else ','
+        line = f'Taskuary {how} at {str(cut["CreatedAt"])[11:16]} while {who} had this{into} so the session went with it. Nothing restarts by itself.'
+    steps = []
+    for e in run:
+        k, src = e['Kind'], e.get('Source')
+        w = ('Started' if not steps else None) if k == 'working' else \
+            (f'Cut off - Taskuary {how}' if src in terminal.INTERRUPTING else 'Session ended') if k == 'disconnected' else _EVENT_SAYS.get(k)
+        if w and (not steps or steps[-1]['text'] != w):
+            steps.append({'at': e['CreatedAt'], 'text': w, 'cut': k == 'disconnected' and src in terminal.INTERRUPTING})
+    if len(steps) > 8: steps = steps[:1] + steps[-7:]
+    said = next((e for e in reversed(run) if e['Kind'] == 'turn_end' and str(e.get('Text') or '').strip()), None)
+    return {'kind': 'interrupted' if interrupted else 'left', 'line': line, 'steps': steps,
+            'said': _said(said['Text']) if said else '', 'said_at': said['CreatedAt'] if said else None}
+
+
 def left_by_facts(tags, runs) -> str:
     """'saved' | 'stopped' | '' from the task's tags and its runs - the rule the rail (agent_left) and All
     (processing_all.row_lane) now share, so one task cannot read "waiting to start" in one and "agent stopped" in the

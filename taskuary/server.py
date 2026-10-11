@@ -1155,9 +1155,19 @@ def task_detail(task_id: int):
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
             # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)
             'ranOn': _ran_on(task_id, tr),
+            # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
+            'agentStory': _agent_story(task_id),
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}
+
+
+def _agent_story(task_id: int):
+    """funnel.agent_story, never in the way of opening the task: a broken story is a missing line, not a 500."""
+    from . import funnel
+    try: return funnel.agent_story(store, task_id)
+    except Exception as e:
+        logger.debug(f'task {task_id}: agent story skipped - {e}'); return None
 
 
 def _ran_on(task_id: int, tr=None):

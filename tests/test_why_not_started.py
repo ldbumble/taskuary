@@ -100,5 +100,53 @@ class FyiBatchSettingTests(unittest.TestCase):
             self.assertEqual(keys[0], 'msg:1', 'the one it led with stays first')
 
 
+class AgentStoryTests(unittest.TestCase):
+    """The agent step tells "never started" from "did half and was cut off" (the owner, 2026-10-11)."""
+    def held_pr(self, s):
+        t = handed(s, who='agent:coder')
+        mid = s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'pat@vendor.example', 'Subject': 'Fix the docs',
+                             'BodyText': 'one line', 'SentAt': ago(0), 'Status': 'routed'})
+        s.add_route(mid, t, 'create', 0.0, 'triage: task - review it · not auto-worked: first message from '
+                    'pat@vendor.example - not one of your domains', [], 'router')
+        return t
+
+    def test_a_hold_says_why_once_without_triages_lead_in(self):
+        s = MemoryStore(); st = funnel.agent_story(s, self.held_pr(s))
+        self.assertEqual(st['kind'], 'held')
+        self.assertTrue(st['line'].startswith('first message from pat@vendor.example'), st['line'])
+        self.assertNotIn('Triage did not start it', st['line'])
+
+    def test_a_restart_mid_run_says_when_how_far_in_and_what_it_last_said(self):
+        from taskuary import workerstate as ws
+        s = MemoryStore(); t = handed(s, who='agent:coder', Status='in_progress')
+        ws.record(s, t, 's1', 'working', source='hook')
+        ws.record(s, t, 's1', 'turn_end', text='Read the diff.\n- one line changed', source='hook')
+        terminal.release_task(s, t, 'startup')
+        st = funnel.agent_story(s, t)
+        self.assertEqual(st['kind'], 'interrupted')
+        self.assertIn('Taskuary restarted at', st['line'])
+        self.assertIn('Nothing restarts by itself', st['line'])
+        self.assertEqual(st['said'], 'Read the diff.\n- one line changed', 'its own line breaks are kept')
+        self.assertEqual([x['text'] for x in st['steps']], ['Started', 'Finished a turn', 'Cut off - Taskuary restarted'])
+        self.assertTrue(st['steps'][-1]['cut'])
+
+    def test_only_the_last_session_is_told(self):
+        from taskuary import workerstate as ws
+        s = MemoryStore(); t = handed(s, who='agent:coder', Status='in_progress')
+        ws.record(s, t, 'old', 'turn_end', text='the first try', source='hook')
+        ws.record(s, t, 'old', 'stopped', source='hook')
+        ws.record(s, t, 'new', 'working', source='hook')
+        ws.record(s, t, 'new', 'turn_end', text='the second try', source='hook')
+        terminal.release_task(s, t, 'shutdown')
+        st = funnel.agent_story(s, t)
+        self.assertEqual(st['said'], 'the second try')
+        self.assertNotIn('Stopped', [x['text'] for x in st['steps']])
+
+    def test_nothing_to_tell_when_no_agent_was_meant_to_have_it_or_it_is_finished(self):
+        s = MemoryStore()
+        self.assertIsNone(funnel.agent_story(s, s.create_task({'Title': 'Mine', 'Status': 'open', 'Assignee': 'owner'}, 'owner')))
+        self.assertIsNone(funnel.agent_story(s, handed(s, Status='done')))
+
+
 if __name__ == '__main__':
     unittest.main()

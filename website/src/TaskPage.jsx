@@ -70,6 +70,8 @@ import { completionFact, completionLine, waitingEmails,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
+import AgentStory, { StoryChip } from "./AgentStory.jsx";
+import { STORY_CHIP, startLabel, storyShown } from "./agentStory.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 
@@ -724,6 +726,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     conversation: generalStarted, finished: rowState === "agentdone", state: rowState,
     handed: !!assignedAgent(t?.Assignee) || rowState === "queued" || !!detail?.transcript || !!report || generalStarted,
   });
+  // why nothing is running on the agent step - never started, or what it did before it went (funnel.agent_story)
+  const story = storyShown(detail?.agentStory, { alive: term?.alive, liveRun, queued: rowState === "queued",
+    closed: ["done", "dropped"].includes(t?.Status) }) ? detail.agentStory : null;
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping, wrapped });
   const replyState = replyPhase(detail?.reviews || []);
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
@@ -1407,7 +1412,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
-                    chip={agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null} tone={PALETTE.sage} {...stageProps("agent")}
+                    chip={story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
+                      : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null} tone={PALETTE.sage} {...stageProps("agent")}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
@@ -1427,11 +1433,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
                               title="Opens the agent step so you can choose a harness, a model and a prompt."
                               onClick={() => setOpenStage("agent")}>
-                              {report || detail?.transcript ? "Run another agent" : "Start an agent"}</Button>
+                              {report || detail?.transcript ? "Run another agent" : startLabel(story, agentName(t), false) || "Start an agent"}</Button>
                           )}
                         </Box>
                       : null} />
                   </Box>
+                  {/* the record below already carries the last message when the step is open */}
+                  {story && <AgentStory story={story} who={agentName(t)} showSaid={stage !== "agent"} />}
                   {stage === "agent" && <>
                   {term?.alive && !inRow && (
                     // on a phone the two buttons take their own row: sharing one with the heading, they

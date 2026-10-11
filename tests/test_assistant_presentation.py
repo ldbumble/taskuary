@@ -190,8 +190,10 @@ class CounselIntroductionTests(unittest.TestCase):
         with quiet(), mock.patch.object(concierge, 'brain', return_value=None): no = concierge.surface(s)
         self.assertIn('Craig wrote on email', no['say'])                                            # no AI: the facts
         s, out = self._asked()
-        with quiet(): broke = concierge.surface(s, llm=lambda *a, **k: "I'm in Claude Code, so I don't have access to the queue.")
-        self.assertIn('Craig wrote on email', broke['say'])                                         # out of character: the facts
+        # staying in character is the prompt's job (concierge.IN_PART), never a word list that throws a reply away (2026-10-11)
+        seen = {}
+        with quiet(): concierge.surface(s, llm=lambda system, user, **k: seen.update(system=system) or 'Craig wants the export fixed.')
+        self.assertIn(concierge.IN_PART, seen['system'])
         s, out = self._asked()
         with quiet(): off = concierge.surface(s, llm=lambda *a, **k: 'Robin asked to deploy gpt-4.1 (TQ-0312).')
         self.assertIn('Craig wrote on email', off['say'])                                           # another subject: the facts

@@ -79,7 +79,9 @@ class KeyTests(unittest.TestCase):
         line = assistant.parse(s, _say('idea:again', text=f'TQ-{tid:04d} is failing the same way again.'), [])[0]
         self.assertNotIn('tid', line['action'])
         live = s.create_task({'Title': 'Open one', 'Kind': 'task'}, 't')
-        self.assertEqual(assistant.parse(s, _say('idea:live', text=f'TQ-{live:04d} has not moved.'), [])[0]['action']['tid'], live)
+        # the task is the model's `about`, never a TQ-ref read out of the line's words (2026-10-11)
+        self.assertNotIn('tid', assistant.parse(s, _say('idea:words', text=f'TQ-{live:04d} has not moved.'), [])[0]['action'])
+        self.assertEqual(assistant.parse(s, _say('idea:live', text='The open one has not moved.', about=f'TQ-{live:04d}'), [])[0]['action']['tid'], live)
 
 
 class RunTests(unittest.TestCase):

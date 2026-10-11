@@ -278,7 +278,7 @@ Mark done - the task is finished (note: optional, what came of it - kept on the 
 
 Remind me: put an open task away until a day and bring it back then. "Remind me about <a task that exists>" - named by ref, sender or subject - is this, never a new to-do.
 
-- `until` - a date (2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", "friday 2pm"), or "none" to bring it back now
+- `until` - a date (2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", "friday 2pm"), "after_meetings" when they mean once the day's meetings or calls are over (the calendar picks the time), or "none" to bring it back now
 - `ref` (optional) - the task (TQ-0123) when it is not the one on the table
 
 <p class="runs">Runs at once, with an undo on the receipt.</p>

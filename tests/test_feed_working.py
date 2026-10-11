@@ -36,7 +36,9 @@ class DigestBriefTests(unittest.TestCase):
         old = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
         mid = s.add_message({'Channel': 'email', 'Subject': 'RE: Stampli Approvers', 'FromName': 'Sam', 'FromEmail': 'teammate@northwind.example',
                              'BodyText': 'Can you send me the GL expense list?', 'Status': 'filed', 'ConversationId': 'cv1', 'SentAt': old})
-        s.add_route(mid, None, 'file', None, 'triage: fyi - informational', [], 'triage')
+        # triage read it as asking (reply_only) and nothing was opened - the brief names it; whether it asks is triage's
+        # verdict, never a word list (2026-10-11)
+        s.add_route(mid, None, 'file', None, 'triage: reply only - wants the list', [], 'triage', verdict={'intent': 'reply_only'})
         s.create_task({'Title': 'fix it', 'Kind': 'coding', 'Status': 'open'}, 't')
         text = digest.gather(s, 3)
         for head in ('THEIR ASKS YOU HAVE NOT ANSWERED', 'MY OPEN LOOPS', 'WHAT PEOPLE SAID', 'OPEN WORK',
@@ -45,7 +47,7 @@ class DigestBriefTests(unittest.TestCase):
         slipped = text.split('THEIR ASKS YOU HAVE NOT ANSWERED', 1)[1].split('MY OPEN LOOPS')[0]
         self.assertIn('Sam', slipped); self.assertIn('GL expense list', slipped); self.assertIn('no task, no draft', slipped)
         self.assertIn('Can you send me the GL expense list?', text.split('WHAT PEOPLE SAID', 1)[1].split('OUT OF OFFICE')[0])
-        self.assertIn('1 info (a person told you something)', text)
+        self.assertIn('1 inbound items - 1 filed', text)
         self.assertIn('open tasks: 1 coding', text)
         self.assertNotIn('THE WINDOW BY TAG', text)          # the counts collapsed to one line
 

@@ -312,17 +312,21 @@ def _when_down(since: str, now: datetime) -> str:
 def missed(store, now: datetime = None) -> dict:
     """The three checks the morning brief already runs, for the chat: who asked and heard nothing back, who has not answered
     the owner, what could not be seen - plus whether anything open is marked urgent."""
-    from . import assistant
+    from . import assistant, sentjudge
     now = now or datetime.now()
-    try: asked = assistant.unanswered(store, away_days(store, now))     # two days back lost Friday's asks on a Monday (B5)
+    try: asked, unjudged = assistant.their_asks(store, away_days(store, now))     # two days back lost Friday's asks on a Monday (B5)
     except Exception as e:
-        logger.warning(f'missed: unanswered failed - {e}'); asked = []
+        logger.warning(f'missed: unanswered failed - {e}'); asked, unjudged = [], []
     try: waiting = assistant.followups(store, 24, ('followup',))
     except Exception as e:
         logger.warning(f'missed: followups failed - {e}'); waiting = []
+    # what the model could not read is said, never counted as "nothing": no AI, or sent words not judged yet (2026-10-11)
+    try: untracked = sentjudge.blind(store)
+    except Exception as e:
+        logger.warning(f'missed: sent-words check failed - {e}'); untracked = ''
     urgent = [t for t in store.list_tasks(active_only=True) if t.get('Priority') == 'urgent' and t.get('Status') in ('open', 'in_progress', 'waiting')
               and DOCK_TAG not in str(t.get('Tags') or '')]
-    return {'asked': asked, 'waiting': waiting, 'blind': couldnt_see(store, now), 'urgent': urgent}
+    return {'asked': asked, 'unjudged': unjudged, 'waiting': waiting, 'untracked': untracked, 'blind': couldnt_see(store, now), 'urgent': urgent}
 
 def missed_says(d: dict, now: datetime = None) -> str:
     """The answer, in the calm voice: "Nothing urgent. Two people asked you something: ... Payworth still hasn't answered
@@ -336,10 +340,18 @@ def missed_says(d: dict, now: datetime = None) -> str:
         out.append(f"{_cap(num(people))} {'person is' if people == 1 else 'people are'} still waiting on an answer from you: "
                    + '; '.join(f"{first_name(a.get('who'))} - \"{a.get('gist') or ''}\" ({a.get('ago')} ago)" for a in asked[:4])
                    + (f"; and {len(asked) - 4} more" if len(asked) > 4 else '') + '.')
+    unjudged, untracked = d.get('unjudged') or [], d.get('untracked') or ''
+    if unjudged:
+        names = list(dict.fromkeys(first_name(u.get('who')) for u in unjudged))
+        out.append(f"I couldn't judge {num(len(unjudged))} message{'s' if len(unjudged) != 1 else ''} - from {', '.join(names[:3])}"
+                   + (f" and {len(names) - 3} more" if len(names) > 3 else '') + f" - so I can't say whether {'they ask' if len(unjudged) != 1 else 'it asks'} you anything.")
     for w in waiting[:3]:
         out.append(f"{first_name(w.get('who'))} still hasn't answered you about \"{w.get('subject') or ''}\" ({w.get('days')} day{'s' if w.get('days') != 1 else ''}).")
     if len(waiting) > 3: out.append(f"{_cap(num(len(waiting) - 3))} more {'is' if len(waiting) == 4 else 'are'} quiet on you too.")
-    if not asked and not waiting: out.append("Nobody is waiting on you, and you aren't waiting on anybody.")
+    # "nobody" only where it was checked: a message triage never read, or sent words no model read, is not a nobody (2026-10-11)
+    if not asked and not unjudged and not waiting:
+        out.append('Nobody is waiting on you.' if untracked else "Nobody is waiting on you, and you aren't waiting on anybody.")
+    if untracked: out.append(untracked)
     if blind:
         names = [n for n, _ in blind]
         said = ' or '.join(names) if len(names) < 3 else ', '.join(names[:-1]) + f' or {names[-1]}'

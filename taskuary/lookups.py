@@ -290,7 +290,8 @@ def missed_check(store, p: dict) -> str:
     """"Did I miss anything?" - the morning brief's unanswered and waiting-on-them checks, and what could not be seen."""
     from . import welcome
     d = welcome.missed(store)
-    facts = ([f"ASKED, NO ANSWER FROM YOU: {a['facts']}" for a in d['asked']] + [f"WAITING ON THEM: {w['facts']}" for w in d['waiting']]
+    facts = ([f"ASKED, NO ANSWER FROM YOU: {a['facts']}" for a in d['asked']] + [f"NOT JUDGED: {u['facts']}" for u in d.get('unjudged') or []]
+             + [f"WAITING ON THEM: {w['facts']}" for w in d['waiting']] + ([f"NOT TRACKED: {d['untracked']}"] if d.get('untracked') else [])
              + [f"COULD NOT CHECK: {n} (not answering since {_day(at) or '?'})" for n, at in d['blind']]
              + [f"URGENT: {task_ref(t['TaskId'])} {_cut(t.get('Title'), 100)}" for t in d['urgent']])
     return NL.join(facts + ['', 'SAY IT LIKE THIS (keep every fact, in your own words if you like):', welcome.missed_says(d)])

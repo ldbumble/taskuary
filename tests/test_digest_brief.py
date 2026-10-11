@@ -19,10 +19,14 @@ def _store():
     return s
 
 
-def _mail(s, frm, subject, body, days=1, conv=None, tid=None):
-    return s.add_message({'TaskId': tid, 'ExternalId': f'x:{frm}:{subject}:{days}', 'ConversationId': conv, 'Channel': 'email',
-                          'SourceName': ME, 'Subject': subject, 'FromName': frm.split('@')[0].title(), 'FromEmail': frm,
-                          'SentAt': _ago(days), 'BodyText': body, 'Status': 'filed'})
+def _mail(s, frm, subject, body, days=1, conv=None, tid=None, intent='reply_only'):
+    """An arrival with TRIAGE's stored verdict on it (route.VerdictJson): whether it asks is triage's call, read from
+    there - never from its words (2026-10-11). intent=None is a message triage never judged."""
+    mid = s.add_message({'TaskId': tid, 'ExternalId': f'x:{frm}:{subject}:{days}', 'ConversationId': conv, 'Channel': 'email',
+                         'SourceName': ME, 'Subject': subject, 'FromName': frm.split('@')[0].title(), 'FromEmail': frm,
+                         'SentAt': _ago(days), 'BodyText': body, 'Status': 'filed' if intent else 'error'})
+    if intent: s.add_route(mid, tid, 'file', None, f'triage: {intent}', [], 'triage', verdict={'intent': intent, 'why': 'test'})
+    return mid
 
 
 def _mine(s, subject, body, days, conv):
@@ -35,7 +39,7 @@ class UnansweredTests(unittest.TestCase):
     def test_their_open_ask_slips_and_an_answered_or_askless_one_does_not(self):
         s = _store()
         _mail(s, DANA, 'Budget', 'Could you send the Q3 budget?', days=1, conv='u1')
-        _mail(s, 'lee@ours.com', 'FYI', 'All handled, nothing needed from you.', days=1, conv='u2')   # no ask in it
+        _mail(s, 'lee@ours.com', 'FYI', 'All handled, nothing needed from you.', days=1, conv='u2', intent='fyi')   # triage: no ask in it
         _mail(s, 'sam@ours.com', 'Numbers', 'Can you check the numbers?', days=2, conv='u3')
         _mine(s, 'Re: Numbers', 'Done - see attached.', days=1, conv='u3')                            # answered
         got = assistant.unanswered(s, days=3)
@@ -61,6 +65,24 @@ class UnansweredTests(unittest.TestCase):
         self.assertEqual(assistant.unanswered(s, days=3), [])
         _mail(s, DANA, 'Budget', 'Thanks - could you also send Q4?', days=0.5, conv='u1', tid=tid)
         self.assertEqual([c['key'] for c in assistant.unanswered(s, days=3)], ['asked:u1'])
+
+    def test_an_imperative_ask_counts_when_triage_said_task_or_reply_only(self):
+        # "Please approve the invoice." has no question mark and no "can you": the regex this replaced missed both (2026-10-11)
+        s = _store()
+        _mail(s, DANA, 'Invoice', 'Please approve the invoice.', days=1, conv='u1', intent='task')
+        _mail(s, 'erin@vendor.example', 'Sign-off', 'Need your sign-off today', days=1, conv='u2', intent='reply_only')
+        _mail(s, 'gail@vendor.example', 'Lunch', 'Can you believe this weather?', days=1, conv='u3', intent='fyi')   # triage: chit-chat
+        self.assertEqual(sorted(c['key'] for c in assistant.unanswered(s, days=3)), ['asked:u1', 'asked:u2'])
+
+    def test_a_message_triage_never_judged_is_not_judged_never_not_an_ask(self):
+        s = _store()
+        _mail(s, DANA, 'Invoice', 'Please approve the invoice.', days=1, conv='u1', intent=None)     # triage failed on it
+        asks, blank = assistant.their_asks(s, days=3)
+        self.assertEqual(asks, [])
+        self.assertEqual([c['key'] for c in blank], ['unjudged:u1'])
+        self.assertIn('NOT KNOWN', blank[0]['facts']); self.assertIn('triage failed', blank[0]['facts'])
+        text = digest.gather(s, 1)
+        self.assertIn('NOT JUDGED', text); self.assertIn('Please approve the invoice.', text[text.index('NOT JUDGED'):])
 
     def test_a_note_the_owner_handed_an_agent_is_not_their_ask(self):
         s = _store()

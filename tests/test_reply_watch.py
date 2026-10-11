@@ -9,6 +9,7 @@ import pytest
 
 from taskuary import asks, general, outbound, remote_assistant, verdicts
 from taskuary.store import MemoryStore
+from tests.sentjudge_fixture import brain
 
 
 @pytest.fixture
@@ -34,9 +35,18 @@ def asked(s, draft='Which day suits you for the walkthrough?'):
     return tid, rid
 
 
-def send(s, rid):
-    with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['erin@vendor.example'], 'cc': []}), \
-         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+# whether a sent reply ASKED something is the model's reading (sentjudge.judge_text), never a word list (2026-10-11)
+SAID = {'Which day suits you': {'asks_them': True}, 'Thanks, all done': {'asks_them': False}}
+
+
+def sending(): return (mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['erin@vendor.example'], 'cc': []}),
+                       mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'))
+
+
+def send(s, rid, said=SAID):
+    """Approve and send - the watch is judged off the button's thread; here that thread runs inline, on a stub model."""
+    a, b, c = sending()
+    with a, b, c, mock.patch.object(asks, '_background', side_effect=lambda f: f()), mock.patch('taskuary.llm.build_llm', return_value=brain(said)):
         return verdicts.decide(s, s.get_review(rid), 'approve')
 
 
@@ -51,10 +61,31 @@ def test_a_reply_that_asks_closes_the_task_and_starts_the_watch(s):
     tid, rid = asked(s)
     out = send(s, rid)
     t = s.get_task(tid)
-    assert out['ok'] and t['Status'] == 'done'
-    assert out['watching'] == "Sent. I'll watch for Erin's answer."
+    assert out['ok'] and t['Status'] == 'done' and 'watching' not in out       # the button never waited on the model
     assert t['AskedWatch'] == 'reply' and t['AskedWatchAt'] and t['AskedVia'] == 'desktop'
-    assert s.list_comments(tid)[-1]['Body'] == out['watching']
+    assert s.list_comments(tid)[-1]['Body'] == "Sent. I'll watch for Erin's answer."
+
+
+def test_an_imperative_ask_starts_the_watch_when_the_model_reads_it_as_one(s):
+    tid, rid = asked(s, draft='Send me the signed form before the audit.')      # no question mark, no "can you"
+    send(s, rid, {'signed form': {'asks_them': True}})
+    assert s.get_task(tid)['AskedWatch'] == 'reply'
+
+
+def test_the_watch_is_judged_off_the_buttons_thread(s):
+    tid, rid = asked(s)
+    a, b, c = sending()
+    with a, b, c, mock.patch.object(asks, '_background') as bg, mock.patch('taskuary.sentjudge.judge_text') as judge:
+        out = verdicts.decide(s, s.get_review(rid), 'approve')
+    assert out['ok'] and bg.called and not judge.called and not s.get_task(tid)['AskedWatch']
+
+
+def test_no_model_starts_no_watch_and_guesses_nothing(s):
+    tid, rid = asked(s)
+    a, b, c = sending()
+    with a, b, c, mock.patch.object(asks, '_background', side_effect=lambda f: f()), mock.patch('taskuary.llm.build_llm', return_value=None):
+        assert verdicts.decide(s, s.get_review(rid), 'approve')['ok']
+    assert not s.get_task(tid)['AskedWatch']
 
 
 def test_a_reply_that_asks_nothing_starts_no_watch(s):

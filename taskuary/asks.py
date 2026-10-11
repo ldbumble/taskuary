@@ -234,17 +234,33 @@ def _reply(store, t: dict) -> str | None:
 NUDGE_DAYS = 2                     # assistant.CHASE_STEPS' first step: silence worth a word
 
 
-def watch_reply(store, rv: dict, body: str, now: datetime = None) -> str | None:
-    """After a reply really left: when it ASKED them something (assistant._ASKS, the Advisor's own test for a follow-up
-    owed), watch for their answer - on the task the send just closed too. The line to say, or None."""
-    from .assistant import _ASKS
-    from .triage import own_words
+def _background(fn):
+    threading.Thread(target=fn, name='taskuary-reply-watch', daemon=True).start()
+
+
+def watch_reply(store, rv: dict, body: str, now: datetime = None, llm=None) -> None:
+    """After a reply really left: the model reads it (sentjudge.judge_text) and, when it ASKED them something, the watch
+    for their answer starts - on the task the send just closed too. In the BACKGROUND: a regex (assistant._ASKS) decided
+    this on the button's own thread, and a model call there would make Approve wait on it (the owner, 2026-10-11:
+    "Everything should be ai"; buttons never wait on AI). The task's comment says the watch began."""
     tid, msg = rv.get('TaskId'), store.get_message(rv['MessageId']) if rv.get('MessageId') else None
-    if not tid or not msg or msg.get('Channel') != 'email' or not _ASKS.search(own_words(str(body or ''))): return None
+    if not tid or not msg or msg.get('Channel') != 'email' or not str(body or '').strip(): return None
+    via = door()                                # the door it was sent from - read here, on the asking thread
+    def go():
+        from . import sentjudge
+        try:
+            v = sentjudge.judge_text(store, body, msg.get('Subject') or '', _who(msg, first=False), llm)
+            if v and v['asks_them']: _start_watch(store, tid, msg, now, via)
+        except Exception as e: logger.warning(f'asks: the reply watch on {tid} was not judged - {e}')
+    _background(go)
+    return None
+
+
+def _start_watch(store, tid: int, msg: dict, now: datetime = None, via: str = None) -> str:
     t = store.get_task(tid) or {}
     seen, at = (_answer(store, tid) or msg).get('MessageId'), (now or datetime.now()).isoformat(' ', 'seconds')
     store._exec('UPDATE task SET AskedVia=COALESCE(AskedVia,?), AskedWatch=?, AskedSeenMid=?, AskedWatchAt=?, AskedNudgedAt=NULL '
-                'WHERE TaskId=?', (door(), 'any' if t.get('AskedWatch') == 'any' else 'reply', seen, at, tid))
+                'WHERE TaskId=?', (via or door(), 'any' if t.get('AskedWatch') == 'any' else 'reply', seen, at, tid))
     line = f"Sent. I'll watch for {_who(msg)}'s answer."
     store.add_comment(tid, 'assistant', 'agent', line)
     return line

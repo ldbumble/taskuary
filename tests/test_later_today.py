@@ -115,5 +115,6 @@ def test_settle_carries_the_sentence(s):
 def test_the_receipt_says_when_it_comes_back_and_who_is_watched():
     from taskuary import concierge
     assert concierge._outcome_line('item.settle', {'verb': 'later'}, {'says': "I'll bring it back at 2:35."}) == " I'll bring it back at 2:35."
-    assert concierge._outcome_line('review.approve', {}, {'watching': "Sent. I'll watch for Erin's answer."}).endswith("Erin's answer.")
+    # a sent reply's watch is the model's call, made after the send (asks.watch_reply) - the receipt claims none
+    assert concierge._outcome_line('review.approve', {}, {'watching': "Sent. I'll watch for Erin's answer."}) == ''
     assert concierge._outcome_line('item.settle', {'verb': 'done'}, {'closed': 7, 'says': 'x'}) != ' x'

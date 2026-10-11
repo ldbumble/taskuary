@@ -57,6 +57,13 @@ def store():
           'FromName': 'Sam Okoro', 'FromEmail': 'sam@client.example', 'SentAt': _ago(days=1, hours=2),
           'BodyText': 'I am out of the office until Monday with limited access to email.'})
 
+    # what the sent-words judge (sentjudge.py) said of the owner's two lines - the model's reading, kept per message
+    # (2026-10-11: these were the _ASKS/_PROMISE regexes; the golden was regenerated for the promise line's new words)
+    for r in s._rows("SELECT MessageId, ConversationId, ExternalId, SentAt FROM message WHERE ExternalId IN ('m3','m5')"):
+        due = (datetime.fromisoformat(r['SentAt']) + timedelta(days=1)).strftime('%Y-%m-%d')
+        s.put_sent_verdict(r['MessageId'], r['ConversationId'], r['ExternalId'] == 'm3', r['ExternalId'] == 'm5',
+                           'send the answers' if r['ExternalId'] == 'm5' else '', due if r['ExternalId'] == 'm5' else None, 'fixture')
+
     # OPEN WORK, DONE THIS WEEK and WORK GONE QUIET
     t1 = s.create_task({'Title': 'Reconcile the Q3 ledger', 'Kind': 'coding', 'Status': 'open'}, 'owner')
     t2 = s.create_task({'Title': 'Draft the audit answers', 'Kind': 'writing', 'Status': 'in_progress'}, 'owner')

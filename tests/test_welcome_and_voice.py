@@ -31,6 +31,16 @@ def mail(s, who, email, subject, sent, body='Hello', conv=None, tid=None, direct
                           'Subject': subject, 'FromName': who, 'FromEmail': email, 'SentAt': sent, 'BodyText': body,
                           'Status': status, 'Direction': direction})
 
+def asks(s, mid, intent='reply_only'):
+    """Triage's stored verdict on an arrival - whether it asks is triage's call (route.VerdictJson), never its words."""
+    s.add_route(mid, None, 'file', None, f'triage: {intent}', [], 'triage', verdict={'intent': intent, 'why': 'test'}); return mid
+
+def judged(s, mid, conv, **said):
+    """The sent-words judge's verdict on one of the owner's messages (sentjudge.py), as kept after a run."""
+    s.put_sent_verdict(mid, conv, said.get('asks'), said.get('promise'), said.get('what', ''), said.get('due'), 'test'); return mid
+
+def brain_ready(on=True): return mock.patch('taskuary.sentjudge.ready', return_value=on)
+
 ITEMS = [{'key': 'msg:1', 'kind': 'asked', 'lane': 'asked', 'who': 'Erin Blake', 'title': 'Staffing sheet needed by noon'},
          {'key': 'msg:2', 'kind': 'review', 'lane': 'approve', 'who': 'Gail Moreno', 'title': 'Reply on the lease renewal'},
          {'key': 'msg:3', 'kind': 'todo', 'lane': 'yours', 'who': 'Paula Vance', 'title': 'Sign the vendor form'},
@@ -81,11 +91,18 @@ class VoiceTests(unittest.TestCase):
     def test_the_end_of_the_walk_adds_a_promise_only_when_one_is_due_today(self):
         s, now = store(), datetime.now().replace(hour=9, minute=0)
         mail(s, 'Erin Blake', 'erin@northwind.example', 'Staffing sheet', ago(20, now=now), 'Can you send the staffing sheet?', conv='c1')
-        mail(s, 'Alex Doyle', 'alex@northwind.example', 'RE: Staffing sheet', stamp(now.replace(hour=8)),
-             "I'll send the staffing sheet today.", conv='c1', direction='out', status='sent')
+        mid = mail(s, 'Alex Doyle', 'alex@northwind.example', 'RE: Staffing sheet', stamp(now.replace(hour=8)),
+                   "I'll send the staffing sheet today.", conv='c1', direction='out', status='sent')
         with mock.patch.object(welcome, 'datetime', mock.Mock(now=lambda: now)):
+            self.assertEqual(welcome.promise_today(s, now), '')                 # not read yet: no guess in its place
+            judged(s, mid, 'c1', promise=True, what='send the staffing sheet', due=now.strftime('%Y-%m-%d'))   # the model's day
             line = welcome.promise_today(s, now)
-        self.assertEqual(line, "You told Erin you'd send the staffing sheet today.")
+            self.assertEqual(line, "You told Erin you'd send the staffing sheet today.")
+            # their thanks does not deliver it - only a later word of the owner's the judge reads as delivering does
+            mail(s, 'Erin Blake', 'erin@northwind.example', 'RE: Staffing sheet', stamp(now.replace(hour=8, minute=30)), 'Great, thanks!', conv='c1')
+            self.assertEqual(welcome.promise_today(s, now), line)
+            s.put_sent_verdict(mid, 'c1', False, True, 'send the staffing sheet', now.strftime('%Y-%m-%d'), 'test', delivered_by=mid + 1)
+            self.assertEqual(welcome.promise_today(s, now), '')
 
 
 class GoodbyeTests(unittest.TestCase):
@@ -240,15 +257,16 @@ class MissedTests(unittest.TestCase):
     def test_did_i_miss_anything_is_a_look_up_with_the_answer_written_out(self):
         self.assertEqual(toolcatalog.valid('missed.check', {}), ''); self.assertIn('missed.check', lookups.READ)
         s = store()
-        mail(s, 'Erin Blake', 'erin@northwind.example', 'Staffing sheet', ago(5), 'Could you send the staffing sheet?', conv='e1')
+        asks(s, mail(s, 'Erin Blake', 'erin@northwind.example', 'Staffing sheet', ago(5), 'Could you send the staffing sheet?', conv='e1'))
         mail(s, 'Payworth Billing', 'billing@payworth.example', 'Invoice 114', ago(days=4), 'Invoice attached.', conv='p1')
-        mail(s, 'Alex Doyle', 'alex@northwind.example', 'RE: Invoice 114', ago(days=3), 'Can you confirm the remit address?',
-             conv='p1', direction='out', status='sent')
+        judged(s, mail(s, 'Alex Doyle', 'alex@northwind.example', 'RE: Invoice 114', ago(days=3), 'Can you confirm the remit address?',
+                       conv='p1', direction='out', status='sent'), 'p1', asks=True)
         cid = s.save_connector({'Type': 'teams', 'Name': 'Teams', 'Active': 1}, 't')
         s._exec('UPDATE connector SET LastError=?, LastErrorAt=? WHERE ConnectorId=?', ('signed out', ago(1), cid))
-        said = lookups.read(s, 'missed.check', {})
+        with brain_ready():
+            said = lookups.read(s, 'missed.check', {})
+            answer = welcome.missed_says(welcome.missed(s))
         self.assertIn('SAY IT LIKE THIS', said)
-        answer = welcome.missed_says(welcome.missed(s))
         self.assertTrue(answer.startswith('Nothing urgent.'), answer)
         self.assertIn('One person is still waiting on an answer from you: Erin', answer)
         self.assertIn('Payworth still hasn\'t answered you about "Invoice 114"', answer)
@@ -257,8 +275,24 @@ class MissedTests(unittest.TestCase):
         self.assertEqual(banned(answer), [])
 
     def test_nothing_missed_says_so(self):
-        self.assertEqual(welcome.missed_says(welcome.missed(store())),
-                         "Nothing urgent. Nobody is waiting on you, and you aren't waiting on anybody.")
+        with brain_ready():
+            self.assertEqual(welcome.missed_says(welcome.missed(store())),
+                             "Nothing urgent. Nobody is waiting on you, and you aren't waiting on anybody.")
+
+    def test_with_nothing_to_read_with_it_says_so_instead_of_nobody(self):
+        # no AI: promises and asks of the owner's cannot be read, so "you aren't waiting on anybody" would be a guess (2026-10-11)
+        with brain_ready(False): answer = welcome.missed_says(welcome.missed(store()))
+        self.assertEqual(answer, "Nothing urgent. Nobody is waiting on you. Nothing reads your sent mail for me yet, so I can't keep "
+                                 "track of what you promised or asked people for.")
+        self.assertEqual(banned(answer), [])
+
+    def test_a_message_triage_never_judged_is_said_never_counted_as_nobody(self):
+        s = store()
+        mail(s, 'Erin Blake', 'erin@northwind.example', 'Invoice', ago(5), 'Please approve the invoice.', conv='e1', status='error')
+        with brain_ready(): answer = welcome.missed_says(welcome.missed(s))
+        self.assertNotIn('Nobody is waiting on you', answer)
+        self.assertIn("I couldn't judge one message - from Erin - so I can't say whether it asks you anything.", answer)
+        self.assertEqual(banned(answer), [])
 
 
 class RepeatsTests(unittest.TestCase):
@@ -359,7 +393,7 @@ class AwayWindowTests(unittest.TestCase):
     def test_monday_did_i_miss_anything_reaches_back_to_friday(self):
         s = store(); now = datetime.now()
         s.set_setting(welcome.SEEN_KEY, ago(70, now=now), 't')                       # gone since Friday afternoon
-        mail(s, 'Erin Blake', 'erin@northwind.example', 'Staffing sheet', ago(66, now=now), 'Could you send the staffing sheet?', conv='e1')
+        asks(s, mail(s, 'Erin Blake', 'erin@northwind.example', 'Staffing sheet', ago(66, now=now), 'Could you send the staffing sheet?', conv='e1'))
         answer = welcome.missed_says(welcome.missed(s, now))
         self.assertIn('One person is still waiting on an answer from you: Erin', answer)
 

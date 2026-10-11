@@ -54,12 +54,6 @@ WATCH_TOTAL_CHARS = 18_000
 PEOPLE_THREADS, PEOPLE_CHARS = 14, 5200   # what people said: threads shown, and the block's ceiling
 SOUL_CHARS = 20000                        # SOUL.md goes whole; this only stops a runaway document
 _LOCK = threading.Lock()   # one check at a time: two clocks firing in the same second posted the same line twice (2026-08-29 23:59:02)
-# the owner's last word on a thread ASKED for something - that is what a chase is for...
-_ASKS = re.compile(r'\?|\b(let me know|could you|can you|would you|please (send|confirm|share|advise|review|check)|get back to me|'
-                   r'by (monday|tuesday|wednesday|thursday|friday|eod|end of (day|week)|tomorrow|next week))\b', re.I)
-# ...or PROMISED something, which is the owner's own open item, not the other side's
-_PROMISE = re.compile(r"\b(i('ll| will)|i'?m going to|let me) (send|get|have|follow|circle|check|share|update|confirm|look|review|come back|revert)\b", re.I)
-
 # The editable instruction - what a real assistant watches for. Seeded as the 'Assistant' report
 # on the Reports tab (store.__init__), so the owner edits it there like the Morning digest's;
 # this copy is the default and the fallback. CONTRACT (the JSON shape) stays in code.
@@ -203,25 +197,49 @@ def ooo(store, days: int = 14) -> dict:
     return out
 
 
-# ── the candidates: facts the hub can find without a model ───────────────────────────────────
-def followups(store, hours: int, want=('followup', 'promise')) -> list:
-    """Threads where the last word is the owner's, `hours` old or more, and that word ASKED for
-    something (followup - theirs to answer, ours to chase) or PROMISED something (promise - the
-    owner's own open item). Silence after a plain "thanks" is neither. A sender's auto-reply in
-    the window rides on the line: silence from someone who is away is not silence."""
+# ── the candidates: facts the hub can find, and the model's own reading of the words ─────────
+def _owner_closed(store, key: str, sent) -> bool:
+    """The owner put this promise down (done or dismissed on its Advisor line) - for the readers that do not go
+    through fresh(): the brief's loops, the day's promise line. A later promise on the thread is a new one."""
+    i = store._one('SELECT Status, Sig FROM idea WHERE Key=?', (key,))
+    return bool(i and i.get('Status') in ('dismissed', 'done') and str(i.get('Sig') or '').split('|')[0] == _ts(sent))
+
+
+def _other_side(store, cid):
+    """The last word of theirs on the thread, or None when there is nobody to chase: no inbound at all, or a report,
+    the Advisor's own thread, an auto-reply or a calendar response - the mail system wrote those (2026-10-06)."""
+    inbound = store.last_inbound_in(cid) if cid else None
+    if not inbound: return None
+    if inbound.get('Channel') in ('report', CHANNEL) or _ooo_row(inbound) or _cal_mail(inbound): return None
+    return inbound
+
+
+def _own(r: dict) -> str:
     from .triage import own_words
+    return own_words(str(r.get('BodyText') or ''))
+
+
+def followups(store, hours: int, want=('followup', 'promise')) -> list:
+    """What the owner is owed and what they owe, `hours` old or more, read from the MODEL's verdict on their own sent
+    words (sentjudge.py) - never a word list (the owner, 2026-10-11: "remove step 1. Everything should be ai").
+    followup: the owner's last word on the thread asked them for something - theirs to answer, ours to chase.
+    promise: the owner committed to something and no later message of theirs delivered it - the other side replying
+    does not close it ("Great, thanks!" is not the budget); the owner closing the line does. A sent message not judged
+    yet is in neither (sentjudge.blind says so). A sender's auto-reply rides on the line: silence from someone away is
+    not silence."""
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
-    out, away = [], None
-    for r in store.owner_last_words(_since(DAYS), cut):
-        body = own_words(str(r.get('BodyText') or ''))
-        kind = 'promise' if _PROMISE.search(body) else 'followup' if _ASKS.search(body) else None
-        if not kind or kind not in want: continue
-        inbound = store.last_inbound_in(r['ConversationId'])
-        if not inbound: continue                                    # nothing of theirs to answer under
-        # ...and nobody to chase behind a report, the Advisor's own thread, an auto-reply or a calendar response - the mail
-        # system wrote those, as unanswered() already knew; with a quiet chase said again, "No answer from Automation ideas"
-        # and "Accepted: AI Agents" would have come back with it (2026-10-06)
-        if inbound.get('Channel') in ('report', CHANNEL) or _ooo_row(inbound) or _cal_mail(inbound): continue
+    out, away, seen, rows = [], None, set(), []
+    if 'promise' in want: rows += [('promise', r) for r in store.open_promises(_since(DAYS), cut)]
+    if 'followup' in want:
+        rows += [('followup', r) for r in store.owner_last_words(_since(DAYS), cut) if (store.sent_verdict(r['MessageId']) or {}).get('AsksThem')]
+    for kind, r in sorted(rows, key=lambda kr: _ts(kr[1].get('SentAt')), reverse=True):
+        cid = r['ConversationId']
+        if (kind, cid) in seen: continue                            # the newest open promise on a thread speaks for it
+        seen.add((kind, cid))
+        if kind == 'promise' and _owner_closed(store, f'promise:{cid}', r.get('SentAt')): continue
+        inbound = _other_side(store, cid)
+        if not inbound: continue
+        body = _own(r)
         who = inbound.get('FromName') or inbound.get('FromEmail') or 'them'
         sent = _dt(r['SentAt']) or datetime.now()
         days = max(1, int((datetime.now() - sent).total_seconds() // 86400))
@@ -233,12 +251,16 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
         # not again for eleven days (2026-10-06). Each step it crosses is new; a dismissed or done one stays down (fresh).
         step = f"|{sum(1 for d in CHASE_STEPS if days >= d)}"
         if kind == 'promise':
-            out.append({'key': f"promise:{r['ConversationId']}", 'kind': 'promise', 'sig': _ts(r['SentAt']) + step,
-                        'facts': f"You told {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" - {days} day(s) ago, and the thread has not moved.",
-                        'text': f"You told {who} you would - \"{_short(body, 70)}\" - {days} day{'s' if days != 1 else ''} ago on \"{subj}\". Done?",
-                        'action': {'type': 'message', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')}})
+            what, due = r.get('PromiseWhat') or _short(body, 70), r.get('PromiseDue')
+            late = f" - it was due {due}" if due and due < datetime.now().strftime('%Y-%m-%d') else f" - due {due}" if due else ''
+            out.append({'key': f"promise:{cid}", 'kind': 'promise', 'sig': _ts(r['SentAt']) + step,
+                        'facts': f"You told {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" - "
+                                 f"the promise: {what}{late}; made {days} day(s) ago, and nothing you have sent since delivers it.",
+                        'text': f"You told {who} you would {what}{late} - {days} day{'s' if days != 1 else ''} ago on \"{subj}\". Done?",
+                        'action': {'type': 'message', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')},
+                        'who': who, 'what': what, 'due': due})
         else:
-            out.append({'key': f"followup:{r['ConversationId']}", 'kind': 'followup', 'sig': _ts(r['SentAt']) + (':away' if gone else '') + step,
+            out.append({'key': f"followup:{cid}", 'kind': 'followup', 'sig': _ts(r['SentAt']) + (':away' if gone else '') + step,
                         'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
                                   f"- nothing has come back in {days} day(s)." + (f" BUT {who} is {gone}." if gone else '')),
                         'text': (f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
@@ -247,37 +269,37 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
     return out
 
 
-_DUE_TODAY = re.compile(r'\b(today|this (morning|afternoon|evening)|by (the )?end of (the )?day|by eod|tonight)\b', re.I)
-
 def promises_due(store, now=None) -> list:
-    """The owner's own promises that fall due TODAY, by their own words: "I'll send it today" written today, "tomorrow"
-    written yesterday, or today's weekday named. [{'who', 'what', 'mid'}] - the arrival's one promise line (welcome.py)."""
-    from .triage import own_words
+    """The owner's own open promises whose day - the one the model read out of their words (sentjudge) - is TODAY.
+    [{'who', 'what', 'mid'}] - the arrival's one promise line (welcome.py)."""
     now = now or datetime.now()
-    day, yday, wd = now.strftime('%Y-%m-%d'), (now - timedelta(days=1)).strftime('%Y-%m-%d'), now.strftime('%A').lower()
-    out = []
-    for r in store.owner_last_words(_since(7), now.strftime('%Y-%m-%d %H:%M:%S')):
-        body, sent = own_words(str(r.get('BodyText') or '')), _ts(r.get('SentAt'))[:10]
-        m = _PROMISE.search(body)
-        if not m: continue
-        line = (body[m.start():].splitlines() or [''])[0].split('. ')[0]
-        if not ((sent == day and _DUE_TODAY.search(line)) or (sent == yday and re.search(r'\btomorrow\b', line, re.I))
-                or (sent != day and re.search(rf'\b{wd}\b', line, re.I))): continue
-        inbound = store.last_inbound_in(r['ConversationId']) if r.get('ConversationId') else None
-        who = (inbound or {}).get('FromName') or (inbound or {}).get('FromEmail') or 'them'
-        what = re.sub(r"^(i('ll| will)|i'?m going to|let me)\s+", '', _short(line, 90), flags=re.I)
-        what = re.sub(rf"\s*\b(today|tomorrow|tonight|this (morning|afternoon|evening)|by (the )?end of (the )?day|by eod|(by |on )?{wd})\b.*$",
-                      '', what, flags=re.I).rstrip(' ,.')
-        out.append({'who': who, 'what': what or 'get back to them', 'mid': r.get('MessageId')})
+    day, out = now.strftime('%Y-%m-%d'), []
+    for r in store.open_promises(_since(DAYS), now.strftime('%Y-%m-%d %H:%M:%S')):
+        if r.get('PromiseDue') != day or _owner_closed(store, f"promise:{r['ConversationId']}", r.get('SentAt')): continue
+        inbound = store.last_inbound_in(r['ConversationId']) or {}
+        out.append({'who': inbound.get('FromName') or inbound.get('FromEmail') or 'them', 'what': r.get('PromiseWhat') or 'get back to them',
+                    'mid': r.get('MessageId')})
     return out
 
 
+ASKING = ('task', 'reply_only')       # the triage intents that want something of the owner
+
+
 def unanswered(store, days: float = 2, hours: int = 3) -> list:
-    """The mirror of followups(): threads where THEIR last word asked the owner for something and
-    nothing of the owner's came after it - the ask that slipped. `hours` old at least (fresh mail
-    is not yet missed). Each carries what covers it: a draft on the task, a task and its state, or
-    nothing at all - the morning brief's "what slipped" is built from these."""
+    """The mirror of followups(): threads where THEIR last word asked the owner for something - TRIAGE'S stored
+    verdict on it said task or reply_only - and nothing of the owner's came after it. See their_asks()."""
+    return their_asks(store, days, hours)[0]
+
+
+def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
+    """(asks, unjudged). asks: their last word is an ask by triage's own verdict (route.VerdictJson) and nothing of the
+    owner's came after it - the ask that slipped, `hours` old at least (fresh mail is not yet missed). Each carries what
+    covers it: a draft on the task, a task and its state, or nothing - the morning brief's "what slipped".
+    unjudged: their last word has NO verdict - triage failed, returned nothing usable, or never ran - so whether it asks
+    anything is not known. It was a regex here (_ASKS) and missed "Please approve the invoice." outright; a message
+    triage never read is said as not judged, never silently "not an ask" (the owner, 2026-10-11)."""
     from .categories import sender_class, team_domains_of
+    from .autoreply import STATUS as AUTO
     from .triage import own_words
     settings = store.get_settings(); team = team_domains_of(settings); me = (settings.get('owner_email') or '').lower()
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
@@ -286,7 +308,7 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
     # "You asked ... no answer from you" under People want for two handoffs the agents had already done
     mine = lambda c: (c.get('Status') == 'context' or c.get('Direction') == 'out' or c.get('Channel') == 'own'
                       or (c.get('FromEmail') or '').lower() == me)
-    seen, out, away = set(), [], None
+    seen, out, blank, away = set(), [], [], None
     # 500 rows was two quiet days; the away window reaches back up to three weeks (welcome.away_days), so the page grows with it
     for r in store.recent_messages(_since(days), limit=max(500, min(5000, int(days * 250)))):
         cid = r.get('ConversationId')
@@ -296,18 +318,28 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
         chain = sorted((c for c in store.thread_messages(conversation_id=cid, limit=12) if c.get('Status') != 'skipped'), key=lambda c: _ts(c.get('SentAt')))
         if not chain: continue
         last = chain[-1]
-        if mine(last) or _ts(last.get('SentAt')) > cut: continue
+        # the owner's own rule (ignore), a feed connection and an auto-reply were settled without triage on purpose
+        if mine(last) or _ts(last.get('SentAt')) > cut or last.get('Status') in ('ignored', 'feed', AUTO): continue
         body = own_words(_BANNER.sub('', str(last.get('BodyText') or '')))
-        if not _ASKS.search(body): continue
+        v = store.message_verdict(last['MessageId'])
+        if v is not None and v.get('intent') not in ASKING: continue
         tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
         t = store.get_task(tid) if tid else None
         # a task closed AFTER the ask is what answered it; an ask that came after the close is new work
         if t and t.get('Status') in ('done', 'dropped') and _ts(t.get('ClosedAt')) >= _ts(last.get('SentAt')): continue
-        cover = ('a draft waits for you on the task' if tid in pend else
-                 f"{task_ref(tid)} is {t.get('Status')}" + (', an agent is on it' if t.get('RunStatus') == 'running' else '') if t else 'no task, no draft')
         who = last.get('FromName') or last.get('FromEmail') or 'someone'
         age = datetime.now() - (_dt(last['SentAt']) or datetime.now())
         ago = f"{age.days} day{'s' if age.days != 1 else ''}" if age.days else f"{int(age.total_seconds() // 3600)}h"
+        if v is None:
+            why = 'triage failed on it' if last.get('Status') == 'error' else 'triage has not judged it'
+            blank.append({'key': f'unjudged:{cid}', 'kind': 'unjudged', 'sig': _ts(last['SentAt']),
+                          'facts': f"{who} wrote {_when(last['SentAt'])} re \"{_short(last.get('Subject'), 70)}\": \"{_gist(body, 160)}\" - {why}, "
+                                   f"so whether it asks you anything is NOT KNOWN; nothing of yours came after it in {ago}",
+                          'action': {'type': 'message', 'mid': last['MessageId'], 'tid': tid},
+                          'who': who, 'gist': _gist(body, 60), 'ago': ago, 'why': why})
+            continue
+        cover = ('a draft waits for you on the task' if tid in pend else
+                 f"{task_ref(tid)} is {t.get('Status')}" + (', an agent is on it' if t.get('RunStatus') == 'running' else '') if t else 'no task, no draft')
         if away is None: away = ooo(store)
         gone = away.get((last.get('FromEmail') or '').lower(), '')
         out.append({'key': f'asked:{cid}', 'kind': 'asked', 'sig': _ts(last['SentAt']),
@@ -316,7 +348,7 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
                     'text': f"{who} asked \"{_gist(body, 60)}\" {ago} ago - no answer yet ({cover})",
                     'action': {'type': 'message', 'mid': last['MessageId'], 'tid': tid},
                     'who': who, 'gist': _gist(body, 60), 'ago': ago})
-    return out
+    return out, blank
 
 
 def cold(store, days: int) -> list:
@@ -607,9 +639,11 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'already and yours is ignored for those; this is for idea:* lines>", '
             '"why": "<one line: what this rests on - the mail, the date, the silence, the pattern - named as it appears in what you '
             'were given (sender, subject, mid, TQ-ref), so the owner can check it>", "mid": <the message id it is '
-            'about, or null>, "about": "<the TQ-ref of the task this line is about - open OR closed - or null>", '
+            'about, or null>, "about": "<the TQ-ref of the task this line is about - open OR closed - or null; '
+            'this field is the ONLY thing that ties the line to a task, so a line about a task always names it here>", '
             '"task": "<idea:* only - a task title the owner could accept as-is, or null>", '
-            '"kind": "<when task is not null: coding if it needs a repository/system changed, otherwise general>"}], '
+            '"kind": "<when task is not null: coding if it needs a repository/system changed, otherwise general>", '
+            '"premise_unanswered": <true when the line rests on nobody having replied or told them (no answer yet, nobody told X), else false>}], '
             '"notes": "<your note to the next check, under 120 words: FACTS AND TIMINGS ONLY - what you looked at and found nothing in, '
             'the date or silence length at which something becomes worth raising, a fact you settled so it need not be worked out again. '
             'Never a standing rule about what to ignore or what is noise: the instruction decides that, and a note that says '
@@ -657,16 +691,13 @@ def _last_run(settings: dict, src: dict) -> str:
     what = 'failed' if rec.get('failed') else f"posted mid {rec['message_id']}" if rec.get('message_id') else 'nothing to report so nothing was filed'
     return f"; last ran {_when(rec['at'])}, {what}"
 
-_FAILS = re.compile(r'fail|error|denied|timeout|could not|unable', re.I)
 _GH_FAILED = re.compile(r'^(.+?) Failed in ', re.M)          # the job lines of GitHub's "Run failed" mail
 def _cause(r: dict) -> str:
-    """For a machine's mail that says something broke: the cause, not the count. GitHub's run mail
-    names the failed jobs; a report's FAILED body starts with the error."""
-    subj, body = str(r.get('Subject') or ''), str(r.get('Preview') or r.get('BodyText') or '')
-    if not _FAILS.search(subj): return ''
-    jobs = _GH_FAILED.findall(body)
-    if jobs: return ' -> failed: ' + ', '.join(_short(j.split('/', 1)[-1], 40) for j in jobs[:4])
-    return f' -> "{_gist(body, 150)}"' if body.strip() else ''
+    """The failed jobs GitHub's run mail lists, parsed out of its body - '' when it lists none. Whether a mail says
+    something broke is the model's to read from the words beside it: a subject word list (fail|error|...) decided it
+    here, and a mail that broke without saying "fail" lost its cause (the owner, 2026-10-11: everything should be ai)."""
+    jobs = _GH_FAILED.findall(str(r.get('Preview') or r.get('BodyText') or ''))
+    return ' -> failed: ' + ', '.join(_short(j.split('/', 1)[-1], 40) for j in jobs[:4]) if jobs else ''
 
 def _recent(store, days: int = 2) -> str:
     """The last two days' arrivals, ROLLED UP: one line per sender+subject with a count, newest
@@ -923,6 +954,8 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
         # whose move it is and what the Advisor would do, kept apart from the finding (CONTRACT)
         said = {k: v for k, v in (('whose', _short(s.get('whose'), 80)), ('suggest', _short(s.get('suggest'), 200)))
                 if v and str(v).strip().lower() not in ('null', 'none')}
+        # the model says when its line rests on "nobody replied"; contradicts_sent_reply holds that against the send receipt
+        if s.get('premise_unanswered') is True: said['unanswered'] = True
         if key in by:
             # the first line of the facts: prep's line carries a 1200-char dossier under it that belongs in 'skipped', not under a button
             out.append({**by[key], 'text': txt, 'action': (by[key].get('action') or {}) | said,
@@ -936,12 +969,11 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             # a line that NAMES a task belongs to it, whatever else it carries: without the tid the
             # pipe could not tell that an agent had the work, so "TQ-0329 July financials hasn't moved"
             # sat in 'slipped' while the task said in_progress (the owner, 2026-09-03)
-            # the model's own `about` first; else an OPEN task the line names - "TQ-0734 granted it, but TQ-0736 says the tab
-            # is still missing" is about 0736, and taking the first ref would have tied it to the closed one
-            refs = [t for t in (store.get_task(int(r)) for r in re.findall(r'\bTQ-?0*(\d+)\b', f'{txt} {why}', re.I)) if t]
+            # WHICH task is the model's `about` (CONTRACT), and only that: a fallback scanned the line's words for TQ refs and
+            # guessed - "TQ-0734 granted it, but TQ-0736 says the tab is still missing" needed a rule about open ones to land
+            # on 0736 at all (the owner, 2026-10-11: everything should be ai). The ref is parsed out of `about`, never chosen.
             about = re.search(r'\bTQ-?0*(\d+)\b', str(s.get('about') or ''), re.I)
-            pick = (store.get_task(int(about.group(1))) if about else None) or \
-                   next((t for t in refs if t.get('Status') not in ('done', 'dropped')), None) or (refs[0] if refs else None)
+            pick = store.get_task(int(about.group(1))) if about else None
             # JUST HANDLED IS NOT NEWS (the owner, 2026-09-25): an idea about a task closed this week is a second copy
             # of finished work - the vendor loop fixed yesterday came back as a fresh idea and a fresh task. A
             # recurrence reaches the owner as its own mail; triage puts that back on the task.
@@ -967,12 +999,6 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
     return out
 
 
-_UNANSWERED_CLAIM = re.compile(
-    r"\b(no (?:reply|response|answer)|nobody (?:told|replied|answered)|"
-    r"has(?:n['’]?t| not) (?:been )?(?:told|answered)|"
-    r"(?:i['’]?d|would) (?:reply|answer)|ask (?:him|her|them) to retry)\b", re.I)
-
-
 def sent_reply_for(store, line: dict) -> dict | None:
     """Find the successful send behind an idea, including another message in its task thread."""
     action = line.get('action') or {}
@@ -989,9 +1015,11 @@ def contradicts_sent_reply(store, line: dict) -> bool:
 
     The full reply is also put into the model's people context. This is the final factual gate:
     a model may overlook context, but Taskuary must not publish "nobody replied" when its own
-    review table records the exact response and the successful decision.
+    review table records the exact response and the successful decision. Whether the line RESTS on "nobody replied" is
+    the model's own answer (premise_unanswered in CONTRACT, kept on the action) - a phrase list read the line's words
+    here and let "still waiting on you" through (the owner, 2026-10-11: everything should be ai).
     """
-    if not _UNANSWERED_CLAIM.search(str(line.get('text') or '')): return False
+    if not (line.get('action') or {}).get('unanswered'): return False
     return bool(sent_reply_for(store, line))
 
 
@@ -1604,12 +1632,18 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         return {'ran': True, 'said': 0, 'reads_nothing': True, 'summary': why, 'inputs': '',
                 'reviewed': {'notes': '', 'scope': 'nothing', 'systems': 0, 'why': why}}
     state = {i['Key']: i for i in store.list_ideas()}
-    cands = [] if systems_only else [again(state, x) for x in candidates(store, c) if fresh(state, x, now)]
     if llm is None:
         from .llm import build_llm
         try: llm = build_llm(store)
         except Exception as e:
             logger.debug(f'assistant: no model - {e}'); llm = None
+    # the owner's own sent words are read by the model BEFORE the candidates are found: which of them asked for
+    # something and which promised it is the judge's call, one batched call a run, each message once (sentjudge.py)
+    if llm is not None and not systems_only and c['producers'] & {'followup', 'promise'}:
+        from . import sentjudge
+        try: sentjudge.judge(store, llm)
+        except Exception as e: logger.warning(f'assistant: the sent-words judge was skipped - {e}')
+    cands = [] if systems_only else [again(state, x) for x in candidates(store, c) if fresh(state, x, now)]
     # Selecting system views is itself an explicit request for model judgement. It must keep
     # working even if the owner turns off the free-form "idea" producer in Settings.
     configured = bool(_ids(watch_source_ids) or _inline(watch_sources))

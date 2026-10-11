@@ -510,7 +510,11 @@ def run_digest(cfg):
     Reports tab, deleting the source turns it off - and it demonstrates how reports work
     using data every install already has. `store` arrives via resolve_cfg, never persisted."""
     from .digest import gather
+    from . import sentjudge
     days = days_of(cfg, 1)
+    # the owner's sent words are read before the brief reads its open loops - the Advisor may be switched off (sentjudge)
+    try: sentjudge.judge(cfg['store'])
+    except Exception as e: logger.warning(f'digest: the sent-words judge was skipped - {e}')
     head = 'yesterday and today so far, distilled' if days == 1 else f'the last {days} days, distilled'
     return head, gather(cfg['store'], days)
 

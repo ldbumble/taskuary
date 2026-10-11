@@ -29,10 +29,17 @@ def _mail(s, frm, subject, body, days=3, conv=None, status='filed', tid=None, na
                           'SentAt': _ago(days, hours), 'BodyText': body, 'Status': status, **cols})
 
 
-def _mine(s, subject, body, days, conv, tid=None):
-    """The owner's own reply on a thread - 'context' rows ride inside the chain."""
-    return s.add_message({'TaskId': tid, 'ExternalId': f'mine:{conv}:{days}', 'ConversationId': conv, 'Channel': 'email', 'SourceName': ME,
-                          'Subject': subject, 'FromName': 'You', 'FromEmail': ME, 'SentAt': _ago(days), 'BodyText': body, 'Status': 'context'})
+ASK = {'asks': True}           # what the sent-words judge (sentjudge.py) said of a line: the model's call, never a word list
+
+
+def _mine(s, subject, body, days, conv, tid=None, said=None):
+    """The owner's own reply on a thread - 'context' rows ride inside the chain - with the model's verdict on it already
+    kept (`said`: asks / promise / what / due; nothing = neither), as a judged message is after a run."""
+    mid = s.add_message({'TaskId': tid, 'ExternalId': f'mine:{conv}:{days}', 'ConversationId': conv, 'Channel': 'email', 'SourceName': ME,
+                         'Subject': subject, 'FromName': 'You', 'FromEmail': ME, 'SentAt': _ago(days), 'BodyText': body, 'Status': 'context'})
+    v = said or {}
+    s.put_sent_verdict(mid, conv, v.get('asks'), v.get('promise'), v.get('what', ''), v.get('due'), 'test')
+    return mid
 
 
 class FollowupCandidateTests(unittest.TestCase):
@@ -40,7 +47,7 @@ class FollowupCandidateTests(unittest.TestCase):
         # told "be useful, not busy", the model let a vendor's twelve days of silence go twice; the owner's ask was still open
         s = _store()
         _mail(s, DANA, 'SSO', 'Here are our settings.', days=13, conv='c1')
-        _mine(s, 'Re: SSO', 'Has that been solved so employee ids are unique?', days=12, conv='c1')
+        _mine(s, 'Re: SSO', 'Has that been solved so employee ids are unique?', days=12, conv='c1', said=ASK)
         [c] = assistant.followups(s, hours=24)
         s.upsert_idea({'key': c['key'], 'kind': 'followup', 'text': 'said on day 2', 'sig': c['sig'].split('|')[0] + '|1', 'action': {}}, _ago(11))
         s.set_setting('assistant_producers', 'followup', 't')
@@ -53,10 +60,10 @@ class FollowupCandidateTests(unittest.TestCase):
     def test_nobody_is_chased_behind_a_report_or_a_calendar_response(self):
         s = _store()
         _mail(s, 'calendar@ours.com', 'Accepted: AI Agents', 'Accepted', days=6, conv='c1', MailMetaJson='{"invite": true}')   # Graph's eventMessageResponse
-        _mine(s, 'Re: AI Agents', 'Can you bring the numbers?', days=5, conv='c1')
+        _mine(s, 'Re: AI Agents', 'Can you bring the numbers?', days=5, conv='c1', said=ASK)
         s.add_message({'ExternalId': 'r1', 'ConversationId': 'c2', 'Channel': 'report', 'SourceName': 'Automation ideas', 'Subject': 'Automation ideas',
                        'FromName': 'Automation ideas', 'FromEmail': '', 'SentAt': _ago(6), 'BodyText': 'Ideas.', 'Status': 'feed'})
-        _mine(s, 'Re: Automation ideas', 'Could you add the T&E ones?', days=5, conv='c2')
+        _mine(s, 'Re: Automation ideas', 'Could you add the T&E ones?', days=5, conv='c2', said=ASK)
         self.assertEqual(assistant.followups(s, hours=24), [])
 
     def test_an_open_follow_up_comes_back_as_the_silence_grows_but_a_dismissed_one_stays_down(self):
@@ -65,7 +72,7 @@ class FollowupCandidateTests(unittest.TestCase):
         from datetime import datetime
         s = _store()
         _mail(s, DANA, 'SSO', 'Here are our settings.', days=13, conv='c1')
-        _mine(s, 'Re: SSO', 'Has that been solved so employee ids are unique?', days=12, conv='c1')
+        _mine(s, 'Re: SSO', 'Has that been solved so employee ids are unique?', days=12, conv='c1', said=ASK)
         [now] = assistant.followups(s, hours=24)
         said_day2 = {'Key': now['key'], 'Status': 'open', 'Sig': now['sig'].split('|')[0] + '|1'}
         self.assertTrue(assistant.fresh({now['key']: said_day2}, now, datetime.now()))           # 12 days on: said again
@@ -78,11 +85,11 @@ class FollowupCandidateTests(unittest.TestCase):
     def test_your_unanswered_ask_becomes_a_followup_but_a_thanks_does_not(self):
         s = _store()
         _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
-        _mine(s, 'Re: Q3 ledger', 'Thanks Dana - could you send the reconciled version by Friday?', days=4, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Thanks Dana - could you send the reconciled version by Friday?', days=4, conv='c1', said=ASK)
         _mail(s, 'lee@ours.com', 'Lunch', 'Lunch?', days=5, conv='c2')
         _mine(s, 'Re: Lunch', 'Thanks, see you there.', days=4, conv='c2')            # no ask in it - silence is fine
         _mail(s, 'sam@ours.com', 'Numbers', 'Can you check?', days=3, conv='c3')
-        _mine(s, 'Re: Numbers', 'Could you resend the file?', days=2, conv='c3')
+        _mine(s, 'Re: Numbers', 'Could you resend the file?', days=2, conv='c3', said=ASK)
         _mail(s, 'sam@ours.com', 'Re: Numbers', 'Attached.', days=1, conv='c3')          # they answered - not a followup
         got = assistant.followups(s, hours=24)
         self.assertEqual([c['key'] for c in got], ['followup:c1'])
@@ -92,7 +99,7 @@ class FollowupCandidateTests(unittest.TestCase):
     def test_too_recent_is_not_yet_a_followup(self):
         s = _store()
         _mail(s, DANA, 'Q3 ledger', 'Here.', days=1, conv='c1')
-        _mine(s, 'Re: Q3 ledger', 'Could you resend?', days=0, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you resend?', days=0, conv='c1', said=ASK)
         self.assertEqual(assistant.followups(s, hours=24), [])
         self.assertEqual(len(assistant.followups(s, hours=0)), 1)
 
@@ -114,7 +121,7 @@ class PostTests(unittest.TestCase):
     def _seed(self):
         s = _store()
         _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
-        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1', said=ASK)
         return s
 
     def test_configured_report_views_are_pulled_live_without_filing_intermediate_rows(self):
@@ -249,7 +256,7 @@ class PostTests(unittest.TestCase):
         the model's own; the post records what it was built from and what it let go."""
         s = self._seed()
         _mail(s, 'lee@x.com', 'Invoice 88', 'Attached.', days=5, conv='c2')
-        _mine(s, 'Re: Invoice 88', 'Can you confirm the PO number?', days=3, conv='c2')
+        _mine(s, 'Re: Invoice 88', 'Can you confirm the PO number?', days=3, conv='c2', said=ASK)
         def llm(system, user, **k):
             self.assertIn('"why":', system)
             return json.dumps({'say': [{'key': 'followup:c1', 'text': "Dana owes you the ledger - I'd nudge.", 'why': 'four days is long for her', 'mid': None},
@@ -328,7 +335,7 @@ class PostTests(unittest.TestCase):
             seen['user'] = user
             return json.dumps({'say': [{'key': 'idea:reply-jd',
                                         'text': "Nobody told JD it was fixed. I'd reply and ask him to retry.",
-                                        'why': 'the task is closed', 'mid': mid}]})
+                                        'why': 'the task is closed', 'mid': mid, 'premise_unanswered': True}]})
         out = assistant.run(s, llm=llm, force=True)
         self.assertIn('you ', seen['user'])
         self.assertIn('Your access is fixed. Please retry.', seen['user'])
@@ -339,7 +346,7 @@ class PostTests(unittest.TestCase):
     def test_a_promise_you_made_is_your_own_open_item_not_a_chase(self):
         s = _store()
         _mail(s, DANA, 'Contract', 'Can you send the signed copy?', days=4, conv='p1')
-        _mine(s, 'Re: Contract', "Yes - I'll send it over by Friday.", days=3, conv='p1')
+        _mine(s, 'Re: Contract', "Yes - I'll send it over by Friday.", days=3, conv='p1', said={'promise': True, 'what': 'send the signed copy'})
         got = assistant.followups(s, hours=24)
         self.assertEqual([c['kind'] for c in got], ['promise'])
         self.assertIn('You told Dana you would', got[0]['text']); self.assertEqual(got[0]['action']['type'], 'message')
@@ -364,7 +371,7 @@ class ButtonTests(unittest.TestCase):
     def _posted(self):
         s = _store()
         mid = _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
-        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1', said=ASK)
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             out = assistant.run(s, force=True)
         idea = s.list_ideas('open')[0]
@@ -438,7 +445,7 @@ class ButtonTests(unittest.TestCase):
         self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'dismissed')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertEqual(assistant.run(s, force=True)['said'], 0)                # same silence: not said again
-            _mine(s, 'Re: Q3 ledger', 'Dana - still need that file, could you send it?', days=2, conv='c1')
+            _mine(s, 'Re: Q3 ledger', 'Dana - still need that file, could you send it?', days=2, conv='c1', said=ASK)
             self.assertEqual(assistant.run(s, force=True)['said'], 1)                # you wrote again: new facts, new line
         self.assertEqual(s.get_idea(idea['IdeaId'])['SaidCount'], 2)
 
@@ -529,7 +536,7 @@ class ButtonTests(unittest.TestCase):
         say = lambda *lines: json.dumps({'say': [dict(zip(('key', 'text', 'why', 'about', 'mid'), l)) for l in lines]})
         got = assistant.parse(s, say(('idea:loop-again', 'The vendor loop rejected a new vendor again.', 'mid 1', f'TQ-{fixed:04d}', None),
                                      ('idea:loop-mail', 'The rejection mail says the fix did not hold.', '', None, mid),
-                                     ('idea:budget', f'TQ-{fixed:04d} is done, but TQ-{live:04d} still has no tab.', '', None, None)), [])
+                                     ('idea:budget', f'TQ-{fixed:04d} is done, but TQ-{live:04d} still has no tab.', '', f'TQ-{live:04d}', None)), [])
         self.assertEqual([g['key'] for g in got], ['idea:budget'])                 # the one about OPEN work stands
         self.assertEqual(got[0]['action']['tid'], live)
         self.assertIn('closed', assistant._done(s, 7)); self.assertIn('name-keyed delete bug', assistant._done(s, 7))
@@ -571,7 +578,7 @@ class ApiTests(unittest.TestCase):
         s.decide_review(rid, 'approved', 'Fixed — please try again.', 'owner')
         s.upsert_idea({'key': 'idea:false-reply-nag', 'kind': 'idea',
                        'text': "Nobody replied to JD. I'd answer now.",
-                       'action': {'type': 'message', 'mid': mid}}, _ago())
+                       'action': {'type': 'message', 'mid': mid, 'unanswered': True}}, _ago())   # the model said it rests on "nobody replied"
         with mock.patch.object(server, 'store', s):
             row = TestClient(server.app).get('/api/assistant/ideas?status=open').json()['data'][0]
         self.assertEqual(row['answered']['text'], 'Fixed — please try again.')
@@ -583,7 +590,7 @@ class ApiTests(unittest.TestCase):
         s = server.store
         s.set_setting('calendar_enabled', '0', 't'); s.set_setting('learn_enabled', '0', 't')
         _mail(s, DANA, 'API ledger', 'Here.', days=6, conv='api-c1')
-        _mine(s, 'Re: API ledger', 'Could you send the reconciled version?', days=4, conv='api-c1')
+        _mine(s, 'Re: API ledger', 'Could you send the reconciled version?', days=4, conv='api-c1', said=ASK)
         c = TestClient(server.app)
         sid = assistant.source(s)['SourceId']
         from taskuary import reports
@@ -645,7 +652,7 @@ class LastRunRecord(unittest.TestCase):
         from taskuary import reports
         s = _store()
         _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
-        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1', said=ASK)
         src = next(x for x in s.list_sources(active_only=False) if json.loads(x['ConfigJson'] or '{}').get('type') == 'assistant')
         reports.run_report_source(s, src, lambda *a, **k: '{"say": [], "notes": "quiet"}')
         reports.run_report_source(s, src, lambda *a, **k: json.dumps({'say': [{'key': 'followup:c1', 'text': "Dana owes you the ledger - I'd nudge.", 'why': 'four days is long for her'}]}))
@@ -695,7 +702,7 @@ class WhatItReadsTests(unittest.TestCase):
     def test_out_of_office_rides_on_the_followup_instead_of_a_chase(self):
         s = _store()
         _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
-        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1', said=ASK)
         _mail(s, DANA, 'Automatic reply: Q3 ledger', 'I am out of the office until Monday September 7th with no access to email.', days=3, conv='c9',
               status='autoreply')                                                 # its Auto-Submitted header, at ingest
         self.assertEqual(assistant.ooo(s), {DANA: f'out until Monday September 7th (auto-reply {assistant._when(_ago(3))[:10]})'})
@@ -737,7 +744,7 @@ class WhatItReadsTests(unittest.TestCase):
               'ci / test (ubuntu-latest, 3.12) Failed in 49 seconds\n1\nci / test (windows-latest, 3.10) Failed in 3 minutes\n', days=0, conv='g1', status='ignored', name='Alex')
         txt = assistant._recent(s)
         self.assertIn('x3 [report] Nightly: "Nightly — FAILED"', txt)
-        self.assertIn('[schedule: daily at 08:00 + on app start] -> "Report error: Login timeout expired (0)"', txt)
+        self.assertIn('[schedule: daily at 08:00 + on app start] -> says: "Report error: Login timeout expired (0)"', txt)
         self.assertIn('-> failed: test (ubuntu-latest, 3.12), test (windows-latest, 3.10)', txt)
         self.assertEqual(assistant._schedules(s)['Nightly'], 'daily at 08:00 + on app start')
 
@@ -777,7 +784,7 @@ class WhatItReadsTests(unittest.TestCase):
         import threading, time
         s = _store()
         _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
-        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1', said=ASK)
         def llm(system, user, **k):
             time.sleep(0.2); return json.dumps({'say': [{'key': 'followup:c1', 'text': "Dana owes you the ledger - I'd nudge.", 'mid': None}]})
         outs = []
@@ -806,6 +813,9 @@ class WhatItReadsTests(unittest.TestCase):
         tid = s.create_task({'Title': 'July financials', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
         self._chat(s, 'Priya Shah', 'can you please fill out the performance review?', hours=4)
         out = assistant.run(s, force=True, llm=lambda *a, **k: json.dumps(
-            {'say': [{'key': 'idea:a', 'text': f'TQ-{tid:04d} July financials has not moved since Tuesday.', 'mid': None}]}))
+            {'say': [{'key': 'idea:a', 'text': f'TQ-{tid:04d} July financials has not moved since Tuesday.', 'mid': None, 'about': f'TQ-{tid:04d}'}]}))
         self.assertTrue(out['reviewed']['model'])                                  # the pass ran; it did not fall back
-        self.assertEqual([l['action'].get('tid') for l in out['lines']], [tid])
+        self.assertEqual([l['action'].get('tid') for l in out['lines']], [tid])    # from the model's `about`
+        # a ref in the words alone ties it to nothing: which task a line is about is the model's to say (2026-10-11)
+        line = assistant.parse(s, json.dumps({'say': [{'key': 'idea:b', 'text': f'TQ-{tid:04d} July financials is stuck.', 'mid': None}]}), [])
+        self.assertIsNone(line[0]['action'].get('tid'))

@@ -2938,8 +2938,8 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     # the merge landed and the reply beside it did not: both halves are facts, and the second one is still yours
     if kind == 'review.approve' and o.get('reply_error'):
         return f" {str(o['reply_error']).replace('Done on GitHub, but the', 'But the', 1)} - it is kept as the draft."
-    # a sent reply that asked them something is watched (asks.watch_reply); Later says WHEN it comes back (funnel.later_until)
-    if kind == 'review.approve' and o.get('watching'): return f" {o['watching']}"
+    # Later says WHEN it comes back (funnel.later_until). A sent reply's watch is decided by the model after the send
+    # (asks.watch_reply, in the background), so the approve receipt no longer claims one
     if kind == 'item.settle' and o.get('says') and not o.get('closed'): return f" {o['says']}"
     # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
     if kind in ('report.run', 'report.rerun') and o.get('ref'):

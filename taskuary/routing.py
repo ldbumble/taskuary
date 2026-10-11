@@ -92,7 +92,8 @@ def score_candidate(msg, task):
 # keyword scan". They read as live for ten days - and they were the reason a pull request LOOKED
 # handled here (`_CODE_HARD` matches `pull request` and `github.com/`) while every PR was in fact
 # going to the assistant. Dead code that describes the behaviour you expect is worse than none:
-# `kind` is the model's, against TRIAGE.md, and this file no longer has an opinion about it.
+# `kind` is the model's, against TRIAGE.md, and this file no longer has an opinion about it. (`_ASKS`, a dead
+# phrase tuple beside them, went the same way on 2026-10-11.)
 
 
 def draft_task_fields(msg, urgent: bool = False, kind: str = None):

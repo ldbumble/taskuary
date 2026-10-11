@@ -327,6 +327,11 @@ CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Ki
 -- behind an item are never stored here, they are recomputed - a reply approved or a task closed
 -- leaves the pile on its own.
 CREATE TABLE IF NOT EXISTS funnel_state (Key TEXT PRIMARY KEY, Status TEXT, Until TEXT, Note TEXT, By TEXT, At TEXT);
+-- What the owner's own sent words MEAN, read once each by the model (sentjudge.py): an ask of the other side, a promise
+-- of theirs - what and by when - and, for a promise, the later message of theirs that delivered it. Replaces the
+-- _ASKS/_PROMISE regexes that picked which threads the Advisor could talk about (the owner, 2026-10-11).
+CREATE TABLE IF NOT EXISTS sent_verdict (MessageId INTEGER PRIMARY KEY, ConversationId TEXT, AsksThem INTEGER, Promise INTEGER,
+  What TEXT, Due TEXT, DeliveredBy INTEGER, JudgedAt TEXT, JudgedBy TEXT);
 -- Phase 1 inventory foundation.  These tables are additive and deliberately stay empty until
 -- backfill_processing is called explicitly after a consistent legacy snapshot is available.
 CREATE TABLE IF NOT EXISTS processing_item (ItemId TEXT PRIMARY KEY, Kind TEXT NOT NULL,
@@ -2048,6 +2053,36 @@ class SQLiteStore:
                           'AND m.SentAt>=? AND m.SentAt<=? AND NOT EXISTS (SELECT 1 FROM message x WHERE x.ConversationId=m.ConversationId '
                           "AND x.MessageId<>m.MessageId AND x.Status<>'skipped' AND x.SentAt>m.SentAt) ORDER BY m.SentAt DESC LIMIT ?",
                           (since, before, limit))
+    # ── the owner's sent words, judged (sentjudge.py) ───────────────────────────────────────────
+    _OWN_SENT = ("(m.Status='context' OR IFNULL(m.Direction,'')='out') AND m.ConversationId IS NOT NULL "
+                 "AND IFNULL(m.Channel,'') NOT IN ('report','assistant','own')")
+    def sent_unjudged(self, since, limit=40):
+        """The owner's own sent messages in the window the model has not read yet, newest first."""
+        return self._rows(f"SELECT m.* FROM message m WHERE {self._OWN_SENT} AND m.SentAt>=? "
+                          'AND NOT EXISTS (SELECT 1 FROM sent_verdict v WHERE v.MessageId=m.MessageId) ORDER BY m.SentAt DESC LIMIT ?',
+                          (since, limit))
+    def own_sent_on_thread(self, conversation_id, after=None, before=None, limit=4):
+        """The owner's own sent words on one thread, oldest first, between two stamps."""
+        return self._rows(f"SELECT m.* FROM message m WHERE {self._OWN_SENT} AND m.ConversationId=? AND m.SentAt>? AND m.SentAt<? "
+                          'ORDER BY m.SentAt LIMIT ?', (conversation_id, after or '', before or '9999', limit))
+    def sent_verdict(self, mid): return self._one('SELECT * FROM sent_verdict WHERE MessageId=?', (mid,))
+    def put_sent_verdict(self, mid, cid, asks, promise, what, due, by, delivered_by=None):
+        self._exec('INSERT OR REPLACE INTO sent_verdict (MessageId,ConversationId,AsksThem,Promise,What,Due,DeliveredBy,JudgedAt,JudgedBy) '
+                   'VALUES (?,?,?,?,?,?,?,?,?)', (mid, cid, int(bool(asks)), int(bool(promise)), what, due, delivered_by, _now(), by))
+    def deliver_promise(self, mid, by):
+        self._exec('UPDATE sent_verdict SET DeliveredBy=? WHERE MessageId=? AND Promise=1 AND DeliveredBy IS NULL', (by, mid))
+    def open_promises(self, since, before='9999', conversation_id=None):
+        """Promises the model read in the owner's sent words that nothing later of theirs delivered, newest first, with
+        the message they were made in. The other side replying does not close one - "Great, thanks!" is not the budget."""
+        return self._rows('SELECT m.*, v.What PromiseWhat, v.Due PromiseDue FROM sent_verdict v JOIN message m ON m.MessageId=v.MessageId '
+                          'WHERE v.Promise=1 AND v.DeliveredBy IS NULL AND m.SentAt>=? AND m.SentAt<=? '
+                          + ('AND m.ConversationId=? ' if conversation_id else '') + 'ORDER BY m.SentAt DESC',
+                          (since, before) + ((conversation_id,) if conversation_id else ()))
+    def message_verdict(self, mid):
+        """Triage's stored verdict on one message (route.VerdictJson), newest - None when triage never judged it."""
+        row = self._one('SELECT VerdictJson FROM route WHERE MessageId=? AND VerdictJson IS NOT NULL ORDER BY RouteId DESC LIMIT 1', (mid,))
+        try: return json.loads(row['VerdictJson']) if row else None
+        except (TypeError, ValueError): return None
     def own_reply_on_thread(self, conversation_id=None, task_id=None):
         """The owner's own last word on a thread (or on a task's chain), however it was typed: a
         'context' row is their reply read back out of Sent, 'out' is one Taskuary sent. The

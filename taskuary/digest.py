@@ -373,8 +373,8 @@ def gather(store, days: int = DAYS) -> str:
         if not i: return ''
         s = i.get('Status')
         return f" [the assistant raised this {A._when(i.get('LastSaid') or i.get('FirstSeen'))}" + (f"; you marked it {s}" if s in ('dismissed', 'done', 'snoozed') else '') + ']'
-    try: asked = A.unanswered(store, span + 1)
-    except Exception as e: asked = [{'facts': f'COULD NOT READ: {str(e)[:120]}'}]
+    try: asked, blank = A.their_asks(store, span + 1)
+    except Exception as e: asked, blank = [{'facts': f'COULD NOT READ: {str(e)[:120]}'}], []
     # The verdicts are read BEFORE the asks are ranked (TQ-0654): an ask on a topic the owner has
     # ruled not theirs used to sit first in this block wearing "no task, no draft", with the ruling
     # blocks later as general context - and the brief led "People want" with a resident refund.
@@ -386,12 +386,20 @@ def gather(store, days: int = DAYS) -> str:
         _block(out, 'ASKS YOUR STANDING VERDICTS ALREADY COVER (you ruled the topic is not yours, so these are NOT "People want"\n'
                     'and rank below everything above; only a NEW ask aimed at you personally outranks the verdict named on its line):',
                (f"  {c['facts']}{said(c)} - ruled out by your verdict \"{ruled[id(c)]}\"" for c in covered[:10]))
+    # triage never judged these, so nobody knows whether they ask anything - said, never dropped as "not an ask" (2026-10-11)
+    if blank:
+        _block(out, 'NOT JUDGED (triage failed on these or has not run, so whether they ask you anything is NOT KNOWN - while any are\n'
+                    'here, never say nobody is waiting on you):', (f"  {c['facts']}" for c in blank[:10]))
     # the owner's own open loops: what they asked for and never got, what they promised, what went cold
     c = A.cfg(store)
     try: loops = A.candidates(store, c | {'producers': {'followup', 'promise', 'cold'}})
     except Exception as e: loops = [{'kind': 'followup', 'facts': f'COULD NOT READ: {str(e)[:120]}', 'key': ''}]
+    # promises and asks are the MODEL's reading of the owner's sent words (sentjudge): what it could not read is said plainly
+    from . import sentjudge
+    try: blind = sentjudge.blind(store)
+    except Exception as e: blind = f'could not check which of your sent messages were read - {str(e)[:120]}'
     _block(out, 'MY OPEN LOOPS (I asked and nothing came back; I promised; work gone quiet):',
-           (f"  [{c_['kind']}] {_linked(c_['facts'].split(chr(10), 1)[0])}{said(c_)}" for c_ in loops[:20]))
+           ([f"  NOT TRACKED: {blind}"] if blind else []) + [f"  [{c_['kind']}] {_linked(c_['facts'].split(chr(10), 1)[0])}{said(c_)}" for c_ in loops[:20]])
     # the ref carries its task's TITLE here too (list_reviews already joins it): a line
     # holding only the attached MAIL SUBJECT let the subject and the ref drift apart, and a
     # brief that renames a task is a lie in the one place the owner trusts by default

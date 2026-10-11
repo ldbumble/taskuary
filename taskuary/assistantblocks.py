@@ -179,10 +179,10 @@ CATALOGUE = (
           'YOUR NOTES FROM YOUR LAST CHECK',
           _notes, sql=NOTES_SQL, whole=True),
     # PRODUCERS: no heading - their rows are candidates, and candidates render under CANDIDATES:.
-    Block('waiting_on', 'Waiting on them', 'view', ('message', 'review'),
+    Block('waiting_on', 'Waiting on them', 'view', ('message', 'sent_verdict'),
           None, _waiting_on, window=('hours', 24, 'How long silence counts as silence'),
           proposes=True, setting='assistant_followup_hours'),
-    Block('promised', 'What I promised', 'view', ('message', 'review'),
+    Block('promised', 'What I promised', 'view', ('message', 'sent_verdict'),
           None, _promised, window=('hours', 24, 'How long a promise waits before it is raised'),
           proposes=True, setting='assistant_followup_hours'),
     Block('meeting_prep', 'Meeting prep', 'view', ('message', 'task'),

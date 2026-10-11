@@ -118,6 +118,7 @@ class ArrivalTests(unittest.TestCase):
 
     def test_the_first_look_of_a_new_day_opens_with_the_night_and_three_things(self):
         s = store(); now = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+        now -= timedelta(days=max(0, now.weekday() - 4))     # a Saturday in the gap says "Over the weekend" - this is a weeknight
         s.set_setting(welcome.CLOSED_KEY, ago(14, now=now), 't')
         for n in range(4): mail(s, 'Ray Colton', 'ray@northwind.example', f'Overnight {n}', ago(10 - n, now=now))
         items = [{**i, 'when': ago(5, now=now)} for i in ITEMS]

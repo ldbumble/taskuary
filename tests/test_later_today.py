@@ -83,6 +83,20 @@ def test_after_my_meetings_offers_the_next_free_moment(s):
 def test_after_my_meetings_with_none_left_today_asks_for_a_time(s):
     tid = s.create_task({'Title': 'Call the vendor back', 'Kind': 'task', 'Status': 'open'}, 'owner')
     with cal(), pytest.raises(ValueError, match='no more meetings today'):
+        remind.set_reminder(s, tid, remind.AFTER_MEETINGS)
+
+
+def test_after_meetings_is_a_token_the_model_emits_not_a_phrase_code_matches(s):
+    """Five exact phrasings were the only ones that worked ("once my calls are done" did not). The model maps the
+    words to the protocol token the tool describes, and the code reads the token only (the owner, 2026-10-11)."""
+    from taskuary import toolcatalog
+    tid = s.create_task({'Title': 'Call the vendor back', 'Kind': 'task', 'Status': 'open'}, 'owner')
+    assert f'"{remind.AFTER_MEETINGS}"' in toolcatalog.PURPOSE['task.defer']       # the model is told the token
+    with cal(meeting('14:00', 30)), mock.patch('taskuary.remind.datetime', wraps=datetime) as d:
+        d.now.return_value = NOW
+        out = remind.set_reminder(s, tid, 'after_meetings')
+    assert out['remindAt'] == '2026-09-25 14:35:00'
+    with cal(meeting('14:00', 30)), pytest.raises(ValueError, match='not a day I can read'):
         remind.set_reminder(s, tid, 'after my meetings')
 
 

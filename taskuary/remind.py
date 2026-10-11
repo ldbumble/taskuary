@@ -11,7 +11,9 @@ from loguru import logger
 
 MORNING = '07:00:00'
 NONE_WORDS = ('', 'none', 'never', 'clear', 'off', 'no')
-AFTER_WORDS = ('after my meetings', 'after meetings', 'after my meeting', 'after the meeting', 'after my calls')
+# the PROTOCOL token for "after my meetings": the model maps whatever she said ("once my calls are done") to it and the
+# chip sends it - five exact phrasings used to be the only ones that worked (the owner, 2026-10-11: "everything should be ai")
+AFTER_MEETINGS = 'after_meetings'
 
 
 _SOON = re.compile(r'(?:in\s+)?(\d+|a|an|one|two|three|four|half an?)\s+(hour|hr|minute|min)s?')
@@ -143,7 +145,7 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
     if not t: raise ValueError('task not found')
     if t.get('Status') in ('done', 'dropped'): raise ValueError('that task is done - reopen it first')
     # "after my meetings" is the calendar's to answer; with no meetings in front of her there is nothing to wait for
-    if str(until or '').strip().lower() in AFTER_WORDS:
+    if str(until or '').strip().lower() == AFTER_MEETINGS:
         free = after_meetings(store)
         if not free: raise ValueError('your calendar shows no more meetings today - say a time ("today 3pm")')
         until = free['until']

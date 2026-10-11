@@ -37,7 +37,8 @@ PURPOSE = {
     'task.complete':            'Mark done - the task is finished (note: optional, what came of it - kept on the task)',
     'task.defer':               ('Remind me: put an open task away until a day and bring it back then - `until`: a date '
                                  '(2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", '
-                                 '"friday 2pm"), or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
+                                 '"friday 2pm"), "after_meetings" when they mean once the day\'s meetings or calls are over (the calendar picks the '
+                                 'time), or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
                                  'the one on the table. "Remind me about <a task that exists>" - named by ref, sender or '
                                  'subject - is this, never a new to-do'),
     'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull "

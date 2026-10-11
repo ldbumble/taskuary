@@ -215,12 +215,12 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p class="runs">At once.</p><h2 id="task">Task<a class="anchor" href="#task" aria-label="Link to this section">#</a></h2>
 <p>Change any task - the one on the table or one named with ref.</p>
 <h3 id="task-update"><code>task.update</code><a class="anchor" href="#task-update" aria-label="Link to this section">#</a></h3>
-<p>Change a task&#39;s priority, title, owner or due day.</p>
+<p>Change a task&#39;s priority, title, owner or due day. Any other value is refused with the allowed ones.</p>
 <ul>
 <li><code>priority</code> - low | normal | high | urgent</li>
 <li><code>title</code></li>
-<li><code>assignee</code> - &#39;me&#39;, or an agent&#39;s role</li>
-<li><code>due</code> - the day the work is due (2026-10-30, &quot;friday&quot;, &quot;2 weeks&quot;, or &quot;none&quot;)</li>
+<li><code>assignee</code> - exactly <code>owner</code> (the owner takes it) or <code>agent:&lt;profile&gt;</code> (a worker on the roster)</li>
+<li><code>due</code> - the day the work is due (2026-10-30, &quot;friday&quot;, &quot;2 weeks&quot;, or &quot;none&quot; to clear it)</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="task-set-kind"><code>task.set_kind</code><a class="anchor" href="#task-set-kind" aria-label="Link to this section">#</a></h3>
@@ -238,7 +238,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p class="runs">Waits for your yes on a card.</p><h3 id="task-check"><code>task.check</code><a class="anchor" href="#task-check" aria-label="Link to this section">#</a></h3>
 <p>Tick a checklist item on a task.</p>
 <ul>
-<li><code>item</code> - its number (1 is the first) or words from it</li>
+<li><code>item</code> - its NUMBER (1 is the first; the facts list them numbered)</li>
 <li><code>done</code> (optional) - false un-ticks</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
@@ -288,7 +288,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p class="runs">Waits for your yes on a card.</p><h3 id="task-defer"><code>task.defer</code><a class="anchor" href="#task-defer" aria-label="Link to this section">#</a></h3>
 <p>Remind me: put an open task away until a day and bring it back then. &quot;Remind me about <a task that exists>&quot; - named by ref, sender or subject - is this, never a new to-do.</p>
 <ul>
-<li><code>until</code> - a date (2026-10-09), &quot;2 weeks&quot;, &quot;3 days&quot;, &quot;monday&quot;, with the time they said kept (&quot;tomorrow 9am&quot;, &quot;friday 2pm&quot;), or &quot;none&quot; to bring it back now</li>
+<li><code>until</code> - a date (2026-10-09), &quot;2 weeks&quot;, &quot;3 days&quot;, &quot;monday&quot;, with the time they said kept (&quot;tomorrow 9am&quot;, &quot;friday 2pm&quot;), &quot;after_meetings&quot; when they mean once the day&#39;s meetings or calls are over (the calendar picks the time), or &quot;none&quot; to bring it back now</li>
 <li><code>ref</code> (optional) - the task (TQ-0123) when it is not the one on the table</li>
 </ul>
 <p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="task-handoff"><code>task.handoff</code><a class="anchor" href="#task-handoff" aria-label="Link to this section">#</a></h3>
@@ -360,6 +360,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p>Open a walk-through with the assistant, for a set-up that needs digging first.</p>
 <ul>
 <li><code>text</code></li>
+<li><code>title</code> - a few words naming the job for the task list</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h2 id="pipe">Pipe<a class="anchor" href="#pipe" aria-label="Link to this section">#</a></h2>
 <p>The walk and sets of items, and filing mail.</p>

@@ -32,7 +32,7 @@
       "label": "Intent triage",
       "type": "switch",
       "desc": "Classify every new message: a task to DO, a question to ANSWER, or FYI to file.",
-      "help": "The heart of the funnel. Every inbound message is read (by the triage brain below, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself."
+      "help": "The heart of the funnel. Every inbound message is read (by the triage brain in Triage & agents, the section above, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself."
     },
     "triage_ai": {
       "group": "Triage & agents",
@@ -84,7 +84,7 @@
       "label": "Assistant tab brain",
       "type": "brain",
       "desc": "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.",
-      "help": "THREE DEFAULTS, one place each: the triage brain (Triage & routing), the default coding agent (Coder agent), and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
+      "help": "THREE DEFAULTS, side by side in Triage & agents: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
     },
     "concierge_model": {
       "group": "Triage & agents",

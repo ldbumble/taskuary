@@ -131,8 +131,8 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
       {noRepoRow}
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>{err}</Typography>}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-        Paths saved here land on the agent — also editable in bulk under Settings → Agents
-        (the repo → dir map).
+        Paths saved here land on the agent — its repo → folder map (cwd_map) in config.toml, the
+        one place to edit them in bulk.
       </Typography>
       {picked && (
         <Button size="small" sx={{ fontSize: 10.5, color: DIM }} disabled={busy}

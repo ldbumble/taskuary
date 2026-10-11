@@ -15,6 +15,7 @@ import { Box, Button, CircularProgress, MenuItem, Select, TextField, Tooltip, Ty
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import api from "./api";
+import { isOwnerAuthor } from "./agentIdentity.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, card, mono } from "./theme.jsx";
 import { Empty, timeAgo, TaskuaryMark } from "./ui.jsx";
 
@@ -43,8 +44,8 @@ export const faceOf = (name) => {
 const short = (p) => String(p || "").split(/[\\/]/).filter(Boolean).slice(-1)[0] || "";
 const dayOf = (t) => String(t || "").slice(0, 10);
 
-const Face = ({ who, size = 30 }) => {
-  const owner = /^(you|owner|dana whitfield)$/i.test(String(who || "").trim());
+const Face = ({ who, ownerName, size = 30 }) => {
+  const owner = isOwnerAuthor(who, ownerName);
   return (
     <Box sx={{ width: size, height: size, borderRadius: "50%", bgcolor: owner ? "#eae4d8" : PANEL2,
       border: `1px solid ${BORDER}`, color: DIM, flexShrink: 0, display: "grid", placeItems: "center" }}>
@@ -66,11 +67,11 @@ const Kind = ({ kind }) => {
   );
 };
 
-const Note = ({ n, onOpenTask }) => {
+const Note = ({ n, onOpenTask, ownerName }) => {
   const read = String(n.ReadBy || "").split(",").filter(Boolean);
   return (
     <Box sx={{ display: "flex", gap: 1.25, py: 1.5, borderBottom: `1px solid ${BORDER}` }}>
-      <Face who={n.Agent} />
+      <Face who={n.Agent} ownerName={ownerName} />
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.85, flexWrap: "wrap" }}>
           <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{n.Agent}</Typography>
@@ -114,8 +115,9 @@ export default function AgentWall({ onOpenTask, refresh, active = true }) {
   const [kind, setKind] = useState("note");
   const [busy, setBusy] = useState(false);
   const [all, setAll] = useState(false);      // durable history, or sessions alive right now
+  const [ownerName, setOwnerName] = useState("");
   const load = useCallback(async () => {
-    try { setRows((await api.get("/api/board/notes", { params: { all } })).data.data || []); }
+    try { const { data } = await api.get("/api/board/notes", { params: { all } }); setRows(data.data || []); setOwnerName(data.owner || ""); }
     catch { setRows([]); }
   }, [all]);
   useEffect(() => { if (active) load(); }, [active, load, refresh]);
@@ -184,7 +186,7 @@ export default function AgentWall({ onOpenTask, refresh, active = true }) {
             {day}
           </Typography>
           <Box sx={{ ...card, py: 0, px: 1.5 }}>
-            {notes.map((n) => <Note key={n.NoteId} n={n} onOpenTask={onOpenTask} />)}
+            {notes.map((n) => <Note key={n.NoteId} n={n} onOpenTask={onOpenTask} ownerName={ownerName} />)}
           </Box>
         </Box>
       ))}

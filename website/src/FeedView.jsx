@@ -309,7 +309,8 @@ const needsYou = (r) => !!r.NeedsYou && r.TaskStatus !== "done";
 
 // One plain-English sentence: what the hub did + where it stands.
 const blurb = (r) => {
-  if ((r.RouteReason || "").includes("your reply") || (r.RouteReason || "").includes("your sent reply"))
+  // the row's own DIRECTION, as the server sends it - never the classifier's sentence searched for "your reply" (2026-10-11)
+  if (r.Direction === "out" || r.Category === "yours")
     return r.TaskId ? `Your reply — kept on ${ref(r.TaskId)} so the thread shows both sides` : "Your reply — kept for context, never a task";
   if (r.Channel === "assistant") return "The assistant's post — open it to talk back or act on a suggestion";
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";

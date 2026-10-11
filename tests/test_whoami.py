@@ -122,6 +122,8 @@ class EndpointTests(unittest.TestCase):
     def test_the_page_reads_saves_and_previews(self):
         r = c_api.get('/api/whoami').json()
         self.assertIn('identities', r); self.assertIn('told_to_agents', r); self.assertEqual(r['styles'], list(whoami.STYLES))
+        # the wall knows the owner's own notes by the name the server sends, never one hardcoded in the page (2026-10-11)
+        self.assertEqual(c_api.get('/api/board/notes').json()['owner'], server.store.owner()['owner'])
         r = c_api.patch('/api/whoami', json={'owner_telegram': '@alex'}).json()
         self.assertEqual(r['facts']['owner_telegram'], '@alex')
         self.assertEqual(c_api.patch('/api/whoami', json={'coder_auto_enabled': '0'}).status_code, 422)   # never a back door into settings

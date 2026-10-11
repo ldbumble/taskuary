@@ -2843,7 +2843,8 @@ def board_notes(cwd: str = '', limit: int = 60, all: bool = False):
     """Live handoffs by default; durable note history when ``all`` is requested."""
     rows = (blackboard.history(store, cwd or None, limit) if all
             else blackboard.live_wall(store, cwd, limit))
-    return {'data': rows,
+    # `owner`: the name a note the owner wrote may carry - the wall used to hardcode one (2026-10-11)
+    return {'data': rows, 'owner': store.owner()['owner'],
             'kinds': list(blackboard.KINDS), 'summary_kind': blackboard.SUMMARY}
 
 @app.post('/api/board/notes')

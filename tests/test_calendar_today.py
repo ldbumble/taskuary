@@ -24,6 +24,15 @@ class AboutTests(unittest.TestCase):
         self.assertEqual(cal.about_text('Download Teams | Join on the web\nMeeting options'), '')
         self.assertTrue(cal.about_text('x' * 300).endswith('…'))
 
+    def test_a_real_sentence_with_a_generic_word_in_it_is_kept(self):
+        """Generic English ("help", "organizer", "learn more", "dial in", "join the meeting") used to delete the line it
+        was on - only vendor template strings, links and phone numbers go now (2026-10-11)."""
+        for said in ('Organizer notes: bring the Q3 sheet.', 'Gail will help with the vendor list.',
+                     'We want to learn more about the Northwind rollout.', 'Erin will dial in from the airport.',
+                     'Please join the meeting with the census numbers ready.', 'This is a recurring review of the budget.',
+                     'More info on the payroll change is in the deck.'):
+            self.assertEqual(cal.about_text(f'{said}\nMicrosoft Teams meeting\nLearn More | Meeting options\nNeed help?'), said, said)
+
     def test_graph_events_carry_who_about_and_join(self):
         ev = {'subject': 'Refund sync', 'start': {'dateTime': '2026-08-28T14:00:00'}, 'end': {'dateTime': '2026-08-28T14:30:00'},
               'isAllDay': False, 'showAs': 'busy', 'location': {'displayName': 'Teams'},

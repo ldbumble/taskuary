@@ -78,12 +78,15 @@ def outlook_events(cfg: dict, secret: str, mailboxes: list, start: datetime, end
 
 
 # invite bodies are mostly plumbing - the Teams block, dial-ins, "join on your computer" - and the
-# one useful sentence, when there is one, sits above it
-_BOILER = re.compile(r'(microsoft teams|join on your computer|join on the web|download teams|meeting id:|passcode:|dial in|dial-in|'
-                     r'conference id|find a local number|click here to join|join the meeting|join with a video|meeting options|'
-                     r'video conferencing device|tenant id|video id|or call in|phone conference|more info|learn more|reset pin|'
-                     r'help |need help|organizer|this is a recurring|zoom\.us|teams\.microsoft\.com|google meet|meet\.google\.com|'
-                     r'https?://|^\+?[\d\s(),.#*-]{7,}$|^[_\-=|\s]+$)', re.I)
+# one useful sentence, when there is one, sits above it. VENDOR TEMPLATE strings only, plus links and phone numbers:
+# generic words ("help", "organizer", "learn more", "dial in", "join the meeting", "this is a recurring") deleted real
+# sentences - "Organizer notes: bring the Q3 sheet" vanished (the owner, 2026-10-11: "everything should be ai"). A
+# template's lone link label ("More info", "Learn More", "Need help?") goes only when it is the WHOLE line.
+_BOILER = re.compile(r'(microsoft teams meeting|microsoft teams need help|join on your computer|join on the web|download teams|'
+                     r'meeting id:|passcode:|dial in by phone|dial-in number|conference id:|find a local number|click here to join|'
+                     r'join the meeting now|join with a video conferencing device|meeting options|tenant id:|video id:|'
+                     r'or call in \(audio only\)|phone conference id|reset pin|zoom\.us|teams\.microsoft\.com|meet\.google\.com|'
+                     r'join with google meet|https?://|^\+?[\d\s(),.#*-]{7,}$|^[_\-=|\s]+$|^(more info|learn more|need help\??|help|system reference)$)', re.I)
 
 
 def about_text(preview: str, limit: int = 240) -> str:

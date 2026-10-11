@@ -301,18 +301,17 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
     out = (llm(system, user, max_tokens=COMPLETE_REPLY_TOKENS if resolution else REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
-    # THE WRITER SAID NOTHING GOES BACK - in words, or by signing off under nothing. A reply the owner asked for (nudge) is
-    # theirs to want: that one is never dropped here, it fails as empty instead
-    # ...signed under nothing means a sign-off WORD or the owner's own signature with nothing above it - never a short real
-    # answer ("on it", "ok"), which the sign-off stripper would also eat
-    body, sig = out.rstrip(), signature_for(store).strip()
-    signed = bool(sig) and body.endswith(sig)
-    if signed: body = body[:-len(sig)].rstrip()
-    first = next((l.strip() for l in body.splitlines() if l.strip()), '')
-    empty = (signed and not body) or (bool(_SIGNOFF.match(first)) and not strip_signoff(body).strip())
-    if out.strip().strip('.').upper() == NO_REPLY or empty:
+    # THE WRITER SAID NOTHING GOES BACK - with its NO_REPLY token, and only that. A sign-off word list used to decide that
+    # "Thanks,\nAlex" was nothing and put the draft down, when a thank-you can be the whole real reply (the owner,
+    # 2026-10-11: "everything should be ai"). A reply the owner asked for (nudge) is theirs to want: never dropped, it fails.
+    if out.strip().strip('.').upper() == NO_REPLY:
         if nudge: raise RuntimeError('the AI wrote no reply to what you asked for - try Redraft with more to go on')
         raise NoReply(out)
+    # the owner's own signature with nothing above it is no draft at all - never an email of one signature to six people
+    # (2026-10-08) - but it is not the writer's "no reply" either, so it FAILS (Redraft) rather than closing anything
+    body, sig = out.rstrip(), signature_for(store).strip()
+    if sig and body.endswith(sig) and not body[:-len(sig)].strip():
+        raise RuntimeError('the AI wrote only your signature - try Redraft with more to go on')
     return (strip_signoff(out) or out) if chat else out    # never strip a reply down to nothing
 
 

@@ -27,12 +27,27 @@ def write(s, said, nudge=None):
     return tid, rid, out
 
 
-@pytest.mark.parametrize('said', ['NO REPLY', 'No reply.', f'Sincerely,\n\n{SIG}', 'Thanks,\nAlex'])
+@pytest.mark.parametrize('said', ['NO REPLY', 'No reply.'])
 def test_the_writer_saying_nothing_goes_back_puts_the_draft_down_and_says_so(s, said):
     tid, rid, out = write(s, said)
     assert out == ''
     assert s.get_review(rid)['Status'] == 'no_reply'
     assert any('No reply drafted' in c['Body'] for c in s.list_comments(tid))
+
+
+@pytest.mark.parametrize('said', ['Thanks,\nAlex', 'Thank you!', 'Cheers'])
+def test_a_sign_off_word_is_not_the_writers_no_reply(s, said):
+    """A sign-off word list put these down as "no reply"; a thank-you can be the whole real answer. Only the writer's
+    NO_REPLY token drops a draft (the owner, 2026-10-11: "everything should be ai")."""
+    tid, rid, out = write(s, said)
+    assert s.get_review(rid)['Status'] == 'pending' and said.split(',')[0] in s.get_review(rid)['DraftText']
+
+
+def test_a_draft_of_only_the_signature_fails_and_is_never_offered_to_send(s):
+    tid, mid, rid = make_review(s)
+    with mock.patch.object(learn, 'learn_from'), pytest.raises(RuntimeError, match='only your signature'):
+        responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: f'\n\n{SIG}', resolution='Not ours.')
+    assert s.get_review(rid)['Status'] == 'pending' and SIG not in str(s.get_review(rid)['DraftText'] or '')
 
 
 def test_a_real_answer_is_drafted_with_its_signature(s):

@@ -87,7 +87,7 @@ def _bullet(name: str) -> str:
 # WHAT THE ANSWER MUST CONTAIN (title, summary, checklist...), as opposed to what the verdict should BE: appended when a
 # document never asks for it, because without it every task carried the whole email as its ask (2026-09-10, TQ-0665).
 TASK_FIELDS = shipped_section('## 5.') + '\n\n' + shipped_section('## 7.')
-URGENT, DUE = _bullet('urgent'), _bullet('due')
+URGENT, DUE, SENDER = _bullet('urgent'), _bullet('due'), _bullet('sender_class')
 
 
 def due_of(j: dict, sent=None) -> str | None:
@@ -117,6 +117,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          'kind': {'type': ['string', 'null'], 'enum': ['coding', 'general', 'task', None]},
          'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}, 'urgent': {'type': 'boolean'},
          'due': {'type': ['string', 'null']},
+         # who wrote it (categories.sender_class) - the Timeline's info/automated/promo and the Advisor's people (2026-10-11)
+         'sender_class': {'type': 'string', 'enum': ['person', 'automated', 'bulk']},
          # what closes it beyond the reply (slots.py): emails to OTHER people the message asks the owner to send
          'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
@@ -592,6 +594,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # ...urgent and due are in the shape block, so they ride on their own only when it is not sent
             if not shape and '"urgent"' not in base: system += '\n\n' + URGENT
             if not shape and '"due"' not in base: system += '\n\n' + DUE          # ...and the due day (2026-10-06)
+            if not shape and 'sender_class' not in base: system += '\n\n' + SENDER   # ...and who wrote it (2026-10-11)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -643,6 +646,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 summary = str(j.get('summary') or '').strip()[:1000]
                 if title: out['title'] = title
                 if summary: out['summary'] = summary
+                if j.get('sender_class') in ('person', 'automated', 'bulk'): out['sender_class'] = j['sender_class']
                 # urgent only means something on work: an fyi that says "urgent" is still an fyi
                 if j.get('urgent') is True and out['intent'] in ('task', 'reply_only'): out['urgent'] = True
                 if out['intent'] in ('task', 'reply_only') and due_of(j, msg.get('sent_at')): out['due'] = due_of(j, msg.get('sent_at'))

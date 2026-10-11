@@ -27,13 +27,31 @@ def _mail(s, frm, subject, body, days=3, conv=None, status='filed', tid=None, na
 
 
 class InviteDetectionTests(unittest.TestCase):
-    def test_graph_marks_meeting_mail_and_subjects_cover_imap(self):
+    def test_graph_marks_meeting_mail_and_the_mime_part_covers_imap(self):
+        import email
         self.assertTrue(counsel.is_invite({'@odata.type': '#microsoft.graph.eventMessage', 'subject': 'Budget sync'}))
         self.assertTrue(counsel.is_invite({'meetingMessageType': 'meetingRequest', 'subject': 'x'}))
-        for subj in ('Invitation: Q3 review @ Tue', 'Updated invitation: standup', 'Accepted: lunch', 'Canceled: 1:1', 'Tentative: demo'):
-            self.assertTrue(counsel.is_invite({'subject': subj}), subj)
-        self.assertFalse(counsel.is_invite({'subject': 'Re: invoice 4471', 'body': {'content': 'see attached'}}))
-        self.assertFalse(counsel.is_invite({'Subject': 'Your invitation to the vendor portal'}))     # a word, not a prefix
+        self.assertTrue(counsel.is_invite({'Subject': 'Budget sync', 'MailMetaJson': '{"invite": true}'}))      # a stored row
+        # a subject is never the mark (2026-10-11): these are people's mails until a type or a part says otherwise
+        for subj in ('Invitation: Q3 review @ Tue', 'Accepted - your offer, next steps', 'Canceled: 1:1', 'Re: invoice 4471'):
+            self.assertFalse(counsel.is_invite({'subject': subj}), subj)
+        ics = email.message_from_string('Content-Type: multipart/alternative; boundary=b\n\n--b\nContent-Type: text/plain\n\nJoin\n'
+                                        '--b\nContent-Type: text/calendar; method=REQUEST\n\nBEGIN:VCALENDAR\nEND:VCALENDAR\n--b--\n')
+        self.assertTrue(counsel.mime_invite(ics))
+        self.assertFalse(counsel.mime_invite(email.message_from_string('Subject: Accepted: lunch\n\nsee you there')))
+
+    def test_a_persons_accepted_is_triaged_not_filed_as_an_invite(self):
+        """"Accepted - your offer" from a person on a plain Graph message: the model reads it, and it is not fyi."""
+        from taskuary.channels import is_invite as graph_invite
+        m = {'@odata.type': '#microsoft.graph.message', 'subject': 'Accepted - your offer, next steps'}
+        self.assertFalse(graph_invite(m))
+        s, calls = _store(), []
+        def llm(system, user, **k): calls.append(1); return '{"intent": "task", "kind": "task", "why": "asks for next steps", "title": "Next steps", "summary": "Lee accepted.", "sender_class": "person"}'
+        with mock.patch.object(ingest, '_spawn'):
+            out = ingest.ingest_message(s, {'external_id': 'g:acc', 'channel': 'email', 'subject': m['subject'], 'body': 'Can you send the paperwork?',
+                                            'from_email': LEE, 'from_name': 'Lee', 'source_name': ME, 'sent_at': _ago(), 'invite': graph_invite(m)}, llm=llm)
+        self.assertEqual(calls, [1])
+        self.assertNotIn('calendar invite', s.feed(limit=3)[0]['RouteReason'] or '')
 
     def test_every_type_graph_actually_sends_reads_as_meeting_mail(self):
         """An invitation is `eventMessageRequest` and an accept/decline is `eventMessageResponse` -

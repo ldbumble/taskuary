@@ -23,16 +23,17 @@ NOOP = {'determination': 'a training reminder, not repo work', 'actions': 'nothi
         'summary': 'nothing to do here', 'outcome': 'nothing_to_do'}
 
 
-def task_with(s, from_email, body=NOTICE, channel='email'):
+def task_with(s, from_email, body=NOTICE, channel='email', sender=None):
+    # sender: the SenderClass triage (or the mail's headers) stored - a robot is never read off the address (2026-10-11)
     tid = s.create_task({'Title': 'Outstanding Assignment', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': channel, 'Subject': 'Outstanding Assignment',
-                         'FromEmail': from_email, 'SentAt': '2026-08-30 09:00:00', 'BodyText': body, 'Status': 'routed'})
+                         'FromEmail': from_email, 'SentAt': '2026-08-30 09:00:00', 'BodyText': body, 'Status': 'routed', 'SenderClass': sender})
     return tid, mid
 
 
 class NoOpEndingTests(unittest.TestCase):
     def test_a_robots_notice_with_nothing_done_drafts_no_reply(self):
-        s = MemoryStore(); tid, _ = task_with(s, 'alerts@phishguard.example')
+        s = MemoryStore(); tid, _ = task_with(s, 'alerts@phishguard.example', sender='automated')
         with mock.patch('taskuary.responder.write_draft') as wd:
             out = coder.finish(s, tid, NOOP, None, 'coder')
         wd.assert_not_called()
@@ -62,7 +63,7 @@ class NoOpEndingTests(unittest.TestCase):
         self.assertEqual(seen, [('waiting', 1)])
 
     def test_work_actually_done_always_drafts_however_it_came_in(self):
-        s = MemoryStore(); tid, mid = task_with(s, 'noreply@vendor.com')
+        s = MemoryStore(); tid, mid = task_with(s, 'noreply@vendor.com', sender='automated')
         rep = {'summary': 'fixed the feed', 'outcome': 'did_work'}
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
             self.assertEqual(coder.finish(s, tid, rep, None, 'coder')['message_id'], mid)
@@ -70,14 +71,14 @@ class NoOpEndingTests(unittest.TestCase):
     def test_a_report_with_no_outcome_field_drafts_as_before(self):
         """Absent means did_work. An older report, a degraded one, or a model that ignored the
         field must never cost somebody their answer."""
-        s = MemoryStore(); tid, mid = task_with(s, 'noreply@vendor.com')
+        s = MemoryStore(); tid, mid = task_with(s, 'noreply@vendor.com', sender='automated')
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
             self.assertEqual(coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')['message_id'], mid)
 
     def test_a_held_draft_means_somebody_is_waiting(self):
         """Triage drafted a reply and it was held when the session started - that is standing
         proof there is an answer owed, and a no-op report does not cancel it."""
-        s = MemoryStore(); tid, mid = task_with(s, 'alerts@phishguard.example')
+        s = MemoryStore(); tid, mid = task_with(s, 'alerts@phishguard.example', sender='automated')
         s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                             'Reason': 'needs a reply'})
         s.hold_reviews(tid, 'the agent is looking at it')

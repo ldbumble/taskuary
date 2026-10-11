@@ -55,7 +55,7 @@ class Block(NamedTuple):
 # Only three are. The rest read through several store helpers and compose the section in Python -
 # `kind='view'` says so out loud rather than printing a SELECT that is not the one the block ran.
 # store.recent_messages - the auto-reply match is a Python regex over these rows
-OOO_SQL = ("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
+OOO_SQL = ("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, SenderClass, substr(BodyText, 1, 400) BodyText "
            "FROM message WHERE Status NOT IN ('context','history','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?")
 ALREADY_SAID_SQL = 'SELECT * FROM idea ORDER BY IdeaId DESC'      # store.list_ideas
 NOTES_SQL = 'SELECT * FROM setting'                               # store.get_settings -> assistant_notes, assistant_notes_at

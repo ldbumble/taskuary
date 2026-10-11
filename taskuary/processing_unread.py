@@ -110,7 +110,7 @@ def _noise(row, view) -> bool:
     line: that one stays, saying so (the rail shows what a rule filed; unjudged is not fyi)."""
     from .autoreply import is_auto
     from .ingest import is_ours
-    if row.get('MsgStatus') == 'withdrawn' or is_auto({'Subject': row.get('Subject'), 'Status': row.get('MsgStatus')}): return True
+    if row.get('MsgStatus') == 'withdrawn' or is_auto(row): return True
     at = processing_all._stamp(row.get('SentAt'))
     msgs = view.get('messages') or []
     last = max(msgs, key=lambda m: processing_all._stamp(m.get('SentAt')) or datetime.min, default=None)

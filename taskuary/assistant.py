@@ -187,15 +187,15 @@ def _reply_text(review: dict | None) -> str:
     """The words that left through Review, never an unsent draft."""
     return str((review or {}).get('FinalText') or (review or {}).get('DraftText') or '').strip()
 
-from .autoreply import SUBJECT as _OOO                      # the mail system's own auto-reply mark (autoreply.py)
-_CAL_REPLY = re.compile(r'^(accepted|declined|tentative|tentatively accepted|updated invitation|canceled|cancelled)\s*:', re.I)   # a calendar's own answer
+from .autoreply import is_auto as _ooo_row                 # the mail system's own auto-reply mark, never a subject (autoreply.py)
+from .counsel import is_invite as _cal_mail                # a calendar's own mail: its MIME part / Graph type, never a subject
 _UNTIL = re.compile(r'\b(until|through|returning( on)?|back (on|in the office on))\s+([A-Z][a-z]+day,?\s+)?([A-Z][a-z]+ \d{1,2}(st|nd|rd|th)?|\d{1,2}/\d{1,2}(/\d{2,4})?)', re.I)
 def ooo(store, days: int = 14) -> dict:
     """{sender email: 'out until Monday August 31st (auto-reply Thu 28 Aug)'} from the auto-replies in the
     window - a chase to someone who is away is worse than silence, and the hub already holds the answer."""
     out = {}
     for r in store.recent_messages(_since(days), limit=600):
-        if not _OOO.match(str(r.get('Subject') or '')): continue
+        if not _ooo_row(r): continue
         em = (r.get('FromEmail') or '').lower()
         if not em or em in out: continue                          # newest first: the latest auto-reply wins
         m = _UNTIL.search(str(r.get('BodyText') or ''))
@@ -221,8 +221,7 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
         # ...and nobody to chase behind a report, the Advisor's own thread, an auto-reply or a calendar response - the mail
         # system wrote those, as unanswered() already knew; with a quiet chase said again, "No answer from Automation ideas"
         # and "Accepted: AI Agents" would have come back with it (2026-10-06)
-        subj = str(inbound.get('Subject') or '')
-        if inbound.get('Channel') in ('report', CHANNEL) or _OOO.match(subj) or _CAL_REPLY.match(subj): continue
+        if inbound.get('Channel') in ('report', CHANNEL) or _ooo_row(inbound) or _cal_mail(inbound): continue
         who = inbound.get('FromName') or inbound.get('FromEmail') or 'them'
         sent = _dt(r['SentAt']) or datetime.now()
         days = max(1, int((datetime.now() - sent).total_seconds() // 86400))
@@ -291,7 +290,7 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
     # 500 rows was two quiet days; the away window reaches back up to three weeks (welcome.away_days), so the page grows with it
     for r in store.recent_messages(_since(days), limit=max(500, min(5000, int(days * 250)))):
         cid = r.get('ConversationId')
-        if not cid or cid in seen or r.get('Channel') in ('report', CHANNEL) or _OOO.match(str(r.get('Subject') or '')): continue
+        if not cid or cid in seen or r.get('Channel') in ('report', CHANNEL) or _ooo_row(r): continue
         seen.add(cid)
         if sender_class(r, team) != 'person': continue
         chain = sorted((c for c in store.thread_messages(conversation_id=cid, limit=12) if c.get('Status') != 'skipped'), key=lambda c: _ts(c.get('SentAt')))
@@ -706,7 +705,7 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
     from .categories import sender_class, team_domains_of
     team = team_domains_of(store.get_settings())
     rows = [r for r in store.recent_messages(_since(days), limit=500)
-            if r.get('Channel') not in ('report', CHANNEL) and not _OOO.match(str(r.get('Subject') or ''))]
+            if r.get('Channel') not in ('report', CHANNEL) and not _ooo_row(r)]
     # the owner's own lines are 'context' rows - recent_messages leaves them out, so fetch the threads' chains
     by = {}
     for r in rows:

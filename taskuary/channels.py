@@ -29,8 +29,11 @@ MAIL_LIST_SELECT = ','.join(f for f in MAIL_SELECT.split(',') if f != 'body')
 # text, which on a forwarded mail is what buried Ray's one-sentence ask (TQ-0665). It rides in the
 # $select the bodies already come back on: no extra request, and never in a LISTING, where the whole
 # point is to carry no weight.
-MAIL_BODY_SELECT = 'id,body,uniqueBody'
-MAIL_FULL_SELECT = MAIL_SELECT + ',uniqueBody'
+# ...and the HEADERS, on the same fetch: Auto-Submitted, X-Auto-Response-Suppress, List-Unsubscribe and their kin are
+# the only things allowed to say a mail is an auto-reply or came from a system or a list before a model has read it
+# (autoreply.from_headers, categories.header_class). Graph returns them only when asked for by name (2026-10-11).
+MAIL_BODY_SELECT = 'id,body,uniqueBody,internetMessageHeaders'
+MAIL_FULL_SELECT = MAIL_SELECT + ',uniqueBody,internetMessageHeaders'
 BODY_BATCH = 20              # Graph's $batch ceiling
 
 
@@ -452,6 +455,14 @@ def _clean(html):
     txt = unescape(re.sub(r'<[^>]+>', ' ', txt))
     txt = re.sub(r'[^\S\n]+', ' ', txt.replace('\xa0', ' '))
     return re.sub(r'\n{3,}', '\n\n', re.sub(r' ?\n ?', '\n', txt)).strip()
+
+def _header_marks(m: dict) -> dict:
+    """What a Graph message's own headers say: an auto-reply (never triaged) and who sent it before a model has read it."""
+    from .autoreply import from_headers, headers
+    from .categories import header_class
+    h = headers(m)
+    return {**({'auto_reply': True} if from_headers(h) else {}), **({'sender_class': header_class(h)} if header_class(h) else {})}
+
 
 # Graph's bodyPreview is capped at 255 chars - reading it FIRST truncated every stored mail,
 # so the panel (and the agents) only ever saw the opening sentence. Full body wins.
@@ -1557,6 +1568,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address'],
                             'images': images_for_triage(store, atts), 'invite': is_invite(m),
+                            **_header_marks(m),
                             'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
                                           'flag': (m.get('flag') or {}).get('flagStatus'),
                                           'invite': is_invite(m)}}, llm=llm)

@@ -22,10 +22,11 @@ def _store():
     return s
 
 
-def _mail(s, frm, subject, body, days=3, conv=None, status='filed', tid=None, name=None, hours=0):
+def _mail(s, frm, subject, body, days=3, conv=None, status='filed', tid=None, name=None, hours=0, **cols):
+    # cols: what ingest stores from the mail's protocol or the verdict - SenderClass, MailMetaJson (2026-10-11: never the words)
     return s.add_message({'TaskId': tid, 'ExternalId': f'x:{frm}:{subject}:{days}:{hours}', 'ConversationId': conv, 'Channel': 'email',
                           'SourceName': ME, 'Subject': subject, 'FromName': name or frm.split('@')[0].title(), 'FromEmail': frm,
-                          'SentAt': _ago(days, hours), 'BodyText': body, 'Status': status})
+                          'SentAt': _ago(days, hours), 'BodyText': body, 'Status': status, **cols})
 
 
 def _mine(s, subject, body, days, conv, tid=None):
@@ -51,7 +52,7 @@ class FollowupCandidateTests(unittest.TestCase):
 
     def test_nobody_is_chased_behind_a_report_or_a_calendar_response(self):
         s = _store()
-        _mail(s, 'calendar@ours.com', 'Accepted: AI Agents', 'Accepted', days=6, conv='c1')
+        _mail(s, 'calendar@ours.com', 'Accepted: AI Agents', 'Accepted', days=6, conv='c1', MailMetaJson='{"invite": true}')   # Graph's eventMessageResponse
         _mine(s, 'Re: AI Agents', 'Can you bring the numbers?', days=5, conv='c1')
         s.add_message({'ExternalId': 'r1', 'ConversationId': 'c2', 'Channel': 'report', 'SourceName': 'Automation ideas', 'Subject': 'Automation ideas',
                        'FromName': 'Automation ideas', 'FromEmail': '', 'SentAt': _ago(6), 'BodyText': 'Ideas.', 'Status': 'feed'})
@@ -695,7 +696,8 @@ class WhatItReadsTests(unittest.TestCase):
         s = _store()
         _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
         _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
-        _mail(s, DANA, 'Automatic reply: Q3 ledger', 'I am out of the office until Monday September 7th with no access to email.', days=3, conv='c9')
+        _mail(s, DANA, 'Automatic reply: Q3 ledger', 'I am out of the office until Monday September 7th with no access to email.', days=3, conv='c9',
+              status='autoreply')                                                 # its Auto-Submitted header, at ingest
         self.assertEqual(assistant.ooo(s), {DANA: f'out until Monday September 7th (auto-reply {assistant._when(_ago(3))[:10]})'})
         got = assistant.followups(s, hours=24)
         self.assertEqual(len(got), 1)
@@ -710,7 +712,7 @@ class WhatItReadsTests(unittest.TestCase):
         self._chat(s, 'Priya Shah', 'Also, can you please fill out the performance review? It is almost my hire date.', hours=4)
         self._chat(s, 'Priya Shah', 'Looking now - the review goes out today.', hours=3, mine=True)
         self._chat(s, 'Priya Shah', 'She said that every day from 4 - 5:00 it does not work', hours=2)
-        _mail(s, 'noreply@robots.com', 'Vendor Create', 'This is an automated message. A vendor was created.', days=0, conv='r1')
+        _mail(s, 'noreply@robots.com', 'Vendor Create', 'This is an automated message. A vendor was created.', days=0, conv='r1', SenderClass='automated')
         s.add_message({'ExternalId': 'rep:1', 'ConversationId': 'rep', 'Channel': 'report', 'SourceName': 'Morning digest', 'Subject': 'Morning digest — today',
                        'FromName': 'Morning digest', 'SentAt': _ago(0, 1), 'BodyText': 'By the tags...', 'Status': 'feed'})
         txt = assistant._people(s)
@@ -762,7 +764,7 @@ class WhatItReadsTests(unittest.TestCase):
         _mail(s, 'notifications@github.com', 'Devarajan invited you to acme-hiring-screener',
               'Devarajan invited you to collaborate on acme-hiring-screener. The repository screens '
               'applicants for a multi-factor authentication engineering role. You can accept or decline the invitation.',
-              days=0, conv='invite', status='ignored', name='Devarajan')
+              days=0, conv='invite', status='ignored', name='Devarajan', SenderClass='automated')
         txt = assistant._recent(s)
         self.assertIn('Devarajan invited you to acme-hiring-screener', txt)
         self.assertIn('-> says: "Devarajan invited you to collaborate', txt)

@@ -71,9 +71,11 @@ class UnansweredTests(unittest.TestCase):
 
     def test_an_exchange_bounce_is_a_machine(self):
         s = _store()
-        _mail(s, 'MicrosoftExchange0a1b2c@northwind.onmicrosoft.example', 'Undeliverable: Budget',
-              "Your message couldn't be delivered. Action required: please check the recipient address.", days=1, conv='u1')
-        _mail(s, 'no-reply-x7Yq2@mail.vendor.example', 'Your sign-in link', 'Can you click the button below to sign in?', days=1, conv='u2')
+        a = _mail(s, 'MicrosoftExchange0a1b2c@northwind.onmicrosoft.example', 'Undeliverable: Budget',
+                  "Your message couldn't be delivered. Action required: please check the recipient address.", days=1, conv='u1')
+        b = _mail(s, 'no-reply-x7Yq2@mail.vendor.example', 'Your sign-in link', 'Can you click the button below to sign in?', days=1, conv='u2')
+        # what their headers said at ingest (Return-Path: <>, Auto-Submitted) - the address alone no longer decides (2026-10-11)
+        for mid in (a, b): s._exec("UPDATE message SET SenderClass='automated' WHERE MessageId=?", (mid,))
         self.assertEqual(assistant.unanswered(s, days=3), [])
 
     def test_a_fresh_ask_is_not_yet_missed(self):

@@ -32,9 +32,7 @@ def _preview(body, n: int) -> str:
     imports the same pattern - so this reuses it rather than inventing a second rule.
 
     Only the head of the body is scanned: a banner sits at the top, and running the stripper over
-    every full body would put that work on every row of a 400-row feed. Classification is deliberately
-    untouched - category_of re-reads the raw body below, because "unsubscribe" in a footer is how a
-    promo is recognised.
+    every full body would put that work on every row of a 400-row feed.
     """
     from .triage import own_words, strip_footer
     text = str(body or '')
@@ -280,9 +278,8 @@ def message_row(message, item, threads, now, *, full=False):
         task_runs = [r for r in view.get('runs', []) if r.get('TaskId') == tid]
         row['AgentLeft'] = left_by_facts(task.get('Tags'), task_runs)
         row['GeneralNotStarted'] = general_not_started(task, _has_conversation(view, tid), view.get('routes', []))
-    # Classification needs the existing 4k window even when the HTTP preview is compact.
-    row['Category'] = category_of({**row, 'Preview': (message.get('BodyText') or '')[:4000]},
-                                  team_domains_of(view.get('settings', {})))
+    # who sent it is the row's stored SenderClass (the verdict's, else the headers') - never a reading of the body
+    row['Category'] = category_of({**row, 'SenderClass': message.get('SenderClass')}, team_domains_of(view.get('settings', {})))
     if row.get('Channel') == 'report':
         from .funnel import _FAILED
         row['ReportFailed'] = view.get('report_outcomes', {}).get(row.get('MessageId'),

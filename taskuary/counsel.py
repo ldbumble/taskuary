@@ -15,13 +15,14 @@ from loguru import logger
 
 
 DAYS = 30                 # how far back the dossier reads
-# Outlook and Google subject prefixes on meeting mail, for channels that carry no @odata.type (IMAP)
-_INVITE_SUBJ = re.compile(r'^\s*((updated |new )?invitation|accepted|declined|tentative(ly accepted)?|cancel+ed|'
-                          r'meeting (request|forward notification))\b', re.I)
-
 def is_invite(m: dict) -> bool:
-    """Graph types meeting mail on @odata.type; anything else is judged by the subject prefix
-    Outlook and Google put on invites.
+    """Meeting mail, by what the mail system says it is - never by its subject. Graph types it on
+    @odata.type; IMAP and Gmail carry a text/calendar part (mime_invite, set by the connector as
+    `invite`); a stored row keeps either in MailMetaJson.
+
+    A subject prefix ("Accepted", "Invitation", "Canceled") used to decide it wherever there was no
+    type, so a person's "Accepted - your offer, next steps" filed itself as fyi - "a calendar invite"
+    - with no model ever reading it (2026-10-11: "everything should be ai").
 
     The type is a FAMILY, not one string: an invitation arrives as `eventMessageRequest`, an
     accept or decline as `eventMessageResponse`, and only some meeting mail as plain
@@ -35,7 +36,17 @@ def is_invite(m: dict) -> bool:
     property named 'meetingMessageType' on type 'Message'"). It is honoured when a caller happens to
     hold the full object."""
     if 'eventmessage' in str(m.get('@odata.type') or '').lower() or m.get('meetingMessageType'): return True
-    return bool(_INVITE_SUBJ.match(str(m.get('subject') or m.get('Subject') or '')))
+    if m.get('invite') is True: return True
+    try: meta = json.loads(m.get('MailMetaJson') or 'null') or {}
+    except (TypeError, ValueError): meta = {}
+    return isinstance(meta, dict) and meta.get('invite') is True
+
+
+def mime_invite(msg) -> bool:
+    """An email.message.Message carrying an iCalendar part (RFC 6047 iMIP) - how every mail system sends a request,
+    an answer or a cancellation, whatever the subject says."""
+    try: return any(p.get_content_type() in ('text/calendar', 'application/ics') for p in msg.walk())
+    except Exception: return False
 
 
 def _since(days): return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')

@@ -360,6 +360,20 @@ def _rewound(user: str, box: str, saved, seen) -> bool:
     return changed
 
 
+def protocol_marks(msg) -> dict:
+    """What a raw mail's own protocol says about it, for ingest: an auto-reply (autoreply.from_headers), a calendar
+    message (its text/calendar part - counsel.mime_invite) and who sent it before a model has read it
+    (categories.header_class). Never a subject or a body word (2026-10-11)."""
+    from .autoreply import from_headers
+    from .categories import header_class
+    from .counsel import mime_invite
+    out, sc = {}, header_class(msg)
+    if from_headers(msg): out['auto_reply'] = True
+    if sc: out['sender_class'] = sc
+    if mime_invite(msg): out.update(invite=True, mail_meta={'invite': True})
+    return out
+
+
 def _fetch_message(M, uid: int):
     """Fetch and decode one message, distinguishing a retryable UID hole from local persistence."""
     typ, parts = M.uid('fetch', str(uid), '(RFC822)')
@@ -699,8 +713,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     # References threads replies the way Graph's conversationId does
                     'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
                     'sent_at': sent_at, 'source_name': user}
-                from .autoreply import from_headers
-                if from_headers(msg): incoming['auto_reply'] = True
+                incoming.update(protocol_marks(msg))
             except Exception as e:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
             conv = incoming['conversation_id']

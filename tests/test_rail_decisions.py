@@ -42,13 +42,15 @@ class DecidedLeavesTheRailTests(unittest.TestCase):
 
 
 class NoiseTests(unittest.TestCase):
-    def test_an_auto_reply_is_off_the_rail_unless_the_setting_is_off(self):
+    def test_an_auto_reply_is_never_on_the_rail(self):
+        """Its header made it `autoreply` at ingest: stored for the Advisor, never an arrival, whatever the setting.
+        A subject reading "Automatic reply:" is no longer the mark (2026-10-11) - a person may write one."""
         s, settle = settled()
-        mail(s, 'Automatic reply: Invoice 42', who='Ray Colton', email='ray@vendor.example', hours=1)
+        mail(s, 'Automatic reply: Invoice 42', who='Ray Colton', email='ray@vendor.example', hours=1, status='autoreply')
         settle()
         self.assertEqual(rail(s), [])
         s.set_setting('rail_hide_noise', '0', 'owner'); funnel.invalidate()
-        self.assertEqual(len(rail(s)), 1)
+        self.assertEqual(rail(s), [])
 
     def test_the_setting_is_in_the_schema(self):
         from taskuary import appfacts

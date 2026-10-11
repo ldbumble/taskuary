@@ -19,7 +19,7 @@ CALENDAR (the next two days):
 (nothing on the calendar for two days - calendar off)
 
 ARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):
-- [feed] Sam Okoro: "Automatic reply: Audit questions" (latest mid 6 <day> <mon> <time>) -> says: "I am out of the office until Monday with limited access to email."
+- [filed] Sam Okoro: "Automatic reply: Audit questions" (latest mid 6 <day> <mon> <time>) -> says: "I am out of the office until Monday with limited access to email."
 - [feed] Dana Reed: "Q3 ledger" (latest mid 1 <day> <mon> <time>) -> says: "Here is the Q3 ledger. Let me know if the reconciliation looks right."
 
 DONE THIS WEEK (my own work, with the agent's summary):
@@ -62,7 +62,7 @@ CALENDAR (the next two days):
 (nothing on the calendar for two days - calendar off)
 
 ARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):
-- [feed] Sam Okoro: "Automatic reply: Audit questions" (latest mid 6 <day> <mon> <time>) -> says: "I am out of the office until Monday with limited access to email."
+- [filed] Sam Okoro: "Automatic reply: Audit questions" (latest mid 6 <day> <mon> <time>) -> says: "I am out of the office until Monday with limited access to email."
 - [feed] Dana Reed: "Q3 ledger" (latest mid 1 <day> <mon> <time>) -> says: "Here is the Q3 ledger. Let me know if the reconciliation looks right."
 
 DONE THIS WEEK (my own work, with the agent's summary):

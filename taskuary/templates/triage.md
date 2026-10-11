@@ -97,6 +97,7 @@ Signs against coding: the work only reads from a system (a query, a report, a lo
 - **outputs** (a task) - only messages the sender asks the owner to send to OTHER people: `to` (the address when given, else the name as written) and `about`. A reply to the sender is not an output; most tasks have none.
 - **urgent** - true only when time presses: a deadline today or tomorrow, a meeting it serves happening today, someone blocked right now. A failure or a request with no time on it is not urgent, nor is "ASAP" alone, nor any fyi. Almost everything is false.
 - **due** - the day the work must be done by when the message names one ("by Friday", "before the 15th", "due 10/9"), worked out from `sent_on`; null when no day is named. A meeting's date is a due date only when something must be ready for it.
+- **sender_class** - who wrote it, for every verdict: "person" when a human wrote this message (a colleague, a customer, a vendor's account manager - whatever address they write from), "automated" when a system generated it (an alert, a notification, a receipt, a report), "bulk" when it went out to a list (a newsletter, marketing, an announcement). Judge from the words and the sender, not the address alone; when unsure, "person".
 - **why** - one concrete sentence, 25 words max: what you saw and what tipped the verdict. The owner reads it to judge you.
 
 ## 6. The evidence you may be given
@@ -117,4 +118,4 @@ Each is a sign to weigh; an absent field is not evidence either way.
 
 ## 7. The answer
 
-JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "...", "title": "...", "summary": "...", "checklist": ["..."], "outputs": [{"to": "...", "about": "..."}], "urgent": false, "due": "YYYY-MM-DD or null"} - plus `same_as`, `profile`, `playbook`, `repository` / `needs_repo_choice` / `repo_reason`, and for a chat line `relationship` / `related_message_ids` / `existing_task_id` / `same_problem`, whenever the input gives you what they are chosen from.
+JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "...", "title": "...", "summary": "...", "checklist": ["..."], "outputs": [{"to": "...", "about": "..."}], "urgent": false, "due": "YYYY-MM-DD or null", "sender_class": "person|automated|bulk"} - plus `same_as`, `profile`, `playbook`, `repository` / `needs_repo_choice` / `repo_reason`, and for a chat line `relationship` / `related_message_ids` / `existing_task_id` / `same_problem`, whenever the input gives you what they are chosen from.

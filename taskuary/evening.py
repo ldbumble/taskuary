@@ -5,7 +5,6 @@ at the end of the local workday, reads only email activity from a short rolling 
 one durable brief on the Timeline. Its instruction remains editable on the Reports tab.
 """
 import json
-import re
 from datetime import datetime, timedelta
 
 from .categories import category_of, team_domains_of
@@ -70,10 +69,9 @@ CONTRACT = (
 )
 
 
-_RECEIPT = re.compile(
-    r'\b(receipt|order confirmation|payment confirmation|invoice paid|your payment|purchase confirmation)\b',
-    re.I,
-)
+# A receipt is a system's mail, and the verdict already says so (sender_class "automated" -> the category dropped
+# below). A word list over subject and body used to drop "receipts", and with them a person's "your payment is
+# overdue - please call me" (2026-10-11, the owner: "everything should be ai").
 
 
 def system(store) -> str:
@@ -91,9 +89,7 @@ def _one_line(value, limit=220) -> str:
 
 
 def _invite(row: dict) -> bool:
-    return (_mail_meta(row).get('invite') is True
-            or 'calendar invite' in str(row.get('RouteReason') or '').lower()
-            or is_invite(row))
+    return is_invite(row)          # the stored invite mark (MailMetaJson), never the words of the route reason
 
 
 def _mail_meta(row: dict) -> dict:
@@ -166,12 +162,10 @@ def gather(store, hours: int = HOURS) -> str:
         if row.get('Status') == 'ignored' and row.get('RoutedBy') == 'owner':
             archived.append(row)
             continue
-        category = category_of({**row, 'MsgStatus': row.get('Status'), 'Preview': row.get('BodyText')}, team)
+        category = category_of({**row, 'MsgStatus': row.get('Status')}, team)
         # Policy suppression is excluded, as are the two categories specifically meant to keep
-        # bulk/system traffic out of a human brief. Owner filing above is a completed action.
+        # bulk/system traffic (receipts among it) out of a human brief. Owner filing above is a completed action.
         if row.get('Status') in ('skipped', 'ignored', 'withdrawn') or category in ('promo', 'automated'):
-            continue
-        if _RECEIPT.search(f"{row.get('Subject') or ''} {row.get('BodyText') or ''}"):
             continue
         eligible.append(row)
 

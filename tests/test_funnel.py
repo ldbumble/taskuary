@@ -895,7 +895,7 @@ class MemoryTests(unittest.TestCase):
         for n in range(3):
             m = mail(s, f'Re: budget {n}', who='Lee', email='lee@ours.com', body='thoughts below', hours=n, status='filed', conv='budget')
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        m = mail(s, 'Automatic reply: out of office', who='Sam', email='sam@ours.com', body='Back Monday.', hours=1, status='filed', conv='ooo')
+        m = mail(s, 'Automatic reply: out of office', who='Sam', email='sam@ours.com', body='Back Monday.', hours=1, status='autoreply', conv='ooo')
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         t = s.create_task({'Title': 'Fix the import', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         mail(s, 'Import broken', hours=1, tid=t)

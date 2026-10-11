@@ -27,6 +27,7 @@ class EveningGatherTests(unittest.TestCase):
                        'Status': 'context'})
         invite = _mail(s, 'invite', 'Invitation: Budget sync')
         s.add_route(invite, None, 'file', None, 'triage: fyi - a calendar invite - a meeting to be ready for', [], 'triage')
+        s._exec('UPDATE message SET MailMetaJson=? WHERE MessageId=?', (json.dumps({'folder': 'inbox', 'invite': True}), invite))
         open_mid = _mail(s, 'open', 'Renewal decision')
         tid = s.create_task({'Title': 'Renewal decision', 'Kind': 'general', 'Priority': 'urgent'}, 'test')
         s._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (tid, 'routed', open_mid))
@@ -36,8 +37,14 @@ class EveningGatherTests(unittest.TestCase):
         custom = _mail(s, 'custom', 'Filed vendor note')
         s._exec('UPDATE message SET MailMetaJson=? WHERE MessageId=?',
                 (json.dumps({'folder': 'custom-folder-id', 'focus': 'focused'}), custom))
-        _mail(s, 'promo', 'September deals', 'marketing@vendor.example', body='Unsubscribe from this newsletter')
-        _mail(s, 'receipt', 'Payment receipt', body='Your payment confirmation is attached.')
+        promo = _mail(s, 'promo', 'September deals', 'marketing@vendor.example', body='Unsubscribe from this newsletter')
+        s.add_route(promo, None, 'file', None, 'triage: fyi - a newsletter', [], 'triage', verdict={'intent': 'fyi', 'sender_class': 'bulk'})
+        receipt = _mail(s, 'receipt', 'Payment receipt', 'billing@vendor.example', body='Your payment confirmation is attached.')
+        s.add_route(receipt, None, 'file', None, 'triage: fyi - a receipt', [], 'triage', verdict={'intent': 'fyi', 'sender_class': 'automated'})
+        # a PERSON writing about a payment is not a receipt: the word list that dropped "your payment" dropped this too
+        overdue = _mail(s, 'overdue', 'Your payment is overdue - please call', 'gail@vendor.example', body='Your payment is overdue - please call me today.')
+        s._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?',
+                (s.create_task({'Title': 'Call about the overdue payment', 'Kind': 'task'}, 'test'), 'routed', overdue))
         _mail(s, 'old', 'Yesterday', hours=9)
 
         text = evening.gather(s, 8)
@@ -52,6 +59,7 @@ class EveningGatherTests(unittest.TestCase):
         self.assertNotIn('Filed vendor note', text)
         self.assertNotIn('September deals', text)
         self.assertNotIn('Payment receipt', text)
+        self.assertIn('Your payment is overdue - please call', text)
         self.assertNotIn('Yesterday', text)
 
     def test_the_evening_report_uses_the_assistant_voice_contract(self):

@@ -17,22 +17,14 @@ is more important than an FYI from a vendor's marketing team". Both are 'fyi' to
 classifier - nothing to do - but one is a colleague keeping you in the loop and the other is
 a mailing list, and they must not wear the same tag.
 """
-import re
-
-# microsoftexchange<hex>@<tenant>.onmicrosoft.com is Exchange's own bounce sender ("Undeliverable: ...")
-FROM_AUTOMATED = re.compile(r'^(no-?reply|do-?not-?reply|notifications?|alerts?|reports?|system|mailer-daemon|postmaster|'
-                            r'bounce|automated|auto|microsoftexchange[0-9a-f]*|no-?reply-[\w.-]+|[\w.-]*-noreply|[\w.-]*-alerts?|[\w.-]*-notifications?)@', re.I)
-FROM_PROMO = re.compile(r'^(news(letter)?s?|marketing|promo(tions)?|offers?|deals?|hello|hi|team|updates?|community|digest|'
-                        r'insights?|events?|webinars?|info|contact|success|growth|product|announcements?)@', re.I)
-BODY_PROMO = re.compile(r'unsubscribe|manage (your )?(email )?preferences|view (this )?(email )?in (your )?browser|'
-                        r'opt[ -]out|you are receiving this (email )?because|update your (email )?preferences', re.I)
-# a robot sender that ALSO carries mailing-list furniture is marketing (noreply@vendor.com with
-# "manage preferences"); a bare "unsubscribe" is not enough there - GitHub's own notifications
-# end with "or unsubscribe", and those are automated, not promo
-BODY_PROMO_STRONG = re.compile(r'manage (your )?(email )?preferences|view (this )?(email )?in (your )?browser|'
-                               r'you are receiving this (email )?because|update your (email )?preferences', re.I)
-BODY_AUTOMATED = re.compile(r'this is an automated (message|email|notification)|do not reply to this (message|email)|'
-                            r'automatically generated|please do not reply', re.I)
+# WHO SENT IT - a person, a system or a mailing list - is the triage model's to say (`sender_class` on its verdict,
+# kept on the message by store.add_route), and before a verdict exists only the mail PROTOCOL may say it: the list and
+# auto-submission headers the sending system writes about itself (header_class, written at ingest). Five regexes over
+# the address and the body decided it before, so a colleague writing from info@ or hello@ was "promo", one whose
+# footer said "please do not reply" was "automated", and the Advisor never spoke about either (the owner, 2026-10-11:
+# "everything should be ai"). No verdict and no header is a PERSON - a robot is never assumed, because a person filed
+# as one is never looked at again.
+SENDER_CLASSES = ('person', 'automated', 'bulk')
 CHAT = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord',
         'mattermost', 'rocketchat', 'matrix', 'google_chat'}
 
@@ -40,17 +32,26 @@ CHAT = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord',
 def _domain(email): return (email or '').rsplit('@', 1)[-1].lower().strip()
 
 
+def header_class(h) -> str | None:
+    """'automated' | 'bulk' | None from the headers a sending system writes about itself (any case-insensitive
+    .get(name): an email.message.Message, or autoreply.headers() over Graph's list). Parsing, not reading: RFC 3834
+    Auto-Submitted and Exchange's X-Auto-Response-Suppress say a system sent it, a null Return-Path is the bounce
+    envelope; RFC 2369/2919 List-* and Precedence: bulk/list say a list did. A notifier that also carries an
+    unsubscribe link is the system - its own statement is the more explicit one."""
+    g = lambda k: str(h.get(k) or '').strip().lower()
+    auto = g('Auto-Submitted')
+    if (auto and not auto.startswith('no')) or g('X-Auto-Response-Suppress') or g('Return-Path') == '<>': return 'automated'
+    if g('List-Unsubscribe') or g('List-Id') or g('Precedence') in ('bulk', 'list', 'junk'): return 'bulk'
+    return None
+
+
 def sender_class(r: dict, team_domains=()) -> str:
-    """'person' | 'automated' | 'promo' from the sender address and the first screen of body.
-    A chat message is always a person. Your own organisation's mail is a person unless the
-    address itself says it is a robot (noreply-securityapp@ is a system, whoever runs it)."""
+    """'person' | 'automated' | 'bulk' for a message row: a chat line is always a person; otherwise the row's
+    SenderClass (the verdict's, else the headers') - and nothing at all is a person. `team_domains` is kept for
+    the callers; the address no longer decides anything."""
     if (r.get('Channel') or '') in CHAT: return 'person'
-    em, body = (r.get('FromEmail') or '').strip().lower(), (r.get('Preview') or r.get('BodyText') or '')[:4000]
-    if FROM_AUTOMATED.match(em): return 'promo' if BODY_PROMO_STRONG.search(body) else 'automated'
-    if _domain(em) in {d.lower() for d in team_domains if d}: return 'person'
-    if BODY_PROMO.search(body) or FROM_PROMO.match(em): return 'promo'
-    if BODY_AUTOMATED.search(body): return 'automated'
-    return 'person'
+    sc = str(r.get('SenderClass') or '').lower()
+    return sc if sc in SENDER_CLASSES else 'person'
 
 
 def category_of(r: dict, team_domains=()) -> str:
@@ -71,7 +72,7 @@ def category_of(r: dict, team_domains=()) -> str:
         # only an fyi verdict earns a "nothing to do, here is who said it" tag; a message filed
         # because triage failed, or because you already ruled on the thread, is just filed
         if not reason.startswith('triage: fyi'): return 'filed'
-        return {'person': 'info', 'automated': 'automated', 'promo': 'promo'}[sender_class(r, team_domains)]
+        return {'person': 'info', 'automated': 'automated', 'bulk': 'promo'}[sender_class(r, team_domains)]
     kind = r.get('TaskKind') or ''
     if kind == 'reply': return 'review'
     if kind == 'coding': return 'coding'

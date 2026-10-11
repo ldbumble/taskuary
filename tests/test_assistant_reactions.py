@@ -52,12 +52,13 @@ def store():
     return s
 
 
-def brain(intent='task', kind='coding', why='because', playbook=None):
-    """Triage's answer, scripted."""
+def brain(intent='task', kind='coding', why='because', playbook=None, sender=None):
+    """Triage's answer, scripted - `sender` is its sender_class (who wrote it: the model says, 2026-10-11)."""
     def llm(system, user, **kw):
         out = {'intent': intent, 'why': why}
         if intent == 'task' and kind: out['kind'] = kind
         if playbook: out['playbook'] = playbook
+        if sender: out['sender_class'] = sender
         return json.dumps(out)
     return llm
 
@@ -147,7 +148,7 @@ class ArrivalsTests(unittest.TestCase):
     def test_fyi_and_marketing_are_filed_but_stay_unread_until_the_owner_clears_them(self):
         s = store()
         promo = arrive(s, subject='Monthly newsletter', body='News from us', who='Marketing',
-                       email='news@vendor.com', llm=brain('fyi', None, 'a newsletter'))
+                       email='news@vendor.com', llm=brain('fyi', None, 'a newsletter', sender='bulk'))
         self.assertEqual((promo['status'], promo['task_id']), ('filed', None))
         self.assertEqual([(i['kind'], i['category']) for i in pile(s)], [('fyi', 'promo')])
         person = arrive(s, subject='FYI - Rebecca is back Tuesday', body='Just so you know.', who='Erin',
@@ -156,7 +157,7 @@ class ArrivalsTests(unittest.TestCase):
         self.assertEqual(lanes(s), [('fyi', 'fyi'), ('fyi', 'fyi')])    # both are unread; the category still ranks/explains them
 
         robot = arrive(s, subject='Backup completed', body='This is an automated notification.', who='System',
-                       email='noreply@vendor.com', conv='c:robot', hours=0, llm=brain('fyi', None, 'system notice'))
+                       email='noreply@vendor.com', conv='c:robot', hours=0, llm=brain('fyi', None, 'system notice', sender='automated'))
         self.assertEqual(robot['status'], 'filed')
         self.assertEqual([i['category'] for i in pile(s)], ['info', 'promo', 'automated'])
 
@@ -197,7 +198,7 @@ class ArrivalsTests(unittest.TestCase):
     def test_an_auto_reply_is_nobody_asking_anything(self):
         s = store()
         arrive(s, subject='Automatic reply: out of office', body='Back Monday.', who='Rebecca',
-               email='rebecca@ours.com', llm=brain('fyi', None))
+               email='rebecca@ours.com', llm=brain('fyi', None), auto_reply=True)     # its header, as the connector reads it
         self.assertEqual(pile(s), [])
 
     def test_a_report_that_landed_and_one_that_failed_read_differently(self):

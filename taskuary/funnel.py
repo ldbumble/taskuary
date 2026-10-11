@@ -14,7 +14,8 @@ from pathlib import Path
 from loguru import logger
 
 from .store import task_ref, auto_code_enabled
-from .assistant import _ts, _dt, _short, _cut, _gist, _agenda, _OOO
+from .assistant import _ts, _dt, _short, _cut, _gist, _agenda
+from .autoreply import is_auto
 from .funnel_presentation import present as _present
 from .processing_order import attention_band, gave_up, priority_rank
 from .workerstate import says as agent_says, sub_state, request_line   # funnel.says is a message's subject
@@ -207,7 +208,7 @@ def _feed_skip(r: dict) -> bool:
     anything on a task that is over (unless a draft on it still waits for a yes)."""
     if r.get('Direction') == 'out' or r.get('MsgStatus') in ('withdrawn', 'ignored'): return True
     if r.get('TaskStatus') in ('done', 'dropped') and r.get('ReviewStatus') != 'pending': return True
-    return bool(_OOO.match(str(r.get('Subject') or '')))
+    return is_auto(r)                 # the mail system's mark (autoreply.py), never the subject
 
 
 def _assistant_wrapper(r: dict) -> bool:

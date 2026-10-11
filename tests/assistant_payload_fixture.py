@@ -53,7 +53,7 @@ def store():
           'FromName': 'Me', 'FromEmail': ME, 'SentAt': _ago(days=2, hours=4),
           'BodyText': 'I will send you the answers tomorrow.'})
     # an auto-reply: OUT OF OFFICE, and the line that rides on a chase
-    mail({'ExternalId': 'm6', 'ConversationId': 'c-ooo', 'Subject': 'Automatic reply: Audit questions', 'Direction': 'in',
+    mail({'ExternalId': 'm6', 'ConversationId': 'c-ooo', 'Subject': 'Automatic reply: Audit questions', 'Direction': 'in', 'Status': 'autoreply',
           'FromName': 'Sam Okoro', 'FromEmail': 'sam@client.example', 'SentAt': _ago(days=1, hours=2),
           'BodyText': 'I am out of the office until Monday with limited access to email.'})
 

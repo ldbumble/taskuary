@@ -47,7 +47,7 @@ OWN_CHANNELS = ('report', 'assistant')
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
-            'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy')
+            'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 def _fold(value):
     """Case-fold for search. casefold() beats lower() on the pairs that differ (German ss)."""
@@ -249,7 +249,7 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
-  Direction TEXT DEFAULT 'in', RecipientsJson TEXT, MailMetaJson TEXT, OwnText TEXT);
+  Direction TEXT DEFAULT 'in', RecipientsJson TEXT, MailMetaJson TEXT, OwnText TEXT, SenderClass TEXT);
 CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
@@ -907,6 +907,11 @@ class SQLiteStore:
             # verdict's line lives for a message that never became work.
             if 'TriageTitle' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN TriageTitle TEXT')
+            # WHO SENT IT - person / automated / bulk (categories.sender_class): the mail's own list and auto-submission
+            # headers at ingest, then the triage verdict's word over them (add_route). Null on every row stored before
+            # 2026-10-11, which reads as a person: the address-and-footer regexes that guessed it are gone.
+            if 'SenderClass' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN SenderClass TEXT')
             # WHAT ORDER TO JUDGE IT IN (bulk processing, rank.py). Triage is the expensive call, so a
             # connector in rank mode ranks its arrivals BEFORE judging any: 300 pull requests cost one
             # listwise ranking call and four triage calls, not 300 triage calls. The value lives on the
@@ -2032,7 +2037,7 @@ class SQLiteStore:
                           '(SELECT ConversationId FROM message WHERE lower(FromEmail)=? AND ConversationId IS NOT NULL) '
                           'ORDER BY SentAt DESC LIMIT ?', (since, email.lower(), limit))
     def recent_messages(self, since, limit=300):
-        return self._rows("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
+        return self._rows("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, SenderClass, substr(BodyText, 1, 400) BodyText "
                           "FROM message WHERE Status NOT IN ('context','history','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
     def set_brief(self, mid, brief): self._exec('UPDATE message SET Brief=? WHERE MessageId=?', (brief, mid))
     # ── what the assistant's post reads (assistant.py) ────────────────────────────────────────
@@ -3309,7 +3314,7 @@ class SQLiteStore:
                 for idea_rows in linked.values(): idea_rows.sort(key=lambda x: x['IdeaId'], reverse=True)
                 q = f'''SELECT m.MessageId,m.Channel,m.SourceName,m.Subject,m.FromName,m.FromEmail,
                     m.SentAt,m.CreatedAt IngestedAt,m.ConversationId,substr(m.BodyText,1,4000) Preview,
-                    m.Status MsgStatus,m.SourceLink,m.TaskId,m.Direction,m.Brief,m.TriageTitle,
+                    m.Status MsgStatus,m.SourceLink,m.TaskId,m.Direction,m.Brief,m.TriageTitle,m.SenderClass,
                     t.Title,t.Status TaskStatus,t.Priority,t.Kind TaskKind,t.Tags TaskTags,
                     IFNULL(ch.n,0) ChainSize,rt.Decision,rt.Reason RouteReason,
                     rv.ReviewId,rv.Status ReviewStatus,rv.Kind ReviewKind,
@@ -3858,6 +3863,10 @@ class SQLiteStore:
 
     def add_route(self, mid, tid, decision, score, reason, candidates, routed_by='router',
                   raw_output=None, parse_error=None, verdict=None):
+        # the verdict's sender_class outranks the headers' guess on the message itself, so every reader of a row
+        # (the chip, the Advisor, the evening brief, the coder's hold) sees the model's word without a join
+        sc = (verdict or {}).get('sender_class') if isinstance(verdict, dict) else None
+        if sc in ('person', 'automated', 'bulk') and mid: self._exec('UPDATE message SET SenderClass=? WHERE MessageId=?', (sc, mid))
         return self._exec('''INSERT INTO route
             (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError,VerdictJson)
             VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
@@ -4835,7 +4844,7 @@ class SQLiteStore:
              live_state=_LIVE_UNSET, ids=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt, m.CreatedAt IngestedAt,
                        m.ConversationId,
-                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief, m.TriageTitle,
+                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief, m.TriageTitle, m.SenderClass,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,

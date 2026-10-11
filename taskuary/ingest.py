@@ -1933,6 +1933,8 @@ def _fields(msg, task_id):
             # was cut from - the panel keeps showing the real mail (channels._own)
             'OwnText': msg.get('own_text') or None,
             'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None,
+            # what the mail's own headers say sent it (categories.header_class) - the verdict overwrites it (store.add_route)
+            'SenderClass': msg.get('sender_class') if msg.get('sender_class') in ('automated', 'bulk') else None,
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)
             'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})
                               if (msg.get('to') or msg.get('cc')) else None,

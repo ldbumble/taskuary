@@ -665,11 +665,15 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # conversation used to file every later reply unread (PW-020). It reaches the model below
         # as evidence (judge), and the model says what THIS message is.
         busy = any(x['Status'] == 'running' for x in store.list_runs(tid))
+        # the agent's own conversation: its task's opener writing while it runs. Only their words reach the agent's
+        # terminal, and only their mail leaves the drafted reply for the agent's answer (B6, 2026-10-11)
+        talking = busy and from_opener(store, tid, msg)
         # A reply INHERITS the task's kind and nothing used to ask what it actually says, so
         # "Thank you!" on an open coding task read as "asked you" in the pipe. Triage judges it
         # like any other message (the owner, 2026-09-03: "the triage should realize that"); an
-        # fyi verdict keeps it on the task for the chain and off the owner's pile. Never while an
-        # agent is waiting on this thread: that round trip IS the answer it asked for.
+        # fyi verdict keeps it on the task for the chain and off the owner's pile. A running agent on the
+        # thread no longer skips it: "also need the Q3 file by Friday" got no due day that way (B6, 2026-10-11);
+        # only the redraft waits for the agent (below).
         follow, _fail = None, {}
         # a chat line was judged once already, before routing (chat_route): that verdict is the follow-up's
         if verdict is not None: follow, _fail = verdict
@@ -678,7 +682,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # as the newest word on it, never work and never a reopening (the owner, 2026-09-25)
         elif msg.get('invite'): follow = {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}
         # no keyword fyi before the model any more (the owner, 2026-09-25): triage reads every follow-up
-        elif not busy and cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg):
+        elif cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg):
             try: follow, _fail = judge(store, msg, llm, mine, me)
             except Exception as e:
                 logger.warning(f'ingest: the follow-up verdict failed - {e}')
@@ -708,6 +712,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                             verdict=_stored_verdict(follow))
             store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - fyi, nothing to do")
             logger.info(f"ingest: filed onto {task_ref(tid)} as fyi - {msg.get('subject') or ''}")
+            # nothing for the owner, but the answer the waiting agent asked for all the same - it was typed in when a
+            # busy thread skipped triage, and judging it must not strand the agent (B6, 2026-10-11)
+            if talking: _hand_to_agent(store, cfg, tid, msg, actor)
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         if r.get('reopen'): _reopen(store, tid, msg, actor)
@@ -730,7 +737,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # left the pending reply pinned to his first one, warned as behind, with nothing behind
             # the warning (TQ-0665, 2026-09-21). The reply is owed to the newest line either way, and
             # the owner still approves it. An fyi never reaches here: it files and returns above.
-            if follow and not follow.get('degraded'):
+            if follow and not follow.get('degraded') and not talking:
                 store.update_review_message(behind['ReviewId'], mid)
                 store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it and is being rewritten from the latest context.')
                 _spawn(_auto_draft, store, tid, behind['ReviewId'])
@@ -739,7 +746,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # change is said on the task rather than made silently (PW-076)
             added = store.merge_task_checklist(tid, follow['checklist'], 'triage')
             if added: store.add_comment(tid, 'triage', 'agent', 'New from the latest message:\n' + '\n'.join(f"- [ ] {i['text']}" for i in added))
-        if follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not store.pending_review(tid):
+        if follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not talking and not store.pending_review(tid):
             # a fresh question on an existing task is reply-needed there: one pending review for
             # this message, drafted at once, whatever the channel can carry (PW-043)
             unsendable = send_block(store, msg.get('channel'))
@@ -749,13 +756,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # the classic round trip: the agent asked something, the hub asked the person, and
         # THIS is their answer arriving on the same thread. With answer_to_agent=auto it is
         # typed straight into the live session; 'ask' leaves the one-click offer in the
-        # panel; 'off' does neither. A dead session just means False - nothing breaks.
-        if cfg.get('answer_to_agent', 'ask') == 'auto':
-            try:
-                from . import terminal
-                terminal.say_to_task(store, tid, msg, actor)
-            except Exception as e:
-                logger.warning(f'answer_to_agent failed for task {tid}: {e}')
+        # panel; 'off' does neither. A dead session just means False - nothing breaks. Only the task's own
+        # person: anyone else on the thread is not the one it asked (B6, 2026-10-11).
+        if from_opener(store, tid, msg): _hand_to_agent(store, cfg, tid, msg, actor)
     else:
         # Nothing the owner said before decides here without a model. A ruling on THIS thread used
         # to (ingest.ruled_on_thread, until PW-020): every later reply on a dismissed email thread
@@ -1321,6 +1324,30 @@ def is_ours(m: dict) -> bool:
             or str(m.get('FromName') or '').strip().lower() == 'you')
 
 
+def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
+    """answer_to_agent=auto: type the line into the task's live session (terminal.say_to_task)."""
+    if cfg.get('answer_to_agent', 'ask') != 'auto': return
+    try:
+        from . import terminal
+        terminal.say_to_task(store, tid, msg, actor)
+    except Exception as e: logger.warning(f'answer_to_agent failed for task {tid}: {e}')
+
+
+def _who(m: dict) -> str:
+    """Who wrote a message, as one comparable key - its address, else its display name (a chat line often has no
+    address). Reads a DB row (FromEmail/FromName) or an ingest dict (from_email/from_name)."""
+    return str(m.get('FromEmail') or m.get('from_email') or m.get('FromName') or m.get('from_name') or '').strip().lower()
+
+
+def from_opener(store, tid, msg: dict) -> bool:
+    """The message comes from the person who opened the task - the first line on it that is not ours. Only their
+    words are the agent's round trip: Gail's request in the group where Erin's task runs is not an answer to Erin's
+    agent (B6, 2026-10-11). An opener nobody can name is nobody's: False."""
+    first = next((m for m in store.list_messages(tid) if not is_ours(m)), None)
+    me = _who(msg)
+    return bool(first and me and _who(first) == me)
+
+
 def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen: set = None) -> list:
     """The conversation as a person scrolling up would read it - theirs and OURS, oldest first,
     each marked with who said it, each message's own words once. The owner's own half was in the
@@ -1457,8 +1484,8 @@ def _reopen(store, tid, msg: dict, actor: str) -> bool:
 def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     """Where a chat line goes: (route dict, (verdict, fail) or None).
 
-    One FACT joins without a model: a line arriving while an agent is live on the room's task is the
-    round trip it asked for (how soon a line follows the last is evidence for triage, never a join). Everything else is the one triage verdict's
+    One FACT joins without a model: a line from the person who opened the task, arriving while an agent is
+    live on it, is the round trip it asked for (how soon a line follows the last is evidence for triage, never a join). Everything else is the one triage verdict's
     `relationship`, judged among this room's same-day lines (chat_candidates): continues/answers
     with a valid related line or task joins that task; new and uncertain open work of their own.
     The room id alone never joins (PW-018/PW-032); without a brain, nothing but the facts does."""
@@ -1470,7 +1497,11 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     # verdict decides, not the clock.
     live = next((c['task_id'] for c in reversed(cands) if _open_task(store, c['task_id'])
                  and any(x['Status'] == 'running' for x in store.list_runs(c['task_id']))), None)
-    if live:
+    # ...and only from the person whose task it is. ANY line in the room used to join a live agent's task unread, so
+    # Gail's "approve the invoice before noon" in the group where Erin's bug was being coded had no task, no due day and
+    # no draft - and was typed into the coder as Erin's answer (B6, 2026-10-11). Anyone else's line is judged below, the
+    # live task among the room's lines it may name: it joins if the verdict says it belongs, else it is its own work.
+    if live and from_opener(store, live, msg):
         return ({'decision': 'attach', 'task_id': live, 'score': 1.0, 'candidates': [],
                  'reason': 'an agent is working this and asked on this chat'}, None)
     room = next((c['task_id'] for c in reversed(cands) if _open_task(store, c['task_id'])), None)

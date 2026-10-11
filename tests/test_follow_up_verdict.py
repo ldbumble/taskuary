@@ -84,13 +84,15 @@ class FollowUpVerdictTests(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('todo', 'yours')])
 
-    def test_the_round_trip_an_agent_is_waiting_for_is_never_second_guessed(self):
+    def test_the_round_trip_an_agent_is_waiting_for_stays_on_its_task_and_is_still_judged(self):
+        """A running agent used to skip the verdict, so a reply that also set a deadline never got its due day
+        (B6, 2026-10-11). It is judged; it stays on the task, and the agent still gets the answer (test_answers)."""
         s = store(); t = opened(s)
         s.start_run(t, 'codex', 'work it', 'owner')
         asked = []
-        out = ingest.ingest_message(s, reply('Use the 8/17 file.'), llm=lambda *a, **k: asked.append(1) or '{}')
+        out = ingest.ingest_message(s, reply('Use the 8/17 file.'), llm=lambda *a, **k: asked.append(1) or brain('task', 'the answer', 'coding')(*a, **k))
         self.assertEqual((out['status'], out['task_id']), ('attached', t))
-        self.assertEqual(asked, [])                              # no verdict is asked for while the agent waits
+        self.assertEqual(asked, [1])
 
     def test_without_a_brain_a_follow_up_attaches_as_it_always_did(self):
         s = store(); t = opened(s)

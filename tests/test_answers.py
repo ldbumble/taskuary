@@ -134,7 +134,7 @@ class SayToTaskTests(unittest.TestCase):
 
 class AttachHookTests(unittest.TestCase):
     def _attachable(self, s):
-        return Factory(s).attachable().tid
+        return Factory(s).attachable(from_email='sarah@x.com').tid
 
     def test_auto_hands_the_answer_over(self):
         s = MemoryStore(); s.set_setting('answer_to_agent', 'auto', 't')
@@ -154,6 +154,38 @@ class AttachHookTests(unittest.TestCase):
                                             'body': 'Use the 8/17 file.', 'conversation_id': 'c1',
                                             'sent_at': '2026-08-23 10:00:00'})
         self.assertEqual(out['status'], 'attached'); say.assert_not_called()
+
+
+class BusyThreadTests(unittest.TestCase):
+    """A mail on a thread whose agent is running used to skip triage entirely: no due day, and whoever wrote it
+    was typed into the coder under auto (B6, 2026-10-11). It is judged now; only the redraft waits on the agent."""
+    def setUp(self):
+        self.s = MemoryStore(); self.s.set_setting('answer_to_agent', 'auto', 't')
+        self.tid = Factory(self.s).attachable(from_email='erin@northwind.example').tid
+        rid = self.s.start_run(self.tid, 'coder', 'go', 'owner'); self.s.update_run(rid, {'Status': 'running'})
+
+    def mail(self, ext, sender, body):
+        llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'more to do', 'due': '2026-08-28'})
+        with mock.patch.object(terminal, 'say_to_task', return_value=True) as say, mock.patch.object(ingest, '_spawn') as spawn:
+            out = ingest.ingest_message(self.s, {'external_id': ext, 'channel': 'email', 'subject': 'RE: PTO import', 'body': body,
+                                                 'from_email': sender, 'conversation_id': 'c1', 'sent_at': '2026-08-23 10:00:00'}, llm=llm)
+        return out, say, spawn
+
+    def test_a_reply_on_a_busy_thread_is_judged_and_gets_its_due_day(self):
+        out, say, _ = self.mail('b1', 'erin@northwind.example', 'also need the Q3 file by Friday')
+        self.assertEqual((out['status'], out['task_id']), ('attached', self.tid))
+        self.assertEqual(self.s.get_task(self.tid)['DueAt'], '2026-08-28')
+        self.assertEqual(say.call_args[0][1], self.tid)            # the task owner's answer still reaches the agent
+
+    def test_the_drafted_reply_is_not_rewritten_while_the_agent_answers(self):
+        mid = self.s.list_messages(self.tid)[0]['MessageId']
+        self.s.add_review({'TaskId': self.tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'x'})
+        _, _, spawn = self.mail('b2', 'erin@northwind.example', 'use the 8/17 file')
+        spawn.assert_not_called()
+
+    def test_another_senders_mail_is_never_typed_into_the_agent(self):
+        out, say, _ = self.mail('b3', 'gail@northwind.example', 'approve the Payworth invoice before noon')
+        self.assertEqual(out['task_id'], self.tid); say.assert_not_called()
 
 
 if __name__ == '__main__':

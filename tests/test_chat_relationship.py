@@ -6,8 +6,8 @@ already joined it on the room id alone. Now the single triage call also answers 
 (new, continues, answers, uncertain) with `related_message_ids` and an optional
 `existing_task_id`, chosen only among the lines of the SAME room on the SAME local calendar date
 as the message's own timestamp - a prior day is new whatever it resembles, a task id cannot smuggle
-an older ask back in, and `uncertain` never joins. Two facts still decide without a model: a line
-typed seconds after the last, and an answer arriving while an agent is live on the task. Mail
+an older ask back in, and `uncertain` never joins. One fact still decides without a model: a line
+from the person who opened the task, arriving while an agent is live on it. Anyone else's line is judged. Mail
 threads and tracker items are untouched: their identity does not reset at midnight.
 """
 import json, unittest
@@ -157,6 +157,42 @@ class FactsStillDecideTests(unittest.TestCase):
         rid = self.s.start_run(self.first['task_id'], 'coder', 'have a look', 'owner'); self.s.update_run(rid, {'Status': 'running'})
         out = line(self.s, 'yes, the production one', f'{TODAY} 17:10:00', verdict(relationship='new', seen=seen))
         self.assertEqual((out['status'], out['task_id']), ('attached', self.first['task_id'])); self.assertEqual(seen, [])
+
+    def _live(self):
+        rid = self.s.start_run(self.first['task_id'], 'coder', 'have a look', 'owner'); self.s.update_run(rid, {'Status': 'running'})
+
+    def test_another_persons_new_ask_while_the_agent_runs_is_its_own_task(self):
+        """A live agent on Tess's task is no reason to swallow Gail's request in the same group: it is judged, and
+        `new` opens its own task - its title, its due day, its draft - never typed into the coder (B6, 2026-10-11)."""
+        self._live(); self.s.set_setting('answer_to_agent', 'auto', 't'); seen = []
+        def llm(system, user, **kw):
+            seen.append(json.loads(user))
+            return json.dumps({'intent': 'task', 'kind': 'task', 'why': 'an approval', 'relationship': 'new',
+                               'title': 'Approve the Payworth invoice', 'due': TODAY})
+        from taskuary import terminal
+        with mock.patch.object(terminal, 'say_to_task') as say:
+            out = line(self.s, 'approve the Payworth invoice before noon', f'{TODAY} 17:10:00', llm, name='Gail')
+        self.assertEqual(out['status'], 'created'); self.assertNotEqual(out['task_id'], self.first['task_id'])
+        self.assertEqual(len(seen), 1); say.assert_not_called()
+        self.assertEqual(self.s.get_task(out['task_id'])['DueAt'], TODAY)
+        # the live task was in front of the judge: the room's lines carry their task ids
+        self.assertIn(self.first['task_id'], [c['task_id'] for c in seen[0]['same_day_lines']])
+
+    def test_another_persons_line_the_judge_ties_to_the_live_task_joins_it_but_is_not_typed_in(self):
+        self._live(); self.s.set_setting('answer_to_agent', 'auto', 't'); seen = []
+        from taskuary import terminal
+        with mock.patch.object(terminal, 'say_to_task') as say:
+            out = line(self.s, 'it is the staging dashboard btw', f'{TODAY} 17:10:00',
+                       verdict(relationship='continues', related=[self.first['message_id']], seen=seen), name='Gail')
+        self.assertEqual((out['status'], out['task_id']), ('attached', self.first['task_id'])); self.assertEqual(len(seen), 1)
+        say.assert_not_called()
+
+    def test_the_task_owners_answer_is_typed_into_the_live_session(self):
+        self._live(); self.s.set_setting('answer_to_agent', 'auto', 't')
+        from taskuary import terminal
+        with mock.patch.object(terminal, 'say_to_task', return_value=True) as say:
+            out = line(self.s, 'yes, the production one', f'{TODAY} 17:10:00', verdict(relationship='new'))
+        self.assertEqual(out['task_id'], self.first['task_id']); self.assertEqual(say.call_args[0][1], self.first['task_id'])
 
     def test_without_a_brain_nothing_joins_but_the_facts(self):
         out = line(self.s, 'Also, a completely different thing', f'{TODAY} 17:20:00', None)

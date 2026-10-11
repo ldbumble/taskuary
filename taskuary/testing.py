@@ -283,9 +283,9 @@ class Factory:
         self.s.set_message_status(p.mid, 'skipped')
         return p
 
-    def attachable(self, title='PTO import', conv='c1'):
+    def attachable(self, title='PTO import', conv='c1', from_email=None):
         """A live coding task with an original mail - the inbound-answer attach hook."""
-        tid, mid = self._work(title, status='in_progress', kind='coding',
+        tid, mid = self._work(title, status='in_progress', kind='coding', from_email=from_email,
                               conversation_id=conv, subject=title, sent_at='2026-08-23 09:00:00')
         return _pic(tid=tid, mid=mid, conversation_id=conv)
 

@@ -36,10 +36,10 @@ def _preview(body, n: int) -> str:
     untouched - category_of re-reads the raw body below, because "unsubscribe" in a footer is how a
     promo is recognised.
     """
-    from .triage import own_words
+    from .triage import own_words, strip_footer
     text = str(body or '')
     if not text: return ''
-    return (own_words(text[:n * 4]) or text)[:n]
+    return (strip_footer(own_words(text[:n * 4])) or text)[:n]     # a preview is shown: the legal footer goes (2026-10-11)
 
 
 # THE MARK SAYS WHERE THE WORK CAME FROM (the owner, 2026-09-25), not which message is newest. A report run that joined

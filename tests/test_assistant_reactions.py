@@ -657,8 +657,8 @@ class WrongTargetTests(unittest.TestCase):
         out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', who='Omar Keller',
                      email='omar@vendor.example', conv='c:inv', hours=1, llm=brain('reply_only', None))
         rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Attached.')
-        other = arrive(s, subject='Payroll portal is down', body='Nobody in Roanoke can clock in.', who='Elena Ross',
-                       email='elena@ours.com', conv='c:outage', channel='teams', hours=0, llm=brain('task', 'general'))
+        other = arrive(s, subject='Payroll portal is down', body='Nobody in Springfield can clock in.', who='Paula Vance',
+                       email='paula@northwind.example', conv='c:outage', channel='teams', hours=0, llm=brain('task', 'general'))
         return s, out, rv['ReviewId'], other
 
     def test_a_verb_about_another_subject_is_proposed_there_not_here(self):

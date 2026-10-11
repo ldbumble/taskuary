@@ -19,7 +19,7 @@ PS = ('The Q3 file for Northwind is attached for your review.\n\nThanks,\nErin B
 
 class NoAiIsNotAVerdictTests(unittest.TestCase):
     def test_the_heuristic_is_gone(self):
-        for name in ('heuristic_intent', '_ASK', '_ACT', '_FYI', '_VALEDICTION', '_LEGAL'): self.assertFalse(hasattr(triage, name), name)
+        for name in ('heuristic_intent', '_ASK', '_ACT', '_FYI', '_VALEDICTION'):self.assertFalse(hasattr(triage, name), name)
         for name in ('GREETING', 'ask_line', '_ASKS', 'route'): self.assertFalse(hasattr(routing, name), name)
 
     def test_with_no_ai_classify_judges_nothing(self):
@@ -90,6 +90,18 @@ class SignOffIsNotTheEndTests(unittest.TestCase):
         body = ('Please keep this between us for now.\nThis message is confidential until the board meets - '
                 'can you draft the Q3 summary for Gail?')
         self.assertIn('draft the Q3 summary', triage.strip_boilerplate(body))
+
+    def test_a_legal_footer_is_hidden_on_screen_and_read_whole_by_the_model(self):
+        """The owner's 2026-09-23 ruling governs what is SHOWN; what triage reads is never cut by it."""
+        body = ('The Q3 file for Northwind is attached - can you approve it today?\n\n'
+                'NOTICE: This message is confidential and intended solely for the addressee.')
+        self.assertNotIn('NOTICE', triage.read_text(body)); self.assertIn('approve it today', triage.read_text(body))
+        self.assertIn('NOTICE', triage.strip_boilerplate(body))
+        s, seen = MemoryStore(), {}
+        def llm(sys_, usr_, **kw): seen['user'] = usr_; return json.dumps({'intent': 'task', 'why': 'x'})
+        ingest.ingest_message(s, {'external_id': 'n1', 'channel': 'email', 'from_email': 'erin@northwind.example',
+                                  'subject': 'Q3 file', 'body': body}, llm=llm)
+        self.assertIn('intended solely for the addressee', seen['user'])
 
 
 if __name__ == '__main__':

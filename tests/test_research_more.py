@@ -79,9 +79,9 @@ class SerpApiTests(unittest.TestCase):
     def test_another_engine_and_a_location_are_passed_through(self):
         with mock.patch.object(research.requests, 'get', return_value=_Resp(self.HIT)) as get:
             research.run_serpapi({'api_key': 'k', 'query': 'q', 'engine': 'google_news',
-                                  'location': 'Roanoke, Virginia'})
+                                  'location': 'Springfield'})
         p = get.call_args.kwargs['params']
-        self.assertEqual((p['engine'], p['location']), ('google_news', 'Roanoke, Virginia'))
+        self.assertEqual((p['engine'], p['location']), ('google_news', 'Springfield'))
 
     def test_serpapis_own_error_field_is_not_swallowed(self):
         """SerpApi answers 200 with {"error": ...} for a bad key. Trusting the status code would

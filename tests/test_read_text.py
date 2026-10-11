@@ -1,7 +1,7 @@
-"""What every screen shows of a message: the sender's words, not the chain or the contact lines under them (2026-09-23).
+"""What every screen shows of a message: the sender's words, not the NOTICE, chain or contact lines under them (2026-09-23).
 
-Since 2026-10-11 a NOTICE footer and a sign-off stay: they were found by English words (_LEGAL, _VALEDICTION), and
-the same words cut a sender's real sentence and every P.S. after a "Thanks," - "Everything should be ai"."""
+Since 2026-10-11 a sign-off stays (every P.S. comes after a "Thanks,"), and the NOTICE trim is the SCREEN's only:
+the model reads the footer whole, because the same words once cut a sender's real sentence."""
 import unittest
 
 from taskuary import triage
@@ -15,6 +15,11 @@ class ReadTextTests(unittest.TestCase):
         out = triage.read_text(MAIL)
         self.assertTrue(out.startswith('You will have to resubmit for the correct amount'))
         self.assertNotIn('erin@northwind.example', out); self.assertNotIn('555-0100', out)
+
+    def test_the_legal_footer_is_not_shown(self):
+        # display only (2026-09-23 ruling, restored 2026-10-11): the model still reads it - test_triage_reads_not_guesses
+        out = triage.read_text(MAIL + '\nNOTICE: This confidential message contains information intended for a specific individual.')
+        self.assertTrue(out.startswith('You will have to resubmit')); self.assertNotIn('NOTICE', out)
 
     def test_the_mailboxs_own_cut_is_used_when_there_is_one(self):
         words = 'Yes - Thursday works for the review, and I will bring the reconciled export and the vendor list.'

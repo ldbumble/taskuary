@@ -197,20 +197,38 @@ EXCHANGE_BUDGET = 12000
 NL = chr(10)
 
 
+# DISPLAY ONLY: the confidentiality footer, from its first line to the end. The owner's 2026-09-23 ruling ("NOTICE etc
+# ... no one needs to see it") governs what a SCREEN shows, and a screen offers the whole email beside it; what a model
+# reads is never cut by this (strip_boilerplate does not call it - 2026-10-11, where it ate a sender's own ask). The
+# heading alternative is case-SENSITIVE: a footer shouts NOTICE; "Notice the error at the top" is an ask (2026-09-02).
+_LEGAL = _re.compile(r'^\s*(NOTICE|DISCLAIMER|CONFIDENTIALITY( NOTICE)?|LEGAL NOTICE)[:\s]'
+                     r'|^\s*(Notice|Disclaimer|Confidentiality Notice|Legal Notice):'
+                     r'|(?i:this (e-?mail|message|communication)[^.]{0,120}(confidential|privileged|intended (solely|only))'
+                     r'|if you (are not the intended|have received this[^.]{0,40}in error)'
+                     r'|unauthorized (use|review|disclosure|distribution))')
+
+
+def strip_footer(text: str) -> str:
+    """The legal footer off a body about to be SHOWN - never one about to be read by a model."""
+    lines = str(text or '').splitlines()
+    i = next((i for i, l in enumerate(lines) if _LEGAL.search(l) and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN), None)
+    return text if i is None else NL.join(lines[:i]).rstrip()
+
+
 def strip_banner(text: str) -> str:
-    """The words to SHOW: a mail system's external-sender banner and a client's clutter lines removed,
-    everything else as it arrived. triage read past these from the start, but every surface that shows a
+    """The words to SHOW: a mail system's external-sender banner, a client's clutter lines and the legal footer
+    removed, everything else as it arrived. triage read past these from the start, but every surface that shows a
     message - the card, the task's source list, the phone - printed them first (the owner, 2026-09-23:
     "this email etc or template of all emails ... should be removed from everywhere"). The mail as STORED
-    is untouched; this is how it is read."""
-    kept = NL.join(l for l in _BANNER.sub('', text or '').splitlines() if not _CLUTTER.match(l)).strip()
+    is untouched; this is how it is read. Display only - no prompt is built from it."""
+    kept = strip_footer(NL.join(l for l in _BANNER.sub('', text or '').splitlines() if not _CLUTTER.match(l))).strip()
     return kept or (text or '')
 
 
 def read_text(body: str, own: str = None) -> str:
     """What the owner READS of a message: the sender's own words this time - the mailbox's own cut when
-    it gave one (Graph uniqueBody, message.OwnText), else split_own's - with the trailing contact lines
-    and the external-sender banner gone (a legal footer is the sender's text since 2026-10-11). The same cleaning triage already reads through, now on every
+    it gave one (Graph uniqueBody, message.OwnText), else split_own's - with the trailing contact lines,
+    the external-sender banner and the legal footer gone (strip_banner; the footer for the screen only). The same cleaning triage already reads through, now on every
     screen (the owner, 2026-09-23: "NOTICE etc ... no one needs to see it"). The mail as stored is untouched;
     a screen that shows this offers the whole email beside it."""
     t = strip_boilerplate(str(own).strip()) if own and str(own).strip() else own_words(body or '')

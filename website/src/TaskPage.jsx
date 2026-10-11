@@ -195,6 +195,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sessionAlive = !!detail?.session?.alive;
   const hasRunningRun = (detail?.runs || []).some((r) => r.Status === "running");
   const hasCoderReport = (detail?.comments || []).some((c) => /^CODER REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()));
+  // the write-up as FILED - the report and the agent's own last message - where the wrap's reply carried only the first
+  const filedReport = [...(detail?.comments || [])].reverse().find((c) => /^CODER REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()))?.Body;
   const hasTranscript = !!detail?.transcript;
   const detailTaskStatus = detail?.task?.Status;
   useEffect(() => {
@@ -1591,14 +1593,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       </Typography>
                       <Button size="small" sx={{ fontSize: 11 }} onClick={() => setWrapped(null)}>dismiss</Button>
                     </Box>
-                    <CoderReport body={wrapped.report} artifacts={wrapped.artifacts || []} />
+                    {/* the filed write-up - what it said last, what it saved - not the wrap's one-line summary (the owner, 2026-10-11:
+                        "where is the summary of what the agent did") */}
+                    <CoderReport body={filedReport || wrapped.report} artifacts={detail?.artifacts || wrapped.artifacts || []} />
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>
                       The session ended and its write-up was saved. The task stays open until you mark it done;
                       reply separately if someone is waiting. Start another session and the agent is handed this,
                       so it carries on instead of starting over.
                     </Typography>
-                    {/* the card used to name Review without offering a way to get there */}
-                    {wrapped.drafting && (
+                    {/* the card used to name Review without offering a way to get there - but with Close out already open below it, the
+                        button opened what was open and did nothing (the owner, 2026-10-11): offered only when the draft is out of sight */}
+                    {wrapped.drafting && stage !== "reply" && (
                       <Button size="small" variant="contained" disableElevation sx={{ mt: 1 }}
                         startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
                         onClick={() => setOpenStage("reply")}>Read the draft</Button>

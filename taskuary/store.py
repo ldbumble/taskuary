@@ -2973,11 +2973,14 @@ class SQLiteStore:
     # ---- the rail: re-project what a write touched, reuse the rest (processing_rail) ----------------
     def close(self):
         """Both connections: the writer and the rail's reader. A test that closes only `cx` leaves the
-        file open on Windows and its temporary directory cannot be removed."""
-        for cx in (self._rail_cx, self.cx):
-            try:
-                if cx is not None: cx.close()
-            except sqlite3.Error: pass
+        file open on Windows and its temporary directory cannot be removed. Under the store's lock: a background thread
+        mid-query (the reply watch's judge, 2026-10-11) had its connection closed beneath it and the process died with an
+        access violation - after this, a late reader gets sqlite's "closed database" error instead."""
+        with self.lock:
+            for cx in (self._rail_cx, self.cx):
+                try:
+                    if cx is not None: cx.close()
+                except sqlite3.Error: pass
 
     def rail_top(self):
         """The newest dirty-row id: "has anything been written, by any process?" in one cheap read. The

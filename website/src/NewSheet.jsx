@@ -30,6 +30,7 @@ const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
   { key: "agent",  mark: <TaskuaryMark size={14} />, label: "Give an agent a job", hint: "a live CLI session, or the assistant's own chat — the two doors triage picks between" },
   { key: "note",   mark: "💡", label: "Note to self", hint: "a reminder or an idea — nothing works it, it just sits on the day you pick" },
+  { key: "goal",   mark: "🎯", label: "Set a goal", hint: "an outcome with a date and steps — the steps are tasks, and it stays on your rail until it is done" },
 ];
 
 const Label = ({ children }) => (
@@ -98,7 +99,8 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
     <>
     <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={value} autoFocus
       onChange={changed} {...(withPics ? pics.drop : {})}
-      placeholder={kind === "send" ? "the census numbers he asked for, plus why Ashgrove moved"
+      placeholder={kind === "goal" ? "the nightly census lands in the new ledger for all three sites, and the old portal's export is switched off"
+        : kind === "send" ? "the census numbers he asked for, plus why Ashgrove moved"
         : kind === "agent" ? (how === "chat" ? "why did Riverbend's census move four points in July?"
           : "work out why the nightly export drops the last facility")
         : "chase the Ashgrove AP replacement"}
@@ -149,6 +151,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // judge that closes a router's task on a quiet screen would close this one while you read it.
   // note
   const [when, setWhen] = useState("");
+  // a goal (spec 2026-10-12): what done looks like is the words above; by when, who is involved, and whether the AI plans the steps
+  const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(true);
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); }, [open]);
   useEffect(() => {
@@ -207,6 +211,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         }
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
+      } else if (kind === "goal") {
+        const title = about.split(/[.\n]/)[0].trim().slice(0, 120) || about.slice(0, 120);
+        const { data } = await api.post("/api/tasks", { Title: title, Summary: who ? `${about}\nInvolved: ${who}` : about,
+          DoneWhen: about.slice(0, 1000), DueAt: by || null, Kind: "task", Tags: "goal" });
+        // the model writes the steps (server.plan_goal); "Track it" leaves the boxes to you
+        if (plan) api.post(`/api/tasks/${data.taskId}/read-ask`, { goal: true }).catch(() => null);
+        setOk(`${data.ref} — ${plan ? "planning the steps; they land on the task in a moment." : "on your rail; add the steps on the task."}`);
+        aboutRef.current?.clear(); setHasAbout(false); setBy(""); setWho(""); onDone?.(); onOpenTask?.(data.taskId);
       } else {
         const { data } = await api.post("/api/notes", { title: about.slice(0, 300), body: "", when: when || null });
         setOk(`Noted — it sits on ${String(data.at).slice(0, 16)} and nothing will touch it.`);
@@ -214,11 +226,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, when, onDone, onOpenTask, pics]);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, when, by, who, plan, onDone, onOpenTask, pics]);
 
   const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
-    : kind === "agent" ? (how === "chat" ? "Ask the assistant" : "Start the session") : "Note it";
+    : kind === "agent" ? (how === "chat" ? "Ask the assistant" : "Start the session") : kind === "goal" ? (plan ? "Plan it" : "Track it") : "Note it";
 
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
   const Shell = inline ? Box : Dialog;
@@ -344,7 +356,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         )}
 
         <Box>
-          <Label>{kind === "send" ? "What's this about"
+          <Label>{kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
             : kind === "agent" ? (how === "chat" ? "What do you want to work out" : "What should it do")
             : "What do you want to remember"}</Label>
           <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} />
@@ -365,6 +377,31 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 hint="an agent researches it, then drafts the message from what it actually found." />
             </Box>
           </Box>
+        )}
+
+        {kind === "goal" && (
+          <>
+            <Box>
+              <Label>By</Label>
+              <TextField type="date" size="small" value={by} onChange={(e) => setBy(e.target.value)} sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+              <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>The date is the goal's clock: it sits where the age goes on your rail.</Typography>
+            </Box>
+            <Box>
+              <Label>Who is involved</Label>
+              <TextField fullWidth size="small" value={who} onChange={(e) => setWho(e.target.value)} placeholder="Ray Colton, Payworth (Marcus), the coder"
+                sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+              <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>People it may chase and systems it may touch. Anyone else is a question to you first.</Typography>
+            </Box>
+            <Box>
+              <Label>And then</Label>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Fork on={plan} onClick={() => setPlan(true)} title="Plan it and show me"
+                  hint="the AI proposes the steps from your words; you cut or add, then start the first one. It lands on the rail as a goal." />
+                <Fork on={!plan} onClick={() => setPlan(false)} title="Track it, I have the plan"
+                  hint="type the steps yourself on the task; it chases the people on them and reports against the date." />
+              </Box>
+            </Box>
+          </>
         )}
 
         {kind === "note" && (

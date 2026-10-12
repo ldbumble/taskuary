@@ -12,6 +12,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import EventIcon from "@mui/icons-material/Event";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import OutlinedFlagIcon from "@mui/icons-material/OutlinedFlag";
 import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
@@ -48,6 +49,8 @@ const faint = { color: "#867f74" };
 export function SourceMark({ item, size = 14 }) {
   if (!item) return null;
   if (item.kind === "meeting") return <EventIcon sx={{ fontSize: size, color: "#55697a" }} />;
+  // a goal has no source: it wears the project mark (spec 2026-10-12)
+  if (String(item.kind || "").startsWith("goal")) return <OutlinedFlagIcon sx={{ fontSize: size, color: "#55697a" }} />;
   // an agent on it is the row's STATE (its chip says so), not where it came from: an Advisor idea, a report or a
   // mail an agent picked up keeps its own mark (the owner, 2026-09-25: "it should be advisor as that's what it
   // comes from"). The terminal is left for work with no source at all.
@@ -63,6 +66,7 @@ export function SourceMark({ item, size = 14 }) {
 export function sourceColor(item) {
   if (!item) return "#a9a294";
   if (item.kind === "meeting") return "#55697a";
+  if (String(item.kind || "").startsWith("goal")) return "#55697a";
   if ((item.kind === "agent" || item.kind === "agentdone") && !item.channel) return "#41525f";
   if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return ASSISTANT.solid;
   if (item.kind === "fyis" && !item.channel) return ASSISTANT.solid;

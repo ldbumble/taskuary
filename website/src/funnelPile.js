@@ -430,6 +430,12 @@ export const backAt = (item) => item?.back_at || item?.defer_until || null;
 // ...said in the age gutter's own short form, counting DOWN and reading forward: "in 30m", "in 1h", "in 3h", "in 2d" - "< 30m"
 // read as an age, as if it had come in (the owner, 2026-09-30), so it says "in" the way a meeting's does. A time already past says
 // nothing - the row is on its way back to On you, and a negative age would be a lie about which way time runs.
+// a GOAL's gutter is its date, not its age: for a goal the date is the clock (spec 2026-10-12)
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const dueWord = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : "";
+};
 export const railBack = (iso, now = Date.now()) => {
   if (!iso) return "";
   const t = new Date(String(iso).replace(" ", "T")).getTime();

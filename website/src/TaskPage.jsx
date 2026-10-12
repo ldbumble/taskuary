@@ -180,6 +180,39 @@ const askedAgo = (t) => {
   return `asked you ${mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`} ago`;
 };
 
+// A GOAL'S STEPS (spec 2026-10-12): the checklist, each box with the task behind it. Start makes a box a task of its own;
+// a box with a task shows its ref and state and opens it. The parent's box ticks itself when the child closes (store).
+function GoalSteps({ task, onOpenTask, onChanged }) {
+  const [steps, setSteps] = useState([]);
+  const load = useCallback(() => api.get(`/api/tasks/${task.TaskId}/steps`).then((r) => setSteps(r.data.steps || [])).catch(() => setSteps([])), [task.TaskId]);
+  useEffect(() => { load(); }, [load, task.UpdatedAt]);
+  const start = async (s) => { const { data } = await api.post(`/api/tasks/${task.TaskId}/steps/${s.id}/start`); load(); onChanged?.(); onOpenTask?.(data.taskId); };
+  const moveDate = async (e) => { await api.patch(`/api/tasks/${task.TaskId}`, { DueAt: e.target.value || null }); onChanged?.(); };
+  const done = steps.filter((s) => s.done).length;
+  return (
+    <Box sx={{ mt: 0.85, maxWidth: 900 }}>
+      <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Done when</Typography>
+      <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{task.DoneWhen}</Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.6, flexWrap: "wrap" }}>
+        <Typography variant="caption" sx={{ color: FAINT }}>{steps.length ? `${done} of ${steps.length} steps done` : "no steps yet"}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>by</Typography>
+        <TextField type="date" size="small" defaultValue={String(task.DueAt || "").slice(0, 10)} onBlur={moveDate}
+          inputProps={{ "aria-label": "Move the date" }} sx={{ "& .MuiInputBase-root": { fontSize: 12, height: 26 } }} />
+      </Box>
+      {steps.map((s, k) => (
+        <Box key={s.id} sx={{ display: "flex", alignItems: "center", gap: 0.8, py: 0.35, borderBottom: `1px solid ${BORDER}` }}>
+          <Typography variant="caption" sx={{ color: FAINT, width: 16, fontVariantNumeric: "tabular-nums" }}>{k + 1}</Typography>
+          <Typography variant="body2" sx={{ flex: 1, color: s.done ? FAINT : INK, textDecoration: s.done ? "line-through" : "none" }}>{s.text}</Typography>
+          {s.who && <Typography variant="caption" sx={{ color: FAINT }}>{s.who}</Typography>}
+          {s.ref
+            ? <Button size="small" variant="text" onClick={() => onOpenTask?.(s.tid)} sx={{ fontSize: 11, textTransform: "none" }}>{s.ref} · {s.state || s.status}</Button>
+            : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}>Start</Button>}
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay,
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
@@ -1256,7 +1289,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* a BATCH: its items in ranked order, each with what the agent found and the owner's presses (batch.py) */}
                         {detail?.batch && <BatchItems taskId={t?.TaskId} items={detail.batch}
                           onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
-                        {(detail?.checklist || []).length > 0 && (
+                        {/* a GOAL lists its steps with the task behind each instead of plain boxes (spec 2026-10-12) */}
+                        {t?.DoneWhen && <GoalSteps task={t} onOpenTask={(tid) => onSelect?.(tid)}
+                          onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
+                        {!t?.DoneWhen && (detail?.checklist || []).length > 0 && (
                           <Box sx={{ mt: 0.85, maxWidth: 900 }}>
                             {detail.checklist.filter((i) => !i.out).map((i) => (
                               <Box key={i.id} onClick={() => tickItem(i)}

@@ -240,11 +240,11 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     from .ingest import others_on_thread, owner_addresses, relevant_notes
     from .learn import injectable
     from .routing import draft_task_fields
-    from .triage import classify_intent
+    from .triage import classify_intent, job_doc
     mine = owner_addresses(store)
     from .ingest import own_addresses
     me = own_addresses(store)          # the To/Cc signal is measured against the owner, not the shared boxes
-    soul, system = store.doc('soul'), (system if system is not None else store.doc('triage'))
+    soul, job, system = store.doc('soul'), job_doc(store), (system if system is not None else store.doc('triage'))
     lrn = injectable(store.doc('learned') or '') if learned else ''
     conf, rows, by_signal = Counter(), [], {'colleague_replied': Counter(), 'alone': Counter()}
     by_channel = {}
@@ -259,7 +259,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
             if v and not v.get('degraded'): break
             # a throttled or garbled call is not a verdict: try again before scoring it as one
             if attempt: time.sleep(2 * attempt)
-            v = classify_intent(msg, llm=llm, soul=soul, thread=thread, learned=lrn, notes=ns,
+            v = classify_intent(msg, llm=llm, soul=soul, job=job, thread=thread, learned=lrn, notes=ns,
                                 notes_left=left, system=system, mine=me)
         # the funnel FILES an answer it cannot read (ingest: 'degraded' -> filed, never assumed
         # work); no model at all is no verdict - scored as such, never as a keyword guess (2026-10-11)

@@ -7,6 +7,7 @@ import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
+import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
@@ -25,6 +26,8 @@ import { ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
+  job: { label: "JOB.md", icon: <WorkOutlineIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+    blurb: "What your job IS — the mission, the responsibilities, who you serve, the cadences the month runs on, the decisions that are yours and the ones you hand up. SOUL.md says how the funnel behaves; this is what it is protecting. Triage, the Assistant and the morning brief weigh what matters by it; working agents never see it. Write it yourself, or Generate from history reads it out of three months of your mail, both directions." },
   triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
   style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#55697a" }} />,
@@ -134,6 +137,7 @@ const PB_BLURB = "How THIS company does one kind of job, for the agent that will
 const GEN = {
   triage: "reads 3 months of your mailbox — what you answered vs let sit — and writes what matters into the marked block",
   style: "reads 3 months of your sent mail and distills how you write, including your recurring signature, into the marked block",
+  job: "reads 3 months of your mail both ways — who writes to you, who you write to, what recurs and on what rhythm — and writes what your job actually is into the marked block",
 };
 
 // Your name, in one place. The documents refer to the owner nine times between them; typed

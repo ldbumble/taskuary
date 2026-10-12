@@ -7037,7 +7037,7 @@ def _heal_owner_docs():
         who = store.owner()
         if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
             return                                    # nobody real named yet: the example stands
-        for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
+        for doc in ('soul', 'job', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')

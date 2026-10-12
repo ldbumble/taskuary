@@ -161,7 +161,7 @@ class TheWorldTests(unittest.TestCase):
         import re
         s = MemoryStore()
         demo.seed(s)
-        blob = ' '.join(str(r) for r in s.feed(limit=50)) + (s.get_doc('soul') or '')
+        blob = ' '.join(str(r) for r in s.feed(limit=50)) + (s.get_doc('soul') or '') + (s.get_doc('job') or '')
         found = set(re.findall(r'[\w.+-]+@([\w.-]+)', blob))
         self.assertTrue(found, 'the demo world has addresses in it')
         # RFC 2606's reserved names, and anything under one of them (vendor.example.com)

@@ -267,9 +267,11 @@ def system(store) -> str:
     so the two never sound like different people."""
     from . import counsel
     voice = counsel.for_brief(store)
-    soul = store.doc('soul') or ''
+    from .triage import job_doc
+    soul, job = store.doc('soul') or '', job_doc(store, 1500)
     return (voice + CONTRACT
-            + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
+            + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else '')
+            + (f"\n\nThe owner's job (their own document - what the brief should weigh first):\n{job}" if job else ''))
 
 
 def _block(out, head, lines):

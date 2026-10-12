@@ -14,8 +14,15 @@ STYLE = ('### Greeting & sign-off\n- "Hi <first>", signs "Best, {{owner_first}}"
          '### Characteristic phrasing\n- "on it"\n'
          '### How they push back or say no\n- offers the alternative in the same breath')
 
+JOB = ('### What the job is\n- {{owner_first}} keeps the payroll import running and answers the people who depend on it\n'
+       '### Responsibilities, by how often they come up\n- PTO import failures: weekly, always answered\n'
+       '### Who {{owner_first}} works with\n- corp.example colleagues write most and are answered\n'
+       '### Recurring cadences\n- the import runs nightly; its failures arrive the next morning\n'
+       '### Decisions {{owner_first}} makes, and what they hand up\n- fixes and reruns are theirs\n'
+       '### What to protect\n- payroll going out on the right numbers')
+
 def fake_llm(system, user, max_tokens=0):
-    return GUIDE if 'TRIAGE' in system else STYLE
+    return JOB if 'JOB IS' in system else GUIDE if 'TRIAGE' in system else STYLE   # the job prompt names TRIAGE.md too
 
 def graph(sent, inbox, n=1):
     return mock.patch.object(histgen, '_graph_mail', return_value=(sent, inbox, n))
@@ -70,6 +77,42 @@ class HistgenTests(unittest.TestCase):
         self.assertIn('Taskuary itself has seen', detail)
         self.assertIn('Greeting & sign-off', s.get_doc('style'))
         self.assertEqual(s.get_doc('style').count(histgen.HIST_START), 1)   # template block reused
+
+    def test_job_reads_both_directions_into_its_marker_block(self):
+        """JOB.md is the third generated document: inbox and sent together, the people each way, the recurring
+        subjects with how many weeks they were present, and the threads the owner opened. The shipped template's
+        own heading survives and the placeholder line is what the block replaces."""
+        s = MemoryStore()
+        sent = SENT + [{'id': 's2', 'subject': 'Access review - census database', 'receivedDateTime': '2026-08-05T10:00:00Z',
+                        'conversationId': 'c9', 'toRecipients': [{'emailAddress': {'address': 'gail@corp.example'}}],
+                        'body': {'content': 'Starting the quarterly review.'}}]
+        seen = {}
+        def llm(system, user, max_tokens=0): seen.update(s=system, u=user); return JOB
+        with graph(sent, INBOX), mock.patch('taskuary.llm.build_llm', return_value=llm):
+            detail = histgen.generate(s, 'job')
+        doc = s.get_doc('job')
+        self.assertIn('2 inbound + 2 sent', detail)
+        self.assertIn(histgen.HIST_START, doc)
+        self.assertIn('payroll going out', doc)
+        self.assertIn('## The job', doc)                          # the template's own section survives
+        self.assertNotIn('not generated yet', doc)
+        self.assertIn('paula@corp.example: 1 mails, 1 answered', seen['u'])    # who writes in, and whether answered
+        self.assertIn('gail@corp.example: 1 mails', seen['u'])                 # who the owner writes to
+        self.assertIn('THREADS THE OWNER STARTED', seen['u'])                   # a sent mail on no inbound thread
+        self.assertIn('never say what is a task', seen['s'])                   # importance, not intent
+        ev = histgen.STATUS['evidence']
+        self.assertTrue(any(l.startswith('writes to you') for l in ev) and any(l.startswith('you write to') for l in ev))
+
+    def test_job_doc_is_silent_until_it_says_something_real(self):
+        """The untouched template must never ride into triage as noise - the rule STYLE.md already lives by."""
+        from taskuary.triage import job_doc
+        s = MemoryStore()
+        self.assertEqual(job_doc(s), '')
+        with graph(SENT, INBOX), mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
+            histgen.generate(s, 'job')
+        self.assertIn('payroll going out', job_doc(s))
+        self.assertNotIn('<!--', job_doc(s))
+        self.assertEqual(len(job_doc(s, 20)), 20)
 
     def test_no_data_and_no_ai_are_loud(self):
         s = MemoryStore()

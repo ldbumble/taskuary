@@ -74,9 +74,9 @@ STOPS = [
         _can('test any connection and see what it answered', 'Connections')]},
     {'key': 'docs', 'title': 'Docs', 'image': '/walk/docs.png',
      'blurb': 'The documents the funnel runs on. SOUL.md is its constitution - what counts as a '
-              'task, how you answer, what it must never do. STYLE.md is how you write. Edit one and '
-              'triage changes; blank one and the shipped default comes back, so nothing is lost by '
-              'trying.',
+              'task, how you answer, what it must never do. STYLE.md is how you write. JOB.md is what '
+              'your job is, read out of your own mail. Edit one and triage changes; blank one and the '
+              'shipped default comes back, so nothing is lost by trying.',
      # Docs is a section of Settings now, not a tab of its own - every one of these opened a tab
      # that no longer exists, so the stop's own button went nowhere (found re-shooting the walk,
      # 2026-09-22: the capture script refuses to shoot a tab it cannot click, which is what caught it)
@@ -84,6 +84,7 @@ STOPS = [
         _can('make SOUL.md yours - your work, boundaries, systems, people, voice', 'Settings', 'settings=docs'),
         _can('generate STYLE.md from the messages you have sent', 'Settings', 'settings=docs'),
         _can('generate TRIAGE.md from what you answered and what you let sit', 'Settings', 'settings=docs'),
+        _can('generate JOB.md - what your job actually is - from three months of your mail', 'Settings', 'settings=docs'),
         _can('read COUNSEL.md, which is the voice the assistant speaks in', 'Settings', 'settings=docs')]},
     {'key': 'settings', 'title': 'Settings', 'image': '/walk/settings.png',
      'blurb': 'The knobs. Most people change three and never come back: what drafts automatically, '

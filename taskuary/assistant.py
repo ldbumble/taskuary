@@ -1278,7 +1278,8 @@ def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES,
           watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None) -> list:
     """One call: the owner's instruction (the Reports tab), the candidates, the day, what was already said."""
-    soul = store.doc('soul') or ''
+    from .triage import job_doc
+    soul, job = store.doc('soul') or '', job_doc(store, SOUL_CHARS)
     direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
                  if systems_only else (instruction or PROMPT).strip())
     contract = SYSTEMS_CONTRACT if systems_only else CONTRACT
@@ -1297,7 +1298,10 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               # WHOLE (the owner, 2026-09-25): cut at 1500 chars it stopped inside "Escalate", and the systems, people and
               # repository map - what FanApp is, who owns what - never reached the voice that reasons about them
-              + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:SOUL_CHARS]}" if soul else ''))
+              + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:SOUL_CHARS]}" if soul else '')
+              # ...and what their JOB is - what they are accountable for, who they serve, the cadences. SOUL says how the
+              # funnel behaves; this is what "matters" is measured against when the assistant says what comes first
+              + (f"\n\nThe owner's job (their own document - weigh what matters by it):\n{job}" if job else ''))
     images = []
     if not systems_only:
         from .llm import readable_images

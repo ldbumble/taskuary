@@ -73,6 +73,22 @@ from pathlib import Path as _Path
 SHIPPED = re.sub(r'<!--.*?-->', '', (_Path(__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8'), flags=re.S).strip()
 
 
+JOB_CHARS = 2500             # triage's cut of JOB.md; the assistant and the chat read it whole (job_doc)
+_JOB_TEMPLATE = re.compile(r'^.*(not generated yet|Write it here).*$', re.M)
+
+
+def job_doc(store, limit: int = None) -> str:
+    """JOB.md as prompts read it: comments and template placeholders stripped, owner tokens rendered - and
+    empty until the document says something REAL, so an untouched template never rides into a prompt as noise
+    (the same rule responder.style_doc applies to STYLE.md). Triage, the Assistant report, the chat and the
+    morning brief read it; workers do not - the task is a worker's job, and a worker that knows the mission
+    starts helping with the mission instead of the ticket."""
+    t = _JOB_TEMPLATE.sub('', re.sub(r'<!--.*?-->', '', store.doc('job') or '', flags=re.S))
+    meat = '\n'.join(l for l in t.splitlines() if l.strip() and not l.strip().startswith('#'))
+    t = t.strip() if len(meat) > 40 else ''
+    return t[:limit] if limit else t
+
+
 def shipped_section(head: str) -> str:
     """The template's section whose heading starts with `head` ("## 5."), heading included - '' when there is none."""
     m = re.search(rf'^{re.escape(head)}.*?(?=^## |\Z)', SHIPPED, re.M | re.S)
@@ -478,8 +494,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     project: dict = None, candidates: list = None, repos: list = None,
-                    profiles: str = None, routing_history: list = None, seen: set = None) -> dict:
-    """`notes` are the owner's past verdicts that may bear on this message - each one dated,
+                    profiles: str = None, routing_history: list = None, seen: set = None, job: str = None) -> dict:
+    """`job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
+    protect. It weighs IMPORTANCE (how much this arrival matters to the job) and never intent; blank until
+    the owner wrote or generated something real, so the shipped template never rides in as noise.
+
+    `notes` are the owner's past verdicts that may bear on this message - each one dated,
     with the sender and subject it was given on - selected by sender and topic overlap
     (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
     which a keyed rule could not (the same topic can arrive asking something new).
@@ -541,6 +561,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # argue with the owner's judgement, so nothing is lost by asking for it at the end.
             shape = 'checklist' not in base or '"summary"' not in base
             system = base + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
+            # the job weighs importance - what this arrival means to what the owner is accountable for;
+            # it defines no intent, and the document says so in its own first line
+            if job: system += f"\n\nThe owner's job (their own document - what they are responsible for, who they serve, what to protect; weigh how much this matters with it):\n{job[:JOB_CHARS]}"
             # `learned` is LEARNED.md's active sections: the profile distilled from the owner's
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
             if learned:

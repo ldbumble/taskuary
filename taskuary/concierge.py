@@ -1034,6 +1034,10 @@ def _system(store, llm=None) -> str:
     soul = str(store.doc('soul') or '').strip()
     who = (f"WHO THE OWNER IS (their own document - context about their work; its reply rules are for text sent to OTHERS):\n{soul}\n\n"
            if soul else '')
+    # ...and the job itself - responsibilities, people, cadences, what to protect - so "what should I do first" has a measure
+    from .triage import job_doc
+    job = job_doc(store)
+    if job: who += f"THE OWNER'S JOB (their own document - weigh what matters by it):\n{job}\n\n"
     # ...and the repositories a coding job can open in: the model picks one by name (`as`) and code only checks it is one of these
     from . import terminal as term
     try: repos = term.known_repos(store)

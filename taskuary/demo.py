@@ -395,6 +395,7 @@ def seed(store) -> int:
         made += 1
 
     store.save_doc('soul', SOUL, 'demo')
+    store.save_doc('job', JOB, 'demo')
     store.add_comment(next(t['TaskId'] for t in store.list_tasks()), 'assistant', 'assistant_agent',
                       'The month-end difference is the four inter-company transfers the export drops. '
                       'I can fix the export, or file it for the close to handle - say which.')
@@ -471,6 +472,50 @@ You are the funnel between everything inbound and Dana's attention.
 
 ## People
 - The CFO outranks everyone; the helpdesk reports to Dana; vendors get a polite no by default.
+
+<!-- this is a demo: Dana, Northwind and everyone in it are invented -->
+"""
+
+# What the job IS, as "Generate from history" would have read it out of three months of Dana's mail - the
+# shape every demo arrival is weighed against. Invented, like everyone in it.
+JOB = """# JOB.md - what Dana's job is
+
+## The job
+- Keep the finance and census systems of Northwind Facilities running and reconciled: the GL export, the
+  AP importers, the census database, and the helpdesk queue that sits in front of them.
+
+## Learned from your mail history
+<!-- fromhistory:start -->
+_generated 2026-09-30 09:12 — 412 inbound + 188 sent from the last 90 days across 1 mailbox(es), read over Graph_
+
+### What the job is
+- Dana owns the systems the month-end close depends on, and is the person the business writes to
+  when a number does not match.
+
+### Responsibilities, by how often they come up
+- Month-end differences between the GL export and the ledger: every month, always answered.
+- AP importer failures and vendor file formats: weekly, always answered.
+- Census corrections and access to the census database: weekly, answered within the day.
+- Helpdesk escalations about finance tools: several a week, answered when the helpdesk cannot.
+
+### Who Dana works with
+- The CFO's office writes most and is always answered - questions about totals, timing of the close.
+- The helpdesk hands up what it cannot settle and is answered the same day.
+- Vendors write about imports and renewals; renewals go to the CFO, imports Dana settles.
+
+### Recurring cadences
+- Month-end close, first three working days of the month: the difference thread opens every time.
+- Vendor statement imports, weekly, Monday or Tuesday.
+- Quarterly access review of the census database.
+
+### Decisions Dana makes, and what they hand up
+- Dana decides fixes, imports, access and priorities in the queue.
+- Money, contracts and renewals go to the CFO; credentials and policy to IT security.
+
+### What to protect
+- The close finishing on time with a number nobody has to explain twice.
+- Census data being right before anyone downstream reads it.
+<!-- fromhistory:end -->
 
 <!-- this is a demo: Dana, Northwind and everyone in it are invented -->
 """

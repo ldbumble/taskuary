@@ -11,13 +11,15 @@ import unittest
 from taskuary import agents, ingest, outbound, responder, terminal
 from taskuary.store import MemoryStore
 
-MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'agent', 'coder', 'triage', 'learned', 'style')}
+MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'job', 'agent', 'coder', 'triage', 'learned', 'style')}
 NOTE, OFF, WNOTE = 'ZZMARKNOTEZZ', 'ZZMARKOFFZZ', 'ZZMARKWRITEZZ'   # a triage verdict, a switched-off note, a writing instruction
 
 
 def seeded():
     s = MemoryStore()
     s.save_doc('soul', f'You work for **Test Owner**.\n{MARK["soul"]}\nrepo map here.', 'owner')
+    # job_doc holds an untouched template out of prompts, so the marker needs real content around it
+    s.save_doc('job', f'### What the job is\n- {MARK["job"]}: keeps the payroll import running and answers the people who depend on it.', 'owner')
     s.save_doc('agent', f'# Agent rules\n- {MARK["agent"]}', 'owner')
     s.save_doc('coder', f'# Coder rules\n- {MARK["coder"]}', 'owner')
     s.save_doc('triage', f'Classify one inbound work message. Answer JSON only. {MARK["triage"]}', 'owner')
@@ -52,7 +54,7 @@ class DocsReachThePromptTests(unittest.TestCase):
         ingest.ingest_message(s, {'external_id': 't1', 'channel': 'email', 'from_email': 'a@b.com',
                                   'subject': 'Please fix the export', 'body': 'Broken - please fix the export.'},
                               llm=lambda sysm, usr, **k: (seen.update(p=sysm + usr), '{"intent":"fyi","why":"x"}')[1])
-        self.assertFlows(seen['p'], [MARK['triage'], MARK['soul'], MARK['learned'], NOTE],
+        self.assertFlows(seen['p'], [MARK['triage'], MARK['soul'], MARK['job'], MARK['learned'], NOTE],
                          forbid=[MARK['coder'], MARK['style']])
 
     def test_both_reply_paths_get_soul_style_and_writing_notes_but_not_learned_or_verdicts(self):
@@ -62,7 +64,7 @@ class DocsReachThePromptTests(unittest.TestCase):
         tid = _task(s, 'reply', 'Can you confirm the date?')
         seen = {}
         responder.draft_reply(s, tid, llm=lambda sysm, usr, **k: (seen.update(p=sysm + usr), 'ok')[1])
-        self.assertFlows(seen['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coder'], MARK['learned'], NOTE])
+        self.assertFlows(seen['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coder'], MARK['learned'], MARK['job'], NOTE])
         mid = s.add_message({'ExternalId': 'r2', 'Channel': 'email', 'Subject': 'quick question',
                              'FromEmail': 'a@b.com', 'BodyText': 'Can you confirm the date?', 'Status': 'filed'})
         rid = s.add_review({'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
@@ -75,7 +77,8 @@ class DocsReachThePromptTests(unittest.TestCase):
         """The notes are the part that was missing: an agent was handed the operator rules and
         the coder rules, and none of the verdicts the owner had actually given."""
         s = seeded()
-        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['agent'], MARK['coder'], NOTE], forbid=[MARK['soul']])   # PW-184: SOUL stays with triage
+        # PW-184: SOUL stays with triage; JOB.md too - a worker that knows the mission starts helping with the mission instead of the ticket
+        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['agent'], MARK['coder'], NOTE], forbid=[MARK['soul'], MARK['job']])
 
     def test_task_context_and_the_handoff_writer_carry_them_too(self):
         s = seeded()

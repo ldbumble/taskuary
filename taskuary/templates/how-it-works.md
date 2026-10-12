@@ -67,6 +67,7 @@ verdict-on-thread and pipe rule runs outside the model — before it and after i
    things.
 5. **Shortcuts that need no model** — a calendar invite, a tracker notification, obvious noise.
 6. **Triage** (`TRIAGE.md`). The only place words decide. It reads: your `TRIAGE.md`, `SOUL.md`,
+   `JOB.md` (what you are accountable for - it weighs how much an arrival matters, never what it is),
    `LEARNED.md`, the standing notes that bear on this sender or topic (two agreeing verdicts become
    binding), and the facts around the message — who it was addressed to, who else has replied, the
    prior mail on the thread, what the assistant already said about it, and a report's own brief. It

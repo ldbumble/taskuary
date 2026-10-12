@@ -522,7 +522,8 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     from .projects import context_for_message
     from . import agents as hub_agents
     project = context_for_message(store, msg)
-    intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread, seen=carried,
+    from .triage import job_doc
+    intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
                              learned=injectable(store.doc('learned') or ''),
                              notes=notes, notes_left=notes_left, images=msg.get('images'),
                              system=store.doc('triage'), mine=me,

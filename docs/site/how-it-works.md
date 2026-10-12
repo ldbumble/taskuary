@@ -61,7 +61,7 @@ caught it before triage ever saw it".
 | 7 | Still the same ask? | **AI** | Chats only, and only when step 6 attached: does this line continue that task or start a new one? |
 | 8 | Your standing ruling | gate | If you already ruled on this conversation it is filed, quoting your own words. Your rulings outrank the classifier. |
 | 9 | An agent is waiting | gate | If a run is live on the attached task, no verdict is asked for — the message goes to the agent as its answer. |
-| 10 | The verdict | gate, then **AI** | Tracker items, obvious noise and calendar invites settle with no call. Everything else is one call reading `TRIAGE.md`, `SOUL.md`, `LEARNED.md` and your past verdicts. |
+| 10 | The verdict | gate, then **AI** | Tracker items, obvious noise and calendar invites settle with no call. Everything else is one call reading `TRIAGE.md`, `SOUL.md`, `JOB.md`, `LEARNED.md` and your past verdicts. |
 | 11 | Acting on it | gate | `fyi` files. A reply files instead of drafting when replies are off for that channel. Anything else becomes a task with its kind. |
 
 Two rules hold wherever AI is involved. With no AI connector, a message is **filed** with
@@ -121,9 +121,12 @@ rewritten. An inferred rule that would *hide* work waits in Proposed rules until
 Taskuary's behaviour is plain Markdown under **Settings → Docs**. These are not configuration files
 around the edges — they are what the models are actually told.
 
+![The eight operator documents and who reads them: TRIAGE, STYLE and JOB can be generated from three months of your mail; SOUL, CODER and COUNSEL you write; LEARNED and DIGEST write themselves](img/operator-docs.svg "Three are read out of your mailbox, three you write, two write themselves.")
+
 | Document | Purpose | Read by |
 |---|---|---|
-| `SOUL.md` | The constitution: rules, voice, escalation lines, repository map | triage, replies, coding agents |
+| `SOUL.md` | The constitution: rules, voice, escalation lines, repository map | triage, replies, the assistant |
+| `JOB.md` | What your job is: mission, responsibilities, who you serve, the cadences, what to protect. It weighs importance, never intent | triage, the assistant, the morning brief |
 | `TRIAGE.md` | What makes something a task, a reply or an FYI | triage |
 | `STYLE.md` | Greeting, tone, length, phrasing | reply drafts |
 | `COUNSEL.md` | How the assistant speaks, and how readily it takes a position | the assistant, the morning brief, replies |
@@ -137,9 +140,11 @@ a card charge to post as a bill, a new hire to set up — gets its own page the 
 does it. On close, Taskuary asks whether that was a kind of job that will recur, and drafts the
 playbook onto the task.
 
-**Generate from history** on `TRIAGE.md` and `STYLE.md` bootstraps all of this from your last
-three months of mail: it compares what arrived with what you actually answered, and writes the
-result into a marked block, leaving anything you wrote outside that block alone.
+**Generate from history** on `TRIAGE.md`, `STYLE.md` and `JOB.md` bootstraps all of this from your
+last three months of mail: it compares what arrived with what you actually answered, reads how you
+write from your sent folder, and reads what your job is from both directions at once — who writes to
+you, who you write to, what recurs and on what rhythm. Each writes its result into a marked block,
+leaving anything you wrote outside that block alone.
 
 ## Where the rest of the workspace fits
 

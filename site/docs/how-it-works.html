@@ -221,7 +221,7 @@ caught it before triage ever saw it&quot;.</p>
 <td>10</td>
 <td>The verdict</td>
 <td>gate, then <strong>AI</strong></td>
-<td>Tracker items, obvious noise and calendar invites settle with no call. Everything else is one call reading <code>TRIAGE.md</code>, <code>SOUL.md</code>, <code>LEARNED.md</code> and your past verdicts.</td>
+<td>Tracker items, obvious noise and calendar invites settle with no call. Everything else is one call reading <code>TRIAGE.md</code>, <code>SOUL.md</code>, <code>JOB.md</code>, <code>LEARNED.md</code> and your past verdicts.</td>
 </tr>
 <tr>
 <td>11</td>
@@ -271,6 +271,7 @@ rewritten. An inferred rule that would <em>hide</em> work waits in Proposed rule
 <h2 id="the-documents-that-govern-it">The documents that govern it<a class="anchor" href="#the-documents-that-govern-it" aria-label="Link to this section">#</a></h2>
 <p>Taskuary&#39;s behaviour is plain Markdown under <strong>Settings → Docs</strong>. These are not configuration files
 around the edges — they are what the models are actually told.</p>
+<p><figure><img src="img/operator-docs.svg" alt="The eight operator documents and who reads them: TRIAGE, STYLE and JOB can be generated from three months of your mail; SOUL, CODER and COUNSEL you write; LEARNED and DIGEST write themselves" loading="lazy"><figcaption>Three are read out of your mailbox, three you write, two write themselves.</figcaption></figure></p>
 <table>
 <thead>
 <tr>
@@ -282,7 +283,12 @@ around the edges — they are what the models are actually told.</p>
 <tbody><tr>
 <td><code>SOUL.md</code></td>
 <td>The constitution: rules, voice, escalation lines, repository map</td>
-<td>triage, replies, coding agents</td>
+<td>triage, replies, the assistant</td>
+</tr>
+<tr>
+<td><code>JOB.md</code></td>
+<td>What your job is: mission, responsibilities, who you serve, the cadences, what to protect. It weighs importance, never intent</td>
+<td>triage, the assistant, the morning brief</td>
 </tr>
 <tr>
 <td><code>TRIAGE.md</code></td>
@@ -324,9 +330,11 @@ around the edges — they are what the models are actually told.</p>
 a card charge to post as a bill, a new hire to set up — gets its own page the first time an agent
 does it. On close, Taskuary asks whether that was a kind of job that will recur, and drafts the
 playbook onto the task.</p>
-<p><strong>Generate from history</strong> on <code>TRIAGE.md</code> and <code>STYLE.md</code> bootstraps all of this from your last
-three months of mail: it compares what arrived with what you actually answered, and writes the
-result into a marked block, leaving anything you wrote outside that block alone.</p>
+<p><strong>Generate from history</strong> on <code>TRIAGE.md</code>, <code>STYLE.md</code> and <code>JOB.md</code> bootstraps all of this from your
+last three months of mail: it compares what arrived with what you actually answered, reads how you
+write from your sent folder, and reads what your job is from both directions at once — who writes to
+you, who you write to, what recurs and on what rhythm. Each writes its result into a marked block,
+leaving anything you wrote outside that block alone.</p>
 <h2 id="where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits<a class="anchor" href="#where-the-rest-of-the-workspace-fits" aria-label="Link to this section">#</a></h2>
 <ul>
 <li><strong>Board</strong> — queued, working, waiting and completed agent tasks, with a live terminal and the

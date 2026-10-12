@@ -162,6 +162,7 @@ def main():
     ap.add_argument('--result', default='', metavar='TEXT', help="with --item: what it is, whether it is right, what you propose")
     ap.add_argument('--overlap', default='', metavar='TEXT', help='with --item: the other item it duplicates, conflicts with or needs')
     ap.add_argument('--settled', action='store_true', help='with --item: nothing is left for the owner to do on it')
+    ap.add_argument('--propose', default='', choices=['', 'merge', 'close', 'changes'], help='with --item: what should happen to it')
     args = ap.parse_args()
     if args.demo:
         import os, tempfile
@@ -224,7 +225,8 @@ def main():
         try:
             r = requests.post(f'{base}/api/agent/item', timeout=60, headers=_session_headers(srv),
                               json={'task_id': int(tid), 'item': args.item, 'result': args.result, 'overlap': args.overlap,
-                                    'settled': bool(args.settled), 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'})
+                                    'settled': bool(args.settled), 'propose': args.propose,
+                                    'agent': os.environ.get('TASKUARY_AGENT') or 'agent'})
             out = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
         except Exception as e:
             print(f'could not reach Taskuary at {base}: {e}'); return

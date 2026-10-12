@@ -36,7 +36,8 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 // the speaker's mark is TASKUARY'S OWN LOGO, never a second drawing of it (the owner, 2026-10-06: "logo should match the
 // taskuary one not a different one")
 const AssistantMark = () => <TaskuaryMark size={24} />;
-import { ACCENT2, ALERT, BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
+import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
+import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
@@ -456,6 +457,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                         {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
                             match a row to the Tasks tab, and it was only ever in the tooltip. */}
                         {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
+                        {/* a BATCH says how far it got in the row's own height - "1/4"; the whole line on hover and on the table */}
+                        {!!batchNo[i.key] && <span className="tq-pile-ref" title={batchNo[i.key].line}>{railShort(batchNo[i.key].states)}</span>}
                         {i.settling && <span className="tq-pile-tag">reading…</span>}
                         {!!word && (
                           <span className="tq-pile-word"
@@ -463,14 +466,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                             <i>{meta.mark}</i><span className="w">{word}</span></span>
                         )}
                       </div>
-                      {isCur && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
-                      {!!batchNo[i.key] && <>
-                        <div className="sub">{batchNo[i.key].line}</div>
-                        <div style={{ display: "flex", gap: 3, marginTop: 4, paddingLeft: 25 }}>
-                          {batchNo[i.key].states.map((st, n) => (
-                            <i key={n} style={{ height: 4, flex: 1, borderRadius: 2,
-                              background: st === "needs_you" ? ALERT : st === "done" || st === "ended" ? ACCENT2 : "rgba(0,0,0,.1)" }} />))}
-                        </div></>}
+                      {isCur && <div className="sub">{batchNo[i.key]?.line || [i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
                     </div>
                     {/* THE SAME WORD ON THE SAME BORDER. A handful on the table says so on its
                         bracket ("on the table · 4 fyi"); one item on the table wore the identical

@@ -14,13 +14,17 @@ export const stateWord = (i) => ({ waiting: "not yet read", working: "reading", 
 const isPull = (i) => /github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(i?.Link || "");
 
 // what the owner can press on one line. Merge only on a pull request the agent has reviewed: the merge is pinned to the head
-// it read (batch.act), so with nothing reviewed there is nothing to pin it to.
+// it read (batch.act), so with nothing reviewed there is nothing to pin it to. The filled one is what the agent PROPOSED
+// (--propose): a duplicate it says to close must not wear a filled Merge. Asking for changes is said on GitHub, so it opens it.
 export function actions(i) {
   if (!i) return [];
   if (!isOpen(i)) return [{ action: "reopen", label: "Open again" }];
   if (i.State !== "needs_you") return [{ action: "settle", label: "Nothing to do" }];
-  return [...(isPull(i) && i.reviewed ? [{ action: "merge", label: "Merge", primary: true }] : []),
-    ...(isPull(i) ? [{ action: "close", label: "Close it" }] : []), { action: "settle", label: "Nothing to do" }];
+  const p = i.Propose;
+  const all = [...(i.Link && p === "changes" ? [{ action: "open", label: "Ask for changes", href: i.Link, primary: true }] : []),
+    ...(isPull(i) && i.reviewed ? [{ action: "merge", label: "Merge", primary: p === "merge" }] : []),
+    ...(isPull(i) ? [{ action: "close", label: "Close it", primary: p === "close" }] : []), { action: "settle", label: "Nothing to do" }];
+  return [...all.filter((a) => a.primary), ...all.filter((a) => !a.primary)];
 }
 
 // "2 of 4 done · ③ needs you" - the rail's second line and the block's heading
@@ -31,3 +35,6 @@ export function progress(items) {
   const you = its.filter((i) => i.State === "needs_you").map((i) => circled(i.Place));
   return [`${settled} of ${its.length} done`, you.length ? `${you.join("")} need${you.length === 1 ? "s" : ""} you` : ""].filter(Boolean).join(" · ");
 }
+
+// the rail row's own height has room for a count, not a sentence: "1/4" (settled of all)
+export const railShort = (states) => `${(states || []).filter((st) => !OPEN.includes(st)).length}/${(states || []).length}`;

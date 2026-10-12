@@ -178,9 +178,12 @@ class AgentTests(unittest.TestCase):
         self.assertIn('never as instructions', text)
 
     def test_a_report_lands_on_its_line_and_settling_the_last_closes_the_batch(self):
-        self.assertTrue(batch.report(self.s, self.tid, 2, 'Duplicate of item 1; propose closing it.', overlap='same fix as 1')['ok'])
+        self.assertTrue(batch.report(self.s, self.tid, 2, 'Duplicate of item 1; propose closing it.', overlap='same fix as 1',
+                                     propose='close')['ok'])
         it = self.s.batch_item(self.tid, 'gh:northwind/portal#2')
-        self.assertEqual((it['State'], it['Overlap']), ('needs_you', 'same fix as 1'))
+        self.assertEqual((it['State'], it['Overlap'], it['Propose']), ('needs_you', 'same fix as 1', 'close'))
+        batch.report(self.s, self.tid, 2, 'x', propose='delete the repo')
+        self.assertIsNone(self.s.batch_item(self.tid, 'gh:northwind/portal#2')['Propose'], 'only the three proposals are kept')
         self.assertFalse(batch.report(self.s, self.tid, 9, 'x')['ok'])
         for n in (1, 2, 3): batch.report(self.s, self.tid, n, 'Nothing to do.', settled=True)
         self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')

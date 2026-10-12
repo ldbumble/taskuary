@@ -313,7 +313,7 @@ CREATE TABLE IF NOT EXISTS dispatchq (QId INTEGER PRIMARY KEY, TaskId INTEGER, B
 -- (closed or merged upstream). The task closes when every item is done or ended.
 CREATE TABLE IF NOT EXISTS batch_item (ItemId INTEGER PRIMARY KEY, TaskId INTEGER NOT NULL, ConversationId TEXT NOT NULL,
   MessageId INTEGER, Place INTEGER, Title TEXT, Link TEXT, State TEXT DEFAULT 'waiting', Result TEXT, Overlap TEXT,
-  EndedWhy TEXT, Sha TEXT, CreatedAt TEXT, UpdatedAt TEXT, UNIQUE(TaskId, ConversationId));
+  EndedWhy TEXT, Sha TEXT, Propose TEXT, CreatedAt TEXT, UpdatedAt TEXT, UNIQUE(TaskId, ConversationId));
 CREATE INDEX IF NOT EXISTS idx_batch_item_conv ON batch_item(ConversationId);
 CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, Note TEXT, CreatedBy TEXT,
   CreatedAt TEXT, DeliveredAt TEXT, How TEXT);
@@ -517,6 +517,7 @@ INDEXES = (
 PROCESSING_DIRTY_TABLES = (
     'task', 'message', 'review', 'idea', 'attachment', 'run', 'route',
     'funnel_state', 'comment', 'task_artifact', 'transcript',
+    'batch_item',                # a batch row's progress line (batch.rail) moves as the agent reports each item
 )
 PROCESSING_DIRTY_SETTINGS = (
     'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains', 'processing_membership_rules',
@@ -818,8 +819,9 @@ class SQLiteStore:
             for c in ('Url', 'ExtId', 'Version'):
                 if c not in acols: self.cx.execute(f'ALTER TABLE task_artifact ADD COLUMN {c} TEXT')
             # the head a batch's agent reviewed: a merge is pinned to it (batch.act), so a push after the review is refused
-            if 'Sha' not in {r[1] for r in self.cx.execute('PRAGMA table_info(batch_item)')}:
-                self.cx.execute('ALTER TABLE batch_item ADD COLUMN Sha TEXT')
+            bcols = {r[1] for r in self.cx.execute('PRAGMA table_info(batch_item)')}
+            for c in ('Sha', 'Propose'):
+                if c not in bcols: self.cx.execute(f'ALTER TABLE batch_item ADD COLUMN {c} TEXT')
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
             if 'RawOutput' not in routecols:
                 self.cx.execute('ALTER TABLE route ADD COLUMN RawOutput TEXT')
@@ -3825,7 +3827,7 @@ class SQLiteStore:
         return self._rows(f"SELECT * FROM message WHERE Status='triaging' ORDER BY {order} LIMIT ?", (limit,))
     def ranked_held(self, channel) -> int: return len(self.ranked_head(channel))
     # ── batches (batch.py) ──────────────────────────────────────────────────────────────────
-    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha')
+    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose')
     def add_batch_item(self, tid, conv, mid, place, title, link):
         self._exec('INSERT OR IGNORE INTO batch_item (TaskId, ConversationId, MessageId, Place, Title, Link, State, CreatedAt, UpdatedAt) '
                    "VALUES (?,?,?,?,?,?,'waiting',?,?)", (tid, conv, mid, place, title, link, _now(), _now()))

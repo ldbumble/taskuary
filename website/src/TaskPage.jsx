@@ -35,6 +35,7 @@ import { completionTransition, cutAway, filterForSelectedState, remindWaiting, r
 import ReviewDecision from "./ReviewDecision.jsx";
 import SlotList from "./SlotList.jsx";
 import BatchItems from "./BatchItems.jsx";
+import { progress as batchProgress } from "./batchItems.js";
 import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
@@ -383,6 +384,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [repoPick, setRepoPick] = useState(false);
   const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
   const [sourceOpen, setSourceOpen] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(true);
   const [reportOpen, setReportOpen] = useState(false);
   useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); setReportOpen(false); setPeek(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
@@ -625,7 +627,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     .find((m) => m.Status !== "context" && m.Direction !== "out");
   // ...and whether there is anybody at the other end of it (taskLifecycle.hasCorrespondent). Every
   // reply door hangs off this, so a task you typed yourself offers no reply to write.
-  const replyMessage = hasCorrespondent(sourceMessage) ? sourceMessage : null;
+  // a BATCH owes nobody one reply: its items are four authors, each answered (or merged, or closed) on its own line (batch.py)
+  const replyMessage = !detail?.batch && hasCorrespondent(sourceMessage) ? sourceMessage : null;
   const workContext = t?.Playbook
     ? `Playbook · ${t.Playbook.title}${t.Playbook.uses?.length ? ` · uses ${t.Playbook.uses.join(", ")}` : ""}`
     : t?.Source === "report" && sourceMessage?.SourceName
@@ -1132,6 +1135,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{cleanText(sourceMessage.BodyText)}</Typography>}
                       </Box>
                     )}
+                  </Box>
+                )}
+                {/* ...and a BATCH's items stay in view while its agent works through them: each result lands on its line as the
+                    agent reports it, and the presses on a finished line are usable without leaving the session (batch.py) */}
+                {sessionView && detail?.batch && (
+                  <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
+                    <Box onClick={() => setItemsOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
+                      <Typography sx={{ ...label }}>The items</Typography>
+                      <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{batchProgress(detail.batch)}</Typography>
+                      <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: itemsOpen ? "rotate(180deg)" : "none" }} />
+                    </Box>
+                    {itemsOpen && <Box sx={{ maxHeight: 360, overflowY: "auto", minWidth: 0 }}>
+                      <BatchItems taskId={t?.TaskId} items={detail.batch} bare
+                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Box>}
                   </Box>
                 )}
                 {!sessionView && (

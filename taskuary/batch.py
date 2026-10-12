@@ -198,21 +198,26 @@ def seed(store, tid, repo: str = None, cwd: str = None, instruction: str = None)
              'safe, what should happen to it (merge, ask for changes, close). If it duplicates, conflicts with or depends on '
              'another item here, say which and how - otherwise say nothing about the others.',
              f'REPORT EACH ONE AS YOU FINISH IT: {REPORT} <n> --result "<two or three sentences: what it is, whether it is right, '
-             'what you propose>" [--overlap "<item and how>"] [--settled]. --settled only when nothing is left for the owner to '
-             'do on it. Do NOT run --done: the batch closes when every item is settled.']
+             'what you propose>" --propose merge|close|changes [--overlap "<item and how>"] [--settled]. --settled only when '
+             'nothing is left for the owner to do on it. Do NOT run --done: the batch closes when every item is settled.']
     if instruction and instruction.strip(): parts.append(f'ASK: {instruction.strip()}')
     rules = brief.rules(store, 'agent', term.AGENT_CHARS)
     if rules: parts.append(f'RULES (AGENT.md - every worker): {term.no_emails(rules)}')
     return term.paragraphs('\n\n'.join(parts))
 
 
-def report(store, tid, place: int, result: str, overlap: str = '', settled: bool = False, actor: str = 'agent') -> dict:
+PROPOSALS = ('merge', 'close', 'changes')
+
+
+def report(store, tid, place: int, result: str, overlap: str = '', settled: bool = False, actor: str = 'agent',
+           propose: str = '') -> dict:
     """`taskuary --item n --result ...` from the batch's own session: one item's finding goes on its line."""
     it = next((i for i in store.batch_items(tid) if int(i['Place']) == int(place)), None)
     if not it: return {'ok': False, 'why': f'there is no item {place} in this batch - the items are numbered 1 to {len(store.batch_items(tid))}'}
     if it['State'] == 'ended': return {'ok': False, 'why': f"item {place} already ended upstream: {it.get('EndedWhy') or ''}"}
     set_item(store, tid, it['ConversationId'], actor, State='done' if settled else 'needs_you',
-             Result=' '.join(str(result or '').split())[:1200], Overlap=' '.join(str(overlap or '').split())[:400] or None)
+             Result=' '.join(str(result or '').split())[:1200], Overlap=' '.join(str(overlap or '').split())[:400] or None,
+             Propose=propose if propose in PROPOSALS else None)
     return {'ok': True, 'item': place, 'state': 'done' if settled else 'needs_you'}
 
 

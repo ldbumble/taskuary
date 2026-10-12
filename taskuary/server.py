@@ -1200,7 +1200,7 @@ def task_detail(task_id: int):
             # ...and what ended it upstream (a merge, a close): Close out says that instead of an empty reply nobody is owed
             'ended': _ended_line(task_id, d.get('comments')),
             # ...and a BATCH's items, in ranked order, each with what the agent found and where it stands (batch.py)
-            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy')} | {'reviewed': bool(i.get('Sha'))}
+            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose')} | {'reviewed': bool(i.get('Sha'))}
                       for i in store.batch_items(task_id)] or None,
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
@@ -3476,7 +3476,7 @@ def agent_draft(body: AgentDraftBody, request: Request):
     out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent)
     return {**out, **coder.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
 
-class AgentItemBody(BaseModel): task_id: int; item: int; result: str; overlap: str = ''; settled: bool = False; agent: str = 'agent'
+class AgentItemBody(BaseModel): task_id: int; item: int; result: str; overlap: str = ''; settled: bool = False; agent: str = 'agent'; propose: str = ''
 
 @app.post('/api/agent/item')
 def agent_item(body: AgentItemBody, request: Request):
@@ -3485,7 +3485,7 @@ def agent_item(body: AgentItemBody, request: Request):
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     if not batch.is_batch(store, body.task_id): raise HTTPException(422, 'this task is not a batch - report with --done or --reply')
-    return batch.report(store, body.task_id, body.item, body.result, body.overlap, body.settled, body.agent)
+    return batch.report(store, body.task_id, body.item, body.result, body.overlap, body.settled, body.agent, body.propose)
 
 class BatchActBody(BaseModel): action: str
 

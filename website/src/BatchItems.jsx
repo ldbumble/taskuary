@@ -7,7 +7,7 @@ import { actions, circled, isOpen, progress, stateWord } from "./batchItems.js";
 
 // The items of a batch, in ranked order, each with what the agent found and the owner's presses for it (batch.py). A line
 // waiting on you never holds up the next one; the task closes when the last line is settled.
-export default function BatchItems({ taskId, items = [], onChanged }) {
+export default function BatchItems({ taskId, items = [], onChanged, bare = false }) {
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState("");
   const [ask, setAsk] = useState(null);
@@ -22,7 +22,7 @@ export default function BatchItems({ taskId, items = [], onChanged }) {
   const go = (i, a) => (a.action === "merge" ? setAsk({ i, a }) : press(i, a));
   return (
     <Box sx={{ mt: 1, maxWidth: 900 }}>
-      <Typography sx={{ ...label, mb: 0.4 }}>{progress(items)}</Typography>
+      {!bare && <Typography sx={{ ...label, mb: 0.4 }}>{progress(items)}</Typography>}
       {items.map((i) => {
         const you = i.State === "needs_you";
         return (
@@ -43,7 +43,7 @@ export default function BatchItems({ taskId, items = [], onChanged }) {
               <Box sx={{ display: "flex", gap: 0.75, mt: 0.5, flexWrap: "wrap" }}>
                 {actions(i).map((a) => (
                   <Button key={a.action} size="small" variant={a.primary ? "contained" : "outlined"} disableElevation
-                    disabled={!!busy} onClick={() => go(i, a)}
+                    disabled={!!busy} {...(a.href ? { href: a.href, target: "_blank", rel: "noreferrer" } : { onClick: () => go(i, a) })}
                     sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5,
                       ...(a.primary ? { bgcolor: ALERT, "&:hover": { bgcolor: ALERT_INK } } : { color: INK, borderColor: BORDER }) }}>
                     {busy === `${i.Place}:${a.action}` ? "…" : a.label}

@@ -170,7 +170,8 @@ test("a task nobody sent offers no reply to write", () => {
   // the drafter answered the OWNER on a task he typed himself, in the box that sends (TQ-0674)
   const life = fs.readFileSync(path.join(process.cwd(), "src", "taskLifecycle.js"), "utf8");
   assert.match(life, /export const NO_ONE_BEHIND = \["", "own", "report", "assistant"\]/);
-  assert.match(tasks, /const replyMessage = hasCorrespondent\(sourceMessage\) \? sourceMessage : null;/);
+  // ...and a batch owes nobody ONE reply: its items are answered on their own lines (batch.py)
+  assert.match(tasks, /const replyMessage = !detail\?\.batch && hasCorrespondent\(sourceMessage\) \? sourceMessage : null;/);
   assert.match(tasks, /api\.post\(`\/api\/messages\/\$\{replyMessage\.MessageId\}\/reply`/);
   assert.match(tasks, /Nobody sent this one, so there is nobody to answer/);
 });

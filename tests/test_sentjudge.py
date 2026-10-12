@@ -41,22 +41,25 @@ PROMISE = {"I'll send the budget Friday": {'promise': True, 'what': 'send the bu
 
 
 class PromiseTests(unittest.TestCase):
+    # A JUDGED PROMISE IS A TASK on the owner, with its day (spec 2026-10-12, goals as tasks): a row on the rail, so the
+    # Advisor raises no line for it. The other side's thanks closes neither.
     def test_a_promise_survives_their_thanks(self):
         s = _store()
-        _theirs(s, 'Can we get the revised budget?', 4, 'c1'); _mine(s, "I'll send the budget Friday.", 3, 'c1')
+        _theirs(s, 'Can we get the revised budget?', 4, 'c1'); mid = _mine(s, "I'll send the budget Friday.", 3, 'c1')
         self.assertEqual(judged(s, PROMISE), 1)
-        [p] = assistant.followups(s, 24)
-        self.assertEqual((p['kind'], p['what']), ('promise', 'send the budget'))
+        t = s.promise_task(mid)
+        self.assertEqual((t['Title'], t['Status'], t['Assignee'], t['DueAt']), ('Send the budget', 'open', 'owner', _day(-1)))
+        self.assertEqual(assistant.followups(s, 24), [])
         _theirs(s, 'Great, thanks!', 2, 'c1')                                    # their word is not the budget
-        self.assertEqual([c['key'] for c in assistant.followups(s, 24)], ['promise:c1'])
+        self.assertEqual(s.promise_task(mid)['Status'], 'open')
+        self.assertEqual(assistant.followups(s, 24), [])
 
     def test_on_it_by_eod_is_a_promise_not_a_chase_on_them(self):
         s = _store()
-        _theirs(s, 'Can we get the deck?', 4, 'c2'); _mine(s, 'On it, by EOD.', 3, 'c2')
+        _theirs(s, 'Can we get the deck?', 4, 'c2'); mid = _mine(s, 'On it, by EOD.', 3, 'c2')
         judged(s, PROMISE)
-        self.assertEqual([c['kind'] for c in assistant.followups(s, 24)], ['promise'])
+        self.assertEqual((s.promise_task(mid)['Title'], s.promise_task(mid)['DueAt']), ('Send the deck', _day(3)))   # the model's day
         self.assertEqual(assistant.followups(s, 24, ('followup',)), [])
-        self.assertIn('it was due', assistant.followups(s, 24)[0]['text'])      # the model's day, read from the sent date
 
     def test_an_ask_of_them_is_a_followup_chosen_by_the_judge(self):
         s = _store()
@@ -91,14 +94,13 @@ class PromiseTests(unittest.TestCase):
         judged(s, PROMISE); judged(s, {'Done.': {'delivers': [f'm{p}']}})      # another thread's message cannot close it
         self.assertIsNone(s.sent_verdict(p)['DeliveredBy'])
 
-    def test_the_owner_closing_the_line_closes_it(self):
+    def test_the_owner_closing_the_task_closes_it(self):
         s = _store()
-        _theirs(s, 'Budget?', 5, 'c1'); _mine(s, "I'll send the budget Friday.", 4, 'c1')
+        _theirs(s, 'Budget?', 5, 'c1'); mid = _mine(s, "I'll send the budget Friday.", 4, 'c1')
         judged(s, PROMISE)
-        [p] = assistant.followups(s, 24)
-        s.upsert_idea({'key': p['key'], 'kind': 'promise', 'sig': p['sig'], 'text': p['text'], 'action': p['action']}, _ago())
-        s._exec("UPDATE idea SET Status='done' WHERE Key=?", (p['key'],))
+        s.update_task(s.promise_task(mid)['TaskId'], {'Status': 'done'}, 'owner')
         self.assertEqual(assistant.followups(s, 24), [])
+        self.assertEqual(judged(s, PROMISE), 0)                                 # judged once: no second task, no second line
 
     def test_promises_due_reads_the_judged_day(self):
         s = _store()
@@ -149,8 +151,11 @@ class JudgeTests(unittest.TestCase):
             if system == sentjudge.SYSTEM: return judge(system, user)
             seen.append(user); return json.dumps({'say': [], 'notes': ''})
         assistant.run(s, llm=llm, force=True)
-        self.assertTrue(s.sent_verdict(s._one("SELECT MessageId FROM message WHERE Status='context'")['MessageId']))
-        self.assertIn('[promise:c1]', seen[0])
+        mid = s._one("SELECT MessageId FROM message WHERE Status='context'")['MessageId']
+        self.assertTrue(s.sent_verdict(mid))
+        # ...and the promise it found is a task by the time the candidates are read, so it is not among them
+        self.assertEqual(s.promise_task(mid)['Title'], 'Send the budget')
+        self.assertNotIn('[promise:c1]', seen[0])
 
 
 class AdvisorLineTests(unittest.TestCase):

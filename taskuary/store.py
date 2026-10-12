@@ -2125,6 +2125,16 @@ class SQLiteStore:
                    'VALUES (?,?,?,?,?,?,?,?,?)', (mid, cid, int(bool(asks)), int(bool(promise)), what, due, delivered_by, _now(), by))
     def deliver_promise(self, mid, by):
         self._exec('UPDATE sent_verdict SET DeliveredBy=? WHERE MessageId=? AND Promise=1 AND DeliveredBy IS NULL', (by, mid))
+        t = self.promise_task(mid)
+        if t and t.get('Status') not in ('done', 'dropped'): self.update_task(t['TaskId'], {'Status': 'done'}, 'promise')
+    def promise_task(self, mid): return self._one('SELECT * FROM task WHERE SourceRef=?', (f'promise:{mid}',))
+    def task_for_promise(self, mid: int, what: str, due) -> int:
+        """The owner's own promise as a task on them (spec 2026-10-12): made once per sent message, dated when it was."""
+        t = self.promise_task(mid)
+        if t: return t['TaskId']
+        what = ' '.join(str(what or '').split())[:120] or 'what you promised'
+        return self.create_task({'Title': what[:1].upper() + what[1:], 'Kind': 'task', 'Status': 'open', 'Assignee': 'owner',
+                                 'Source': 'promise', 'SourceRef': f'promise:{mid}', 'DueAt': due or None}, 'promise')
     def open_promises(self, since, before='9999', conversation_id=None):
         """Promises the model read in the owner's sent words that nothing later of theirs delivered, newest first, with
         the message they were made in. The other side replying does not close one - "Great, thanks!" is not the budget."""

@@ -107,6 +107,8 @@ def judge(store, llm=None, days: int = DAYS) -> int:
             store.put_sent_verdict(m['MessageId'], m['ConversationId'], v.get('asks_them') is True, promise,
                                    ' '.join(str(v.get('what') or '').split())[:160] if promise else '',
                                    _date(v.get('due')) if promise else None, str(by)[:60], done)
+            if promise and not done:                                  # the owner's own word is their task, with its day (spec 2026-10-12)
+                store.task_for_promise(m['MessageId'], ' '.join(str(v.get('what') or '').split())[:160], _date(v.get('due')))
             for pid in v.get('delivers') or []:
                 if str(pid) in opened: store.deliver_promise(opened[str(pid)], m['MessageId'])   # only a promise it was shown
             n += 1

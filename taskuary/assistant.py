@@ -229,7 +229,8 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
     not silence."""
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     out, away, seen, rows = [], None, set(), []
-    if 'promise' in want: rows += [('promise', r) for r in store.open_promises(_since(DAYS), cut)]
+    # ...a promise that is already a TASK on the owner (store.task_for_promise) is a row on the rail, not a line here
+    if 'promise' in want: rows += [('promise', r) for r in store.open_promises(_since(DAYS), cut) if not store.promise_task(r['MessageId'])]
     if 'followup' in want:
         rows += [('followup', r) for r in store.owner_last_words(_since(DAYS), cut) if (store.sent_verdict(r['MessageId']) or {}).get('AsksThem')]
     for kind, r in sorted(rows, key=lambda kr: _ts(kr[1].get('SentAt')), reverse=True):

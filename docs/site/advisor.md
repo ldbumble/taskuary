@@ -90,6 +90,11 @@ counted numbers underneath. The lines are the model's reading; the numbers are t
 own lines above the block are yours and survive every recompile. The page is read wherever the hub's
 dossier is read: the reply drafter, triage's context, meeting prep, and the Advisor's bigger read.
 
+Facts about kinds of work go to the playbook they belong to, as a proposal: once a playbook has
+five closes on the ledger, reflection writes a bullet block - how often a close came open again,
+and how often the ones closed with a question still open did - and it waits for your yes on the
+Review queue. Nothing edits a playbook on its own; your own lines on it are never touched.
+
 ## The outcome ledger
 
 Every store Taskuary keeps is written from one signal: your click or your sentence, at the moment
@@ -118,8 +123,8 @@ already cites. Habits about you go to `LEARNED.md` with the same grammar, the sa
 same decay: "green PR from the coder: you merge it, 8 of 8"; "the agent asks 'open the PR?': you
 always say yes". A habit carries the one number it never had, the regret count. Facts about other
 people ("Ray answers in three days and needs a second chase") and about kinds of work ("closing
-from a thread with an open question reopens 40%; ask first") are the next two build steps: a page
-per person derived from the ledger, and work facts proposed into the playbook they belong to.
+from a thread with an open question reopens 40%; ask first") go elsewhere: a page per person
+derived from the ledger, and work facts proposed into the playbook they belong to (both below).
 
 ## The one rule
 
@@ -132,8 +137,11 @@ so it needs nothing new.
 
 ## What is built, and what is next
 
-Built: goals as tasks (a task whose boxes are tasks, a person as an assignee, a promise as a task
-on you with its day, one row per goal on the rail); the outcome ledger with its daily sweep and
-reflection reading it; the Advisor on the event, with the prompt-box pill and the notes in the
-clock menu; a page per person and a per-person day, with the slipped lane and its four answers.
-Next: triage naming which goal step a mail serves, and work facts proposed into playbooks.
+Built - all five steps of the design: goals as tasks (a task whose boxes are tasks, a person as an
+assignee, a promise as a task on you with its day, one row per goal on the rail); the outcome
+ledger with its daily sweep and reflection reading it; the Advisor on the event, with the
+prompt-box pill and the notes in the clock menu; a page per person and a per-person day, with the
+slipped lane and its four answers; and triage naming which goal step a mail serves (the mail lands
+under that step, and may tick a box nobody holds), opening a goal for the open-ended ask with the
+planner proposing its steps, and work facts proposed into playbooks.
+Next, kept in mind but not built: earned autonomy.

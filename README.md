@@ -41,7 +41,8 @@ numbers through the real app, using fictional demo data.
 Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by what they need:
 **Urgent**, **On you**, **Goals**, **For later**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
 one card: what changed since last night, what was learned, the morning digest, your meetings, and
-what waits in each section - so you never open each system in turn.
+what waits in each section - so you never open each system in turn. A goal is a task whose steps
+are tasks: triage opens one for an open-ended ask, and files later mail under the step it serves.
 
 ![The work rail sorting today's items into Urgent, On you, Agents working, Reports, Advisor ideas, and FYI, beside the opening card: agents that finished and a report that ran since last night, the memory and morning digest lines, today's meetings, and what waits in each section.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=cards)
 

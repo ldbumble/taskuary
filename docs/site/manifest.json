@@ -46,6 +46,12 @@
       "desc": "Reading the systems you work in on a schedule, and the report whose job is to judge."
     },
     {
+      "slug": "advisor",
+      "file": "advisor.md",
+      "title": "The Advisor",
+      "desc": "What goes into the brain that says what should happen next, its two clocks, and the outcome ledger that teaches it what worked."
+    },
+    {
       "slug": "phone",
       "file": "phone.md",
       "title": "On your phone",

@@ -155,7 +155,8 @@ opens, and it posts on the Timeline **only** when it finds something worth sayin
 reply, context for an upcoming meeting, a task gone quiet, a pattern across incoming work, or
 something in the systems it watches that does not look right. Each suggestion names its evidence
 and carries the same words everywhere it shows up - the Timeline, the Assistant chat, the work rail
-and your phone:
+and your phone. What it reads, its two clocks and the outcome ledger it learns from are on
+[The Advisor](advisor); this section is the report that runs it.
 
 | Word | What it does to the idea |
 |---|---|

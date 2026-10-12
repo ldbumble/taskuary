@@ -123,15 +123,15 @@ allowed to read and to do, not by where they run.
 
 | | What it does | What it reads | When | Acts? |
 |---|---|---|---|---|
-| **Triage** | Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the task it serves, names the profile, playbook and repository, assigns the worker | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the open tasks and goals | every poll | makes rows; never sends |
-| **The assistant** | The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb | `COUNSEL.md`, `SOUL.md` and `JOB.md` whole; the one item on the table; the Advisor's line on it | on a turn | moves things; never does the work, never proposes |
-| **The Advisor** | The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting | everything: `LEARNED.md` whole (hypotheses too, since it proposes and never acts); the outcome ledger; `JOB.md`, `SOUL.md`, the playbooks, the knowledge base, the calendar, schedules and mutes | on its schedule, and reflection when corrections or outcomes have queued | never; it leaves a line, an idea row or a proposal |
+| **Triage** | Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the thread's task, names the profile, playbook and repository, assigns the worker | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the recent open tasks | every poll | makes rows; never sends |
+| **The assistant** | The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb | `COUNSEL.md`, `SOUL.md` and `JOB.md` whole; the one item on the table | on a turn | moves things; never does the work, never proposes |
+| **The Advisor** | The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting | the head of `SOUL.md` and `JOB.md`, `COUNSEL.md`; your work as the hub sees it; the calendar; the knowledge base; the sources it watches; its own notes. At reflection: `LEARNED.md` whole, hypotheses too, and the outcome ledger | on its schedule and when the app opens; reflection at launch and after three corrections | never; it leaves a line, an idea row or a proposal |
 
 The workers (the coding agent, the general agent) are the fourth kind and not always on: they do
-the work a task names, in a session you can watch. Nothing on screen says "Advisor": `COUNSEL.md`
-is the voice for the assistant and the Advisor both. The split is a budget: the heavy reader works
-off the request path and leaves one line on the item; the voice that answers on a turn reads that
-line and the item, and never recomputes what the Advisor computed.
+the work a task names, in a session you can watch. `COUNSEL.md` is the voice for the assistant and
+the Advisor both. The split is a budget: the heavy reader works off the request path, on the
+clock; the voice that answers on a turn reads the one item on the table, and never recomputes what
+the Advisor computed.
 
 **The outcome ledger** is the Advisor's newest input. Every other store is written at the moment
 you click: the documents say what they say, `LEARNED.md` is what you do when you correct, and the
@@ -145,7 +145,8 @@ sweep. What the facts mean is reflection's: it reads the resolved rows as eviden
 beside the `mem`, `rv` and `task` ids above) and writes habits into `LEARNED.md` with the same
 grammar and the same decay - "green PR from the coder: you merge it, 8 of 8". A derived line never
 acts on its own: it changes which button comes first and what a proposal says, and deleting it
-from `LEARNED.md` is the whole undo.
+from `LEARNED.md` is the whole undo. The whole of it - every input, the two clocks, the ledger's
+row kinds and verdicts - is on [The Advisor](advisor).
 
 ## The documents that govern it
 

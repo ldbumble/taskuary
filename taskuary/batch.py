@@ -16,7 +16,13 @@ agent works them top-down and says what it found per item. The rules the owner s
   - an item ending upstream (merged, closed) settles ITS line. The task closes when no line is left open.
   - a comment on an item re-opens that line, not a new task.
   - mail is not batched: four senders are not one job.
+  - WHO MAY WRITE THERE decides how the agent works (the owner, 2026-10-12: "protection is only needed for ... the outside, not
+    monday or private github repos"; "if they are writer on repo then that's enough trust"). A private repository, a board or a
+    PR by someone with write access gets an ordinary agent, started by itself, no prompts. A PUBLIC repository's PR by anyone
+    else is reviewed with every command beyond reading refused - never asked: a reviewer that stopped the owner on each
+    command was worse than none. Such items batch apart, so a stranger's words never reach an agent that may run things.
 """
+import re
 from loguru import logger
 
 from .store import task_ref
@@ -28,7 +34,42 @@ PREFIX = 'batch:'
 
 
 def batches(channel) -> bool: return str(channel or '') in CHANNELS
-def source_ref(channel, source) -> str: return f'{PREFIX}{channel}:{source}'
+def source_ref(channel, source, outside=False) -> str: return f'{PREFIX}{channel}:{source}' + (':outside' if outside else '')
+
+TEAM = ('OWNER', 'MEMBER', 'COLLABORATOR')                 # GitHub's author_association for people with write access
+_ASSOC = re.compile(r'^\[(?:pull request|issue) by [^\]\n]* - association: ([A-Z_]+)\]')
+
+
+def association(body) -> str:
+    "The author's role on the repository, off the line channels.py writes at the top of every GitHub item (never the author's words)."
+    hit = _ASSOC.match(str(body or ''))
+    return hit.group(1) if hit else 'NONE'
+
+
+def repo_public(store, repo: str) -> bool:
+    """Is this GitHub repository public? Asked once and kept (gh_public:<repo>). Not knowing is public: the careful answer."""
+    key = f'gh_public:{repo}'
+    got = str(store.get_setting(key) or '')
+    if got in ('0', '1'): return got == '1'
+    tok = _token(store)
+    if not tok or not repo: return True
+    from . import github
+    try: pub = not github.repo_info(tok, repo).get('private', False)
+    except Exception as e:
+        logger.info(f'batch: could not tell whether {repo} is public ({e}) - treating it as public'); return True
+    store.set_setting(key, '1' if pub else '0', 'router')
+    return pub
+
+
+def outside_row(store, r) -> bool:
+    "A stranger's item: on a PUBLIC GitHub repository, by someone without write access to it. Everything else is ours."
+    if str(r.get('Channel') or '') != 'github': return False
+    return repo_public(store, str(r.get('SourceName') or '')) and association(r.get('BodyText')) not in TEAM
+
+
+def outside(store, tid) -> bool:
+    "Does this batch hold a stranger's item? Read off its items, so a batch made before this rule is judged the same way."
+    return any(outside_row(store, store.get_message(i['MessageId']) or {}) for i in store.batch_items(tid) if i.get('MessageId'))
 def is_batch(store, tid) -> bool: return str((store.get_task(tid) or {}).get('SourceRef') or '').startswith(PREFIX)
 
 
@@ -49,13 +90,13 @@ def summary_for(n: int, noun: str, source: str) -> str:
     return f"The {n} most valuable {noun}s waiting on {source}, in ranked order. Each one is reviewed in turn; nothing is merged, closed or answered without you."
 
 
-def create(store, channel: str, source: str, rows: list, actor: str = 'router') -> int:
+def create(store, channel: str, source: str, rows: list, actor: str = 'router', strangers: bool = False) -> int:
     """Let these arrivals in as one task - `rows` in ranked order, best first. Nothing is triaged: what each item is,
     the agent reads; what it is worth, ranking already said."""
     noun = _noun(rows)
     tid = store.create_task({
         'Title': title_for(len(rows), noun, source), 'Kind': 'coding' if channel in ('github', 'gitlab') else 'general',
-        'Status': 'open', 'Source': channel, 'SourceRef': source_ref(channel, source), 'Tags': 'batch',
+        'Status': 'open', 'Source': channel, 'SourceRef': source_ref(channel, source, strangers), 'Tags': 'batch',
         'Summary': summary_for(len(rows), noun, source)}, actor)
     _let_in(store, tid, rows, 1, source)
     logger.info(f'batch: {task_ref(tid)} let in {len(rows)} {noun}(s) from {source}')
@@ -117,16 +158,16 @@ def admit(store, rows: list) -> list:
     for r in rows:
         ch = str(r.get('Channel') or '')
         if not batches(ch) or store.task_for_conversation(r.get('ConversationId')): rest.append(r); continue
-        groups.setdefault((ch, str(r.get('SourceName') or '')), []).append(r)
-    for (ch, source), rs in groups.items():
+        groups.setdefault((ch, str(r.get('SourceName') or ''), outside_row(store, r)), []).append(r)
+    for (ch, source, strangers), rs in groups.items():
         rs, head = sorted(rs, key=lambda r: (r.get('RankValue') is None, -(r.get('RankValue') or 0), r['MessageId'])), rank.head_size(store, ch)
         try:
-            ob = store.open_batch(source_ref(ch, source))
+            ob = store.open_batch(source_ref(ch, source, strangers))
             if ob and not finished(store, ob):
                 room = head - len(store.batch_items(ob))
                 if room > 0: join(store, ob, rs[:room], source)
                 continue                                                 # full: the rest wait for this agent to finish
-            start(store, create(store, ch, source, rs[:head]))
+            start(store, create(store, ch, source, rs[:head], strangers=strangers))
         except Exception as e: logger.warning(f'batch: {source} could not be let in ({e})')
     return rest
 
@@ -149,8 +190,15 @@ def start(store, tid):
 REPORT = 'taskuary --item'
 
 
+# what a stranger's batch may do without anyone asked: read, search, read git's history, and report. Bash and PowerShell both:
+# on Windows Claude reaches for PowerShell, and the report was stopped for approval there (2026-10-12)
+READ_ONLY_TOOLS = ('Read', 'Grep', 'Glob', f'Bash({REPORT}:*)', f'PowerShell({REPORT}:*)', 'Bash(git log:*)', 'Bash(git show:*)',
+                   'Bash(git diff:*)', 'PowerShell(git log:*)', 'PowerShell(git show:*)', 'PowerShell(git diff:*)')
+
+
 def read_only_argv(cli: str, argv: list, context_dir: str = None) -> list:
-    """This CLI's command line with its own read-only gate on and any bypass the profile carries taken off. A CLI with
+    """This CLI's command line with its own read-only gate on and any bypass the profile carries taken off - and set to
+    REFUSE what it may not do, never to ask: the owner was stopped on every command of a review (2026-10-12). A CLI with
     no gate Taskuary knows is refused rather than started with whatever its profile allows."""
     out, skip = [], 0
     if cli == 'claude':
@@ -159,14 +207,14 @@ def read_only_argv(cli: str, argv: list, context_dir: str = None) -> list:
             if a == '--dangerously-skip-permissions': continue
             if a in ('--permission-mode', '--allowedTools', '--allowed-tools', '--disallowedTools', '--disallowed-tools'): skip = 1; continue
             out.append(a)
-        return out + ['--permission-mode', 'default', '--allowedTools', f'Bash({REPORT}:*)'] + (['--add-dir', context_dir] if context_dir else [])
+        return out + ['--permission-mode', 'dontAsk', '--allowedTools', ','.join(READ_ONLY_TOOLS)] + (['--add-dir', context_dir] if context_dir else [])
     if cli == 'codex':
         for a in argv:
             if skip: skip -= 1; continue
             if a in ('--dangerously-bypass-approvals-and-sandbox', '--full-auto', '--yolo'): continue
             if a in ('--sandbox', '-s', '--ask-for-approval', '-a'): skip = 1; continue
             out.append(a)
-        return out + ['--sandbox', 'read-only', '--ask-for-approval', 'on-request']
+        return out + ['--sandbox', 'read-only', '--ask-for-approval', 'never']
     raise ValueError(f'{cli or "this agent"} has no read-only mode Taskuary knows how to switch on, and a batch is reviewed '
                      'read-only - give the coder Claude Code or Codex as its brain, or review the items yourself')
 
@@ -199,6 +247,20 @@ def _diff(store, link: str) -> tuple:
 DIFF_CHARS = 40000
 
 
+def _ci(store, link: str, sha: str) -> str:
+    """GitHub's own verdict on this head, in words: the tests of a stranger's change run there, never here."""
+    p, tok = pull(link), _token(store)
+    if not (p and sha and tok): return ''
+    from . import github
+    try: c = github.checks(tok, p[0], sha)
+    except Exception as e:
+        logger.info(f'batch: the checks of {link} could not be read ({e})'); return ''
+    if c['state'] == 'none': return 'No checks ran on it.'
+    line = {'success': f"All {c['total']} checks passed.", 'pending': f"{c['pending']} of {c['total']} checks still running.",
+            'failure': f"{len(c['failed'])} of {c['total']} checks failed:"}[c['state']]
+    return '\n'.join([line] + [f"- {f['name']}: {' '.join(str(f.get('summary') or '').split())[:200]}" for f in c['failed']])
+
+
 def brief_file(store, tid) -> str:
     """Everything about every item, in one file under Taskuary's home: what it says, what was said on it since, and the
     diff. The seed is one line and cannot carry four pull requests; and with the diffs already here the agent needs no
@@ -217,6 +279,8 @@ def brief_file(store, tid) -> str:
                                                     for m in said] + ['']
         d, sha = _diff(store, it.get('Link'))
         if sha: store.update_batch_item(tid, it['ConversationId'], {'Sha': sha})
+        ci = _ci(store, it.get('Link'), sha)
+        if ci: out += ['### CI on GitHub (the tests ran there, on this head)', '', ci, '']
         if d:
             cut = len(d) > DIFF_CHARS
             out += ['### Diff' + (f' (first {DIFF_CHARS} characters of {len(d)})' if cut else ''), '', '```diff', d[:DIFF_CHARS], '```', '']
@@ -238,8 +302,11 @@ def seed(store, tid, repo: str = None, cwd: str = None, instruction: str = None)
              'ITEMS, most valuable first: ' + '; '.join(f"({i['Place']}) {i.get('Title') or ''}"
                                                        + ('' if i['State'] in OPEN else f" [{i['State']}]") for i in its) + '.',
              f'EVERYTHING ABOUT THEM - descriptions, comments, diffs: {path} - read it first; it is all you need.',
-             'YOU ARE READ-ONLY. Review; do not run any item\'s code or tests, push, commit, comment, merge or close anything. '
-             'The owner does each of those after reading what you found. Anything you try beyond reading will stop and ask them.',
+             ('YOU ARE READ-ONLY: these are outside contributors\' changes on a public repository. Read the file and the checkout; '
+              'anything beyond reading is refused, not asked - do not fetch, install, build or run anything. The tests already '
+              'ran on GitHub and their results are in the file.' if outside(store, tid) else
+              'You may read, check an item\'s branch out in a worktree of your own, build it and run its tests.')
+             + ' Never push, commit to the checkout, comment, merge or close anything - the owner does those after reading what you found.',
              f"WORK THEM IN ORDER: {', '.join(str(i['Place']) for i in todo) or 'none left open'}. For each: is it right, is it "
              'safe, what should happen to it (merge, ask for changes, close). If it duplicates, conflicts with or depends on '
              'another item here, say which and how - otherwise say nothing about the others.',

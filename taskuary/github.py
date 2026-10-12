@@ -194,7 +194,7 @@ def repo_info(tok, repo) -> dict:
     j = r.json()
     return {'methods': [m for m, k in (('squash', 'allow_squash_merge'), ('merge', 'allow_merge_commit'), ('rebase', 'allow_rebase_merge'))
                         if j.get(k, True)],
-            'permissions': j.get('permissions') or {}, 'default_branch': j.get('default_branch')}
+            'permissions': j.get('permissions') or {}, 'default_branch': j.get('default_branch'), 'private': bool(j.get('private'))}
 
 
 def update_branch(tok, repo, number, expected_sha=None) -> str:

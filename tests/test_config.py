@@ -1,7 +1,7 @@
 """Config writer tests - the UI persists agents/settings, so save() must round-trip
 exactly through stdlib tomllib.
 """
-import os, socket, unittest
+import os, socket, unittest, contextlib, io
 from unittest import mock
 try: import tomllib
 except ImportError: import tomli as tomllib
@@ -112,6 +112,28 @@ class TomlTests(unittest.TestCase):
                 self.assertTrue(cli._busy('::1', port))
         except OSError:
             pass
+
+    def test_cli_reports_corrupt_config_without_a_traceback(self):
+        """One typo in a hand-edited config.toml must name the file and say how to move on - never
+        a raw traceback. tests/conftest.py already points TASKUARY_HOME at a disposable home, so
+        this writes there and puts the file back afterwards."""
+        path = config.home() / 'config.toml'
+        previous = path.read_text(encoding='utf-8') if path.exists() else None
+        path.write_text('[server]\nhost = "127.0.0.1\n', encoding='utf-8')  # unclosed quote
+        try:
+            err = io.StringIO()
+            with mock.patch('sys.argv', ['taskuary']), contextlib.redirect_stderr(err):
+                with self.assertRaises(SystemExit) as stopped:
+                    cli.main()
+            self.assertEqual(stopped.exception.code, 1)
+            message = err.getvalue()
+            self.assertIn(str(path), message)      # names the file the owner can fix
+            self.assertIn('line 2', message)       # the parser's own line/column survives
+            self.assertIn('config.toml', message)  # ...and a way to start fresh
+            self.assertNotIn('Traceback', message)  # not a raw traceback
+        finally:
+            if previous is None: path.unlink(missing_ok=True)
+            else: path.write_text(previous, encoding='utf-8')
 
 
 if __name__ == '__main__':

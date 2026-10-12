@@ -13,7 +13,7 @@ python -m pytest -q                        # the whole suite runs offline in ~2s
 taskuary --debug                           # run the server with debug logging
 ```
 
-UI work needs Node 20+ (build-time only — users never need node):
+UI work needs Node 22.12+ (build-time only — users never need node):
 
 ```bash
 cd website && npm ci

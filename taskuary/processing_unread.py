@@ -6,7 +6,7 @@ read policy, history windows, or an independent size limit after activation.
 import copy
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from . import processing_all, proposals
 
@@ -290,9 +290,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             except (ValueError, TypeError): action = {}
             triage = action.get('triage') or {}
             lane = processing_all.idea_lane(idea)
+            slip, late = funnel.slipped_followup(store, action, now)        # a quiet thread past the person's day: the owner's move
+            if slip: lane = slip
             base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action,
                         priority=triage.get('priority'), tid=action.get('tid') or tid,
-                        mid=action.get('mid'), settling=bool(triage.get('pending')),
+                        mid=action.get('mid'), settling=bool(triage.get('pending')), who_email=action.get('who_email') or '', late_days=late,
                         urgent_request=lane == 'asked' and (bool(triage.get('urgent')) or funnel.priority_rank(triage.get('priority')) == 0))
             card = funnel._item('', 'idea', lane, compact['title'], **base)
         else:
@@ -337,6 +339,29 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # task page said "waiting on them" - the rail had no lane for it. The TASK only: a message from them is their
     # answer, and that is your move again (FollowUpTests)
     if not row.get('MessageId') and task.get('Status') == 'waiting' and not review and card['lane'] == 'yours': card['lane'] = 'theirs'
+    # ...and a step a PERSON owes, quiet past its day plus that person's usual day, is SLIPPED: the owner's move (spec 2026-10-12)
+    who = str(task.get('Assignee') or '')
+    if card['lane'] == 'theirs' and who.startswith('person:') and str(task.get('DueAt') or '')[:10]:
+        from . import outcomes
+        try: due = date.fromisoformat(str(task['DueAt'])[:10])
+        except ValueError: due = None
+        if due:
+            day = outcomes.late_after(store, who[7:], int(store.get_setting('slipped_default_days', 5) or 5))
+            past = (now.date() - due).days - day
+            if past >= 0:
+                card.update(lane='forgotten', who_email=who[7:].lower(), late_days=past,
+                            why=f"{holder_name(who)} has been quiet {(now.date() - due).days} days past {due:%b %d} - late for them after {day}")
+    # ...and a SLIPPED FOLLOW-UP among the item's members is the owner's move whatever row leads the item: on this rail the
+    # Advisor's line about a thread joins the thread's own item, so the rule reads the members, not only the target
+    if card['lane'] not in ('forgotten', 'blocked', 'approve', 'time'):
+        for i in view.get('ideas') or []:
+            if i.get('Status') != 'open' or i.get('Kind') != 'followup': continue
+            try: a = json.loads(i.get('ActionJson') or '{}')
+            except (ValueError, TypeError): a = {}
+            slip, late = funnel.slipped_followup(store, a, now)
+            if slip:
+                card.update(lane=slip, who_email=a.get('who_email') or '', late_days=late, idea=card.get('idea') or i['IdeaId'],
+                            idea_kind=card.get('idea_kind') or i.get('Kind'), why=i.get('Text') or card.get('why')); break
     # A GOAL IS ONE ROW (spec 2026-10-12): its kind says its state, its sub line says the count and who is holding it, its
     # date sits where the age goes, and it is never gone while open. Its children fold into it unless they are your move.
     from .store import is_goal

@@ -135,6 +135,13 @@
       "desc": "Open work with no comment, message or run for this many days gets a line. 3 by default.",
       "help": "A task with a live agent on it is never cold. One with a draft waiting on the task is named as waiting on you."
     },
+    "slipped_default_days": {
+      "group": "Advisor",
+      "label": "Days of silence before a thread has slipped",
+      "type": "number",
+      "desc": "A thread you wrote on, or a step somebody owes, is 'slipped' - first on your rail, with Chase, Let it go, They answered elsewhere and Remind me - once it has been quiet this many days. For a person the outcome ledger has seen answer three times, their own usual day is used instead. 5 by default.",
+      "help": "Someone whose auto-reply says they are away never slips. The day is read from the ledger, never from the mail."
+    },
     "advisor_events": {
       "group": "Advisor",
       "label": "Advise on the item that changed",

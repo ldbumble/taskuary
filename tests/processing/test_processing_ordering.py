@@ -73,7 +73,7 @@ def test_the_owners_work_is_one_level_oldest_first_and_a_result_is_not_in_it():
     failed check are all the owner's task; what landed is a result below them; an idea nobody
     judged is an fyi below that."""
     rows = [item("ask", "asked", at=stamp(-1)), item("broken", "broken", at=stamp(-2)),
-            item("idea", "forgotten", kind="idea", at=stamp(-3)),
+            item("idea", "fyi", kind="idea", at=stamp(-3)),                 # an idea nobody judged is an fyi (idea_lane); slipped is the owner's move since 2026-10-12
             item("result", "report", at=stamp(-4)), item("todo", "queued", at=stamp(-6))]
     before = deepcopy(rows)
     assert [row["key"] for row in funnel._order(rows)] == ["todo", "broken", "ask", "result", "idea"]

@@ -92,7 +92,7 @@ _LOCK = threading.Lock()
 
 
 MUTES_KEY = 'funnel_mutes'            # the owner's standing "never show me these again" rules
-MUTED_LANES = ('fyi', 'report', 'forgotten')   # only what has nothing to do: a real ask still reaches them
+MUTED_LANES = ('fyi', 'report')     # only what has nothing to do: a real ask still reaches them; slipped is the owner's move (2026-10-12)
 
 
 def mutes(store) -> list:
@@ -843,6 +843,18 @@ def from_calendar(store, now: datetime) -> list:
     return out
 
 
+def slipped_followup(store, action: dict, now: datetime = None) -> tuple:
+    """SLIPPED (spec 2026-10-12): a follow-up quiet past THAT person's day is the owner's move, in the slipped lane. The day is
+    the ledger's (outcomes.late_after), the default the owner's (Settings -> Advisor); someone away never slips. Returns
+    ('forgotten', days past the person's day) or (None, 0) - one rule for the legacy pile and the processing rail."""
+    a = action or {}
+    if a.get('type') != 'followup' or not a.get('who_email') or not a.get('asked_at') or a.get('away'): return (None, 0)
+    from . import outcomes
+    day = outcomes.late_after(store, a['who_email'], int(store.get_setting('slipped_default_days', 5) or 5))
+    quiet = max(0, int(((now or datetime.now()) - (_dt(a['asked_at']) or datetime.now())).total_seconds() // 86400))
+    return ('forgotten', quiet - day) if quiet >= day else (None, 0)
+
+
 def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = frozenset(),
                    reconcile: bool = True) -> list:
     """The assistant's own open lines (assistant.py posts them on its half-hourly check: the ask that
@@ -879,6 +891,8 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         # the shared verdict decides the lane (PW-200), by the one rule the canonical rail uses too
         from .processing_all import idea_lane
         lane, tri = idea_lane(i), a.get('triage') or {}
+        slip, late = slipped_followup(store, a)
+        if slip: lane = slip
         why = a.get('why') or 'the assistant raised this'
         if tri.get('error'): why = f"triage failed ({tri['error']}) - the next check retries; {why}"
         elif tri.get('pending'): why = f'awaiting triage (no AI connector); {why}'
@@ -892,6 +906,7 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
                          who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
                          idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'),
+                         who_email=a.get('who_email') or '', late_days=late,
                          urgent_request=tri.get('intent') in ('task', 'reply_only') and (bool(tri.get('urgent')) or priority_rank(tri.get('priority')) == 0)))
     return out
 
@@ -944,7 +959,7 @@ def _band(item):
                           # a task an agent FINISHED is still a task - Your task until Next reads it, never a report:
                           # reports are what a report you set up filed (the owner, 2026-09-24: "reports are never
                           # tasks just information" / "it's not agent working if task is done")
-                          actionable=lane in ('broken', 'asked', 'yours', 'theirs', 'queued', 'stopped', 'saved') or item.get('kind') == 'agentdone'
+                          actionable=lane in ('broken', 'asked', 'yours', 'theirs', 'queued', 'stopped', 'saved', 'forgotten') or item.get('kind') == 'agentdone'
                                      or (lane == 'unjudged' and bool(item.get('held'))),
                           result=lane == 'report')
 
@@ -959,7 +974,7 @@ SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'goals': 'Goals', 'agents
 _LEVEL_OF_BAND = {1: 'urgent', 2: 'task', 3: 'reports', 4: 'fyi', 5: 'agents'}
 # the page's fallback for a row that carries no band (funnelPile.attentionBand) - kept identical, never _band's
 _BAND_FALLBACK = {'blocked': 2, 'time': 1, 'approve': 2, 'broken': 2, 'asked': 2, 'yours': 2, 'queued': 2, 'stopped': 2,
-                  'saved': 2, 'forgotten': 4, 'report': 3, 'fyi': 4, 'working': 5}
+                  'saved': 2, 'forgotten': 2, 'report': 3, 'fyi': 4, 'working': 5}
 
 
 def level_of(item: dict) -> str:

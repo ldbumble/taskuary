@@ -72,9 +72,9 @@
     {
       "lane": "forgotten",
       "kind": "idea",
-      "order_band": 4
+      "order_band": 2
     },
-    "ideas"
+    "task"
   ],
   [
     {
@@ -95,9 +95,9 @@
   [
     {
       "lane": "forgotten",
-      "order_band": 4
+      "order_band": 2
     },
-    "fyi"
+    "task"
   ],
   [
     {},

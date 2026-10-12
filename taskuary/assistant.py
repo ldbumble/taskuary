@@ -265,7 +265,9 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
                         'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
                                   f"- nothing has come back in {days} day(s)." + (f" BUT {who} is {gone}." if gone else '')),
                         'text': (f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
-                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')},
+                        # the person key, the day asked and whether they are away: what the slipped lane reads (funnel.slipped_followup)
+                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId'),
+                                   'who_email': (inbound.get('FromEmail') or '').lower(), 'asked_at': _ts(r['SentAt']), 'away': bool(gone)},
                         'who': who, 'subject': subj, 'days': days, 'away': gone})
     return out
 

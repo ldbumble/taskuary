@@ -2994,6 +2994,13 @@ def board_read(note_id: int, who: str = ''):
     store.mark_note_read(note_id, who or ACTOR)
     return {'ok': True}
 
+@app.get('/api/people/pages')
+def people_pages_list():
+    """The pages the ledger keeps per person (people_pages.py): who, the doc name, when, how many lines."""
+    from . import people_pages
+    return {'data': people_pages.pages(store)}
+
+
 @app.get('/api/people')
 def people(limit: int = 300):
     """The address book behind every place a person is picked - looping somebody in on a reply,

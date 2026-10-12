@@ -334,6 +334,11 @@ def reflect(store, llm=None) -> bool:
     store.set_setting('learn_reflect_failed', '', 'reflect')
     store.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'), 'reflect')
     logger.info('LEARNED.md reflected')
+    try:                                            # ...and the people the window's outcomes name get their page (people_pages.py)
+        from . import people_pages
+        done = people_pages.refresh(store, llm)
+        if done: logger.info(f"people pages compiled: {', '.join(done)}")
+    except Exception as e: logger.warning(f'people pages skipped: {e}')
     return True
 
 

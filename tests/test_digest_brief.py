@@ -144,6 +144,11 @@ class BriefVoiceTests(unittest.TestCase):
         self.assertEqual([t['Title'] for t in s.list_tasks()], ['Review the export PR'], 'no task made from the brief')
         self.assertIsNone(s.get_message(out['message_id'])['TaskId'])
         self.assertIn('Two meetings today', since.digest(s)['text'], 'the opening screen still shows it')
+        # ...and it is no ROW either: not a task, not a report under Reports - the assistant canvas is its only place
+        from taskuary import funnel
+        rail = funnel.pile(s, force=True, quiet=True)['items']
+        self.assertEqual([i['title'] for i in rail if i.get('mid') == out['message_id'] or 'meetings' in str(i.get('title'))], [],
+                         'the digest never shows on the work rail')
 
 
 class BriefMemoryTests(unittest.TestCase):

@@ -182,9 +182,11 @@ export default function LearnedView({ onChanged }) {
           )}
           {loose.length > 0 && (
             <Box>
-              <Typography onClick={() => setLooseOpen((o) => !o)} sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, cursor: "pointer" }}>
+              <button type="button" aria-expanded={looseOpen} onClick={() => setLooseOpen((o) => !o)}
+                style={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, cursor: "pointer",
+                  background: "none", border: 0, padding: 0, textAlign: "left", display: "block" }}>
                 {looseOpen ? "▾" : "▸"} VERDICTS NOT YET IN ANY LINE · {loose.length}
-              </Typography>
+              </button>
               {looseOpen && (
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 0.75, mt: 0.75 }}>
                   {loose.map((e) => <Evidence key={e.id} e={e} contra={false} innerRef={() => {}} />)}

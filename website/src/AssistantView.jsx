@@ -651,7 +651,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)}
-        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} />
+        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} onOpenTask={actions.openTask} />
     </div>
   );
   // THE WORDS RIDE IN THE CARD (2026-09-23): Next beside the card's verb, every other word on its

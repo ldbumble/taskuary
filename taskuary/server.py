@@ -780,9 +780,11 @@ def start_step(task_id: int, item_id: str):
     if not box: raise HTTPException(404, 'no such step')
     if box.get('tid') and store.get_task(box['tid']): return {'taskId': box['tid'], 'ref': task_ref(box['tid'])}
     k = [i['id'] for i in boxes].index(item_id) + 1
+    # the goal's repository rides to its step: an agent on the step works where the goal said (the owner, 2026-10-12)
+    repo = [x for x in re.split(r'[\s,]+', str(g.get('Tags') or '')) if x.startswith('repo:')]
     tid = store.create_task({'Title': box['text'][:300], 'Kind': 'general', 'ParentId': task_id, 'Source': 'goal', 'SourceRef': f'goal:{task_id}:{item_id}',
                              'Summary': f"Step {k} of {task_ref(task_id)} \"{g.get('Title') or ''}\". Done when: {g.get('DoneWhen') or ''}",
-                             'AskedVia': 'desktop'}, ACTOR)
+                             'AskedVia': 'desktop', **({'Tags': repo[0]} if repo else {})}, ACTOR)
     store.link_step(task_id, item_id, tid, ACTOR)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)

@@ -77,3 +77,12 @@ class PromptTests(unittest.TestCase):
         self.assertTrue(seen['system'].startswith(triage.ASK_SYSTEM)); self.assertTrue(seen['system'].endswith(triage.GOAL_SYSTEM))
         triage.extract_ask({'body': 'plain'}, llm)
         self.assertEqual(seen['system'], triage.ASK_SYSTEM)
+
+
+class StepInheritsTests(unittest.TestCase):
+    def test_a_started_step_inherits_the_goals_repository_tag(self):
+        g = goal()
+        server.store.tag_task(g, 'repo:northwind/ledger', actor='owner')
+        server.store.set_task_checklist(g, ['Export job on the new schema'], 'owner')
+        child = c.post(f'/api/tasks/{g}/steps/{checklist_id("Export job on the new schema")}/start').json()['taskId']
+        self.assertIn('repo:northwind/ledger', str(server.store.get_task(child)['Tags'] or ''))

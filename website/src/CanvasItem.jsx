@@ -24,7 +24,7 @@ export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "
 // arrow - full screen, and still never a resize: the box it pins is measured in place, the same width and height.
 export const phoneItemHeight = (innerHeight) => Math.max(420, Math.round((innerHeight || 0) - 16));
 
-export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onGoReports, phone = false }) {
+export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onGoReports, onOpenTask, phone = false }) {
   // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
@@ -62,6 +62,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         openAct={act} onActOpened={() => setAct(null)}
         expanded={expanded} onExpand={onExpand}
         onClose={onFold} onListChanged={onListChanged} onChanged={onChanged} onGoReports={onGoReports}
+        // a goal's step opens as its own view on the table (TaskHubPage.openTask); onSelect never carried an id here
+        onOpenTask={onOpenTask}
         // closed, put away or deleted here, the walk moves on - the same as Done on a walk card
         onSelect={(id) => { if (!id) onAfter(); }}
         onFinish={async (status, close) => { await close(); onAfter(); }}

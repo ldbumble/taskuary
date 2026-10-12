@@ -235,7 +235,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   );
 }
 
-export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay,
+export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
   const [detail, setDetail] = useState(null);
@@ -875,6 +875,28 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the non-coding agent");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
+  // START AN AGENT ON A GOAL (the owner, 2026-10-12): the goal is up to its first step not done. That step becomes a task
+  // of its own if it is not one yet (the goal's repository rides along), the regular agent starts on it through the one
+  // dispatch door, and the step opens on the table so what the agent does is what you see.
+  const startGoalStep = async () => {
+    if (!selected || startingAgent) return;
+    const id = selected;
+    setStartingAgent("step"); setErr("");
+    try {
+      const { data: got } = await api.get(`/api/tasks/${id}/steps`);
+      const step = (got.steps || []).find((s) => !s.done);
+      if (!step) { setErr("Every step is done - close the goal, or add a step."); return; }
+      const child = step.tid || (await api.post(`/api/tasks/${id}/steps/${step.id}/start`)).data.taskId;
+      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null });
+      const outcome = outcomeOf(data);
+      if (outcome.state === "needs_repo") setErr(`${outcome.text} - open the step and pick one.`);
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.();
+      (onOpenTask || onSelect)?.(child);
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the agent on the next step");
+    } finally { if (!stale(id)) setStartingAgent(""); }
+  };
   // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and
   // what you type is the first thing it hears. The page had two older roads with no note (continue-session, resume).
   const [continueAt, setContinueAtRaw] = useState(null);
@@ -972,6 +994,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
         // the profile, brain and model pickers stay in that card for whoever wants to change them first
         title: "Starts the regular assistant with this task and its messages - profile, brain and model as set in Agent work." }]
+      // ON A GOAL the agent starts on the step the goal is up to - the first box not done: its child, made if it has none - and
+      // that step opens on the table (the owner, 2026-10-12: "it should start an agent on what it's up to")
+      : startHere && t?.DoneWhen ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "step" ? "Starting…" : "Start an agent on the next step",
+        disabled: !!startingAgent, run: startGoalStep,
+        title: "Finds the first step not done, makes it a task of its own if it is not one yet, starts the regular agent on it and opens it here." }]
       : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? "Run another agent" : "Start an agent",
         run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")),
         // it OPENS the step where the harness, model and prompt are chosen - nothing starts until that step's own Start button
@@ -1316,7 +1343,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {detail?.batch && <BatchItems taskId={t?.TaskId} items={detail.batch}
                           onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
                         {/* a GOAL lists its steps with the task behind each instead of plain boxes (spec 2026-10-12) */}
-                        {t?.DoneWhen && <GoalSteps task={t} onOpenTask={(tid) => onSelect?.(tid)}
+                        {t?.DoneWhen && <GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
                           onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
                         {!t?.DoneWhen && (detail?.checklist || []).length > 0 && (
                           <Box sx={{ mt: 0.85, maxWidth: 900 }}>

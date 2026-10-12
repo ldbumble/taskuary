@@ -135,6 +135,20 @@
       "desc": "Open work with no comment, message or run for this many days gets a line. 3 by default.",
       "help": "A task with a live agent on it is never cold. One with a draft waiting on the task is named as waiting on you."
     },
+    "advisor_events": {
+      "group": "Advisor",
+      "label": "Advise on the item that changed",
+      "type": "switch",
+      "desc": "When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor runs one small prompt on the light model and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.",
+      "help": "Never a row and never a change to the rail's order: the line attaches to the item and shows when the walk reaches it. The verb is one the item already carries; the number beside it is read from the outcome ledger. Off, the Advisor still runs on its schedule."
+    },
+    "advisor_event_cap": {
+      "group": "Advisor",
+      "label": "Event judgements per hour, at most",
+      "type": "number",
+      "desc": "The small prompt runs once per item per change and never more than this many times an hour; past it, the change is noted as dropped and the item simply has no pill. 30 by default.",
+      "help": "The Advisor's notes on an item (the clock menu) say when a judgement was dropped for the cap."
+    },
     "assistant_producers": {
       "group": "Advisor",
       "label": "What it looks for",

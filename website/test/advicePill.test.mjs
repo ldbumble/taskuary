@@ -23,3 +23,8 @@ test("the Advisor's line is the ghost text while the box is empty, and the pill 
 test("the pill never shows beside a typed line or a picture", () => {
   assert.match(src, /advice\?\.verb && !text\.trim\(\) && !pics\.imgs\.length\s*\?\s*\(\s*<button type="button" className="tq-pill"/);
 });
+
+test("the clock menu offers the Advisor's notes for the item on the table", () => {
+  assert.match(src, /Advisor's notes/);
+  assert.match(src, /api\.get\("\/api\/advice\/notes", \{ params: \{ key/);
+});

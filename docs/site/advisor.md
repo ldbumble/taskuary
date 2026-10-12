@@ -40,15 +40,26 @@ a sender you keep hearing from through a system you have not connected. Their fi
 judged like any arrival, because a forgotten task is work waiting on you and belongs on the rail
 where **Next** reads it in turn. Nothing fires for absence; something has to look.
 
-**On the event, next.** The same brain will also run when one item changes - an agent stops or
-asks, a reply arrives on a watched thread, a pull request opens, a goal step slips - with one small
-prompt on the light model: the event, the item's facts, the promoted lines, the ledger rows that
-bear on it. It will answer with one verb from the actions the app already has, or nothing, and
-code checks the verb exists. Those findings will never be rows. They attach to the item and show
-when the walk reaches it, as ghost text in the prompt box with one pill where the send arrow sits:
-"Merge it · 8 of 8 times". The pill is the card's own button through the same proposal and the
-same receipt. The rail's order does not read advice, by construction: a suggestion can never move
-a row. This is designed and not yet built.
+**On the event.** The same brain also runs when one item changes: an agent stops or asks, a reply
+arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a
+due day is missed, a report lands. One small prompt on the light model reads the event, the item's
+facts, the verbs the item carries, the promoted lines of `LEARNED.md` and the ledger rows that bear
+on it, and answers with one verb from the actions the app already has and one line, or nothing.
+Code checks the verb is one the item offers; a verb it does not is dropped and noted. Those
+findings are never rows. They attach to the item at its revision and show when the walk reaches
+it, as ghost text in the prompt box with one pill where the send arrow sits: "Continue session ·
+8 of 8 times". The number is read from the outcome ledger, never written by the model. The pill is
+the card's own button through the same proposal and the same receipt; typing anything brings the
+arrow back. A changed item drops its old line by one comparison. The item on the table earns one
+bigger read, with what the hub knows about the people on it and the month's outcomes. The rail's
+order does not read advice, by construction: the test that pins it builds the rail with and
+without advice and asks for the same order. Two settings govern it, in Settings → Advisor: the
+switch, and a cap on judgements per hour.
+
+**Seeing what it did.** The clock menu on the stage opens the Advisor's notes for the item on the
+table: a receipt, not a transcript. Each entry says the event, what it decided (the pill and the
+line) or what it dropped and why (nothing to say, a verb the item did not carry, the hour's cap,
+no brain), and the evidence it cited by id. "Why?" in the chat is answered from the same line.
 
 ## The outcome ledger
 
@@ -93,8 +104,8 @@ so it needs nothing new.
 ## What is built, and what is next
 
 Built: goals as tasks (a task whose boxes are tasks, a person as an assignee, a promise as a task
-on you with its day, one row per goal on the rail), and the outcome ledger with its daily sweep
-and reflection reading it. Next, in order: the Advisor on the event with the prompt-box pill and a
-receipt of what it looked at and dropped; per-person pages and a per-person chase ladder, with the
-slipped thread's four answers (chase, let it go, they answered elsewhere, later); and triage
-naming which goal step a mail serves.
+on you with its day, one row per goal on the rail); the outcome ledger with its daily sweep and
+reflection reading it; the Advisor on the event, with the prompt-box pill and the notes in the
+clock menu. Next, in order: per-person pages and a per-person chase ladder, with the slipped
+thread's four answers (chase, let it go, they answered elsewhere, later); and triage naming which
+goal step a mail serves.

@@ -242,3 +242,11 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(c.get(f'/api/advice?key=task:{t}').json(), {})
             self.assertEqual(c.get(f'/api/advice/notes?key=task:{t}').json(), {'rows': []})
             self.assertEqual(c.get('/api/advice?key=conn:1').json(), {})
+
+
+class SchemaTests(unittest.TestCase):
+    def test_the_two_knobs_are_in_the_advisor_group(self):
+        import pathlib
+        d = json.loads(pathlib.Path('taskuary/settings_schema.json').read_text(encoding='utf-8'))
+        self.assertEqual(d['knobs']['advisor_events']['group'], 'Advisor')
+        self.assertEqual(d['knobs']['advisor_event_cap']['group'], 'Advisor')

@@ -254,6 +254,14 @@ is what you see if those cards cannot load.</li>
 <p><code>assistant_cold_days</code> · type: number · default: <code>3</code></p>
 <p>Open work with no comment, message or run for this many days gets a line. 3 by default.</p>
 <p>A task with a live agent on it is never cold. One with a draft waiting on the task is named as waiting on you.</p>
+<h3 id="advise-on-the-item-that-changed">Advise on the item that changed<a class="anchor" href="#advise-on-the-item-that-changed" aria-label="Link to this section">#</a></h3>
+<p><code>advisor_events</code> · type: switch</p>
+<p>When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor runs one small prompt on the light model and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.</p>
+<p>Never a row and never a change to the rail&#39;s order: the line attaches to the item and shows when the walk reaches it. The verb is one the item already carries; the number beside it is read from the outcome ledger. Off, the Advisor still runs on its schedule.</p>
+<h3 id="event-judgements-per-hour-at-most">Event judgements per hour, at most<a class="anchor" href="#event-judgements-per-hour-at-most" aria-label="Link to this section">#</a></h3>
+<p><code>advisor_event_cap</code> · type: number</p>
+<p>The small prompt runs once per item per change and never more than this many times an hour; past it, the change is noted as dropped and the item simply has no pill. 30 by default.</p>
+<p>The Advisor&#39;s notes on an item (the clock menu) say when a judgement was dropped for the cap.</p>
 <h3 id="what-it-looks-for">What it looks for<a class="anchor" href="#what-it-looks-for" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_producers</code> · type: channels · default: <code>followup,promise,prep,cold,idea</code></p>
 <p>followup = your unanswered asks · promise = what you said you would do and have not · prep = meetings in the next two days, with what came before them · cold = tasks gone quiet · idea = the model&#39;s own thoughts from the day&#39;s mail, guided by the report&#39;s prompt.</p>

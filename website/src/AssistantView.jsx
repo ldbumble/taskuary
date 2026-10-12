@@ -719,6 +719,32 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
 }
 
 // ── the page ─────────────────────────────────────────────────────────────────────────────────
+/* THE ADVISOR'S NOTES (spec 2026-10-12, "Seeing the Advisor's thinking"): a receipt, not a transcript - what it decided
+   on the item on the table, what it dropped and why, with the evidence it cited. Read from /api/advice/notes; shown in
+   the clock menu above the past chats, only while something is on the table. */
+function AdvisorNotes({ keyOnTable }) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let on = true;
+    api.get("/api/advice/notes", { params: { key: keyOnTable, limit: 8 } }).then(({ data }) => { if (on) setRows(data?.rows || []); }).catch(() => { if (on) setRows([]); });
+    return () => { on = false; };
+  }, [keyOnTable]);
+  return (
+    <div className="tq-advisor-notes">
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, px: 1.5, pt: 1.25 }}>Advisor's notes on this one</Typography>
+      {rows === null && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Reading…</Typography>}
+      {rows && !rows.length && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Nothing judged on it yet.</Typography>}
+      {(rows || []).map((r, i) => (
+        <div key={i} style={{ padding: "6px 12px", borderTop: "1px solid #eee9e2" }}>
+          <Typography sx={{ fontSize: 11.5, color: FAINT }}>{[ageText(r.at), r.event, r.tier > 1 ? "the bigger read" : ""].filter(Boolean).join(" · ")}</Typography>
+          <Typography sx={{ fontSize: 12.5, color: INK }}>{r.verb ? `${r.pill} - ${r.line}` : `dropped: ${r.dropped}${r.line ? ` ("${r.line}")` : ""}`}</Typography>
+          {!!(r.evidence || []).length && <Typography sx={{ fontSize: 11.5, color: FAINT }}>{r.evidence.map((e) => `${e.id}: ${e.label || e.kind || ""}`).join(" · ")}</Typography>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode, onMode, active = true, request = null }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
@@ -2015,6 +2041,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <div className="tq-chats">
           <div className="tq-chats-head">Chats<span style={{ flex: 1 }} /><IconButton aria-label="Close past chats" size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>
           <div className="tq-chats-list">
+            {current && <AdvisorNotes keyOnTable={current} />}
             {chatsLoading && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>Loading past chats…</Typography>}
             {chatsErr && <Typography role="alert" sx={{ color: "#7a2f3c", fontSize: 12, p: 1.5 }}>{chatsErr}{" "}
               <button type="button" className="tq-chip" onClick={openChats}>Try again</button></Typography>}

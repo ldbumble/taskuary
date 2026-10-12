@@ -13,8 +13,8 @@ and an Advisor post are told apart at a glance. Calendar entries show the meetin
 row for the full message, its attachments, what triage decided and why, any drafted reply, and
 the actions available on it.
 
-Beside the Timeline, the **work rail** holds what is actually waiting on you, under Urgent, Your task,
-Passed, Reports, FYI and Agents working. A finished or closed item gets no row: the rail is what still
+Beside the Timeline, the **work rail** holds what is actually waiting on you, under Urgent, On you,
+Goals, Agents working, For later, Reports, Advisor ideas and FYI. A finished or closed item gets no row: the rail is what still
 wants something from you, never a history. See [The work rail](tasks-and-agents#the-work-rail) for what
 puts a row there and what takes it off.
 

@@ -548,6 +548,11 @@ it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on 
 <td>For later work when its time comes</td>
 </tr>
 <tr>
+<td><strong>Goals</strong></td>
+<td>A goal - an outcome with a date whose steps are tasks - while it has news: it slipped, a step finished, somebody it is waiting on is late. One row per goal; its steps fold into the row (&quot;3 of 7 · coder on step 5 · Ray owes step 4&quot;) unless one is your move, which is a row of its own under On you</td>
+<td>For later while it is quiet, with its date in the time column; never gone until it is done</td>
+</tr>
+<tr>
 <td><strong>Agents working</strong></td>
 <td>An agent busy on a task - nothing for you until it stops or asks</td>
 <td>-</td>
@@ -633,6 +638,11 @@ it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on 
 <td>a new message; a Remind me date</td>
 </tr>
 </tbody></table>
+<h3 id="goals">Goals<a class="anchor" href="#goals" aria-label="Link to this section">#</a></h3>
+<p><strong>+ New → Set a goal</strong> asks three things: what done looks like, by when, who is involved. Plan it and the AI proposes the
+steps; Track it and you type them. Each step is a box on the goal; <strong>Start</strong> on a box makes it a task of its own (the
+goal&#39;s child), and when that task closes the box ticks itself. A promise you made in your own mail (&quot;I&#39;ll send it
+Friday&quot;) is a goal&#39;s smaller cousin: it becomes a task on you with its day, so the Advisor stops raising it as a line.</p>
 <h2 id="how-work-is-ordered">How work is ordered<a class="anchor" href="#how-work-is-ordered" aria-label="Link to this section">#</a></h2>
 <p>Each inbound connector chooses how the tasks it creates reach agents:</p>
 <ul>

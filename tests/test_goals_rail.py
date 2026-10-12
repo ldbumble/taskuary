@@ -90,3 +90,14 @@ class FoldTests(unittest.TestCase):
         self.assertIn(g, [i.get('tid') for i in rail(s)])                       # open: on the rail, read or not
         s.update_task(g, {'Status': 'done'}, 'owner'); settle()
         self.assertNotIn(g, [i.get('tid') for i in rail(s)])
+
+
+class DemoTests(unittest.TestCase):
+    def test_the_demo_world_has_one_goal_with_a_started_step(self):
+        from taskuary import demo
+        from taskuary.store import is_goal
+        s = MemoryStore(); demo.seed(s)
+        goals = [t for t in s.list_tasks() if is_goal(t) and t.get('Status') == 'open']
+        self.assertEqual(len(goals), 1)
+        steps = s.goal_steps(goals[0]['TaskId'])
+        self.assertGreaterEqual(len(steps), 4); self.assertTrue(any(x['child'] for x in steps))

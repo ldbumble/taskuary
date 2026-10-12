@@ -756,6 +756,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [current, setCurrent] = useState(null);       // the key on the table
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [text, setText] = useState("");
+  const [advice, setAdvice] = useState(null);     // the Advisor's line for the key on the table (advisor.py), or null
   // THE BOX GROWS WITH WHAT YOU TYPE, like every chat app: one row empty, a row per line after that, up to the CSS
   // cap (40% of the window) - then it scrolls inside. rows={1} alone held a paragraph in a one-and-a-half-line slot
   // (the owner, 2026-09-24: "how do we deal with this when you type in many lines?")
@@ -1080,6 +1081,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, []);
   useEffect(() => { currentRef.current = currentItem; }, [currentItem]);
   useEffect(() => { loadState().catch((e) => setErr(errText(e))); }, [loadState]);
+  // the Advisor's line for the item on the table: read when the table changes and when its event lands; a changed
+  // item answers {} and the pill goes with it - nothing on the rail moves for it (spec 2026-10-12, mechanics 3-5)
+  const readAdvice = useCallback(async (key) => {
+    if (!key) { setAdvice(null); return; }
+    try { const { data } = await api.get("/api/advice", { params: { key } }); setAdvice(data && data.verb ? data : null); }
+    catch { setAdvice(null); }
+  }, []);
+  useEffect(() => { readAdvice(current); }, [current, readAdvice]);
+  useEffect(() => onLive("advice", (ev) => {
+    const key = currentRef.current;
+    if (ev?.key && key && (ev.key === key || (currentItem?.aliases || []).includes(ev.key))) readAdvice(key);
+  }), [readAdvice, currentItem]);
   // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
   // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
   // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
@@ -2116,10 +2129,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             </Tooltip>
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
-            <textarea ref={composeRef} rows={1} value={text} disabled={resetting} placeholder={phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
-              : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
+            <textarea ref={composeRef} rows={1} value={text} disabled={resetting}
+              placeholder={advice?.line && !text.trim() ? `${advice.line} Tell me what to do with it, or press…`   /* the Advisor's ghost text (advisor.py) */
+                : phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
+                : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            {/* THE PILL (spec 2026-10-12): the Advisor's verb where the arrow sits, while the box is empty. It presses the card's
+                own button through the same chip path (runChip -> propose -> receipt); typing anything brings the arrow back */}
+            {advice?.verb && !text.trim() && !pics.imgs.length ? (
+              <button type="button" className="tq-pill" title={advice.line} disabled={busy || resetting}
+                onClick={() => runChip({ verb: advice.verb, label: advice.label })}>{advice.pill}</button>
+            ) : (
+              <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            )}
           </div>
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}

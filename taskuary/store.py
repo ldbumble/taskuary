@@ -922,6 +922,11 @@ class SQLiteStore:
                             'Sender TEXT, Topic TEXT, Verdict TEXT, VerdictRouteId INTEGER, Change TEXT, ContextJson TEXT, CreatedAt TEXT)')
             self.cx.execute('CREATE TABLE IF NOT EXISTS discussion (Id INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER, Actor TEXT, '
                             'Body TEXT, OpId TEXT, CreatedAt TEXT)')
+            # THE OUTCOME LEDGER (spec 2026-10-12, build step 2): what the app did, what the owner did next, what came of
+            # it - resolved later by outcomes.resolve from facts already here. Evidence for reflection, never a rule.
+            self.cx.execute('CREATE TABLE IF NOT EXISTS outcome (Id INTEGER PRIMARY KEY, Kind TEXT, TargetKind TEXT, TargetId INTEGER, '
+                            'Actor TEXT, At TEXT, FactsJson TEXT, NextMove TEXT, NextAt TEXT, Outcome TEXT, ResolvedAt TEXT, Verdict TEXT)')
+            self.cx.execute('CREATE INDEX IF NOT EXISTS outcome_target ON outcome(TargetKind, TargetId)')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')

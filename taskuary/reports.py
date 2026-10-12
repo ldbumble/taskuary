@@ -1692,6 +1692,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         funnel.settle(store, f'report:{mid}', 'done', 'report')
     expire_previous_runs(store, src, cfg, mid)
     store.audit('message', mid, 'report', 'report', 'agent', title)
+    from . import advisor                            # the Advisor on the event (advisor.py): a report is on the rail
+    advisor.notice(store, 'report.landed', 'task' if out.get('task_id') else 'message', out.get('task_id') or mid)
     err = _after(store, src, cfg, d, title, subject, text, mid)
     # the digest report is ALSO what keeps DIGEST.md alive: the Timeline row, and the doc Settings shows
     if not failed and 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:

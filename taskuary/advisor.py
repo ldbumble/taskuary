@@ -15,6 +15,7 @@ from . import concierge
 from .llm import build_llm, ask_json
 
 ON_KEY, CAP_KEY, CAP_DEFAULT = 'advisor_events', 'advisor_event_cap', 30
+BACKGROUND = True        # the suite turns this off (tests/conftest.py): a judgement runs only when a test asks for it inline
 def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 
@@ -157,6 +158,7 @@ def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wai
         if have and int(have.get('Tier') or 1) >= tier: return None             # judged at this revision already
         if _capped(store): return _write(store, target_kind=target_kind, target_id=target_id, key=key_of(target_kind, target_id), event=event, revision=rev, tier=tier, dropped='cap')
         if wait: return judge(store, event, target_kind, target_id, rev, tier, llm)
+        if not BACKGROUND: return None
         def go():
             try: judge(store, event, target_kind, target_id, rev, tier, llm)
             except Exception as e: logger.warning(f'advisor: {event} on {target_kind} {target_id} not judged - {e}')

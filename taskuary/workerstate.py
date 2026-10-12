@@ -83,6 +83,11 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
                             'ChoicesJson': json.dumps(list(choices)) if choices else None, 'Source': source, 'EventId': event_id})
     try: store._poke('task-changed', task_id=tid)
     except Exception: pass
+    if kind in REQUESTS:                          # the Advisor on the event (advisor.py): an agent asked
+        try:
+            from . import advisor
+            advisor.notice(store, 'agent.asked', 'task', tid)
+        except Exception: pass
     return True
 
 

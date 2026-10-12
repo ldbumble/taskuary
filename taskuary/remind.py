@@ -272,6 +272,9 @@ def deadlines(store, now: datetime = None) -> int:
         try: asks.say_due(store, t['TaskId'], line, late_chips(t['TaskId'], t, now) if s == 'late' else None)
         except Exception as e: logger.warning(f"due day on {t['TaskId']} not said: {e}")
         store._exec('UPDATE task SET DueSaid=? WHERE TaskId=?', (s, t['TaskId'])); n += 1
+        if s == 'late':                              # the Advisor on the event (advisor.py): a step slipped
+            from . import advisor
+            advisor.notice(store, 'due.late', 'task', t['TaskId'])
     return n
 
 

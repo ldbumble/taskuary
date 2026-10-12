@@ -222,6 +222,8 @@ def _reply(store, t: dict) -> str | None:
     line = f"{task_ref(t['TaskId'])} {str(t.get('Title') or '').strip()} - {_who(m, first=False)} answered: {words}"
     if not _say(store, t, line): return None
     store._exec('UPDATE task SET AskedSeenMid=? WHERE TaskId=?', (m['MessageId'], t['TaskId']))
+    from . import advisor
+    advisor.notice(store, 'reply.arrived', 'task', t['TaskId'])     # the Advisor on the event (advisor.py)
     if t.get('AskedWatch') == 'reply': store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (t['TaskId'],))
     return line
 

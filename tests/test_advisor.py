@@ -165,3 +165,33 @@ class JudgeTests(unittest.TestCase):
             i = outcomes.record(s, 'reply.sent', 'task', t, facts={'verb': v}); outcomes.settle(s, i, 'settled', 'settled')
         self.assertEqual(advisor.habit(s, 'approve', {'tid': t}), (2, 3))
         self.assertEqual(advisor.habit(s, 'defer', {'tid': t}), (0, 0))
+
+
+class DoorTests(unittest.TestCase):
+    def _session(self, s, tid):
+        from types import SimpleNamespace
+        return SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd='C:/x', agent='coder', label='coder', argv=['claude'], last=1.0,
+                               ext_id='', started='2026-10-12 09:00:00', typed=[], files=lambda: [], tail=lambda n=3: [], idle=lambda: 0.0,
+                               witness=SimpleNamespace(note=lambda n: None), store=s, bg={})
+
+    def test_a_stop_notices_once_per_stretch_and_an_ask_notices(self):
+        from taskuary import hooks, workerstate as ws
+        s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner'); sess = self._session(s, t)
+        with mock.patch.object(advisor, 'notice') as n:
+            for _ in range(3): hooks._events(sess, {'hook_event_name': 'Stop', 'last_assistant_message': ''})
+            self.assertEqual([c.args[1] for c in n.call_args_list], ['agent.stopped'])
+            ws.record(s, t, 'run1', 'input_needed', text='Open the PR?')
+            self.assertEqual([c.args[1] for c in n.call_args_list], ['agent.stopped', 'agent.asked'])
+
+    def test_a_close_notices_through_the_one_door(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
+        with mock.patch.object(advisor, 'notice') as n:
+            s.update_task(t, {'Status': 'done'}, 'owner')
+        self.assertEqual(n.call_args.args[1:], ('task.closed', 'task', t))
+
+    def test_a_late_due_notices_once(self):
+        from taskuary import remind
+        s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'open', 'DueAt': '2026-01-01'}, 'owner')
+        with mock.patch.object(advisor, 'notice') as n:
+            remind.deadlines(s, datetime(2026, 1, 9, 9)); remind.deadlines(s, datetime(2026, 1, 10, 9))
+        self.assertEqual([c.args[1:] for c in n.call_args_list], [('due.late', 'task', t)])

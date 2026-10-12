@@ -1681,6 +1681,8 @@ class SQLiteStore:
         if fields.get('Status') in ('done', 'dropped') and was not in (None, 'done', 'dropped') and actor != 'promise':
             from . import outcomes
             outcomes.record(self, 'task.closed', 'task', task_id, actor, facts={'from': was, 'to': fields['Status']})
+            from . import advisor
+            advisor.notice(self, 'task.closed', 'task', task_id)        # the Advisor on the event (advisor.py)
         self._bump_snapshots()
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)

@@ -1002,6 +1002,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         verdict = _stored_verdict(intent)
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor, verdict=verdict)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
+    if r['decision'] == 'attach':                   # the Advisor on the event (advisor.py): the task has new mail
+        from . import advisor
+        advisor.notice(store, 'message.attached', 'task', tid)
     return {'status': 'attached' if r['decision'] == 'attach' else 'created', 'task_id': tid, 'message_id': mid}
 
 

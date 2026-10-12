@@ -1531,7 +1531,9 @@ def item_for_key(store, key: str) -> dict | None:
         task = store.get_task(tid)
         if not task: return None
         # the task's own mail first - that row has the sender, the channel and the buttons
-        row = next((r for r in store.feed(limit=500, days=FEED_DAYS) if r.get('TaskId') == tid), None)
+        # Asked for by id, not fished out of 500 built rows (0.7-1.2 s a look-up, twice a turn). The window first so a
+        # task with recent mail speaks through the same row as before; past it, its newest row anywhere in the history.
+        row = next(iter(store.feed(limit=1, days=FEED_DAYS, task_id=tid) or store.feed(limit=1, days=3650, task_id=tid)), None)
         if row:
             got = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
             if got: return _present_one(store, got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'})
@@ -1540,7 +1542,7 @@ def item_for_key(store, key: str) -> dict | None:
     m = re.match(r'^(msg|report):(\d+)$', key or '')
     if not m: return None
     mid = int(m.group(2))
-    row = next((r for r in store.feed(limit=500, days=FEED_DAYS) if r['MessageId'] == mid), None)
+    row = next(iter(store.feed(limit=1, days=3650, ids=[mid])), None)   # any age: a Recent row older than a week is still that row
     if not row: return None
     items = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
     it = next((i for i in items if i.get('mid') == mid), None)

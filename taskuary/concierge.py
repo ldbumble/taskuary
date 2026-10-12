@@ -1447,6 +1447,20 @@ def word_hits(words: list, text: str) -> int:
 def _enough(words: list) -> int: return max(1, (len(words) + 1) // 2)
 
 
+def newest_rows(store, days: int, cap: int = 4000):
+    """feed(limit=cap) newest first, a page at a time: a search by category or age alone stops at its twelfth hit
+    instead of building 4,000 rows (6-10 s) to keep twelve. Same rows, same order (feed's order is total: SentAt,
+    then MessageId). A row that arrives between pages shifts the next one down a place - seen once, not twice.
+    No live sessions: a hit carries who/when/title/ref, none of which a running agent changes."""
+    seen, off, n = set(), 0, 100
+    while off < cap:
+        page = store.feed(limit=min(n, cap - off), days=days, offset=off, live_state=())
+        for r in page:
+            if r['MessageId'] not in seen: seen.add(r['MessageId']); yield r
+        if len(page) < min(n, cap - off): return
+        off, n = off + len(page), min(n * 2, 1000)
+
+
 def search_timeline(store, sel: dict, limit: int = 12) -> list:
     """The history, by the same selector the pipe uses - and over ALL of it, not the last fortnight.
     lookup() only ever looked 14 days back and needed half the owner's words to hit, so anything older
@@ -1461,7 +1475,7 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
     out, days = [], int(sel.get('days') or 3650)
     # the index reaches every message, body included, best match first; without one, the newest 4000 by subject
     ids = store.message_search(words, who, days) if (words or who) else None
-    if ids is None: rows = store.feed(limit=4000, days=days)
+    if ids is None: rows = newest_rows(store, days)
     else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids), key=lambda r: rank[r['MessageId']])
     for r in rows:
         if r.get('Channel') == 'assistant': continue

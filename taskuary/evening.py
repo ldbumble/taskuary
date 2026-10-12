@@ -130,18 +130,15 @@ def gather(store, hours: int = HOURS) -> str:
     hours = max(1, min(int(hours or HOURS), 48))
     start = datetime.now() - timedelta(hours=hours)
     since = start.strftime('%Y-%m-%d %H:%M:%S')
+    # newest route/review by index per row, never a GROUP BY over the whole table (the store.feed fix)
     rows = store._rows(
         """SELECT m.*, t.Status TaskStatus, t.Priority,
                   rt.Decision, rt.Reason RouteReason, rt.RoutedBy,
                   rv.Status ReviewStatus
              FROM message m
              LEFT JOIN task t ON t.TaskId=m.TaskId
-             LEFT JOIN (SELECT MessageId, Decision, Reason, RoutedBy FROM route
-                        WHERE RouteId IN (SELECT MAX(RouteId) FROM route GROUP BY MessageId)) rt
-                    ON rt.MessageId=m.MessageId
-             LEFT JOIN (SELECT MessageId, Status FROM review
-                        WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)) rv
-                    ON rv.MessageId=m.MessageId
+             LEFT JOIN route rt ON rt.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
+             LEFT JOIN review rv ON rv.ReviewId=(SELECT MAX(ReviewId) FROM review WHERE MessageId=m.MessageId)
             WHERE m.Channel='email' AND m.SentAt>=?
             ORDER BY m.SentAt DESC, m.MessageId DESC
             LIMIT 500""",

@@ -4900,34 +4900,27 @@ class SQLiteStore:
     NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT).replace('{theirs}', THEIR_TURN)
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None,
-             live_state=_LIVE_UNSET, ids=None):
+             live_state=_LIVE_UNSET, ids=None, task_id=None):
+        # The newest route/review, the attachment count and the chain size are looked up per output row on their
+        # indexes. They were derived tables over the WHOLE route/review/attachment/message tables (GROUP BY, then
+        # `RouteId IN (12k MAXes)`), which every output row walked: ~1-2 ms a row, 1.5 s for 500, 14 s for the
+        # full history, all under store.lock. tests/test_feed_plan.py pins both the plan and the rows.
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt, m.CreatedAt IngestedAt,
                        m.ConversationId,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief, m.TriageTitle, m.SenderClass,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
-                       IFNULL(ch.n, 0) ChainSize,
+                       CASE WHEN m.TaskId IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM message c
+                            WHERE c.TaskId=m.TaskId AND c.Status NOT IN ('context','history')) END ChainSize,
                        rt.Decision, rt.Reason RouteReason,
-                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind, rv.HasDraft, rv.DraftError,
-                       IFNULL(att.n, 0) Attachments,
+                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind,
+                       CASE WHEN rv.ReviewId IS NULL THEN NULL WHEN IFNULL(rv.DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft, rv.DraftError,
+                       (SELECT COUNT(*) FROM attachment a WHERE a.MessageId=m.MessageId) Attachments,
                        {self.ANSWERED_AT} AnsweredAt,
                        {self.THEIR_TURN} TheirTurn
                 FROM message m
                 LEFT JOIN task t ON t.TaskId=m.TaskId
-                LEFT JOIN (
-                    SELECT MessageId, Decision, Reason FROM route
-                    WHERE RouteId IN (SELECT MAX(RouteId) FROM route GROUP BY MessageId)
-                ) rt ON rt.MessageId=m.MessageId
-                LEFT JOIN (
-                    SELECT MessageId, ReviewId, Status, Kind, DecidedAt, CreatedAt, DraftError,
-                           CASE WHEN IFNULL(DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft FROM review
-                    WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)
-                ) rv ON rv.MessageId=m.MessageId
-                LEFT JOIN (
-                    SELECT MessageId, COUNT(*) n FROM attachment GROUP BY MessageId
-                ) att ON att.MessageId=m.MessageId
-                LEFT JOIN (
-                    SELECT TaskId, COUNT(*) n FROM message WHERE Status NOT IN ('context','history') GROUP BY TaskId
-                ) ch ON ch.TaskId=m.TaskId
+                LEFT JOIN route rt ON rt.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
+                LEFT JOIN review rv ON rv.ReviewId=(SELECT MAX(ReviewId) FROM review WHERE MessageId=m.MessageId)
                 LEFT JOIN (
                     SELECT DISTINCT TaskId FROM run WHERE Status='running'
                 ) rn ON rn.TaskId=m.TaskId
@@ -4942,6 +4935,7 @@ class SQLiteStore:
             p += chans
         if source: q += ' AND m.SourceName=?'; p.append(source)   # e.g. one mailbox of several
         if ids is not None: q += f" AND m.MessageId IN ({','.join(str(int(i)) for i in ids) or 'NULL'})"
+        if task_id is not None: q += ' AND m.TaskId=?'; p.append(int(task_id))   # one task's rows (funnel.item_for_key)
         q += f' ORDER BY m.SentAt DESC, m.MessageId DESC LIMIT {int(limit)} OFFSET {int(offset)}'
         rows = self._rows(q, p)
         # the one-word tag every row wears (categories.py) - decided here, once, so the feed,

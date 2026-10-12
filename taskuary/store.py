@@ -3917,7 +3917,8 @@ class SQLiteStore:
         self._bump_snapshots(); self._poke('task-changed', task_id=tid)
         return True
     def open_batch(self, source_ref):
-        """The batch of this input still being worked - one at a time per repository; the rest wait for the next."""
+        """The newest open batch of this input - the one an arrival may join (batch.admit). An older one can still be open
+        on items that wait for the owner."""
         r = self._one("SELECT TaskId FROM task WHERE SourceRef=? AND Status NOT IN ('done','dropped') ORDER BY TaskId DESC LIMIT 1",
                       (source_ref,))
         return r['TaskId'] if r else None

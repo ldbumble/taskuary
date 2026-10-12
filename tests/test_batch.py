@@ -60,18 +60,45 @@ class BatchTests(unittest.TestCase):
         self.assertTrue(a and b and a != b)
         self.assertEqual({i['ConversationId'].split('#')[0] for i in batch.items(self.s, a)}, {'gh:northwind/portal'})
 
-    def test_arrivals_while_a_batch_is_open_wait_for_the_next_one(self):
+    def test_an_arrival_joins_the_open_batch_while_its_agent_is_on_it_and_there_is_room(self):
+        """The owner, 2026-10-12: "it should batch it if it has room but if agent is finished then create new batch"."""
+        for n in (1, 2): pr(self.s, 'northwind/portal', n, 0.5)
+        self.drain(); first = self.batch_of('northwind/portal')
+        pr(self.s, 'northwind/portal', 9, 1.0, 'fix the totals')
+        with mock.patch.object(batch, 'live', return_value=True), mock.patch('taskuary.waitroom.add') as told:
+            self.drain()
+        self.assertEqual(self.batch_of('northwind/portal'), first, 'no second batch')
+        its = batch.items(self.s, first)
+        self.assertEqual([(i['Place'], i['ConversationId']) for i in its][-1], (3, 'gh:northwind/portal#9'), 'below what is there')
+        self.assertEqual(self.s.get_task(first)['Title'], '3 pull requests on northwind/portal')
+        self.assertEqual(self.s.pending_triage(), [])
+        self.assertIn('(3) #9 fix the totals', told.call_args[0][2], 'the live agent is told what joined')
+
+    def test_a_full_batch_whose_agent_is_on_it_makes_the_arrival_wait(self):
         for n in range(1, 5): pr(self.s, 'northwind/portal', n, 0.5)
         self.drain(); first = self.batch_of('northwind/portal')
         pr(self.s, 'northwind/portal', 9, 1.0)
         self.drain()
-        self.assertEqual(len(batch.items(self.s, first)), 4, 'nothing joins an open batch')
+        self.assertEqual(len(batch.items(self.s, first)), 4)
         self.assertEqual([r['ConversationId'] for r in self.s.pending_triage()], ['gh:northwind/portal#9'])
         self.s.update_task(first, {'Status': 'done'}, 'owner')
         self.drain()
         nxt = self.batch_of('northwind/portal')
         self.assertNotEqual(nxt, first)
         self.assertEqual([i['ConversationId'] for i in batch.items(self.s, nxt)], ['gh:northwind/portal#9'])
+
+    def test_once_its_agent_has_finished_an_arrival_starts_the_next_batch(self):
+        """...even while the old one still holds an item that waits on the owner."""
+        pr(self.s, 'northwind/portal', 1, 0.5)
+        self.drain(); first = self.batch_of('northwind/portal')
+        self.s.add_transcript(first, 's1', 'screen', agent='coder')
+        pr(self.s, 'northwind/portal', 9, 1.0)
+        self.drain()
+        nxt = self.batch_of('northwind/portal')
+        self.assertNotEqual(nxt, first)
+        self.assertEqual(len(batch.items(self.s, first)), 1)
+        self.assertEqual([i['ConversationId'] for i in batch.items(self.s, nxt)], ['gh:northwind/portal#9'])
+        self.assertNotIn(self.s.get_task(first)['Status'], ('done', 'dropped'), 'the old batch stays open on its own item')
 
     def test_mail_is_not_batched(self):
         ranked(self.s, 'outlook')

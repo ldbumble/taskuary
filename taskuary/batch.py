@@ -9,7 +9,10 @@ Now the top N of ONE repository come in as one task. Its items are rows of batch
 agent works them top-down and says what it found per item. The rules the owner set:
   - a batch is one input (SourceName - the repository, the board). Which input an arrival came from is a fact on it,
     never a judgement; the AI ranks only WITHIN an input.
-  - arrivals while a batch is open wait for the next one. A batch is a fixed set you can finish.
+  - an arrival joins the open batch while its agent is still on it (not started yet, or its session live) and it has room
+    (head_size items); once that agent has finished, or the batch is full, it starts the next batch (the owner, 2026-10-12:
+    "it should batch it if it has room but if agent is finished then create new batch"). Before, nothing joined, and two
+    pull requests an hour behind the first sat unseen until the owner had settled it.
   - an item ending upstream (merged, closed) settles ITS line. The task closes when no line is left open.
   - a comment on an item re-opens that line, not a new task.
   - mail is not batched: four senders are not one job.
@@ -42,6 +45,8 @@ def _title(r, source) -> str:
 
 
 def title_for(n: int, noun: str, source: str) -> str: return f"{n} {noun}{'' if n == 1 else 's'} on {source}"
+def summary_for(n: int, noun: str, source: str) -> str:
+    return f"The {n} most valuable {noun}s waiting on {source}, in ranked order. Each one is reviewed in turn; nothing is merged, closed or answered without you."
 
 
 def create(store, channel: str, source: str, rows: list, actor: str = 'router') -> int:
@@ -51,19 +56,55 @@ def create(store, channel: str, source: str, rows: list, actor: str = 'router') 
     tid = store.create_task({
         'Title': title_for(len(rows), noun, source), 'Kind': 'coding' if channel in ('github', 'gitlab') else 'general',
         'Status': 'open', 'Source': channel, 'SourceRef': source_ref(channel, source), 'Tags': 'batch',
-        'Summary': f"The {len(rows)} most valuable {noun}s waiting on {source}, in ranked order. "
-                   f"Each one is reviewed in turn; nothing is merged, closed or answered without you."}, actor)
-    for n, r in enumerate(rows, 1):
+        'Summary': summary_for(len(rows), noun, source)}, actor)
+    _let_in(store, tid, rows, 1, source)
+    logger.info(f'batch: {task_ref(tid)} let in {len(rows)} {noun}(s) from {source}')
+    return tid
+
+
+def _let_in(store, tid, rows, first, source):
+    for n, r in enumerate(rows, first):
         conv = r.get('ConversationId') or f"m{r['MessageId']}"
         store.place_message(r['MessageId'], tid, 'routed')
         store.add_route(r['MessageId'], tid, 'batch', r.get('RankValue'),
                         f"item {n} of {task_ref(tid)}'s batch" + (f" - {r['RankWhy']}" if r.get('RankWhy') else ''), [], 'rank')
         store.add_batch_item(tid, conv, r['MessageId'], n, _title(r, source), r.get('SourceLink'))
-    logger.info(f'batch: {task_ref(tid)} let in {len(rows)} {noun}(s) from {source}')
-    return tid
 
 
 def items(store, tid) -> list: return store.batch_items(tid)
+
+
+def live(tid) -> bool:
+    from . import terminal as term
+    return bool(getattr(term.session_for(tid), 'alive', False))
+
+
+def finished(store, tid) -> bool:
+    """Its agent has been and gone: a session that is not live now, though one ran (its object, transcript or events say so).
+    Not started yet is not finished - the agent's first prompt is built from the items, whatever joined before it."""
+    from . import terminal as term
+    if live(tid): return False
+    return bool(term.session_for(tid) or store.last_transcript(tid) or store.worker_events(tid))
+
+
+def join(store, tid, rows, source, actor='router'):
+    """Let these arrivals into an open batch, below what is there. A live agent is told at its next stop (the waiting room)
+    and its brief is written again with them in it; one not started yet reads them in its first prompt."""
+    its = store.batch_items(tid)
+    first = max((int(i['Place']) for i in its), default=0) + 1
+    _let_in(store, tid, rows, first, source)
+    its = store.batch_items(tid)
+    noun = _noun([store.get_message(i['MessageId']) or {} for i in its if i.get('MessageId')])
+    store.update_task(tid, {'Title': title_for(len(its), noun, source), 'Summary': summary_for(len(its), noun, source)}, actor)
+    added = [i for i in its if int(i['Place']) >= first]
+    said = '; '.join(f"({i['Place']}) {i.get('Title') or ''}" for i in added)
+    store.add_comment(tid, 'router', 'agent', f'Joined the batch: {said}.')
+    logger.info(f'batch: {len(added)} joined {task_ref(tid)} from {source}')
+    if live(tid):
+        from . import waitroom
+        path = brief_file(store, tid)
+        waitroom.add(store, tid, f'NEW ITEMS JOINED THIS BATCH: {said}. Their text and diffs are now in {path}. Review them after '
+                     f'the ones before them, and report each the same way: {REPORT} <n> --result "..." --propose merge|close|changes.', actor)
 
 
 def admit(store, rows: list) -> list:
@@ -78,9 +119,14 @@ def admit(store, rows: list) -> list:
         if not batches(ch) or store.task_for_conversation(r.get('ConversationId')): rest.append(r); continue
         groups.setdefault((ch, str(r.get('SourceName') or '')), []).append(r)
     for (ch, source), rs in groups.items():
-        if store.open_batch(source_ref(ch, source)): continue          # the next batch waits for this one to finish
-        rs = sorted(rs, key=lambda r: (r.get('RankValue') is None, -(r.get('RankValue') or 0), r['MessageId']))
-        try: start(store, create(store, ch, source, rs[:rank.head_size(store, ch)]))
+        rs, head = sorted(rs, key=lambda r: (r.get('RankValue') is None, -(r.get('RankValue') or 0), r['MessageId'])), rank.head_size(store, ch)
+        try:
+            ob = store.open_batch(source_ref(ch, source))
+            if ob and not finished(store, ob):
+                room = head - len(store.batch_items(ob))
+                if room > 0: join(store, ob, rs[:room], source)
+                continue                                                 # full: the rest wait for this agent to finish
+            start(store, create(store, ch, source, rs[:head]))
         except Exception as e: logger.warning(f'batch: {source} could not be let in ({e})')
     return rest
 

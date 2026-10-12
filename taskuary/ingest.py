@@ -902,14 +902,23 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # never handed CODER.md's "work only in the repository".
         from . import agents as hub_agents
         role = hub_agents.routed_role(store, f['kind'], intent.get('profile') or '')
+        # A GOAL (spec 2026-10-12): the open-ended ask opens as the owner's goal - its done-when sentence, its date, no steps
+        # and nobody on it; the planner proposes the steps behind the arrival, as the New sheet's Set a goal does
+        goal = intent['intent'] == 'task' and bool(intent.get('goal') and intent.get('done_when'))
+        if goal: f['kind'], role = 'task', None
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
+                                 **({'DoneWhen': intent['done_when']} if goal else {}),
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
                                  'SourceRef': msg.get('source_link'),
                                  **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
                                  **({'Assignee': f'agent:{role}'} if role else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
-        if intent.get('checklist'): store.set_task_checklist(tid, intent['checklist'], 'triage')
+        if intent.get('checklist') and not goal: store.set_task_checklist(tid, intent['checklist'], 'triage')
         if intent.get('due'): remind.set_due(store, tid, intent['due'], actor)     # the day it is due, as triage read it
+        if goal:
+            from . import goals
+            store.tag_task(tid, 'goal', actor='triage')
+            goals.plan_later(store, tid, goals.words(store.get_task(tid)))
         if intent.get('outputs'):                  # what closes it beyond the reply: emails to other people (slots.py)
             from . import slots
             slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))

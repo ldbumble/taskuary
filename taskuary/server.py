@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from . import config
 from . import store as store_mod
-from .store import SQLiteStore, task_ref
+from .store import SQLiteStore, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
 from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports, run_one)
 from . import agents as hub_agents
@@ -641,18 +641,9 @@ def _read_hand_task(tid: int, text: str, goal: bool = False):
 
 
 def plan_goal(tid: int, text: str):
-    """The model writes the goal's steps (spec 2026-10-12); a step already started is never reworded away: it stays, in
-    its place, with its child (set_task_checklist keeps a box by its words), and the model's new words come around it
-    (the review, 2026-10-12: a slot fallback pinned the child to whatever the model put in that slot)."""
-    try:
-        from . import concierge, triage
-        ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True), goal=True)
-        texts = [x for x in ask.get('checklist') or [] if x]
-        if not texts: return
-        for k, i in enumerate(store.task_checklist(tid)):
-            if i.get('tid') and i['text'] not in texts: texts.insert(min(k, len(texts)), i['text'])
-        store.set_task_checklist(tid, texts, 'triage')
-    except Exception as e: logger.info(f'could not plan {task_ref(tid)}: {e}')
+    """The model writes the goal's steps (goals.plan - one planner for the New sheet, Re-plan and triage's goal)."""
+    from . import goals
+    goals.plan(store, tid, text)
 
 
 @app.post('/api/tasks/{task_id}/read-ask')
@@ -827,6 +818,20 @@ def _run_operation(op: dict, background: BackgroundTasks):
             raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
         return out
     if kind == 'task.set_kind':
+        t = store.get_task(tid) or {}
+        # A GOAL OR NOT (spec 2026-10-12): "that was a task, not a goal" and "make this a goal" are kind corrections like any, taught on
+        # the same curve. A goal let go keeps its boxes as plain boxes; a task made a goal takes its ask as what done looks like and
+        # the planner proposes steps when it has none.
+        if str(p.get('kind')) == 'goal':
+            from . import goals
+            store.update_task(tid, {'DoneWhen': t.get('DoneWhen') or t.get('Summary') or t.get('Title') or ''}, ACTOR); store.tag_task(tid, 'goal', actor=ACTOR)
+            if not store.task_checklist(tid): goals.plan_later(store, tid, goals.words(store.get_task(tid)))
+            if p.get('learn', True): _teach_routing(tid, 'kind', 'goal', background=background)
+            return {'kind': 'goal'}
+        if str(p.get('kind')) == 'task' and is_goal(t):
+            store.update_task(tid, {'DoneWhen': None}, ACTOR); store.tag_task(tid, 'goal', on=False, actor=ACTOR)
+            if p.get('learn', True): _teach_routing(tid, 'kind', 'task', background=background)
+            return {'kind': 'task'}
         if str(p.get('kind')) == 'task': return not_coding(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
         # ...and every other kind down the task page's own road, not a bare field write. Writing
         # the column directly skipped BOTH things the PATCH does: it taught nothing (so "hand it

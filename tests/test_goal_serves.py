@@ -72,4 +72,61 @@ class ServesTests(unittest.TestCase):
         self.assertEqual(([len(x['arrivals']) for x in steps], steps[2]['arrivals'][0]['subject'], steps[2]['done']), ([0, 0, 1], 'Export dry run', False))
 
 
+class GoalKindTests(unittest.TestCase):
+    def _v(self, **kw):
+        return {'intent': 'task', 'kind': 'general', 'why': 'x', 'title': 'Move the census to the new ledger', 'summary': 'several sites, Gail and Ray',
+                'urgent': False, 'sender_class': 'person', 'goal': True, 'done_when': 'the census lands in the new ledger for all three sites', **kw}
+
+    def test_triage_answers_goal_only_with_a_done_when(self):
+        self.assertIn('goal', triage.verdict_schema()['schema']['properties'])
+        def ask(**kw):
+            return triage.classify_intent({'from_email': 'gail@northwind.example', 'subject': 'Census', 'body': 'x'}, llm=lambda *a, **k: json.dumps(self._v(**kw)))
+        self.assertEqual((ask()['goal'], ask()['done_when'][:10]), (True, 'the census'))
+        self.assertNotIn('goal', ask(done_when=''))
+        self.assertNotIn('goal', ask(intent='reply_only'))
+
+    def test_an_open_ended_ask_becomes_a_goal_with_no_steps_and_the_planner_runs(self):
+        s = MemoryStore()
+        with mock.patch('taskuary.goals.plan_later') as plan:
+            out = ingest_one(s, mail({**self._v(checklist=['a', 'b']), 'due': '2026-12-01'}, subject='Census migration'))
+        t = s.get_task(out['task_id'])
+        self.assertEqual((t['DoneWhen'][:10], str(t['DueAt'])[:10], t.get('Tags'), t['Kind'], t.get('Assignee')), ('the census', '2026-12-01', 'goal', 'task', None))
+        self.assertEqual(s.task_checklist(t['TaskId']), []); plan.assert_called_once()
+        self.assertIn('Done when: the census lands', plan.call_args[0][2])
+
+    def test_a_goal_without_done_when_is_a_task(self):
+        s = MemoryStore()
+        v = self._v(); v.pop('goal'); v.pop('done_when')
+        out = ingest_one(s, mail(v, subject='Quick one'))
+        self.assertFalse(s.get_task(out['task_id']).get('DoneWhen'))
+
+    def test_not_a_goal_clears_done_when_and_teaches(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server, routingmemory as rmem
+        s = MemoryStore()
+        with mock.patch('taskuary.goals.plan_later'): out = ingest_one(s, mail(self._v(), subject='Census migration'))
+        g = out['task_id']; s.set_task_checklist(g, ['a', 'b'], 'owner')
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            op = c.post('/api/operations', json={'kind': 'task.set_kind', 'target': g, 'params': {'kind': 'task'}}).json()
+            c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']})
+        self.assertFalse(s.get_task(g).get('DoneWhen')); self.assertEqual(len(s.task_checklist(g)), 2)
+        self.assertNotIn('goal', str(s.get_task(g).get('Tags') or ''))
+        self.assertTrue(any(f['field'] == 'kind' and f['value'] == 'task' for f in rmem.facts_for(s, {'from_email': 'gail@northwind.example', 'subject': 'Census migration'})))
+
+    def test_made_a_goal_by_hand_takes_a_done_when_and_teaches(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server, routingmemory as rmem
+        s = MemoryStore()
+        v = self._v(); v.pop('goal'); v.pop('done_when')
+        g = ingest_one(s, mail(v, subject='Census migration'))['task_id']
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.goals.plan_later') as later:
+            c = TestClient(server.app)
+            op = c.post('/api/operations', json={'kind': 'task.set_kind', 'target': g, 'params': {'kind': 'goal'}}).json()
+            c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']})
+        t = s.get_task(g)
+        self.assertEqual((t['DoneWhen'], 'goal' in str(t.get('Tags'))), ('several sites, Gail and Ray', True)); later.assert_called_once()
+        self.assertTrue(any(f['field'] == 'kind' and f['value'] == 'goal' for f in rmem.facts_for(s, {'from_email': 'gail@northwind.example', 'subject': 'Census migration'})))
+
+
 if __name__ == '__main__': unittest.main()

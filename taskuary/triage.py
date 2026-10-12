@@ -106,7 +106,7 @@ def _bullet(name: str) -> str:
 # WHAT THE ANSWER MUST CONTAIN (title, summary, checklist...), as opposed to what the verdict should BE: appended when a
 # document never asks for it, because without it every task carried the whole email as its ask (2026-09-10, TQ-0665).
 TASK_FIELDS = shipped_section('## 5.') + '\n\n' + shipped_section('## 7.')
-URGENT, DUE, SENDER = _bullet('urgent'), _bullet('due'), _bullet('sender_class')
+URGENT, DUE, SENDER, GOAL = _bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal')
 
 
 def due_of(j: dict, sent=None) -> str | None:
@@ -138,6 +138,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          'due': {'type': ['string', 'null']},
          # who wrote it (categories.sender_class) - the Timeline's info/automated/promo and the Advisor's people (2026-10-11)
          'sender_class': {'type': 'string', 'enum': ['person', 'automated', 'bulk']},
+         # an open-ended ask opens a GOAL with no steps, and the planner proposes them (spec 2026-10-12, build step 5)
+         'goal': {'type': 'boolean'}, 'done_when': {'type': ['string', 'null']},
          # what closes it beyond the reply (slots.py): emails to OTHER people the message asks the owner to send
          'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
@@ -629,6 +631,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"urgent"' not in base: system += '\n\n' + URGENT
             if not shape and '"due"' not in base: system += '\n\n' + DUE          # ...and the due day (2026-10-06)
             if not shape and 'sender_class' not in base: system += '\n\n' + SENDER   # ...and who wrote it (2026-10-11)
+            if not shape and 'done_when' not in base: system += '\n\n' + GOAL       # ...and whether it is a goal (2026-10-12)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -692,6 +695,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
                     out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
                 if out['intent'] == 'task' and parse_outputs(j): out['outputs'] = parse_outputs(j)
+                # a GOAL needs its done-when sentence: "goal" on a two-line question with nothing to stop on is a task
+                dw = ' '.join(str(j.get('done_when') or '').split())[:1000]
+                if out['intent'] == 'task' and j.get('goal') is True and dw: out.update(goal=True, done_when=dw)
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

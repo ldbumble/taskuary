@@ -488,7 +488,8 @@ def no_advisor_in_the_background():
     build whose agenda thread outlived the test and tripped the teardown join above. A test that wants a judgement asks for
     it inline (`notice(..., wait=True)`); nobody gets one by accident."""
     from taskuary import advisor
-    advisor.BACKGROUND = False; yield; advisor.BACKGROUND = True
+    from taskuary import goals
+    advisor.BACKGROUND = goals.BACKGROUND = False; yield; advisor.BACKGROUND = goals.BACKGROUND = True
 
 
 @pytest.fixture(autouse=True)

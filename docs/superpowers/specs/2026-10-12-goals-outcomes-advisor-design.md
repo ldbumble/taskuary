@@ -16,8 +16,8 @@ Taskuary runs three always-on headless brains. The owner talks to one voice.
 | **The Advisor** | the brain: says what should happen next on each item, what the owner usually does, what was not followed up, which step a mail serves, what worked, which system is worth connecting | everything: LEARNED.md whole (hypotheses too, since it proposes and does not act), the outcome ledger, the dossier, JOB.md, SOUL.md, playbooks, the knowledge base, the calendar, schedules, mutes | two: on the event, on the clock | never; it leaves a line, a chip, a proposal or a row |
 
 The **workers** (coder, general agent) are the fourth kind and not always on: they do the work a task
-names, in a session the owner can watch. The Advisor proposes work; a worker does it; the assistant
-moves it; triage sorted it.
+names, in a session the owner can watch. The Advisor is the manager, so to speak: it proposes work and
+says what is late; a worker does it; the assistant moves it; triage sorted it.
 
 From the owner's side the assistant and the Advisor are one thing. COUNSEL.md is the voice for both;
 nothing on screen says "Advisor". The split is a prompt-budget split: the heavy reader works off the
@@ -203,6 +203,35 @@ A reply arriving is an event: the row goes and the step ticks without the clock 
 at once sit on the table as one batch, like fyi, with one chip ("Chase all three"); the owner still
 answers each. The morning brief carries the same facts one line each and says they are first on the
 rail.
+
+## Mechanics: what touches the rail
+
+The owner's worry is that advice changes the rail's order or slows the walk. By construction it
+cannot do either.
+
+1. **The event.** The hook fires; the processing pass moves the item's lane, as today.
+2. **Tier 1, in the same pass.** Promoted lines matched against the event, a lookup. It writes one
+   **advice** row for the item: the line, the chip (a proposal), the evidence ids, the item's
+   `context_revision` (the stamp a proposal already carries so a changed item refuses a stale
+   confirmation), the tier, the model and cost, and what a gate dropped.
+3. **The rail build is unchanged.** It reads lanes, ages, urgency and the worker signature. It does
+   not read advice. The pile cache stays what it is.
+4. **The stage render** joins the advice for the key on the table: one lookup. Revision mismatch
+   means nothing is shown; a reply arriving moves the revision and the old chip vanishes with no
+   cleanup pass.
+5. **Tier 2 runs in the background**, only for the item on the table or next; when it lands, the
+   live-events push fills the reserved slot. Nothing moves. Missing its moment, it is dropped.
+6. **The click** is the card's button: the same proposal, confirmation and receipt. The outcome row
+   opens, resolved later.
+
+What can move a row is what moves it today: lane, age, urgency, batch, the shown mark, a return
+date, a task fact set by the clock pass (late, slipped, a step's state), a clock-pass finding filed
+as an idea row through triage. A goal's band comes from task facts only: `DueAt`, its children's
+lanes, a step's late fact. An event-path suggestion never moves a row, and no door exists for the
+Advisor to promote or demote one. One suggestion per item per revision; an empty Enter does nothing.
+
+The test that pins it: build the rail with and without the advice table populated and assert the
+two orders are identical. If that test ever needs an exception, the design has leaked.
 
 ## Seeing the Advisor's thinking
 

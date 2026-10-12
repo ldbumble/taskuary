@@ -10,7 +10,8 @@ import json
 from datetime import datetime, timedelta
 from loguru import logger
 
-KINDS = ('reply.sent', 'task.closed', 'agent.stopped', 'agent.continued', 'pr.merged', 'promise.made', 'sender.ignored')
+KINDS = ('reply.sent', 'task.closed', 'agent.stopped', 'agent.continued', 'pr.merged', 'promise.made', 'sender.ignored',
+         'chase.let_go', 'chase.elsewhere')          # the slipped card's answers (spec 2026-10-12, build step 4)
 WINDOW = {'reply.sent': 7, 'task.closed': 7, 'agent.stopped': 2, 'pr.merged': 14, 'sender.ignored': 60, 'promise.made': 7}
 SWEPT_KEY = 'outcomes_swept_on'
 def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -52,6 +53,11 @@ def rows_for(store, target_kind: str, target_id) -> list:
 def open_rows(store) -> list: return store._rows('SELECT * FROM outcome WHERE ResolvedAt IS NULL ORDER BY Id')
 def settle(store, row_id: int, outcome: str, verdict: str, now: str = None):
     store._exec('UPDATE outcome SET Outcome=?, Verdict=?, ResolvedAt=? WHERE Id=? AND ResolvedAt IS NULL', (outcome, verdict, now or _now(), row_id))
+def update_facts(store, row_id: int, **more):
+    """A fact the sweep learned later (how long the answer took, who gave it) joins the row's facts."""
+    r = store._one('SELECT FactsJson FROM outcome WHERE Id=?', (row_id,)) or {}
+    f = json.loads(r.get('FactsJson') or '{}'); f.update(more)
+    store._exec('UPDATE outcome SET FactsJson=? WHERE Id=?', (json.dumps(f), row_id))
 
 
 def _material_inbound_after(store, cid: str, at: str) -> list:
@@ -73,6 +79,9 @@ def _resolve_one(store, r: dict, now: datetime):
         if not facts.get('cid'): return settle(store, r['Id'], 'no thread to watch', 'unknown')   # new mail, no conversation: nothing to read
         if age < WINDOW[kind]: return
         later = _material_inbound_after(store, facts.get('cid') or '', r['At'])
+        if later:                                   # the person facts: how long THEIR first word took, and whose it was
+            update_facts(store, r['Id'], answer_days=round(max(0.0, ((_dt(later[0]['SentAt']) or now) - at).total_seconds() / 86400), 1),
+                         answered_by=str(later[0].get('FromEmail') or '').lower())
         reopened = t and t.get('Status') not in ('done', 'dropped') and facts.get('closed')
         if later or reopened: return settle(store, r['Id'], f"{len(later)} more from them" + ('; the task reopened' if reopened else ''), f'unsettled: {len(later)} more')
         return settle(store, r['Id'], 'nothing more from them in the window; the task stayed as it was', 'settled')
@@ -102,6 +111,8 @@ def _resolve_one(store, r: dict, now: datetime):
             return settle(store, r['Id'], f"delivered {closed:%Y-%m-%d}" + (f", due {due:%Y-%m-%d}" if due else ''), 'kept late' if late else 'kept')
         if due and (now - due).days >= WINDOW[kind]: return settle(store, r['Id'], f'not delivered a week past {due:%Y-%m-%d}', 'late')
         return
+    if kind in ('chase.let_go', 'chase.elsewhere'):   # the owner's own answer on a slipped item: a fact the moment it is given
+        return settle(store, r['Id'], 'put down' if kind == 'chase.let_go' else f"answered elsewhere: {facts.get('where') or ''}".strip(), 'closed')
     if kind == 'sender.ignored':
         if age < WINDOW[kind]: return
         who = str(facts.get('from') or '').lower()
@@ -148,3 +159,46 @@ def evidence(store, since: str, limit: int = 40) -> list:
     """One line per resolved row, newest first, `out{id}: ...` - what reflection reads (learn.gather) and cites."""
     rows = store._rows("SELECT * FROM outcome WHERE ResolvedAt IS NOT NULL AND Verdict!='unknown' AND At>=? ORDER BY Id DESC LIMIT ?", (since, limit))
     return [f"out{r['Id']}: {_sentence(store, r)}" for r in rows]
+
+
+# ── the person facts (build step 4): bookkeeping per address, no model; people_pages.py says what they mean ──────────
+def _rows_who(store, who: str, kind: str = None) -> list:
+    """Every row whose facts name this address - the person key the ledger carries (`who`), never a name."""
+    q, p = "SELECT * FROM outcome WHERE json_extract(FactsJson, '$.who')=?", [str(who or '').lower()]
+    if kind: q += ' AND Kind=?'; p.append(kind)
+    return store._rows(q + ' ORDER BY Id', p)
+
+
+def person_facts(store, who: str) -> dict:
+    """What the ledger counts about one person: replies and how fast they answered, chases and whether they worked, steps
+    they owed and how late, how often the owner let one go, and who on copy was there when they answered."""
+    who = str(who or '').lower(); f = [(r, json.loads(r.get('FactsJson') or '{}')) for r in _rows_who(store, who)]
+    replies = [x for x in f if x[0]['Kind'] == 'reply.sent' and x[0].get('ResolvedAt')]       # an answer is the sweep's to count
+    answered = [x for x in replies if x[1].get('answer_days') is not None]
+    days = sorted(x[1]['answer_days'] for x in answered)
+    cc = {}
+    for r, x in replies:
+        for a in x.get('cc') or []:
+            c = cc.setdefault(str(a).lower(), [0, 0]); c[1] += 1; c[0] += 1 if x.get('answer_days') is not None else 0
+    steps = [x for x in f if x[0]['Kind'] == 'task.closed']
+    return {'replies': len(replies), 'answered': len(answered), 'answer_days': days,
+            'median_days': (days[len(days) // 2] if len(days) % 2 else (days[len(days) // 2 - 1] + days[len(days) // 2]) / 2) if days else None,
+            'chased': sum(1 for _, x in replies if x.get('chase')), 'answered_after_chase': sum(1 for _, x in answered if x.get('chase')),
+            'steps': len(steps), 'steps_late': sum(1 for _, x in steps if (x.get('late_days') or 0) > 0),
+            'let_go': sum(1 for r, _ in f if r['Kind'] == 'chase.let_go'), 'cc': cc}
+def let_go_count(store, who: str) -> int: return len(_rows_who(store, who, 'chase.let_go'))
+
+
+def late_after(store, who: str, default: int = 5) -> int:
+    """The day a silence is late for THIS person: half again their median answer, two at least - once three answers say
+    what their median is. Fewer is no habit: the default day (Settings -> Advisor)."""
+    import math
+    f = person_facts(store, who)
+    return max(2, math.ceil(f['median_days'] * 1.5)) if f['answered'] >= 3 and f['median_days'] is not None else int(default)
+
+
+def chase_cc(store, who: str):
+    """The copied address that moved this person, when the ledger has seen it move them: two or more replies with them on
+    copy and most of those answered. None otherwise - a chase copies nobody on a guess."""
+    best = [(a, n, m) for a, (n, m) in person_facts(store, who)['cc'].items() if m >= 2 and n / m >= 0.6]
+    return max(best, key=lambda x: (x[1] / x[2], x[2]))[0] if best else None

@@ -1643,7 +1643,8 @@ class SQLiteStore:
     def update_task(self, task_id, fields, actor):
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
-        was = (self._one('SELECT Status FROM task WHERE TaskId=?', (task_id,)) or {}).get('Status') if 'Status' in fields else None
+        was_row = (self._one('SELECT Status, Assignee, DueAt FROM task WHERE TaskId=?', (task_id,)) or {}) if 'Status' in fields else {}
+        was = was_row.get('Status')
         # ClosedAt describes the CURRENT lifecycle, not merely that the task was closed once.
         # An explicit reopen used to change Status while retaining the old close timestamp, so
         # the API simultaneously said "waiting" and "closed" and different views chose a
@@ -1680,7 +1681,12 @@ class SQLiteStore:
         # already its own row (promise.made) and the actor says so.
         if fields.get('Status') in ('done', 'dropped') and was not in (None, 'done', 'dropped') and actor != 'promise':
             from . import outcomes
-            outcomes.record(self, 'task.closed', 'task', task_id, actor, facts={'from': was, 'to': fields['Status']})
+            facts = {'from': was, 'to': fields['Status']}
+            if str(was_row.get('Assignee') or '').startswith('person:'):     # a step somebody owed: whom, and how late (build step 4)
+                facts['who'] = was_row['Assignee'][7:].lower(); facts['due'] = was_row.get('DueAt')
+                try: facts['late_days'] = max(0, (datetime.now().date() - datetime.strptime(str(was_row.get('DueAt') or '')[:10], '%Y-%m-%d').date()).days)
+                except ValueError: pass
+            outcomes.record(self, 'task.closed', 'task', task_id, actor, facts=facts)
             from . import advisor
             advisor.notice(self, 'task.closed', 'task', task_id)        # the Advisor on the event (advisor.py)
         self._bump_snapshots()

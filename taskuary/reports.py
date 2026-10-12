@@ -1660,7 +1660,12 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # TRIAGE.md with the report's brief (classify_intent's `watch`). A task if it needs doing, else a row
     # under Reports - or, with the Timeline line at no, nothing: a task or nothing
     from .ingest import ingest_message
-    out = ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
+    is_digest = 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}
+    # ...except the MORNING DIGEST, which is the assistant's brief on the opening screen, not an arrival: every line of it
+    # retells work that already has its own row, so judging it as mail only ever made a duplicate of that work - triage
+    # flipped to "task" on two runs (TQ-0938, TQ-1038: "Review today's meetings and waiting work", urgent, on the rail
+    # above the very items it listed) and the owner, 2026-10-12: "should not be a task"
+    out = {} if is_digest else ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
                                      'subject': subject, 'body': text, 'from_name': title,
                                      'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
                                      'source_link': cfg.get('link'), 'source_name': title,
@@ -1682,7 +1687,6 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # run put down first was a different row by the time it settled and every held-back "all clear" came back unread
     # ...and the MORNING DIGEST lives on the opening screen now, folded under what changed (since.digest - the owner, 2026-10-08:
     # "morning digest is usually stale when you get to it since it comes after the tasks"): its row is read as it lands
-    is_digest = 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}
     if (not d['timeline'] or is_digest) and not (store.get_message(mid) or {}).get('TaskId'):
         from . import funnel
         funnel.settle(store, f'report:{mid}', 'done', 'report')

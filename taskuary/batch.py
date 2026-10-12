@@ -62,9 +62,12 @@ def repo_public(store, repo: str) -> bool:
 
 
 def outside_row(store, r) -> bool:
-    "A stranger's item: on a PUBLIC GitHub repository, by someone without write access to it. Everything else is ours."
+    """A stranger's item: by default one on a PUBLIC GitHub repository by someone without write access to it. The owner sets
+    both sides in Settings -> Agent permissions (repo_trust_private, repo_trust_public); everything that is not GitHub is ours."""
     if str(r.get('Channel') or '') != 'github': return False
-    return repo_public(store, str(r.get('SourceName') or '')) and association(r.get('BodyText')) not in TEAM
+    if not repo_public(store, str(r.get('SourceName') or '')): return str(store.get_setting('repo_trust_private') or 'ours') == 'outside'
+    who = str(store.get_setting('repo_trust_public') or 'writers')
+    return True if who == 'nobody' else False if who == 'anyone' else association(r.get('BodyText')) not in TEAM
 
 
 def outside(store, tid) -> bool:
@@ -384,7 +387,7 @@ def arrived(store, tid, conv, who: str, actor: str = 'router'):
 
 
 # ── the owner's side ──────────────────────────────────────────────────────────────────────────────────────────────
-ACTIONS = ('merge', 'close', 'settle', 'reopen')
+ACTIONS = ('merge', 'close', 'settle', 'reopen', 'fix')
 
 
 def act(store, tid, place: int, action: str, actor: str = 'owner') -> dict:
@@ -399,12 +402,20 @@ def act(store, tid, place: int, action: str, actor: str = 'owner') -> dict:
         store.update_batch_item(tid, it['ConversationId'], {'State': 'waiting'}); return {'ok': True, 'state': 'waiting'}
     if action == 'settle':
         set_item(store, tid, it['ConversationId'], actor, State='done'); return {'ok': True, 'state': 'done'}
+    if action == 'fix': return fix(store, tid, it, actor)
     p, tok = pull(it.get('Link')), _token(store)
     if not p: return {'ok': False, 'why': 'only a GitHub pull request can be merged or closed from here - open it where it lives'}
     if not tok: return {'ok': False, 'why': 'the GitHub card has no token - connect it under Connections first'}
     from . import github
+    fixed = pull(it.get('FixLink')) if it.get('Fix') == 'done' else None
     try:
-        if action == 'merge':
+        if action == 'merge' and fixed:
+            # THE FIX'S pull request, pinned to the head the cloud pushed; a merge commit keeps the contributor's own commits,
+            # and GitHub then counts their pull request merged too. Squash-only repositories close it with the fix in.
+            methods = github.repo_info(tok, fixed[0]).get('methods') or ['squash']
+            github.merge_pr(tok, *fixed, it['Sha'], method='merge' if 'merge' in methods else methods[0])
+            if (github.pr(tok, *p) or {}).get('state') == 'open': github.close_pr(tok, *p)
+        elif action == 'merge':
             if not it.get('Sha'): return {'ok': False, 'why': 'nothing was reviewed yet - let the agent report on it first'}
             methods = github.repo_info(tok, p[0]).get('methods') or ['squash']
             github.merge_pr(tok, *p, it['Sha'], method='squash' if 'squash' in methods else methods[0])
@@ -415,6 +426,24 @@ def act(store, tid, place: int, action: str, actor: str = 'owner') -> dict:
     store.add_comment(tid, actor, 'owner', f"{it.get('Title') or it['ConversationId']}: {said}")
     set_item(store, tid, it['ConversationId'], actor, State='ended', EndedWhy=said)
     return {'ok': True, 'state': 'ended'}
+
+
+def fix(store, tid, it, actor='owner') -> dict:
+    """Fix it, on one item. A stranger's goes to GitHub's cloud (cloudfix.py) when the owner turned that on - never to this
+    machine; our own people's goes to the batch's agent here, which may push to that pull request's branch for this item."""
+    if it['State'] == 'ended': return {'ok': False, 'why': 'it already ended upstream'}
+    if outside(store, tid):
+        from . import cloudfix
+        if not cloudfix.enabled(store):
+            return {'ok': False, 'why': "an outside contributor's pull request is fixed in GitHub's cloud, never here - turn that on in "
+                                        'Settings -> Agent permissions (Outside pull requests)'}
+        return cloudfix.start(store, tid, it, actor=actor)
+    from . import waitroom
+    waitroom.add(store, tid, f"FIX ITEM {it['Place']} ({it.get('Title') or ''}): make the changes your review asked for - "
+                             f"{it.get('Result') or 'see your finding'}. Work in a worktree of its branch, run its tests, then commit and "
+                             'push to THAT pull request\'s branch - for this item only, the owner asked. Report it again when done.', actor)
+    store.update_batch_item(tid, it['ConversationId'], {'State': 'working'})
+    return {'ok': True, 'state': 'working'}
 
 
 CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'

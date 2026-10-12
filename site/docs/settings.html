@@ -350,6 +350,24 @@ is what you see if those cards cannot load.</li>
 <p>A general agent used to be read-only by inheritance from the brain that reads incoming mail - not by a decision (2026-10-05). It now runs with your CLI agent&#39;s own permissions, in Taskuary&#39;s scratch folder, unless you choose &#39;only look things up&#39;.</p>
 <p>What it may change in your other systems is each connection&#39;s Authority, in the table below. Every connection starts at full - what your CLI agent could already do with those credentials - and you narrow the ones you want: at read it can look, and any change becomes a proposal you approve on the task; at write it makes the change itself. A SQL query through a read-level connection is rolled back, whatever it contains.</p>
 <p>Mail from someone you do not know never starts an agent by itself - general or coding - so these permissions are only used on work you or a trusted sender started.</p>
+<h3 id="private-github-repositories">Private GitHub repositories<a class="anchor" href="#private-github-repositories" aria-label="Link to this section">#</a></h3>
+<p><code>repo_trust_private</code> · type: select</p>
+<p>Who writes pull requests on a private repository. Your own people get an ordinary agent that starts by itself, no prompts.</p>
+<p>Options: <code>ours</code>, <code>outside</code></p>
+<p>Only people you added can write to a private repository, so its pull requests are your own people&#39;s work: they batch together and an ordinary coding agent reviews them, started by itself, with no prompts.</p>
+<p>Choose &quot;treat as outside&quot; to give them the same protection as a stranger&#39;s pull request on a public repository.</p>
+<h3 id="public-github-repositories-who-is-yours">Public GitHub repositories - who is yours<a class="anchor" href="#public-github-repositories-who-is-yours" aria-label="Link to this section">#</a></h3>
+<p><code>repo_trust_public</code> · type: select</p>
+<p>On a public repository anyone can open a pull request. People with write access can push anyway, so trusting their pull requests adds nothing; everyone else&#39;s are outside.</p>
+<p>Options: <code>writers</code>, <code>nobody</code>, <code>anyone</code></p>
+<p>Trust comes from the role GitHub reports for the author - owner, member or collaborator - which only you can grant and nobody can fake. Having had a pull request merged before does NOT count: one small good change would buy trust for the next.</p>
+<p>An outside pull request batches apart from your own people&#39;s and is reviewed read-only: everything beyond reading is refused, never asked. Its brief carries GitHub&#39;s CI results, so nothing of theirs runs on this machine.</p>
+<h3 id="outside-pull-requests">Outside pull requests<a class="anchor" href="#outside-pull-requests" aria-label="Link to this section">#</a></h3>
+<p><code>outside_prs</code> · type: select</p>
+<p>What an outside contributor&#39;s pull request gets. Fix it in the cloud runs the agent and the tests on a machine GitHub throws away, never yours.</p>
+<p>Options: <code>review</code>, <code>cloud</code></p>
+<p>With &quot;fix in GitHub&#39;s cloud&quot;, an outside pull request whose review asks for changes gets a Fix it button. It runs a workflow in the repository: one job with a read-only token checks out exactly the reviewed head, runs Claude Code there (tests, builds) and hands back a patch; a second job, which never runs their code, pushes it to taskuary/pr-<number>. Taskuary opens the fix&#39;s pull request with your token so your CI runs on it, and Merge merges it with the contributor&#39;s commits.</p>
+<p>The repository needs the workflow (Taskuary adds it when you press Set up) and one secret, CLAUDE_CODE_OAUTH_TOKEN - run <code>claude setup-token</code> and paste the result under the repository&#39;s Settings -&gt; Secrets and variables -&gt; Actions. The secret sits beside the stranger&#39;s code in that throwaway job: it is revocable, and it cannot reach your repository or this machine.</p>
 <h2 id="notifications">Notifications<a class="anchor" href="#notifications" aria-label="Link to this section">#</a></h2>
 <h3 id="sound-when-an-agent-raises-its-hand">Sound when an agent raises its hand<a class="anchor" href="#sound-when-an-agent-raises-its-hand" aria-label="Link to this section">#</a></h3>
 <p><code>hand_sound</code> · type: sound · default: <code>chime</code></p>

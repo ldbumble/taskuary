@@ -543,6 +543,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
                     'general_agent_hands': 'cli',   # ...with the CLI agent's own permissions unless the owner narrows it (general.full_hands)
+                    # who counts as ours on a GitHub repository (batch.outside_row), and what an outsider's PR gets (cloudfix.py)
+                    'repo_trust_private': 'ours', 'repo_trust_public': 'writers', 'outside_prs': 'review',
                     # who may start a worker UNATTENDED (senders.known, PW-079..081): the owner's own domains, verified
                     # Sent Items evidence that the receiving mailbox wrote to the exact address, chat channels inside a
                     # workspace the owner controls. Prior incoming mail is never a rule here.
@@ -822,7 +824,8 @@ class SQLiteStore:
                 if c not in acols: self.cx.execute(f'ALTER TABLE task_artifact ADD COLUMN {c} TEXT')
             # the head a batch's agent reviewed: a merge is pinned to it (batch.act), so a push after the review is refused
             bcols = {r[1] for r in self.cx.execute('PRAGMA table_info(batch_item)')}
-            for c in ('Sha', 'Propose'):
+            # ...and a fix made in GitHub's cloud (cloudfix.py): running | done | failed | nothing, when it was sent, its pull request
+            for c in ('Sha', 'Propose', 'Fix', 'FixAt', 'FixLink'):
                 if c not in bcols: self.cx.execute(f'ALTER TABLE batch_item ADD COLUMN {c} TEXT')
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
             if 'RawOutput' not in routecols:
@@ -3911,7 +3914,9 @@ class SQLiteStore:
         return self._rows(f"SELECT * FROM message WHERE Status='triaging' ORDER BY {order} LIMIT ?", (limit,))
     def ranked_held(self, channel) -> int: return len(self.ranked_head(channel))
     # ── batches (batch.py) ──────────────────────────────────────────────────────────────────
-    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose')
+    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose', 'Fix', 'FixAt', 'FixLink')
+    def batch_items_fixing(self) -> list:
+        return self._rows("SELECT * FROM batch_item WHERE Fix='running' ORDER BY ItemId")
     def add_batch_item(self, tid, conv, mid, place, title, link):
         self._exec('INSERT OR IGNORE INTO batch_item (TaskId, ConversationId, MessageId, Place, Title, Link, State, CreatedAt, UpdatedAt) '
                    "VALUES (?,?,?,?,?,?,'waiting',?,?)", (tid, conv, mid, place, title, link, _now(), _now()))

@@ -205,7 +205,7 @@ const reviewDraft = (r) => {
   if (r.Kind === "action") {
     try {
       const proposal = JSON.parse(r.DraftText || "");
-      if (proposal?.action === "write_playbook" && proposal.text) return proposal.text;
+      if ((proposal?.action === "write_playbook" || proposal?.action === "amend_playbook") && proposal.text) return proposal.text;
     } catch { /* ordinary reply text */ }
   }
   return r.DraftText || "";

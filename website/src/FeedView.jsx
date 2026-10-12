@@ -3579,7 +3579,7 @@ const MessageBlock = ({ messages, focusId, fallback, threadTotal, askIds }) => {
 // An action proposal's DraftText is its JSON envelope. For most actions that IS the thing to read
 // (a bill: vendor, amount, account); a proposed playbook is a page of markdown, so show the page.
 const proposalText = (t) => {
-  try { const j = JSON.parse(t); if (j?.action === "write_playbook" && j.text) return j.text; } catch { /* a plain draft */ }
+  try { const j = JSON.parse(t); if ((j?.action === "write_playbook" || j?.action === "amend_playbook") && j.text) return j.text; } catch { /* a plain draft */ }
   return t;
 };
 

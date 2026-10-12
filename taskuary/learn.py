@@ -339,6 +339,11 @@ def reflect(store, llm=None) -> bool:
         done = people_pages.refresh(store, llm)
         if done: logger.info(f"people pages compiled: {', '.join(done)}")
     except Exception as e: logger.warning(f'people pages skipped: {e}')
+    try:                                            # ...and the playbooks the ledger has facts about get a proposal (playbook_facts.py)
+        from . import playbook_facts
+        done = playbook_facts.refresh(store, llm)
+        if done: logger.info(f"playbook facts proposed: {', '.join(done)}")
+    except Exception as e: logger.warning(f'playbook facts skipped: {e}')
     return True
 
 

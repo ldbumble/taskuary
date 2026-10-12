@@ -1646,7 +1646,7 @@ class SQLiteStore:
     def update_task(self, task_id, fields, actor):
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
-        was_row = (self._one('SELECT Status, Assignee, DueAt FROM task WHERE TaskId=?', (task_id,)) or {}) if 'Status' in fields else {}
+        was_row = (self._one('SELECT Status, Assignee, DueAt, Tags FROM task WHERE TaskId=?', (task_id,)) or {}) if 'Status' in fields else {}
         was = was_row.get('Status')
         # ClosedAt describes the CURRENT lifecycle, not merely that the task was closed once.
         # An explicit reopen used to change Status while retaining the old close timestamp, so
@@ -1689,6 +1689,12 @@ class SQLiteStore:
                 facts['who'] = was_row['Assignee'][7:].lower(); facts['due'] = was_row.get('DueAt')
                 try: facts['late_days'] = max(0, (datetime.now().date() - datetime.strptime(str(was_row.get('DueAt') or '')[:10], '%Y-%m-%d').date()).days)
                 except ValueError: pass
+            # ...the playbook it was worked from, and whether the last mail on it asked something - what the ledger counts about a
+            # KIND of work (playbook_facts.py, build step 5): "closed with a question open" is the model's intent, never a word match
+            from . import playbooks as _pb
+            if _pb.of_task(was_row):
+                li = self.last_inbound_on_task(task_id); v = self.message_verdict(li['MessageId']) if li else None
+                facts.update(playbook=_pb.of_task(was_row), asked=bool(v and v.get('intent') in ('task', 'reply_only')))
             outcomes.record(self, 'task.closed', 'task', task_id, actor, facts=facts)
             from . import advisor
             advisor.notice(self, 'task.closed', 'task', task_id)        # the Advisor on the event (advisor.py)

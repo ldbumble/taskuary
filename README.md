@@ -54,6 +54,8 @@ and the Assistant already has the message, the thread, and your past decisions t
 
 ![The Assistant bringing Ruth's request into the chat as task TQ-0018 - what needs doing, its agent and close-out steps - with Next, Write reply, Send to agent, and Mark done under it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png?v=cards)
 
+Assistant look-ups clamp result limits to a safe range and use their default when a limit is invalid.
+
 ### 3. Every request becomes a task with its whole story
 
 Open any item to see how it got here: the message, what triage decided and why, which agent

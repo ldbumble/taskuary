@@ -450,7 +450,8 @@ def block(store, items: list = None) -> str:
 def listing(store, p: dict) -> str:
     """The look-up (asks.list): every ask, any age - "what did I ask you last week?". `status`: open (default) | all."""
     open_only = str(p.get('status') or 'open').strip().lower() != 'all'
-    rows = _asked(store, open_only, max(1, min(int(p.get('limit') or 20), 60)))
+    from .lookups import _limit
+    rows = _asked(store, open_only, _limit(p, 20, 60))
     return '\n'.join(_line(store, t, state(store, t['TaskId'])[1] or t.get('Status') or '') for t in rows) or 'No asks yet.'
 
 

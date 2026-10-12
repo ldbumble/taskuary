@@ -36,6 +36,17 @@ before 1.0.
 - Desktop tray controls and native notifications
 - A connector plugin API
 
+## Under discussion
+
+Bigger steps, each with a GitHub Discussion where the shape is being worked out:
+
+- Record a job on screen once and turn the recording into a playbook
+  ([#179](https://github.com/ldbumble/taskuary/discussions/179)) — the nearest of the three
+- Computer use inside a sandboxed desktop, for the systems that have no API
+  ([#178](https://github.com/ldbumble/taskuary/discussions/178))
+- Outbound phone calls as approval-gated work: the agent proposes the brief, places the call,
+  files the receipt ([#180](https://github.com/ldbumble/taskuary/discussions/180))
+
 The active release history is on
 [GitHub Releases](https://github.com/ldbumble/taskuary/releases), and current work is tracked
 in [GitHub Issues](https://github.com/ldbumble/taskuary/issues).

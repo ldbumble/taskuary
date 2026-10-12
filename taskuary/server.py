@@ -137,6 +137,10 @@ async def _lifespan(_app):
         try:
             demo.seed(store)
             demo.start_sessions(store)
+            # ...and the demo's rail is built the way a real install's is (processing_unread), not the legacy funnel:
+            # a goal is one row only there (spec 2026-10-12), and the demo is where the owner looks at the product
+            from .processing_startup import initialize
+            initialize(store, live_state=[])
         except Exception as e: logger.warning(f'demo seed failed: {e}')
         async with processing_all.membership_lifecycle(store):
             yield

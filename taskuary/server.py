@@ -309,7 +309,8 @@ async def token_gate(request: Request, call_next):
 class TaskBody(BaseModel):
     Title: str | None = None; Summary: str | None = None; Kind: str | None = None
     Priority: str | None = None; Status: str | None = None; Tags: str | None = None
-    Assignee: str | None = None
+    Assignee: str | None = None; DoneWhen: str | None = None; DueAt: str | None = None; ParentId: int | None = None
+class ReadAskBody(BaseModel): goal: bool = False
 class MsgBody(BaseModel):
     external_id: str | None = None; channel: str = 'api'; subject: str | None = None
     body: str | None = None; from_name: str | None = None; from_email: str | None = None
@@ -620,11 +621,13 @@ def _rail_tids() -> set:
     except Exception as e:
         logger.warning(f'tasks: the rail could not be read for OnWorkToday: {e}'); return set()
 
-def _read_hand_task(tid: int, text: str):
+def _read_hand_task(tid: int, text: str, goal: bool = False):
     """A task typed into + New skips triage, so it had no checklist - one block of words with no boxes (the owner, 2026-10-09:
     "when i create task the task list looks weird?? (no checkboxes?)"). The same reading a promoted message gets
     (triage.extract_ask), off the request: each distinct thing asked becomes a box, an email it asks for becomes one of the
-    task's emails. The owner's own words stay the summary. A brain that fails leaves the task as typed."""
+    task's emails. The owner's own words stay the summary. A brain that fails leaves the task as typed. A goal's boxes are
+    its steps (plan_goal)."""
+    if goal: return plan_goal(tid, text)
     try:
         from . import concierge, slots, triage
         ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True))
@@ -633,12 +636,34 @@ def _read_hand_task(tid: int, text: str):
     except Exception as e: logger.info(f'could not read the checklist of {task_ref(tid)}: {e}')
 
 
+def plan_goal(tid: int, text: str):
+    """The model writes the goal's steps (spec 2026-10-12); a step already started keeps its child whatever the new words
+    are - matched by its words first (set_task_checklist keeps it), else by the slot it stood in."""
+    try:
+        from . import concierge, triage
+        ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True), goal=True)
+        texts = [x for x in ask.get('checklist') or [] if x]
+        if not texts: return
+        old = store.task_checklist(tid)
+        started = [(k, i) for k, i in enumerate(old) if i.get('tid')]
+        store.set_task_checklist(tid, texts, 'triage')
+        new = store.task_checklist(tid)
+        for k, i in started:
+            if any(n.get('tid') == i['tid'] for n in new): continue
+            slot = new[k] if k < len(new) else None
+            if slot and not slot.get('tid'): store.link_step(tid, slot['id'], i['tid'], 'triage')
+    except Exception as e: logger.info(f'could not plan {task_ref(tid)}: {e}')
+
+
 @app.post('/api/tasks/{task_id}/read-ask')
-def read_hand_task(task_id: int, background: BackgroundTasks):
+def read_hand_task(task_id: int, background: BackgroundTasks, body: ReadAskBody = None):
     """+ New asks for its task to be read once it exists (_read_hand_task) - answered at once, read behind it."""
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
-    background.add_task(_read_hand_task, task_id, t.get('Summary') or t.get('Title') or '')
+    goal = bool(body and body.goal) or bool(t.get('DoneWhen'))
+    words = t.get('Summary') or t.get('Title') or ''
+    if goal: words = f"{t.get('Title') or ''}\nDone when: {t.get('DoneWhen') or ''}\n{words}"
+    background.add_task(_read_hand_task, task_id, words, goal)
     return {'ok': True}
 
 
@@ -729,6 +754,40 @@ def edit_checklist(task_id: int, body: ChecklistEdit):
     """The owner's words for the list; a box whose words are unchanged keeps its state (PW-076)."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     return {'ok': True, 'checklist': store.set_task_checklist(task_id, body.items, ACTOR)}
+
+
+@app.get('/api/tasks/{task_id}/steps')
+def goal_steps(task_id: int):
+    """A goal's boxes with the child task behind each (store.goal_steps), as the task page lists them (spec 2026-10-12)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import taskstate
+    out = []
+    for x in store.goal_steps(task_id):
+        c = x.pop('child')
+        who = str((c or {}).get('Assignee') or '')
+        out.append({**x, 'ref': task_ref(c['TaskId']) if c else None, 'status': (c or {}).get('Status'),
+                    'who': who.split(':', 1)[1] if ':' in who else who, 'state': taskstate.state(store, c) if c else None})
+    return {'steps': out}
+
+
+@app.post('/api/tasks/{task_id}/steps/{item_id}/start')
+def start_step(task_id: int, item_id: str):
+    """One box becomes a task of its own, the goal's child: made once, claimed as the owner's like any + New task."""
+    g = store.get_task(task_id)
+    if not g: raise HTTPException(404, 'task not found')
+    boxes = store.task_checklist(task_id)
+    box = next((i for i in boxes if i['id'] == item_id), None)
+    if not box: raise HTTPException(404, 'no such step')
+    if box.get('tid') and store.get_task(box['tid']): return {'taskId': box['tid'], 'ref': task_ref(box['tid'])}
+    k = [i['id'] for i in boxes].index(item_id) + 1
+    tid = store.create_task({'Title': box['text'][:300], 'Kind': 'general', 'ParentId': task_id, 'Source': 'goal', 'SourceRef': f'goal:{task_id}:{item_id}',
+                             'Summary': f"Step {k} of {task_ref(task_id)} \"{g.get('Title') or ''}\". Done when: {g.get('DoneWhen') or ''}",
+                             'AskedVia': 'desktop'}, ACTOR)
+    store.link_step(task_id, item_id, tid, ACTOR)
+    from . import selfclose
+    selfclose.claim(store, tid, ACTOR)
+    store.audit('task', tid, 'create', ACTOR, detail={'goal': task_id, 'step': item_id})
+    return {'taskId': tid, 'ref': task_ref(tid)}
 
 
 # ── shared operations (operations.py): propose, edit, confirm once, and the durable record ──────

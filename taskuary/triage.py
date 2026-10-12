@@ -407,9 +407,14 @@ ASK_SYSTEM = (
     'what the message actually asks for; never invent a requirement, never list anything as '
     'already done, and never include the signature, the confidentiality footer or quoted '
     'earlier mail. If the message asks for nothing concrete, return an empty checklist.')
+# ...and for a GOAL (spec 2026-10-12): the boxes are the ordered steps to the outcome, each naming who does it. The model
+# writes them; code only keeps the ones it returns.
+GOAL_SYSTEM = (' This message is a GOAL with a date, not one ask: the checklist is the ORDERED steps that reach the outcome it '
+               'describes, three to nine of them, each one step a person or an agent can finish, named for who does it when '
+               'the message says ("Ray: schema sign-off"). The summary restates what done looks like.')
 
 
-def extract_ask(msg: dict, llm=None) -> dict:
+def extract_ask(msg: dict, llm=None, goal: bool = False) -> dict:
     """{'summary', 'checklist'} for a task made by hand.
 
     task_from_message used to store the raw body sliced at 1000 characters, so the task's ask
@@ -428,7 +433,7 @@ def extract_ask(msg: dict, llm=None) -> dict:
     subject = str(msg.get('Subject') or msg.get('subject') or '')
     if not llm: return {'summary': own[:1000], 'checklist': [], 'outputs': []}
     try:
-        raw = llm(ASK_SYSTEM, f'Subject: {subject}\n\n{body[:6000]}')
+        raw = llm(ASK_SYSTEM + (GOAL_SYSTEM if goal else ''), f'Subject: {subject}\n\n{body[:6000]}')
         j = json.loads(re.sub(r'^```(json)?|```$', '', str(raw or '').strip(), flags=re.M))
         summary = str(j.get('summary') or '').strip()
         items = [x.strip() for x in (j.get('checklist') or []) if isinstance(x, str) and x.strip()]

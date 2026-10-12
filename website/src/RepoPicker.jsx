@@ -118,7 +118,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <TextField size="small" fullWidth autoFocus value={path} placeholder="C:\\Users\\you\\Documents\\portal"
                     onChange={(e) => setPath(e.target.value)}
-                    inputProps={{ style: { fontSize: 11.5, fontFamily: "ui-monospace, monospace" } }} />
+                    inputProps={{ "aria-label": "Folder where this repository is checked out", style: { fontSize: 11.5, fontFamily: "ui-monospace, monospace" } }} />
                   <Button size="small" variant="contained" disableElevation disabled={busy || !path.trim()}
                     onClick={() => choose(r, path.trim())}>Save</Button>
                   <Button size="small" sx={{ color: DIM }} onClick={() => setOpen(null)}>cancel</Button>

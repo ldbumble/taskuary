@@ -112,8 +112,8 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
           <Typography variant="caption" sx={{ color: FAINT }}>
             saved on {slot.owner}
             {slot.owner_link && (
-              <Typography component="span" variant="caption" onClick={() => onGo(slot.owner_link)}
-                sx={{ color: "#55697a", cursor: "pointer", ml: 0.5, "&:hover": { textDecoration: "underline" } }}>
+              <Typography component="button" type="button" variant="caption" onClick={() => onGo(slot.owner_link)}
+                sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "#55697a", cursor: "pointer", ml: 0.5, "&:hover": { textDecoration: "underline" } }}>
                 open →
               </Typography>
             )}
@@ -180,8 +180,8 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
     <Box sx={{ mb: 1 }}>
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Which AI does what, and on which model. Adding or signing into a CLI or an API key is
-        still <Typography component="span" variant="body2" onClick={() => onGo("connectors")}
-          sx={{ color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>Connections</Typography>;
+        still <Typography component="button" type="button" variant="body2" onClick={() => onGo("connectors")}
+          sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>Connections</Typography>;
         this page only chooses between what you have connected.
       </Typography>
       {err && (

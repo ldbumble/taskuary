@@ -24,14 +24,34 @@ class FolderTests(unittest.TestCase):
         self.assertEqual(channels.source_folders({'ConfigJson': '{"folders": ["inbox", "AAMk-vendors"]}'}), ['inbox', 'AAMk-vendors'])
 
     def test_the_folder_list_leads_with_the_inbox_and_hides_the_plumbing(self):
-        body = {'value': [{'id': 'AAMk-sent', 'displayName': 'Sent Items', 'wellKnownName': 'sentitems', 'totalItemCount': 9},
+        # v1.0 lists folders WITHOUT wellKnownName (a beta-only property - selecting it is a 400);
+        # the default folders are known by asking for each by name in one $batch
+        body = {'value': [{'id': 'AAMk-sent', 'displayName': 'Sent Items', 'totalItemCount': 9},
                           {'id': 'AAMk-vend', 'displayName': 'Vendors', 'totalItemCount': 42},
-                          {'id': 'AAMk-in', 'displayName': 'Inbox', 'wellKnownName': 'inbox', 'totalItemCount': 120},
-                          {'id': 'AAMk-junk', 'displayName': 'Junk Email', 'wellKnownName': 'junkemail'}]}
-        with mock.patch.object(channels.requests, 'get', return_value=R(200, body)):
+                          {'id': 'AAMk-in', 'displayName': 'Inbox', 'totalItemCount': 120},
+                          {'id': 'AAMk-junk', 'displayName': 'Junk Email'}]}
+        batch = {'responses': [{'id': 'inbox', 'status': 200, 'body': {'id': 'AAMk-in'}},
+                               {'id': 'sentitems', 'status': 200, 'body': {'id': 'AAMk-sent'}},
+                               {'id': 'junkemail', 'status': 200, 'body': {'id': 'AAMk-junk'}},
+                               {'id': 'conversationhistory', 'status': 404, 'body': {'error': {'code': 'ErrorItemNotFound'}}}]}
+        sent = []
+        def post(url, **kw): sent.append((url, kw)); return R(200, batch)
+        with mock.patch.object(channels.requests, 'get', return_value=R(200, body)) as get, \
+             mock.patch.object(channels.requests, 'post', side_effect=post):
             fs = channels.mail_folders('T', 'me@x.com')
+        self.assertNotIn('wellKnownName', get.call_args[1]['params']['$select'])      # the property v1.0 refuses is never asked for
+        self.assertEqual(sent[0][0], f'{channels.GRAPH}/$batch')
+        self.assertEqual([q['url'] for q in sent[0][1]['json']['requests']][:2],
+                         ['/users/me@x.com/mailFolders/inbox?$select=id', '/users/me@x.com/mailFolders/sentitems?$select=id'])
         self.assertEqual([f['id'] for f in fs], ['inbox', 'AAMk-vend'])             # inbox by its well-known name, plumbing dropped
         self.assertEqual(fs[1], {'id': 'AAMk-vend', 'name': 'Vendors', 'count': 42, 'well_known': ''})
+
+    def test_a_failed_batch_leaves_the_folders_ordinary_rather_than_failing_the_chooser(self):
+        body = {'value': [{'id': 'AAMk-in', 'displayName': 'Inbox', 'totalItemCount': 1}]}
+        with mock.patch.object(channels.requests, 'get', return_value=R(200, body)), \
+             mock.patch.object(channels.requests, 'post', return_value=R(503, {})):
+            fs = channels.mail_folders('T', 'me@x.com')
+        self.assertEqual(fs, [{'id': 'AAMk-in', 'name': 'Inbox', 'count': 1, 'well_known': ''}])
 
     def test_the_poll_reads_every_chosen_folder(self):
         s = MemoryStore()

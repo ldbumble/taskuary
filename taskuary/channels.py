@@ -557,16 +557,45 @@ def _local(iso):
     except ValueError: return iso
 
 
+# The default folders the chooser treats specially: the Inbox leads, the rest is plumbing it hides.
+# Their names are resolved by ASKING for each (/mailFolders/inbox answers with the folder's id)
+# rather than read off the listing: `wellKnownName` is a beta-only property, and v1.0 answers a
+# $select naming it with 400 "Could not find a property named 'wellKnownName'" - so the folder
+# step on the Outlook card failed for every mailbox while the poll beside it worked (2026-10-10).
+WELL_KNOWN = ('inbox', 'sentitems', 'deleteditems', 'drafts', 'junkemail', 'outbox',
+              'conversationhistory', 'syncissues', 'recoverableitemsdeletions')
+
+
+def _well_known_ids(tok, upn) -> dict:
+    """{folder id: well-known name} for the default folders this mailbox has - one $batch, one
+    GET per name. A folder the mailbox lacks answers 404 inside the batch and is simply not
+    well-known; a batch that fails altogether leaves every folder ordinary rather than failing
+    the chooser, since the listing itself already succeeded."""
+    reqs = [{'id': n, 'method': 'GET', 'url': f'/users/{upn}/mailFolders/{n}?$select=id'} for n in WELL_KNOWN]
+    try:
+        r = requests.post(f'{GRAPH}/$batch', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
+                          json={'requests': reqs})
+        r.raise_for_status()
+        answers = r.json().get('responses', [])
+    except (requests.RequestException, ValueError) as e:
+        logger.warning(f'mail folders: the well-known names could not be resolved - {e}')
+        return {}
+    return {x['body']['id']: x['id'] for x in answers
+            if x.get('status') == 200 and isinstance(x.get('body'), dict) and x['body'].get('id')}
+
+
 def mail_folders(tok, upn) -> list:
     """The mailbox's folders, for the card's chooser: id + name, the well-known ones first. Only the
     Inbox was ever read; a rule that files vendor mail into 'Vendors' made that mail invisible here."""
     r = requests.get(f'{GRAPH}/users/{upn}/mailFolders', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
-                     params={'$top': 100, '$select': 'id,displayName,totalItemCount,wellKnownName'})
+                     params={'$top': 100, '$select': 'id,displayName,totalItemCount'})
     r.raise_for_status()
-    skip = {'sentitems', 'deleteditems', 'drafts', 'junkemail', 'outbox', 'conversationhistory', 'syncissues', 'recoverableitemsdeletions'}
+    names = _well_known_ids(tok, upn)
+    skip = set(WELL_KNOWN) - {'inbox'}
     out = []
     for f in r.json().get('value', []):
-        wk = (f.get('wellKnownName') or '').lower()
+        # the resolved name first; a listing that does carry wellKnownName (beta) is still read
+        wk = (names.get(f.get('id')) or f.get('wellKnownName') or '').lower()
         if wk in skip: continue
         out.append({'id': 'inbox' if wk == 'inbox' else f['id'], 'name': f.get('displayName') or '', 'count': f.get('totalItemCount') or 0, 'well_known': wk})
     out.sort(key=lambda f: (f['id'] != 'inbox', f['name'].lower()))

@@ -50,9 +50,9 @@ git reset -q                                # ALWAYS: refreshes the shared index
 Skipping that last `git reset -q` leaves the shared index showing your own files as modified and
 your new test file as deleted. It is confusing, not harmful — but fix it, do not commit over it.
 
-## 2. Bump the version in all six places
+## 2. Bump the version in all seven places
 
-`pyproject.toml` is the one source of truth (`taskuary/__init__._version()` reads it), but four
+`pyproject.toml` is the one source of truth (`taskuary/__init__._version()` reads it), but the
 other places *announce* the number and drift if you forget them. `docs/roadmap.md` sat three
 releases behind this way, and the public demo sat on v0.3.3.2 through four.
 
@@ -64,6 +64,7 @@ releases behind this way, and the public demo sat on v0.3.3.2 through four.
 | `README.zh-CN.md` | `目前为 **vX.Y.Z.W**`, and its own `release=`/`asof=` buster |
 | `docs/roadmap.md` | `currently vX.Y.Z.W` |
 | `website/src/demoFixtures.json` | `/api/version.version`, `/api/build.version`, `/api/build.disk_version` |
+| `docs/site/manifest.json` | `version` and `updated` (today) - the docs footer; then `npm run build:docs` |
 
 The fifth is the one that hides. taskuary.com/demo has **no server**, so its header reads
 `/api/version` out of a recording — `website/demo_fixtures.mjs` freezes a live `--demo` instance
@@ -71,7 +72,7 @@ into `demoFixtures.json`, and the recording is only re-dumped when the fixtures 
 Patch exactly those three fields and leave the rest byte-identical: it is a real instance's output,
 not a document. Three occurrences of the old number, no more.
 
-Two tests guard this, both in `tests/test_promptmap_and_catalog.py`:
+Three tests guard this. `tests/test_docs_manifest.py` pins the manifest (0.3.8.0 shipped with it stale, 2026-10-12). The other two are in `tests/test_promptmap_and_catalog.py`:
 `test_no_shipped_doc_advertises_an_older_version` (both READMEs and the roadmap against `pyproject`) and
 `test_the_demo_does_not_advertise_an_older_version` (the recording). The badge buster is covered by
 neither: shields caches per-URL, so without bumping it the README shows the previous number for up

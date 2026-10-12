@@ -1019,6 +1019,32 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
     # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
+    if kind in ('task.chase', 'task.let_go', 'task.elsewhere'):
+        # THE SLIPPED ANSWERS (spec 2026-10-12): each is an outcome. The item is the rail's card (a person's step, or a thread with
+        # a follow-up on it); the person is its `who_email`, the ledger's key. A chase is a draft for your yes, never a send.
+        import json as _json
+        from . import assistant, funnel, outcomes
+        key = str(p.get('key') or ''); item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+        if not item: raise HTTPException(404, 'that one is not on the rail any more')
+        who, tid_, iid, text = str(item.get('who_email') or ''), item.get('tid'), item.get('idea'), str(p.get('text') or '').strip()[:300]
+        if kind == 'task.chase':
+            conv = (store.get_task(tid_) or {}).get('ConversationId') if tid_ else None
+            mid = item.get('mid') or ((store.last_inbound_in(conv) or {}).get('MessageId') if conv else None)
+            if not mid: raise HTTPException(422, 'There is no thread to chase on - write to them from the task page, and the ledger will count it.')
+            n = (sum(1 for r in outcomes.rows_for(store, 'task', tid_) if _json.loads(r.get('FactsJson') or '{}').get('chase')) if tid_ else 0) + 1
+            cc = outcomes.chase_cc(store, who) if who else None
+            out = open_reply(mid, OpenReplyBody(instruction='a short chase, in my voice: no answer yet, what I need and by when'
+                                                            + (f'; copy {cc}, who gets them to answer' if cc else '')))
+            store._exec('UPDATE review SET Reason=? WHERE ReviewId=?', (f'chase:{n}' + (f' cc:{cc}' if cc else ''), out['reviewId']))
+            return {**out, 'cc': cc}
+        if iid: assistant.act(store, iid, 'dismiss', ACTOR)
+        if tid_ and kind == 'task.let_go':
+            store.add_comment(tid_, ACTOR, 'human', 'Let it go - nobody is chasing this further.'); store.update_task(tid_, {'Status': 'dropped'}, ACTOR)
+        elif tid_ and (store.get_task(tid_) or {}).get('Status') not in ('done', 'dropped') and str((store.get_task(tid_) or {}).get('Assignee') or '').startswith('person:'):
+            store.add_comment(tid_, ACTOR, 'human', f"Answered elsewhere{': ' + text if text else ''}."); store.update_task(tid_, {'Status': 'done'}, ACTOR)
+        outcomes.record(store, 'chase.let_go' if kind == 'task.let_go' else 'chase.elsewhere', 'task' if tid_ else 'message', tid_ or item.get('mid') or 0, ACTOR,
+                        facts={'who': who, **({'where': text} if text else {})})
+        return {'status': 'dropped' if kind == 'task.let_go' else 'done', 'who': who}
     if kind == 'item.settle':
         from . import funnel, verdicts
         verb = str(p.get('verb') or 'done')

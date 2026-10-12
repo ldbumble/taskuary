@@ -242,6 +242,10 @@ DECISIONS = {
     'setup':           'build a report, a connection to another system or an automation - `text`: the request. Never a to-do',
     'confirm':         "the owner's yes to the card already waiting - only when one is",
     'cancel':          "the owner's no to it",
+    # the slipped card's answers (spec 2026-10-12, build step 4): each is an outcome the ledger keeps
+    'chase':           "chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent",
+    'let_go':          'let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them',
+    'elsewhere':       "they answered elsewhere - `text`: where (a call, a meeting); the step somebody owed closes as done, or the follow-up is put down",
 }
 
 # WHERE THINGS ARE: the owner's question, and the look-up that answers it - an example CALL each.

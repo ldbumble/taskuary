@@ -240,6 +240,10 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
         if kind == 'promise' and _owner_closed(store, f'promise:{cid}', r.get('SentAt')): continue
         inbound = _other_side(store, cid)
         if not inbound: continue
+        # three Let-it-gos on one person and the Advisor stops raising them - the spec's one rule about silence (2026-10-12)
+        if kind == 'followup':
+            from . import outcomes
+            if outcomes.let_go_count(store, (inbound.get('FromEmail') or '').lower()) >= 3: continue
         body = _own(r)
         who = inbound.get('FromName') or inbound.get('FromEmail') or 'them'
         sent = _dt(r['SentAt']) or datetime.now()

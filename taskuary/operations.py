@@ -37,6 +37,9 @@ KINDS = {
     'task.create_from_text':    ('text', ('kind', 'text'), None),
     'message.archive':          ('message', (), 'dismissed'),
     'item.settle':              ('item', ('key', 'verb'), None),
+    'task.chase':               ('item', ('key',), None),          # the slipped card's answers (spec 2026-10-12)
+    'task.let_go':              ('item', ('key',), None),
+    'task.elsewhere':           ('item', ('key',), None),
     'idea.act':                 ('idea', ('verb',), None),        # an Advisor idea's own words (assistant.act)
     'review.approve':           ('review', (), None),
     'agent.answer':             ('task', ('text',), None),

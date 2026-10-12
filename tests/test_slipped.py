@@ -69,3 +69,74 @@ def test_followups_carry_the_address_and_the_day_asked(s):
     s.put_sent_verdict(mid, 'c2', True, False, None, None, 'test')
     c = next(x for x in assistant.followups(s, 24, ('followup',)) if x['kind'] == 'followup')
     assert c['action']['who_email'] == RAY and c['action']['asked_at'][:10] == ago(days=4)[:10] and c['action']['away'] is False
+
+
+# ── the four answers (build step 4, Task 4): Chase, Let it go, They answered elsewhere, Remind me ──────────────────────
+from unittest import mock
+from taskuary import concierge, server
+from fastapi.testclient import TestClient
+
+def run(s, kind, card, text=None):
+    """Propose and execute one operation the way the card does, through the server's one handler."""
+    target = card.get('tid') or card.get('idea') or card.get('mid') or 0
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        op = c.post('/api/operations', json={'kind': kind, 'target': target, 'params': {'key': card['key'], **({'text': text} if text else {})}}).json()
+        assert 'id' in op, op
+        return c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']})
+
+def test_a_slipped_card_offers_the_four_answers(s):
+    t = person_step(s, 7)
+    card = next(c for c in rail(s) if c.get('tid') == t)
+    assert [c['verb'] for c in concierge.chips_for(s, card)] == ['chase', 'let_go', 'elsewhere', 'defer', 'next']
+
+def test_let_it_go_drops_the_step_and_writes_the_ledger(s):
+    t = person_step(s, 7); card = next(c for c in rail(s) if c.get('tid') == t)
+    r = run(s, 'task.let_go', card)
+    assert r.status_code == 200, r.text
+    assert s.get_task(t)['Status'] == 'dropped'
+    assert [x['Kind'] for x in outcomes.rows_for(s, 'task', t)][:2] == ['chase.let_go', 'task.closed']
+    assert json.loads(outcomes.rows_for(s, 'task', t)[0]['FactsJson'])['who'] == RAY
+
+def test_answered_elsewhere_closes_the_step_with_where(s):
+    t = person_step(s, 7); card = next(c for c in rail(s) if c.get('tid') == t)
+    assert run(s, 'task.elsewhere', card, 'he called').status_code == 200
+    assert s.get_task(t)['Status'] == 'done'
+    assert any('he called' in str(c.get('Body')) for c in s.list_comments(t))
+    assert json.loads(outcomes.rows_for(s, 'task', t)[0]['FactsJson'])['where'] == 'he called'
+
+def test_three_let_gos_silence_one_person(s):
+    for k in range(3): outcomes.record(s, 'chase.let_go', 'message', k, facts={'who': RAY})
+    t = s.create_task({'Title': 'Budget'}, 'owner')
+    for who, cid in ((RAY, 'c5'), ('gail@northwind.example', 'c6')):
+        s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'Budget', 'FromEmail': who, 'SentAt': ago(days=5), 'BodyText': 'q', 'Status': 'filed', 'TaskId': t})
+        mid = s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'Re: Budget', 'FromEmail': 'alex@northwind.example', 'SentAt': ago(days=4), 'BodyText': 'Can you send it?', 'Status': 'context', 'TaskId': t})
+        s.put_sent_verdict(mid, cid, True, False, None, None, 'test')
+    whos = [c['action']['who_email'] for c in assistant.followups(s, 24, ('followup',))]
+    assert whos == ['gail@northwind.example']
+
+def test_a_chase_opens_a_draft_on_the_thread_with_the_ledgers_cc(s):
+    iid, t = followup_idea(s, 6); card = next(c for c in rail(s) if c.get('idea') == iid)
+    for k in range(2):
+        t2 = s.create_task({'Title': f'x{k}'}, 'owner')
+        i = outcomes.record(s, 'reply.sent', 'task', t2, facts={'cid': f'y{k}', 'mid': 1, 'verb': 'approve', 'who': RAY, 'cc': ['omar@northwind.example'], 'chase': True, 'answer_days': 1.0}, at=ago(days=9))
+        outcomes.settle(s, i, 'answered', 'settled')
+    with mock.patch('taskuary.responder.write_draft', return_value='Ray - a quick nudge on the budget.') as wd:
+        r = run(s, 'task.chase', card)
+    assert r.status_code == 200, r.text
+    body = r.json(); rv = s.get_review(body['outcome']['reviewId'])
+    assert rv['Reason'].startswith('chase:') and body['outcome']['cc'] == 'omar@northwind.example'
+    assert 'omar' in (wd.call_args.kwargs.get('nudge') or '')
+
+def test_a_chase_with_no_thread_is_refused_plainly(s):
+    t = person_step(s, 7); card = next(c for c in rail(s) if c.get('tid') == t)
+    r = run(s, 'task.chase', card)
+    assert r.status_code in (422, 200) and 'task page' in r.text
+
+def test_the_advisor_counts_chases_from_the_ledger(s):
+    for k, ans in enumerate((1.0, None, 2.0)):
+        t = s.create_task({'Title': f'x{k}'}, 'owner')
+        i = outcomes.record(s, 'reply.sent', 'task', t, facts={'cid': f'w{k}', 'mid': 1, 'verb': 'approve', 'who': RAY, 'cc': [], 'chase': True, **({'answer_days': ans} if ans else {})}, at=ago(days=9))
+        outcomes.settle(s, i, 'x', 'settled')
+    from taskuary import advisor
+    assert advisor.habit(s, 'chase', {}) == (2, 3)

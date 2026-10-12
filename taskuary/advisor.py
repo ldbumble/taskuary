@@ -95,7 +95,9 @@ def habit(store, verb: str, item: dict) -> tuple:
     close: closes that held, over every close that resolved. Any other verb has no count yet."""
     q = {'continue': ("SELECT Verdict AS v FROM outcome WHERE Kind='agent.stopped' AND ResolvedAt IS NOT NULL", lambda r: r['v'] == 'continued'),
          'approve': ("SELECT FactsJson AS f FROM outcome WHERE Kind='reply.sent' AND ResolvedAt IS NOT NULL", lambda r: json.loads(r['f'] or '{}').get('verb') == 'approve'),
-         'close': ("SELECT Verdict AS v FROM outcome WHERE Kind='task.closed' AND ResolvedAt IS NOT NULL", lambda r: r['v'] == 'held')}.get(verb)
+         'close': ("SELECT Verdict AS v FROM outcome WHERE Kind='task.closed' AND ResolvedAt IS NOT NULL", lambda r: r['v'] == 'held'),
+         'chase': ("SELECT FactsJson AS f FROM outcome WHERE Kind='reply.sent' AND ResolvedAt IS NOT NULL AND json_extract(FactsJson, '$.chase')=1",
+                   lambda r: json.loads(r['f'] or '{}').get('answer_days') is not None)}.get(verb)
     if not q: return (0, 0)
     rs = store._rows(q[0]); return (sum(1 for r in rs if q[1](r)), len(rs))
 def pill(label: str, count) -> str:

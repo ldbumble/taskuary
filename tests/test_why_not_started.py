@@ -150,3 +150,32 @@ class AgentStoryTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FinishedIsNotLeftTests(unittest.TestCase):
+    """A coder closed its task itself, the reply went out, the sender wrote again and the task reopened - and the step said
+    the coder "left without finishing" over its own finished record (2026-10-12)."""
+
+    def ran(self, s, t, finish=True):
+        from taskuary import workerstate as ws
+        ws.record(s, t, 's1', 'working', source='hook')
+        ws.record(s, t, 's1', 'turn_end', text='Found it: the primary address is wrong.', source='hook')
+        if finish: ws.record(s, t, 's1', 'finished', source='hook')
+        s.add_transcript(t, 's1', 'screen text', agent='coder')
+
+    def test_a_session_that_finished_did_not_leave(self):
+        s = MemoryStore(); t = handed(s, who='agent:coder'); self.ran(s, t)
+        self.assertFalse(funnel.agent_left(s, t))
+        why = funnel.not_started_why(s, t)
+        self.assertIn('finished its last session', why)
+        self.assertNotIn('left without finishing', why)
+
+    def test_a_report_written_after_it_began_is_a_finish_too(self):
+        s = MemoryStore(); t = handed(s, who='agent:coder'); self.ran(s, t, finish=False)
+        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nDetermination: done.')
+        self.assertFalse(funnel.agent_left(s, t))
+
+    def test_a_session_that_walked_away_still_left(self):
+        s = MemoryStore(); t = handed(s, who='agent:coder'); self.ran(s, t, finish=False)
+        self.assertTrue(funnel.agent_left(s, t))
+        self.assertIn('left without finishing', funnel.not_started_why(s, t))

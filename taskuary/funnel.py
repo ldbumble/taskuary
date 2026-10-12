@@ -511,6 +511,11 @@ def not_started_why(store, tid) -> str:
     # here, so two tasks a coder had actually worked and walked away from reported "it was handed to
     # coder and nothing has started it" for six hours (TQ-0588/0589, 2026-09-16: transcripts from
     # copilot and from coder, no run rows, no live session). A transcript IS proof that it ran.
+    # ...but a session that FINISHED did not leave anything: it said it was done and wrote its report, and the task came
+    # back only because somebody wrote again (TQ-1040, 2026-10-12: a coder closed its task, the reply went out, the sender
+    # answered, and the step said the coder "left without finishing" over its own finished record)
+    if session_finished(store, tid):
+        return f'{who} finished its last session - its record is below. Nothing has started on what came in since.' + old
     if store.last_transcript(tid):
         return f'{who} ran on this and left without finishing it. Continue the session, or hand it on.' + old
     msg = store.last_inbound_on_task(tid) or {}
@@ -624,7 +629,20 @@ def agent_left(store, tid) -> bool:
     if terminal.INTERRUPTED in [x.strip() for x in str(t.get('Tags') or '').split(',')]: return True
     if session_saved(store, tid): return True
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])): return True
-    return bool(store.last_transcript(tid))
+    return bool(store.last_transcript(tid)) and not session_finished(store, tid)
+
+
+def session_finished(store, tid) -> bool:
+    """Did the LAST session end by finishing - it said it was done (its `finished` event), or its report was written
+    after it began? Then nothing was left half-done: a task open again after it is open for what arrived since."""
+    evs = store.worker_events(tid) or []
+    if not evs: return False                     # no account of the session at all: nothing says it finished
+    sid = str(evs[-1]['Sid'])
+    run = [e for e in evs if str(e['Sid']) == sid]
+    if any(e['Kind'] == 'finished' for e in run): return True
+    began = str(run[0].get('CreatedAt') or '')
+    return bool(began) and any(str(c.get('Body') or '').startswith('CODER REPORT') and str(c.get('CreatedAt') or '') >= began
+                               for c in store.list_comments(tid) or [])
 
 
 def report_failed(store, subject: str, mid=None) -> bool:

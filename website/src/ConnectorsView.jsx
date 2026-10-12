@@ -3665,7 +3665,8 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             2 · PER REPO — WHAT ISSUES AND PRS DO
           </Typography>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.5 }}>
-            <b>tasks</b> = through triage, <b>feed</b> = shown on the Timeline only, <b>off</b> = ignored.
+            <b>tasks</b> = through triage, <b>feed</b> = shown on the Timeline only, <b>replies</b> (issues) = the issues
+            themselves are ignored but a person commenting on one goes through triage, <b>off</b> = ignored.
             The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
             owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
             <b>anyone</b> = every author. Everyone else’s items still become tasks for you to promote.
@@ -3696,7 +3697,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
                       }
                       apply();
                     }}>
-                    {(kind === "auto" ? ["off", "team", "contributors", "anyone"] : ["tasks", "feed", "off"]).map((v) => (
+                    {(kind === "auto" ? ["off", "team", "contributors", "anyone"] : kind === "issues" ? ["tasks", "feed", "replies", "off"] : ["tasks", "feed", "off"]).map((v) => (
                       <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>
                         {kind === "prs" ? "PRs" : kind === "issues" ? "issues" : "agent"}: {v}</MenuItem>
                     ))}

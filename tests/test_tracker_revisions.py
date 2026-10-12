@@ -6,7 +6,7 @@ rewritten after you first saw it reached nobody, and comments were never fetched
 at all. See docs/superpowers/specs/2026-09-15-tracker-revisions-design.md.
 """
 import json, unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from taskuary import channels, github, pm
@@ -383,3 +383,44 @@ class UpstreamEndingTests(unittest.TestCase):
         self.assertEqual([r for r in s.feed(days=99) if r['ConversationId'] == 'gh:o/r#46'], [],
                          'and it never reaches the timeline as work')
         self.assertIsNone(s.task_for_conversation('gh:o/r#46'), 'nor opens a task to sit in the work list')
+
+
+class GithubRepliesOnlyTests(unittest.TestCase):
+    """issues: replies - the owner's issues are notes, never work, but a person answering on one is asking (2026-10-12)."""
+    SRC = {'Address': 'o/r', 'ConfigJson': json.dumps({'issues': 'replies'})}
+
+    def poll(self, s, items, comments=None):
+        with mock.patch.object(github, 'list_items', return_value=items), \
+             mock.patch.object(github, 'body_images', return_value=[]), \
+             mock.patch.object(github, 'issue_comments', return_value=comments or [], create=True):
+            return channels.ingest_github_issues(s, self.SRC, 'tok', datetime.now() - timedelta(hours=1))
+
+    def fresh(self, cid, body, **kw):
+        c = gh_comment(cid, body, **kw)
+        c['created_at'] = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        return c
+
+    def test_the_issue_itself_is_not_read(self):
+        s = MemoryStore()
+        self.assertEqual(self.poll(s, [gh_item(user='alex')]), 0)
+        self.assertIsNone(s.message_by_external('gh:o/r#42'))
+        self.assertEqual(s.feed(days=99), [])
+
+    def test_a_person_asking_on_it_reaches_triage_with_the_issue_named(self):
+        s = MemoryStore()
+        n = self.poll(s, [gh_item(user='alex')], comments=[self.fresh(910, 'could you assign this to me?')])
+        self.assertEqual(n, 1)
+        row = s.message_by_external('gh:o/r#42:c910')
+        self.assertNotEqual(row['Status'], 'context', 'a person asking is not history')
+        self.assertEqual(row['ConversationId'], 'gh:o/r#42')
+        self.assertIn('o/r#42', row['BodyText'], 'the comment alone does not say which issue it is about')
+        self.assertIn('could you assign this to me?', row['BodyText'])
+
+    def test_an_old_thread_is_not_replayed_when_it_is_switched_on(self):
+        s = MemoryStore()
+        self.assertEqual(self.poll(s, [gh_item()], comments=[gh_comment(911, 'from last month')]), 0)
+
+    def test_a_bot_on_it_is_still_history(self):
+        s = MemoryStore()
+        self.poll(s, [gh_item()], comments=[self.fresh(912, 'Coverage dropped', login='codecov', typ='Bot')])
+        self.assertEqual(s.message_by_external('gh:o/r#42:c912')['Status'], 'context')

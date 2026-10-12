@@ -1254,12 +1254,17 @@ def _gh_ended(store, item: dict, base: str, repo: str, tok: str = None) -> int:
     return 0
 
 
-def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, llm, file_only: bool, own_only: bool = False) -> int:
+def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, llm, file_only: bool, own_only: bool = False,
+                 since=None, about: str = '') -> int:
     """Comments on one issue or PR, as messages on the ITEM's conversation - which is what makes
     identity_route attach them to its task, re-judge them and rewrite a draft that is now behind.
 
     Ours and a bot's ride along as history and never become work: CI, Dependabot and coverage
-    bots are the loudest commenters on any active repo and none of it is a person asking."""
+    bots are the loudest commenters on any active repo and none of it is a person asking.
+
+    `since` drops comments older than the poll window and `about` leads each body with the item it was written on - both
+    for 'replies' mode, where no task holds the item, so the comment is all triage reads and switching it on must not
+    replay a year of old threads."""
     from . import github
     try: comments = github.issue_comments(tok, repo, item['number'])
     except Exception as e:
@@ -1270,8 +1275,9 @@ def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, l
         u = c.get('user') or {}
         who, ext = u.get('login') or 'github', f"{base}:c{c.get('id')}"
         if store.message_exists(ext) or (own_only and not (me and who == me)): continue
+        if since and c.get('created_at') and datetime.fromisoformat(c['created_at'].replace('Z', '+00:00')) < since.astimezone(): continue
         msg = {'external_id': ext, 'channel': 'github', 'subject': f"Re: {item.get('title') or base}",
-               'body': (c.get('body') or '')[:20000], 'from_name': who,
+               'body': (f"{about}\n" if about else '') + (c.get('body') or '')[:20000], 'from_name': who,
                'from_email': f'{who}@users.noreply.github.com', 'conversation_id': base,
                'sent_at': _local(c.get('created_at') or ''), 'source_link': c.get('html_url'),
                'source_name': repo, 'no_auto': not gh_auto_ok(src, c.get('author_association'))}
@@ -1288,7 +1294,7 @@ def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, l
 def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=False) -> int:
     """GitHub as an INBOUND channel: new issues - and, per repo, pull requests - land on the
     Timeline and go through the same triage as mail. What each KIND does is the source's own
-    call (ConfigJson {"issues": "tasks|feed|off", "prs": ...}), because an open-source repo
+    call (ConfigJson {"issues": "tasks|feed|replies|off", "prs": ...}), because an open-source repo
     usually wants PRs SEEN but not auto-worked. Every item leads with who wrote it and
     GitHub's own author_association, so triage can weigh a stranger's PR on a public repo
     for what it is. Whether an item may start a coding agent by itself is the repo's 'auto'
@@ -1326,6 +1332,13 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
                 if tid and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
                     n += _gh_comments(store, src, tok, repo, i, base, llm, True, own_only=True)
                 n += _gh_ended(store, i, base, repo, tok)
+            continue
+        # REPLIES ONLY: the issues are the owner's own notes - to themselves, to contributors - and none of them is work,
+        # but a person answering on one ("could you assign this to me?") is somebody asking (the owner, 2026-10-12)
+        if mode == 'replies':
+            about = (f"[comment on {'pull request' if is_pr else 'issue'} {repo}#{i['number']} \"{i.get('title') or ''}\" "
+                     f"by {who}: {(i.get('body') or '')[:600]}]")
+            n += _gh_comments(store, src, tok, repo, i, base, llm, False, since=since, about=about)
             continue
         # a robot filing its own chore (a downloads chart, a dependency bump) is not somebody
         # asking the owner for something - the same rule its comments get
@@ -1373,7 +1386,7 @@ def _gh_explicit(store) -> bool:
         if s['Channel'] != 'github': continue
         try: m = json.loads(s.get('ConfigJson') or '{}')
         except ValueError: m = {}
-        if {'tasks', 'feed'} & {m.get('issues'), m.get('prs')}: return True
+        if {'tasks', 'feed', 'replies'} & {m.get('issues'), m.get('prs')}: return True
     return False
 
 

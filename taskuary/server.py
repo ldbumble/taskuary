@@ -4514,7 +4514,7 @@ def _live(src) -> set:
     except ValueError: cfg = {}
     if not src.get('Active'): return set()
     return {f'{k}:{cfg[k]}' for k in ('issues', 'prs', 'mode')
-            if cfg.get(k) in ('tasks', 'feed')} or ({'active'} if not cfg else set())
+            if cfg.get(k) in ('tasks', 'feed', 'replies')} or ({'active'} if not cfg else set())
 
 
 def _woke_up(before, after) -> bool:

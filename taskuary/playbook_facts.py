@@ -39,7 +39,9 @@ def compile(store, slug: str, llm=None):
     lines = [l for l in text.splitlines() if l.strip().startswith('-')]
     if not lines: return None
     body = "## From the ledger\n\n_Counted by the outcome ledger; the lines are read from the numbers._\n\n" + '\n'.join(lines) + f"\n\n```\n{facts}\n```"
-    p = {'action': 'amend_playbook', 'slug': slug, 'text': splice(page, body), 'why': facts.replace('\n', '; ')}
+    # `block` is what is applied: spliced into the page AS IT IS when the owner says yes, so an edit made while this waited survives
+    # (the review, 2026-10-12); `text` is the page as it would read today, for the card
+    p = {'action': 'amend_playbook', 'slug': slug, 'block': body, 'text': splice(page, body), 'why': facts.replace('\n', '; ')}
     rid = store.add_review({'TaskId': None, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': f"the ledger's facts about {slug}"})
     store.audit('review', rid, 'proposed', 'reflect', detail={'action': 'amend_playbook', 'slug': slug})
     return rid

@@ -450,6 +450,9 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         out = {'changed': done}
     elif a in ('write_playbook', 'amend_playbook'):
         from . import playbooks
+        if a == 'amend_playbook' and p.get('block') and not edited:      # the ledger's block onto the page as it is NOW (playbook_facts)
+            from .people_pages import splice
+            p['text'] = splice(playbooks.read(p['slug']) or p['text'], p['block'])
         slug = playbooks.write(p['slug'], p['text'])
         out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}
     else:                                   # run_tool

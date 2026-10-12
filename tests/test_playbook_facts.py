@@ -77,5 +77,26 @@ class WorkFactsTests(unittest.TestCase):
         with mock.patch.object(playbooks, 'read', return_value=None):
             self.assertIsNone(playbook_facts.compile(self.s, 'vendor-onboarding', llm=lambda *a, **k: '- a fact [ev: out1]'))
 
+    def test_approving_keeps_edits_made_to_the_playbook_since(self):
+        """review: the proposal carried the whole page as it was; approved weeks later it put back an older page"""
+        self.five()
+        with mock.patch.object(playbooks, 'read', return_value=PAGE):
+            rid = playbook_facts.compile(self.s, 'vendor-onboarding', llm=lambda *a, **k: '- ask first [ev: out1]')
+        later = PAGE + '\n- the owner added this later\n'
+        with mock.patch.object(playbooks, 'read', return_value=later), mock.patch.object(playbooks, 'write', return_value='vendor-onboarding') as w:
+            proposals.execute(self.s, self.s.get_review(rid))
+        self.assertIn('the owner added this later', w.call_args[0][1]); self.assertIn('ask first', w.call_args[0][1])
+
+    def test_a_question_the_owner_answered_is_not_left_open(self):
+        """review: `asked` read the last inbound alone, so a task whose opening mail asked counted open even after the reply"""
+        t = self.s.create_task({'Title': 'Vendor onboarding', 'Tags': playbooks.tag('vendor-onboarding'), 'Status': 'open'}, 'owner')
+        mid = self.s.add_message({'ConversationId': 'cx', 'Channel': 'email', 'Subject': 'Onboarding', 'FromEmail': 'billing@vendor.example', 'SentAt': ago(10),
+                                  'BodyText': 'x', 'Status': 'routed', 'TaskId': t})
+        self.s.add_route(mid, t, 'create', 1.0, 'x', [], 'triage', verdict={'intent': 'task'})
+        self.s.add_message({'ConversationId': 'cx', 'Channel': 'email', 'Subject': 'Re: Onboarding', 'FromEmail': 'alex@northwind.example', 'SentAt': ago(9),
+                            'BodyText': 'done', 'Status': 'context', 'Direction': 'out', 'TaskId': t})
+        self.s.update_task(t, {'Status': 'done'}, 'owner')
+        self.assertFalse(json.loads(outcomes.rows_for(self.s, 'task', t)[0]['FactsJson'])['asked'])
+
 
 if __name__ == '__main__': unittest.main()

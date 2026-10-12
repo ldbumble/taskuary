@@ -853,7 +853,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # ...and A STEP OF A GOAL it serves (spec 2026-10-12): triage named a goal and a step it was shown; the mail lands under it
         sv = intent.get('serves')
         if sv and store.get_task(sv['task']) and any(x['id'] == sv['step'] for x in store.goal_steps(sv['task'])):
-            return _serve_step(store, msg, sv, intent, actor, _notes_note())
+            return _serve_step(store, msg, sv, intent, actor, _notes_note(), pol)
         same = intent.get('same_as')
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
@@ -1195,13 +1195,21 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
     return {'status': 'routed', 'task_id': tid, 'message_id': mid}
 
 
-def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note: str = '') -> dict:
+def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note: str = '', pol: dict = None) -> dict:
     """WHICH STEP DOES THIS SERVE (spec 2026-10-12): the mail lands under the step's own task when somebody holds it, else under
     the goal. A box nobody holds ticks on the model's `done`; a held one is its holder's to close, so the mail goes to them and
     the box waits for their close. The verdict, `serves` with it, rides on the route - store.step_arrivals reads it back."""
     step = next((x for x in store.goal_steps(sv['task']) if x['id'] == sv['step']), None)
     tid, ref, k = (step or {}).get('tid') or sv['task'], task_ref(sv['task']), [x['id'] for x in store.goal_steps(sv['task'])].index(sv['step']) + 1
-    mid = _land(store, msg, tid, 'filed' if intent.get('intent') == 'fyi' else 'routed')
+    work = intent.get('intent') != 'fyi'
+    mid = _land(store, msg, tid, 'routed' if work else 'filed')
+    # ...and what same_as does for the task it joins (the review, 2026-10-12): the sender's escalation, triage's urgency, and - on the
+    # step's own task only - the day it names; a step's day never moves the goal's date. A follow-up on a finished step reopens it.
+    if (pol or {}).get('action') == 'escalate': _escalate(store, tid, pol, actor)
+    elif intent.get('urgent'): _mark_urgent(store, tid, intent, actor)
+    if intent.get('due') and tid != sv['task']: remind.set_due(store, tid, intent['due'], actor)
+    if work and tid != sv['task'] and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): _reopen(store, tid, msg, actor)
+    if work and tid != sv['task'] and intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage')
     store.add_route(mid, tid, 'attach', 1.0, f"triage: serves step {k} of {ref} - {intent.get('why') or ''}" + notes_note, [], 'triage',
                     verdict=_stored_verdict(intent))
     store.add_comment(tid, actor, 'agent', f"From {msg.get('from_name') or msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''}"

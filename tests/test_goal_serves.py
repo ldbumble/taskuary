@@ -71,6 +71,22 @@ class ServesTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s): steps = TestClient(server.app).get(f'/api/tasks/{g}/steps').json()['steps']
         self.assertEqual(([len(x['arrivals']) for x in steps], steps[2]['arrivals'][0]['subject'], steps[2]['done']), ([0, 0, 1], 'Export dry run', False))
 
+    def test_a_held_step_takes_the_mails_urgency_and_day(self):
+        """review: the step branch returned before urgent/due, which same_as applies - a step mail asking for today lost both"""
+        s = MemoryStore(); g, ids = goal(s)
+        c = s.create_task({'Title': 'Ray: schema sign-off', 'Status': 'waiting', 'Assignee': 'person:ray@northwind.example'}, 'owner'); s.link_step(g, ids[1], c, 'owner')
+        ingest_one(s, mail(verdict(intent='task', urgent=True, due=ago()[:10], serves={'task': g, 'step': ids[1], 'done': False}), 'ray@northwind.example', 'Ray Colton', 'Sign-off today'))
+        t = s.get_task(c)
+        self.assertEqual((t['Priority'], str(t['DueAt'])[:10]), ('urgent', ago()[:10]))
+        self.assertFalse(s.get_task(g).get('DueAt'))          # a step's day never moves the goal's date
+
+    def test_a_closed_steps_task_reopens_on_a_new_ask(self):
+        """review: a follow-up on a finished step sat on a closed card nobody looks at"""
+        s = MemoryStore(); g, ids = goal(s)
+        c = s.create_task({'Title': 'Export job', 'Status': 'open'}, 'owner'); s.link_step(g, ids[2], c, 'owner'); s.update_task(c, {'Status': 'done'}, 'owner')
+        ingest_one(s, mail(verdict(intent='task', serves={'task': g, 'step': ids[2], 'done': False}), subject='The export used the old file'))
+        self.assertNotIn(s.get_task(c)['Status'], ('done', 'dropped'))
+
 
 class GoalKindTests(unittest.TestCase):
     def _v(self, **kw):

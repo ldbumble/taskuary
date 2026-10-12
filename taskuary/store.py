@@ -1693,8 +1693,12 @@ class SQLiteStore:
             # KIND of work (playbook_facts.py, build step 5): "closed with a question open" is the model's intent, never a word match
             from . import playbooks as _pb
             if _pb.of_task(was_row):
+                # ...and still open only when the owner's own word did not come after it (the review, 2026-10-12: the opening mail alone
+                # counted every task as closed on an open question)
                 li = self.last_inbound_on_task(task_id); v = self.message_verdict(li['MessageId']) if li else None
-                facts.update(playbook=_pb.of_task(was_row), asked=bool(v and v.get('intent') in ('task', 'reply_only')))
+                own = self.own_reply_on_thread(li.get('ConversationId'), task_id) if li else None
+                facts.update(playbook=_pb.of_task(was_row), asked=bool(v and v.get('intent') in ('task', 'reply_only')
+                                                                    and not (own and str(own.get('SentAt') or '') >= str(li.get('SentAt') or ''))))
             outcomes.record(self, 'task.closed', 'task', task_id, actor, facts=facts)
             from . import advisor
             advisor.notice(self, 'task.closed', 'task', task_id)        # the Advisor on the event (advisor.py)

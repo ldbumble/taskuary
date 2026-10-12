@@ -818,6 +818,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     emails: emailsWaiting,
   })));
   const storyAt = storyPlace(story, { open: stage === "agent" && !sessionView, hasRecord });
+  // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
+  // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
+  const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
+  const pickRepo = () => { setRepoPick(true); if (heldRepo) setResumeAfterRepo({ dispatch: true }); };
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
   const stageProps = (name) => ({ folded: stage !== name, onToggle: stage === name ? null : () => setOpenStage(name) });
@@ -1460,8 +1464,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </Select>
                         {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                           startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                          title="Which checkout the session works in"
-                          onClick={() => setRepoPick(true)}>{repoOf(t) || "pick a repo"}</Button>}
+                          title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
+                          onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
+                        {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
                       </>}
                       {/* a finished task still says what it WAS - the settings read as the record,
                           not as controls. Reopen is the only thing you can do to it, and it lives
@@ -1622,8 +1627,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{brainPill}</Box>}
                       {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                        title="Which checkout the session works in"
-                        onClick={() => setRepoPick(true)}>{repoOf(t) || "pick a repo"}</Button>}
+                        title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
+                        onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
+                      {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
                     </Box>
                   )}
                   </>}

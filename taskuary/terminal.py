@@ -1106,6 +1106,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         # ONE START, whatever the door (A22, 2026-09-25): the interruption is over, a saved session is live again, and the
         # task is no longer queued - the task page's own terminal door skipped all three and left them stale
         resume_task(store, task_id, actor); store.tag_task(task_id, SAVED, False, actor); store.clear_dispatch(task_id)
+        store.tag_task(task_id, 'held:repo', False, actor)    # funnel.HELD_REPO: the repository it waited for is found
     if task_id and store.hold_reviews(task_id, 'held while an agent works the task - the reply is written from what it finds'):
         logger.debug(f'held the pending reply on task {task_id} while {agent or "a session"} works it')
     store.audit('terminal', 0, 'open', actor, detail={'sid': t.sid, 'agent': agent, 'cwd': cwd, 'task': task_id})

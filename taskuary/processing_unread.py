@@ -252,7 +252,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # owner's own work (A10, 2026-09-25)
     from .processing_all import _has_conversation
     queued = active and not workers and not persisted_working and (
-        str(task.get('Assignee') or '').startswith('agent:') or funnel.general_not_started(task, _has_conversation(view, tid), view.get('routes', [])))
+        str(task.get('Assignee') or '').startswith('agent:') or funnel.general_not_started(task, _has_conversation(view, tid), view.get('routes', []))
+        or funnel.held_for_repo(task))    # a start that stopped on "which repository?" is on the rail until you pick one
     # a done task is not work any more - its own row, the assistant's note that became it, AND the mail
     # it was opened from. That last one used to stay in the pipe wearing an fyi face with its task
     # already closed (the owner, 2026-09-07: "it should just go off the unread timeline"), and reading
@@ -346,6 +347,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         card['why_idle'] = funnel.not_started_why(store, card['tid'])
         if not card.get('why'):
             card['why'] = f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'an agent'}, not started yet"
+        if funnel.held_for_repo(task): card['why'] = 'not started - pick a repository for it'
         # ...unless an agent HAD it and is gone. That is not a queue that will clear itself, it is work
         # that stopped, and the owner is the only one who moves it: `stopped`, wearing the cause as its
         # word (the owner, 2026-09-17: "stopped should stay on stopped and shown to user to handle").

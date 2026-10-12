@@ -70,6 +70,23 @@ class ANonStartIsNotAStartTests(unittest.TestCase):
         self.assertEqual(out['dispatch'], 'needs_repo')
         self.assertFalse(out['started'], 'a caller that reads `started` is told the truth')
 
+    def test_the_task_keeps_saying_it_was_not_started_until_a_repo_is_picked(self):
+        """The answer was one line on a sheet that closed at once, and the task said "nobody on it" (the owner, 2026-10-12:
+        "if i don't fill it out it should warn me at least?")."""
+        from taskuary import funnel
+        c, s = TestClient(server.app), server.store
+        tid = s.create_task({'Title': 'go through the budget inputs', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        with mock.patch.object(hub_term, 'start_on_task',
+                               side_effect=ValueError('I could not tell which checkout this belongs in')):
+            c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coder'})
+            c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coder'})
+        self.assertTrue(funnel.held_for_repo(s.get_task(tid)))
+        self.assertEqual(sum('needs a repository' in str(x.get('Body')) for x in s.list_comments(tid)), 1, 'said once, not per press')
+        self.assertIn('needs a repository', funnel.not_started_why(s, tid))
+        self.assertEqual(funnel.agent_story(s, tid)['kind'], 'held', 'the agent step wears "waiting on you"')
+        c.put(f'/api/tasks/{tid}/repo', json={'repo': 'org/app'})
+        self.assertFalse(funnel.held_for_repo(s.get_task(tid)), 'the pick answers the question')
+
 
 if __name__ == '__main__':
     unittest.main()

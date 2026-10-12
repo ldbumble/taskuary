@@ -1830,6 +1830,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a
         # DECISION for the owner, shown as a visible choice, never a session in some other checkout (PW-095)
         if e.status_code == 422 and NEEDS_REPO.search(str(e.detail or '')):
+            from . import funnel; funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
         raise
@@ -1881,6 +1882,7 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
     store.clear_project_evidence(task_id)
     tags = [x for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x and not x.startswith('repo:')]
     if body.repo: tags.append(f'repo:{body.repo}')
+    if body.repo: tags = [x for x in tags if x != 'held:repo']    # the question a held start asked (funnel.HELD_REPO) is answered
     store.update_task(task_id, {'Tags': ' '.join(tags)}, ACTOR)
     # a repo Taskuary knows about but has no path for cannot be opened - take the path here
     if body.repo and body.path:
@@ -2729,6 +2731,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
         # This is a decision, not a failed action. The message may only just have become a task,
         # so return its id and let the card ask which repo before resuming the same dispatch.
         if e.status_code == 422 and NEEDS_REPO.search(reason):
+            from . import funnel; funnel.hold_for_repo(store, tid, reason)
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
                     'ref': task_ref(tid), 'reason': reason}
         raise

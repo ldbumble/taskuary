@@ -124,6 +124,12 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp }) => {
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       {now ? <SessionRecord s={now} pages={pages} draft={draft} /> : <PublishedPages pages={pages} />}
+      {/* what ended it upstream (a merge, a close) - ADDED under what the agent did, never in its place (the owner, 2026-10-12) */}
+      {rec.ended?.text && <Box sx={{ ...sec, display: "flex", gap: 1, alignItems: "baseline" }}>
+        <Typography sx={{ ...head, mb: 0, flexShrink: 0 }}>Since then</Typography>
+        <Typography sx={{ fontSize: 12.5, color: INK, flex: 1, minWidth: 0 }}>{rec.ended.text}</Typography>
+        {rec.ended.at && <Typography sx={{ fontSize: 11, color: FAINT, flexShrink: 0 }}>{String(rec.ended.at).slice(0, 16)}</Typography>}
+      </Box>}
       {!!before.length && <Box sx={{ mt: 1.2, pt: 1, borderTop: `1px solid ${BORDER}` }}>
         <Typography sx={head}>Earlier sessions · {before.length}</Typography>
         {before.map((s) => <Earlier key={s.sid} s={s} />)}

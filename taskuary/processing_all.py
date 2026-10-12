@@ -51,9 +51,23 @@ def advisor_task(t: dict) -> bool:
     return str(t.get('Source') or '') == 'assistant' and str(t.get('SourceRef') or '').startswith('assistant:idea:')
 
 
-def task_mark(tasks) -> str | None:
-    return next((str(t['Source']) for t in tasks or [] if t.get('Source') not in (None, '', 'manual')
-                 and (t.get('Source') != 'assistant' or advisor_task(t))), None)
+def task_mark(tasks, messages=()) -> str | None:
+    t = next((t for t in tasks or [] if t.get('Source') not in (None, '', 'manual')
+              and (t.get('Source') != 'assistant' or advisor_task(t))), None)
+    return (advised_item(t, messages) or str(t['Source'])) if t else None
+
+
+def advised_item(t: dict, messages=()) -> str | None:
+    """...and an Advisor idea ABOUT something already here - "review these two pull requests" - points at the work, it is
+    not where the work came from: the item it read was in before the task was opened, so its mark is the item's (the
+    owner, 2026-10-12: "why does number 1 show advisor not github pr?" - the row wore the PR's rank under the Advisor's
+    icon). Anything that joined AFTER the Advisor opened it still wears the Advisor's (the report run of 2026-09-28)."""
+    if not advisor_task(t): return None
+    from .coder import no_one_behind
+    opened = str(t.get('CreatedAt') or '')
+    before = [m for m in messages or () if m.get('TaskId') in (None, t.get('TaskId')) and m.get('Direction') != 'out'
+              and not no_one_behind(m.get('Channel')) and opened and str(m.get('CreatedAt') or '') <= opened]
+    return str(min(before, key=lambda m: str(m.get('CreatedAt') or ''))['Channel']) if before else None
 
 
 def idea_lane(idea: dict) -> str:
@@ -404,7 +418,7 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
             title = message.get('Subject') or legacy.get('Title') or 'Message'
             actor, stamp = message.get('FromName') or message.get('FromEmail') or '', message.get('SentAt') or message.get('CreatedAt')
             channel, source, status = message.get('Channel') or '', message.get('SourceName') or '', message.get('Status') or ''
-            channel = task_mark(view.get('tasks', [])) or channel
+            channel = task_mark(view.get('tasks', []), view.get('messages', [])) or channel
             preview, category = legacy['Preview'], legacy['Category']
         else:
             generic = _generic_target(item, query, cutoff, vehicles_only=not shown,

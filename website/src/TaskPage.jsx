@@ -42,7 +42,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -66,7 +66,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails,
-  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentElsewhere, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
@@ -195,8 +195,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sessionAlive = !!detail?.session?.alive;
   const hasRunningRun = (detail?.runs || []).some((r) => r.Status === "running");
   const hasCoderReport = (detail?.comments || []).some((c) => /^CODER REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()));
-  // the write-up as FILED - the report and the agent's own last message - where the wrap's reply carried only the first
-  const filedReport = [...(detail?.comments || [])].reverse().find((c) => /^CODER REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()))?.Body;
   const hasTranscript = !!detail?.transcript;
   const detailTaskStatus = detail?.task?.Status;
   useEffect(() => {
@@ -593,6 +591,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const proposals = allProposals.filter((p) => !(pendingReview && p === closeoutRv));
   const sentReview = sentReplyReview(detail?.reviews || []);
   const unsentReview = sentReview ? null : unsentReplyReview(detail?.reviews || []);
+  // the agent's record, one mount wherever the Agent work step draws it (the wrapped card, the step once that is dismissed)
+  const recordProps = { taskId: selected, pages: isGeneral ? [] : (detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown"),
+    draft: (() => { const r = pendingReview || unsentReview || sentReview; return r ? r.FinalText || r.DraftText || "" : ""; })(),
+    stamp: `${(detail?.comments || []).length}-${detail?.transcript?.at || ""}-${(detail?.artifacts || []).length}` };
+  // ...and what already went out, so Close out says it instead of offering an empty letter: the ending upstream (a merge, a
+  // close) and what you - or an agent under your login - sent outside Taskuary (the owner, 2026-10-12: "if agent already
+  // sent message show what it sent")
+  const ended = detail?.ended || null;
+  const sentOutside = sentElsewhere(detail?.messages || []);
   // A successful Review send is the reply even before (or when) the external channel ingests an
   // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
   // message; otherwise completed tasks showed one inbound message and claimed that was the whole
@@ -1483,9 +1490,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     || (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result")) && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
                       {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
-                      <AgentRecord taskId={selected} pages={isGeneral ? [] : (detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
-                        draft={(() => { const r = pendingReview || unsentReview || sentReview; return r ? r.FinalText || r.DraftText || "" : ""; })()}
-                        stamp={`${(detail?.comments || []).length}-${detail?.transcript?.at || ""}-${(detail?.artifacts || []).length}`} />
+                      <AgentRecord {...recordProps} />
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                     </Box>
                   )}
@@ -1593,9 +1598,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       </Typography>
                       <Button size="small" sx={{ fontSize: 11 }} onClick={() => setWrapped(null)}>dismiss</Button>
                     </Box>
-                    {/* the filed write-up - what it said last, what it saved - not the wrap's one-line summary (the owner, 2026-10-11:
-                        "where is the summary of what the agent did") */}
-                    <CoderReport body={filedReport || wrapped.report} artifacts={detail?.artifacts || wrapped.artifacts || []} />
+                    {/* THE SAME RECORD the step shows once the card is gone - what happened, its last message, what it saved - so a
+                        later ending (merged, closed) is a line ADDED to it and never its replacement. It drew the newest CODER REPORT,
+                        and the poll that saw the merge filed a second one whose "last message" was our own sentence: the agent's account
+                        was there, then gone (the owner, 2026-10-12: "it was there and then disappeared?") */}
+                    <AgentRecord {...recordProps} />
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>
                       The session ended and its write-up was saved. The task stays open until you mark it done;
                       reply separately if someone is waiting. Start another session and the agent is handed this,
@@ -1603,7 +1610,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Typography>
                     {/* the card used to name Review without offering a way to get there - but with Close out already open below it, the
                         button opened what was open and did nothing (the owner, 2026-10-11): offered only when the draft is out of sight */}
-                    {wrapped.drafting && stage !== "reply" && (
+                    {/* ...and only while there IS one: the wrap's answer said "drafting", the merge retired that draft a few seconds
+                        later, and the button opened an empty Close out (2026-10-12) - the review on the task decides, not the reply */}
+                    {pendingReview && stage !== "reply" && (
                       <Button size="small" variant="contained" disableElevation sx={{ mt: 1 }}
                         startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
                         onClick={() => setOpenStage("reply")}>Read the draft</Button>
@@ -1675,6 +1684,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       ? (replyMessage ? "Close-out controls return when the agent stops." : "No inbound sender is attached to this task.")
                       : closeoutRv
                         ? (replyMessage ? "Your reply to the sender and the last act on GitHub - approving them closes the task." : "The last act on GitHub - approving it closes the task.")
+                      : ended && !pendingReview ? "It ended upstream, so no reply is owed. What already went out is below."
                       : replyMessage
                         ? (owesEmails ? "What goes back to the sender, and the emails this task owes. It closes when they are all sent or dropped."
                           : pendingReview ? "What goes back to the sender." : "What goes back to the sender. Sending it closes the task.")
@@ -1699,7 +1709,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           </Tooltip>
                         </Box>
                       : null} />
-                  {stage === "reply" && ((pendingReview || proposals.length || replyMessage || owesEmails) ? (
+                  {stage === "reply" && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
                       <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
@@ -1743,10 +1753,33 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>
+                          {/* WHAT ALREADY WENT OUT, before any envelope: the item ending upstream (the agent's merge) and what was sent
+                              from outside a draft here. With neither, a merged pull request's Close out was a bare "To <sender>" over
+                              nothing (the owner, 2026-10-12: "i hit read the draft and nothing is there anyway?") */}
+                          {ended && (
+                            <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
+                              <Typography sx={{ ...label, flexShrink: 0 }}>Ended</Typography>
+                              <Typography variant="body2" sx={{ color: INK, flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{ended.text}</Typography>
+                              {ended.at && <Typography variant="caption" sx={{ color: FAINT, flexShrink: 0 }}>{fmtDateTime(ended.at)}</Typography>}
+                            </Box>
+                          )}
+                          {sentOutside.map((m) => (
+                            <Box key={m.MessageId} sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25, px: 1.1, py: 0.85, mt: 0.9 }}>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, minWidth: 0 }}>
+                                <ChannelIcon channel={m.Channel} sx={{ color: FAINT }} />
+                                <Typography sx={{ ...label, flex: 1 }}>Already sent{m.SourceName ? ` · ${m.SourceName}` : ""}</Typography>
+                                {m.SentAt && <Typography variant="caption" sx={{ color: FAINT }}>{fmtDateTime(m.SentAt)}</Typography>}
+                              </Box>
+                              <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere", mt: 0.4 }}>
+                                {m.OwnText || m.BodyText}</Typography>
+                              {m.SourceLink && <Button size="small" sx={{ mt: 0.5, fontSize: 11, minHeight: 0, p: 0 }} href={m.SourceLink} target="_blank" rel="noreferrer">Open where it was sent</Button>}
+                            </Box>
+                          ))}
                           {/* THE ENVELOPE over what was sent, read from the same Deliver blob
                               (replyDelivery.js). Read-only: this one is history, not a decision. Only where there is a reply:
-                              a task with nobody to answer read "To You" under its own emails (2026-10-09) */}
-                          {(replyMessage || sentReview) && (
+                              a task with nobody to answer read "To You" under its own emails (2026-10-09) - and only over a letter
+                              once the item has ended, where it named a sender nothing is going to */}
+                          {(replyMessage || sentReview) && (!ended || sentReview || unsentReview) && (
                           <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
                             <Typography sx={{ ...label, flexShrink: 0 }}>To</Typography>
                             <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>

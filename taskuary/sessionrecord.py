@@ -14,6 +14,7 @@ was pointed at), `plan` (its todo list) or `error`. Tool OUTPUT is left out on p
 is read past, and the agent's next thought or answer says what it made of it."""
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
@@ -280,6 +281,24 @@ def parse_report(body: str) -> dict:
 def _when(s) -> str: return str(s or '').replace('T', ' ')[:19]
 
 
+def _local(at) -> str:
+    """A step's time as the store writes one (local, 'YYYY-MM-DD HH:MM:SS'): a CLI log stamps UTC ('...Z')."""
+    s = str(at or '')
+    if not re.search(r'(Z|[+-]\d\d:?\d\d)$', s): return _when(s)
+    try: return datetime.fromisoformat(s.replace('Z', '+00:00')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+    except ValueError: return _when(s)
+
+
+def _keeps_last(s: dict, rep: dict) -> bool:
+    """A second write-up of a session nothing has happened in since the first is a RE-WRAP - the same transcript read again
+    with no agent left to speak - so it may not replace the agent's last message: an upstream ending filed its own sentence
+    there, and the card swapped the agent's account of its merge for "was merged on GitHub" (2026-10-12)."""
+    prev = s.get('report') or {}
+    if not prev.get('last') or prev.get('last') == rep.get('last'): return False
+    times = [_local(x['at']) for x in s['steps'] if x.get('at')]
+    return bool(times) and max(times) <= _when(prev.get('at'))
+
+
 def _nearest(sessions: list, at: str):
     """Which session a note belongs to: the first that ended at or after it (a report is written, then the pty closes),
     else the last one before it (a session wrapped up from its filed transcript, after the pane had gone)."""
@@ -311,7 +330,9 @@ def record(store, tid: int) -> dict:
     sessions.sort(key=lambda s: s['at'])
     for c in store.list_comments(tid):
         if str(c.get('Body') or '').startswith('CODER REPORT') and (s := _nearest(sessions, c.get('CreatedAt'))):
-            s['report'] = parse_report(c['Body']) | {'by': c.get('Actor') or '', 'at': _when(c.get('CreatedAt'))}
+            rep = parse_report(c['Body'])
+            if _keeps_last(s, rep): rep['last'] = s['report']['last']
+            s['report'] = rep | {'by': c.get('Actor') or '', 'at': _when(c.get('CreatedAt'))}
     arts = store.list_task_artifacts(tid)
     for a in sorted((a for a in arts if a.get('Kind') == 'agent_result'), key=lambda a: str(a.get('CreatedAt') or '')):
         p = session_artifacts.confined(a.get('Path'))
@@ -325,4 +346,6 @@ def record(store, tid: int) -> dict:
         # which stays in the full record as the summary it is
         s['result'] = s.get('answer') or rep.get('last') or said or rep.get('summary') or ''
         s.update(summarise(s['steps']))
-    return {'sessions': sessions[::-1]}
+    # ...and what ended it upstream (a merge, a close), as a status line ADDED to the record, never in place of it
+    from .channels import ended_line
+    return {'sessions': sessions[::-1], 'ended': ended_line(store, tid)}

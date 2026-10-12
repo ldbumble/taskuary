@@ -90,7 +90,7 @@ def _jira_ended(store, issue, base: str) -> bool:
         where, key = (f.get('status') or {}).get('name') or 'Done', base.split(':', 1)[-1]
         said = (f'The Jira issue this task came from was moved to {where} '
                 f'({key}), so there is nothing left to do here.')
-        close_upstream_ended(store, tid, said, f'{key} was moved to {where} in Jira - {said}')
+        close_upstream_ended(store, tid, said)
         logger.info(f'jira: {base} is {where} - closed TQ-{tid:04d}')
     return True
 

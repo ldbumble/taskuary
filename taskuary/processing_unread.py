@@ -221,7 +221,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                        HasDraft=bool(review.get('DraftText')))
         cards = funnel.from_feed(store, [row], canonical=True)
         card = cards[0]
-        card['channel'] = processing_all.task_mark([task]) or card.get('channel')
+        card['channel'] = processing_all.task_mark([task], view.get('messages', [])) or card.get('channel')
     else:
         target = compact['open_target']
         kind = target['kind']

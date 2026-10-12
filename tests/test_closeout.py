@@ -427,7 +427,7 @@ class ContributorPullRequestTests(unittest.TestCase):
         from taskuary import channels
         s = armed(MemoryStore()); tid = self._reviewed(s, 'waiting')
         rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks - merged.'})
-        channels.close_upstream_ended(s, tid, 'You merged this pull request on GitHub.', 'merged', 'owner')
+        channels.close_upstream_ended(s, tid, 'You merged this pull request on GitHub.', 'owner')
         self.assertEqual(s.get_task(tid)['Status'], 'done'); self.assertNotEqual(s.get_review(rid)['Status'], 'pending')
 
 

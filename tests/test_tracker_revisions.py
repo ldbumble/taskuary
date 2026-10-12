@@ -311,10 +311,11 @@ class UpstreamEndingTests(unittest.TestCase):
         self.poll(s, [gh_item(state='closed')], closer='ray')
         self.assertEqual(finish_evidence(s, tid)['who'], 'Its issue')
 
-    def test_closing_goes_through_the_normal_ending_with_the_last_message(self):
+    def test_closing_goes_through_the_normal_ending_and_says_why_beside_it(self):
         """Not a bare status flip: the same wrap every other ending gets, so the report is
-        written, proposals become reviews, the sender gets their reply - and the cause is
-        recorded as the LAST MESSAGE rather than vanishing into a status change."""
+        written and proposals become reviews - and the cause is the router's own line on the task,
+        never the agent's LAST MESSAGE (2026-10-12: the card swapped the agent's account of its merge
+        for "was merged on GitHub")."""
         from taskuary import coder
         s = MemoryStore()
         self.poll(s, [gh_item()])
@@ -322,8 +323,9 @@ class UpstreamEndingTests(unittest.TestCase):
         with mock.patch.object(coder, 'wrap', return_value={'wrap': 'done'}) as w:
             self.poll(s, [gh_item(state='closed')])
         self.assertEqual(w.call_args.kwargs.get('close'), True)
-        self.assertIn('closed', w.call_args.kwargs.get('final_message', '').lower())
-        self.assertIn('#42', w.call_args.kwargs.get('final_message', ''))
+        self.assertFalse(w.call_args.kwargs.get('final_message'))
+        said = [c['Body'] for c in s.list_comments(tid) if c.get('Actor') == 'router']
+        self.assertTrue(any('closed' in b and '#42' in b for b in said), said)
 
     def test_a_task_with_no_session_still_closes(self):
         """wrap refuses a task that never had a transcript ('nothing to wrap up'). TQ-0550 was

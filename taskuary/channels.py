@@ -1155,15 +1155,18 @@ def gh_login(store, tok: str) -> str:
     return me
 
 
-def close_upstream_ended(store, tid: int, said: str, final: str, actor: str = 'router'):
+def close_upstream_ended(store, tid: int, said: str, actor: str = 'router'):
     """Close a task whose upstream item is over - through the NORMAL ending, not a status flip.
 
     wrap() is the same call the Done button makes: the report is written, the transcript becomes
-    an artifact, proposals become reviews and the sender gets their drafted reply. The cause
-    rides in as the LAST MESSAGE, so the task says what ended it in the place every other ending
-    is recorded. A task that never had a session has nothing to wrap ('nothing to wrap up') -
-    that refusal is expected, and must not leave the dead task sitting in the work list."""
-    from . import coder, proposals
+    an artifact, proposals become reviews. The cause is said ONCE, as the router's own line on the
+    task (ended_line) - a status beside the agent's write-up, never inside it. It used to ride in
+    as the wrap's LAST MESSAGE, so a PR the agent itself merged got a second CODER REPORT whose
+    "last message" was this sentence, and the card swapped the agent's account of the merge for
+    "was merged on GitHub" a few seconds after showing it (2026-10-12). A task that never had a
+    session has nothing to wrap ('nothing to wrap up') - that refusal is expected, and must not
+    leave the dead task sitting in the work list."""
+    from . import coder, proposals, selfclose, terminal as term
     # said once: a task kept open below for its unsent reply meets this ending again on a later poll
     if not any(c.get('Body') == said for c in store.list_comments(tid)): store.add_comment(tid, 'router', 'agent', said)
     # a close-out waiting on the owner (close the issue, merge) is answered by the upstream ending itself
@@ -1171,8 +1174,18 @@ def close_upstream_ended(store, tid: int, said: str, final: str, actor: str = 'r
     if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, actor, 'the item ended upstream')
     # ...and a merged or closed item is FINISHED, a thank-you drafted beside it included: it closes, and closing retires
     # the unsent draft (the owner, 2026-09-28: "if they were merged in, they should just close")
+    # A SESSION ALREADY SAVED IS NOT WRAPPED AGAIN: its write-up is on the task, and a second one read the same transcript
+    # with no agent left to speak, so its last message could only be ours. The draft it left is decided, kept to read.
+    live = getattr(term.session_for(tid), 'alive', False)
+    if term.SAVED in str((store.get_task(tid) or {}).get('Tags') or '') and not live:
+        for r in store.list_reviews('pending'):
+            if r.get('TaskId') == tid and r.get('Kind') not in ('action', 'slot'):
+                store.decide_review(r['ReviewId'], 'no_reply', None, actor, 'the item ended upstream')
+        selfclose.unclaim(store, tid, actor)
+        store.update_task(tid, {'Status': 'done'}, actor)
+        return
     try:
-        coder.wrap(store, tid, close=True, actor=actor, final_message=final, no_reply=True)   # a merged PR owes nobody a reply (A21)
+        coder.wrap(store, tid, close=True, actor=actor, no_reply=True)   # a merged PR owes nobody a reply (A21)
     except ValueError as e:
         logger.info(f'TQ-{tid:04d}: nothing to wrap up ({e}) - closing it plainly')
         store.update_task(tid, {'Status': 'done'}, actor)
@@ -1182,6 +1195,15 @@ def close_upstream_ended(store, tid: int, said: str, final: str, actor: str = 'r
 
 
 ENDED_SAID = 'so there is nothing left to do here.'
+
+
+def ended_line(store, tid: int, comments: list = None):
+    """What ended this task upstream - the router's own line ("... was merged on GitHub ..., so there is nothing left to
+    do here.") and when it was said - or None. A STATUS beside the agent's write-up: the Agent work card adds it, Close
+    out says it instead of offering a reply nobody is owed."""
+    c = next((c for c in reversed(comments if comments is not None else store.list_comments(tid))
+              if c.get('Actor') == 'router' and str(c.get('Body') or '').endswith(ENDED_SAID)), None)
+    return {'text': c['Body'], 'at': c.get('CreatedAt')} if c else None
 
 
 def heal_upstream_ended(store) -> list:
@@ -1194,10 +1216,9 @@ def heal_upstream_ended(store) -> list:
         # the Board's list keeps TODAY's finished tasks too: re-closing them wrote a fresh AI report and two comments on
         # every launch, and eight of them held the first page back a minute (the owner, 2026-09-28)
         if t.get('Status') in ('done', 'dropped'): continue
-        said = next((c['Body'] for c in reversed(store.list_comments(t['TaskId']))
-                     if c.get('Actor') == 'router' and str(c.get('Body') or '').endswith(ENDED_SAID)), None)
+        said = (ended_line(store, t['TaskId']) or {}).get('text')
         if not said: continue
-        close_upstream_ended(store, t['TaskId'], said, said, 'owner' if said.startswith('You ') else 'router')
+        close_upstream_ended(store, t['TaskId'], said, 'owner' if said.startswith('You ') else 'router')
         closed.append(t['TaskId'])
     if closed: logger.info(f"github: closed {len(closed)} task(s) whose item had already ended: {closed}")
     return closed
@@ -1228,12 +1249,12 @@ def _gh_ended(store, item: dict, base: str, repo: str, tok: str = None) -> int:
         logger.warning(f'github: who ended {base} could not be read ({e})'); who = ''
     mine = bool(who and who in whoami.github_logins(store))
     if mine: said = f"You {what} this {kind} on GitHub ({repo}#{item['number']}), so there is nothing left to do here."
-    close_upstream_ended(store, tid, said, f'{repo}#{item["number"]} was {what} on GitHub - {said}', 'owner' if mine else 'router')
+    close_upstream_ended(store, tid, said, 'owner' if mine else 'router')
     logger.info(f'github: {base} was {what} - closed TQ-{tid:04d}')
     return 0
 
 
-def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, llm, file_only: bool) -> int:
+def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, llm, file_only: bool, own_only: bool = False) -> int:
     """Comments on one issue or PR, as messages on the ITEM's conversation - which is what makes
     identity_route attach them to its task, re-judge them and rewrite a draft that is now behind.
 
@@ -1248,7 +1269,7 @@ def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, l
     for c in comments:
         u = c.get('user') or {}
         who, ext = u.get('login') or 'github', f"{base}:c{c.get('id')}"
-        if store.message_exists(ext): continue
+        if store.message_exists(ext) or (own_only and not (me and who == me)): continue
         msg = {'external_id': ext, 'channel': 'github', 'subject': f"Re: {item.get('title') or base}",
                'body': (c.get('body') or '')[:20000], 'from_name': who,
                'from_email': f'{who}@users.noreply.github.com', 'conversation_id': base,
@@ -1298,7 +1319,13 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
         if (i.get('state') or 'open') != 'open':
             # an ending we never saw begin is history: a backfill reaches items closed long
             # before Taskuary existed, and none of those is a job for anybody
-            if known: n += _gh_ended(store, i, base, repo, tok)
+            if known:
+                # ...and what WE said on it before it ended comes back first: an agent that comments and merges in one go
+                # left its comment unread for good, because an ended item's conversation was never read again (2026-10-12)
+                tid = store.task_for_conversation(base)
+                if tid and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+                    n += _gh_comments(store, src, tok, repo, i, base, llm, True, own_only=True)
+                n += _gh_ended(store, i, base, repo, tok)
             continue
         # a robot filing its own chore (a downloads chart, a dependency bump) is not somebody
         # asking the owner for something - the same rule its comments get

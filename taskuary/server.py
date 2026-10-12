@@ -1197,9 +1197,18 @@ def task_detail(task_id: int):
             'ranOn': _ran_on(task_id, tr),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': _agent_story(task_id),
+            # ...and what ended it upstream (a merge, a close): Close out says that instead of an empty reply nobody is owed
+            'ended': _ended_line(task_id, d.get('comments')),
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}
+
+
+def _ended_line(task_id: int, comments=None):
+    from .channels import ended_line
+    try: return ended_line(store, task_id, comments)
+    except Exception as e:
+        logger.debug(f'task {task_id}: ended line skipped - {e}'); return None
 
 
 def _agent_story(task_id: int):

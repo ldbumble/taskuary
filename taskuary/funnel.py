@@ -472,6 +472,17 @@ def todays_brief(item: dict) -> bool:
 
 
 AUTO_OFF = 'not auto-worked:'          # the clause triage writes on a route it declined to start
+# A START THAT ASKED "WHICH REPOSITORY?" (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?"): the
+# answer was a line on a sheet that closed at once, and the task said "nobody on it" as if nothing had been asked for
+HELD_REPO = 'held:repo'
+
+def held_for_repo(t) -> bool: return HELD_REPO in re.split(r'[\s,]+', str((t or {}).get('Tags') or ''))
+
+def hold_for_repo(store, tid, reason=''):
+    "The start stopped on a repository nobody named: the task says so until a repo is set or a session opens."
+    if store.tag_task(tid, HELD_REPO, True, 'router'):
+        store.add_comment(tid, 'router', 'agent', 'Not started: it needs a repository. '
+                          + (' '.join(str(reason).split())[:200] + ' ' if reason else '') + 'Pick a repo on the task and the session starts.')
 
 
 def not_started_why(store, tid) -> str:
@@ -496,6 +507,7 @@ def not_started_why(store, tid) -> str:
         return 'You ended the session - its report is written. Continue it, or mark the task done.'
     if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
         return f'Taskuary closed while {who} had this, so the session went with it. Nothing restarts by itself.' + old
+    if held_for_repo(t): return f'{who} did not start: it needs a repository - pick a repo and the session starts.' + old
     # THE QUEUE SAYS WHY (A3, 2026-09-25): a full house, a start that keeps failing and a CLI that is not installed all
     # read "nothing has started it" - only the Tasks list showed the queue
     q = store.get_dispatch(tid) or {}
@@ -559,7 +571,7 @@ def agent_story(store, tid) -> dict | None:
     tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
     who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
     left, q, why = agent_left(store, tid), store.get_dispatch(tid), not_started_why(store, tid)
-    held = why.startswith('Triage did not start it')
+    held = why.startswith('Triage did not start it') or held_for_repo(t)
     if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held): return None
     # the page leads a hold with "<agent> did not start:", so triage's own lead-in is not said twice
     if not left: return {'kind': 'held' if held else 'queued' if q else 'idle', 'line': why.split(': ', 1)[1] if held else why}
@@ -908,7 +920,7 @@ def _band(item):
 # by its heading, and the phone doorway offers the same sections as picks - so the walk and the rail must agree on
 # which row is in which: For later is work walked past with Next or put away with Remind me; Advisor ideas is an
 # idea still only an idea (made a task, it is work like any other).
-SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'agents': 'Agents working', 'later': 'For later',
+SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'goals': 'Goals', 'agents': 'Agents working', 'later': 'For later',
                  'reports': 'Reports', 'ideas': 'Advisor ideas', 'fyi': 'FYI'}
 _LEVEL_OF_BAND = {1: 'urgent', 2: 'task', 3: 'reports', 4: 'fyi', 5: 'agents'}
 # the page's fallback for a row that carries no band (funnelPile.attentionBand) - kept identical, never _band's
@@ -922,6 +934,9 @@ def level_of(item: dict) -> str:
         if item.get('kind') == 'meeting' and (item.get('calendar_ready') is False or (item.get('mins') or 0) > 15): band = 2
         elif item.get('kind') == 'agentdone': band = 2
         else: band = _BAND_FALLBACK.get(item.get('lane'), 2)
+    # A GOAL is one row and never gone: Goals while it has news you have not walked past, For later once you have (spec
+    # 2026-10-12). `surfaced` is the Passed mark: a read open task stays unread on purpose, so unread cannot be the signal.
+    if str(item.get('kind') or '').startswith('goal'): return 'goals' if item.get('news') and not item.get('surfaced') else 'later'
     # FOR LATER IS WHAT YOU PUT THERE - Next or Remind me - never a card merely shown: clicking another row on the rail moved the
     # task on the table under For later for three hours (the owner, 2026-10-08: "it moved 1003 automatically to later?")
     if band == 2 and (item.get('put_down') or item.get('deferred')): return 'later'

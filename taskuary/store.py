@@ -44,7 +44,8 @@ def _delivery_claim_alive(claim):
 GENESIS = '0' * 64
 # the channels Taskuary writes itself - its reports and the Advisor's ideas - which carry no sender address
 OWN_CHANNELS = ('report', 'assistant')
-TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt')
+TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt',
+             'DoneWhen', 'ParentId')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
             'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass')
@@ -146,6 +147,7 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 # numbering read as skipping.
 INTERNAL_TASK_BASE = 1_000_000_000
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
+def is_goal(t) -> bool: return bool((t or {}).get('DoneWhen'))      # a goal is a task with a done-when sentence (spec 2026-10-12)
 def auto_code_enabled(src) -> bool:
     """Does new coding work start its agent by itself? ONE read of `coder_auto_enabled` (a store or its settings
     dict), missing = the seeded default. Four readers used to disagree: three read missing as off, one as on."""
@@ -245,7 +247,7 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
   Assignee TEXT, Source TEXT DEFAULT 'manual', SourceRef TEXT, Tags TEXT,
   CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT, ClosedAt TEXT, RemindAt TEXT,
   AskedVia TEXT, AskedTold TEXT, AskedToldAt TEXT, AskedWatch TEXT, AskedSeenMid INTEGER, RemindVia TEXT, RemindOwed TEXT,
-  AskedWatchAt TEXT, AskedNudgedAt TEXT, DueAt TEXT, DueSaid TEXT, DueRaised TEXT);
+  AskedWatchAt TEXT, AskedNudgedAt TEXT, DueAt TEXT, DueSaid TEXT, DueRaised TEXT, DoneWhen TEXT, ParentId INTEGER);
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
@@ -868,6 +870,10 @@ class SQLiteStore:
             # only the assistant's own urgent - any other write of Priority clears it (update_task)
             for col in ('AskedWatchAt', 'AskedNudgedAt', 'DueAt', 'DueSaid', 'DueRaised'):
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
+            # a GOAL is a task with a done-when sentence and a date; its boxes may point at child tasks, which carry the
+            # parent (spec 2026-10-12, goals as tasks). Derived everywhere from DoneWhen - no kind, no second object.
+            if 'DoneWhen' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN DoneWhen TEXT')
+            if 'ParentId' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN ParentId INTEGER')
             # an email slot an agent addressed as "Name <address>" handed the provider the whole string (TQ-0957): the
             # recipient is the address, the name rides beside it (slots.split) - repaired once, on start
             from .slots import split
@@ -916,6 +922,11 @@ class SQLiteStore:
                             'Sender TEXT, Topic TEXT, Verdict TEXT, VerdictRouteId INTEGER, Change TEXT, ContextJson TEXT, CreatedAt TEXT)')
             self.cx.execute('CREATE TABLE IF NOT EXISTS discussion (Id INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER, Actor TEXT, '
                             'Body TEXT, OpId TEXT, CreatedAt TEXT)')
+            # THE OUTCOME LEDGER (spec 2026-10-12, build step 2): what the app did, what the owner did next, what came of
+            # it - resolved later by outcomes.resolve from facts already here. Evidence for reflection, never a rule.
+            self.cx.execute('CREATE TABLE IF NOT EXISTS outcome (Id INTEGER PRIMARY KEY, Kind TEXT, TargetKind TEXT, TargetId INTEGER, '
+                            'Actor TEXT, At TEXT, FactsJson TEXT, NextMove TEXT, NextAt TEXT, Outcome TEXT, ResolvedAt TEXT, Verdict TEXT)')
+            self.cx.execute('CREATE INDEX IF NOT EXISTS outcome_target ON outcome(TargetKind, TargetId)')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')
@@ -1626,6 +1637,7 @@ class SQLiteStore:
     def update_task(self, task_id, fields, actor):
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
+        was = (self._one('SELECT Status FROM task WHERE TaskId=?', (task_id,)) or {}).get('Status') if 'Status' in fields else None
         # ClosedAt describes the CURRENT lifecycle, not merely that the task was closed once.
         # An explicit reopen used to change Status while retaining the old close timestamp, so
         # the API simultaneously said "waiting" and "closed" and different views chose a
@@ -1655,6 +1667,14 @@ class SQLiteStore:
             items = self.task_checklist(task_id)
             if any(not i.get('done') for i in items):
                 self._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps([{**i, 'done': True} for i in items]), task_id))
+            self._tick_parent_step(task_id, actor)
+        # THE LEDGER'S ONE CLOSE DOOR (outcomes.py): every road that closes a live task - Done, a batch, the chat, a self-close, a
+        # pull request's end - passes here, so the "did it stay closed?" row is written once, from the same place. A write that
+        # leaves the task waiting (a self-close that drafted a reply) is not a close and gets no row; a delivered promise is
+        # already its own row (promise.made) and the actor says so.
+        if fields.get('Status') in ('done', 'dropped') and was not in (None, 'done', 'dropped') and actor != 'promise':
+            from . import outcomes
+            outcomes.record(self, 'task.closed', 'task', task_id, actor, facts={'from': was, 'to': fields['Status']})
         self._bump_snapshots()
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)
@@ -1717,7 +1737,7 @@ class SQLiteStore:
                                 if digest[:n] not in used_ids), digest)
             used_ids.add(item_id)
             items.append({'id': item_id, 'text': text, 'done': bool(prior.get('done')),
-                          **{k: prior[k] for k in ('out', 'rid') if k in prior}})     # a slot keeps what it sends and its draft
+                          **{k: prior[k] for k in ('out', 'rid', 'tid') if k in prior}})     # a slot keeps what it sends and its draft; a step its child
         self._write_checklist(task_id, items, actor)
         return items
     def merge_task_checklist(self, task_id, texts, actor: str) -> list:
@@ -1761,6 +1781,31 @@ class SQLiteStore:
             tail = (f" -> email to {o.get('to')}{maybe}, " + ('drafted' if i.get('rid') else f"fill with `taskuary --slot {i['id']} --draft \"<text>\"`")) if o else ''
             return f"- [{'x' if i.get('done') else ' '}] {i['text']}{tail}"
         return '\n'.join(line(i) for i in self.task_checklist(task_id))
+    # ── goals: a task whose boxes are tasks (spec 2026-10-12) ─────────────────────────────────
+    def children(self, task_id) -> list:
+        return self._rows('SELECT * FROM task WHERE ParentId=? ORDER BY TaskId', (task_id,))
+    def goal_steps(self, task_id) -> list:
+        """Every box of the goal with the child task behind it, in the goal's own order."""
+        kids = {t['TaskId']: t for t in self.children(task_id)}
+        return [{'id': i['id'], 'text': i['text'], 'done': bool(i.get('done')), 'tid': i.get('tid'), 'child': kids.get(i.get('tid'))}
+                for i in self.task_checklist(task_id)]
+    def link_step(self, task_id, item_id: str, child_tid: int, actor: str) -> bool:
+        items = self.task_checklist(task_id)
+        hit = [i for i in items if i['id'] == item_id]
+        if not hit: return False
+        hit[0]['tid'] = int(child_tid)
+        self._write_checklist(task_id, items, actor)
+        self._exec('UPDATE task SET ParentId=? WHERE TaskId=?', (task_id, int(child_tid)))
+        return True
+    def _tick_parent_step(self, child_tid, actor: str):
+        """A child closed `done` ticks the parent's box that points at it; the parent itself is never closed for it."""
+        row = self._one('SELECT ParentId FROM task WHERE TaskId=?', (child_tid,))
+        if not row or not row.get('ParentId'): return
+        items = self.task_checklist(row['ParentId'])
+        hit = [i for i in items if i.get('tid') == child_tid and not i.get('done')]
+        if not hit: return
+        hit[0]['done'] = True
+        self._write_checklist(row['ParentId'], items, actor)
 
     def tag_task(self, task_id, tag, on=True, actor='router'):
         """Add or remove ONE tag, leaving the others alone. Tags is a csv the UI and the router
@@ -2093,6 +2138,31 @@ class SQLiteStore:
                    'VALUES (?,?,?,?,?,?,?,?,?)', (mid, cid, int(bool(asks)), int(bool(promise)), what, due, delivered_by, _now(), by))
     def deliver_promise(self, mid, by):
         self._exec('UPDATE sent_verdict SET DeliveredBy=? WHERE MessageId=? AND Promise=1 AND DeliveredBy IS NULL', (by, mid))
+        t = self.promise_task(mid)
+        if t and t.get('Status') not in ('done', 'dropped'): self.update_task(t['TaskId'], {'Status': 'done'}, 'promise')
+        if t:                                           # delivered: the ledger row resolves now, not at the sweep
+            try:
+                from . import outcomes
+                for r in outcomes.rows_for(self, 'task', t['TaskId']):
+                    if r['Kind'] == 'promise.made' and not r['ResolvedAt']: outcomes._resolve_one(self, r, datetime.now())
+            except Exception as e: logger.warning(f'promise {mid}: its outcome row was not resolved - {e}')
+    def promise_task(self, mid): return self._one('SELECT * FROM task WHERE SourceRef=?', (f'promise:{mid}',))
+    def task_for_promise(self, mid: int, what: str, due) -> int:
+        """The owner's own promise as a task on them (spec 2026-10-12): made once per sent message, dated when it was,
+        saying whom it was made to and carrying the thread it was made in (the review, 2026-10-12: a title alone)."""
+        t = self.promise_task(mid)
+        if t: return t['TaskId']
+        what = ' '.join(str(what or '').split())[:120] or 'what you promised'
+        m = self.get_message(mid) or {}
+        other = self.last_inbound_in(m['ConversationId']) if m.get('ConversationId') else None
+        who = (other or {}).get('FromName') or (other or {}).get('FromEmail') or 'them'
+        summary = f"You told {who} on {str(m.get('SentAt') or '')[:10]} re \"{m.get('Subject') or ''}\" you would {what}."
+        tid = self.create_task({'Title': what[:1].upper() + what[1:], 'Summary': summary, 'Kind': 'task', 'Status': 'open', 'Assignee': 'owner',
+                                'Source': m.get('Channel') or 'email', 'SourceRef': f'promise:{mid}', 'DueAt': due or None}, 'promise')
+        self._exec('UPDATE message SET TaskId=? WHERE MessageId=? AND TaskId IS NULL', (tid, mid))
+        from . import outcomes
+        outcomes.record(self, 'promise.made', 'task', tid, 'promise', facts={'mid': mid, 'due': due})   # the ledger: kept, kept late, late?
+        return tid
     def open_promises(self, since, before='9999', conversation_id=None):
         """Promises the model read in the owner's sent words that nothing later of theirs delivered, newest first, with
         the message they were made in. The other side replying does not close one - "Great, thanks!" is not the budget."""
@@ -3847,7 +3917,8 @@ class SQLiteStore:
         self._bump_snapshots(); self._poke('task-changed', task_id=tid)
         return True
     def open_batch(self, source_ref):
-        """The batch of this input still being worked - one at a time per repository; the rest wait for the next."""
+        """The newest open batch of this input - the one an arrival may join (batch.admit). An older one can still be open
+        on items that wait for the owner."""
         r = self._one("SELECT TaskId FROM task WHERE SourceRef=? AND Status NOT IN ('done','dropped') ORDER BY TaskId DESC LIMIT 1",
                       (source_ref,))
         return r['TaskId'] if r else None

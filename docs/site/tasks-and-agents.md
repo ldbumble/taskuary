@@ -251,6 +251,7 @@ it until it is empty, then says so ("FYI done.") and the walk goes on as usual.
 |---|---|---|
 | **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
 | **On you** | A person's ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished | For later work when its time comes |
+| **Goals** | A goal - an outcome with a date whose steps are tasks - while it has news: it slipped, a step finished, somebody it is waiting on is late. One row per goal; its steps fold into the row ("3 of 7 · coder on step 5 · Ray owes step 4") unless one is your move, which is a row of its own under On you | For later while it is quiet, with its date in the time column; never gone until it is done |
 | **Agents working** | An agent busy on a task - nothing for you until it stops or asks | - |
 | **For later** | Your work you pressed **Next** on, and tasks put away with **Remind me** - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first | - |
 | **Reports** | A report run that landed | - |
@@ -271,6 +272,13 @@ it until it is empty, then says so ("FYI done.") and the walk goes on as usual.
 | A meeting starts | off 5 minutes in (Settings) | - |
 | **Next** on a failed connection | off | a different error |
 | Older than 14 days | off - ask the Assistant for it by name or TQ number | a new message; a Remind me date |
+
+### Goals
+
+**+ New → Set a goal** asks three things: what done looks like, by when, who is involved. Plan it and the AI proposes the
+steps; Track it and you type them. Each step is a box on the goal; **Start** on a box makes it a task of its own (the
+goal's child), and when that task closes the box ticks itself. A promise you made in your own mail ("I'll send it
+Friday") is a goal's smaller cousin: it becomes a task on you with its day, so the Advisor stops raising it as a line.
 
 ## How work is ordered
 

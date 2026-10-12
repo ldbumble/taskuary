@@ -110,6 +110,7 @@ STOPS = [
         _can('open a task and read the thread behind it', 'Tasks'),
         _can('continue a coding session where it stopped', 'Tasks'),
         _can('hand a task to an agent, or take it back', 'Tasks'),
+        _can('set a goal with a date and let the AI plan its steps', 'Tasks'),
         # Review retired as a tab of its own: a drafted reply waits on the task it belongs to. The
         # stop that used to send you to a queue is gone, and what it was FOR - nothing sends until
         # you say so - is said here, where the draft actually is (2026-09-22).

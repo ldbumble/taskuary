@@ -13,8 +13,8 @@ and an Advisor post are told apart at a glance. Calendar entries show the meetin
 row for the full message, its attachments, what triage decided and why, any drafted reply, and
 the actions available on it.
 
-Beside the Timeline, the **work rail** holds what is actually waiting on you, under Urgent, Your task,
-Passed, Reports, FYI and Agents working. A finished or closed item gets no row: the rail is what still
+Beside the Timeline, the **work rail** holds what is actually waiting on you, under Urgent, On you,
+Goals, Agents working, For later, Reports, Advisor ideas and FYI. A finished or closed item gets no row: the rail is what still
 wants something from you, never a history. See [The work rail](tasks-and-agents#the-work-rail) for what
 puts a row there and what takes it off.
 
@@ -115,6 +115,38 @@ Repeated patterns become lessons in `LEARNED.md`. Each machine-written line carr
 Delete a learned line and it is gone. Lines you write yourself carry no machine tag and are never
 rewritten. An inferred rule that would *hide* work waits in Proposed rules until you adopt it.
 `SOUL.md` always outranks `LEARNED.md`, and one setting switches the whole loop off.
+
+## Three brains, one voice
+
+Three always-on models do the thinking, and you talk to one voice. They are split by what each is
+allowed to read and to do, not by where they run.
+
+| | What it does | What it reads | When | Acts? |
+|---|---|---|---|---|
+| **Triage** | Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the thread's task, names the profile, playbook and repository, assigns the worker | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the recent open tasks | every poll | makes rows; never sends |
+| **The assistant** | The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb | `COUNSEL.md`, `SOUL.md` and `JOB.md` whole; the one item on the table | on a turn | moves things; never does the work, never proposes |
+| **The Advisor** | The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting | the head of `SOUL.md` and `JOB.md`, `COUNSEL.md`; your work as the hub sees it; the calendar; the knowledge base; the sources it watches; its own notes. At reflection: `LEARNED.md` whole, hypotheses too, and the outcome ledger | on its schedule and when the app opens; reflection at launch and after three corrections | never; it leaves a line, an idea row or a proposal |
+
+The workers (the coding agent, the general agent) are the fourth kind and not always on: they do
+the work a task names, in a session you can watch. `COUNSEL.md` is the voice for the assistant and
+the Advisor both. The split is a budget: the heavy reader works off the request path, on the
+clock; the voice that answers on a turn reads the one item on the table, and never recomputes what
+the Advisor computed.
+
+**The outcome ledger** is the Advisor's newest input. Every other store is written at the moment
+you click: the documents say what they say, `LEARNED.md` is what you do when you correct, and the
+verdict and routing memories stop at the verdict. Nothing recorded what you did next, or what the
+world did after Taskuary acted. The ledger does: one row per action the app took or proposed - a
+reply sent, a task closed, an agent stopping and your next move in your own words, a pull request
+merged, a promise made, a sender ignored - and a once-a-day sweep fills in what came of it from
+facts already in the store: did more mail arrive on the thread, did the task reopen, did the
+person deliver and when, did the ignored sender's mail become work anyway. No model runs in the
+sweep. What the facts mean is reflection's: it reads the resolved rows as evidence (`out` ids,
+beside the `mem`, `rv` and `task` ids above) and writes habits into `LEARNED.md` with the same
+grammar and the same decay - "green PR from the coder: you merge it, 8 of 8". A derived line never
+acts on its own: it changes which button comes first and what a proposal says, and deleting it
+from `LEARNED.md` is the whole undo. The whole of it - every input, the two clocks, the ledger's
+row kinds and verdicts - is on [The Advisor](advisor).
 
 ## The documents that govern it
 

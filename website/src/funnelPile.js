@@ -389,6 +389,7 @@ export const attentionBand = (item) => {
 export const LEVEL_META = {
   urgent: { word: "urgent", hint: "a meeting inside fifteen minutes, an ask triage called urgent, or a sender on your escalate list" },
   task: { word: "on you", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed, a task an agent finished" },
+  goals: { word: "goals", hint: "an outcome with a date, its steps tasks of their own - here while it has news, in For later while it is quiet" },
   agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },
   later: { word: "for later", hint: "still yours - you pressed Next on these, or put them away with Remind me; each comes back when its time says" },
   reports: { word: "reports", hint: "a report you set up landed - information, never a task" },
@@ -400,9 +401,9 @@ export const LEVEL_META = {
 // redesign (2026-09-29) moved Agents working up to second and gave ideas a level of their own: an idea leaves FYI
 // until it is made work (then it is On you / Agents working like any task) or dismissed (then it leaves the rail).
 // A grouping of the rail only: the walk's own order is the server's (funnel.level_of mirrors this for a section walk).
-export const LEVEL_ORDER = ["urgent", "task", "agents", "later", "reports", "ideas", "fyi"];
+export const LEVEL_ORDER = ["urgent", "task", "goals", "agents", "later", "reports", "ideas", "fyi"];
 const LEVEL_OF_BAND = { 1: "urgent", 2: "task", 3: "reports", 4: "fyi", 5: "agents" };
-export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "put_down", "unread", "kind", "working", "state"];
+export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "put_down", "unread", "kind", "working", "state", "news"];
 export const placed = (row, card) => {
   const out = { ...row, ...card };
   for (const k of PLACEMENT) { if (k in row) out[k] = row[k]; else delete out[k]; }
@@ -417,6 +418,8 @@ export const asPressed = (items, { leaving = null, continuing = null } = {}) => 
       ? { ...i, lane: "working", order_band: 5, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
 export const levelOf = (item) => {
   const band = attentionBand(item);
+  // A GOAL is one row and never gone: Goals while it has news you have not read, For later otherwise (spec 2026-10-12)
+  if (String(item?.kind || "").startsWith("goal")) return item?.news && !item?.surfaced ? "goals" : "later";
   // For later is what you PUT there - Next or Remind me - never a card merely shown and clicked away from (funnel.level_of)
   if (band === 2 && (item?.put_down || item?.deferred)) return "later";
   if (band === 4 && item?.kind === "idea") return "ideas";
@@ -427,6 +430,12 @@ export const backAt = (item) => item?.back_at || item?.defer_until || null;
 // ...said in the age gutter's own short form, counting DOWN and reading forward: "in 30m", "in 1h", "in 3h", "in 2d" - "< 30m"
 // read as an age, as if it had come in (the owner, 2026-09-30), so it says "in" the way a meeting's does. A time already past says
 // nothing - the row is on its way back to On you, and a negative age would be a lie about which way time runs.
+// a GOAL's gutter is its date, not its age: for a goal the date is the clock (spec 2026-10-12)
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const dueWord = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : "";
+};
 export const railBack = (iso, now = Date.now()) => {
   if (!iso) return "";
   const t = new Date(String(iso).replace(" ", "T")).getTime();
@@ -536,7 +545,7 @@ export const heldSince = (pile, now = Date.now()) => {
 // Clicking a section's heading puts its first row on the table, and Next stays inside that section until it is empty -
 // then it says so and the walk goes on as normal. The rows are the rail's own (bandsOf, so For later walks soonest
 // first); the server's funnel.section_next is the same rule for the phone doorway.
-export const SECTION_WORDS = { urgent: "Urgent", task: "On you", agents: "Agents working", later: "For later", reports: "Reports", ideas: "Advisor ideas", fyi: "FYI" };
+export const SECTION_WORDS = { urgent: "Urgent", task: "On you", goals: "Goals", agents: "Agents working", later: "For later", reports: "Reports", ideas: "Advisor ideas", fyi: "FYI" };
 export const sectionNext = (items, section, seen = new Set()) =>
   (bandsOf(items).find((b) => b.level === section)?.items || [])
     .find((i) => !i.settling && !seen.has(i.key) && !(i.aliases || []).some((a) => seen.has(a))) || null;

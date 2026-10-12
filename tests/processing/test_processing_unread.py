@@ -611,3 +611,14 @@ def test_a_thank_you_triage_filed_after_the_close_does_not_bring_the_task_back(s
     add(store, 'Time entry', tid=tid, status='routed', sent=(datetime.now() + timedelta(minutes=2)).isoformat(' '))
     _, later = both(store)
     assert [i for i in later['items'] if i['tid'] == tid], 'a real ask after the close still comes back'
+
+
+def test_a_start_held_for_a_repository_stays_on_the_rail_saying_so(store):
+    """Nobody on it and no repository: the start answered "which repository?" on a sheet that closed at once, and the task
+    read as the owner's own quiet todo (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")."""
+    tid = store.create_task({'Title': 'Go through the budget inputs', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+    funnel.hold_for_repo(store, tid, 'I could not tell which checkout this belongs in')
+    _, unread = both(store)
+    card = next(i for i in unread['items'] if i.get('tid') == tid)
+    assert card['lane'] == 'queued' and 'pick a repository' in card['why'], card
+    assert 'needs a repository' in card['why_idle']

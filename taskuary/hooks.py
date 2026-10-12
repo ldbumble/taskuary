@@ -307,6 +307,11 @@ def _events(t, p: dict) -> None:
             # working again, not the owner speaking, so it must not overtake a question still open (open_requests)
             from .background import is_wake
             ws.record(st, tid, sid, 'working', text=ws.WAKE if is_wake(p.get('prompt')) else '', source='hook')
+            if not is_wake(p.get('prompt')):                # ...and the owner's words are their next move after a stop (outcomes.py)
+                try:
+                    from . import outcomes
+                    outcomes.moved_on(st, tid, p.get('prompt'))
+                except Exception as e: logger.debug(f'task {tid}: the prompt was not ledgered - {e}')
         # a tool that FAILED had its permission decided too - the run went on either way - and a request left open
         # read "waiting for your approval" over an agent that kept working until its next prompt
         elif ev == 'PostToolUseFailure': close(('approval_needed',), 'decided in the pane')
@@ -375,6 +380,11 @@ def _events(t, p: dict) -> None:
             from . import selfclose
             said, asks = selfclose.ask_markers(str(p.get('last_assistant_message') or ''))
             ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook')
+            try:                                        # the ledger: what the owner does next after a stop (outcomes.py); never breaks a hook
+                from . import ci, outcomes
+                agent = getattr(t, 'agent', '') or 'coder'
+                outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent})
+            except Exception as e: logger.debug(f'task {tid}: the stop was not ledgered - {e}')
             g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None
             for i, (q, choices) in enumerate(asks, 1):
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),

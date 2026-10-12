@@ -137,6 +137,10 @@ async def _lifespan(_app):
         try:
             demo.seed(store)
             demo.start_sessions(store)
+            # ...and the demo's rail is built the way a real install's is (processing_unread), not the legacy funnel:
+            # a goal is one row only there (spec 2026-10-12), and the demo is where the owner looks at the product
+            from .processing_startup import initialize
+            initialize(store, live_state=[])
         except Exception as e: logger.warning(f'demo seed failed: {e}')
         async with processing_all.membership_lifecycle(store):
             yield
@@ -309,7 +313,8 @@ async def token_gate(request: Request, call_next):
 class TaskBody(BaseModel):
     Title: str | None = None; Summary: str | None = None; Kind: str | None = None
     Priority: str | None = None; Status: str | None = None; Tags: str | None = None
-    Assignee: str | None = None
+    Assignee: str | None = None; DoneWhen: str | None = None; DueAt: str | None = None; ParentId: int | None = None
+class ReadAskBody(BaseModel): goal: bool = False
 class MsgBody(BaseModel):
     external_id: str | None = None; channel: str = 'api'; subject: str | None = None
     body: str | None = None; from_name: str | None = None; from_email: str | None = None
@@ -620,11 +625,13 @@ def _rail_tids() -> set:
     except Exception as e:
         logger.warning(f'tasks: the rail could not be read for OnWorkToday: {e}'); return set()
 
-def _read_hand_task(tid: int, text: str):
+def _read_hand_task(tid: int, text: str, goal: bool = False):
     """A task typed into + New skips triage, so it had no checklist - one block of words with no boxes (the owner, 2026-10-09:
     "when i create task the task list looks weird?? (no checkboxes?)"). The same reading a promoted message gets
     (triage.extract_ask), off the request: each distinct thing asked becomes a box, an email it asks for becomes one of the
-    task's emails. The owner's own words stay the summary. A brain that fails leaves the task as typed."""
+    task's emails. The owner's own words stay the summary. A brain that fails leaves the task as typed. A goal's boxes are
+    its steps (plan_goal)."""
+    if goal: return plan_goal(tid, text)
     try:
         from . import concierge, slots, triage
         ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True))
@@ -633,12 +640,30 @@ def _read_hand_task(tid: int, text: str):
     except Exception as e: logger.info(f'could not read the checklist of {task_ref(tid)}: {e}')
 
 
+def plan_goal(tid: int, text: str):
+    """The model writes the goal's steps (spec 2026-10-12); a step already started is never reworded away: it stays, in
+    its place, with its child (set_task_checklist keeps a box by its words), and the model's new words come around it
+    (the review, 2026-10-12: a slot fallback pinned the child to whatever the model put in that slot)."""
+    try:
+        from . import concierge, triage
+        ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True), goal=True)
+        texts = [x for x in ask.get('checklist') or [] if x]
+        if not texts: return
+        for k, i in enumerate(store.task_checklist(tid)):
+            if i.get('tid') and i['text'] not in texts: texts.insert(min(k, len(texts)), i['text'])
+        store.set_task_checklist(tid, texts, 'triage')
+    except Exception as e: logger.info(f'could not plan {task_ref(tid)}: {e}')
+
+
 @app.post('/api/tasks/{task_id}/read-ask')
-def read_hand_task(task_id: int, background: BackgroundTasks):
+def read_hand_task(task_id: int, background: BackgroundTasks, body: ReadAskBody = None):
     """+ New asks for its task to be read once it exists (_read_hand_task) - answered at once, read behind it."""
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
-    background.add_task(_read_hand_task, task_id, t.get('Summary') or t.get('Title') or '')
+    goal = bool(body and body.goal) or bool(t.get('DoneWhen'))
+    words = t.get('Summary') or t.get('Title') or ''
+    if goal: words = f"{t.get('Title') or ''}\nDone when: {t.get('DoneWhen') or ''}\n{words}"
+    background.add_task(_read_hand_task, task_id, words, goal)
     return {'ok': True}
 
 
@@ -729,6 +754,42 @@ def edit_checklist(task_id: int, body: ChecklistEdit):
     """The owner's words for the list; a box whose words are unchanged keeps its state (PW-076)."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     return {'ok': True, 'checklist': store.set_task_checklist(task_id, body.items, ACTOR)}
+
+
+@app.get('/api/tasks/{task_id}/steps')
+def goal_steps(task_id: int):
+    """A goal's boxes with the child task behind each (store.goal_steps), as the task page lists them (spec 2026-10-12)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import taskstate
+    from .processing_unread import holder_name
+    out = []
+    for x in store.goal_steps(task_id):
+        c = x.pop('child')
+        out.append({**x, 'ref': task_ref(c['TaskId']) if c else None, 'status': (c or {}).get('Status'),
+                    'who': holder_name((c or {}).get('Assignee')), 'state': taskstate.state(store, c) if c else None})
+    return {'steps': out}
+
+
+@app.post('/api/tasks/{task_id}/steps/{item_id}/start')
+def start_step(task_id: int, item_id: str):
+    """One box becomes a task of its own, the goal's child: made once, claimed as the owner's like any + New task."""
+    g = store.get_task(task_id)
+    if not g: raise HTTPException(404, 'task not found')
+    boxes = store.task_checklist(task_id)
+    box = next((i for i in boxes if i['id'] == item_id), None)
+    if not box: raise HTTPException(404, 'no such step')
+    if box.get('tid') and store.get_task(box['tid']): return {'taskId': box['tid'], 'ref': task_ref(box['tid'])}
+    k = [i['id'] for i in boxes].index(item_id) + 1
+    # the goal's repository rides to its step: an agent on the step works where the goal said (the owner, 2026-10-12)
+    repo = [x for x in re.split(r'[\s,]+', str(g.get('Tags') or '')) if x.startswith('repo:')]
+    tid = store.create_task({'Title': box['text'][:300], 'Kind': 'general', 'ParentId': task_id, 'Source': 'goal', 'SourceRef': f'goal:{task_id}:{item_id}',
+                             'Summary': f"Step {k} of {task_ref(task_id)} \"{g.get('Title') or ''}\". Done when: {g.get('DoneWhen') or ''}",
+                             'AskedVia': 'desktop', **({'Tags': repo[0]} if repo else {})}, ACTOR)
+    store.link_step(task_id, item_id, tid, ACTOR)
+    from . import selfclose
+    selfclose.claim(store, tid, ACTOR)
+    store.audit('task', tid, 'create', ACTOR, detail={'goal': task_id, 'step': item_id})
+    return {'taskId': tid, 'ref': task_ref(tid)}
 
 
 # ── shared operations (operations.py): propose, edit, confirm once, and the durable record ──────
@@ -1652,6 +1713,8 @@ def continue_session(task_id: int, body: CodeBody = None):
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
     store.audit('task', task_id, 'continue-session', ACTOR, detail={'agent': row['Agent'], 'fromSid': row['Sid']})
+    from . import outcomes                           # the ledger: the owner's next move after a stop, in their words
+    outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=(body.instruction if body else None) or '', facts={'door': 'continue-session'})
     return {'resumed': row['ExtId'], 'agent': row['Agent'], 'fromSession': row['Sid'], 'session': session}
 
 
@@ -1682,6 +1745,8 @@ def continue_work(task_id: int, body: ContinueBody = None):
             except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
         threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': bool(note)})
+        from . import outcomes
+        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note or '', facts={'door': 'continue-work', 'kind': 'general'})
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
     note = with_images(note, imgs).strip()
     row, _why = _resumable(task_id)
@@ -1702,6 +1767,9 @@ def continue_work(task_id: int, body: ContinueBody = None):
             row, out = None, fresh()
     else: out = fresh()
     store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'coding', 'resumed': bool(row), 'note': bool(note)})
+    if not row:                                      # a resumed one was recorded by continue_session itself: one act, one row
+        from . import outcomes
+        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note or '', facts={'door': 'continue-work', 'kind': 'coding'})
     return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': bool(row), **(out if isinstance(out, dict) else {})}
 
 
@@ -1771,6 +1839,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a
         # DECISION for the owner, shown as a visible choice, never a session in some other checkout (PW-095)
         if e.status_code == 422 and NEEDS_REPO.search(str(e.detail or '')):
+            from . import funnel; funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
         raise
@@ -1822,6 +1891,7 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
     store.clear_project_evidence(task_id)
     tags = [x for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x and not x.startswith('repo:')]
     if body.repo: tags.append(f'repo:{body.repo}')
+    if body.repo: tags = [x for x in tags if x != 'held:repo']    # the question a held start asked (funnel.HELD_REPO) is answered
     store.update_task(task_id, {'Tags': ' '.join(tags)}, ACTOR)
     # a repo Taskuary knows about but has no path for cannot be opened - take the path here
     if body.repo and body.path:
@@ -2556,6 +2626,8 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
             quieted.append(t['TaskId'])
         except Exception as e: logger.debug(f"task {t['TaskId']} did not settle under the new rule: {e}")
     if quieted: store.audit('policy', pid, 'quiet_tasks', ACTOR, detail={'tasks': quieted})
+    from . import outcomes                           # the ledger: regret if their mail becomes work anyway (after the rule has done its work)
+    outcomes.record(store, 'sender.ignored', 'policy', pid, ACTOR, facts={'from': em, 'rule': 'skip'})
     return {'ok': True, 'how': 'rule', 'policyId': pid, 'affected': hidden, 'sender': em,
             'quieted': quieted}
 
@@ -2670,6 +2742,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
         # This is a decision, not a failed action. The message may only just have become a task,
         # so return its id and let the card ask which repo before resuming the same dispatch.
         if e.status_code == 422 and NEEDS_REPO.search(reason):
+            from . import funnel; funnel.hold_for_repo(store, tid, reason)
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
                     'ref': task_ref(tid), 'reason': reason}
         raise
@@ -6927,6 +7000,11 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             wabridge.trim_log(target_store)
         except Exception as e:
             logger.warning(f'whatsapp log trim skipped: {e}')
+        try:                                            # the outcome ledger: resolve what is old enough to judge, once a day (outcomes.py)
+            from . import outcomes
+            outcomes.sweep_if_due(target_store)
+        except Exception as e:
+            logger.warning(f'outcome sweep skipped: {e}')
         _lap('housekeeping')
         return added
     finally:

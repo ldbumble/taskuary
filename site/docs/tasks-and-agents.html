@@ -42,7 +42,7 @@
 <div class="entry">
       <a class="page" href="./how-it-works">How it works</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#three-brains-one-voice">Three brains, one voice</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./connections">Connections</a>
@@ -68,6 +68,11 @@
       <a class="page" href="./reports">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
       <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./advisor">The Advisor</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show The Advisor's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./advisor#what-it-reads">What it reads</a><a class="sec" href="./advisor#two-clocks">Two clocks</a><a class="sec" href="./advisor#the-outcome-ledger">The outcome ledger</a><a class="sec" href="./advisor#the-one-rule">The one rule</a><a class="sec" href="./advisor#what-is-built-and-what-is-next">What is built, and what is next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./phone">On your phone</a>
@@ -548,6 +553,11 @@ it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on 
 <td>For later work when its time comes</td>
 </tr>
 <tr>
+<td><strong>Goals</strong></td>
+<td>A goal - an outcome with a date whose steps are tasks - while it has news: it slipped, a step finished, somebody it is waiting on is late. One row per goal; its steps fold into the row (&quot;3 of 7 · coder on step 5 · Ray owes step 4&quot;) unless one is your move, which is a row of its own under On you</td>
+<td>For later while it is quiet, with its date in the time column; never gone until it is done</td>
+</tr>
+<tr>
 <td><strong>Agents working</strong></td>
 <td>An agent busy on a task - nothing for you until it stops or asks</td>
 <td>-</td>
@@ -633,6 +643,11 @@ it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on 
 <td>a new message; a Remind me date</td>
 </tr>
 </tbody></table>
+<h3 id="goals">Goals<a class="anchor" href="#goals" aria-label="Link to this section">#</a></h3>
+<p><strong>+ New → Set a goal</strong> asks three things: what done looks like, by when, who is involved. Plan it and the AI proposes the
+steps; Track it and you type them. Each step is a box on the goal; <strong>Start</strong> on a box makes it a task of its own (the
+goal&#39;s child), and when that task closes the box ticks itself. A promise you made in your own mail (&quot;I&#39;ll send it
+Friday&quot;) is a goal&#39;s smaller cousin: it becomes a task on you with its day, so the Advisor stops raising it as a line.</p>
 <h2 id="how-work-is-ordered">How work is ordered<a class="anchor" href="#how-work-is-ordered" aria-label="Link to this section">#</a></h2>
 <p>Each inbound connector chooses how the tasks it creates reach agents:</p>
 <ul>

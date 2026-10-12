@@ -376,7 +376,7 @@ def _rank_first(store, rows: list) -> list:
     fresh = {r['MessageId']: r for r in store.pending_triage(_ALL, ranked=True)}
     keep = {r['MessageId'] for r in ranked}
     # a batched input (a repository, a board) lets its head in as ONE task (batch.py); only its follow-ups - a comment on
-    # an item already let in - go on to triage, and the rest wait for the next batch
+    # an item already let in - go on to triage; the rest join an open batch with room or wait for the next (batch.admit)
     from . import batch
     follow = batch.admit(store, [fresh[m] for m in fresh if m in keep and batch.batches(fresh[m].get('Channel'))])
     # each input's OWN batch size: a repo firehose and a mailbox are not the same appetite

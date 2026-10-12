@@ -1,16 +1,154 @@
 [
-  [{"lane": "time", "order_band": 1}, "urgent"],
-  [{"lane": "asked", "order_band": 2}, "task"],
-  [{"lane": "approve", "order_band": 2}, "task"],
-  [{"lane": "stopped", "order_band": 2, "surfaced": true, "put_down": true}, "later"],
-  [{"lane": "stopped", "order_band": 2, "surfaced": true}, "task"],
-  [{"lane": "yours", "order_band": 2, "deferred": true, "defer_until": "2099-01-01 08:00:00"}, "later"],
-  [{"lane": "time", "order_band": 1, "surfaced": true}, "urgent"],
-  [{"lane": "working", "order_band": 5}, "agents"],
-  [{"lane": "report", "order_band": 3}, "reports"],
-  [{"lane": "forgotten", "kind": "idea", "order_band": 4}, "ideas"],
-  [{"lane": "yours", "kind": "idea", "order_band": 2, "tid": 7}, "task"],
-  [{"lane": "fyi", "order_band": 4}, "fyi"],
-  [{"lane": "forgotten", "order_band": 4}, "fyi"],
-  [{}, "task"]
+  [
+    {
+      "lane": "time",
+      "order_band": 1
+    },
+    "urgent"
+  ],
+  [
+    {
+      "lane": "asked",
+      "order_band": 2
+    },
+    "task"
+  ],
+  [
+    {
+      "lane": "approve",
+      "order_band": 2
+    },
+    "task"
+  ],
+  [
+    {
+      "lane": "stopped",
+      "order_band": 2,
+      "surfaced": true,
+      "put_down": true
+    },
+    "later"
+  ],
+  [
+    {
+      "lane": "stopped",
+      "order_band": 2,
+      "surfaced": true
+    },
+    "task"
+  ],
+  [
+    {
+      "lane": "yours",
+      "order_band": 2,
+      "deferred": true,
+      "defer_until": "2099-01-01 08:00:00"
+    },
+    "later"
+  ],
+  [
+    {
+      "lane": "time",
+      "order_band": 1,
+      "surfaced": true
+    },
+    "urgent"
+  ],
+  [
+    {
+      "lane": "working",
+      "order_band": 5
+    },
+    "agents"
+  ],
+  [
+    {
+      "lane": "report",
+      "order_band": 3
+    },
+    "reports"
+  ],
+  [
+    {
+      "lane": "forgotten",
+      "kind": "idea",
+      "order_band": 4
+    },
+    "ideas"
+  ],
+  [
+    {
+      "lane": "yours",
+      "kind": "idea",
+      "order_band": 2,
+      "tid": 7
+    },
+    "task"
+  ],
+  [
+    {
+      "lane": "fyi",
+      "order_band": 4
+    },
+    "fyi"
+  ],
+  [
+    {
+      "lane": "forgotten",
+      "order_band": 4
+    },
+    "fyi"
+  ],
+  [
+    {},
+    "task"
+  ],
+  [
+    {
+      "kind": "goal_slipped",
+      "lane": "yours",
+      "order_band": 2,
+      "news": true,
+      "surfaced": false
+    },
+    "goals"
+  ],
+  [
+    {
+      "kind": "goal",
+      "lane": "yours",
+      "order_band": 2,
+      "news": true,
+      "surfaced": false
+    },
+    "goals"
+  ],
+  [
+    {
+      "kind": "goal",
+      "lane": "yours",
+      "order_band": 2,
+      "news": true,
+      "surfaced": true
+    },
+    "later"
+  ],
+  [
+    {
+      "kind": "goal",
+      "lane": "yours",
+      "order_band": 2,
+      "news": false,
+      "surfaced": false
+    },
+    "later"
+  ],
+  [
+    {
+      "kind": "goal_fresh",
+      "lane": "yours",
+      "order_band": 2
+    },
+    "later"
+  ]
 ]

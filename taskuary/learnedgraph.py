@@ -26,7 +26,7 @@ PROMOTE_AT = 4          # mirrors learn.REFLECT_SYSTEM: s:4 with evidence from 3
 DECAY_EVERY = 10        # reflections that read the evidence and left a line alone, per point off it
 DECAYS = ('hypothesis', 'proposed')   # only what is still a guess: a promoted rule earned its s, an adopted one is the owner's
 LOG, LOG_KEEP = 'learn_reflect_log', 200   # the dates reflections ran on; 200 is 20 points of decay, past any live score
-_EV = re.compile(r'^(mem|rv|task)(\d+)$')
+_EV = re.compile(r'^(mem|rv|task|out)(\d+)$')
 
 
 def _today(): return datetime.now().strftime('%Y-%m-%d')
@@ -125,7 +125,7 @@ def record(store, old_doc: str, new_doc: str, actor: str = 'learn'):
 
 def _resolve(store, ev_id: str) -> dict:
     """An evidence id -> {id, kind, date, label}. mem = a verdict note, rv = a review decision,
-    task = an owner action on a task."""
+    task = an owner action on a task, out = a resolved row of the outcome ledger (outcomes.py)."""
     m = _EV.match(ev_id or '')
     if not m: return {'id': ev_id, 'kind': 'other', 'date': None, 'label': ev_id}
     kind, n = m.group(1), int(m.group(2))
@@ -137,6 +137,10 @@ def _resolve(store, ev_id: str) -> dict:
         r = store.get_review(n) or {}
         return {'id': ev_id, 'kind': 'review', 'date': r.get('DecidedAt') or r.get('CreatedAt'),
                 'label': f"{r.get('Status') or 'review'}: {(r.get('Subject') or r.get('Title') or '')[:90]}" if r else ev_id}
+    if kind == 'out':
+        r = store._one('SELECT * FROM outcome WHERE Id=?', (n,)) or {}
+        return {'id': ev_id, 'kind': 'outcome', 'date': r.get('ResolvedAt') or r.get('At'),
+                'label': f"{r.get('Verdict') or 'outcome'}: {r.get('Kind')} - {(r.get('Outcome') or '')[:90]}" if r else ev_id}
     r = store.get_task(n) or {}
     return {'id': ev_id, 'kind': 'task', 'date': r.get('UpdatedAt') or r.get('CreatedAt'),
             'label': f"{r.get('Status') or 'task'}: {(r.get('Title') or '')[:90]}" if r else ev_id}

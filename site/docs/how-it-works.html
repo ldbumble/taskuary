@@ -42,7 +42,7 @@
 <div class="entry on">
       <a class="page" href="./how-it-works" aria-current="page">How it works</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide How it works's sections"></button>
-      <div class="secs"><a class="sec" href="#the-timeline" data-sec="the-timeline">The Timeline</a><a class="sec" href="#the-five-roads-a-message-can-take" data-sec="the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="#what-triage-actually-decides" data-sec="what-triage-actually-decides">What triage actually decides</a><a class="sec" href="#nothing-sends-itself" data-sec="nothing-sends-itself">Nothing sends itself</a><a class="sec" href="#correcting-it-teaches-it" data-sec="correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="#the-documents-that-govern-it" data-sec="the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="#where-the-rest-of-the-workspace-fits" data-sec="where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+      <div class="secs"><a class="sec" href="#the-timeline" data-sec="the-timeline">The Timeline</a><a class="sec" href="#the-five-roads-a-message-can-take" data-sec="the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="#what-triage-actually-decides" data-sec="what-triage-actually-decides">What triage actually decides</a><a class="sec" href="#nothing-sends-itself" data-sec="nothing-sends-itself">Nothing sends itself</a><a class="sec" href="#correcting-it-teaches-it" data-sec="correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="#three-brains-one-voice" data-sec="three-brains-one-voice">Three brains, one voice</a><a class="sec" href="#the-documents-that-govern-it" data-sec="the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="#where-the-rest-of-the-workspace-fits" data-sec="where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./connections">Connections</a>
@@ -68,6 +68,11 @@
       <a class="page" href="./reports">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
       <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./advisor">The Advisor</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show The Advisor's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./advisor#what-it-reads">What it reads</a><a class="sec" href="./advisor#two-clocks">Two clocks</a><a class="sec" href="./advisor#the-outcome-ledger">The outcome ledger</a><a class="sec" href="./advisor#the-one-rule">The one rule</a><a class="sec" href="./advisor#what-is-built-and-what-is-next">What is built, and what is next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./phone">On your phone</a>
@@ -101,8 +106,8 @@ morning&#39;s spend report and a failed nightly export are one list.</p>
 and an Advisor post are told apart at a glance. Calendar entries show the meeting time. Open a
 row for the full message, its attachments, what triage decided and why, any drafted reply, and
 the actions available on it.</p>
-<p>Beside the Timeline, the <strong>work rail</strong> holds what is actually waiting on you, under Urgent, Your task,
-Passed, Reports, FYI and Agents working. A finished or closed item gets no row: the rail is what still
+<p>Beside the Timeline, the <strong>work rail</strong> holds what is actually waiting on you, under Urgent, On you,
+Goals, Agents working, For later, Reports, Advisor ideas and FYI. A finished or closed item gets no row: the rail is what still
 wants something from you, never a history. See <a href="tasks-and-agents#the-work-rail">The work rail</a> for what
 puts a row there and what takes it off.</p>
 <h2 id="the-five-roads-a-message-can-take">The five roads a message can take<a class="anchor" href="#the-five-roads-a-message-can-take" aria-label="Link to this section">#</a></h2>
@@ -268,6 +273,60 @@ three episodes across two people or threads. Contradictions weaken it; stale hyp
 <p>Delete a learned line and it is gone. Lines you write yourself carry no machine tag and are never
 rewritten. An inferred rule that would <em>hide</em> work waits in Proposed rules until you adopt it.
 <code>SOUL.md</code> always outranks <code>LEARNED.md</code>, and one setting switches the whole loop off.</p>
+<h2 id="three-brains-one-voice">Three brains, one voice<a class="anchor" href="#three-brains-one-voice" aria-label="Link to this section">#</a></h2>
+<p>Three always-on models do the thinking, and you talk to one voice. They are split by what each is
+allowed to read and to do, not by where they run.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it does</th>
+<th>What it reads</th>
+<th>When</th>
+<th>Acts?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Triage</strong></td>
+<td>Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the thread&#39;s task, names the profile, playbook and repository, assigns the worker</td>
+<td><code>TRIAGE.md</code>; the first 2,500 characters of <code>SOUL.md</code> and of <code>JOB.md</code>; <code>LEARNED.md</code>&#39;s promoted lines; routing memory; the playbook menu; the recent open tasks</td>
+<td>every poll</td>
+<td>makes rows; never sends</td>
+</tr>
+<tr>
+<td><strong>The assistant</strong></td>
+<td>The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb</td>
+<td><code>COUNSEL.md</code>, <code>SOUL.md</code> and <code>JOB.md</code> whole; the one item on the table</td>
+<td>on a turn</td>
+<td>moves things; never does the work, never proposes</td>
+</tr>
+<tr>
+<td><strong>The Advisor</strong></td>
+<td>The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting</td>
+<td>the head of <code>SOUL.md</code> and <code>JOB.md</code>, <code>COUNSEL.md</code>; your work as the hub sees it; the calendar; the knowledge base; the sources it watches; its own notes. At reflection: <code>LEARNED.md</code> whole, hypotheses too, and the outcome ledger</td>
+<td>on its schedule and when the app opens; reflection at launch and after three corrections</td>
+<td>never; it leaves a line, an idea row or a proposal</td>
+</tr>
+</tbody></table>
+<p>The workers (the coding agent, the general agent) are the fourth kind and not always on: they do
+the work a task names, in a session you can watch. <code>COUNSEL.md</code> is the voice for the assistant and
+the Advisor both. The split is a budget: the heavy reader works off the request path, on the
+clock; the voice that answers on a turn reads the one item on the table, and never recomputes what
+the Advisor computed.</p>
+<p><strong>The outcome ledger</strong> is the Advisor&#39;s newest input. Every other store is written at the moment
+you click: the documents say what they say, <code>LEARNED.md</code> is what you do when you correct, and the
+verdict and routing memories stop at the verdict. Nothing recorded what you did next, or what the
+world did after Taskuary acted. The ledger does: one row per action the app took or proposed - a
+reply sent, a task closed, an agent stopping and your next move in your own words, a pull request
+merged, a promise made, a sender ignored - and a once-a-day sweep fills in what came of it from
+facts already in the store: did more mail arrive on the thread, did the task reopen, did the
+person deliver and when, did the ignored sender&#39;s mail become work anyway. No model runs in the
+sweep. What the facts mean is reflection&#39;s: it reads the resolved rows as evidence (<code>out</code> ids,
+beside the <code>mem</code>, <code>rv</code> and <code>task</code> ids above) and writes habits into <code>LEARNED.md</code> with the same
+grammar and the same decay - &quot;green PR from the coder: you merge it, 8 of 8&quot;. A derived line never
+acts on its own: it changes which button comes first and what a proposal says, and deleting it
+from <code>LEARNED.md</code> is the whole undo. The whole of it - every input, the two clocks, the ledger&#39;s
+row kinds and verdicts - is on <a href="advisor">The Advisor</a>.</p>
 <h2 id="the-documents-that-govern-it">The documents that govern it<a class="anchor" href="#the-documents-that-govern-it" aria-label="Link to this section">#</a></h2>
 <p>Taskuary&#39;s behaviour is plain Markdown under <strong>Settings → Docs</strong>. These are not configuration files
 around the edges — they are what the models are actually told.</p>

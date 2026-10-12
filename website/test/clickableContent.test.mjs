@@ -17,3 +17,19 @@ test("task and attachment actions use keyboard-operable buttons", () => {
   assert.match(taskPage, /<Box component="button" type="button" onClick=\{\(\) => \{ const next = diffScope === "task" \? "checkout" : "task";/);
   assert.match(learned, /<Typography component="button" type="button" aria-expanded=\{looseOpen\} onClick=\{\(\) => setLooseOpen\(\(o\) => !o\)\}/);
 });
+
+test("a failed report run offers Try again as a real button, not a span", () => {
+  // Reports shows "This run's details could not be loaded. Try again" when a
+  // run's details fail to load; the retry must take keyboard focus (#142).
+  // Anchor on setMissed: other Box components exist in the same file.
+  const source = read("ReportsView.jsx");
+  const retry = source.match(
+    /<Box component="(\w+)"((?:(?!<Box)[\s\S])*?setMissed\(null\)(?:(?!<Box)[\s\S])*?)>Try again<\/Box>/
+  );
+  assert.ok(retry, "Try again control exists in ReportsView.jsx");
+  assert.equal(retry[1], "button");
+  assert.match(retry[2], /type="button"/);
+  assert.match(retry[2], /border: 0/);
+  assert.match(retry[2], /bgcolor: "transparent"/);
+  assert.match(retry[2], /font: "inherit"/);
+});

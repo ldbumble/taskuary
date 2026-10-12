@@ -54,7 +54,7 @@ import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, Message
 import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
 import ActionRow from "./ActionRow.jsx";
@@ -442,7 +442,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                   <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${agoText(backAt(i))}` : undefined}>
-                      {level === "later" ? railBack(backAt(i)) : railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+                      {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
+                        : level === "later" ? railBack(backAt(i)) : railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
@@ -650,7 +651,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)}
-        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} />
+        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} onOpenTask={actions.openTask} />
     </div>
   );
   // THE WORDS RIDE IN THE CARD (2026-09-23): Next beside the card's verb, every other word on its

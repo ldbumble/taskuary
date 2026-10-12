@@ -32,8 +32,9 @@ class LevelOfTests(unittest.TestCase):
             self.assertEqual(funnel.level_of(item), level, item)
 
     def test_every_section_has_its_heading_word(self):
-        self.assertEqual(list(funnel.SECTION_WORDS), ['urgent', 'task', 'agents', 'later', 'reports', 'ideas', 'fyi'])
+        self.assertEqual(list(funnel.SECTION_WORDS), ['urgent', 'task', 'goals', 'agents', 'later', 'reports', 'ideas', 'fyi'])
         self.assertEqual(funnel.SECTION_WORDS['later'], 'For later')
+        self.assertEqual(funnel.SECTION_WORDS['goals'], 'Goals')
 
 
 class ForLaterTests(unittest.TestCase):

@@ -180,7 +180,62 @@ const askedAgo = (t) => {
   return `asked you ${mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`} ago`;
 };
 
-export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay,
+// A GOAL'S STEPS (spec 2026-10-12): the checklist, each box with the task behind it. Start makes a box a task of its own;
+// a box with a task shows its ref and state and opens it. The parent's box ticks itself when the child closes (store).
+function GoalSteps({ task, onOpenTask, onChanged }) {
+  const [steps, setSteps] = useState([]);
+  const [draft, setDraft] = useState("");
+  const load = useCallback(() => api.get(`/api/tasks/${task.TaskId}/steps`).then((r) => setSteps(r.data.steps || [])).catch(() => setSteps([])), [task.TaskId]);
+  useEffect(() => { load(); }, [load, task.UpdatedAt]);
+  const start = async (s) => { const { data } = await api.post(`/api/tasks/${task.TaskId}/steps/${s.id}/start`); load(); onChanged?.(); onOpenTask?.(data.taskId); };
+  const moveDate = async (e) => { await api.patch(`/api/tasks/${task.TaskId}`, { DueAt: e.target.value || null }); onChanged?.(); };
+  // "Track it, I have the plan" needs doors of its own (the review, 2026-10-12): a step done by hand is ticked here, and a
+  // step is added here - the same checklist endpoints the task card uses; a step with a child ticks itself when it closes
+  const tick = async (s) => { await api.patch(`/api/tasks/${task.TaskId}/checklist/${s.id}`, { done: !s.done }); load(); onChanged?.(); };
+  const add = async () => {
+    const text = draft.trim(); if (!text) return;
+    await api.put(`/api/tasks/${task.TaskId}/checklist`, { items: [...steps.map((s) => s.text), text] });
+    setDraft(""); load(); onChanged?.();
+  };
+  // RE-PLAN: the AI writes the steps again from the goal's words; a step already started keeps its place (server.plan_goal)
+  const [replanning, setReplanning] = useState(false);
+  const replan = async () => { setReplanning(true); try { await api.post(`/api/tasks/${task.TaskId}/read-ask`, { goal: true }); } finally { setTimeout(() => { setReplanning(false); load(); onChanged?.(); }, 4000); } };
+  const done = steps.filter((s) => s.done).length;
+  return (
+    <Box sx={{ mt: 0.85, maxWidth: 900 }}>
+      <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Done when</Typography>
+      <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{task.DoneWhen}</Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.6, flexWrap: "wrap" }}>
+        <Typography variant="caption" sx={{ color: FAINT }}>{steps.length ? `${done} of ${steps.length} steps done` : "no steps yet"}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>by</Typography>
+        <TextField type="date" size="small" defaultValue={String(task.DueAt || "").slice(0, 10)} onBlur={moveDate}
+          inputProps={{ "aria-label": "Move the date" }} sx={{ "& .MuiInputBase-root": { fontSize: 12, height: 26 } }} />
+        <Button size="small" variant="text" onClick={replan} disabled={replanning} sx={{ fontSize: 11, textTransform: "none", ml: "auto" }}
+          title="The AI writes the steps again from what done looks like; a step already started keeps its place">{replanning ? "Planning…" : "Re-plan"}</Button>
+      </Box>
+      {steps.map((s, k) => (
+        <Box key={s.id} sx={{ display: "flex", alignItems: "center", gap: 0.8, py: 0.35, borderBottom: `1px solid ${BORDER}` }}>
+          <Typography variant="caption" sx={{ color: FAINT, width: 16, fontVariantNumeric: "tabular-nums" }}>{k + 1}</Typography>
+          <Checkbox size="small" checked={!!s.done} onChange={() => tick(s)} disabled={!!s.ref} inputProps={{ "aria-label": `Step ${k + 1} done` }}
+            sx={{ p: 0.25, color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
+          <Typography variant="body2" sx={{ flex: 1, color: s.done ? FAINT : INK, textDecoration: s.done ? "line-through" : "none" }}>{s.text}</Typography>
+          {s.who && <Typography variant="caption" sx={{ color: FAINT }}>{s.who}</Typography>}
+          {s.ref
+            ? <Button size="small" variant="text" onClick={() => onOpenTask?.(s.tid)} sx={{ fontSize: 11, textTransform: "none" }}>{s.ref} · {s.state || s.status}</Button>
+            : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}>Start</Button>}
+        </Box>
+      ))}
+      <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", mt: 0.6 }}>
+        <TextField size="small" fullWidth placeholder="Add a step" value={draft} onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} inputProps={{ "aria-label": "Add a step" }}
+          sx={{ "& .MuiInputBase-root": { fontSize: 12 } }} />
+        <Button size="small" variant="outlined" onClick={add} disabled={!draft.trim()} sx={{ fontSize: 11, textTransform: "none" }}>Add</Button>
+      </Box>
+    </Box>
+  );
+}
+
+export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
   const [detail, setDetail] = useState(null);
@@ -763,6 +818,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     emails: emailsWaiting,
   })));
   const storyAt = storyPlace(story, { open: stage === "agent" && !sessionView, hasRecord });
+  // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
+  // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
+  const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
+  const pickRepo = () => { setRepoPick(true); if (heldRepo) setResumeAfterRepo({ dispatch: true }); };
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
   const stageProps = (name) => ({ folded: stage !== name, onToggle: stage === name ? null : () => setOpenStage(name) });
@@ -814,6 +873,28 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       onChanged?.();
     } catch (e) {
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the non-coding agent");
+    } finally { if (!stale(id)) setStartingAgent(""); }
+  };
+  // START AN AGENT ON A GOAL (the owner, 2026-10-12): the goal is up to its first step not done. That step becomes a task
+  // of its own if it is not one yet (the goal's repository rides along), the regular agent starts on it through the one
+  // dispatch door, and the step opens on the table so what the agent does is what you see.
+  const startGoalStep = async () => {
+    if (!selected || startingAgent) return;
+    const id = selected;
+    setStartingAgent("step"); setErr("");
+    try {
+      const { data: got } = await api.get(`/api/tasks/${id}/steps`);
+      const step = (got.steps || []).find((s) => !s.done);
+      if (!step) { setErr("Every step is done - close the goal, or add a step."); return; }
+      const child = step.tid || (await api.post(`/api/tasks/${id}/steps/${step.id}/start`)).data.taskId;
+      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null });
+      const outcome = outcomeOf(data);
+      if (outcome.state === "needs_repo") setErr(`${outcome.text} - open the step and pick one.`);
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.();
+      (onOpenTask || onSelect)?.(child);
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the agent on the next step");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and
@@ -913,6 +994,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
         // the profile, brain and model pickers stay in that card for whoever wants to change them first
         title: "Starts the regular assistant with this task and its messages - profile, brain and model as set in Agent work." }]
+      // ON A GOAL the agent starts on the step the goal is up to - the first box not done: its child, made if it has none - and
+      // that step opens on the table (the owner, 2026-10-12: "it should start an agent on what it's up to")
+      : startHere && t?.DoneWhen ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "step" ? "Starting…" : "Start an agent on the next step",
+        disabled: !!startingAgent, run: startGoalStep,
+        title: "Finds the first step not done, makes it a task of its own if it is not one yet, starts the regular agent on it and opens it here." }]
       : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? "Run another agent" : "Start an agent",
         run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")),
         // it OPENS the step where the harness, model and prompt are chosen - nothing starts until that step's own Start button
@@ -1256,7 +1342,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* a BATCH: its items in ranked order, each with what the agent found and the owner's presses (batch.py) */}
                         {detail?.batch && <BatchItems taskId={t?.TaskId} items={detail.batch}
                           onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
-                        {(detail?.checklist || []).length > 0 && (
+                        {/* a GOAL lists its steps with the task behind each instead of plain boxes (spec 2026-10-12) */}
+                        {t?.DoneWhen && <GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
+                          onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
+                        {!t?.DoneWhen && (detail?.checklist || []).length > 0 && (
                           <Box sx={{ mt: 0.85, maxWidth: 900 }}>
                             {detail.checklist.filter((i) => !i.out).map((i) => (
                               <Box key={i.id} onClick={() => tickItem(i)}
@@ -1402,8 +1491,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </Select>
                         {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                           startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                          title="Which checkout the session works in"
-                          onClick={() => setRepoPick(true)}>{repoOf(t) || "pick a repo"}</Button>}
+                          title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
+                          onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
+                        {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
                       </>}
                       {/* a finished task still says what it WAS - the settings read as the record,
                           not as controls. Reopen is the only thing you can do to it, and it lives
@@ -1564,8 +1654,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{brainPill}</Box>}
                       {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                        title="Which checkout the session works in"
-                        onClick={() => setRepoPick(true)}>{repoOf(t) || "pick a repo"}</Button>}
+                        title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
+                        onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
+                      {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
                     </Box>
                   )}
                   </>}

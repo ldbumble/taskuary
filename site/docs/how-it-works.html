@@ -42,7 +42,7 @@
 <div class="entry on">
       <a class="page" href="./how-it-works" aria-current="page">How it works</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide How it works's sections"></button>
-      <div class="secs"><a class="sec" href="#the-timeline" data-sec="the-timeline">The Timeline</a><a class="sec" href="#the-five-roads-a-message-can-take" data-sec="the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="#what-triage-actually-decides" data-sec="what-triage-actually-decides">What triage actually decides</a><a class="sec" href="#nothing-sends-itself" data-sec="nothing-sends-itself">Nothing sends itself</a><a class="sec" href="#correcting-it-teaches-it" data-sec="correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="#the-documents-that-govern-it" data-sec="the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="#where-the-rest-of-the-workspace-fits" data-sec="where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+      <div class="secs"><a class="sec" href="#the-timeline" data-sec="the-timeline">The Timeline</a><a class="sec" href="#the-five-roads-a-message-can-take" data-sec="the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="#what-triage-actually-decides" data-sec="what-triage-actually-decides">What triage actually decides</a><a class="sec" href="#nothing-sends-itself" data-sec="nothing-sends-itself">Nothing sends itself</a><a class="sec" href="#correcting-it-teaches-it" data-sec="correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="#three-brains-one-voice" data-sec="three-brains-one-voice">Three brains, one voice</a><a class="sec" href="#the-documents-that-govern-it" data-sec="the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="#where-the-rest-of-the-workspace-fits" data-sec="where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./connections">Connections</a>
@@ -268,6 +268,59 @@ three episodes across two people or threads. Contradictions weaken it; stale hyp
 <p>Delete a learned line and it is gone. Lines you write yourself carry no machine tag and are never
 rewritten. An inferred rule that would <em>hide</em> work waits in Proposed rules until you adopt it.
 <code>SOUL.md</code> always outranks <code>LEARNED.md</code>, and one setting switches the whole loop off.</p>
+<h2 id="three-brains-one-voice">Three brains, one voice<a class="anchor" href="#three-brains-one-voice" aria-label="Link to this section">#</a></h2>
+<p>Three always-on models do the thinking, and you talk to one voice. They are split by what each is
+allowed to read and to do, not by where they run.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it does</th>
+<th>What it reads</th>
+<th>When</th>
+<th>Acts?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Triage</strong></td>
+<td>Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the task it serves, names the profile, playbook and repository, assigns the worker</td>
+<td><code>TRIAGE.md</code>; the first 2,500 characters of <code>SOUL.md</code> and of <code>JOB.md</code>; <code>LEARNED.md</code>&#39;s promoted lines; routing memory; the playbook menu; the open tasks and goals</td>
+<td>every poll</td>
+<td>makes rows; never sends</td>
+</tr>
+<tr>
+<td><strong>The assistant</strong></td>
+<td>The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb</td>
+<td><code>COUNSEL.md</code>, <code>SOUL.md</code> and <code>JOB.md</code> whole; the one item on the table; the Advisor&#39;s line on it</td>
+<td>on a turn</td>
+<td>moves things; never does the work, never proposes</td>
+</tr>
+<tr>
+<td><strong>The Advisor</strong></td>
+<td>The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting</td>
+<td>everything: <code>LEARNED.md</code> whole (hypotheses too, since it proposes and never acts); the outcome ledger; <code>JOB.md</code>, <code>SOUL.md</code>, the playbooks, the knowledge base, the calendar, schedules and mutes</td>
+<td>on its schedule, and reflection when corrections or outcomes have queued</td>
+<td>never; it leaves a line, an idea row or a proposal</td>
+</tr>
+</tbody></table>
+<p>The workers (the coding agent, the general agent) are the fourth kind and not always on: they do
+the work a task names, in a session you can watch. Nothing on screen says &quot;Advisor&quot;: <code>COUNSEL.md</code>
+is the voice for the assistant and the Advisor both. The split is a budget: the heavy reader works
+off the request path and leaves one line on the item; the voice that answers on a turn reads that
+line and the item, and never recomputes what the Advisor computed.</p>
+<p><strong>The outcome ledger</strong> is the Advisor&#39;s newest input. Every other store is written at the moment
+you click: the documents say what they say, <code>LEARNED.md</code> is what you do when you correct, and the
+verdict and routing memories stop at the verdict. Nothing recorded what you did next, or what the
+world did after Taskuary acted. The ledger does: one row per action the app took or proposed - a
+reply sent, a task closed, an agent stopping and your next move in your own words, a pull request
+merged, a promise made, a sender ignored - and a once-a-day sweep fills in what came of it from
+facts already in the store: did more mail arrive on the thread, did the task reopen, did the
+person deliver and when, did the ignored sender&#39;s mail become work anyway. No model runs in the
+sweep. What the facts mean is reflection&#39;s: it reads the resolved rows as evidence (<code>out</code> ids,
+beside the <code>mem</code>, <code>rv</code> and <code>task</code> ids above) and writes habits into <code>LEARNED.md</code> with the same
+grammar and the same decay - &quot;green PR from the coder: you merge it, 8 of 8&quot;. A derived line never
+acts on its own: it changes which button comes first and what a proposal says, and deleting it
+from <code>LEARNED.md</code> is the whole undo.</p>
 <h2 id="the-documents-that-govern-it">The documents that govern it<a class="anchor" href="#the-documents-that-govern-it" aria-label="Link to this section">#</a></h2>
 <p>Taskuary&#39;s behaviour is plain Markdown under <strong>Settings → Docs</strong>. These are not configuration files
 around the edges — they are what the models are actually told.</p>

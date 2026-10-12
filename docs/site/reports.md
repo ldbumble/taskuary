@@ -188,6 +188,10 @@ Four things shape it:
 - The **Advisor** report — what it watches, its schedule, its model.
 - **Settings → Advisor** — thresholds such as how long a reply or task must be quiet.
 - **Settings → Learning** — whether your verdicts feed back into `LEARNED.md`.
+- **The outcome ledger** — what came of what Taskuary did: a reply that got more rounds, a close
+  that reopened, a promise delivered late, your own next move after an agent stopped. Resolved
+  once a day from the store's own facts; reflection reads it as evidence. See
+  [Three brains, one voice](how-it-works#three-brains-one-voice).
 
 Delete the Advisor report to switch it off. Its **Preview** shows exactly what a run would hand
 the model, which is the fastest way to find out whether a watched source returns what you think

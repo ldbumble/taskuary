@@ -116,6 +116,37 @@ Delete a learned line and it is gone. Lines you write yourself carry no machine 
 rewritten. An inferred rule that would *hide* work waits in Proposed rules until you adopt it.
 `SOUL.md` always outranks `LEARNED.md`, and one setting switches the whole loop off.
 
+## Three brains, one voice
+
+Three always-on models do the thinking, and you talk to one voice. They are split by what each is
+allowed to read and to do, not by where they run.
+
+| | What it does | What it reads | When | Acts? |
+|---|---|---|---|---|
+| **Triage** | Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the task it serves, names the profile, playbook and repository, assigns the worker | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the open tasks and goals | every poll | makes rows; never sends |
+| **The assistant** | The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb | `COUNSEL.md`, `SOUL.md` and `JOB.md` whole; the one item on the table; the Advisor's line on it | on a turn | moves things; never does the work, never proposes |
+| **The Advisor** | The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting | everything: `LEARNED.md` whole (hypotheses too, since it proposes and never acts); the outcome ledger; `JOB.md`, `SOUL.md`, the playbooks, the knowledge base, the calendar, schedules and mutes | on its schedule, and reflection when corrections or outcomes have queued | never; it leaves a line, an idea row or a proposal |
+
+The workers (the coding agent, the general agent) are the fourth kind and not always on: they do
+the work a task names, in a session you can watch. Nothing on screen says "Advisor": `COUNSEL.md`
+is the voice for the assistant and the Advisor both. The split is a budget: the heavy reader works
+off the request path and leaves one line on the item; the voice that answers on a turn reads that
+line and the item, and never recomputes what the Advisor computed.
+
+**The outcome ledger** is the Advisor's newest input. Every other store is written at the moment
+you click: the documents say what they say, `LEARNED.md` is what you do when you correct, and the
+verdict and routing memories stop at the verdict. Nothing recorded what you did next, or what the
+world did after Taskuary acted. The ledger does: one row per action the app took or proposed - a
+reply sent, a task closed, an agent stopping and your next move in your own words, a pull request
+merged, a promise made, a sender ignored - and a once-a-day sweep fills in what came of it from
+facts already in the store: did more mail arrive on the thread, did the task reopen, did the
+person deliver and when, did the ignored sender's mail become work anyway. No model runs in the
+sweep. What the facts mean is reflection's: it reads the resolved rows as evidence (`out` ids,
+beside the `mem`, `rv` and `task` ids above) and writes habits into `LEARNED.md` with the same
+grammar and the same decay - "green PR from the coder: you merge it, 8 of 8". A derived line never
+acts on its own: it changes which button comes first and what a proposal says, and deleting it
+from `LEARNED.md` is the whole undo.
+
 ## The documents that govern it
 
 Taskuary's behaviour is plain Markdown under **Settings → Docs**. These are not configuration files

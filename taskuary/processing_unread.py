@@ -168,6 +168,13 @@ def _agent_spoke_at(store, tid):
     return processing_all._stamp(evs[-1].get('CreatedAt')) if evs else None
 
 
+def names(item) -> list:
+    """Every key a card for this inventory item answers to: its own first, then its aliases - ONE list for card_for
+    and for a keyed build, so a lookup that skips the other items can never disagree with the card about who it is."""
+    return ['processing:' + item['item_id'], *[a['Value'] for a in item.get('aliases', []) if a.get('Namespace') == 'legacy_funnel'],
+            *['processing:' + root['ItemId'] for root in item.get('item_history', [])]]
+
+
 def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES, walk_at=None):
     from . import funnel
     from .processing_reads import state
@@ -399,8 +406,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     processing_reads.drawn(store, item['item_id'], item['view_revision'], view.get('processing_read', {}).get('units', ()))
     card.update(key='processing:' + item['item_id'], processing_id=item['item_id'],
                 member_ids=list(item['member_ids']), context_revision=item['context_revision'],
-                view_revision=item['view_revision'], aliases=[a['Value'] for a in item.get('aliases', [])
-                    if a.get('Namespace') == 'legacy_funnel'] + ['processing:' + root['ItemId'] for root in item.get('item_history', [])],
+                view_revision=item['view_revision'], aliases=names(item)[1:],
                 unread=unread, deferred=bool(read.get('deferred')), defer_until=read.get('defer_until'),
                 more=max(0, compact['counts'].get('messages', 0) - 1),
                 source=row.get('SourceName') or compact['source'], status=row.get('MsgStatus') or compact['status'], order_band=funnel._band(card))
@@ -472,9 +478,13 @@ def on_rail(card) -> bool:
 
 
 def build(store, *, now=None, live_state=None, include_read=False, only=None,
-          full_history=False):
+          full_history=False, keys=None):
+    """`keys`: a LOOKUP, not a rail - only the items answering to one of these keys are compacted and carded (calendar
+    and broken connections as ever). Looking up Current carded every root to keep one: ~300 ms in the window, ~3 s
+    over the whole history (P4, 2026-10-12). The kept cards are the ones the whole build makes; counts are theirs."""
     from . import funnel, terminal
     now = now or datetime.now()
+    keep = None if keys is None else (lambda item, want=frozenset(keys): not want.isdisjoint(names(item)))
     live_state = terminal.live_sessions(tail=6) if live_state is None else live_state
     query = query_for(store, only, history=not full_history)
     for attempt in (1, 2):
@@ -488,7 +498,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
         # The pile then carries coverage.degraded and says so rather than disappearing.
         try:
             rows, coverage, counts = processing_all.compact_inventory(
-                snapshot, query, include_excluded=include_read, degraded_ok=attempt == 2)
+                snapshot, query, include_excluded=include_read, degraded_ok=attempt == 2, keep=keep)
             break
         except processing_all.AllError as e:      # a write landed between the settle check and the snapshot: once more
             if attempt == 2 or e.detail.get('code') != 'processing_coverage_pending': raise

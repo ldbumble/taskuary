@@ -374,7 +374,9 @@ def _degraded(coverage, reconciliation) -> dict:
             'reconciled_generation': reconciliation.get('reconciled_generation')}
 
 
-def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=False):
+def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=False, keep=None):
+    """`keep`: compact only the items it accepts. The thread index is still taken from EVERY item - a row
+    reads its conversation across roots - so a kept item's row is byte-for-byte what the whole pass gives it."""
     coverage = copy.deepcopy(snapshot['coverage'])
     reconciliation = coverage.get('processing_reconciliation') or {}
     if (reconciliation.get('pending', True) or reconciliation.get('status') == 'conflicted'
@@ -394,6 +396,7 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
     threads = _thread_index(snapshot['items'])
     rows, hidden, tombstones = [], 0, 0
     for item in snapshot['items']:
+        if keep is not None and not keep(item): continue
         members = item.get('member_ids', [])
         if not members:
             tombstones += 1

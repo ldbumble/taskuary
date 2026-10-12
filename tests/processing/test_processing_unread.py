@@ -523,6 +523,58 @@ def test_named_lookup_reads_the_unread_window_first_and_only_then_the_whole_hist
     assert 36500 in windows
 
 
+def _whole(store, key, **kw):
+    """The pre-P4 lookup: every root carded, the first answering to `key` kept."""
+    return next((i for i in funnel.build(store, keep_surfaced=True, **kw)['items'] if i['key'] == key or key in i.get('aliases', [])), None)
+
+
+def test_a_keyed_lookup_finds_the_card_the_whole_build_finds_and_cards_nothing_else(store, monkeypatch):
+    """GET /api/concierge restores Current on every chat read and every 30 s tick, and the lookup carded every root to keep
+    one: ~300 ms in the window, ~3 s outside it, each time (P4, 2026-10-12). A keyed build must return the SAME card -
+    same key, aliases, lane, revision - for every name a card answers to, in either window, and card nothing else."""
+    tid = store.create_task({'Title': 'Open task', 'Kind': 'task', 'Status': 'open'}, 'fixture')
+    add(store, 'Recent', tid=tid, status='routed')
+    add(store, 'Recent reply', sent=(datetime.now() + timedelta(minutes=1)).isoformat(' '))
+    shown = add(store, 'Shown already')
+    old = add(store, 'Ancient', sent='2020-01-01 09:00:00')
+    store._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', ('2020-01-01 09:00:00', old))
+    store.reconcile_processing_membership()
+    funnel.settle(store, f'msg:{shown}', 'surfaced', read=True)
+    carded, orig = [], processing_unread.card_for
+    monkeypatch.setattr(processing_unread, 'card_for', lambda s, item, *a, **k: carded.append(item['item_id']) or orig(s, item, *a, **k))
+    for history in (False, True):
+        cards = funnel.build(store, keep_surfaced=True, full_history=history)['items']
+        assert any(c.get('mid') == old for c in cards) == history
+        for card in cards:
+            for key in [card['key'], *card['aliases']]:
+                carded.clear()
+                got = next(i for i in funnel.build(store, keep_surfaced=True, full_history=history, keys=[key])['items']
+                           if i['key'] == key or key in i['aliases'])
+                assert carded and set(carded) == {card['processing_id']}, (key, carded)
+                assert got == _whole(store, key, full_history=history), key
+    # ...and next_item returns what the whole-build lookup returned, outside the window included
+    for key in (f'msg:{old}', f'msg:{shown}', f'task:{tid}', 'processing:nothing-here'):
+        whole = _whole(store, key) or _whole(store, key, full_history=True)
+        assert funnel.next_item(store, key, include_surfaced=True) == funnel._present_one(store, whole), key
+
+
+def test_a_batch_key_looks_up_its_members_without_carding_the_rail(store, monkeypatch):
+    """The fyi batch the page holds as Current: the same handful, by key or alias, in the same order - from its members' cards alone."""
+    for title in ('One', 'Two', 'Three', 'Four'): add(store, title)
+    store.reconcile_processing_membership()
+    rail = funnel.build(store, keep_surfaced=True)['items']
+    key = 'fyis:' + ','.join([rail[0]['key'], rail[1]['aliases'][0], rail[2]['key'], 'processing:gone'])
+    build = funnel.build
+    monkeypatch.setattr(funnel, 'build', lambda s, *a, keys=None, **k: build(s, *a, **k))
+    whole = funnel.batch_item(store, key)
+    monkeypatch.setattr(funnel, 'build', build)
+    carded, orig = [], processing_unread.card_for
+    monkeypatch.setattr(processing_unread, 'card_for', lambda s, item, *a, **k: carded.append(item['item_id']) or orig(s, item, *a, **k))
+    got = funnel.batch_item(store, key)
+    assert got == whole and [i['key'] for i in got['items']] == [i['key'] for i in rail[:3]]
+    assert sorted(carded) == sorted(i['processing_id'] for i in rail[:3])
+
+
 def test_an_interrupted_agent_task_is_stopped_work_that_a_look_does_not_clear(store):
     """A restart killed the coder's session on TQ-0616. The task list said interrupted / needs you; the
     rail said `queued` "handed to coder, not started yet", and one look in chat cleared it from work for

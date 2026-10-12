@@ -1043,13 +1043,15 @@ def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
 
 def build(store, now: datetime = None, keep_surfaced: bool = False,
           reconcile: bool = True, live_state=_LIVE_UNSET,
-          full_history: bool = False) -> dict:
+          full_history: bool = False, keys=None) -> dict:
+    """`keys`: a lookup - the shared builder cards only what answers to them (processing_unread.build); the legacy
+    pile builds whole and the caller's match finds the same item in it."""
     now = now or datetime.now()
     if getattr(store, 'processing_reads_active', lambda: False)():
         from .processing_unread import build as shared_build
         return shared_build(store, now=now, include_read=keep_surfaced,
                             live_state=None if live_state is _LIVE_UNSET else live_state,
-                            full_history=full_history)
+                            full_history=full_history, keys=keys)
     # Explicit Current/named-item lookup must not lose its subject behind the
     # ordinary transport cap. Its existing history/read/grouping rules still apply.
     feed_limit = -1 if keep_surfaced else 400
@@ -1465,10 +1467,13 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
         # None before batch_item answered - on every "All read, Next", since the page sends the key it
         # holds as `current` (the owner, 2026-09-17: "hitting all read next still takes forever").
         if key.startswith('fyis:'): return batch_item(store, key)
-        pool = items if items is not None else build(store, keep_surfaced=True)['items']
+        # ...and a key is looked up, never the rail rebuilt for it: the keyed build cards only what answers to it (the
+        # same cards, the same order), where the whole one carded every root to keep one - Current is restored on
+        # every chat read, every 30 s tick, and outside the window it paid for the WHOLE history each time (P4).
+        pool = items if items is not None else build(store, keep_surfaced=True, keys=[key])['items']
         item = next((i for i in pool if i['key'] == key or key in i.get('aliases', [])), None)
         if item is None and getattr(store, 'processing_reads_active', lambda: False)():
-            item = next((i for i in build(store, keep_surfaced=True, full_history=True)['items']
+            item = next((i for i in build(store, keep_surfaced=True, full_history=True, keys=[key])['items']
                          if i['key'] == key or key in i.get('aliases', [])), None)
         return _present_one(store, item) or batch_item(store, key)
     if getattr(store, 'processing_reads_active', lambda: False)():
@@ -1491,7 +1496,7 @@ def batch_item(store, key: str) -> dict | None:
     until a button was clicked (the 2026-09-03 break test)."""
     if not key or not key.startswith('fyis:'): return None
     want = [k for k in key[5:].split(',') if k]
-    have = {alias: i for i in build(store, keep_surfaced=True)['items']
+    have = {alias: i for i in build(store, keep_surfaced=True, keys=want)['items']
             for alias in [i['key'], *i.get('aliases', [])]}
     seen = set()
     got = [have[k] for k in want if k in have

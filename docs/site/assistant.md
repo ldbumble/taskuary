@@ -110,7 +110,7 @@ These have no button. Say them, in the app or on your phone.
 | "redraft it shorter" | The draft written again with the change | at once |
 | "yes, go ahead" to a waiting agent | Your answer goes to the agent | you confirm |
 | "run it again" on a report | The report runs again | at once |
-| "remember that…" | A fact kept in Settings → Memory, used by triage and the Assistant | you confirm |
+| "remember that…" | A fact kept in Settings → Verdicts & notes, used by triage and the Assistant | you confirm |
 | "clear all the fyi" | Clears that set from the walk, with the count on the card | you confirm |
 | "set up a report that…" | A walk-through for a report, connection or workflow | you confirm |
 | "stop hiding auto-replies" | The setting is changed, with an undo | at once |

@@ -15,3 +15,9 @@ test("task and attachment actions use keyboard-operable buttons", () => {
   assert.match(attachments, /<Box key=\{a\.id\} component="button" type="button"[^>]+onClick=\{\(\) => setBig\(a\)\}/);
   assert.match(taskPage, /<Box component="button" type="button" onClick=\{\(\) => \{ const next = diffScope === "task" \? "checkout" : "task";/);
 });
+
+test("AI defaults navigation links are keyboard-operable buttons", () => {
+  const aiDefaults = read("AiDefaults.jsx");
+  assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="caption" onClick={() => onGo(slot.owner_link)}'));
+  assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="body2" onClick={() => onGo("connectors")}'));
+});

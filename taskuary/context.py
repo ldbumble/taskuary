@@ -124,6 +124,17 @@ def recent_open(store, msg: dict, limit: int = RECENT) -> list:
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 
 
+def open_goals(store, limit: int = 5) -> list:
+    """The open GOALS with their steps, titles only, for triage's "which step does this serve" (spec 2026-10-12). Five goals of
+    twelve steps at most: the prompt stays small, and a goal past that is the newest activity's to show."""
+    from .store import is_goal
+    from .processing_unread import holder_name
+    gs = sorted((t for t in store.list_tasks(active_only=True) if is_goal(t)), key=lambda t: str(t.get('UpdatedAt') or ''), reverse=True)[:limit]
+    return [{'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'done_when': _short(t.get('DoneWhen'), 200),
+             'steps': [{'id': x['id'], 'k': k + 1, 'text': _short(x['text'], 120), 'done': x['done'], 'who': holder_name((x.get('child') or {}).get('Assignee'))}
+                       for k, x in enumerate(store.goal_steps(t['TaskId'])[:12])]} for t in gs]
+
+
 SENDER_DAYS = 60         # how far back a sender's own asks still say how their work is done
 SENDER_PAST = 3          # ...and how many of them
 

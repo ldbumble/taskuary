@@ -214,7 +214,8 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
           title="The AI writes the steps again from what done looks like; a step already started keeps its place">{replanning ? "Planning…" : "Re-plan"}</Button>
       </Box>
       {steps.map((s, k) => (
-        <Box key={s.id} sx={{ display: "flex", alignItems: "center", gap: 0.8, py: 0.35, borderBottom: `1px solid ${BORDER}` }}>
+        <Box key={s.id} sx={{ borderBottom: `1px solid ${BORDER}` }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, py: 0.35 }}>
           <Typography variant="caption" sx={{ color: FAINT, width: 16, fontVariantNumeric: "tabular-nums" }}>{k + 1}</Typography>
           <Checkbox size="small" checked={!!s.done} onChange={() => tick(s)} disabled={!!s.ref} inputProps={{ "aria-label": `Step ${k + 1} done` }}
             sx={{ p: 0.25, color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
@@ -223,6 +224,11 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
           {s.ref
             ? <Button size="small" variant="text" onClick={() => onOpenTask?.(s.tid)} sx={{ fontSize: 11, textTransform: "none" }}>{s.ref} · {s.state || s.status}</Button>
             : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}>Start</Button>}
+        </Box>
+        {/* the mail triage said served this step (store.step_arrivals) - who sent what, under the step it moved */}
+        {(s.arrivals || []).map((a) => (
+          <Typography key={a.mid} variant="caption" sx={{ color: FAINT, pl: 4.5, pb: 0.3, display: "block" }}>↳ {a.who} sent "{a.subject}" · {String(a.at || "").slice(0, 16)}</Typography>
+        ))}
         </Box>
       ))}
       <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", mt: 0.6 }}>

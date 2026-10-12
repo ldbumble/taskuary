@@ -1814,6 +1814,14 @@ class SQLiteStore:
         self._write_checklist(task_id, items, actor)
         self._exec('UPDATE task SET ParentId=? WHERE TaskId=?', (task_id, int(child_tid)))
         return True
+    def step_arrivals(self, goal_tid) -> dict:
+        """Mail that served a goal's steps, by step id - the route rows triage wrote with `serves` (spec 2026-10-12)."""
+        rows = self._rows("SELECT r.MessageId mid, json_extract(r.VerdictJson, '$.serves.step') step, m.FromName who, m.FromEmail em, m.SentAt at, "
+                          "m.Subject subject FROM route r JOIN message m ON m.MessageId=r.MessageId "
+                          "WHERE json_extract(r.VerdictJson, '$.serves.task')=? ORDER BY m.SentAt, r.RouteId", (int(goal_tid),))
+        out = {}
+        for r in rows: out.setdefault(r['step'], []).append({'mid': r['mid'], 'who': r['who'] or r['em'] or '', 'at': r['at'], 'subject': r['subject'] or ''})
+        return out
     def _tick_parent_step(self, child_tid, actor: str):
         """A child closed `done` ticks the parent's box that points at it; the parent itself is never closed for it."""
         row = self._one('SELECT ParentId FROM task WHERE TaskId=?', (child_tid,))

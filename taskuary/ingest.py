@@ -511,6 +511,9 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
         # ...and the OPEN work it touches, so a repeat can be named as the task it repeats (same_as, 2026-09-25)
         still = taskcontext.recent_open(store, msg)
         if still: thread = {**thread, 'open_work': still}
+        # ...and the open GOALS with their steps, so a mail on another thread can say which step it serves (spec 2026-10-12)
+        goals = taskcontext.open_goals(store)
+        if goals: thread = {**thread, 'open_goals': goals}
         # ...and how this sender's last asks were worked, further back than three days (TQ-0955, 2026-10-05)
         theirs = taskcontext.sender_history(store, msg)
         if theirs: thread = {**thread, 'sender_history': theirs}
@@ -847,6 +850,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # it had - an Advisor idea on a closed task (I7), one PR into another's task (2026-09-28), a report run onto a closed task
         # (2026-10-01). Each is now said to triage as a rule it applies (triage.py, SAME AS), with the sender's open and closed work
         # in front of it (context.recent_open / recent_closures) - never applied over its answer (the owner, 2026-10-08)
+        # ...and A STEP OF A GOAL it serves (spec 2026-10-12): triage named a goal and a step it was shown; the mail lands under it
+        sv = intent.get('serves')
+        if sv and store.get_task(sv['task']) and any(x['id'] == sv['step'] for x in store.goal_steps(sv['task'])):
+            return _serve_step(store, msg, sv, intent, actor, _notes_note())
         same = intent.get('same_as')
         if same and store.get_task(same):
             if pol['action'] == 'escalate': _escalate(store, same, pol, actor)
@@ -1177,6 +1184,30 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
         _spawn(_auto_draft, store, tid, rid)
     logger.info(f"ingest: the same as {ref} - joined" + (' and reopened' if closed else ''))
     return {'status': 'routed', 'task_id': tid, 'message_id': mid}
+
+
+def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note: str = '') -> dict:
+    """WHICH STEP DOES THIS SERVE (spec 2026-10-12): the mail lands under the step's own task when somebody holds it, else under
+    the goal. A box nobody holds ticks on the model's `done`; a held one is its holder's to close, so the mail goes to them and
+    the box waits for their close. The verdict, `serves` with it, rides on the route - store.step_arrivals reads it back."""
+    step = next((x for x in store.goal_steps(sv['task']) if x['id'] == sv['step']), None)
+    tid, ref, k = (step or {}).get('tid') or sv['task'], task_ref(sv['task']), [x['id'] for x in store.goal_steps(sv['task'])].index(sv['step']) + 1
+    mid = _land(store, msg, tid, 'filed' if intent.get('intent') == 'fyi' else 'routed')
+    store.add_route(mid, tid, 'attach', 1.0, f"triage: serves step {k} of {ref} - {intent.get('why') or ''}" + notes_note, [], 'triage',
+                    verdict=_stored_verdict(intent))
+    store.add_comment(tid, actor, 'agent', f"From {msg.get('from_name') or msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''}"
+                      f" - it serves step {k}, \"{(step or {}).get('text', '')}\"")
+    if sv.get('done') and step and not step.get('tid') and not step.get('done'): store.tick_checklist_item(sv['task'], sv['step'], True, 'triage')
+    if intent.get('intent') == 'reply_only' and not store.pending_review(tid):
+        from .outbound import send_block
+        unsendable = send_block(store, msg.get('channel'))
+        rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                'Reason': f"needs a reply: {intent.get('why') or 'question for you'}" + (f' · {unsendable}' if unsendable else '')})
+        _spawn(_auto_draft, store, tid, rid)
+    from . import advisor
+    advisor.notice(store, 'message.attached', 'task', sv['task'])
+    logger.info(f"ingest: serves step {k} of {ref}")
+    return {'status': 'filed' if intent.get('intent') == 'fyi' else 'routed', 'task_id': tid, 'message_id': mid}
 
 
 def identity_route(store, msg: dict) -> dict:

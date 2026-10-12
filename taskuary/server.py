@@ -762,11 +762,11 @@ def goal_steps(task_id: int):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     from . import taskstate
     from .processing_unread import holder_name
-    out = []
+    out, arr = [], store.step_arrivals(task_id)       # ...and the mail triage said served each step (spec 2026-10-12, step 5)
     for x in store.goal_steps(task_id):
         c = x.pop('child')
         out.append({**x, 'ref': task_ref(c['TaskId']) if c else None, 'status': (c or {}).get('Status'),
-                    'who': holder_name((c or {}).get('Assignee')), 'state': taskstate.state(store, c) if c else None})
+                    'who': holder_name((c or {}).get('Assignee')), 'state': taskstate.state(store, c) if c else None, 'arrivals': arr.get(x['id'], [])})
     return {'steps': out}
 
 

@@ -20,8 +20,8 @@ commits anyone to a time.
 import json, re, time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import requests
 from loguru import logger
+from . import net as requests     # pooled Session + (connect, read) timeouts, same call shape
 
 DAYS = 14
 MAX_EVENTS = 60

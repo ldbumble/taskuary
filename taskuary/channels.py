@@ -8,10 +8,10 @@ import base64, contextlib, hashlib, json, math, os, queue, re, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 from datetime import datetime, timedelta
-import requests
 from loguru import logger
 
-from . import spawn
+from . import net, spawn
+requests = net      # pooled Session + (connect, read) timeouts; the name keeps patches of channels.requests.get biting
 from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message, rev_id, seen_before
 from .counsel import is_invite
@@ -72,11 +72,15 @@ def graph_token(cfg: dict, secret: str = None) -> str:
     sec = secret or os.getenv('AZURE_CLIENT_SECRET')
     if not (tid and cid and sec):
         raise RuntimeError('need tenant_id + client_id + a secret (or AZURE_* env vars on the server)')
-    r = requests.post(f'https://login.microsoftonline.com/{tid}/oauth2/v2.0/token', timeout=20,
-                      data={'client_id': cid, 'client_secret': sec, 'grant_type': 'client_credentials',
-                            'scope': 'https://graph.microsoft.com/.default'})
-    if r.status_code != 200: raise RuntimeError(f'token failed ({r.status_code}): {r.text[:300]}')
-    return r.json()['access_token']
+    scope = 'https://graph.microsoft.com/.default'
+    def mint():
+        r = requests.post(f'https://login.microsoftonline.com/{tid}/oauth2/v2.0/token', timeout=20,
+                          data={'client_id': cid, 'client_secret': sec, 'grant_type': 'client_credentials', 'scope': scope})
+        if r.status_code != 200: raise RuntimeError(f'token failed ({r.status_code}): {r.text[:300]}')
+        j = r.json()
+        return j['access_token'], j.get('expires_in')
+    # the secret's hash is in the key so a rotated secret mints fresh instead of riding the old token out
+    return net.token(('graph', tid, cid, scope, hashlib.sha256(sec.encode()).hexdigest()), mint)
 
 
 def github_discover(store, c: dict, actor='owner') -> dict:
@@ -974,19 +978,27 @@ def hosted_images(tok: str, html: str, cap: int = 4, where: str = '') -> list:
     return out
 
 
+# mailbox -> its directory object id. Looked up on every 30 s poll it was ~2,880 identical calls a day;
+# keyed by the address, so pointing the card at another mailbox looks that one up, and a failed lookup
+# is never kept, so the next poll asks again.
+_TEAMS_ME = {}
+
+
 def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False) -> int:
     """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
     ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
     call-started events, deletions and empty bodies are not messages anybody has to act on."""
     since_iso, users, chats, n = _utc(since), {}, {}, 0
     touched = set()                                # chats to mark read once, not per message
-    me = ''
-    try:
-        r = requests.get(f'{GRAPH}/users/{upn}', headers={'Authorization': f'Bearer {tok}'},
-                         params={'$select': 'id'}, timeout=20)
-        me = r.json().get('id', '') if r.status_code == 200 else ''
-    except requests.RequestException:
-        pass
+    me = _TEAMS_ME.get(upn.lower(), '')
+    if not me:
+        try:
+            r = requests.get(f'{GRAPH}/users/{upn}', headers={'Authorization': f'Bearer {tok}'},
+                             params={'$select': 'id'}, timeout=20)
+            me = r.json().get('id', '') if r.status_code == 200 else ''
+            if me: _TEAMS_ME[upn.lower()] = me
+        except requests.RequestException:
+            pass
     for m in reversed(_teams_delta(tok, upn, since_iso)):          # oldest first, so threads read in order
         user = (m.get('from') or {}).get('user') or {}
         body = _clean((m.get('body') or {}).get('content'))

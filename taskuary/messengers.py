@@ -11,8 +11,8 @@ Both are CHAT: messages land with a conversation id per chat, replies go back in
 chat, and the responder already knows not to sign chat messages.
 """
 import base64, json, os, time
-import requests
 from loguru import logger
+from . import net as requests     # pooled Session + (connect, read) timeouts, same call shape
 
 TG_API = 'https://api.telegram.org'
 TG_LIMIT = 25                # messages per poll, like the other channels

@@ -500,6 +500,16 @@ def no_calendar_carryover():
     cal._TODAY.update(at=0.0, day='', data=None); cal._REPLY.update(at=0.0, data=None)
 
 
+@pytest.fixture(autouse=True)
+def no_token_carryover():
+    """net's app-only token cache and the Teams mailbox -> object id cache are process-wide: a token one test
+    minted would answer the next test's graph_token without its patched POST ever being called."""
+    from taskuary import channels, net
+    net.clear(); channels._TEAMS_ME.clear()
+    yield
+    net.clear(); channels._TEAMS_ME.clear()
+
+
 @pytest.fixture
 def fx():
     """A MemoryStore wrapped in the picture factory. Named pictures (pending_draft,

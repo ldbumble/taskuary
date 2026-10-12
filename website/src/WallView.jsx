@@ -165,13 +165,13 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
         {!!panes.length && (
           <Box sx={{ display: "flex", gap: 0.25, bgcolor: "#e7eae2", borderRadius: 2, p: "3px" }}>
             {COLS.map((n) => (
-              <Box key={n} onClick={() => setColsP(n)} title={n === 1 ? "one at a time" : n === 2 ? "two across (2×2)" : `${n} across`}
-                sx={{ minWidth: 30, textAlign: "center", height: 24, lineHeight: "24px", px: 1, borderRadius: 1.5, cursor: "pointer",
+              <Box key={n} component="button" type="button" aria-pressed={cols === n} onClick={() => setColsP(n)} title={n === 1 ? "one at a time" : n === 2 ? "two across (2×2)" : `${n} across`}
+                sx={{ minWidth: 30, textAlign: "center", height: 24, lineHeight: "24px", px: 1, borderRadius: 1.5, cursor: "pointer", border: 0, font: "inherit", appearance: "none",
                   ...mono, fontSize: 12, fontWeight: cols === n ? 700 : 500, color: cols === n ? INK : DIM,
-                  bgcolor: cols === n ? PANEL : "transparent", boxShadow: cols === n ? "0 1px 2px rgba(30,50,38,.10)" : "none" }}>
+                  bgcolor: cols === n ? PANEL : "transparent", boxShadow: cols === n ? "0 1px 2px rgba(30,50,38,.10)" : "none", }}>
                 {n}×
               </Box>
-            ))}
+              ))}
           </Box>
         )}
       </Box>

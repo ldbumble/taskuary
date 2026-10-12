@@ -2,6 +2,8 @@
 import argparse, socket, threading, webbrowser
 import uvicorn
 from . import __version__, config
+try: import tomllib
+except ImportError: import tomli as tomllib  # py3.10
 
 
 def _session_headers(srv: dict) -> dict:
@@ -354,7 +356,17 @@ def main():
         return
     from .logs import setup as setup_logs
     setup_logs(args.debug)
-    cfg = config.load()
+    try:
+        cfg = config.load()
+    except tomllib.TOMLDecodeError as e:
+        # One typo in a hand-edited config.toml should not greet the owner with a traceback: they
+        # are the only one who can fix it, and the parser's own message already carries the line
+        # and column - so name the file, and say how to move on. (sys is imported here, not at the
+        # top: main()'s other branches import it locally, which makes it local to this function.)
+        import sys
+        print(f'{config.home() / "config.toml"} is not valid TOML: {e} - fix the file, or rename it '
+              f'(e.g. to config.toml.bak) to start fresh', file=sys.stderr)
+        sys.exit(1)
     host, port = args.host or cfg['server']['host'], args.port or cfg['server']['port']
     url = public_url(host, port)
     if _busy(host, port):

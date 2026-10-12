@@ -131,6 +131,27 @@
       "role": "info",
       "mark": "🗂",
       "hint": "the reply went out and the agent is finished, but the task is still open"
+    },
+    {
+      "key": "goal",
+      "word": "on track",
+      "role": "info",
+      "mark": "🎯",
+      "hint": "a goal with a date: its steps are tasks, and it stays on the rail until it is done"
+    },
+    {
+      "key": "goal_slipped",
+      "word": "slipped",
+      "role": "bad",
+      "mark": "🎯",
+      "hint": "a goal past its date, or a step somebody owes past theirs"
+    },
+    {
+      "key": "goal_fresh",
+      "word": "not started",
+      "role": "info",
+      "mark": "🎯",
+      "hint": "a goal nothing has moved on yet"
     }
   ],
   "states": [

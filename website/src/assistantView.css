@@ -45,6 +45,7 @@
 .tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #fff; background: #7b7366; border: 1px solid #7b7366; }
 .tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }   /* put off: the oat, as an outline */
 .tq-pile-head span.lvl-agents, .tq-sum-head span.lvl-agents { color: #fff; background: #55697a; border: 1px solid #55697a; }
+.tq-pile-head span.lvl-goals, .tq-sum-head span.lvl-goals { color: #fff; background: #55697a; border: 1px solid #55697a; }   /* a goal is slate, like the project mark it wears */
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
 .tq-pile-head em { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; font-variant-numeric: tabular-nums; }

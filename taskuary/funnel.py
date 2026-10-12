@@ -908,7 +908,7 @@ def _band(item):
 # by its heading, and the phone doorway offers the same sections as picks - so the walk and the rail must agree on
 # which row is in which: For later is work walked past with Next or put away with Remind me; Advisor ideas is an
 # idea still only an idea (made a task, it is work like any other).
-SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'agents': 'Agents working', 'later': 'For later',
+SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'goals': 'Goals', 'agents': 'Agents working', 'later': 'For later',
                  'reports': 'Reports', 'ideas': 'Advisor ideas', 'fyi': 'FYI'}
 _LEVEL_OF_BAND = {1: 'urgent', 2: 'task', 3: 'reports', 4: 'fyi', 5: 'agents'}
 # the page's fallback for a row that carries no band (funnelPile.attentionBand) - kept identical, never _band's
@@ -922,6 +922,8 @@ def level_of(item: dict) -> str:
         if item.get('kind') == 'meeting' and (item.get('calendar_ready') is False or (item.get('mins') or 0) > 15): band = 2
         elif item.get('kind') == 'agentdone': band = 2
         else: band = _BAND_FALLBACK.get(item.get('lane'), 2)
+    # A GOAL is one row and never gone: Goals while it has news you have not read, For later otherwise (spec 2026-10-12)
+    if str(item.get('kind') or '').startswith('goal'): return 'goals' if item.get('news') and item.get('unread') else 'later'
     # FOR LATER IS WHAT YOU PUT THERE - Next or Remind me - never a card merely shown: clicking another row on the rail moved the
     # task on the table under For later for three hours (the owner, 2026-10-08: "it moved 1003 automatically to later?")
     if band == 2 and (item.get('put_down') or item.get('deferred')): return 'later'

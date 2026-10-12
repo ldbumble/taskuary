@@ -522,7 +522,8 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     if took and wants_read(store):
         try: _wa(c, '/read', {'ids': [i for i in took if i]})
         except Exception as e: logger.warning(f'marking whatsapp read failed: {e}')
-    if out.get('seq') is not None:
+    # only a sequence that moved: an idle check-in rewrote the same number ~2/s, and every write moved the rail (2026-10-12)
+    if out.get('seq') is not None and out['seq'] != cfg.get('wa_seq'):
         store.set_connector_config(c['ConnectorId'], {**cfg, 'wa_seq': out['seq']})
     return n
 

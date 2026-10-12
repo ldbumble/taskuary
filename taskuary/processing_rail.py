@@ -41,6 +41,13 @@ DIRTY_ROWS = {
     'processing_alias': [('EntityKind', 'LocalId')],
     'processing_relation': [('FromEntityKind', 'FromLocalId'), ('ToEntityKind', 'ToLocalId')],
 }
+# A healthy connector's heartbeat is the one write nothing here reads: touch_connector stamps LastSyncAt on every check-in
+# (~2/s while WhatsApp is connected), and each stamp left a dirty row that moved rail_top and threw the cached pile away -
+# 0 of 1,050 production pile reads came back warm (2026-10-12). So the connector's UPDATE leaves a row only when a column
+# other than the stamp moved, or the connector is failing (a broken row's `when` is its LastSyncAt, funnel.broken_connections).
+# Every other column stays in: a column added to the table must be added here (test_rail_incremental pins the list).
+CONNECTOR_COLUMNS = ('ConnectorId', 'Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'LastError', 'LastErrorAt', 'Roles', 'Scope')
+UPDATE_WHEN = {'connector': 'NEW.LastError IS NOT NULL OR ' + ' OR '.join(f'OLD.{c} IS NOT NEW.{c}' for c in CONNECTOR_COLUMNS)}
 ENTITY_KINDS = ('message', 'task', 'review', 'idea')
 KEEP_ROWS = 10_000     # a rail older than this many dirty rows rebuilds in full
 
@@ -70,7 +77,8 @@ def triggers(setting_names):
             body = ''.join(f"INSERT INTO processing_dirty_row(Kind, LocalId) SELECT {_ref(k, r)}, CAST({r}.{i} AS TEXT) WHERE {r}.{i} IS NOT NULL"
                            + (f" AND OLD.{i} IS NOT NEW.{i}" if action == 'UPDATE' and r == 'OLD' else '') + ";\n"
                            for r in rows for k, i in pairs)
-            out.append(f'CREATE TRIGGER IF NOT EXISTS rail_dirty_{table}_{action.lower()} AFTER {action} ON {table} BEGIN\n{body}END')
+            when = f' WHEN {UPDATE_WHEN[table]}' if action == 'UPDATE' and table in UPDATE_WHEN else ''
+            out.append(f'CREATE TRIGGER IF NOT EXISTS rail_dirty_{table}_{action.lower()} AFTER {action} ON {table}{when} BEGIN\n{body}END')
     names = ','.join("'" + n + "'" for n in setting_names)
     for action, row in (('INSERT', 'NEW'), ('UPDATE', 'NEW'), ('DELETE', 'OLD')):
         out.append(f'''CREATE TRIGGER IF NOT EXISTS rail_dirty_setting_{action.lower()} AFTER {action} ON setting
@@ -78,6 +86,21 @@ def triggers(setting_names):
               INSERT INTO processing_dirty_row(Kind, LocalId) VALUES ('setting', {row}.Name);
             END''')
     return out
+
+
+def install(cx, setting_names):
+    """Create the triggers, replacing any whose stored text is not today's. CREATE TRIGGER IF NOT EXISTS never reaches
+    an existing database, so the connector's new WHEN (2026-10-12) - or a setting added to the dirty list - would
+    otherwise never arrive on an install made before it. SQLite keeps the text as written, minus IF NOT EXISTS."""
+    have = dict(cx.execute("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name LIKE 'rail_dirty_%'"))
+    for sql in triggers(setting_names):
+        name = sql.split()[5]
+        if have.get(name, sql.replace(' IF NOT EXISTS', '', 1)) != sql.replace(' IF NOT EXISTS', '', 1):
+            # one savepoint: a write from another process between the DROP and the CREATE would leave no dirty row
+            cx.execute('SAVEPOINT rail_trigger')
+            try: cx.execute(f'DROP TRIGGER {name}'); cx.execute(sql); cx.execute('RELEASE rail_trigger')
+            except Exception: cx.execute('ROLLBACK TO rail_trigger'); cx.execute('RELEASE rail_trigger'); raise
+        else: cx.execute(sql)
 
 
 def dirty_since(cur, mark):

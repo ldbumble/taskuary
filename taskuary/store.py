@@ -515,6 +515,14 @@ PROCESSING_DIRTY_SETTINGS = (
     'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains', 'processing_membership_rules',
     'reply_channels',            # read into a reply card's display backing (funnel_presentation): a change must move the stamp
 )
+# Settings no pile reads (funnel.pile and everything it builds from), so writing one leaves the cached pile warm. A
+# prefix covers the per-dock-task keys. Only concierge, the server's own routes and the phone doorway read these - a key
+# goes here only once nothing on the pile's road reads it: a missed invalidation shows a stale pile.
+PILE_BLIND_SETTINGS = (
+    'assistant_current:',        # concierge.CURRENT_KEY - the item on the table, written as each press puts it there
+    'concierge_cli_sid:',        # concierge.SID_KEY - the CLI conversation, resumed turn to turn
+    'assistant_last_undo',       # concierge.LAST_UNDO - what the phone's Undo pill runs
+)
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
 # draft. Both stop short of anything leaving the building - a draft waits for you to send it,
@@ -1003,7 +1011,7 @@ class SQLiteStore:
                   UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
                 END''')
             from . import processing_rail
-            for sql in processing_rail.triggers(PROCESSING_DIRTY_SETTINGS): self.cx.execute(sql)
+            processing_rail.install(self.cx, PROCESSING_DIRTY_SETTINGS)
             try: self.cx.execute(KB_FTS); self.kb_fts = True
             except sqlite3.OperationalError as e:
                 self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
@@ -4563,10 +4571,19 @@ class SQLiteStore:
         return self._patch_poll_state('connector', connector_id, config_set=config_set,
                                      config_remove=config_remove, expect_fields=expect_fields,
                                      expect_config=expect_config)
+    TOUCH_EVERY = 30      # seconds: a check-in that changes nothing rewrites the stamp at most this often
     def touch_connector(self, cid, error=None):
         # LastErrorAt is WHEN it failed: LastSyncAt is the last time it worked, and the bell was showing that as the failure's time
-        if error: self._exec('UPDATE connector SET LastError=?, LastErrorAt=? WHERE ConnectorId=?', (error[:500], _now(), cid))
-        else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL, LastErrorAt=NULL WHERE ConnectorId=?', (_now(), cid))
+        # A check-in that says what the row already says, inside TOUCH_EVERY, changes no row: WhatsApp checks in ~2/s, and
+        # every one rewrote it (2026-10-12). The stamps are read as "ok 3m ago", never to the second; a stamp
+        # from the future (the clock went back) does not hold the next one off.
+        now, since = _now(), (datetime.now() - timedelta(seconds=self.TOUCH_EVERY)).isoformat(sep=' ', timespec='seconds')
+        if error: self._exec('''UPDATE connector SET LastError=?, LastErrorAt=? WHERE ConnectorId=?
+                                AND NOT (LastError IS ? AND COALESCE(LastErrorAt, '') BETWEEN ? AND ?)''',
+                             (error[:500], now, cid, error[:500], since, now))
+        else: self._exec('''UPDATE connector SET LastSyncAt=?, LastError=NULL, LastErrorAt=NULL WHERE ConnectorId=?
+                            AND NOT (LastError IS NULL AND LastErrorAt IS NULL AND COALESCE(LastSyncAt, '') BETWEEN ? AND ?)''',
+                         (now, cid, since, now))
         self._processing_ignored_writes += 1
     def get_settings(self): return {r['Name']: r['Value'] for r in self._rows('SELECT * FROM setting')}
     def get_setting(self, name, default=None):
@@ -4586,6 +4603,10 @@ class SQLiteStore:
         if name == 'ingest_status':
             # This setting is an ephemeral progress clock. It is intentionally absent from every
             # processing projection, so do not make it invalidate otherwise reusable DB work.
+            self._processing_ignored_writes += 1
+        elif name.startswith(PILE_BLIND_SETTINGS):
+            # ...nor are these: the assistant's own bookkeeping, written on every Next press. Emptying the pile for them
+            # made the press that wrote one rebuild it cold (2026-10-12).
             self._processing_ignored_writes += 1
         else:
             # Only a setting the projection READS colds the rail (PROCESSING_DIRTY_SETTINGS - and its

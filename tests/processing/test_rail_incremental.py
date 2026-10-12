@@ -179,3 +179,96 @@ def test_dirty_rows_say_which_row_and_an_update_names_its_key_once(db):
     db._exec('UPDATE message SET Subject=? WHERE MessageId=?', ('once', mid))
     assert [tuple(r) for r in db.cx.execute('SELECT Kind, LocalId FROM processing_dirty_row')] == [('message', str(mid))]
     assert processing_rail.dirty_since(db.cx.cursor(), 0)[1] == [('message', str(mid))]
+
+
+# ---- the pile cache stays warm through writes nothing on it reads (2026-10-12) -------------------------
+def pile(s): return funnel.pile(s, observed=[], quiet=True)
+def at(**kw): return (datetime.now() + timedelta(**kw)).isoformat(sep=' ', timespec='seconds')
+def stamp(s, cid, col, value): s._exec(f'UPDATE connector SET {col}=? WHERE ConnectorId=?', (value, cid))
+
+
+def test_a_healthy_connector_check_in_leaves_the_pile_warm(db):
+    mail(db, 1)
+    cid, first = db.get_connector_by_type('github')['ConnectorId'], pile(db)
+    stamp(db, cid, 'LastSyncAt', '2026-01-01 00:00:00')                  # an old stamp, so the check-in below does write
+    top = db.rail_top()
+    db.touch_connector(cid)
+    assert db.get_connector(cid)['LastSyncAt'] != '2026-01-01 00:00:00'
+    assert db.rail_top() == top and pile(db) is first
+
+
+def test_a_connector_that_starts_failing_still_moves_the_pile(db):
+    mail(db, 1)
+    cid, first = db.get_connector_by_type('github')['ConnectorId'], pile(db)
+    db.touch_connector(cid, 'HTTP 404')
+    assert pile(db) is not first
+    second = pile(db)
+    db.touch_connector(cid)                                              # ...and so does it coming back
+    assert pile(db) is not second
+
+
+@pytest.mark.parametrize('column, value', [('Active', 1), ('ConfigJson', '{"bulk": "rank"}'), ('Type', 'gitlab'), ('LastErrorAt', '2026-01-01')])
+def test_a_column_the_pile_reads_still_leaves_a_dirty_row(db, column, value):
+    cid, top = db.get_connector_by_type('github')['ConnectorId'], db.rail_top()
+    stamp(db, cid, column, value)
+    assert db.rail_top() > top
+
+
+def test_a_failing_connectors_stamp_still_leaves_a_dirty_row(db):
+    # a broken row's `when` is its LastSyncAt (funnel.broken_connections)
+    cid = db.get_connector_by_type('github')['ConnectorId']
+    stamp(db, cid, 'LastError', 'HTTP 404'); top = db.rail_top()
+    stamp(db, cid, 'LastSyncAt', '2026-01-01 00:00:00')
+    assert db.rail_top() > top
+
+
+def test_the_trigger_names_every_connector_column_but_the_stamp(db):
+    cols = {r[1] for r in db.cx.execute('PRAGMA table_info(connector)')}
+    assert set(processing_rail.CONNECTOR_COLUMNS) == cols - {'LastSyncAt'}
+
+
+def test_an_install_made_before_the_when_gets_it(tmp_path):
+    path = str(tmp_path / 'old.db')
+    s = SQLiteStore(path)
+    s.cx.execute('DROP TRIGGER rail_dirty_connector_update')
+    s.cx.execute("CREATE TRIGGER rail_dirty_connector_update AFTER UPDATE ON connector BEGIN "
+                 "INSERT INTO processing_dirty_row(Kind, LocalId) VALUES ('connector', NEW.ConnectorId); END")
+    s.cx.commit(); s.cx.close()
+    s = SQLiteStore(path)
+    triggers = lambda: {r[0]: r[1] for r in s.cx.execute("SELECT name, sql FROM sqlite_master WHERE type='trigger'")}
+    before = triggers()
+    assert ' WHEN ' in before['rail_dirty_connector_update']
+    s.cx.close(); s = SQLiteStore(path)                                   # a second open leaves every trigger as it is
+    assert triggers() == before
+    s.cx.close()
+
+
+def test_a_check_in_that_changes_nothing_writes_nothing_for_a_while(db):
+    cid = db.get_connector_by_type('github')['ConnectorId']
+    get = lambda col: db.get_connector(cid)[col]
+    stamp(db, cid, 'LastSyncAt', held := at(seconds=-10))
+    db.touch_connector(cid); assert get('LastSyncAt') == held             # fresh: skipped
+    stamp(db, cid, 'LastSyncAt', at(minutes=-5))
+    db.touch_connector(cid); assert get('LastSyncAt') >= at(seconds=-5)   # stale: stamped
+    stamp(db, cid, 'LastSyncAt', at(days=1))
+    db.touch_connector(cid); assert get('LastSyncAt') < at(minutes=1)     # a stamp from the future does not hold it off
+    db.touch_connector(cid, 'HTTP 500')
+    stamp(db, cid, 'LastErrorAt', held := at(seconds=-10))
+    db.touch_connector(cid, 'HTTP 500'); assert get('LastErrorAt') == held                            # the same error: skipped
+    db.touch_connector(cid, 'HTTP 502'); assert (get('LastError'), get('LastErrorAt') > held) == ('HTTP 502', True)
+    db.touch_connector(cid); assert get('LastError') is None                                          # recovery: always written
+
+
+def test_the_assistants_bookkeeping_leaves_the_pile_warm(db):
+    mail(db, 1)
+    first = pile(db)
+    for k in ('assistant_current:7', 'concierge_cli_sid:7', 'assistant_last_undo'): db.set_setting(k, 'x', 'assistant')
+    assert pile(db) is first
+
+
+@pytest.mark.parametrize('name', ['funnel_mutes', 'walk_started_at', 'meeting_grace_minutes'])
+def test_a_setting_the_pile_reads_or_might_still_empties_it(db, name):
+    mail(db, 1)
+    first = pile(db)
+    db.set_setting(name, '[]' if name == 'funnel_mutes' else '1', 'owner')
+    assert pile(db) is not first

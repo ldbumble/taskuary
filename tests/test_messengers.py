@@ -117,6 +117,16 @@ class WhatsAppTests(unittest.TestCase):
         c2 = s.get_connector_by_type('whatsapp')
         self.assertEqual(json.loads(c2['ConfigJson'])['wa_seq'], 7)
 
+    def test_an_idle_check_in_leaves_the_sequence_unwritten(self):
+        # the bridge answers ~2/s with nothing new: rewriting the same seq every time moved the rail and emptied the pile
+        s, c = self._store()
+        s.set_connector_config(c['ConnectorId'], {**json.loads(c['ConfigJson'] or '{}'), 'wa_seq': 7})
+        c = s.get_connector_by_type('whatsapp', with_secret=True)
+        with mock.patch.object(s, 'set_connector_config') as wrote, \
+             mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'seq': 7, 'messages': []}):
+            messengers.poll_whatsapp(s, c, s.list_sources(), llm=None)
+        wrote.assert_not_called()
+
     def test_only_the_chats_you_named_come_in_and_there_is_no_catch_all(self):
         """A paired account is the owner's OWN WhatsApp: it sees every group they are in and every
         DM they get. '*' used to admit all the direct ones, which on a real phone is far too much

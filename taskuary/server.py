@@ -3147,6 +3147,19 @@ def cli_hook_ask(payload: dict):
         logger.debug(f'ask hook ignored: {e}'); return {}
 
 
+# A hook writes the store, and run on the loop it froze every pane, socket and screencast whenever another thread held
+# the store's lock (P16, measured: p99 45-60 ms, max 2 s, and a hook past curl's 3 s was dropped). So it runs off the
+# loop - on ONE worker, in arrival order, exactly as the loop used to serialise them: a PermissionRequest and the
+# PostToolUse that closes it, a Stop and the next UserPromptSubmit, must never overtake each other the way a pool can.
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+_HOOK_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix='cli-hook')
+
+async def _hook_off_loop(f, *args, **kw):
+    """Run f on the hook worker. Shielded: a curl that hangs up must not cancel a hook still queued - on the loop it ran
+    once its body was read, whoever was still listening."""
+    return await asyncio.shield(asyncio.wrap_future(_HOOK_WORKER.submit(partial(f, *args, **kw))))
+
 @app.post('/api/hooks/{cli}')
 async def cli_hook(cli: str, request: Request):
     """A CLI's hook fired in a checkout a session of ours works in (hooks.py wires it): the event's
@@ -3161,7 +3174,7 @@ async def cli_hook(cli: str, request: Request):
     try: payload = json.loads((await request.body()) or b'{}')
     except Exception as e:
         logger.debug(f'claude hook body unreadable: {e}'); return {'bound': False}
-    try: return hooks.receive(payload if isinstance(payload, dict) else {}, cli=cli)
+    try: return await _hook_off_loop(hooks.receive, payload if isinstance(payload, dict) else {}, cli=cli)
     except Exception as e:
         logger.debug(f'{cli} hook ignored: {e}'); return {'bound': False}
 
@@ -3879,8 +3892,10 @@ async def concierge_stream(body: ConciergeStreamBody):
     from . import concierge
     from .processing_navigation import NavigationStale
     from .funnel_selection import SelectionUnavailable
-    _hands_off()                        # the walk is in a chat: the tab is locked and so is its road
-    admission = asyncio.create_task(asyncio.to_thread(_navigation_reservation, body))
+    def admit():
+        _hands_off()                    # the walk is in a chat: the tab is locked and so is its road (a store read - off the loop, P16)
+        return _navigation_reservation(body)
+    admission = asyncio.create_task(asyncio.to_thread(admit))
     try:
         reservation = await asyncio.shield(admission)
     except asyncio.CancelledError:

@@ -254,6 +254,10 @@ is what you see if those cards cannot load.</li>
 <p><code>assistant_cold_days</code> · type: number · default: <code>3</code></p>
 <p>Open work with no comment, message or run for this many days gets a line. 3 by default.</p>
 <p>A task with a live agent on it is never cold. One with a draft waiting on the task is named as waiting on you.</p>
+<h3 id="days-of-silence-before-a-thread-has-slipped">Days of silence before a thread has slipped<a class="anchor" href="#days-of-silence-before-a-thread-has-slipped" aria-label="Link to this section">#</a></h3>
+<p><code>slipped_default_days</code> · type: number</p>
+<p>A thread you wrote on, or a step somebody owes, is &#39;slipped&#39; - first on your rail, with Chase, Let it go, They answered elsewhere and Remind me - once it has been quiet this many days. For a person the outcome ledger has seen answer three times, their own usual day is used instead. 5 by default.</p>
+<p>Someone whose auto-reply says they are away never slips. The day is read from the ledger, never from the mail.</p>
 <h3 id="advise-on-the-item-that-changed">Advise on the item that changed<a class="anchor" href="#advise-on-the-item-that-changed" aria-label="Link to this section">#</a></h3>
 <p><code>advisor_events</code> · type: switch</p>
 <p>When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor runs one small prompt on the light model and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.</p>

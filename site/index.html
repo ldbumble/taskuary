@@ -52,49 +52,34 @@
 
   /* THE ONE ASK. Gold is GitHub's own star colour, so the glyph reads as the thing you press
      over there rather than as decoration (the owner, 2026-09-17: "the star should be gold like
-     in github (its yellow) but want it more prominent"). Every project that gets starred asks in
-     the same places: beside the logo, once near the top while people are still reading, and in
-     the community block at the end - one line each, with the reason, never a second time. */
+     in github (its yellow) but want it more prominent"). It is asked twice: under the download, and in
+     the community block at the end - never in the nav (2026-10-11: "star it should not be on top"). */
   .star{color:var(--gold);line-height:1;font-size:1.05em}
   .btn.primary .star{color:#f3c74a}
-  .starline{margin:20px 0 0;font-size:14.5px;color:var(--dim)}
-  .starline a{color:var(--ink);font-weight:650;border-bottom:1px solid var(--bd)}
-  .starline a:hover{color:var(--accent);border-color:var(--accent);text-decoration:none}
-  .starline .n{font-family:var(--mono);font-size:13px;color:var(--faint)}
   .starchip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;
             border:1px solid var(--bd);background:var(--panel);font-weight:600;font-size:13.5px;color:var(--ink)}
   .starchip:hover{text-decoration:none;border-color:var(--gold);background:#fff}
   .starchip .n{font-family:var(--mono);color:var(--faint)}
 
-  /* The guided task is the first action; the Studio remains available after the workflow. */
-  .studio-preview{margin-top:28px;border:1px solid var(--bd);border-radius:12px;overflow:hidden;background:var(--panel)}
-  .studio-preview summary{padding:18px 22px;cursor:pointer;font-weight:600;color:var(--accent)}
-  .studio-preview summary:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
-  .workspace-hero{display:block;width:100%;height:620px;border:0;background:var(--bg)}
   header{padding:0}
   .intro{padding-top:64px;text-align:center}
   .intro h1{font-size:clamp(40px,6vw,66px);margin:14px 0 16px}
   .intro .sub{max-width:720px;margin:0 auto;font-size:clamp(16px,1.5vw,19px)}
-  .intro .cta{justify-content:center;margin:28px 0 12px}
-  .after{padding-top:48px}
+  .get{display:flex;flex-direction:column;align-items:center;gap:12px;margin:30px 0 0}
+  .get .fine{margin-top:2px}
+  .shot{margin-top:44px}
+  .shot img{display:block;width:100%;height:auto;border:1px solid var(--bd);border-radius:14px;background:var(--panel);box-shadow:0 18px 50px -24px rgba(38,37,33,.35)}
+  .after{padding-top:8px}
   h1{line-height:1.02;letter-spacing:-.03em;font-weight:700}
   h1 .accent{color:var(--accent)}
   .sub{color:var(--dim);line-height:1.5}
   .sub b{color:var(--ink);font-weight:600}
-  .cta{display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;margin:30px 0 14px}
   .btn.big{padding:14px 26px;font-size:16.5px;border-radius:11px}
-  .trynote{text-align:center;color:var(--dim);font-size:13px;margin:-2px 0 26px}
-  .ways{margin-top:0}
-  .pip{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:13.5px;background:var(--panel);border:1px solid var(--bd);border-radius:9px;padding:9px 12px 9px 14px;color:var(--ink)}
-  .pip .dollar{color:var(--faint)}
-  .pip button{all:unset;cursor:pointer;color:var(--accent);font-family:var(--sans);font-weight:600;font-size:12.5px;padding:2px 6px;border-radius:5px}
-  .pip button:hover{background:var(--panel2)}
   .fine{color:var(--faint);font-size:13px}
-  .fine.vs{margin-top:6px}
   .fine a{color:var(--faint);text-decoration:underline;text-decoration-color:var(--bd)}
 
   /* flow strip */
-  .flow{margin:56px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--bd);border-radius:12px;background:var(--panel);overflow:hidden}
+  .flow{margin:40px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--bd);border-radius:12px;background:var(--panel);overflow:hidden}
   .flow > div{padding:22px 24px;border-left:1px solid var(--bd);position:relative}
   .flow > div:first-child{border-left:0}
   .flow .n{font-family:var(--mono);color:var(--sage-ink);font-size:12px;font-weight:600;letter-spacing:.1em}
@@ -149,7 +134,6 @@
 
   @media (max-width:860px){
     nav .links a.hide{display:none}
-    .workspace-hero{height:560px}
     .intro{padding-top:40px}
     .intro h1{font-size:40px}
     .flow{grid-template-columns:1fr}
@@ -180,53 +164,36 @@
       <a class="hide" href="#how">How it works</a>
       <a class="hide" href="#features">Features</a>
       <a href="/docs/">Docs</a>
-      <a class="hide" href="https://github.com/ldbumble/taskuary" title="Source on GitHub">GitHub</a>
-      <a class="starchip" href="https://github.com/ldbumble/taskuary"
-         title="Star Taskuary on GitHub - it is how other people find it"><span class="star">★</span> Star <span class="n" id="starnav"></span></a>
-      <a href="https://github.com/ldbumble/taskuary/issues/new/choose" title="Get help or report a problem">Support</a>
-      <a class="hide" href="/demo/">Try it</a>
+      <a class="hide" href="https://github.com/ldbumble/taskuary">GitHub</a>
       <a class="btn primary sm" href="#download">Download</a>
     </div>
   </div>
 </nav>
-  <div class="wrap intro" id="how">
-    <div class="eyebrow">request → checked result → your approval</div>
+  <!-- One headline, one download, the star beneath it, then the product itself. The nav is only
+       the top things (the owner, 2026-10-11: "this is looking busy ... star should not be on top"). -->
+  <div class="wrap intro">
     <h1>Your work, <span class="accent">already underway.</span></h1>
-    <p class="sub"><b>Bring a request all the way to a reviewed result.</b> Taskuary keeps the original message,
-      your agent's work, the evidence and the reply together. Runs on your machine with the AI tools you choose.</p>
-    <!-- One thing to do, then three ways to get it. Four buttons in a row asked the visitor to
-         choose an install method before they had any reason to install anything; trying it costs
-         them nothing and answers the only question they actually have. -->
-    <div class="cta">
-      <a class="btn primary big" href="/demo/">Try one task
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="m12 5 7 7-7 7"/></svg></a>
-    </div>
-    <div class="trynote">Follow one email request through checked figures and a simulated approval.<br>Fictional data and scripted agent work. No install, sign-up or email sending.</div>
-    <div class="trynote"><a href="/docs/">Read the documentation</a> — the first run, what to connect, and what every setting does</div>
-    <!-- three ways to get it, across: they are alternatives to each other, not steps -->
-    <div class="cta ways">
-      <a class="btn primary" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">
+    <p class="sub">Taskuary turns your mail and messages into tasks, has your AI agents do the work, and waits for
+      your approval before anything goes out. Free, open source, runs on your machine.</p>
+    <div class="get">
+      <a class="btn primary big" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
         Download for Windows</a>
-      <span class="pip"><span class="dollar">$</span><span id="pipcmd">pip install taskuary</span><button type="button" onclick="copyPip(this)">copy</button></span>
-      <a class="btn ghost" href="https://github.com/ldbumble/taskuary">View source</a>
+      <a class="starchip" href="https://github.com/ldbumble/taskuary"
+         title="Star Taskuary on GitHub - it is how other people find it"><span class="star">★</span> Star on GitHub <span class="n" id="starnav"></span></a>
+      <div class="fine">or <a href="#download">pip install taskuary</a> on macOS and Linux · <a href="/demo/">try one task in your browser</a></div>
     </div>
-    <div class="fine">Free and open source (MIT) · runs on your machine · no subscription</div>
-    <div class="fine vs">Compared with hosted assistants like Fyxer: no account, no monthly fee, and the work goes to agents you already use.</div>
-    <p class="starline"><span class="star">⭐</span>
-      <a href="https://github.com/ldbumble/taskuary">Please star Taskuary on GitHub if you find it helpful</a>
-      — it is how other people find it<span class="n" id="starcount"></span></p>
   </div>
-  <div class="wrap after">
+  <div class="wrap shot">
+    <img src="/hero.webp" width="1120" height="709" fetchpriority="high"
+         alt="Taskuary at work: every task, message and agent as a figure on one floor - agents at their desks, people waiting on you, and the assistant at the centre.">
+  </div>
+  <div class="wrap after" id="how">
     <div class="flow">
       <div><div class="n">01 · IN</div><h3>Everything lands on one timeline</h3><p>Outlook and IMAP mail, Teams, Slack, Telegram, WhatsApp, GitHub issues, Jira, and the reports you schedule — one rail, in the order it arrived.</p><span class="arrow">→</span></div>
       <div><div class="n">02 · FUNNEL</div><h3>Triage says what is real work</h3><p>It reads the thread, not just the message: who was addressed, whether a colleague already answered, what you ruled before. A question becomes a drafted reply; work becomes a task.</p><span class="arrow">→</span></div>
       <div><div class="n">03 · AGENTS + YOU</div><h3>Your agents do it, you approve</h3><p>Claude Code, Codex or Gemini open a live session on the task in your own checkout. Replies wait in a review queue. Nothing sends without you.</p></div>
     </div>
-    <details class="studio-preview">
-      <summary>Explore the optional Studio view</summary>
-      <iframe class="workspace-hero" src="/workspace/" loading="lazy" title="The interactive Taskuary Studio: work arrives and AI agents take it on"></iframe>
-    </details>
   </div>
 </header>
 
@@ -235,7 +202,7 @@
     <div class="head">
       <div class="eyebrow">what it does</div>
       <h2>Work arrives as messages. Work <em>is</em> tasks. You were the translation layer.</h2>
-      <p class="lead">Taskuary is that layer — local-first, with your judgement written down where the machine can read it.</p>
+      <p class="lead">Taskuary is that layer — local-first, with your judgement written down where the machine can read it. Unlike hosted assistants such as Fyxer: no account, no monthly fee, and the work goes to agents you already use.</p>
     </div>
     <div class="grid">
       <div class="card you">
@@ -353,30 +320,6 @@ docker compose up -d</div>
 </footer>
 
 <script>
-  /* The mobile scene grows to show its stacked inbox without creating a second scrollbar inside
-     the page. Desktop stays exactly one viewport tall. Both documents are served from this site.
-     Only the frame is sized: the header holds the hero copy and the flow strip above it, and
-     pinning the header to the frame's height let the next section draw over them on phones. */
-  (function(){
-    var frame = document.querySelector('.workspace-hero'), observer;
-    function fitWorkspace(){
-      if (!frame || !frame.contentDocument) return;
-      if (matchMedia('(max-width: 860px)').matches) {
-        var height = Math.max(760, frame.contentDocument.documentElement.scrollHeight);
-        frame.style.height = height + 'px';
-      } else {
-        frame.style.height = '';
-      }
-    }
-    frame.addEventListener('load', function(){
-      fitWorkspace();
-      if (window.ResizeObserver) {
-        if (observer) observer.disconnect();
-        observer = new ResizeObserver(fitWorkspace); observer.observe(frame.contentDocument.documentElement);
-      }
-    });
-    window.addEventListener('resize', fitWorkspace);
-  })();
   /* First-party, anonymous visit + CTA counts. The id is kept only for this browser tab so the
      stats page can connect "clicked demo" to "opened demo" after navigation. */
   (function(){
@@ -403,11 +346,6 @@ docker compose up -d</div>
     });
   })();
 
-  function copyPip(btn){
-    navigator.clipboard.writeText(document.getElementById('pipcmd').textContent).then(function(){
-      btn.textContent = 'copied'; setTimeout(function(){ btn.textContent = 'copy'; }, 1400);
-    });
-  }
   // a code block copies its COMMANDS: the button's own label and the # comment lines stay out
   function copyCode(btn){
     var lines = [];
@@ -446,8 +384,6 @@ docker compose up -d</div>
         if (!n) return;
         var short = n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
         ['starnav', 'starcard'].forEach(function(id){ var e = document.getElementById(id); if (e) e.textContent = short; });
-        var line = document.getElementById('starcount');
-        if (line) line.textContent = ' \u00b7 ' + n + (n === 1 ? ' star so far' : ' stars so far');
       })
       .catch(function(){});
   })();

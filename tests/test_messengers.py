@@ -167,6 +167,29 @@ class WhatsAppTests(unittest.TestCase):
                                          'me@s.whatsapp.net']}))
         self.assertTrue(calls[1][0].startswith('/messages?after='))
 
+    def test_the_filter_is_sent_when_it_changes_not_on_every_read(self):
+        """The doorway reads once a second (P13): an unchanged list is not re-sent, an unchanged watermark is
+        not re-written, and a new chat, a restarted bridge or an old send each state the filter again."""
+        s, c = self._store()
+        calls, seq = [], [3]
+        def fake(_c, path, body=None):
+            calls.append(path)
+            return {'ok': True} if path == '/filter' else {'seq': seq[0], 'messages': []}
+        def read():
+            calls.clear()
+            with mock.patch.object(messengers, '_wa', fake): messengers.poll_whatsapp(s, s.get_connector_by_type('whatsapp', with_secret=True), s.list_sources())
+            return [p.split('?')[0] for p in calls]
+        self.assertEqual(read(), ['/filter', '/messages'])
+        with mock.patch.object(s, 'set_connector_config', wraps=s.set_connector_config) as wrote:
+            self.assertEqual(read(), ['/messages'])                             # idle: one bridge request, no write
+            wrote.assert_not_called()
+        s.save_source({'Channel': 'whatsapp', 'Address': '4242@g.us', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
+        self.assertEqual(read(), ['/filter', '/messages'])                      # a chat added: told at once
+        seq[0] = 0; read()                                                      # the bridge restarted (seq went back)...
+        self.assertEqual(read(), ['/filter', '/messages'])                      # ...so it is told again
+        with mock.patch.object(messengers.time, 'monotonic', return_value=messengers.time.monotonic() + messengers.WA_FILTER_EVERY + 1):
+            self.assertEqual(read(), ['/filter', '/messages'])                  # and re-stated after a while regardless
+
     def test_the_pairing_qr_is_drawn_for_the_card_and_a_down_bridge_is_a_state(self):
         s, c = self._store()
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': False, 'me': '', 'qr': '2@abc,def,ghi', 'pairingCode': ''}):

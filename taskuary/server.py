@@ -185,6 +185,7 @@ ATTACH_QUIET = 10
 
 from loguru import logger
 import time as _time
+QUIET_GETS = {'/api/ingest/status'}     # polled GETs that are not logged when they succeed (request_log)
 
 @app.middleware('http')
 async def request_log(request: Request, call_next):
@@ -203,7 +204,9 @@ async def request_log(request: Request, call_next):
         return JSONResponse({'detail': f'{type(e).__name__}: {str(e)[:300] or "no message"}',
                              'where': f'{request.method} {request.url.path}',
                              'log': str(home() / 'taskuary.log'), 'code': 'crashed'}, status_code=500)
-    if request.url.path.startswith('/api'):
+    # ...except a status poll that answered: the page asks every second or so, and those lines were three
+    # quarters of taskuary.log - the 5 MB rotation then kept a day and a half of anything else (P13)
+    if request.url.path.startswith('/api') and not (request.method == 'GET' and request.url.path in QUIET_GETS and resp.status_code < 300):
         logger.debug(f'{request.method} {request.url.path} -> {resp.status_code} ({int((_time.time() - t0) * 1000)}ms)')
     return resp
 
@@ -6343,7 +6346,10 @@ def _visible_status(owners):
 
 
 def _status_write(target_store, owners):
-    target_store.set_setting('ingest_status', json.dumps(_visible_status(owners)), 'system')
+    # the same banner again is no news: each write is a transaction AND an ingest-status push to every
+    # open page, and an idle phone doorway was sending the identical "idle" two or three times a second (P13)
+    st = json.dumps(_visible_status(owners))
+    if target_store.get_setting('ingest_status') != st: target_store.set_setting('ingest_status', st, 'system')
 
 
 def _status_begin(target_store, lane, what):
@@ -6640,7 +6646,7 @@ def doorway_forever():
             for c in store.list_connectors():
                 if c.get('Active') and c.get('Type') not in types and remote_assistant.polls(store, c):
                     types.append(c['Type'])
-            if types: _poll_on_quick_clock(types, timer=False)     # every tick, whatever the chat clock says
+            if types: _poll_on_quick_clock(types, timer=False, quiet=True)     # every tick, whatever the chat clock says
         except Exception as e:
             logger.debug(f'doorway poll failed: {e}')
         time.sleep(DOORWAY_TICK)
@@ -6688,7 +6694,7 @@ def _recently_fetched(types, target_store=None) -> bool:
         for provider in providers)
 
 
-def _poll_on_quick_clock(types, timer: bool = True):
+def _poll_on_quick_clock(types, timer: bool = True, quiet: bool = False):
     """Each due chat type on its own thread, marked for the due recheck. One shared chat lane meant a
     bridge that hung for forty seconds skipped every Teams, Slack and Telegram tick in between; now a
     slow type holds only its own lock (_poll_quick) and this tick waits for it no longer than the clock.
@@ -6696,13 +6702,19 @@ def _poll_on_quick_clock(types, timer: bool = True):
     `timer=False` is the doorway's read: it is NOT subject to the chat clock's cadence. Marked as a
     timer read, the doorway's one-second tick was filtered by _quick_due and actually read the
     assistant chat once per poll_seconds - thirty seconds - so "next" typed on the phone sat unheard
-    for up to half a minute while the reply itself takes half a second (measured 2026-09-20)."""
+    for up to half a minute while the reply itself takes half a second (measured 2026-09-20).
+
+    `quiet=True` is the doorway too: a read that finds nothing leaves the banner alone (_poll_quick).
+    With one type there is no other type to keep on time, so it is read on the doorway's own thread
+    rather than on a fresh thread every second; the type lock still makes a hung read skip, not stack."""
     def one(typ):
-        _QUICK_TIMER.active = timer
+        _QUICK_TIMER.active, _QUICK_TIMER.quiet = timer, quiet
         try: _poll_reports(0, what='syncing', only=[typ])
         except Exception as e: logger.exception(f'chat poll failed ({typ}): {e}')   # with the traceback: 'unhashable type: dict' twice, and no line to go to
-        finally: _QUICK_TIMER.active = False
-    threads = [threading.Thread(target=one, args=(t,), name=f'quick-{t}', daemon=True) for t in dict.fromkeys(types)]
+        finally: _QUICK_TIMER.active = _QUICK_TIMER.quiet = False
+    types = list(dict.fromkeys(types))
+    if quiet and len(types) == 1: return one(types[0])
+    threads = [threading.Thread(target=one, args=(t,), name=f'quick-{t}', daemon=True) for t in types]
     for th in threads: th.start()
     deadline = time.monotonic() + QUICK_TICK
     for th in threads: th.join(max(0.0, deadline - time.monotonic()))
@@ -6726,7 +6738,8 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
                   only=None, wait: bool = False, on_fetched=None):
     """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
     if only is not None:
-        return _poll_quick(only, what, wait, timer=bool(getattr(_QUICK_TIMER, 'active', False)), on_fetched=on_fetched)
+        return _poll_quick(only, what, wait, timer=bool(getattr(_QUICK_TIMER, 'active', False)), on_fetched=on_fetched,
+                           quiet=bool(getattr(_QUICK_TIMER, 'quiet', False)))
     target_store = store                 # a test or shutdown cannot retarget work already started
     # one full poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
@@ -6838,7 +6851,7 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             finally: _POLL_BUSY.release()
 
 
-def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = False, on_fetched=None):
+def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = False, on_fetched=None, quiet: bool = False):
     """The chat lane: read ONLY these connector types, put their lines first on the one ordered
     drain worker, and release the fetch clock - no CI, no reports.
 
@@ -6869,7 +6882,10 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                 still_due = set(_quick_due())
                 types = [typ for typ in types if typ in still_due]
             if types:
-                status = _status_begin(target_store, 'quick', what)
+                # QUIET is the doorway's once-a-second read: shown as "syncing" it flickered the caption
+                # every second and pushed three status writes a second at every open page while nothing
+                # came in (P13). It shows only when it brought something; a failure still logs below.
+                status = None if quiet else _status_begin(target_store, 'quick', what)
                 try:
                     from .channels import CH2SRC, poll_channels
                     from . import ingest as ingest_mod
@@ -6878,7 +6894,8 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                         _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
                     t_read = time.monotonic()
                     with ingest_mod.deferred():
-                        added = poll_channels(target_store, 0, progress=_say, only=types)
+                        added = poll_channels(target_store, 0, progress=None if quiet else _say, only=types)
+                    if quiet and added: status = _status_begin(target_store, 'quick', f"{what} · reading {', '.join(types)}")
                     # a slow read is the whole latency of a phone turn: the doorway cannot hand the
                     # owner's line to the assistant until this returns (the owner, 2026-09-20:
                     # "hitting next or 3 in whatsapp takes a while")
@@ -6897,7 +6914,7 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                     for t in types:
                         _QUICK_LAST[t] = now
                         _QUICK_LAST_STORE[t] = id(target_store)
-                    _status_end(target_store, status)
+                    if status is not None: _status_end(target_store, status)
     finally:
         for t in held: _quick_lock(t).release()
     # Waiting belongs to the explicit action's correctness gate, not the connector fetch lane.

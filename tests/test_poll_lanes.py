@@ -444,6 +444,51 @@ class LaneTests(unittest.TestCase):
             release.set(); self.assertTrue(server.join_drains(self.s, 10))
         self.assertTrue(server._open_drain_workers(self.s))
 
+    def _doorway_tick(self, poll):
+        """One doorway_forever tick over Teams, counting the ingest_status writes and the pushes they make."""
+        events, writes = [], []
+        real = self.s.set_setting
+        def counted(name, value, actor):
+            if name == 'ingest_status': writes.append(json.loads(value))
+            return real(name, value, actor)
+        with mock.patch('taskuary.channels.poll_channels', poll), mock.patch.object(self.s, 'set_setting', counted), \
+             mock.patch('taskuary.live.emit', lambda kind, **kw: events.append(kind)):
+            server._poll_on_quick_clock(['teams'], timer=False, quiet=True)
+        return writes, [e for e in events if e == 'ingest-status']
+
+    def test_an_idle_doorway_tick_writes_no_status_and_pushes_nothing(self):
+        """P13: the doorway reads every second. Shown as "syncing" each time, an idle phone chat cost three
+        status writes and three pushes to every open page a second, and the caption flickered."""
+        self.s.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+        writes, pushes = self._doorway_tick(lambda store, days, progress=None, only=None: 0)
+        self.assertEqual((writes, pushes), ([], []))
+        self.assertLess(time.time() - server._QUICK_LAST['teams'], 5)          # it did read
+
+    def test_a_doorway_tick_that_brings_a_line_still_shows(self):
+        self.s.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+        def poll(store, days, progress=None, only=None):
+            pending_row(store, 'teams', 1); return 1
+        with mock.patch.object(server, '_llm', return_value=lambda *a, **k: '{"intent": "fyi", "why": "t"}'):
+            writes, pushes = self._doorway_tick(poll)
+        self.assertEqual([w['state'] for w in writes], ['running', 'idle'])
+        self.assertEqual(len(pushes), 2)
+
+    def test_the_chat_clock_still_shows_its_sync(self):
+        """Only the doorway is quiet: a chat-clock or explicit read still says "syncing" while it reads."""
+        seen = []
+        def poll(store, days, progress=None, only=None):
+            progress(only[0], 0); seen.append(json.loads(store.get_setting('ingest_status'))); return 0
+        with mock.patch('taskuary.channels.poll_channels', poll): server._poll_reports(0, what='syncing', only=['teams'])
+        self.assertEqual(seen[0]['state'], 'running')
+        self.assertEqual(json.loads(self.s.get_setting('ingest_status')), {'state': 'idle'})
+
+    def test_an_unchanged_banner_is_not_written_again(self):
+        self.s.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+        with mock.patch.object(self.s, 'set_setting') as wrote: server._status_write(self.s, {})
+        wrote.assert_not_called()
+        with mock.patch.object(self.s, 'set_setting') as wrote: server._status_write(self.s, {'t': {'lane': 'full', 'what': 'syncing', 'at': 'x', 'phase': 'fetching', 'seq': 1}})
+        wrote.assert_called_once()
+
     def test_a_running_chat_poll_is_not_healed_into_idle(self):
         server._quick_lock('teams').acquire()
         try:
@@ -574,6 +619,21 @@ class DrainOrderTests(unittest.TestCase):
         self.assertIsNone(ticket.error)
         self.assertEqual(self.order, [row])
         self.assertTrue(worker.close(10))
+
+
+def test_an_answered_status_poll_is_not_logged_but_other_requests_are():
+    """P13: the page polls /api/ingest/status every second or so, and its lines were three quarters of the log."""
+    from fastapi.testclient import TestClient
+    from loguru import logger
+    lines = []
+    sink = logger.add(lambda m: lines.append(str(m)), level='DEBUG', format='{message}')
+    try:
+        c = TestClient(server.app)
+        assert c.get('/api/ingest/status').status_code == 200
+        c.get('/api/settings')
+    finally: logger.remove(sink)
+    assert not any('/api/ingest/status ->' in l for l in lines), lines
+    assert any('GET /api/settings ->' in l for l in lines), lines
 
 
 if __name__ == '__main__':

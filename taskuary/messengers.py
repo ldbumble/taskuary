@@ -10,13 +10,15 @@ Taskuary's side is ~40 lines either way.
 Both are CHAT: messages land with a conversation id per chat, replies go back into the same
 chat, and the responder already knows not to sign chat messages.
 """
-import base64, json, os
+import base64, json, os, time
 import requests
 from loguru import logger
 
 TG_API = 'https://api.telegram.org'
 TG_LIMIT = 25                # messages per poll, like the other channels
 WA_URL = 'http://127.0.0.1:8977'   # the bridge's default; override in the connector config
+WA_FILTER_EVERY = 60          # seconds a sent /filter is trusted before poll_whatsapp re-states it
+_WA_FILTERED = {}             # bridge url -> (policy json, monotonic time it was sent)
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -415,10 +417,20 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     bridge_want = want | ({notify_chat} if notify_chat else set()) | ({assistant_chat} if assistant_chat else set())
     # Filtering here alone was too late: Baileys had already decrypted and downloaded media from
     # every chat. Give the same policy to its pre-decryption hook before asking for messages.
-    try: _wa(c, '/filter', {'allDirect': False, 'jids': sorted(bridge_want)})
-    except RuntimeError as e:
-        if '(404)' not in str(e): raise                     # an older detached bridge: keep polling until its next restart
-    out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
+    # Sent when the list CHANGES, not on every read: the doorway reads once a second, and a /filter
+    # beside every /messages doubled an idle phone chat's bridge traffic (P13). A restarted bridge comes
+    # up closed unless it was launched with WA_BRIDGE_FILTER, so a seq that went backwards forgets what
+    # was sent, and WA_FILTER_EVERY re-states it anyway in case a restart slipped past both.
+    url, policy, now = cfg.get('bridge_url') or WA_URL, json.dumps({'allDirect': False, 'jids': sorted(bridge_want)}), time.monotonic()
+    sent, at = _WA_FILTERED.get(url, (None, 0))
+    if sent != policy or now - at > WA_FILTER_EVERY:
+        try: _wa(c, '/filter', json.loads(policy))
+        except RuntimeError as e:
+            if '(404)' not in str(e): raise                 # an older detached bridge: keep polling until its next restart
+        _WA_FILTERED[url] = (policy, now)
+    seq = int(cfg.get('wa_seq') or 0)
+    out = _wa(c, f"/messages?after={seq}")
+    if out.get('seq') is not None and int(out['seq']) < seq: _WA_FILTERED.pop(url, None)    # the bridge restarted
     n, took = 0, []
     from . import remote_assistant
     for m in out.get('messages', []):

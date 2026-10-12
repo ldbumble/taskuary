@@ -483,6 +483,14 @@ def no_connection_brains():
 
 
 @pytest.fixture(autouse=True)
+def no_wa_filter_carryover():
+    """messengers._WA_FILTERED remembers the /filter a bridge was last sent, per bridge url - and every test's
+    fake bridge has the same url, so one test's sent filter would skip the next test's (P13)."""
+    from taskuary import messengers
+    messengers._WA_FILTERED.clear(); yield; messengers._WA_FILTERED.clear()
+
+
+@pytest.fixture(autouse=True)
 def no_calendar_carryover():
     """calendar._TODAY is a process-wide cache. A test that filled it with a 09:00 meeting today made every later
     "Nothing's waiting." read "...Your next meeting is Standup at 9:00 AM." - but only when the suite ran before 9."""

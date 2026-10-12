@@ -232,7 +232,8 @@ class ArrivalTests(unittest.TestCase):
         items = [{'key': 'agent:7', 'lane': 'stopped', 'kind': 'agent', 'who': '', 'title': 'Fix the ledger export'},
                  {'key': 'check:2', 'lane': 'broken', 'kind': 'check', 'who': '', 'title': 'Nightly build'},
                  {'key': 'msg:9', 'lane': 'theirs', 'kind': 'todo', 'who': 'Gail Moreno', 'title': 'Waiting on the lease'},
-                 {'key': 'idea:1', 'lane': 'forgotten', 'kind': 'idea', 'who': '', 'title': 'An idea'}]
+                 # nothing to do on it - `forgotten` is the slipped lane now, the owner's move (2026-10-12), so it would count
+                 {'key': 'idea:1', 'lane': 'fyi', 'kind': 'idea', 'who': '', 'title': 'An idea'}]
         self.assertEqual([i['key'] for i in welcome.needs_you(items)], ['agent:7', 'check:2'])
         self.assertTrue(welcome.three_things(items).startswith('Two things today'), welcome.three_things(items))
         self.assertEqual([i['key'] for i in welcome.needs_you(ITEMS)], ['msg:1', 'msg:2', 'msg:3'])

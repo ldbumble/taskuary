@@ -10,7 +10,7 @@ each stage owns exactly one state badge.
 | Part | What it records | Main controls | What it never does by itself |
 |---|---|---|---|
 | **Task** | The durable job and who owns it | owner, kind, priority, Reopen, Mark done | Starting or ending an agent session does not complete it |
-| **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, new prompt, start, prompt, pause, finish, stop | Stopping does not mark the task done or send a reply |
+| **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, start, save and end session | Ending a session does not mark the task done or send a reply |
 | **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | write, generate, edit; **Close out**, **Decline**, **Not yet** | Sending it marks the task done — unless an agent is still working, a new message came in, or its merge still waits |
 
 While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
@@ -86,10 +86,7 @@ and topic history, the learned profile, and reports from related closed tasks.
 |---|---|
 | **Start coding session** | Starts the selected harness and model |
 | **Start new coding session** | Picks a different harness after an earlier run stopped or hit a limit; the checkout and history are kept |
-| **Give new prompt** | Queues another instruction for the live session |
-| **Pause & save** | Ends the session after writing a handoff note for the next one |
 | **Save and end session** | Ends the session and writes its result; the task stays open until you mark it done |
-| **Stop session** | Ends only the process. Deliberately changes neither task nor reply state |
 
 **Mark done** is stronger than all of them: it closes the task *and* ends any live session,
 because a finished task should not leave an orphan process running.

@@ -2762,7 +2762,10 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
             else f"{label}: {summary}")
     text = head + ('.' if tail.startswith('\n') else '. ') + tail
     record_related(store, dock_tid, item, 'assistant', text, {'kind': 'proposal', 'key': None, 'title': label, 'op': op['id'], 'tid': None, 'ref': None})
-    return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text}
+    # OVER THE CARD only what the card does not say - its heading is the label and its line the summary (the 2026-09-24 rule
+    # propose_for keeps; this road never did, so "Clear 21 from the pipe: 21 items - ..." was said twice, the owner, 2026-10-12)
+    return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text,
+            'say_card': tail.strip()}
 
 
 def _routing_words(cfg: dict) -> str:

@@ -96,3 +96,13 @@ class ResolveTests(unittest.TestCase):
         t = s.create_task({'Title': 'from ray'}, 'owner')
         s.add_message({'ConversationId': 'c9', 'Channel': 'email', 'Subject': 'Quote', 'FromEmail': 'ray@vendor.example', 'SentAt': ago(days=30), 'BodyText': 'x', 'Status': 'routed', 'TaskId': t})
         outcomes.resolve(s); self.assertEqual(s._one('SELECT Verdict FROM outcome WHERE Id=?', (j,))['Verdict'], 'regret')
+
+
+class SweepTests(unittest.TestCase):
+    def test_the_sweep_runs_once_a_day(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'done'}, 'owner')
+        outcomes.record(s, 'task.closed', 'task', t, at=ago(days=8))
+        self.assertEqual(outcomes.sweep_if_due(s), 1)
+        outcomes.record(s, 'task.closed', 'task', t, at=ago(days=8))
+        self.assertIsNone(outcomes.sweep_if_due(s))                                 # swept today already
+        self.assertEqual(outcomes.sweep_if_due(s, now=datetime.now() + timedelta(days=1)), 1)

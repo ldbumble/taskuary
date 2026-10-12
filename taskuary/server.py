@@ -6991,6 +6991,11 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             wabridge.trim_log(target_store)
         except Exception as e:
             logger.warning(f'whatsapp log trim skipped: {e}')
+        try:                                            # the outcome ledger: resolve what is old enough to judge, once a day (outcomes.py)
+            from . import outcomes
+            outcomes.sweep_if_due(target_store)
+        except Exception as e:
+            logger.warning(f'outcome sweep skipped: {e}')
         _lap('housekeeping')
         return added
     finally:

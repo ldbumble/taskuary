@@ -95,3 +95,12 @@ def resolve(store, now: datetime = None) -> int:
             if store._one('SELECT ResolvedAt FROM outcome WHERE Id=?', (r['Id'],))['ResolvedAt']: n += 1
         except Exception as e: logger.warning(f'outcome {r["Id"]} not resolved: {e}')
     return n
+
+
+def sweep_if_due(store, now: datetime = None):
+    """Once a day, from the poll's housekeeping (server._poll_reports): None when today's sweep already ran."""
+    now = now or datetime.now(); today = now.strftime('%Y-%m-%d')
+    if store.get_setting(SWEPT_KEY, '') == today: return None
+    n = resolve(store, now)
+    store.set_setting(SWEPT_KEY, today, 'outcomes')
+    return n

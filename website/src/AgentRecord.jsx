@@ -2,26 +2,19 @@
 // 2026-10-10: "make sure the agent work section carries enough info to let user know everything the agent did and thought
 // about. You can do short the long version with more button maybe but make sure it's full and complete record but don't
 // duplicate sections"). In reading order (the owner, 2026-10-10): what happened - with what it decided and changed, and
-// the pages it made - then its last message, the files it saved in the project, and every step (told, thought, tool, said)
-// behind one button. Earlier sessions fold under it.
-import React, { useEffect, useRef, useState } from "react";
+// the pages it made - and behind ONE More its last message, the files it saved in the project, the run's timeline, every step
+// (told, thought, tool, said) and earlier sessions.
+import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { cardParts, hasMore, recordFacts, recordSteps, sourceLabel, splitFiles } from "./agentRecord.js";
+import { cardParts, hasMore, moreParts, plain, recordFacts, recordHead, recordSteps, sourceLabel, splitFiles } from "./agentRecord.js";
+import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
 
-// long text folds to a few lines; the caller draws the Show more (useTall says whether one is needed)
-const useTall = (height) => {
-  const ref = useRef(null), [tall, setTall] = useState(false);
-  useEffect(() => { if (ref.current) setTall(ref.current.scrollHeight > height + 24); });
-  return [ref, tall];
-};
-const folded = (tall, open, height) => ({ maxHeight: open || !tall ? "none" : height, overflow: "hidden",
-  ...(tall && !open ? { maskImage: "linear-gradient(#000 70%, transparent)" } : {}) });
 const link = { fontSize: 11, minHeight: 0, p: 0, minWidth: 0 };
 
 const Step = ({ s }) => {
@@ -64,7 +57,7 @@ const Step = ({ s }) => {
 const Steps = ({ s }) => {
   const steps = recordSteps(s);
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.2, mt: 0.8 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.2 }}>
       {!!s.plan?.length && <Box><Typography sx={head}>Its plan</Typography><Step s={{ k: "plan", items: s.plan }} /></Box>}
       {!!steps.length && <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6, maxHeight: 640, overflow: "auto", pr: 0.5 }}>
         {steps.map((x, i) => <Step key={i} s={x} />)}
@@ -76,70 +69,94 @@ const sec = { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` };
 const rowsSx = { display: "grid", gridTemplateColumns: "72px minmax(0, 1fr)", columnGap: 1.25, rowGap: 0.6, mt: 0.9, fontSize: 12.5, lineHeight: 1.45,
   color: DIM, overflowWrap: "anywhere", "& > :nth-of-type(odd)": { color: FAINT, fontSize: 11, pt: "1px" } };
 
-// one session, in reading order: what happened, its last message, what it made, every step
-export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false }) => {
-  const [full, setFull] = useState(startOpen), [more, setMore] = useState(false);
-  const [ref, tall] = useTall(150);
+// one session, in reading order: what happened, then ONE More for everything else - its last message in full, what it saved,
+// the run's timeline, what ended it since, every step, earlier sessions (the owner, 2026-10-12: "main summary, then details
+// behind more"). It was what happened + a folded last message + files + its own "Every step" button, under a second section
+// that told the same run again.
+export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, timeline = [], since = null, earlier = [], inChat = false }) => {
+  const [more, setMore] = useState(startOpen);
   const { lead, rows, message, isReply } = cardParts(s, draft), { mine, other } = splitFiles(s.files, s.cwd);
-  const steps = recordSteps(s).filter((x) => x.k !== "result").length;
+  const parts = moreParts(s, { draft, timeline, since, earlier: earlier.length });
   return (
     <Box>
       <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 0.5 }}>{recordFacts(s).join(" · ")}</Typography>
-      {lead ? <Box><Typography sx={head}>What happened</Typography><Box sx={{ fontSize: 14, lineHeight: 1.45, color: INK }}><Md text={lead} /></Box></Box>
-        : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result{s.steps?.length ? " - its steps are below." : "."}</Typography>}
+      {inChat ? null : lead ? <Box><Typography sx={head}>What happened</Typography><Box sx={{ fontSize: 14, lineHeight: 1.45, color: INK }}><Md text={lead} /></Box></Box>
+        : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result{parts.length ? " - More has what it did." : "."}</Typography>}
       {!!rows.length && <Box sx={rowsSx}>{rows.map(([k, v]) => <React.Fragment key={k}><Box>{k}</Box><Box><Md text={v} /></Box></React.Fragment>)}</Box>}
       {/* what it made to be LOOKED AT belongs with what happened (the owner, 2026-10-10: "it's important to see it") */}
       {!!pages.length && <Box sx={{ mt: 0.9 }}><PublishedPages pages={pages} /></Box>}
-      {message && <Box sx={sec}>
-        <Typography sx={head}>Its last message{isReply && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · the reply it drafted, also in Close out</Box>}</Typography>
-        <Box ref={ref} sx={{ fontSize: 13, color: INK, ...folded(tall, more, 150) }}><Md text={message} /></Box>
-        {tall && <Button size="small" sx={{ ...link, mt: 0.4 }} onClick={() => setMore(!more)}>{more ? "Show less" : "Show more"}</Button>}
-      </Box>}
-      {s.files?.length > 0 && <Box sx={sec}>
-        <Typography sx={head}>Files it saved</Typography>
-        {!!mine.length && <Box>
-          {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}</Box>}
-        {!!other.length && <Typography title={other.join("\n")} sx={{ fontSize: 12, color: FAINT, mt: 0.4 }}>
-          {mine.length ? "and " : ""}{other.length} scratch file{other.length === 1 ? "" : "s"} it used while working</Typography>}
-      </Box>}
-      {hasMore(s) && <Box sx={sec}>
-        <Button size="small" sx={link} onClick={() => setFull(!full)}>
-          {s.source === "conversation" ? "The working behind its answers" : "Every step"} · {steps} {full ? "▾" : "▸"}</Button>
-        {s.source && <Box component="span" sx={{ fontSize: 11, color: FAINT, ml: 1 }}>from {sourceLabel(s.source)}</Box>}
-        {full && <Steps s={s} />}
+      {!!parts.length && <Box sx={sec}>
+        <Button size="small" sx={{ ...link, textAlign: "left" }} onClick={() => setMore(!more)}>More · {parts.join(", ")} {more ? "▾" : "▸"}</Button>
+        {more && <Box sx={{ display: "flex", flexDirection: "column", gap: 1.3, mt: 1 }}>
+          {message && <Box>
+            <Typography sx={head}>Its last message{isReply && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · the reply it drafted, also in Close out</Box>}</Typography>
+            <Box sx={{ fontSize: 13, color: INK }}><Md text={message} /></Box>
+          </Box>}
+          {s.files?.length > 0 && <Box>
+            <Typography sx={head}>Files it saved</Typography>
+            {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}
+            {!!other.length && <Typography title={other.join("\n")} sx={{ fontSize: 12, color: FAINT, mt: mine.length ? 0.4 : 0 }}>
+              {mine.length ? "and " : ""}{other.length} scratch file{other.length === 1 ? "" : "s"} it used while working</Typography>}
+          </Box>}
+          {!!timeline.length && <Box><Typography sx={head}>The run</Typography><Timeline steps={timeline} /></Box>}
+          {/* what ended it upstream (a merge, a close) - ADDED to what the agent did, never in its place (the owner, 2026-10-12) */}
+          {since?.text && <Box>
+            <Typography sx={head}>Since then{since.at && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · {String(since.at).slice(0, 16)}</Box>}</Typography>
+            <Typography sx={{ fontSize: 12.5, color: INK }}>{since.text}</Typography>
+          </Box>}
+          {hasMore(s) && <Box>
+            <Typography sx={head}>{s.source === "conversation" ? "The working behind its answers" : "Every step"}
+              {s.source && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · from {sourceLabel(s.source)}</Box>}</Typography>
+            <Steps s={s} />
+          </Box>}
+          {!!earlier.length && <Box>
+            <Typography sx={head}>Earlier sessions · {earlier.length}</Typography>
+            {earlier.map((x) => <Earlier key={x.sid} s={x} />)}
+          </Box>}
+        </Box>}
       </Box>}
     </Box>);
 };
 
-export const AgentRecord = ({ taskId, pages = [], draft = "", stamp }) => {
+// THE ONE BLOCK on the Agent work step for a session that is not running: the state in a sentence (`story`, from
+// funnel.agent_story: ended by you, cut off by a restart, stopped), what happened, and More. With no record to show it is the
+// story alone.
+export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, who = "", folded = false, inChat = false }) => {
   const [rec, setRec] = useState(null);
   useEffect(() => {
     let live = true;
     api.get(`/api/tasks/${taskId}/record`).then(({ data }) => live && setRec(data)).catch(() => live && setRec({ sessions: [] }));
     return () => { live = false; };
   }, [taskId, stamp]);
+  const [now, ...before] = rec?.sessions || [];
+  // FOLDED, the step is its state and what happened, two lines - the rest is the open step's (storyPlace)
+  if (folded) {
+    const lead = now ? plain(cardParts(now, draft).lead) : "";
+    return story ? <Box sx={{ mt: 1, pl: { xs: 0, sm: 4 } }}>
+      <StoryLine kind={story.kind} line={story.line} who={who} />
+      {lead && <Typography sx={{ mt: 0.4, pl: 3, fontSize: 13, lineHeight: 1.45, color: DIM, overflow: "hidden",
+        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{lead}</Typography>}
+    </Box> : null;
+  }
   if (!rec) return <CircularProgress size={12} />;
-  const [now, ...before] = rec.sessions || [];
-  if (!now && !pages.length) return null;
+  if (!now && !pages.length) return story ? <AgentStory story={story} who={who} /> : null;
+  const { state, since } = recordHead(story, rec.ended);
+  // the run's last words stand in for a session whose own log kept none; a conversation's answers are the chat under the card,
+  // so there it is only the working behind them (a card over the chat said the answer a second time)
+  const chat = inChat && now?.source === "conversation";
+  const s = chat ? { ...now, result: "", report: {} } : now && !String(now.result || "").trim() && story?.said ? { ...now, result: story.said } : now;
+  if (chat && !state && !pages.length && !moreParts(s, { earlier: before.length }).length) return null;
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-      {now ? <SessionRecord s={now} pages={pages} draft={draft} /> : <PublishedPages pages={pages} />}
-      {/* what ended it upstream (a merge, a close) - ADDED under what the agent did, never in its place (the owner, 2026-10-12) */}
-      {rec.ended?.text && <Box sx={{ ...sec, display: "flex", gap: 1, alignItems: "baseline" }}>
-        <Typography sx={{ ...head, mb: 0, flexShrink: 0 }}>Since then</Typography>
-        <Typography sx={{ fontSize: 12.5, color: INK, flex: 1, minWidth: 0 }}>{rec.ended.text}</Typography>
-        {rec.ended.at && <Typography sx={{ fontSize: 11, color: FAINT, flexShrink: 0 }}>{String(rec.ended.at).slice(0, 16)}</Typography>}
-      </Box>}
-      {!!before.length && <Box sx={{ mt: 1.2, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-        <Typography sx={head}>Earlier sessions · {before.length}</Typography>
-        {before.map((s) => <Earlier key={s.sid} s={s} />)}
-      </Box>}
+      {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} who={who} /></Box>}
+      {s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />
+        : <PublishedPages pages={pages} />}
     </Box>);
 };
 
 const Earlier = ({ s }) => {
   const [open, setOpen] = useState(false);
-  const line = String(s.result || "").split(/\n\s*\n/)[0].replace(/[#*_`>]/g, "").trim();
+  const line = plain(String(s.result || "").split(/\n\s*\n/)[0]);
   return (
     <Box sx={{ py: 0.5, borderBottom: `1px dashed ${BORDER}`, "&:last-of-type": { borderBottom: 0 } }}>
       <Box onClick={() => setOpen(!open)} sx={{ display: "flex", gap: 1, cursor: "pointer", fontSize: 12.5, minWidth: 0 }}>

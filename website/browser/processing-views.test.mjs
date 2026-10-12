@@ -114,7 +114,10 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   assert.equal(assistantWrites().length, afterWalk, "All tab return must not create assistant state");
   assert.deepEqual(await durableTurns(page, harness.token), turnsAfterWalk,
     "All hover, open and tab return must not create durable assistant turns");
-  const feedReads = requests.filter(({ method, path }) => method === "GET" && path === "/api/feed");
+  // the rows must come from the real backend, by either transport: the canonical All (/api/processing/all) or the
+  // legacy feed it falls back to while grouping is incomplete. The demo builds the canonical rail since the goal
+  // row landed (fc50cda9), so a legacy-only count read "no feed" on a page that had just rendered it.
+  const feedReads = requests.filter(({ method, path }) => method === "GET" && (path === "/api/processing/all" || path === "/api/feed"));
   assert.ok(feedReads.length > 0, "the rendered views must exercise the real feed endpoint");
   assert.ok(feedReads.every(({ search }) => !new URLSearchParams(search).has("pending_only")),
     "All/Unread views must not revive the removed pending_only filter");

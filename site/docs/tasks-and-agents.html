@@ -114,8 +114,8 @@ each stage owns exactly one state badge.</p>
 <tr>
 <td><strong>Agent work</strong></td>
 <td>One or more attempts by a coding or non-coding agent, plus the saved result</td>
-<td>harness, model, new prompt, start, prompt, pause, finish, stop</td>
-<td>Stopping does not mark the task done or send a reply</td>
+<td>harness, model, start, save and end session</td>
+<td>Ending a session does not mark the task done or send a reply</td>
 </tr>
 <tr>
 <td><strong>Close out</strong></td>
@@ -291,20 +291,8 @@ and topic history, the learned profile, and reports from related closed tasks.</
 <td>Picks a different harness after an earlier run stopped or hit a limit; the checkout and history are kept</td>
 </tr>
 <tr>
-<td><strong>Give new prompt</strong></td>
-<td>Queues another instruction for the live session</td>
-</tr>
-<tr>
-<td><strong>Pause &amp; save</strong></td>
-<td>Ends the session after writing a handoff note for the next one</td>
-</tr>
-<tr>
 <td><strong>Save and end session</strong></td>
 <td>Ends the session and writes its result; the task stays open until you mark it done</td>
-</tr>
-<tr>
-<td><strong>Stop session</strong></td>
-<td>Ends only the process. Deliberately changes neither task nor reply state</td>
 </tr>
 </tbody></table>
 <p><strong>Mark done</strong> is stronger than all of them: it closes the task <em>and</em> ends any live session,

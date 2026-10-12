@@ -383,8 +383,10 @@ def _events(t, p: dict) -> None:
             try:                                        # the ledger: what the owner does next after a stop (outcomes.py); never breaks a hook
                 from . import advisor, ci, outcomes
                 agent = getattr(t, 'agent', '') or 'coder'
-                if outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent}):
-                    advisor.notice(st, 'agent.stopped', 'task', tid)          # the Advisor on the event (advisor.py): once per stretch
+                # ...and the Advisor hears of it once per stretch - unless the turn ASKED: then the ask below is the event, and a
+                # stop judged here would be stale the moment the question is recorded (the review, 2026-10-12)
+                if outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent}) and not asks:
+                    advisor.notice(st, 'agent.stopped', 'task', tid)
             except Exception as e: logger.debug(f'task {tid}: the stop was not ledgered - {e}')
             g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None
             for i, (q, choices) in enumerate(asks, 1):

@@ -59,7 +59,7 @@ switch, and a cap on judgements per hour.
 **Seeing what it did.** The clock menu on the stage opens the Advisor's notes for the item on the
 table: a receipt, not a transcript. Each entry says the event, what it decided (the pill and the
 line) or what it dropped and why (nothing to say, a verb the item did not carry, the hour's cap,
-no brain), and the evidence it cited by id. "Why?" in the chat is answered from the same line.
+no brain), and the evidence it cited by id - what it cited, not everything it read. "Why?" in the chat is answered from the same line.
 
 ## The outcome ledger
 

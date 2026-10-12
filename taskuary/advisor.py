@@ -25,10 +25,15 @@ def target_of(store, key: str):
     m = re.match(r'^(task|agent|wrap|msg|report):(\d+)$', str(key or ''))
     if m: return ('task' if m.group(1) in ('task', 'agent', 'wrap') else 'message', int(m.group(2)))
     if str(key or '').startswith('processing:'):
+        # the inventory's key names an ITEM; its members say what it is made of (a task outranks its mail rows)
         try:
-            with store._processing_read() as cur: hit = store._processing_read_target(cur, key)
-        except Exception: hit = None
-        if hit and hit[1] in ('task', 'message'): return (hit[1], int(hit[2]))
+            with store._processing_read() as cur:
+                hit = store._processing_read_target(cur, key)
+                rows = cur.execute("SELECT EntityKind, LocalId FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL", (hit[0],)).fetchall() if hit else []
+        except Exception: rows = []
+        for kind in ('task', 'message'):
+            m = next((r for r in rows if r['EntityKind'] == kind), None)
+            if m: return (kind, int(m['LocalId']))
     return None
 
 
@@ -73,7 +78,12 @@ def _item(store, target_kind, target_id):
     """The card the rail would show for this target - found by its task or message id, since the rail's key spelling is the
     processing inventory's (`processing:...`) in a real install and a legacy alias in a bare store."""
     from . import funnel
-    try: items = funnel.pile(store, quiet=True).get('items') or []
+    if target_kind == 'task':
+        t = store.get_task(target_id) or {}
+        if not t or (t.get('Status') in ('done', 'dropped') and not store.resumable_session(target_id)): return None
+    try:
+        pile = funnel.pile(store, quiet=True).get('items') or []
+        items = (funnel.full_items(store) or []) + pile                      # read items kept: the one on the table is often read
     except Exception: items = []
     f = 'tid' if target_kind == 'task' else 'mid'
     return next((i for i in items if i.get(f) == int(target_id)), None) or funnel.item_for_key(store, key_of(target_kind, target_id))
@@ -124,10 +134,12 @@ def judge(store, event: str, target_kind: str, target_id, rev: str, tier: int = 
     if not verbs: return W(dropped='no actions')
     brain = llm or build_llm(store)
     if not brain: return W(dropped='no brain')
+    have = row(store, target_kind, target_id, rev)                           # two events in one poll: the second finds the first's row
+    if have and int(have.get('Tier') or 1) >= tier: return have['Id']
     model = getattr(brain, 'last_pick', None) or getattr(brain, 'model', None) or 'light'
-    ans = ask_json(brain, SYSTEM, _prompt(store, event, item, verbs, tier, target_kind, target_id), want=WANT, need=('verb', 'line'), max_tokens=200)
-    d = ans.data or {}
-    if ans.error and not d: return W(dropped=f'no answer: {ans.error}'[:200], model=model)
+    ans = ask_json(brain, SYSTEM, _prompt(store, event, item, verbs, tier, target_kind, target_id), want=WANT, max_tokens=200)
+    d = ans.data if isinstance(ans.data, dict) else {}
+    if not d: return W(dropped=f'no answer: {ans.error or "not an object"}'[:200], model=model)
     verb, line = d.get('verb'), ' '.join(str(d.get('line') or '').split())[:200]
     ev = [e for e in (d.get('evidence') or []) if isinstance(e, str) and _EV.match(e)][:6]
     if not verb or not line: return W(dropped='nothing to say', model=model, evidence=ev)
@@ -144,8 +156,11 @@ def judge(store, event: str, target_kind: str, target_id, rev: str, tier: int = 
 def _capped(store) -> bool:
     cap = int(store.get_setting(CAP_KEY, CAP_DEFAULT) or CAP_DEFAULT)
     since = (datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
-    n = (store._one("SELECT COUNT(*) AS n FROM advice WHERE CreatedAt>=? AND (Dropped IS NULL OR Dropped!='cap')", (since,)) or {}).get('n') or 0
+    n = (store._one("SELECT COUNT(*) AS n FROM advice WHERE CreatedAt>=? AND Model IS NOT NULL", (since,)) or {}).get('n') or 0
     return n >= cap
+
+
+_INFLIGHT, _LOCK = set(), threading.Lock()      # (kind, id, revision, tier) being judged right now
 
 
 def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wait: bool = False, llm=None):
@@ -157,11 +172,20 @@ def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wai
         have = row(store, target_kind, target_id, rev)
         if have and int(have.get('Tier') or 1) >= tier: return None             # judged at this revision already
         if _capped(store): return _write(store, target_kind=target_kind, target_id=target_id, key=key_of(target_kind, target_id), event=event, revision=rev, tier=tier, dropped='cap')
-        if wait: return judge(store, event, target_kind, target_id, rev, tier, llm)
-        if not BACKGROUND: return None
+        mark = (target_kind, int(target_id), rev, int(tier))
+        with _LOCK:
+            if mark in _INFLIGHT: return None                                   # the same moment, judged on another thread
+            _INFLIGHT.add(mark)
+        def done():
+            with _LOCK: _INFLIGHT.discard(mark)
+        if wait:
+            try: return judge(store, event, target_kind, target_id, rev, tier, llm)
+            finally: done()
+        if not BACKGROUND: done(); return None
         def go():
             try: judge(store, event, target_kind, target_id, rev, tier, llm)
             except Exception as e: logger.warning(f'advisor: {event} on {target_kind} {target_id} not judged - {e}')
+            finally: done()
         threading.Thread(target=go, daemon=True, name=f'advise-{target_kind}-{target_id}').start()
     except Exception as e: logger.warning(f'advisor: {event} on {target_kind} {target_id} skipped - {e}')
     return None

@@ -118,9 +118,11 @@ class JudgeTests(_Rail):
 
     def test_silence_is_a_row_with_no_verb_and_no_pill(self):
         s = MemoryStore(); t = self._stopped_task(s)
-        rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=brain_saying({'verb': None, 'line': '', 'evidence': []}))
+        llm = brain_saying({'verb': None, 'line': '', 'evidence': []})
+        rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)
         r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
         self.assertEqual((r['Verb'], r['Dropped']), (None, 'nothing to say'))
+        self.assertEqual(len(llm.calls), 1)                                          # silence is the answer, not a missing key
 
     def test_a_verb_the_item_cannot_carry_is_dropped(self):
         s = MemoryStore(); t = self._stopped_task(s)
@@ -250,3 +252,64 @@ class SchemaTests(unittest.TestCase):
         d = json.loads(pathlib.Path('taskuary/settings_schema.json').read_text(encoding='utf-8'))
         self.assertEqual(d['knobs']['advisor_events']['group'], 'Advisor')
         self.assertEqual(d['knobs']['advisor_event_cap']['group'], 'Advisor')
+
+
+class FixPassTests(_Rail):
+    """The review's fix pass (2026-10-12): what a real install does that the first tests did not reach."""
+    def _advised(self):
+        s = MemoryStore(); t = self._stopped_task(s)
+        rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=brain_saying({'verb': 'continue', 'line': 'You usually continue it.', 'evidence': []}))
+        return s, t, rid
+
+    def test_the_rails_own_key_resolves_to_the_card(self):
+        s, t, rid = self._advised()
+        card = next(i for i in funnel.pile(s, quiet=True)['items'] if i.get('tid') == t)
+        self.assertTrue(card['key'].startswith('processing:'))
+        self.assertEqual(advisor.target_of(s, card['key']), ('task', t))
+        with mock.patch.object(advisor, 'notice'):
+            self.assertEqual(advisor.for_key(s, card['key'])['verb'], 'continue')
+            self.assertEqual(len(advisor.notes(s, card['key'])), 1)
+            self.assertIn('You usually continue it.', advisor.block(s, {'key': card['key'], 'tid': t}))
+
+    def test_one_revision_is_judged_once_even_when_two_events_race(self):
+        s = MemoryStore(); t = self._stopped_task(s); rev = advisor.revision(s, 'task', t)
+        llm = brain_saying({'verb': 'continue', 'line': 'x', 'evidence': []})
+        a = advisor.judge(s, 'agent.stopped', 'task', t, rev, 1, llm); b = advisor.judge(s, 'reply.arrived', 'task', t, rev, 1, llm)
+        self.assertEqual((a, b, len(llm.calls)), (a, a, 1))                            # the second judge finds the row and calls nothing
+        advisor._INFLIGHT.add(('task', t, rev, 1))
+        try: self.assertIsNone(advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=llm))
+        finally: advisor._INFLIGHT.discard(('task', t, rev, 1))
+
+    def test_a_stop_that_asked_is_the_ask_not_the_stop(self):
+        from taskuary import hooks, selfclose
+        s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
+        from types import SimpleNamespace
+        sess = SimpleNamespace(sid='run1', alive=True, task_id=t, cwd='C:/x', agent='coder', label='coder', argv=['claude'], last=1.0, ext_id='',
+                               started='2026-10-12 09:00:00', typed=[], files=lambda: [], tail=lambda n=3: [], idle=lambda: 0.0,
+                               witness=SimpleNamespace(note=lambda n: None), store=s, bg={})
+        with mock.patch.object(advisor, 'notice') as n, mock.patch.object(selfclose, 'ask_markers', return_value=('Open the PR?', [('Open the PR?', ['yes', 'no'])])):
+            hooks._events(sess, {'hook_event_name': 'Stop', 'last_assistant_message': 'Open the PR?'})
+        self.assertEqual([c.args[1] for c in n.call_args_list], ['agent.asked'])
+
+    def test_the_cap_counts_model_calls_only(self):
+        s = MemoryStore(); s.set_setting(advisor.CAP_KEY, '1', 'test'); t = self._stopped_task(s)
+        llm = brain_saying({'verb': 'continue', 'line': 'x', 'evidence': []})
+        self.assertEqual(s._one('SELECT Dropped FROM advice WHERE Id=?', (advisor.notice(s, 'task.closed', 'task', 999, wait=True, llm=llm),))['Dropped'], 'no item')
+        advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)
+        self.assertEqual(len(llm.calls), 1)                                              # a drop that called no model spends no cap
+
+    def test_a_closed_task_with_no_session_is_no_item(self):
+        s = MemoryStore(); t = self._stopped_task(s); llm = brain_saying({'verb': 'close', 'line': 'x', 'evidence': []})
+        with mock.patch.object(advisor, 'notice'): s.update_task(t, {'Status': 'done'}, 'owner')
+        funnel.invalidate()
+        rid = advisor.notice(s, 'task.closed', 'task', t, wait=True, llm=llm)
+        self.assertEqual(s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'], 'no item'); self.assertEqual(llm.calls, [])
+
+    def test_a_pill_pressed_on_a_moved_item_is_refused(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'open'}, 'owner')
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            r = c.post('/api/concierge/propose', json={'verb': 'close', 'key': f'task:{t}', 'table': True, 'revision': 'stale'})
+        self.assertEqual(r.status_code, 409); self.assertIn('changed', r.json()['detail'])

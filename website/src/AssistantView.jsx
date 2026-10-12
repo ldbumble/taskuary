@@ -28,6 +28,7 @@ import { useRowVerbs, useVerbs } from "./actionRow.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
+import { adviceKeyFor, ghostText } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -1114,11 +1115,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     try { const { data } = await api.get("/api/advice", { params: { key } }); setAdvice(data && data.verb ? data : null); }
     catch { setAdvice(null); }
   }, []);
-  useEffect(() => { readAdvice(current); }, [current, readAdvice]);
-  useEffect(() => onLive("advice", (ev) => {
-    const key = currentRef.current;
-    if (ev?.key && key && (ev.key === key || (currentItem?.aliases || []).includes(ev.key))) readAdvice(key);
-  }), [readAdvice, currentItem]);
+  // ...re-read when the table changes AND when the card on it refreshes (a reply landing keeps the key and moves the
+  // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
+  useEffect(() => { readAdvice(current); }, [current, currentItem?.view_revision, readAdvice]);
+  useEffect(() => onLive("advice", (ev) => { const key = adviceKeyFor(ev, currentRef.current); if (key) readAdvice(key); }), [readAdvice]);
   // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
   // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
   // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
@@ -1472,8 +1472,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   };
   // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the
   // target is explicit. The card lands in the chat and runs from its own button, like any proposal.
-  const proposeDirect = async (verb, key, table = false) => {
-    const { data } = await api.post("/api/concierge/propose", { verb, key, table });
+  const proposeDirect = async (verb, key, table = false, revision = null) => {
+    // the pill carries the stamp it was judged at, and a moved item refuses it (409); the plain road is unchanged
+    const { data } = revision ? await api.post("/api/concierge/propose", { verb, key, table, revision })
+      : await api.post("/api/concierge/propose", { verb, key, table });
     // refused before any proposal existed: the reason and this item's other words, as a line of its own (no card to confirm)
     if (!data.id) {
       setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], card: { kind: "words", chips: data.chips || [] } }]);
@@ -1544,7 +1546,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     try {
       if (c.verb === "prep") await prep(item);
       else {
-        const pr = await proposeDirect(c.verb, key, true);
+        const pr = await proposeDirect(c.verb, key, true, c.revision || null);
         if (pr?.auto) await runProposal(pr);
       }
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
@@ -2157,15 +2159,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting}
-              placeholder={advice?.line && !text.trim() ? `${advice.line} Tell me what to do with it, or press…`   /* the Advisor's ghost text (advisor.py) */
-                : phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
-                : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
+              placeholder={(!text.trim() && ghostText(advice?.line, phone))   /* the Advisor's ghost text (advice.js); the phone keeps its short hint */
+                || (phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
+                : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…")}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
             {/* THE PILL (spec 2026-10-12): the Advisor's verb where the arrow sits, while the box is empty. It presses the card's
                 own button through the same chip path (runChip -> propose -> receipt); typing anything brings the arrow back */}
             {advice?.verb && !text.trim() && !pics.imgs.length ? (
               <button type="button" className="tq-pill" title={advice.line} disabled={busy || resetting}
-                onClick={() => runChip({ verb: advice.verb, label: advice.label })}>{advice.pill}</button>
+                onClick={() => runChip({ verb: advice.verb, label: advice.label, revision: advice.revision })}>{advice.pill}</button>
             ) : (
               <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
             )}

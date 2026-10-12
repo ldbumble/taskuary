@@ -13,10 +13,11 @@ test("the Advisor's line is the ghost text while the box is empty, and the pill 
   assert.match(src, /const \[advice, setAdvice\] = useState\(null\)/);
   assert.match(src, /api\.get\("\/api\/advice", \{ params: \{ key/);
   assert.match(src, /onLive\("advice"/);
-  assert.match(src, /advice\?\.line && !text\.trim\(\)/);                       // ghost text only while empty
-  assert.match(src, /Tell me what to do with it, or press…/);
+  assert.match(src, /ghostText\(advice\?\.line, phone\)/);                     // the ghost text, from advice.js, only while empty
+  assert.match(src, /adviceKeyFor\(ev, currentRef\.current\)/);                   // the live event is matched against the item, not a string
+  assert.match(src, /revision: advice\.revision/);                                // the pill carries the stamp the server checks
   assert.match(src, /className="tq-pill"/);
-  assert.match(src, /runChip\(\{ verb: advice\.verb, label: advice\.label \}\)/);   // the card's own button, same path
+  assert.match(src, /runChip\(\{ verb: advice\.verb, label: advice\.label, revision: advice\.revision \}\)/);   // the card's own button, same path
   assert.match(css, /\.tq-pill \{/);
 });
 

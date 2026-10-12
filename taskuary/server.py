@@ -4220,13 +4220,18 @@ def advice_notes(key: str, limit: int = 10):
     return {'rows': advisor.notes(store, key, limit)}
 
 
-class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False
+class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False; revision: str | None = None
 
 @app.post('/api/concierge/propose')
 def concierge_propose(body: ConciergeProposeBody):
     """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
     from . import concierge
     _hands_off()
+    if body.revision:                                   # the Advisor's pill carries the stamp it was judged at: a moved item refuses it
+        from . import advisor
+        tgt = advisor.target_of(store, body.key)
+        if tgt and advisor.revision(store, *tgt) != body.revision:
+            raise HTTPException(409, 'That one changed since the Advisor looked at it - read it again before pressing.')
     try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact)
     except ValueError as e: raise HTTPException(422, str(e))
 

@@ -29,6 +29,8 @@ class StepsTests(unittest.TestCase):
         self.assertIn('Done when: the nightly census lands', child['Summary'])
         steps = c.get(f'/api/tasks/{g}/steps').json()['steps']
         self.assertEqual((steps[1]['tid'], steps[1]['ref'], steps[1]['status'], steps[0]['tid']), (r['taskId'], r['ref'], 'open', None))
+        server.store.update_task(r['taskId'], {'Assignee': 'person:ray.colton@northwind.example', 'Status': 'waiting'}, 'owner')
+        self.assertEqual(c.get(f'/api/tasks/{g}/steps').json()['steps'][1]['who'], 'Ray Colton')   # a person, named; never the raw address
         self.assertEqual(c.post(f'/api/tasks/{g}/steps/{checklist_id("Map the schema")}/start').json()['taskId'], r['taskId'])  # once
 
     def test_starting_a_step_that_is_not_there_is_404(self):

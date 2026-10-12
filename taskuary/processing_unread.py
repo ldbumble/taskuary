@@ -5,6 +5,7 @@ read policy, history windows, or an independent size limit after activation.
 """
 import copy
 import json
+import re
 from datetime import datetime, timedelta
 
 from . import processing_all, proposals
@@ -178,6 +179,14 @@ def names(item) -> list:
             *['processing:' + root['ItemId'] for root in item.get('item_history', [])]]
 
 
+def holder_name(assignee: str) -> str:
+    """Who holds a step, as a name: 'person:ray.colton@northwind.example' -> 'Ray Colton', 'agent:coder' -> 'coder'."""
+    who = str(assignee or '')
+    if who.startswith('agent:'): return who.split(':', 1)[1]
+    if who.startswith('person:'): return ' '.join(p[:1].upper() + p[1:] for p in re.split(r'[._-]+', who.split(':', 1)[1].split('@')[0]) if p)
+    return ''
+
+
 def goal_facts(store, task, tid, now) -> dict:
     """What the goal's row says (spec 2026-10-12): kind (slipped / on track / not started), news, the count, who holds
     it, its date. Facts, not a progress bar."""
@@ -197,16 +206,17 @@ def goal_facts(store, task, tid, now) -> dict:
     stamps += [f"{str(x['child'].get('DueAt'))[:10]} 00:00:00" for x in kids
                if x['child'].get('Status') == 'waiting' and str(x['child'].get('DueAt') or '')[:10] and str(x['child'].get('DueAt'))[:10] < today]
     news_at = max(stamps) if stamps else None
-    bits = [f'{done} of {n}' if n else 'no steps yet']
+    bits, holders = [f'{done} of {n}' if n else 'no steps yet'], []
     for k, x in enumerate(steps, 1):
         c = x['child']
         if not c or c.get('Status') in ('done', 'dropped'): continue
-        who = str(c.get('Assignee') or '')
-        if who.startswith('agent:'): bits.append(f"{who.split(':', 1)[1]} on step {k}")
-        elif who.startswith('person:'): bits.append(f"{who.split(':', 1)[1].split('@')[0]} owes step {k}")
+        who = str(c.get('Assignee') or ''); name = holder_name(who)
+        if who.startswith('agent:'): bits.append(f"{name} on step {k}"); holders.append(name)
+        elif who.startswith('person:'): bits.append(f"{name} owes step {k}"); holders.append(name)
         elif c.get('Status') == 'open': bits.append(f'step {k} is on you')
     if slipped and due and due < today: bits.append(f"slipped {(now - datetime.strptime(due, '%Y-%m-%d')).days}d")
-    return {'kind': kind, 'news': bool(news_at), 'news_at': news_at, 'due': due, 'steps': n, 'steps_done': done,
+    # `who` is the row's person column everywhere else (the day card lists them): for a goal it is who holds it, never its creator
+    return {'kind': kind, 'news': bool(news_at), 'news_at': news_at, 'due': due, 'steps': n, 'steps_done': done, 'who': holders[0] if holders else '',
             'why': ' · '.join(bits), 'back_at': f'{due} 08:00:00' if due else None, 'folded': False}
 
 

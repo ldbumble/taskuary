@@ -197,6 +197,9 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
     await api.put(`/api/tasks/${task.TaskId}/checklist`, { items: [...steps.map((s) => s.text), text] });
     setDraft(""); load(); onChanged?.();
   };
+  // RE-PLAN: the AI writes the steps again from the goal's words; a step already started keeps its place (server.plan_goal)
+  const [replanning, setReplanning] = useState(false);
+  const replan = async () => { setReplanning(true); try { await api.post(`/api/tasks/${task.TaskId}/read-ask`, { goal: true }); } finally { setTimeout(() => { setReplanning(false); load(); onChanged?.(); }, 4000); } };
   const done = steps.filter((s) => s.done).length;
   return (
     <Box sx={{ mt: 0.85, maxWidth: 900 }}>
@@ -207,6 +210,8 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
         <Typography variant="caption" sx={{ color: FAINT }}>by</Typography>
         <TextField type="date" size="small" defaultValue={String(task.DueAt || "").slice(0, 10)} onBlur={moveDate}
           inputProps={{ "aria-label": "Move the date" }} sx={{ "& .MuiInputBase-root": { fontSize: 12, height: 26 } }} />
+        <Button size="small" variant="text" onClick={replan} disabled={replanning} sx={{ fontSize: 11, textTransform: "none", ml: "auto" }}
+          title="The AI writes the steps again from what done looks like; a step already started keeps its place">{replanning ? "Planning…" : "Re-plan"}</Button>
       </Box>
       {steps.map((s, k) => (
         <Box key={s.id} sx={{ display: "flex", alignItems: "center", gap: 0.8, py: 0.35, borderBottom: `1px solid ${BORDER}` }}>

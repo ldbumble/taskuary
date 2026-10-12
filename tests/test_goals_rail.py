@@ -75,7 +75,8 @@ class FoldTests(unittest.TestCase):
         s.link_step(g, checklist_id('Schema sign-off'), c, 'owner'); settle()
         items = rail(s, include_read=True)
         self.assertNotIn(c, [i.get('tid') for i in items])                      # folded: not a row of its own
-        self.assertIn('ray owes step 3', card(s, g)['why'])
+        k = card(s, g)
+        self.assertIn('Ray owes step 3', k['why']); self.assertEqual(k['who'], 'Ray')   # the holder, named, is the row's who
 
     def test_a_child_that_is_the_owners_move_stays_a_row_and_names_its_goal(self):
         s, settle = settled(); g = goal(s)
@@ -112,7 +113,7 @@ class FixPassTests(unittest.TestCase):
         s.link_step(g, checklist_id('Map the schema'), c, 'owner'); s.start_run(c, 'coder', 'map it', 'owner'); settle()
         items = rail(s, include_read=True)
         self.assertNotIn(c, [i.get('tid') for i in items])
-        self.assertIn('coder on step 2', card(s, g)['why'])
+        k = card(s, g); self.assertIn('coder on step 2', k['why']); self.assertEqual(k['who'], 'coder')
 
     def test_a_read_goal_comes_back_on_a_childs_close_and_not_on_the_quiet_hours(self):
         s, settle = settled(); g = goal(s)

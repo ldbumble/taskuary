@@ -732,7 +732,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     does it, instead of a sentence that promised something nothing carried out (the owner, 2026-09-07:
     "It says x, does something else")."""
     if not item: return []
-    verbs = list(CHIPS[item['kind']] if item.get('kind') in CHIPS else ('next',))    # the handful's () is deliberate
+    kind = 'task' if str(item.get('kind') or '').startswith('goal') else item.get('kind')   # a goal is a task on the table (spec 2026-10-12)
+    verbs = list(CHIPS[kind] if kind in CHIPS else ('next',))    # the handful's () is deliberate
     # CONTINUE SESSION leads on work an agent left - stopped, saved by you, or paused when Taskuary stopped (A19)
     if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused')): verbs = ['continue'] + [v for v in verbs if v != 'continue']
     # ...and on FINISHED work it is offered after the card's own close: the session is still there to be asked for more
@@ -958,6 +959,13 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
     if item['kind'] == 'idea':
         return f"{item['title']}" + (f" ({item.get('who')})" if item.get('who') else '') + f" - {item.get('why') or 'I raised this'}." + (' Draft the follow-up, or let it go.' if item.get('tid') else ' Draft the follow-up, make it a task, or let it go.')
     if item['kind'] == 'meeting': return f"{item['title']} is {item.get('why')}. Prep me, or move on."
+    # A GOAL (spec 2026-10-12): what it is, by when, the facts its row carries, and what it needs - a decision when it slipped,
+    # its first step when nothing has moved, nothing when it is on track (the Advisor's own line is build step 3)
+    if str(item['kind']).startswith('goal'):
+        d = funnel._dt(item.get('due')); by = f" by {d.day} {d:%b}" if d else ''
+        need = ('Move the date, start the next step, or move on.' if item['kind'] == 'goal_slipped' else
+                'Start its first step, or move on.' if item['kind'] == 'goal_fresh' else 'Nothing needs you yet - move on.')
+        return f"\"{item['title']}\" is a goal{by} ({item.get('ref') or ''}): {item.get('why') or 'no steps yet'}. {need}"
     if item['kind'] == 'report':
         return f"{item['title']} landed {funnel_age(item)}" + (" and didn't finish - the reason is inside." if item.get('bad') else '.') + ' It is open below - make it a task, hand it off, or move on.'
     if item['kind'] == 'agentdone': return _finished(item) + (f": {item['summary']}" if item.get('summary') else '.') + ' Its full report is on the card.'

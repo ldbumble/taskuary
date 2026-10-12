@@ -761,12 +761,12 @@ def goal_steps(task_id: int):
     """A goal's boxes with the child task behind each (store.goal_steps), as the task page lists them (spec 2026-10-12)."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     from . import taskstate
+    from .processing_unread import holder_name
     out = []
     for x in store.goal_steps(task_id):
         c = x.pop('child')
-        who = str((c or {}).get('Assignee') or '')
         out.append({**x, 'ref': task_ref(c['TaskId']) if c else None, 'status': (c or {}).get('Status'),
-                    'who': who.split(':', 1)[1] if ':' in who else who, 'state': taskstate.state(store, c) if c else None})
+                    'who': holder_name((c or {}).get('Assignee')), 'state': taskstate.state(store, c) if c else None})
     return {'steps': out}
 
 

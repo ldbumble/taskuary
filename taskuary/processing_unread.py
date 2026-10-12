@@ -251,7 +251,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...or a regular-agent task nobody has started yet: unassigned when triage named no specialist, it read as the
     # owner's own work (A10, 2026-09-25)
     from .processing_all import _has_conversation
-    queued = active and not workers and not persisted_working and (
+    # NEWS AFTER THE AGENT (the owner, 2026-10-12): a sender wrote again after the agent's last session - the task is that
+    # message now, on you, not "handed to coder" nor "you ended the session" from days before
+    news = funnel.news_since_agent(store, tid) if active and tid and not workers else None
+    queued = active and not workers and not persisted_working and not news and (
         str(task.get('Assignee') or '').startswith('agent:') or funnel.general_not_started(task, _has_conversation(view, tid), view.get('routes', []))
         or funnel.held_for_repo(task))    # a start that stopped on "which repository?" is on the rail until you pick one
     # a done task is not work any more - its own row, the assistant's note that became it, AND the mail
@@ -339,6 +342,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     from .store import is_goal
     if is_goal(task) and active and not review and not worker: card.update(**goal_facts(store, task, tid, now))
     elif task.get('ParentId') and active: card.update(goal=funnel.task_ref(task['ParentId']), folded=False)   # folded below, once the lane is final
+    if news:
+        who = str(task.get('Assignee') or '').split(':', 1)[-1] or 'the agent'
+        frm = str(news.get('FromName') or news.get('FromEmail') or 'they').split(' at ')[0]
+        card.update(lane='asked' if card['lane'] in ('queued', 'saved', 'stopped') else card['lane'], why=f'{frm} wrote again since {who} finished')
     if queued and card['lane'] in ('asked', 'yours'):
         card.update(lane='queued', why=f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'the regular agent'}, not started yet")
     # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a

@@ -129,7 +129,7 @@ export const waitingEmails = (checklist = [], reviews = []) => {
   return (checklist || []).filter((i) => i.out && !i.done && pending.has(i.rid)).length;
 };
 
-export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub, emails = 0 } = {}) => {
+export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub, emails = 0, news = false } = {}) => {
   if (reply === READY) return "reply";
   // ONE EVENT SEEN TWICE. An agent parked because it PROPOSED something is not two things wanting
   // the page: approving the proposal is what releases it. Opening the agent stage there would show
@@ -145,6 +145,8 @@ export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agen
   if (proposal) return "reply";
   if (hasSender && kind === "reply" && !["sent", "not needed"].includes(reply)) return "reply";
   if (["done", "dropped"].includes(task)) return "task";
+  // a sender wrote AFTER the agent's last session: the message is the news, the session's record is history (2026-10-12)
+  if (news) return "task";
   if (agent && agent !== AGENT.idle) return "agent";
   return "task";
 };

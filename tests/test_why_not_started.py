@@ -179,3 +179,31 @@ class FinishedIsNotLeftTests(unittest.TestCase):
         s = MemoryStore(); t = handed(s, who='agent:coder'); self.ran(s, t, finish=False)
         self.assertTrue(funnel.agent_left(s, t))
         self.assertIn('left without finishing', funnel.not_started_why(s, t))
+
+
+class NewsAfterTheAgentTests(unittest.TestCase):
+    """A coder's session ended, the task closed, and days later the sender wrote again: the task reopened and opened on the
+    old session's "You ended the session" (2026-10-12). The message is what the task is about now."""
+
+    def setUp(self):
+        self.s = MemoryStore(); self.t = handed(self.s, who='agent:coder')
+        self.s.add_transcript(self.t, 's1', 'screen text', agent='coder')
+        self.s.tag_task(self.t, terminal.SAVED, True, 'owner')
+        self.s._exec("UPDATE transcript SET CreatedAt=? WHERE TaskId=?", (ago(5), self.t))
+
+    def wrote(self, when):
+        return self.s.add_message({'TaskId': self.t, 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                                   'Subject': 'Re: access list', 'BodyText': 'looks right except one', 'SentAt': when, 'Status': 'routed'})
+
+    def test_a_message_after_the_session_is_the_news(self):
+        self.wrote(ago(0))
+        why = funnel.not_started_why(self.s, self.t)
+        self.assertIn('Erin Blake wrote again today', why)
+        self.assertNotIn('You ended the session', why)
+        self.assertFalse(funnel.agent_left(self.s, self.t), 'not "stopped" or "saved" on the rail')
+        self.assertEqual(funnel.agent_story(self.s, self.t)['kind'], 'news')
+
+    def test_the_message_that_started_the_work_is_not_news(self):
+        self.wrote(ago(6))
+        self.assertIsNone(funnel.news_since_agent(self.s, self.t))
+        self.assertIn('You ended the session', funnel.not_started_why(self.s, self.t))

@@ -3,7 +3,7 @@
 // agent did so far and was interrupted or it never started").
 
 // the chip beside "Agent work" - only the two that wait on the owner wear oxblood
-export const STORY_CHIP = { held: "waiting on you", interrupted: "interrupted", left: "stopped", idle: "not started" };
+export const STORY_CHIP = { held: "waiting on you", interrupted: "interrupted", left: "stopped", idle: "not started", news: "earlier session" };
 export const storyAlarm = (kind) => kind === "held" || kind === "interrupted";
 
 // a live session tells its own story, and a queued start already has its card (QueuedStart) with Start now and Cancel

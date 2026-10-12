@@ -794,6 +794,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     conversation: generalStarted, finished: rowState === "agentdone", state: rowState,
     handed: !!assignedAgent(t?.Assignee) || rowState === "queued" || !!detail?.transcript || !!report || generalStarted,
   });
+  // a sender wrote again after the agent's last session (funnel.news_since_agent): the task stage leads with that message
+  const news = !term?.alive && detail?.agentStory?.kind === "news" ? detail.agentStory : null;
   // why nothing is running on the agent step - never started, or what it did before it went (funnel.agent_story)
   const story = storyShown(detail?.agentStory, { alive: term?.alive, liveRun, queued: rowState === "queued",
     closed: ["done", "dropped"].includes(t?.Status) }) ? detail.agentStory : null;
@@ -814,10 +816,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
-    proposal: proposals.length > 0, agentSub: term ? subState(term) : null,
+    proposal: proposals.length > 0, agentSub: term ? subState(term) : null, news: !!news,
     emails: emailsWaiting,
   })));
-  const storyAt = storyPlace(story, { open: stage === "agent" && !sessionView, hasRecord });
+  // the news line is said once, at the top of the task stage; open, the agent step is just its record
+  const storyAt = storyPlace(news ? null : story, { open: stage === "agent" && !sessionView, hasRecord });
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
   // chip you press (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?")
   const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
@@ -1315,6 +1318,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {/* 2 - WHAT THERE IS TO DO. The title is in the header now; repeating it here was
                         the same words twice, an inch apart. */}
                     <Box sx={{ minWidth: 0 }}>
+                        {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
+                            session is the record under Agent work, not the news (the owner, 2026-10-12) */}
+                        {news && <Typography sx={{ fontSize: 12.5, color: INK, fontWeight: 600, mb: 0.9 }}>Open again: {news.line}</Typography>}
                         <Typography sx={{ ...label, display: "block", mb: 0.25 }}>What needs doing</Typography>
                         {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task;
                             the card says so once - how many, and what they need now (concierge.repeats, counted by code) */}

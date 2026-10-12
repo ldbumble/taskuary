@@ -622,3 +622,16 @@ def test_a_start_held_for_a_repository_stays_on_the_rail_saying_so(store):
     card = next(i for i in unread['items'] if i.get('tid') == tid)
     assert card['lane'] == 'queued' and 'pick a repository' in card['why'], card
     assert 'needs a repository' in card['why_idle']
+
+
+def test_a_sender_writing_again_after_the_agent_is_on_you_saying_so(store):
+    """Not "you ended the session" from days before, and not "handed to coder" (the owner, 2026-10-12)."""
+    old = (datetime.now() - timedelta(days=5)).isoformat(' ')
+    tid = store.create_task({'Title': 'Access list review', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coder'}, 'router')
+    store.add_transcript(tid, 's1', 'screen', agent='coder')
+    store._exec('UPDATE transcript SET CreatedAt=? WHERE TaskId=?', (old, tid))
+    store.tag_task(tid, terminal.SAVED, True, 'owner')
+    add(store, 'Re: access list', tid=tid, status='routed')
+    _, unread = both(store)
+    card = next(i for i in unread['items'] if i.get('tid') == tid)
+    assert card['lane'] == 'asked' and card['why'] == 'Fixture wrote again since coder finished', card

@@ -106,3 +106,25 @@ class SweepTests(unittest.TestCase):
         outcomes.record(s, 'task.closed', 'task', t, at=ago(days=8))
         self.assertIsNone(outcomes.sweep_if_due(s))                                 # swept today already
         self.assertEqual(outcomes.sweep_if_due(s, now=datetime.now() + timedelta(days=1)), 1)
+
+
+class DoorsTests(unittest.TestCase):
+    def test_closing_a_task_from_the_assistant_records_it(self):
+        from taskuary import concierge
+        s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
+        concierge.close_task(s, t, 'owner')
+        r = outcomes.rows_for(s, 'task', t)[0]
+        self.assertEqual((r['Kind'], r['Actor'], json.loads(r['FactsJson'])['how']), ('task.closed', 'owner', 'close_from_assistant'))
+
+    def test_a_promise_task_records_its_making_and_its_delivery(self):
+        s = MemoryStore()
+        mid = s.add_message({'ConversationId': 'c1', 'Channel': 'email', 'Subject': 'Budget', 'FromEmail': 'alex@northwind.example', 'SentAt': ago(days=2), 'BodyText': 'x', 'Status': 'context'})
+        t = s.task_for_promise(mid, 'send the budget', (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d'))
+        self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['Kind'], 'promise.made')
+        s.put_sent_verdict(mid, 'c1', False, True, 'send the budget', None, 'test'); s.deliver_promise(mid, mid)
+        self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['Verdict'], 'kept')
+
+    def test_a_continue_with_no_words_records_an_empty_move(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
+        outcomes.record(s, 'agent.continued', 'task', t, next_move=None, facts={'door': 'continue-session'})
+        self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['NextMove'], '')

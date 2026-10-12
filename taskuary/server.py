@@ -1713,6 +1713,8 @@ def continue_session(task_id: int, body: CodeBody = None):
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
     store.audit('task', task_id, 'continue-session', ACTOR, detail={'agent': row['Agent'], 'fromSid': row['Sid']})
+    from . import outcomes                           # the ledger: the owner's next move after a stop, in their words
+    outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=(body.instruction if body else None) or '', facts={'door': 'continue-session'})
     return {'resumed': row['ExtId'], 'agent': row['Agent'], 'fromSession': row['Sid'], 'session': session}
 
 
@@ -1743,6 +1745,8 @@ def continue_work(task_id: int, body: ContinueBody = None):
             except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
         threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': bool(note)})
+        from . import outcomes
+        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note or '', facts={'door': 'continue-work', 'kind': 'general'})
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
     note = with_images(note, imgs).strip()
     row, _why = _resumable(task_id)
@@ -1763,6 +1767,9 @@ def continue_work(task_id: int, body: ContinueBody = None):
             row, out = None, fresh()
     else: out = fresh()
     store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'coding', 'resumed': bool(row), 'note': bool(note)})
+    if not row:                                      # a resumed one was recorded by continue_session itself: one act, one row
+        from . import outcomes
+        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note or '', facts={'door': 'continue-work', 'kind': 'coding'})
     return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': bool(row), **(out if isinstance(out, dict) else {})}
 
 
@@ -2600,6 +2607,8 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
     pid = store.save_policy({'Name': f'Skip {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'skip',
                              'Reason': f'the owner said to ignore mail from {em}', 'Active': 1}, ACTOR)
     store.audit('policy', pid, 'create', ACTOR, detail={'from': em, 'message_id': mid, 'via': 'ignore-sender'})
+    from . import outcomes                           # the ledger: regret if their mail becomes work anyway
+    outcomes.record(store, 'sender.ignored', 'policy', pid, ACTOR, facts={'from': em, 'rule': 'skip'})
     saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
     hidden = policy_engine.apply_retroactively(store, saved or {})
     if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden})

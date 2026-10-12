@@ -231,6 +231,12 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         store.audit('review', rid, 'reconciled_sent' if reconciled else 'sent_outbound' if outgoing else verb, actor,
                     detail={'kind': rv.get('Kind'), 'sent': True, 'channel': sent.get('channel'), 'to': sent.get('to')})
         _settle_task_after_sent_reply(store, rv, actor, True)
+        try:                                            # the ledger: did the thread go quiet, or did it take more rounds? (outcomes.py)
+            from . import outcomes
+            tid = rv.get('TaskId'); closed = bool(tid and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'))
+            outcomes.record(store, 'reply.sent', 'task' if tid else 'message', tid or rv.get('MessageId') or 0, actor,
+                            facts={'cid': (msg or {}).get('ConversationId'), 'mid': rv.get('MessageId'), 'review': rid, 'verb': verb, 'closed': closed})
+        except Exception as e: logger.warning(f'review {rid}: the outcome row was not written - {e}')
         # A reply that ASKED them something keeps watching for the answer, though the send closed the task (asks.py) -
         # whether it asked is the model's to read, off this thread: the button never waits on it
         if not outgoing and rv.get('Kind') not in ('action', 'slot'):

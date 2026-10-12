@@ -375,6 +375,11 @@ def _events(t, p: dict) -> None:
             from . import selfclose
             said, asks = selfclose.ask_markers(str(p.get('last_assistant_message') or ''))
             ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook')
+            try:                                        # the ledger: what the owner does next after a stop (outcomes.py); never breaks a hook
+                from . import ci, outcomes
+                agent = getattr(t, 'agent', '') or 'coder'
+                outcomes.record(st, 'agent.stopped', 'task', tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent})
+            except Exception as e: logger.debug(f'task {tid}: the stop was not ledgered - {e}')
             g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None
             for i, (q, choices) in enumerate(asks, 1):
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),

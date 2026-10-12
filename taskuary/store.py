@@ -2132,6 +2132,10 @@ class SQLiteStore:
         self._exec('UPDATE sent_verdict SET DeliveredBy=? WHERE MessageId=? AND Promise=1 AND DeliveredBy IS NULL', (by, mid))
         t = self.promise_task(mid)
         if t and t.get('Status') not in ('done', 'dropped'): self.update_task(t['TaskId'], {'Status': 'done'}, 'promise')
+        if t:                                           # delivered: the ledger row resolves now, not at the sweep
+            from . import outcomes
+            for r in outcomes.rows_for(self, 'task', t['TaskId']):
+                if r['Kind'] == 'promise.made' and not r['ResolvedAt']: outcomes._resolve_one(self, r, datetime.now())
     def promise_task(self, mid): return self._one('SELECT * FROM task WHERE SourceRef=?', (f'promise:{mid}',))
     def task_for_promise(self, mid: int, what: str, due) -> int:
         """The owner's own promise as a task on them (spec 2026-10-12): made once per sent message, dated when it was,
@@ -2146,6 +2150,8 @@ class SQLiteStore:
         tid = self.create_task({'Title': what[:1].upper() + what[1:], 'Summary': summary, 'Kind': 'task', 'Status': 'open', 'Assignee': 'owner',
                                 'Source': m.get('Channel') or 'email', 'SourceRef': f'promise:{mid}', 'DueAt': due or None}, 'promise')
         self._exec('UPDATE message SET TaskId=? WHERE MessageId=? AND TaskId IS NULL', (tid, mid))
+        from . import outcomes
+        outcomes.record(self, 'promise.made', 'task', tid, 'promise', facts={'mid': mid, 'due': due})   # the ledger: kept, kept late, late?
         return tid
     def open_promises(self, since, before='9999', conversation_id=None):
         """Promises the model read in the owner's sent words that nothing later of theirs delivered, newest first, with

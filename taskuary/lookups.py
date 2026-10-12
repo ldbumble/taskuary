@@ -23,8 +23,13 @@ def _cut(s, n):
 
 def _day(s): return str(s or '')[:16]
 
+def _limit(p, default, cap):
+    try: limit = int(p.get('limit') or default)
+    except (TypeError, ValueError, OverflowError): limit = default
+    return max(1, min(limit, cap))
+
 def tasks_list(store, p: dict) -> str:
-    status, limit = str(p.get('status') or 'open').strip().lower(), max(1, min(int(p.get('limit') or 25), 60))
+    status, limit = str(p.get('status') or 'open').strip().lower(), _limit(p, 25, 60)
     q = str(p.get('contains') or '').strip() or None
     rows = store.list_tasks(status=None if status in ('open', 'all') else status, q=q)
     if status == 'open': rows = [t for t in rows if t.get('Status') in ACTIVE]

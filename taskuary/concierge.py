@@ -1608,7 +1608,8 @@ def read_op(store, kind: str, params: dict) -> str:
     if kind == 'timeline.search':
         sel = {k: v for k, v in p.items() if k != 'limit'}
         if sel.get('select'): sel = sel['select']
-        limit = max(1, min(int(p.get('limit') or 12), 40))
+        from .lookups import _limit
+        limit = _limit(p, 12, 40)
         hits = search_timeline(store, sel, limit)
         if not hits: return 'Nothing in the history matches that.'
         return NEWLINE.join(f"m{h['mid']} {h['ref'] or '-'} {h['when'][:16]} {h['who']}: {_cut(h['title'], 120)}" for h in hits)

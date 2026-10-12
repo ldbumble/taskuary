@@ -308,6 +308,13 @@ CREATE TABLE IF NOT EXISTS routing_evidence (EvidenceId INTEGER PRIMARY KEY, Fac
 CREATE TABLE IF NOT EXISTS doc (Name TEXT PRIMARY KEY, Content TEXT, UpdatedBy TEXT, UpdatedAt TEXT);
 CREATE TABLE IF NOT EXISTS dispatchq (QId INTEGER PRIMARY KEY, TaskId INTEGER, BehindTaskId INTEGER,
   Agent TEXT, Reason TEXT, CreatedAt TEXT);
+-- A BATCH (batch.py): the ranked arrivals of one repository, let in together as ONE task an agent works top-down.
+-- One row per item, in the order ranking put them (Place). State: waiting -> working -> needs_you | done, or ended
+-- (closed or merged upstream). The task closes when every item is done or ended.
+CREATE TABLE IF NOT EXISTS batch_item (ItemId INTEGER PRIMARY KEY, TaskId INTEGER NOT NULL, ConversationId TEXT NOT NULL,
+  MessageId INTEGER, Place INTEGER, Title TEXT, Link TEXT, State TEXT DEFAULT 'waiting', Result TEXT, Overlap TEXT,
+  EndedWhy TEXT, CreatedAt TEXT, UpdatedAt TEXT, UNIQUE(TaskId, ConversationId));
+CREATE INDEX IF NOT EXISTS idx_batch_item_conv ON batch_item(ConversationId);
 CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, Note TEXT, CreatedBy TEXT,
   CreatedAt TEXT, DeliveredAt TEXT, How TEXT);
 -- The agent wall (blackboard.py): what one agent leaves for the next one in the same
@@ -1638,6 +1645,8 @@ class SQLiteStore:
         # open boxes, as if the work were still owed (the owner, 2026-09-18: "part of --done should be
         # that, no? same if it's saved manually"). Dropped leaves them: nothing was done.
         if fields.get('Status') == 'done':
+            # ...a batch's items with it: Done on the batch is the owner settling every line still open
+            self._exec("UPDATE batch_item SET State='done', UpdatedAt=? WHERE TaskId=? AND State NOT IN ('done','ended')", (_now(), task_id))
             items = self.task_checklist(task_id)
             if any(not i.get('done') for i in items):
                 self._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps([{**i, 'done': True} for i in items]), task_id))
@@ -3812,6 +3821,27 @@ class SQLiteStore:
         order = 'RankValue IS NULL, RankValue DESC, MessageId' if ranked else 'MessageId'
         return self._rows(f"SELECT * FROM message WHERE Status='triaging' ORDER BY {order} LIMIT ?", (limit,))
     def ranked_held(self, channel) -> int: return len(self.ranked_head(channel))
+    # ── batches (batch.py) ──────────────────────────────────────────────────────────────────
+    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place')
+    def add_batch_item(self, tid, conv, mid, place, title, link):
+        self._exec('INSERT OR IGNORE INTO batch_item (TaskId, ConversationId, MessageId, Place, Title, Link, State, CreatedAt, UpdatedAt) '
+                   "VALUES (?,?,?,?,?,?,'waiting',?,?)", (tid, conv, mid, place, title, link, _now(), _now()))
+    def batch_items(self, tid) -> list:
+        return self._rows('SELECT * FROM batch_item WHERE TaskId=? ORDER BY Place, ItemId', (tid,))
+    def batch_item(self, tid, conv):
+        return self._one('SELECT * FROM batch_item WHERE TaskId=? AND ConversationId=?', (tid, conv))
+    def update_batch_item(self, tid, conv, fields: dict) -> bool:
+        d = {k: v for k, v in fields.items() if k in self.BATCH_ITEM_COLS}
+        if not d or not self.batch_item(tid, conv): return False
+        self._exec(f"UPDATE batch_item SET {', '.join(f'{k}=?' for k in d)}, UpdatedAt=? WHERE TaskId=? AND ConversationId=?",
+                   (*d.values(), _now(), tid, conv))
+        self._bump_snapshots(); self._poke('task-changed', task_id=tid)
+        return True
+    def open_batch(self, source_ref):
+        """The batch of this input still being worked - one at a time per repository; the rest wait for the next."""
+        r = self._one("SELECT TaskId FROM task WHERE SourceRef=? AND Status NOT IN ('done','dropped') ORDER BY TaskId DESC LIMIT 1",
+                      (source_ref,))
+        return r['TaskId'] if r else None
     def ranked_head(self, channel) -> list:
         """How many of this input's RANKED arrivals were judged into a task that still waits on the owner - not
         read (Next, Done), not put away (Later, Remind me), not closed. They hold the head: a drain judges only

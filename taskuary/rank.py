@@ -248,26 +248,38 @@ def rank_pending(store, force: bool = False) -> int:
             v, why = floor(store, {}, r, mine)
             store.set_message_rank(r['MessageId'], v, why, 'rank')
         llm = build_rank_llm(store)
-        if not llm or len(rows) < 2: return len(rows)
-        try:
-            out = llm(RANK_SYSTEM, 'Arrivals:\n' + '\n'.join(_arrival_line(r) for r in rows), max_tokens=900)
-            j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
-            order = [str(o.get('ref') or '') for o in j.get('order') or []]
-            whys = {str(o.get('ref') or ''): str(o.get('why') or '')[:60] for o in j.get('order') or []}
-            k = len(order)
-            for r in rows:
-                ref = f"m{r['MessageId']}"
-                if ref not in order: continue
-                # the MODEL's position IS the rank here. The floor is the fallback, not half of it:
-                # what deserves attention is a judgement, and a handful of deterministic signals
-                # cannot make it (the owner, 2026-09-18: "rank has to be ai").
-                store.set_message_rank(r['MessageId'], round(1 - order.index(ref) / max(1, k - 1), 3) if k > 1 else 1.0,
-                                       whys.get(ref) or (store.get_message(r['MessageId']) or {}).get('RankWhy') or '', 'rank')
-        except Exception as e:
-            logger.debug(f'the ranking call did not answer, the floor stands: {e}')
+        if not llm: return len(rows)
+        # A BATCHED input is ranked on its own: a batch is one repository's best, so a value is only ever compared with
+        # its own repository's (batch.py). Everything else shares one pool, as before.
+        from . import batch
+        pools = {}
+        for r in rows:
+            pools.setdefault((r.get('Channel'), r.get('SourceName')) if batch.batches(r.get('Channel')) else None, []).append(r)
+        for pool in pools.values():
+            if len(pool) >= 2: _order(store, llm, pool)
         return len(rows)
     finally:
         _lock.release()
+
+
+def _order(store, llm, rows: list):
+    """One listwise call over these arrivals; its order IS their rank."""
+    try:
+        out = llm(RANK_SYSTEM, 'Arrivals:\n' + '\n'.join(_arrival_line(r) for r in rows), max_tokens=900)
+        j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
+        order = [str(o.get('ref') or '') for o in j.get('order') or []]
+        whys = {str(o.get('ref') or ''): str(o.get('why') or '')[:60] for o in j.get('order') or []}
+        k = len(order)
+        for r in rows:
+            ref = f"m{r['MessageId']}"
+            if ref not in order: continue
+            # the MODEL's position IS the rank here. The floor is the fallback, not half of it:
+            # what deserves attention is a judgement, and a handful of deterministic signals
+            # cannot make it (the owner, 2026-09-18: "rank has to be ai").
+            store.set_message_rank(r['MessageId'], round(1 - order.index(ref) / max(1, k - 1), 3) if k > 1 else 1.0,
+                                   whys.get(ref) or (store.get_message(r['MessageId']) or {}).get('RankWhy') or '', 'rank')
+    except Exception as e:
+        logger.debug(f'the ranking call did not answer, the floor stands: {e}')
 
 
 def waiting(store) -> dict:
@@ -325,8 +337,10 @@ def rank_numbers(store, rows: list) -> dict:
     """{row key: its place in its input's batch} - the circled 1, 2, 3, 4 a ranked row wears on the rail, in the order
     the batch let them in (the owner, 2026-09-28: "if they are processed in bulk we should write numbers on it like
     circle 1 rank"). Empty on an install that ranks nothing."""
+    from . import batch
     out = {}
-    for ch in rank_channels(store):
+    # a batched input's order is its batch's own (batch_item.Place), on the task page - one row, nothing to number
+    for ch in rank_channels(store) - batch.CHANNELS:
         for n, h in enumerate(store.ranked_head(ch), 1):
             row = next((r for r in rows if (r or {}).get('tid') == h['TaskId'] or (r or {}).get('mid') == h['MessageId']), None)
             if row: out[row['key']] = n

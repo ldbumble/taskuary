@@ -1278,6 +1278,12 @@ def _gh_ended(store, item: dict, base: str, repo: str, tok: str = None) -> int:
         logger.warning(f'github: who ended {base} could not be read ({e})'); who = ''
     mine = bool(who and who in whoami.github_logins(store))
     if mine: said = f"You {what} this {kind} on GitHub ({repo}#{item['number']}), so there is nothing left to do here."
+    # ONE ITEM OF A BATCH: its line settles, and the batch closes only when none is left (batch.py) - closing the task
+    # here would end three other pull requests nobody had looked at
+    from . import batch
+    if batch.is_batch(store, tid):
+        batch.ended(store, tid, base, f"{'You' if mine else 'It was'} {what}{' it' if mine else ''} on GitHub.", 'owner' if mine else 'router')
+        return 0
     close_upstream_ended(store, tid, said, 'owner' if mine else 'router')
     logger.info(f'github: {base} was {what} - closed TQ-{tid:04d}')
     return 0

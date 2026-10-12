@@ -89,7 +89,7 @@ test("nothing touches xterm after the pane is disposed", () => {
   assert.match(term, /s\.dispose = \(\) => \{\n\s+if \(disposed\) return;\n\s+disposed = true; s\.alive = false; unbind\(\);/);
   assert.match(term, /term\.write\(data, \(\) => \{ if \(disposed\) return; pendingWrites -= 1;/);
   assert.match(term, /const lift = \(\) => \{\n\s+if \(disposed\) return;/);
-  assert.match(term, /const onResize = \(\) => \{\n\s+if \(disposed \|\| !ui\) return;/);
+  assert.match(term, /const onResize = \((?:real = true)?\) => \{\n\s+if \(disposed \|\| !ui\) return;/);
 });
 
 test("a pane put away hands the geometry back and follows the pty out of sight", () => {

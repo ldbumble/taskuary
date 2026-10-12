@@ -8,7 +8,7 @@
 //
 // So this is a mode, not a route: the pane it belongs to covers the window where it stands, and Esc
 // or the button puts it back. Nothing is remembered - full screen is a moment, not a preference.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export const FULL_Z = 1250;          // above the app's own chrome, below MUI's modals (1300)
 
@@ -24,6 +24,14 @@ let closeOther = null;
 export function useFullScreen() {
   const [full, setFull] = useState(false);
   const toggle = useCallback(() => setFull((f) => !f), []);
+  // in or out of full screen is a new WINDOW for the pane inside, not the page moving: a terminal holds its rows through
+  // the page moving (terminalSizing.holdTerminalHeight) and must not hold the full-screen height once it is put back
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return undefined; }
+    const id = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => cancelAnimationFrame(id);
+  }, [full]);
   useEffect(() => {
     if (!full) return undefined;
     if (closeOther && closeOther !== setFull) closeOther(false);

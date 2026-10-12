@@ -15,7 +15,7 @@ import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { BORDER, CATPPUCCIN, FAINT, XTERM_THEME, mono } from "./theme.jsx";
 import { MicButton } from "./ui.jsx";
-import { adoptPtyGeometry, canRevealTerminal, changedTerminalSize, safeTerminalRows, usableTerminalBox } from "./terminalSizing.js";
+import { adoptPtyGeometry, canRevealTerminal, changedTerminalSize, holdTerminalHeight, safeTerminalRows, usableTerminalBox } from "./terminalSizing.js";
 import { pastedImageFiles, pastedImagePrompt } from "./terminalInput.js";
 import { terminalOutputBatcher } from "./terminalOutput.js";
 import { createPool, paneCap } from "./terminalPool.js";
@@ -291,10 +291,16 @@ function liveSession(sid, readOnly) {
   const input = readOnly ? null : term.onData((d) => send({ type: "in", data: d }));
   let resizeTimer = null, ro = null;
   let wasHidden = false;
-  const onResize = () => {
+  let held = null;                                  // the box of the last REAL fit (holdTerminalHeight)
+  const pin = (h, hostH) => { el.style.height = h == null ? "100%" : `${h}px`; el.style.marginTop = h == null ? "0" : `${hostH - h}px`; };
+  const onResize = (real = true) => {
     if (disposed || !ui) return;
     const box = el.parentElement?.getBoundingClientRect();
     if (!box || !usableTerminalBox(box.width, box.height)) { wasHidden = true; return; }
+    if (!wasHidden && ownsGeometry && holdTerminalHeight({ real, held, width: box.width, height: box.height })) {
+      pin(held.height, box.height); return;           // the rows stay; the top ones slide out of view until the page gives them back
+    }
+    pin(null); held = { width: box.width, height: box.height };
     fitSafely();
     // A pane hidden behind another tab (the Tasks tab stays mounted) comes back with the
     // canvas xterm painted before it went away - sometimes nothing at all, and no scroll
@@ -307,7 +313,11 @@ function liveSession(sid, readOnly) {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(sendSize, 90);
   };
-  s.refit = onResize;                               // the size picker drives the same path
+  s.refit = () => onResize(true);                   // the size picker drives the same path
+  // the window itself changing is a real resize; the observer firing in the same moment is that same change, not the page
+  let windowAt = 0;
+  const onWindow = () => { windowAt = Date.now(); onResize(true); };
+  const onLayout = () => onResize(Date.now() - windowAt < 400);
   // ...and the same on the browser tab itself coming back to the foreground
   const onVisible = () => { if (!disposed && ui && document.visibilityState === "visible") term.refresh(0, Math.max(0, term.rows - 1)); };
   // The wheel never leaves the terminal. When xterm has nothing to scroll (an idle TUI in the
@@ -341,7 +351,7 @@ function liveSession(sid, readOnly) {
   const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
   const unbind = () => {
     ui = null; ro?.disconnect(); ro = null; clearTimeout(resizeTimer);
-    window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("resize", onWindow); document.removeEventListener("visibilitychange", onVisible);
   };
   // A kept pane coming back stays at the pty's size and ASKS for its box's: if another pane owns the geometry, fitting
   // first shrank it to this box and grew it back, which moves its rows - the next keystroke landed a row low on the
@@ -361,9 +371,9 @@ function liveSession(sid, readOnly) {
     if (!opened) { opened = true; term.open(el); gauge(); ownsGeometry = true; }   // a fresh pane: the first-resize barrier settles it
     binding.setState(s.state); binding.setRestoring(s.restoring); binding.setPromptState(s.prompt);
     sentSize = ""; wasHidden = true;
-    window.addEventListener("resize", onResize);
+    window.addEventListener("resize", onWindow);
     document.addEventListener("visibilitychange", onVisible);
-    ro = new ResizeObserver(onResize);
+    ro = new ResizeObserver(onLayout);
     ro.observe(host);
     onResize();
     if (back) claim();
@@ -550,7 +560,8 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
           this unpadded inner box and fitSafely keeps one row clear of pixel rounding. */}
       <Box sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, boxSizing: "border-box" }}>
       <Box ref={host} onMouseDown={() => !readOnly && requestAnimationFrame(() => termRef.current?.focus())}
-        sx={{ width: "100%", height: "100%", minHeight: 0, "& .xterm": { height: "100%" },
+        // overflow hidden: a pane held at its height while the page squeezes it (holdTerminalHeight) shows its bottom rows only
+        sx={{ width: "100%", height: "100%", minHeight: 0, overflow: "hidden", "& .xterm": { height: "100%" },
         // the rows never fill the slot exactly, and xterm paints the remainder #000 whatever the
         // theme says - a black band under a Catppuccin pane. The pane behind it wears the theme.
         "& .xterm-viewport": { backgroundColor: "transparent !important" },

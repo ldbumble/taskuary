@@ -110,7 +110,8 @@ DENIED = (
 AGENT_WRITES = (
     (r'POST', r'^/api/hooks/[a-z]+$', 'a CLI hook reporting its own session (hooks.command)'),
     (r'POST', r'^/api/hooks/claude/ask$', 'the ask hook - it shows the question; the owner answers it'),
-    (r'POST', r'^/api/agent/(reply|done|draft)$', "`taskuary --reply/--done/--draft` on the session's OWN task (owns_task); nothing leaves"),
+    (r'POST', r'^/api/agent/(reply|done|draft|item)$',
+     "`taskuary --reply/--done/--draft/--item` on the session's OWN task (owns_task); nothing leaves"),
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),
     (r'POST', r'^/api/(hub|handbook)(/\d+/(comment|vote|retire|restore))?$',
      "the Hub - post, correct, vote, retire what is no longer true; gated again by the card's hub_write scope"),
@@ -131,8 +132,8 @@ OWNER_ONLY = (
     (r'POST', r'^/api/assistant/(dock(/new)?|doorways(/listens)?|ideas/[^/]+/[^/]+)$', "the assistant's dock, doorways and ideas"),
     (r'POST|PATCH', r'^/api/tasks(/purge-dropped|/\d+)?$', 'making, editing and purging tasks'),
     (r'POST|PUT|PATCH', r'^/api/tasks/\d+/(agent/stop|assistant/(browser|cancel|messages|report|session|stream)|checklist(/\d+)?'
-                        r'|code|comments|continue|continue-work|discussion|dispatch|merge|not-a-task|not-coding|pause|remind|repo'
-                        r'|split|wrap|answer|read-ask)$', 'steering a task - and a comment here is written as the owner'),
+                        r'|batch/\d+|code|comments|continue|continue-work|discussion|dispatch|merge|not-a-task|not-coding|pause|remind|repo'
+                        r'|split|wrap|answer|read-ask|steps/\w+/start)$', 'steering a task - and a comment here is written as the owner'),
     (r'POST|DELETE', r'^/api/tasks/\d+/waitroom(/bulk|/image|/\d+)?$', 'the waiting room is what the owner tells the agent'),
     (r'POST', r'^/api/tasks/\d+/emails$', "an email the owner starts from a task - an agent drafts one through --draft"),
     (r'POST', r'^/api/messages/\d+/(attachments/fetch|chat|discussion|dispatch|file|ignore-sender|mine|not-mine|reclassify'

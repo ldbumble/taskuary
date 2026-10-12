@@ -14,3 +14,10 @@ export const storyShown = (story, { alive, liveRun, queued, closed } = {}) =>
 export const startLabel = (story, who, ran) => !ran && story && ["held", "idle"].includes(story.kind) && who ? `Start ${who}` : null;
 
 export const hhmm = (ts) => String(ts || "").slice(11, 16);
+
+// WHERE THE STORY GOES, so the step says each thing once (the owner, 2026-10-12, on a stopped session that stacked the story,
+// its last message in a bubble and a "Session closed" card repeating it: "follow the format of all agents. main summary,
+// then details behind more"). With a record it is the record's first line - folded, over the record's summary; open, over the
+// whole record with its timeline behind More. With none it is the account itself - folded, its sentence.
+export const storyPlace = (story, { open, hasRecord } = {}) =>
+  !story?.line ? null : hasRecord ? (open ? "record" : "summary") : open ? "story" : "line";

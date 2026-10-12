@@ -37,6 +37,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 // taskuary one not a different one")
 const AssistantMark = () => <TaskuaryMark size={24} />;
 import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
+import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
@@ -53,7 +54,7 @@ import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, Message
 import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
 import ActionRow from "./ActionRow.jsx";
@@ -272,6 +273,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
   // BULK PROCESSING: a ranked row's place in its batch, circled (the owner, 2026-09-28: "we should write numbers on it
   // like circle 1 rank") - in the order the batch let them in, which is rank order (rank.rank_numbers)
   const rankNo = pile?.rank_numbers || {};
+  // a BATCH row: how far it got, in words and as one bar segment per item (batch.py / batchItems.js)
+  const batchNo = pile?.batch_progress || {};
   const [openChannel, setOpenChannel] = useState("");
   const [waiting, setWaiting] = useState(null);
   useEffect(() => {
@@ -439,7 +442,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                   <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${agoText(backAt(i))}` : undefined}>
-                      {level === "later" ? railBack(backAt(i)) : railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+                      {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
+                        : level === "later" ? railBack(backAt(i)) : railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
@@ -454,6 +458,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                         {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
                             match a row to the Tasks tab, and it was only ever in the tooltip. */}
                         {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
+                        {/* a BATCH says how far it got in the row's own height - "1/4"; the whole line on hover and on the table */}
+                        {!!batchNo[i.key] && <span className="tq-pile-ref" title={batchNo[i.key].line}>{railShort(batchNo[i.key].states)}</span>}
                         {i.settling && <span className="tq-pile-tag">reading…</span>}
                         {!!word && (
                           <span className="tq-pile-word"
@@ -461,7 +467,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                             <i>{meta.mark}</i><span className="w">{word}</span></span>
                         )}
                       </div>
-                      {isCur && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
+                      {isCur && <div className="sub">{batchNo[i.key]?.line || [i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
                     </div>
                     {/* THE SAME WORD ON THE SAME BORDER. A handful on the table says so on its
                         bracket ("on the table · 4 fyi"); one item on the table wore the identical
@@ -645,7 +651,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)}
-        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} />
+        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} onOpenTask={actions.openTask} />
     </div>
   );
   // THE WORDS RIDE IN THE CARD (2026-09-23): Next beside the card's verb, every other word on its

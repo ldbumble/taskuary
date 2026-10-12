@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { STORY_CHIP, startLabel, storyAlarm, storyShown } from "../src/agentStory.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { STORY_CHIP, startLabel, storyAlarm, storyPlace, storyShown } from "../src/agentStory.js";
 
 const held = { kind: "held", line: "first message from pat@vendor.example - not one of your domains" };
 
@@ -25,4 +27,25 @@ test("a step that never ran names who Start starts", () => {
   assert.equal(startLabel(held, "coder", true), null);
   assert.equal(startLabel({ kind: "interrupted", line: "x" }, "coder", false), null);
   assert.equal(startLabel(held, "", false), null);
+});
+
+// One telling of the run (the owner, 2026-10-12): with a record the sentence heads it - folded over its summary, open over it all
+// with the timeline behind More; with none the story is the whole account.
+test("the story is the record's first line when there is a record, and the whole account only when there is none", () => {
+  const left = { kind: "left", line: "You ended the session.", steps: [{ at: "2026-10-12 08:00:00", text: "Started" }], said: "Merged." };
+  assert.equal(storyPlace(left, { open: false, hasRecord: true }), "summary");
+  assert.equal(storyPlace(left, { open: false, hasRecord: false }), "line");
+  assert.equal(storyPlace(left, { open: true, hasRecord: true }), "record");
+  assert.equal(storyPlace(left, { open: true, hasRecord: false }), "story");
+  assert.equal(storyPlace(null, { open: true }), null);
+});
+
+test("the step draws the story once: never beside the record, and its last message in no bubble", () => {
+  const read = (n) => readFileSync(fileURLToPath(new URL(`../src/${n}`, import.meta.url)), "utf8");
+  const page = read("TaskPage.jsx"), story = read("AgentStory.jsx");
+  assert.match(page, /\(storyAt === "line" \|\| storyAt === "story"\) && <AgentStory /);
+  assert.match(page, /storyAt === "summary" && <AgentRecord \{\.\.\.recordProps\} story=\{story\} who=\{agentName\(t\)\} folded \/>/);
+  assert.match(page, /<AgentRecord \{\.\.\.recordProps\} story=\{storyAt === "record" \? story : null\}/);
+  assert.doesNotMatch(story.slice(story.indexOf("export default")), /PANEL2|bgcolor/, "no tinted bubble");
+  assert.equal(story.match(/setMore\(/g).length, 1, "the timeline is behind one More");
 });

@@ -129,6 +129,28 @@ class BriefVoiceTests(unittest.TestCase):
         self.assertIn('Every line leaves', seen['system'])
 
 
+    def test_the_digest_is_the_opening_screens_brief_and_never_a_task(self):
+        """The owner, 2026-10-12: "should not be a task" - triage read a brief naming two meetings and three waiting
+        reviews as urgent work of its own, and the rail grew a task above the very items it listed."""
+        from taskuary import since
+        from tests.digest_fixture import add_digest
+        s = MemoryStore()
+        s.create_task({'Title': 'Review the export PR', 'Status': 'open'}, 'o')
+        src = add_digest(s)
+        def llm(system, user, **kw): return '- Two meetings today; the export PR still waits on you.'
+        with mock.patch('taskuary.ingest.ingest_message') as judged:
+            out = reports.run_report_source(s, src, llm=llm)
+        judged.assert_not_called()
+        self.assertEqual([t['Title'] for t in s.list_tasks()], ['Review the export PR'], 'no task made from the brief')
+        self.assertIsNone(s.get_message(out['message_id'])['TaskId'])
+        self.assertIn('Two meetings today', since.digest(s)['text'], 'the opening screen still shows it')
+        # ...and it is no ROW either: not a task, not a report under Reports - the assistant canvas is its only place
+        from taskuary import funnel
+        rail = funnel.pile(s, force=True, quiet=True)['items']
+        self.assertEqual([i['title'] for i in rail if i.get('mid') == out['message_id'] or 'meetings' in str(i.get('title'))], [],
+                         'the digest never shows on the work rail')
+
+
 class BriefMemoryTests(unittest.TestCase):
     def test_an_applicable_standing_verdict_governs_the_digest(self):
         s = _store()

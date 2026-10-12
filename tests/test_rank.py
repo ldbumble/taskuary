@@ -411,27 +411,35 @@ class TheMoreMarkerTests(unittest.TestCase):
     def test_the_batch_is_numbered_in_the_order_it_was_let_in(self):
         """The owner, 2026-09-28: "we should write numbers on it like circle 1 rank". Each ranking call scales its own
         pool from 1.0, so a later arrival's value says nothing next to the head's - the batch's order is admission."""
-        c = self.s.get_connector_by_type('github')
+        c = self.s.get_connector_by_type('outlook')
         self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
         tids = []
         for v in (0.9, 0.6, 1.0):                       # the third came in later, from a re-rank that rescaled it to 1.0
-            m = self._arrival(f'in {v}'); self.s.set_message_rank(m, v, 'floor', 'rank')
+            m = self._arrival(f'in {v}', 'email'); self.s.set_message_rank(m, v, 'floor', 'rank')
             tids.append(self.s.create_task({'Title': f'task {v}', 'Kind': 'coding', 'Status': 'open'}, 'triage'))
             self.s.place_message(m, tids[-1], 'routed')
-        rows = [{'key': f'k{t}', 'channel': 'github', 'tid': t} for t in reversed(tids)]
+        rows = [{'key': f'k{t}', 'channel': 'email', 'tid': t} for t in reversed(tids)]
         self.assertEqual(rank.rank_numbers(self.s, rows), {f'k{tids[0]}': 1, f'k{tids[1]}': 2, f'k{tids[2]}': 3})
         self.assertEqual(rank.rank_numbers(MemoryStore(), rows), {}, 'nothing ranks, nothing is numbered')
+
+    def test_a_batched_input_wears_no_numbers(self):
+        """A repository's head comes in as ONE task (batch.py); its order is the batch's own, on the task page."""
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        m = self._arrival('a pr'); self.s.set_message_rank(m, 0.9, 'floor', 'rank')
+        tid = self.s.create_task({'Title': 'pr', 'Kind': 'coding', 'Status': 'open'}, 'triage'); self.s.place_message(m, tid, 'routed')
+        self.assertEqual(rank.rank_numbers(self.s, [{'key': 'k', 'channel': 'github', 'tid': tid}]), {})
 
     def test_a_task_notified_about_twice_holds_one_place_and_wears_one_number(self):
         """The owner, 2026-09-29: "i also only see number 2 why?" - one pull request's two notifications were ranked onto
         one task, held two places in the head, and the second number overwrote the first on its row."""
-        c = self.s.get_connector_by_type('github')
+        c = self.s.get_connector_by_type('outlook')
         self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
         tid = self.s.create_task({'Title': 'Review the docs PR', 'Kind': 'coding', 'Status': 'waiting'}, 'triage')
         for v in (0.55, 0.33):
-            m = self._arrival(f'notified {v}'); self.s.set_message_rank(m, v, 'floor', 'rank'); self.s.place_message(m, tid, 'routed')
-        self.assertEqual(len(self.s.ranked_head('github')), 1)
-        self.assertEqual(rank.rank_numbers(self.s, [{'key': 'k', 'channel': 'github', 'tid': tid}]), {'k': 1})
+            m = self._arrival(f'notified {v}', 'email'); self.s.set_message_rank(m, v, 'floor', 'rank'); self.s.place_message(m, tid, 'routed')
+        self.assertEqual(len(self.s.ranked_head('email')), 1)
+        self.assertEqual(rank.rank_numbers(self.s, [{'key': 'k', 'channel': 'email', 'tid': tid}]), {'k': 1})
 
     def test_a_ranked_source_with_nothing_waiting_shows_no_pill(self):
         c = self.s.get_connector_by_type('github')

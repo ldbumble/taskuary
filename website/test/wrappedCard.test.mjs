@@ -5,11 +5,6 @@ import { fileURLToPath } from "node:url";
 import { sentElsewhere, unsentReplyReview, replyPhase } from "../src/taskLifecycle.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
-// the "Session closed - here is what it did" card, from its heading to the end of its box
-const card = () => {
-  const page = read("TaskPage.jsx"), at = page.indexOf("Session closed — here is what it did");
-  return page.slice(at, page.indexOf(") : workspaceMode ===", at));
-};
 // Close out, from its heading to the Context & history fold under it
 const closeOut = () => {
   const page = read("TaskPage.jsx"), at = page.indexOf('<WorkflowHeading number="3" title="Close out"');
@@ -17,19 +12,14 @@ const closeOut = () => {
 };
 
 // The card drew the NEWEST CODER REPORT, and the poll that saw the agent's own merge filed a second one whose "last
-// message" was our sentence - the agent's account was there, then gone (2026-10-12). It draws the same record the step
-// does (sessionrecord: a re-wrap never replaces the agent's words), with the ending added under it.
-test("the closed-session card shows the agent's record, not the newest report", () => {
-  assert.match(card(), /<AgentRecord \{\.\.\.recordProps\} \/>/);
-  assert.doesNotMatch(card(), /CoderReport|filedReport/);
-  assert.match(read("AgentRecord.jsx"), /rec\.ended\?\.text && [\s\S]*Since then[\s\S]*rec\.ended\.text/, "the ending is a line added to it");
-});
-
-// "Read the draft" read the wrap's answer ("drafting"), which the merge outdated seconds later: it opened an empty Close out.
-test("Read the draft is offered only while a draft is waiting, and out of sight", () => {
-  const c = card();
-  assert.match(c.slice(0, c.indexOf("Read the draft")), /\{pendingReview && stage !== "reply" &&/);
-  assert.doesNotMatch(c, /wrapped\.drafting/);
+// message" was our sentence - the agent's account was there, then gone (2026-10-12). Then it was a second telling of the run
+// under the step's own: the ended session is the step's record now, with the ending added to it.
+test("an ended session has no card of its own - the step's record is it, with the ending added", () => {
+  const page = read("TaskPage.jsx");
+  assert.doesNotMatch(page, /Session closed — here is what it did|workspaceMode === "wrapped"/);
+  assert.doesNotMatch(page, /reply separately if someone is waiting/, "no boilerplate paragraph under it");
+  assert.equal(page.match(/<AgentRecord \{\.\.\.recordProps\} story=\{storyAt === "record"/g).length, 1, "the open step draws the record once");
+  assert.match(read("AgentRecord.jsx"), /since\?\.text && [\s\S]*Since then[\s\S]*since\.text/, "the ending is a line added to it");
 });
 
 // Close out of a merged pull request was a bare "To <sender>" over nothing.

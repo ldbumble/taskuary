@@ -426,6 +426,9 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
             out = {'merged': f'{repo}#{num}', 'sha': sha[:7], 'url': cur.get('url'), 'method': seen['method'],
                    **({'note': seen['note']} if seen['note'] else {})}
         if ci.pr_of(store, tid): ci._save_pr(store, tid, {**ci.pr_of(store, tid), 'state': 'closed', 'merged': True}, actor)
+        if not out.get('already'):                   # the ledger: still merged in two weeks? (an already-merged PR was not our act)
+            from . import outcomes
+            outcomes.record(store, 'pr.merged', 'task', tid, actor, facts={'pr': num})
     elif a == 'settings':
         changes, why = setting_changes(p)
         if not changes: raise RuntimeError(why)

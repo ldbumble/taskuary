@@ -1002,6 +1002,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # said where it belonged - the wrong sentence, and the one the owner cannot act on.
     argv = agent_argv(profile, model) if agent else default_shell()
     if agent and cli_named(profile, argv) == 'claude' and '--settings' not in argv: argv = [*argv, *claude_theme_args(store)]
+    # a BATCH is reviewed read-only, whoever opened the session: its items are strangers' words (batch.read_only_argv)
+    if agent and task_id:
+        from . import batch as _batch
+        if _batch.is_batch(store, task_id):
+            from .config import home
+            argv = _batch.read_only_argv(cli_named(profile, argv), list(argv), str(home() / 'context'))
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
     # differ per CLI, and the typed road is the one verified against every TUI here.
@@ -1100,6 +1106,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         # ONE START, whatever the door (A22, 2026-09-25): the interruption is over, a saved session is live again, and the
         # task is no longer queued - the task page's own terminal door skipped all three and left them stale
         resume_task(store, task_id, actor); store.tag_task(task_id, SAVED, False, actor); store.clear_dispatch(task_id)
+        store.tag_task(task_id, 'held:repo', False, actor)    # funnel.HELD_REPO: the repository it waited for is found
     if task_id and store.hold_reviews(task_id, 'held while an agent works the task - the reply is written from what it finds'):
         logger.debug(f'held the pending reply on task {task_id} while {agent or "a session"} works it')
     store.audit('terminal', 0, 'open', actor, detail={'sid': t.sid, 'agent': agent, 'cwd': cwd, 'task': task_id})
@@ -1457,6 +1464,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     It says so explicitly, because an agent that goes back to Taskuary for the message spends
     a minute of tool calls re-fetching what it was already handed."""
     from .store import task_ref
+    from . import batch as _batch
+    if _batch.is_batch(store, tid): return _batch.seed(store, tid, repo, cwd, instruction)
     t = store.get_task(tid) or {}
     msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     m = msgs[-1] if msgs else None

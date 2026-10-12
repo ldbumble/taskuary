@@ -79,6 +79,9 @@ REFLECT_SYSTEM = (
     'NOT A TASK): then the owner has already said it, and it goes straight into the matching section.\n'
     '- Add new hypotheses only for patterns 2+ episodes support; singles stay unwritten.\n'
     '- Never contradict SOUL.md (it outranks this file); never invent facts beyond the events.\n'
+    '- Lines from the outcome ledger (out123) are evidence of HABITS and of what WORKED: a move the owner makes every '
+    'time an agent stops the same way is a rule about the owner; a reply that always gets more rounds is a fact about '
+    'what works. Cite their ids like any other.\n'
     "- Keep each line's k: byte-for-byte - it is how a line is recognised across rewrites, and a "
     'changed one orphans its evidence and its history. A line you add fresh needs none.\n'
     '- Keep the section headers, all four <!-- --> marker lines, and every {{owner}}-style '
@@ -245,6 +248,11 @@ def gather(store, since: str) -> str:
     if aud:
         out.append('OWNER CORRECTIONS (audit trail):')
         out += [f"  {a['Action']} {a['EntityType']}{a['EntityId']} {str(a.get('Detail') or '')[:120]}" for a in aud[:20]]
+    from . import outcomes
+    led = outcomes.evidence(store, since)
+    if led:
+        out.append('WHAT CAME OF ACTIONS (the outcome ledger - what you did next and what followed; a habit is what you do when nothing corrected it):')
+        out += [f'  {l}' for l in led]
     return '\n'.join(out)
 
 

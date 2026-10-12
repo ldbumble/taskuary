@@ -375,10 +375,14 @@ def _rank_first(store, rows: list) -> list:
     except Exception as e: logger.debug(f'ranking the pool failed, arrival order stands: {e}')
     fresh = {r['MessageId']: r for r in store.pending_triage(_ALL, ranked=True)}
     keep = {r['MessageId'] for r in ranked}
+    # a batched input (a repository, a board) lets its head in as ONE task (batch.py); only its follow-ups - a comment on
+    # an item already let in - go on to triage; the rest join an open batch with room or wait for the next (batch.admit)
+    from . import batch
+    follow = batch.admit(store, [fresh[m] for m in fresh if m in keep and batch.batches(fresh[m].get('Channel'))])
     # each input's OWN batch size: a repo firehose and a mailbox are not the same appetite
-    heads, in_order = {}, []
+    heads, in_order = {}, list(follow)
     for mid in fresh:
-        if mid not in keep: continue
+        if mid not in keep or batch.batches(fresh[mid].get('Channel')): continue
         ch = str(fresh[mid].get('Channel') or '')
         # the head is what is still FREE of it: judged arrivals the owner has not dealt with hold their places
         if ch not in heads: heads[ch] = max(0, rank.head_size(store, ch) - store.ranked_held(ch))
@@ -650,7 +654,17 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # resemblance (PW-016); the closed task of a thread stays closed and the reply stays on the
         # thread, judged afresh (PW-017)
         r = identity_route(store, msg)
-    new_rid = None                     # set when a fresh reply task opens a review below
+        # a follow-up on one item of a batch still being worked opens THAT line for the agent - it is not re-judged as
+        # the whole task, which is four items and not the one this comment was written on (batch.py)
+        if r['decision'] == 'attach' and not r.get('reopen'):
+            from . import batch
+            if batch.is_batch(store, r['task_id']) and store.batch_item(r['task_id'], msg.get('conversation_id')):
+                mid = _land(store, msg, r['task_id'], 'routed')
+                store.add_route(mid, r['task_id'], 'attach', 1.0, f"a follow-up on one item of {task_ref(r['task_id'])}'s batch - "
+                                "its line opens again", [], 'router')
+                batch.arrived(store, r['task_id'], msg.get('conversation_id'), msg.get('from_name') or msg.get('from_email') or 'someone')
+                return {'status': 'routed', 'task_id': r['task_id'], 'message_id': mid}
+    new_rid = None                    # set when a fresh reply task opens a review below
     held = ''                            # why the coding agent was NOT auto-started (a robot or a stranger)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
     def _notes_note():

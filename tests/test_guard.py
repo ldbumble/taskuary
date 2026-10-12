@@ -204,7 +204,7 @@ class AllowListTests(unittest.TestCase):
                          for m in sorted((getattr(r, 'methods', None) or set()) & {'POST', 'PUT', 'PATCH', 'DELETE'})
                          if guard.classify(m, self._fill(r.path))[0] == 'agent')
         self.assertEqual(allowed, sorted([
-            'POST /api/agent/done', 'POST /api/agent/draft', 'POST /api/agent/reply', 'POST /api/board/notes',
+            'POST /api/agent/done', 'POST /api/agent/draft', 'POST /api/agent/item', 'POST /api/agent/reply', 'POST /api/board/notes',
             'POST /api/handbook', 'POST /api/handbook/{lid}/comment', 'POST /api/handbook/{lid}/restore',
             'POST /api/handbook/{lid}/retire', 'POST /api/handbook/{lid}/vote',
             'POST /api/hooks/claude/ask', 'POST /api/hooks/{cli}',

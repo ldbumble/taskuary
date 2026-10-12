@@ -334,6 +334,20 @@ def seed(store) -> int:
     f.route(gm, gl, 'create', 'a reconciliation with a clear check: a coding agent can run it')
     f.run(gl, agent='coder')
     refs['gl'] = gl
+    # ONE GOAL (spec 2026-10-12): an outcome with a date, its steps tasks of their own - one done by the coder, one waiting
+    # on a person past its day, the rest not started. Dana's census migration.
+    g = f.task(title='Migrate the census export off the old portal', status='open', kind='task',
+               DoneWhen='the nightly census lands in the new ledger for all three sites, and the old portal\'s export is switched off',
+               DueAt=(datetime.now() + timedelta(days=45)).strftime('%Y-%m-%d'))
+    store.set_task_checklist(g, ['Inventory the fields the old export carries', 'Map them onto the ledger schema',
+                                 'Ray: schema sign-off', 'Export job on the new schema', 'Tell the sites the cutover date'], 'owner')
+    done = f.task(title='Inventory the fields the old export carries', status='done', kind='general', ParentId=g)
+    store.link_step(g, store.checklist_id('Inventory the fields the old export carries'), done, 'owner')
+    store.tick_checklist_item(g, store.checklist_id('Inventory the fields the old export carries'), True, 'owner')   # seeded closed: tick it as a close would
+    waiting = f.task(title='Ray: schema sign-off', status='waiting', kind='task', ParentId=g, Assignee='person:ray@northwind.example',
+                     DueAt=(datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d'))
+    store.link_step(g, store.checklist_id('Ray: schema sign-off'), waiting, 'owner')
+    refs['goal'] = g
     for title, chart_title, rows in REPORTS:
         pic = f.report_row(title=title)
         body = '\n'.join(json.dumps(r) for r in rows)

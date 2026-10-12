@@ -39,7 +39,7 @@ numbers through the real app, using fictional demo data.
 ### 1. Everything lands in one place
 
 Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by what they need:
-**Urgent**, **On you**, **For later**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
+**Urgent**, **On you**, **Goals**, **For later**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
 one card: what changed since last night, what was learned, the morning digest, your meetings, and
 what waits in each section - so you never open each system in turn.
 
@@ -122,6 +122,14 @@ it to lead with the total next time.
 
 Open **Docs → LEARNED.md** to read, edit, or delete those lessons. Your written instructions
 in `SOUL.md` take precedence.
+
+It also learns from what came *after*. The **outcome ledger** records one row per action Taskuary
+took or proposed - a reply sent, a task closed, an agent stopping and your next move in your own
+words, a pull request merged, a promise made, a sender ignored - and a daily sweep fills in what
+followed from facts already in the store: more rounds on the thread, a task reopened, a promise
+delivered late. Reflection reads those rows as evidence, so a lesson can say "green PR from the
+coder: you merge it, 8 of 8". A learned line never acts on its own; it changes which button comes
+first. See [The Advisor](https://taskuary.com/docs/advisor).
 
 ![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=cards)
 
@@ -230,7 +238,8 @@ so on until each column has a unique name, matching Google Sheets reports.
 - [How it works](https://taskuary.com/docs/how-it-works)—the Timeline, the five roads, what triage decides, the operator documents
 - [Connections](https://taskuary.com/docs/connections)—channels, AI providers, work systems, and report sources
 - [Tasks and agents](https://taskuary.com/docs/tasks-and-agents)—the task, the agent work and the reply as three separate lives
-- [Reports and the Assistant](https://taskuary.com/docs/reports)—the report pipeline, AI-written source cards, and what Taskuary watches
+- [Reports and the Advisor](https://taskuary.com/docs/reports)—the report pipeline, AI-written source cards, and what Taskuary watches
+- [The Advisor](https://taskuary.com/docs/advisor)—what goes into it, its two clocks, and the outcome ledger that teaches it what worked
 - [Settings reference](https://taskuary.com/docs/settings)—every setting, generated from the schema the app itself reads
 - [Status and roadmap](docs/roadmap.md)—what works today and what is next
 - [Contributing](CONTRIBUTING.md)—development setup and contribution guide

@@ -157,6 +157,12 @@ def main():
     ap.add_argument('--slot', default='', help='the checklist slot this email fills (the id after --slot in your checklist)')
     ap.add_argument('--to', default='', help='who it goes to, when no slot names them')
     ap.add_argument('--subject', default='', help='the subject line')
+    # ...and a BATCH's items (batch.py): one finding per item, as the agent finishes each
+    ap.add_argument('--item', type=int, metavar='N', help='in a batch: report on item N (with --result, and --overlap/--settled)')
+    ap.add_argument('--result', default='', metavar='TEXT', help="with --item: what it is, whether it is right, what you propose")
+    ap.add_argument('--overlap', default='', metavar='TEXT', help='with --item: the other item it duplicates, conflicts with or needs')
+    ap.add_argument('--settled', action='store_true', help='with --item: nothing is left for the owner to do on it')
+    ap.add_argument('--propose', default='', choices=['', 'merge', 'close', 'changes'], help='with --item: what should happen to it')
     args = ap.parse_args()
     if args.demo:
         import os, tempfile
@@ -205,6 +211,27 @@ def main():
                                             else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
         if out.get('attached'): print('attached: ' + ', '.join(out['attached']))
         for w in out.get('not_attached') or []: print(f'NOT attached - {w}')
+        return
+    if args.item is not None:
+        import os, sys, requests
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no batch to report on'); return
+        if not args.result.strip(): print('nothing reported - say what you found with --result'); return
+        srv = config.load()['server']
+        host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
+        base = f"http://{host}:{srv.get('port') or 7787}"
+        try:
+            r = requests.post(f'{base}/api/agent/item', timeout=60, headers=_session_headers(srv),
+                              json={'task_id': int(tid), 'item': args.item, 'result': args.result, 'overlap': args.overlap,
+                                    'settled': bool(args.settled), 'propose': args.propose,
+                                    'agent': os.environ.get('TASKUARY_AGENT') or 'agent'})
+            out = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
+        except Exception as e:
+            print(f'could not reach Taskuary at {base}: {e}'); return
+        print(f"item {args.item}: {'settled' if out.get('state') == 'done' else 'waiting on the owner'}" if out.get('ok')
+              else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
     if args.done is not None:
         import os, sys, requests

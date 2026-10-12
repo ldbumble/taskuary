@@ -3,6 +3,8 @@
 // record but don't duplicate sections").
 
 const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
+// markdown's marks off a line shown as plain text (a folded summary, an earlier session's one line)
+export const plain = (s) => String(s || "").replace(/^\s*(#+|>)\s*/gm, "").replace(/[*\x60]/g, "").trim();
 
 // the steps the full record lists. A conversation's own turns are already on screen in the chat under the card, so for a
 // general session only its WORKING is listed (thoughts, tools, plans, errors); and the step that is the result itself
@@ -51,6 +53,21 @@ export const recordFacts = (s) => {
 
 // is there anything behind "Every step" that the card does not already show?
 export const hasMore = (s) => !!(recordSteps(s).some((x) => x.k !== "result") || s?.plan?.length);
+
+// WHAT THE ONE "MORE" HOLDS, named on the button: everything past what happened - its last message in full, the files, the
+// run's timeline, what ended it since, every step, earlier sessions. One control, so nothing is drawn twice and nothing is
+// a second section (the owner, 2026-10-12: "main summary, then details behind more").
+export const moreParts = (s, { draft = "", timeline = [], since = null, earlier = 0 } = {}) => {
+  const steps = recordSteps(s).filter((x) => x.k !== "result").length, files = s?.files?.length || 0;
+  return [cardParts(s, draft).message && "its last message", files && plural(files, "file"), timeline?.length && "the timeline",
+    since?.text && "since then", (steps || s?.plan?.length) && (s?.source === "conversation" ? "its working" : plural(steps, "step")),
+    earlier && plural(earlier, "earlier session")].filter(Boolean);
+};
+
+// the state line over the record: the story's sentence, else - nothing being left to do - what ended it upstream, which is
+// then not repeated as "since then"
+export const recordHead = (story, ended) => story?.line ? { state: story, since: ended?.text ? ended : null }
+  : ended?.text ? { state: { kind: "ended", line: ended.text }, since: null } : { state: null, since: null };
 
 const SOURCES = { conversation: "the conversation", screen: "what was on screen" };
 export const sourceLabel = (src) => SOURCES[src] || src || "";

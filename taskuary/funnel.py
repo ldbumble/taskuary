@@ -472,6 +472,17 @@ def todays_brief(item: dict) -> bool:
 
 
 AUTO_OFF = 'not auto-worked:'          # the clause triage writes on a route it declined to start
+# A START THAT ASKED "WHICH REPOSITORY?" (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?"): the
+# answer was a line on a sheet that closed at once, and the task said "nobody on it" as if nothing had been asked for
+HELD_REPO = 'held:repo'
+
+def held_for_repo(t) -> bool: return HELD_REPO in re.split(r'[\s,]+', str((t or {}).get('Tags') or ''))
+
+def hold_for_repo(store, tid, reason=''):
+    "The start stopped on a repository nobody named: the task says so until a repo is set or a session opens."
+    if store.tag_task(tid, HELD_REPO, True, 'router'):
+        store.add_comment(tid, 'router', 'agent', 'Not started: it needs a repository. '
+                          + (' '.join(str(reason).split())[:200] + ' ' if reason else '') + 'Pick a repo on the task and the session starts.')
 
 
 def not_started_why(store, tid) -> str:
@@ -496,6 +507,7 @@ def not_started_why(store, tid) -> str:
         return 'You ended the session - its report is written. Continue it, or mark the task done.'
     if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
         return f'Taskuary closed while {who} had this, so the session went with it. Nothing restarts by itself.' + old
+    if held_for_repo(t): return f'{who} did not start: it needs a repository - pick a repo and the session starts.' + old
     # THE QUEUE SAYS WHY (A3, 2026-09-25): a full house, a start that keeps failing and a CLI that is not installed all
     # read "nothing has started it" - only the Tasks list showed the queue
     q = store.get_dispatch(tid) or {}
@@ -511,6 +523,11 @@ def not_started_why(store, tid) -> str:
     # here, so two tasks a coder had actually worked and walked away from reported "it was handed to
     # coder and nothing has started it" for six hours (TQ-0588/0589, 2026-09-16: transcripts from
     # copilot and from coder, no run rows, no live session). A transcript IS proof that it ran.
+    # ...but a session that FINISHED did not leave anything: it said it was done and wrote its report, and the task came
+    # back only because somebody wrote again (TQ-1040, 2026-10-12: a coder closed its task, the reply went out, the sender
+    # answered, and the step said the coder "left without finishing" over its own finished record)
+    if session_finished(store, tid):
+        return f'{who} finished its last session - its record is below. Nothing has started on what came in since.' + old
     if store.last_transcript(tid):
         return f'{who} ran on this and left without finishing it. Continue the session, or hand it on.' + old
     msg = store.last_inbound_on_task(tid) or {}
@@ -554,7 +571,7 @@ def agent_story(store, tid) -> dict | None:
     tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
     who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
     left, q, why = agent_left(store, tid), store.get_dispatch(tid), not_started_why(store, tid)
-    held = why.startswith('Triage did not start it')
+    held = why.startswith('Triage did not start it') or held_for_repo(t)
     if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held): return None
     # the page leads a hold with "<agent> did not start:", so triage's own lead-in is not said twice
     if not left: return {'kind': 'held' if held else 'queued' if q else 'idle', 'line': why.split(': ', 1)[1] if held else why}
@@ -624,7 +641,20 @@ def agent_left(store, tid) -> bool:
     if terminal.INTERRUPTED in [x.strip() for x in str(t.get('Tags') or '').split(',')]: return True
     if session_saved(store, tid): return True
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])): return True
-    return bool(store.last_transcript(tid))
+    return bool(store.last_transcript(tid)) and not session_finished(store, tid)
+
+
+def session_finished(store, tid) -> bool:
+    """Did the LAST session end by finishing - it said it was done (its `finished` event), or its report was written
+    after it began? Then nothing was left half-done: a task open again after it is open for what arrived since."""
+    evs = store.worker_events(tid) or []
+    if not evs: return False                     # no account of the session at all: nothing says it finished
+    sid = str(evs[-1]['Sid'])
+    run = [e for e in evs if str(e['Sid']) == sid]
+    if any(e['Kind'] == 'finished' for e in run): return True
+    began = str(run[0].get('CreatedAt') or '')
+    return bool(began) and any(str(c.get('Body') or '').startswith('CODER REPORT') and str(c.get('CreatedAt') or '') >= began
+                               for c in store.list_comments(tid) or [])
 
 
 def report_failed(store, subject: str, mid=None) -> bool:
@@ -890,7 +920,7 @@ def _band(item):
 # by its heading, and the phone doorway offers the same sections as picks - so the walk and the rail must agree on
 # which row is in which: For later is work walked past with Next or put away with Remind me; Advisor ideas is an
 # idea still only an idea (made a task, it is work like any other).
-SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'agents': 'Agents working', 'later': 'For later',
+SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'goals': 'Goals', 'agents': 'Agents working', 'later': 'For later',
                  'reports': 'Reports', 'ideas': 'Advisor ideas', 'fyi': 'FYI'}
 _LEVEL_OF_BAND = {1: 'urgent', 2: 'task', 3: 'reports', 4: 'fyi', 5: 'agents'}
 # the page's fallback for a row that carries no band (funnelPile.attentionBand) - kept identical, never _band's
@@ -904,6 +934,9 @@ def level_of(item: dict) -> str:
         if item.get('kind') == 'meeting' and (item.get('calendar_ready') is False or (item.get('mins') or 0) > 15): band = 2
         elif item.get('kind') == 'agentdone': band = 2
         else: band = _BAND_FALLBACK.get(item.get('lane'), 2)
+    # A GOAL is one row and never gone: Goals while it has news you have not walked past, For later once you have (spec
+    # 2026-10-12). `surfaced` is the Passed mark: a read open task stays unread on purpose, so unread cannot be the signal.
+    if str(item.get('kind') or '').startswith('goal'): return 'goals' if item.get('news') and not item.get('surfaced') else 'later'
     # FOR LATER IS WHAT YOU PUT THERE - Next or Remind me - never a card merely shown: clicking another row on the rail moved the
     # task on the table under For later for three hours (the owner, 2026-10-08: "it moved 1003 automatically to later?")
     if band == 2 and (item.get('put_down') or item.get('deferred')): return 'later'
@@ -1257,6 +1290,12 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         except Exception as e:
             logger.debug(f'the ranked count did not reach the rail: {e}')
             p['more_markers'], p['rank_numbers'] = [], {}
+        # ...and a BATCH row says how far it got: "2 of 4 done · ③ needs you", with a bar of its items (batch.py)
+        try:
+            from . import batch
+            p['batch_progress'] = batch.rail(store, p['items'])
+        except Exception as e:
+            logger.debug(f'batch progress did not reach the rail: {e}'); p['batch_progress'] = {}
         p['events'] = events
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)

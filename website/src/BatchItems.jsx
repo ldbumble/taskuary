@@ -1,0 +1,65 @@
+import { useState } from "react";
+import { Box, Button, Link, Typography } from "@mui/material";
+import api from "./api";
+import { Confirm } from "./ui.jsx";
+import { ACCENT2, ALERT, ALERT_INK, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
+import { actions, circled, isOpen, progress, stateWord } from "./batchItems.js";
+
+// The items of a batch, in ranked order, each with what the agent found and the owner's presses for it (batch.py). A line
+// waiting on you never holds up the next one; the task closes when the last line is settled.
+export default function BatchItems({ taskId, items = [], onChanged, bare = false }) {
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState("");
+  const [ask, setAsk] = useState(null);
+  if (!items?.length) return null;
+  const press = async (i, a) => {
+    setBusy(`${i.Place}:${a.action}`); setErr("");
+    try { await api.post(`/api/tasks/${taskId}/batch/${i.Place}`, { action: a.action }); onChanged?.(); }
+    catch (e) { setErr(`${circled(i.Place)} ${a.label} did not go through - ${e?.response?.data?.detail || "Taskuary didn't answer"}.`); }
+    finally { setBusy(null); }
+  };
+  // a merge leaves this machine for GitHub: said once, with what it merges, before it goes
+  const go = (i, a) => (a.action === "merge" ? setAsk({ i, a }) : press(i, a));
+  return (
+    <Box sx={{ mt: 1, maxWidth: 900 }}>
+      {!bare && <Typography sx={{ ...label, mb: 0.4 }}>{progress(items)}</Typography>}
+      {items.map((i) => {
+        const you = i.State === "needs_you";
+        return (
+          <Box key={i.Place} sx={{ display: "grid", gridTemplateColumns: "22px minmax(0,1fr) auto", columnGap: 1, py: 0.9,
+            borderTop: `1px solid ${BORDER}`, alignItems: "start" }}>
+            <Typography sx={{ color: FAINT, fontSize: 15, lineHeight: 1.4, textAlign: "center" }}>{circled(i.Place)}</Typography>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="body2" sx={{ color: isOpen(i) ? INK : FAINT, fontWeight: 500, overflowWrap: "anywhere" }}>
+                {i.Link ? <Link href={i.Link} target="_blank" rel="noreferrer" underline="hover" color="inherit">{i.Title}</Link> : i.Title}
+              </Typography>
+              {(i.Result || i.EndedWhy) && (
+                <Typography variant="body2" sx={{ color: DIM, mt: 0.2, lineHeight: 1.5, overflowWrap: "anywhere" }}>
+                  {i.State === "ended" ? i.EndedWhy : i.Result}</Typography>)}
+              {i.Overlap && isOpen(i) && (
+                <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.2 }}>Overlaps: {i.Overlap}</Typography>)}
+              {!i.Result && i.State === "waiting" && (
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.2 }}>The agent has not reached it yet.</Typography>)}
+              <Box sx={{ display: "flex", gap: 0.75, mt: 0.5, flexWrap: "wrap" }}>
+                {actions(i).map((a) => (
+                  <Button key={a.action} size="small" variant={a.primary ? "contained" : "outlined"} disableElevation
+                    disabled={!!busy} {...(a.href ? { href: a.href, target: "_blank", rel: "noreferrer" } : { onClick: () => go(i, a) })}
+                    sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5,
+                      ...(a.primary ? { bgcolor: ALERT, "&:hover": { bgcolor: ALERT_INK } } : { color: INK, borderColor: BORDER }) }}>
+                    {busy === `${i.Place}:${a.action}` ? "…" : a.label}
+                  </Button>
+                ))}
+              </Box>
+            </Box>
+            <Typography variant="caption" sx={{ color: you ? ALERT_INK : i.State === "done" || i.State === "ended" ? ACCENT2 : FAINT,
+              fontWeight: you ? 600 : 400, whiteSpace: "nowrap", pt: 0.2 }}>{stateWord(i)}</Typography>
+          </Box>
+        );
+      })}
+      {err && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block", mt: 0.5 }}>{err}</Typography>}
+      <Confirm open={!!ask} title={ask ? `Merge ${ask.i.Title}?` : ""} confirmLabel="Merge on GitHub"
+        text="It merges the version the agent reviewed. If anything was pushed to it since, GitHub refuses and nothing is merged."
+        onConfirm={() => press(ask.i, ask.a)} onClose={() => setAsk(null)} />
+    </Box>
+  );
+}

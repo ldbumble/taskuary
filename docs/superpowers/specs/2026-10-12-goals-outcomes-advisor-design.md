@@ -111,9 +111,10 @@ was resolved, and a verdict.
 | CC added on a chase | Omar · refund thread | nothing · decision the same day; 3 chases without him got nothing | moved it |
 | ignore rule applied | newsletter sender | nothing · no promotion, reply or mention in 60d | no regret |
 
-**Most rows need no model.** "Did more mail arrive on the thread", "did the task reopen", "was the
-PR reverted", "did the person answer and when" are facts already in the store; a nightly sweep
-resolves open outcomes. The model runs only at reflection, as it does now.
+**Resolving an outcome is bookkeeping, not judgment.** "Did more mail arrive on the thread", "did
+the task reopen", "was the PR reverted", "did the person answer and when" are facts already in the
+store; a nightly sweep records them. What the facts mean, and what to offer because of them, is
+always the model: at reflection as today, and on every event through the Advisor.
 
 **Reflection distils into the stores that exist**, with LEARNED.md's grammar (`[s:N | ev: ids |
 seen | k:]`), its decay in reflections, and its promoted-only rule before a line rides into a prompt:
@@ -139,13 +140,17 @@ thinker that could disagree with the first.
 **On the event: the shadow.** Runs when one item changes and lands on that item. The triggers are
 the events the app already sees: an agent stops or asks (the hooks, the stopped lane, the By the way
 strip), a PR opens, a reply arrives on a watched thread, a task closes, a goal step slips, a report
-lands, the owner presses something. Two tiers:
+lands, the owner presses something.
 
-- **Tier 1, no model.** Does a promoted line match this event? A lookup. Most events end here, with
-  a changed button or nothing.
-- **Tier 2, a small prompt.** Only for the item on the table or next, or where a line says "ask".
-  Light model, the dossier and the promoted lines, one suggestion or nothing. Runs in the background
-  after the event.
+**Always the model, never a word match.** This is the rule every door in Taskuary lives by (the
+owner, 2026-09-06 and again 2026-10-12): the model reads intent and returns the verb, code validates
+the verb against the actions it has, and nothing routes on a hardcoded match. The Advisor is no
+exception. On every event it runs one small prompt on the light gear: the event, the item's facts,
+the promoted lines, and the ledger facts that bear on it. It answers with a verb from the action
+vocabulary and a line, or nothing. Code checks the verb exists and builds the pill from it; the fact
+beside the pill ("8 of 8") is read from the ledger, not written by the model. For the item on the
+table or next, the dossier and the ledger rows join the prompt: the same model, a bigger read, one
+suggestion or nothing. Everything runs in the background after the event.
 
 Event findings are **never rows**. They attach to the item they are about and surface when the walk
 reaches it. That line is what keeps the rail from filling with advice.
@@ -158,27 +163,28 @@ are **rows**, judged like any arrival (fyi, or asked when they need the owner), 
 task is work waiting on the owner and belongs on the rail where Next reads it in turn. Nothing fires
 for absence; something has to look.
 
-**Cost gates.** Tier 1 is free. Tier 2 only for the item on the table or next, or where a line asks;
-one per item per state change; light model; a per-hour cap; silence when there is nothing to say.
-An event-driven Advisor that calls the model on every stop is the per-message brief the owner killed
-in August; these gates are what keep it from coming back.
+**Cost gates.** The gates are on *when* the model runs, never on *whether*: only on a state change,
+one per item per revision, the light gear, a small prompt, the bigger read only for the item on the
+table or next, a per-hour cap, and silence when it has nothing to say. An event-driven Advisor that
+ran a full read on every stop would be the per-message brief the owner killed in August; the small
+prompt and the per-revision rule are what keep it from coming back.
 
 **Speed gates.** Everything runs after the event, off the request path. No button waits on the
 model; a Next press stays a pile rebuild. A suggestion that misses its moment is dropped, not queued.
 
 ## Surfaces: how it reaches the owner without touching Next
 
-The walk is the spine. Suggestions ride on it. Two places, both already there:
+The walk is the spine. Suggestions ride on it, in one place that already exists: **the prompt box**.
+The ghost text says what the owner usually does ("You usually merge it here. Tell me what to do
+with it, or press…") and a **pill** where the send arrow sits does it: "Merge it · 8 of 8 times".
+Typing anything brings the arrow back; Enter on an empty box does nothing; only the pill, or the
+owner's words, act. The pill does what the card's primary button does, through the same proposal
+and the same receipt. When there is nothing to say the placeholder is today's. The chip row under
+the card stays Next, Done, Later, Tomorrow; the suggestion is never a chip there as well (the owner,
+2026-10-12: "why is it in two places?").
 
-- **The chip row under the card.** The suggestion is the first chip, in slate, with the fact beside
-  it: "Merge it · you did this 8 of 8 times", ahead of Next, Done, Later, Tomorrow. The chip does
-  what the card's button does, through the same proposal and the same receipt: a fact beside a button
-  the owner already had, not a second way to act.
-- **The prompt box's placeholder.** "You usually merge it here. Say so, or tell me what to do with
-  it…". When there is nothing to say the row starts with Next and the placeholder is today's.
-
-The chip is there when the card is, because tier 1 is a lookup. A tier 2 line that arrives later
-fills the same reserved slot without moving anything. No popup, no new strip, no new row.
+The pill is usually there when the card is, because the Advisor ran when the item changed. One that
+lands later fills the same box without moving anything. No popup, no new strip, no new row.
 
 **About another item:** the By the way strip, which already exists for an agent waiting on the owner
 and already has the rules: it waits for a gap, one line at a time, replaced rather than stacked,
@@ -187,15 +193,15 @@ Answer yes for you?" One click and it is an earned-autonomy proposal with its ev
 
 **The assistant's opening sentence** on every card stays the assistant's: what arrived and what is
 asked. The Advisor's line adds what to do about it and why: the habit, the person fact, the thing
-someone sent that belongs here. Composed from facts, not the model, in the common case.
+someone sent that belongs here. Written by the model; the numbers in it are the ledger's.
 
 **What was not followed up.** The clock pass finds it against the promoted people facts (day 3 is
 late for Ray, day 5 for someone unknown) and it lands in the existing slipped lane inside On you,
 ranked by how late and how much it matters by JOB.md. The pipe count says "3 slipped". When Next
 brings it up the card is the thread: what the owner asked, when, that it was read, the silence
-since; the chase is drafted in the owner's voice with the CC the ledger says moved things. Chip:
-"Chase Ray, copy Omar · Omar on CC got an answer the same day, 2 of 2". Ghost text: "Ray has been
-quiet 5 days. Chase him, copy Omar? Or say let it go, he called, or a day to ask again." Four
+since; the chase is drafted in the owner's voice with the CC the ledger says moved things. The
+prompt box: "Ray has been quiet 5 days. Say let it go, he called, a day to ask again, or press…"
+with the pill "Chase Ray, copy Omar · Omar got an answer the same day, 2 of 2". Four
 answers, each an outcome: **Chase** (same proposal and receipt; the ledger later records how long the
 answer took), **Let it go** (the promise closes as dropped; three on one sender and the Advisor stops
 raising them), **He answered elsewhere** (the owner says where; the step ticks), **Later** (a date).
@@ -210,19 +216,22 @@ The owner's worry is that advice changes the rail's order or slows the walk. By 
 cannot do either.
 
 1. **The event.** The hook fires; the processing pass moves the item's lane, as today.
-2. **Tier 1, in the same pass.** Promoted lines matched against the event, a lookup. It writes one
-   **advice** row for the item: the line, the chip (a proposal), the evidence ids, the item's
-   `context_revision` (the stamp a proposal already carries so a changed item refuses a stale
-   confirmation), the tier, the model and cost, and what a gate dropped.
+2. **The Advisor, in the background.** One small prompt on the light gear: the event, the item's
+   facts, the promoted lines. It returns a verb from the action vocabulary and a line, or nothing;
+   code validates the verb. It writes one **advice** row for the item: the line, the verb (a
+   proposal), the evidence ids, the item's `context_revision` (the stamp a proposal already carries
+   so a changed item refuses a stale confirmation), the model and cost, and what was dropped: an
+   answer no verb matched, or a run a gate skipped.
 3. **The rail build is unchanged.** It reads lanes, ages, urgency and the worker signature. It does
    not read advice. The pile cache stays what it is.
 4. **The stage render** joins the advice for the key on the table: one lookup. Revision mismatch
-   means nothing is shown; a reply arriving moves the revision and the old chip vanishes with no
+   means nothing is shown; a reply arriving moves the revision and the old pill vanishes with no
    cleanup pass.
-5. **Tier 2 runs in the background**, only for the item on the table or next; when it lands, the
-   live-events push fills the reserved slot. Nothing moves. Missing its moment, it is dropped.
-6. **The click** is the card's button: the same proposal, confirmation and receipt. The outcome row
-   opens, resolved later.
+5. **When it lands**, the live-events push fills the prompt box, whether the card is already up or
+   not. Nothing moves. Missing its moment, it is dropped. The bigger read, with the dossier and the
+   ledger rows, runs only for the item on the table or next.
+6. **The pill** is the card's primary button: the same proposal, confirmation and receipt. The
+   outcome row opens, resolved later.
 
 What can move a row is what moves it today: lane, age, urgency, batch, the shown mark, a return
 date, a task fact set by the clock pass (late, slipped, a step's state), a clock-pass finding filed
@@ -250,19 +259,30 @@ Assistant report's row on the Reports tab for the clock pass, and from the item 
    assignee. Promises become tasks; the ladder reads the lane. The Goals band and the Later rules.
    The New sheet's fourth tab. The goal card with its opening steps.
 2. The `outcome` table and the nightly resolution sweep. Reflection reads it and writes habit lines
-   to LEARNED.md with the new evidence kind. The chip row and the ghost text read promoted habit lines
-   (tier 1 only): "Merge it · 8 of 8" appears with no model involved.
-3. The Advisor's event entry point with tier 2 and its gates; the Advisor's notes receipt.
+   to LEARNED.md with the new evidence kind.
+3. The Advisor's event entry point (the small prompt, the verb vocabulary, the advice sidecar, the
+   gates) and the prompt box's ghost text and pill; the Advisor's notes receipt.
 4. Per-person pages from the ledger; the per-person chase ladder; the slipped interaction with its
    four answers.
 5. "Which step does this serve" in triage; triage's goal kind; work facts proposed into playbooks.
 
+## Kept in mind: earned autonomy
+
+Out of scope for this build, but every piece is shaped so it needs nothing new (the owner,
+2026-10-12: "if the Advisor sees something always being done the same as always, it should be able
+to do earned autonomy as well"). The ledger counts the habit and its regret; the advice sidecar
+already carries the verb and the evidence; the proposal path already exists. When a habit line's
+evidence passes a bar with no regret, the Advisor's answer on the next event is a different verb:
+not "offer Merge it" but "propose doing it myself". That lands as a proposal the owner clicks, is
+revocable from the same line ("stop"), and runs through the same operation and receipt. Nothing in
+steps 1 to 5 should make that harder; a field that would (a pill with no verb, an action with no
+proposal) is the design leaking.
+
 ## Left out, on purpose
 
-- Autonomy itself. The ledger gives earned autonomy its regret count; the proposal stays a proposal
-  and is designed in its own spec.
-- A separate Advisor model setting. It uses the Assistant's (one tier over the light gear); the
-  event path's tier 2 uses the light gear.
+- Autonomy itself: see above. The proposal is designed in its own spec.
+- A separate Advisor model setting. The clock pass uses the Assistant's (one tier over the light
+  gear); the event path uses the light gear.
 - A Goals page. A goal has the card and Open, like a task; a page of its own waits until the card
   proves too small.
 - Showing children on the rail. Decided against: one row per goal, children only when they are the

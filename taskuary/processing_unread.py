@@ -64,6 +64,9 @@ def _arrived_after_close(task, view) -> bool:
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
 OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time')
+# a goal's CHILD in one of these lanes is told by the goal's row ("coder on step 5 · Ray owes step 4"), not by a row of its
+# own; in any other lane it is the owner's move and stays a row (spec 2026-10-12, "many steps, one row")
+FOLD_LANES = ('working', 'queued', 'theirs', 'fyi')
 # what a new walk raises again whatever the old one did with it: work that blocks on the owner (funnel.reset_walk)
 RAISED_BY_NEW_WALK = ('blocked', 'approve')
 WALK_KEY = 'walk_started_at'
@@ -173,6 +176,33 @@ def names(item) -> list:
     and for a keyed build, so a lookup that skips the other items can never disagree with the card about who it is."""
     return ['processing:' + item['item_id'], *[a['Value'] for a in item.get('aliases', []) if a.get('Namespace') == 'legacy_funnel'],
             *['processing:' + root['ItemId'] for root in item.get('item_history', [])]]
+
+
+def goal_facts(store, task, tid, now) -> dict:
+    """What the goal's row says (spec 2026-10-12): kind (slipped / on track / not started), news, the count, who holds
+    it, its date. Facts, not a progress bar."""
+    steps = store.goal_steps(tid)
+    done, n = sum(1 for x in steps if x['done']), len(steps)
+    today = now.strftime('%Y-%m-%d')
+    due = str(task.get('DueAt') or '')[:10] or None
+    kids = [x for x in steps if x['child']]
+    late_kid = any(x['child'].get('Status') == 'waiting' and str(x['child'].get('DueAt') or '')[:10] and str(x['child'].get('DueAt'))[:10] < today for x in kids)
+    slipped = bool((due and due < today and done < n) or late_kid)
+    started = bool(done or any(x['child'].get('Status') != 'open' or x['child'].get('Assignee') for x in kids))
+    kind = 'goal_slipped' if slipped else 'goal_fresh' if not started else 'goal'
+    recent = (now - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+    news = slipped or any(str(x['child'].get('ClosedAt') or '') >= recent for x in kids)
+    bits = [f'{done} of {n}' if n else 'no steps yet']
+    for k, x in enumerate(steps, 1):
+        c = x['child']
+        if not c or c.get('Status') in ('done', 'dropped'): continue
+        who = str(c.get('Assignee') or '')
+        if who.startswith('agent:'): bits.append(f"{who.split(':', 1)[1]} on step {k}")
+        elif who.startswith('person:'): bits.append(f"{who.split(':', 1)[1].split('@')[0]} owes step {k}")
+        elif c.get('Status') == 'open': bits.append(f'step {k} is on you')
+    if slipped and due and due < today: bits.append(f"slipped {(now - datetime.strptime(due, '%Y-%m-%d')).days}d")
+    return {'kind': kind, 'news': bool(news), 'due': due, 'steps': n, 'steps_done': done, 'why': ' · '.join(bits),
+            'back_at': f'{due} 08:00:00' if due else None, 'folded': False}
 
 
 def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES, walk_at=None):
@@ -288,6 +318,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # task page said "waiting on them" - the rail had no lane for it. The TASK only: a message from them is their
     # answer, and that is your move again (FollowUpTests)
     if not row.get('MessageId') and task.get('Status') == 'waiting' and not review and card['lane'] == 'yours': card['lane'] = 'theirs'
+    # A GOAL IS ONE ROW (spec 2026-10-12): its kind says its state, its sub line says the count and who is holding it, its
+    # date sits where the age goes, and it is never gone while open. Its children fold into it unless they are your move.
+    from .store import is_goal
+    if is_goal(task) and active and not review and not worker: card.update(**goal_facts(store, task, tid, now))
+    elif task.get('ParentId') and active: card.update(goal=funnel.task_ref(task['ParentId']), folded=card['lane'] in FOLD_LANES)
     if queued and card['lane'] in ('asked', 'yours'):
         card.update(lane='queued', why=f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'the regular agent'}, not started yet")
     # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a
@@ -471,9 +506,12 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
 
 
 def on_rail(card) -> bool:
-    """What the rail holds: the unread, and a task put away with Remind me - still open work, in For later with its day
-    (the canvas redesign, 2026-09-29). ONE rule for the builder and for funnel.pile, the road the page is served - the
-    builder alone kept put-away rows that pile() then dropped (the final review)."""
+    """What the rail holds: the unread, a task put away with Remind me - still open work, in For later with its day
+    (the canvas redesign, 2026-09-29) - and a goal, never gone while open (spec 2026-10-12); a goal's child folded into
+    its row is not a row. ONE rule for the builder and for funnel.pile, the road the page is served - the builder alone
+    kept put-away rows that pile() then dropped (the final review)."""
+    if card.get('folded'): return False
+    if str(card.get('kind') or '').startswith('goal') and card.get('tid') and not card.get('closed'): return True
     return bool(card.get('unread') or (card.get('deferred') and card.get('tid') and not card.get('closed')))
 
 
@@ -509,7 +547,8 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     # ...and a task put away with Remind me stays on the rail, in For later, saying its day - it is still open work, and
     # the rail is where open work lives (2026-09-29). It is never actionable, so the walk does not offer it early.
     kept = on_rail
-    cards = [card for card in cards if (include_read or kept(card)) and not card.get('ranked_wait')]
+    # ...a goal's child told by the goal's row is not a row, read or unread (on_rail)
+    cards = [card for card in cards if (include_read or kept(card)) and not card.get('ranked_wait') and not card.get('folded')]
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)
     if processing_all._matches('calendar', '', query):

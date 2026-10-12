@@ -66,3 +66,102 @@ def test_the_rail_is_the_same_with_and_without_advice(rail):
                        revision=advisor.revision(rail, 'task', t['TaskId']), tier=1, line='Close it.', verb='close', label='Mark done',
                        count=(3, 3), evidence=[], model='haiku')
     assert order(rail) == before
+
+
+def brain_saying(answer: dict):
+    """A light brain that answers one JSON object, and counts its calls."""
+    calls = []
+    def llm(system, user, max_tokens=400, images=None, want=None, **kw):
+        calls.append((system, user)); return json.dumps(answer)
+    llm.takes_want = False; llm.calls = calls
+    return llm
+
+
+class JudgeTests(unittest.TestCase):
+    """The rail is built the way a real install builds it (processing reads on), so the card is the one the owner sees."""
+    def setUp(self):
+        self._p = [mock.patch.object(terminal, 'live_sessions', lambda tail=0: []), mock.patch.object(funnel, '_agenda', lambda _s, **kw: [])]
+        for p in self._p: p.start()
+        funnel.invalidate()
+    def tearDown(self):
+        for p in self._p: p.stop()
+        funnel.invalidate()
+
+    def _stopped_task(self, s):
+        s.set_setting('calendar_enabled', '0', 'test')
+        t = s.create_task({'Title': 'Export job', 'Status': 'in_progress', 'Kind': 'code'}, 'owner')
+        s.add_message({'ConversationId': f'c{t}', 'Channel': 'email', 'Subject': 'Export job', 'FromEmail': 'gail@northwind.example', 'FromName': 'Gail Moreno',
+                       'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': 'Please move the export.', 'Status': 'routed', 'TaskId': t})
+        rid = s.start_run(t, 'coder', 'move the export', 'owner'); s._exec("UPDATE run SET Status='stopped' WHERE RunId=?", (rid,))   # the agent left: Continue leads
+        s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
+        return t
+
+    def test_a_verb_the_item_carries_lands_with_the_ledgers_number(self):
+        s = MemoryStore(); t = self._stopped_task(s)
+        for _ in range(3):
+            i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', facts={'pr': False}); outcomes.settle(s, i, 'continued 2 min later', 'continued')
+        llm = brain_saying({'verb': 'continue', 'line': 'You usually continue it here.', 'evidence': ['out1']})
+        rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)
+        r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
+        self.assertEqual((r['Verb'], r['Line'], json.loads(r['CountJson']), r['Dropped']), ('continue', 'You usually continue it here.', [3, 3], None))
+        self.assertIn('CONTINUE', llm.calls[0][1].upper()); self.assertIn('out1', llm.calls[0][1])
+        self.assertEqual(advisor.pill(r['Label'], json.loads(r['CountJson'])), f"{r['Label']} · 3 of 3 times")
+
+    def test_the_same_revision_is_judged_once(self):
+        s = MemoryStore(); t = self._stopped_task(s)
+        llm = brain_saying({'verb': 'continue', 'line': 'x', 'evidence': []})
+        advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)
+        self.assertIsNone(advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=llm))
+        self.assertEqual(len(llm.calls), 1)
+
+    def test_silence_is_a_row_with_no_verb_and_no_pill(self):
+        s = MemoryStore(); t = self._stopped_task(s)
+        rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=brain_saying({'verb': None, 'line': '', 'evidence': []}))
+        r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
+        self.assertEqual((r['Verb'], r['Dropped']), (None, 'nothing to say'))
+
+    def test_a_verb_the_item_cannot_carry_is_dropped(self):
+        s = MemoryStore(); t = self._stopped_task(s)
+        rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=brain_saying({'verb': 'approve', 'line': 'Send it.', 'evidence': []}))
+        r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
+        self.assertEqual(r['Verb'], None); self.assertIn('approve', r['Dropped'])
+
+    def test_an_item_with_no_actions_is_dropped_without_a_call(self):
+        s = MemoryStore()
+        mid = s.add_message({'ConversationId': 'c2', 'Channel': 'email', 'Subject': 'Newsletter', 'FromEmail': 'news@vendor.example',
+                             'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': 'x', 'Status': 'filed'})
+        llm = brain_saying({'verb': 'close', 'line': 'x', 'evidence': []})
+        with mock.patch.object(advisor.concierge, 'chips_for', return_value=[{'verb': 'next', 'label': 'Next'}]):
+            rid = advisor.notice(s, 'report.landed', 'message', mid, wait=True, llm=llm)
+        self.assertEqual(s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'], 'no actions'); self.assertEqual(llm.calls, [])
+
+    def test_the_hourly_cap_drops_without_a_call(self):
+        s = MemoryStore(); s.set_setting(advisor.CAP_KEY, '1', 'test'); t = self._stopped_task(s); t2 = self._stopped_task(s)
+        llm = brain_saying({'verb': 'continue', 'line': 'x', 'evidence': []})
+        advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)
+        rid = advisor.notice(s, 'agent.stopped', 'task', t2, wait=True, llm=llm)
+        self.assertEqual(s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'], 'cap'); self.assertEqual(len(llm.calls), 1)
+        s._exec("UPDATE advice SET CreatedAt=?", ((datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%d %H:%M:%S'),))
+        t3 = self._stopped_task(s); advisor.notice(s, 'agent.stopped', 'task', t3, wait=True, llm=llm)
+        self.assertEqual(len(llm.calls), 2)
+
+    def test_no_brain_is_a_drop_never_an_error(self):
+        s = MemoryStore(); t = self._stopped_task(s)
+        with mock.patch.object(advisor, 'build_llm', return_value=None):
+            rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True)
+        self.assertEqual(s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'], 'no brain')
+
+    def test_the_switch_off_runs_nothing(self):
+        s = MemoryStore(); s.set_setting(advisor.ON_KEY, '0', 'test'); t = self._stopped_task(s)
+        llm = brain_saying({'verb': 'continue', 'line': 'x', 'evidence': []})
+        self.assertIsNone(advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)); self.assertEqual(llm.calls, [])
+
+    def test_habit_counts_come_from_the_ledger(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
+        for v in ('held', 'held', 'reopened'):
+            i = outcomes.record(s, 'task.closed', 'task', t); outcomes.settle(s, i, v, v)
+        self.assertEqual(advisor.habit(s, 'close', {'tid': t}), (2, 3))
+        for v in ('approve', 'edit', 'approve'):
+            i = outcomes.record(s, 'reply.sent', 'task', t, facts={'verb': v}); outcomes.settle(s, i, 'settled', 'settled')
+        self.assertEqual(advisor.habit(s, 'approve', {'tid': t}), (2, 3))
+        self.assertEqual(advisor.habit(s, 'defer', {'tid': t}), (0, 0))

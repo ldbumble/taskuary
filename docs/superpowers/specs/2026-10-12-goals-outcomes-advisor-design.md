@@ -168,17 +168,17 @@ model; a Next press stays a pile rebuild. A suggestion that misses its moment is
 
 ## Surfaces: how it reaches the owner without touching Next
 
-The walk is the spine. Suggestions ride on it. Two places, both already there:
+The walk is the spine. Suggestions ride on it, in one place that already exists: **the prompt box**.
+The ghost text says what the owner usually does ("You usually merge it here. Tell me what to do
+with it, or press…") and a **pill** where the send arrow sits does it: "Merge it · 8 of 8 times".
+Typing anything brings the arrow back; Enter on an empty box does nothing; only the pill, or the
+owner's words, act. The pill does what the card's primary button does, through the same proposal
+and the same receipt. When there is nothing to say the placeholder is today's. The chip row under
+the card stays Next, Done, Later, Tomorrow; the suggestion is never a chip there as well (the owner,
+2026-10-12: "why is it in two places?").
 
-- **The chip row under the card.** The suggestion is the first chip, in slate, with the fact beside
-  it: "Merge it · you did this 8 of 8 times", ahead of Next, Done, Later, Tomorrow. The chip does
-  what the card's button does, through the same proposal and the same receipt: a fact beside a button
-  the owner already had, not a second way to act.
-- **The prompt box's placeholder.** "You usually merge it here. Say so, or tell me what to do with
-  it…". When there is nothing to say the row starts with Next and the placeholder is today's.
-
-The chip is there when the card is, because tier 1 is a lookup. A tier 2 line that arrives later
-fills the same reserved slot without moving anything. No popup, no new strip, no new row.
+The pill is there when the card is, because tier 1 is a lookup. A tier 2 line that arrives later
+fills the same box without moving anything. No popup, no new strip, no new row.
 
 **About another item:** the By the way strip, which already exists for an agent waiting on the owner
 and already has the rules: it waits for a gap, one line at a time, replaced rather than stacked,
@@ -193,9 +193,9 @@ someone sent that belongs here. Composed from facts, not the model, in the commo
 late for Ray, day 5 for someone unknown) and it lands in the existing slipped lane inside On you,
 ranked by how late and how much it matters by JOB.md. The pipe count says "3 slipped". When Next
 brings it up the card is the thread: what the owner asked, when, that it was read, the silence
-since; the chase is drafted in the owner's voice with the CC the ledger says moved things. Chip:
-"Chase Ray, copy Omar · Omar on CC got an answer the same day, 2 of 2". Ghost text: "Ray has been
-quiet 5 days. Chase him, copy Omar? Or say let it go, he called, or a day to ask again." Four
+since; the chase is drafted in the owner's voice with the CC the ledger says moved things. The
+prompt box: "Ray has been quiet 5 days. Say let it go, he called, a day to ask again, or press…"
+with the pill "Chase Ray, copy Omar · Omar got an answer the same day, 2 of 2". Four
 answers, each an outcome: **Chase** (same proposal and receipt; the ledger later records how long the
 answer took), **Let it go** (the promise closes as dropped; three on one sender and the Advisor stops
 raising them), **He answered elsewhere** (the owner says where; the step ticks), **Later** (a date).
@@ -217,12 +217,12 @@ cannot do either.
 3. **The rail build is unchanged.** It reads lanes, ages, urgency and the worker signature. It does
    not read advice. The pile cache stays what it is.
 4. **The stage render** joins the advice for the key on the table: one lookup. Revision mismatch
-   means nothing is shown; a reply arriving moves the revision and the old chip vanishes with no
+   means nothing is shown; a reply arriving moves the revision and the old pill vanishes with no
    cleanup pass.
 5. **Tier 2 runs in the background**, only for the item on the table or next; when it lands, the
-   live-events push fills the reserved slot. Nothing moves. Missing its moment, it is dropped.
-6. **The click** is the card's button: the same proposal, confirmation and receipt. The outcome row
-   opens, resolved later.
+   live-events push fills the prompt box. Nothing moves. Missing its moment, it is dropped.
+6. **The pill** is the card's primary button: the same proposal, confirmation and receipt. The
+   outcome row opens, resolved later.
 
 What can move a row is what moves it today: lane, age, urgency, batch, the shown mark, a return
 date, a task fact set by the clock pass (late, slipped, a step's state), a clock-pass finding filed

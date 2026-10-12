@@ -1,7 +1,7 @@
 """The outcome ledger (spec 2026-10-12, build step 2): what the app did, what the owner did next, what came of it."""
 import json, unittest
 from datetime import datetime, timedelta
-from taskuary import outcomes
+from taskuary import autoreply, outcomes
 from taskuary.store import MemoryStore
 
 
@@ -29,3 +29,70 @@ class RecordTests(unittest.TestCase):
         self.assertEqual([r['Id'] for r in outcomes.open_rows(s)], [])
         r = outcomes.rows_for(s, 'task', 1)[0]
         self.assertEqual((r['Outcome'], r['Verdict']), ('delivered 2 days early', 'kept')); self.assertTrue(r['ResolvedAt'])
+
+
+class ResolveTests(unittest.TestCase):
+    def _thread(self, s, cid='c1'):
+        s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'AP cutover', 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake',
+                       'SentAt': ago(days=9), 'BodyText': 'Still Thursday?', 'Status': 'filed'})
+        return s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'Re: AP cutover', 'FromEmail': 'alex@northwind.example',
+                              'FromName': 'Alex Doyle', 'SentAt': ago(days=8), 'BodyText': 'Thursday works.', 'Status': 'context'})
+
+    def test_a_reply_nobody_wrote_back_on_is_settled_after_its_window(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'AP cutover', 'Status': 'done'}, 'owner'); mid = self._thread(s)
+        outcomes.record(s, 'reply.sent', 'task', t, facts={'cid': 'c1', 'mid': mid}, at=ago(days=8))
+        self.assertEqual(outcomes.resolve(s), 1)
+        self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['Verdict'], 'settled')
+
+    def test_more_rounds_after_a_reply_are_unsettled_and_counted(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'Payworth billing'}, 'owner'); mid = self._thread(s, 'c2')
+        for d in (6, 4): s.add_message({'ConversationId': 'c2', 'Channel': 'email', 'Subject': 'Re: billing', 'FromEmail': 'billing@vendor.example',
+                                       'FromName': 'Payworth', 'SentAt': ago(days=d), 'BodyText': 'And the PO number?', 'Status': 'filed'})
+        outcomes.record(s, 'reply.sent', 'task', t, facts={'cid': 'c2', 'mid': mid}, at=ago(days=8))
+        outcomes.resolve(s)
+        self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['Verdict'], 'unsettled: 2 more')
+
+    def test_an_auto_reply_is_not_a_round(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner'); mid = self._thread(s, 'c3')
+        s.add_message({'ConversationId': 'c3', 'Channel': 'email', 'Subject': 'Automatic reply: Re: AP cutover', 'FromEmail': 'erin@northwind.example',
+                       'FromName': 'Erin Blake', 'SentAt': ago(days=7), 'BodyText': 'I am out of the office until Monday.', 'Status': autoreply.STATUS})   # the connector's mark, never the subject
+        outcomes.record(s, 'reply.sent', 'task', t, facts={'cid': 'c3', 'mid': mid}, at=ago(days=8))
+        outcomes.resolve(s)
+        self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['Verdict'], 'settled')
+
+    def test_a_closed_task_resolves_after_its_window(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'done'}, 'owner')
+        i = outcomes.record(s, 'task.closed', 'task', t, at=ago(days=3))
+        self.assertEqual(outcomes.resolve(s), 0)                                   # inside the window: nothing yet
+        s._exec('UPDATE outcome SET At=? WHERE Id=?', (ago(days=8), i))
+        outcomes.resolve(s); self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['Verdict'], 'held')
+        t2 = s.create_task({'Title': 'y', 'Status': 'open'}, 'owner')
+        outcomes.record(s, 'task.closed', 'task', t2, at=ago(days=8)); outcomes.resolve(s)
+        self.assertEqual(outcomes.rows_for(s, 'task', t2)[0]['Verdict'], 'reopened')
+
+    def test_a_stop_takes_the_owners_next_move_from_the_later_row(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
+        i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', facts={'pr': True}, at=ago(hours=30))
+        outcomes.record(s, 'agent.continued', 'task', t, next_move='merge it', at=ago(hours=29))
+        outcomes.resolve(s)
+        r = s._one('SELECT * FROM outcome WHERE Id=?', (i,))
+        self.assertEqual((r['Verdict'], r['NextMove']), ('continued', 'merge it'))
+        j = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', at=ago(days=3)); outcomes.resolve(s)
+        self.assertEqual(s._one('SELECT Verdict FROM outcome WHERE Id=?', (j,))['Verdict'], 'left')
+
+    def test_a_promise_is_kept_late_or_late(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'Send the budget', 'DueAt': (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d'), 'Status': 'done'}, 'owner')
+        i = outcomes.record(s, 'promise.made', 'task', t, at=ago(days=9)); s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (ago(days=1), t))
+        outcomes.resolve(s); self.assertEqual(s._one('SELECT Verdict FROM outcome WHERE Id=?', (i,))['Verdict'], 'kept late')
+        t2 = s.create_task({'Title': 'Send the deck', 'DueAt': (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d'), 'Status': 'open'}, 'owner')
+        j = outcomes.record(s, 'promise.made', 'task', t2, at=ago(days=20)); outcomes.resolve(s)
+        self.assertEqual(s._one('SELECT Verdict FROM outcome WHERE Id=?', (j,))['Verdict'], 'late')
+
+    def test_an_ignored_sender_who_later_became_a_task_is_regret(self):
+        s = MemoryStore()
+        i = outcomes.record(s, 'sender.ignored', 'policy', 1, facts={'from': 'news@vendor.example'}, at=ago(days=61))
+        outcomes.resolve(s); self.assertEqual(s._one('SELECT Verdict FROM outcome WHERE Id=?', (i,))['Verdict'], 'no regret')
+        j = outcomes.record(s, 'sender.ignored', 'policy', 2, facts={'from': 'ray@vendor.example'}, at=ago(days=61))
+        t = s.create_task({'Title': 'from ray'}, 'owner')
+        s.add_message({'ConversationId': 'c9', 'Channel': 'email', 'Subject': 'Quote', 'FromEmail': 'ray@vendor.example', 'SentAt': ago(days=30), 'BodyText': 'x', 'Status': 'routed', 'TaskId': t})
+        outcomes.resolve(s); self.assertEqual(s._one('SELECT Verdict FROM outcome WHERE Id=?', (j,))['Verdict'], 'regret')

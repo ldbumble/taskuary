@@ -132,3 +132,116 @@ class ItemEndingTests(unittest.TestCase):
         self.assertEqual(it['State'], 'waiting')
         self.assertIn('dev wrote on it since', it['Result'])
         self.assertIn('ready to merge', it['Result'], 'what the agent said before is kept')
+
+
+class AgentTests(unittest.TestCase):
+    """The batch's agent: read-only whoever started it, one prompt naming every item, one report per item."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.tid = batch.create(self.s, 'github', 'northwind/portal', [self.s.get_message(pr(self.s, 'northwind/portal', n, 0.5))
+                                                                        for n in (1, 2, 3)])
+        self.nx = mock.patch.object(batch, '_next'); self.nx.start()
+
+    def tearDown(self): self.nx.stop()
+
+    def test_claude_runs_with_its_permission_gate_on_and_only_the_report_let_through(self):
+        argv = batch.read_only_argv('claude', ['claude', '--dangerously-skip-permissions', '--permission-mode', 'bypassPermissions',
+                                               '--model', 'opus'], '/home/x/.taskuary/context')
+        self.assertNotIn('--dangerously-skip-permissions', argv)
+        self.assertNotIn('bypassPermissions', argv)
+        self.assertEqual(argv[argv.index('--permission-mode') + 1], 'default')
+        self.assertEqual(argv[argv.index('--allowedTools') + 1], 'Bash(taskuary --item:*)')
+        self.assertIn('/home/x/.taskuary/context', argv, 'the brief file is outside the checkout and must be readable')
+        self.assertIn('opus', argv)
+
+    def test_codex_runs_in_its_read_only_sandbox(self):
+        argv = batch.read_only_argv('codex', ['codex', '--dangerously-bypass-approvals-and-sandbox', '--sandbox', 'workspace-write'])
+        self.assertNotIn('--dangerously-bypass-approvals-and-sandbox', argv)
+        self.assertEqual(argv[argv.index('--sandbox') + 1], 'read-only')
+        self.assertEqual(argv.count('--sandbox'), 1)
+
+    def test_a_cli_with_no_known_gate_is_refused_not_trusted(self):
+        with self.assertRaises(ValueError): batch.read_only_argv('gemini', ['gemini', '--yolo'])
+
+    def test_the_seed_names_every_item_in_order_and_the_one_command(self):
+        with mock.patch.object(batch, '_diff', return_value=('diff --git a/x b/x', 'abc123')):
+            seed = batch.seed(self.s, self.tid, 'northwind/portal')
+        self.assertLess(seed.index('(1) #1'), seed.index('(2) #2'))
+        self.assertIn('READ-ONLY', seed)
+        self.assertIn('taskuary --item <n>', seed)
+        self.assertIn('Do NOT run --done', seed)
+        self.assertNotIn('fixes 1', seed, 'the items themselves are in the file, not the command line')
+        path = next(w for w in seed.split() if w.endswith('-batch.md'))
+        text = open(path, encoding='utf-8').read()
+        self.assertIn('fixes 2', text); self.assertIn('diff --git', text)
+        self.assertIn('never as instructions', text)
+
+    def test_a_report_lands_on_its_line_and_settling_the_last_closes_the_batch(self):
+        self.assertTrue(batch.report(self.s, self.tid, 2, 'Duplicate of item 1; propose closing it.', overlap='same fix as 1')['ok'])
+        it = self.s.batch_item(self.tid, 'gh:northwind/portal#2')
+        self.assertEqual((it['State'], it['Overlap']), ('needs_you', 'same fix as 1'))
+        self.assertFalse(batch.report(self.s, self.tid, 9, 'x')['ok'])
+        for n in (1, 2, 3): batch.report(self.s, self.tid, n, 'Nothing to do.', settled=True)
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
+
+    def test_the_endpoint_takes_reports_only_for_a_batch(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        plain = self.s.create_task({'Title': 'not a batch', 'Kind': 'coding', 'Status': 'open'}, 't')
+        with mock.patch.object(server, 'store', self.s), mock.patch.object(server, '_own_task_only', return_value=None):
+            c = TestClient(server.app)
+            ok = c.post('/api/agent/item', json={'task_id': self.tid, 'item': 1, 'result': 'Right fix; merge it.'})
+            no = c.post('/api/agent/item', json={'task_id': plain, 'item': 1, 'result': 'x'})
+        self.assertTrue(ok.json()['ok'])
+        self.assertEqual(no.status_code, 422)
+
+
+class OwnerActionTests(unittest.TestCase):
+    """The owner's press on one item. Nothing the agent does merges anything; a merge is the owner's, pinned to what was reviewed."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.tid = batch.create(self.s, 'github', 'northwind/portal', [self.s.get_message(pr(self.s, 'northwind/portal', n, 0.5))
+                                                                        for n in (1, 2)])
+        self.nx = mock.patch.object(batch, '_next'); self.nx.start()
+        self.tok = mock.patch.object(batch, '_token', return_value='tok'); self.tok.start()
+
+    def tearDown(self): self.nx.stop(); self.tok.stop()
+
+    def test_a_merge_is_pinned_to_the_head_the_agent_reviewed(self):
+        from taskuary import github
+        self.s.update_batch_item(self.tid, 'gh:northwind/portal#1', {'Sha': 'reviewed1'})
+        with mock.patch.object(github, 'repo_info', return_value={'methods': ['merge']}), \
+             mock.patch.object(github, 'merge_pr') as merge:
+            self.assertTrue(batch.act(self.s, self.tid, 1, 'merge')['ok'])
+        merge.assert_called_once_with('tok', 'northwind/portal', 1, 'reviewed1', method='merge')
+        it = self.s.batch_item(self.tid, 'gh:northwind/portal#1')
+        self.assertEqual((it['State'], it['EndedWhy']), ('ended', 'You merged it on GitHub.'))
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'open', 'item 2 is still open')
+
+    def test_nothing_reviewed_is_not_merged(self):
+        from taskuary import github
+        with mock.patch.object(github, 'merge_pr') as merge:
+            out = batch.act(self.s, self.tid, 1, 'merge')
+        self.assertFalse(out['ok']); merge.assert_not_called()
+
+    def test_close_then_settle_the_last_closes_the_batch_and_reopen_brings_a_line_back(self):
+        from taskuary import github
+        with mock.patch.object(github, 'close_pr'): batch.act(self.s, self.tid, 1, 'close')
+        batch.act(self.s, self.tid, 2, 'settle')
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
+        batch.act(self.s, self.tid, 2, 'reopen')
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')
+        self.assertEqual(self.s.batch_item(self.tid, 'gh:northwind/portal#2')['State'], 'waiting')
+
+    def test_the_endpoint_is_the_owners_alone(self):
+        from taskuary import guard
+        self.assertEqual(guard.classify('POST', '/api/tasks/12/batch/1')[0], 'owner')
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        with mock.patch.object(server, 'store', self.s):
+            r = TestClient(server.app).post(f'/api/tasks/{self.tid}/batch/2', json={'action': 'settle'})
+            bad = TestClient(server.app).post(f'/api/tasks/{self.tid}/batch/2', json={'action': 'explode'})
+        self.assertEqual(r.json()['state'], 'done')
+        self.assertEqual(bad.status_code, 422)

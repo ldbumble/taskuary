@@ -124,6 +124,7 @@ AGENT_WRITES = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    (r'POST', r'^/api/cloudfix/setup$', 'it commits a workflow to the repository - only ever the owner pressing Set up (cloudfix.install)'),
     (r'POST|PATCH|DELETE', r'^/api/operations(/[^/]+(/(execute|preview))?)?$',
      'a proposal runs approvals, settings and hand-offs - confirming one is the owner, whatever its kind'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/reviews/\d+(/(attachment|closeout/[a-z_-]+|draft|envelope|release|reopen))?$',

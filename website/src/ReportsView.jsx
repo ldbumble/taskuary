@@ -2221,7 +2221,7 @@ function RunHistory({ sid, title, onClose }) {
               </Typography>
               {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded />
                 : missed === pick ? <Typography variant="caption" sx={{ color: DIM }}>This run's details could not be loaded.{" "}
-                  <Box component="span" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>Try again</Box></Typography>
+                  <Box component="button" type="button" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline", border: 0, bgcolor: "transparent", p: 0, font: "inherit" }}>Try again</Box></Typography>
                   : <CircularProgress size={16} />}
             </>
           ) : <Typography variant="caption" sx={{ color: FAINT }}>Pick a run on the left.</Typography>}

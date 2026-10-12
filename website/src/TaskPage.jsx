@@ -34,6 +34,7 @@ import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
 import SlotList from "./SlotList.jsx";
+import BatchItems from "./BatchItems.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
@@ -1231,6 +1232,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             The WHOLE LINE is the target, not the 16px box: on a manual task ticking these
                             off IS the work (the owner, 2026-09-16), and a box that small did not look
                             like something you were meant to click. */}
+                        {/* a BATCH: its items in ranked order, each with what the agent found and the owner's presses (batch.py) */}
+                        {detail?.batch && <BatchItems taskId={t?.TaskId} items={detail.batch}
+                          onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
                         {(detail?.checklist || []).length > 0 && (
                           <Box sx={{ mt: 0.85, maxWidth: 900 }}>
                             {detail.checklist.filter((i) => !i.out).map((i) => (
@@ -1253,7 +1257,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         )}
                         {/* the rest of what they said, in order - indented so it reads as the same
                             person continuing rather than as separate business */}
-                        {alsoSaid.map((m) => (
+                        {/* ...never on a batch: its other messages are its OTHER ITEMS, not the same person continuing */}
+                        {!detail?.batch && alsoSaid.map((m) => (
                           <Box key={m.MessageId} sx={{ mt: 0.6, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
                             <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
                               {m.FromName || m.FromEmail || m.Channel}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}

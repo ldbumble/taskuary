@@ -245,3 +245,14 @@ class OwnerActionTests(unittest.TestCase):
             bad = TestClient(server.app).post(f'/api/tasks/{self.tid}/batch/2', json={'action': 'explode'})
         self.assertEqual(r.json()['state'], 'done')
         self.assertEqual(bad.status_code, 422)
+
+
+class RailTests(unittest.TestCase):
+    def test_a_batch_row_says_how_far_it_got_and_other_rows_say_nothing(self):
+        s = MemoryStore()
+        tid = batch.create(s, 'github', 'northwind/portal', [s.get_message(pr(s, 'northwind/portal', n, 0.5)) for n in (1, 2, 3, 4)])
+        with mock.patch.object(batch, '_next'):
+            batch.report(s, tid, 1, 'Fine.', settled=True); batch.report(s, tid, 3, 'Duplicate of 1.')
+        other = s.create_task({'Title': 'mail', 'Kind': 'task', 'Status': 'open'}, 't')
+        got = batch.rail(s, [{'key': 'b', 'tid': tid}, {'key': 'o', 'tid': other}, {'key': 'x'}])
+        self.assertEqual(got, {'b': {'line': '1 of 4 done · ③ needs you', 'states': ['done', 'waiting', 'needs_you', 'waiting']}})

@@ -36,7 +36,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 // the speaker's mark is TASKUARY'S OWN LOGO, never a second drawing of it (the owner, 2026-10-06: "logo should match the
 // taskuary one not a different one")
 const AssistantMark = () => <TaskuaryMark size={24} />;
-import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
+import { ACCENT2, ALERT, BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
@@ -272,6 +272,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
   // BULK PROCESSING: a ranked row's place in its batch, circled (the owner, 2026-09-28: "we should write numbers on it
   // like circle 1 rank") - in the order the batch let them in, which is rank order (rank.rank_numbers)
   const rankNo = pile?.rank_numbers || {};
+  // a BATCH row: how far it got, in words and as one bar segment per item (batch.py / batchItems.js)
+  const batchNo = pile?.batch_progress || {};
   const [openChannel, setOpenChannel] = useState("");
   const [waiting, setWaiting] = useState(null);
   useEffect(() => {
@@ -462,6 +464,13 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
                         )}
                       </div>
                       {isCur && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
+                      {!!batchNo[i.key] && <>
+                        <div className="sub">{batchNo[i.key].line}</div>
+                        <div style={{ display: "flex", gap: 3, marginTop: 4, paddingLeft: 25 }}>
+                          {batchNo[i.key].states.map((st, n) => (
+                            <i key={n} style={{ height: 4, flex: 1, borderRadius: 2,
+                              background: st === "needs_you" ? ALERT : st === "done" || st === "ended" ? ACCENT2 : "rgba(0,0,0,.1)" }} />))}
+                        </div></>}
                     </div>
                     {/* THE SAME WORD ON THE SAME BORDER. A handful on the table says so on its
                         bracket ("on the table · 4 fyi"); one item on the table wore the identical

@@ -1257,6 +1257,12 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         except Exception as e:
             logger.debug(f'the ranked count did not reach the rail: {e}')
             p['more_markers'], p['rank_numbers'] = [], {}
+        # ...and a BATCH row says how far it got: "2 of 4 done · ③ needs you", with a bar of its items (batch.py)
+        try:
+            from . import batch
+            p['batch_progress'] = batch.rail(store, p['items'])
+        except Exception as e:
+            logger.debug(f'batch progress did not reach the rail: {e}'); p['batch_progress'] = {}
         p['events'] = events
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)

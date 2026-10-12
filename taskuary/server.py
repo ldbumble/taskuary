@@ -1199,6 +1199,9 @@ def task_detail(task_id: int):
             'agentStory': _agent_story(task_id),
             # ...and what ended it upstream (a merge, a close): Close out says that instead of an empty reply nobody is owed
             'ended': _ended_line(task_id, d.get('comments')),
+            # ...and a BATCH's items, in ranked order, each with what the agent found and where it stands (batch.py)
+            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy')} | {'reviewed': bool(i.get('Sha'))}
+                      for i in store.batch_items(task_id)] or None,
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}

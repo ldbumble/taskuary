@@ -3831,6 +3831,10 @@ class SQLiteStore:
                    "VALUES (?,?,?,?,?,?,'waiting',?,?)", (tid, conv, mid, place, title, link, _now(), _now()))
     def batch_items(self, tid) -> list:
         return self._rows('SELECT * FROM batch_item WHERE TaskId=? ORDER BY Place, ItemId', (tid,))
+    def batch_items_for(self, tids) -> list:
+        tids = [int(t) for t in tids or [] if str(t).isdigit()]
+        if not tids: return []
+        return self._rows(f"SELECT TaskId, Place, State FROM batch_item WHERE TaskId IN ({','.join('?' * len(tids))}) ORDER BY TaskId, Place", tids)
     def batch_item(self, tid, conv):
         return self._one('SELECT * FROM batch_item WHERE TaskId=? AND ConversationId=?', (tid, conv))
     def update_batch_item(self, tid, conv, fields: dict) -> bool:

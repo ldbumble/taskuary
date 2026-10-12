@@ -297,3 +297,23 @@ def act(store, tid, place: int, action: str, actor: str = 'owner') -> dict:
     store.add_comment(tid, actor, 'owner', f"{it.get('Title') or it['ConversationId']}: {said}")
     set_item(store, tid, it['ConversationId'], actor, State='ended', EndedWhy=said)
     return {'ok': True, 'state': 'ended'}
+
+
+CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'
+
+
+def progress(its: list) -> str:
+    """"2 of 4 done · ③ needs you" - the rail row's second line (batchItems.progress says it the same way on the page)."""
+    if not its: return ''
+    you = ''.join(CIRCLED[i['Place'] - 1] if 0 < i['Place'] <= 20 else str(i['Place']) for i in its if i['State'] == 'needs_you')
+    return ' · '.join(x for x in (f"{sum(i['State'] in SETTLED for i in its)} of {len(its)} done",
+                                  f"{you} need{'s' if len(you) == 1 else ''} you" if you else '') if x)
+
+
+def rail(store, rows: list) -> dict:
+    """{row key: {line, states}} for the rail's batch rows - how far each got, in words and as a bar of item states. One
+    query for the whole rail, whatever its length: the rail is rebuilt on every press (store.batch_items_for)."""
+    keys = {r['tid']: r['key'] for r in rows or [] if (r or {}).get('tid') and r.get('key')}
+    by = {}
+    for i in store.batch_items_for(list(keys)): by.setdefault(i['TaskId'], []).append(i)
+    return {keys[t]: {'line': progress(its), 'states': [i['State'] for i in its]} for t, its in by.items()}

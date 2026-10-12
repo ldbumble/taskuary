@@ -1026,25 +1026,46 @@ def _run_operation(op: dict, background: BackgroundTasks):
         from . import assistant, funnel, outcomes
         key = str(p.get('key') or ''); item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
         if not item: raise HTTPException(404, 'that one is not on the rail any more')
+        # ...and only while it IS slipped: pressed after they wrote back, or on a card that never slipped, nothing is changed
+        if item.get('lane') != 'forgotten': raise HTTPException(409, 'That one is not slipped any more - they wrote back, or it moved on. Nothing was changed.')
         who, tid_, iid, text = str(item.get('who_email') or ''), item.get('tid'), item.get('idea'), str(p.get('text') or '').strip()[:300]
+        task_ = store.get_task(tid_) if tid_ else None
+        step = bool(task_ and str(task_.get('Assignee') or '').startswith('person:') and task_.get('Status') not in ('done', 'dropped'))   # a step somebody owes
         if kind == 'task.chase':
-            conv = (store.get_task(tid_) or {}).get('ConversationId') if tid_ else None
-            mid = item.get('mid') or ((store.last_inbound_in(conv) or {}).get('MessageId') if conv else None)
-            if not mid: raise HTTPException(422, 'There is no thread to chase on - write to them from the task page, and the ledger will count it.')
+            # the thread's last word FROM THE PERSON WHO OWES IT: a follow-up's own inbound, or the step's conversation filtered by them
+            a = item.get('action') or {}
+            if a.get('type') == 'followup' and a.get('mid'): mid = a['mid']
+            else:
+                row = store._one("SELECT MessageId FROM message WHERE TaskId=? AND lower(FromEmail)=? AND Status!='context' ORDER BY SentAt DESC LIMIT 1",
+                                 (tid_, who)) if tid_ and who else None                      # the step's own mail from them
+                mid = (row or {}).get('MessageId')
+            if not mid: raise HTTPException(422, 'There is no thread with them to chase on - write to them from the task page, and the ledger will count it.')
             n = (sum(1 for r in outcomes.rows_for(store, 'task', tid_) if _json.loads(r.get('FactsJson') or '{}').get('chase')) if tid_ else 0) + 1
             cc = outcomes.chase_cc(store, who) if who else None
-            out = open_reply(mid, OpenReplyBody(instruction='a short chase, in my voice: no answer yet, what I need and by when'
-                                                            + (f'; copy {cc}, who gets them to answer' if cc else '')))
+            instr = f'a short chase to {who or "them"}, in my voice: no answer yet, what I need and by when' + (f'; copy {cc}, who gets them to answer' if cc else '')
+            if a.get('type') == 'followup': out = open_reply(mid, OpenReplyBody(instruction=instr))     # their thread: its newest line is theirs
+            else:
+                # a step somebody owes: the review answers THEIR last word, even when somebody else wrote on the thread since -
+                # open_reply would re-target to the newest line, and the chase would go to the wrong person
+                from . import responder
+                rv = store.pending_review(tid_) if tid_ else None
+                rid = rv['ReviewId'] if rv and rv.get('MessageId') == mid else store.add_review({'TaskId': tid_, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': f'chase:{n}'})
+                try: draft = responder.write_draft(store, tid_, rid, actor=ACTOR, nudge=instr)
+                except Exception as e: logger.warning(f'chase draft on {task_ref(tid_)} not written: {e}'); draft = ''
+                out = {'reviewId': rid, 'taskId': tid_, 'draft': draft, 'drafting': not draft}
             store._exec('UPDATE review SET Reason=? WHERE ReviewId=?', (f'chase:{n}' + (f' cc:{cc}' if cc else ''), out['reviewId']))
             return {**out, 'cc': cc}
-        if iid: assistant.act(store, iid, 'dismiss', ACTOR)
-        if tid_ and kind == 'task.let_go':
-            store.add_comment(tid_, ACTOR, 'human', 'Let it go - nobody is chasing this further.'); store.update_task(tid_, {'Status': 'dropped'}, ACTOR)
-        elif tid_ and (store.get_task(tid_) or {}).get('Status') not in ('done', 'dropped') and str((store.get_task(tid_) or {}).get('Assignee') or '').startswith('person:'):
-            store.add_comment(tid_, ACTOR, 'human', f"Answered elsewhere{': ' + text if text else ''}."); store.update_task(tid_, {'Status': 'done'}, ACTOR)
+        # Let it go is a turn-down on the follow-up; answered elsewhere is a done. Only a step somebody OWES is dropped or closed -
+        # a thread's own task is never touched for its follow-up (the review, 2026-10-12)
+        if iid: assistant.act(store, iid, 'dismiss' if kind == 'task.let_go' else 'done', ACTOR)
+        status = 'put down'
+        if step and kind == 'task.let_go':
+            store.add_comment(tid_, ACTOR, 'human', 'Let it go - nobody is chasing this further.'); store.update_task(tid_, {'Status': 'dropped'}, ACTOR); status = 'dropped'
+        elif step:
+            store.add_comment(tid_, ACTOR, 'human', f"Answered elsewhere{': ' + text if text else ''}."); store.update_task(tid_, {'Status': 'done'}, ACTOR); status = 'done'
         outcomes.record(store, 'chase.let_go' if kind == 'task.let_go' else 'chase.elsewhere', 'task' if tid_ else 'message', tid_ or item.get('mid') or 0, ACTOR,
                         facts={'who': who, **({'where': text} if text else {})})
-        return {'status': 'dropped' if kind == 'task.let_go' else 'done', 'who': who}
+        return {'status': status, 'who': who}
     if kind == 'item.settle':
         from . import funnel, verdicts
         verb = str(p.get('verb') or 'done')

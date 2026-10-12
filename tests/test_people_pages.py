@@ -58,3 +58,15 @@ class PageTests(unittest.TestCase):
         self.assertEqual(people_pages.pages(s)[0]['who'], WHO)
         self.assertIsNone(people_pages.compile(s, other, llm=brain_saying('')))
         with mock.patch.object(people_pages, 'build_llm', return_value=None): self.assertEqual(people_pages.refresh(s), [])
+
+
+    def test_refresh_skips_the_owner_and_an_auto_replier(self):
+        from taskuary import autoreply
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'test'); seed(s)
+        for who in ('alex@northwind.example', 'noreply@vendor.example'):
+            for k in range(3):
+                t = s.create_task({'Title': 'z'}, 'owner')
+                outcomes.record(s, 'reply.sent', 'task', t, facts={'cid': f'q{who}{k}', 'mid': 1, 'verb': 'approve', 'who': who, 'cc': [], 'chase': False}, at=ago(days=9))
+        s.add_message({'ConversationId': 'auto', 'Channel': 'email', 'Subject': 'Automatic reply', 'FromEmail': 'noreply@vendor.example', 'SentAt': ago(days=1), 'BodyText': 'x', 'Status': autoreply.STATUS})
+        outcomes.resolve(s)
+        self.assertEqual(people_pages.refresh(s, llm=brain_saying('- a line')), [WHO])

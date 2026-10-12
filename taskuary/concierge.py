@@ -656,6 +656,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # an idea triage already opened a task for IS that task - Make a task on it made nothing new (the owner, 2026-10-01:
     # "no Make a task on an item that already is a task"); a closed one is history, and new work may be a task again
     if verb == 'mine' and item.get('kind') == 'idea' and _live_task(store, item): return f"{what} is already a task on your list."
+    # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
+    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten': return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     if verb == 'not_ours_kind': return f"{what} is not one of the assistant's ideas - say Not ours."
     if verb == 'answer_agent' and item.get('kind') != 'agent':

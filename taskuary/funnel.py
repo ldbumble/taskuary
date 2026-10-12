@@ -845,14 +845,23 @@ def from_calendar(store, now: datetime) -> list:
 
 def slipped_followup(store, action: dict, now: datetime = None) -> tuple:
     """SLIPPED (spec 2026-10-12): a follow-up quiet past THAT person's day is the owner's move, in the slipped lane. The day is
-    the ledger's (outcomes.late_after), the default the owner's (Settings -> Advisor); someone away never slips. Returns
-    ('forgotten', days past the person's day) or (None, 0) - one rule for the legacy pile and the processing rail."""
+    the ledger's (outcomes.late_after), the default the owner's (Settings -> Advisor); someone away never slips, and a reply
+    from them ends it. Returns (lane, days past the person's day, days quiet, the person's day): lane is 'forgotten', 'answered'
+    (close the idea) or None - one rule for the legacy pile and the processing rail."""
     a = action or {}
-    if a.get('type') != 'followup' or not a.get('who_email') or not a.get('asked_at') or a.get('away'): return (None, 0)
+    if a.get('type') != 'followup' or not a.get('who_email') or not a.get('asked_at') or a.get('away'): return (None, 0, 0, 0)
     from . import outcomes
+    # THEIR REPLY ENDS IT: a material word from them on the thread since the ask is the answer, whatever the idea row still says
+    m = store.get_message(a.get('mid')) if a.get('mid') else None
+    if m and m.get('ConversationId') and outcomes._material_inbound_after(store, m['ConversationId'], a['asked_at']): return ('answered', 0, 0, 0)
     day = outcomes.late_after(store, a['who_email'], int(store.get_setting('slipped_default_days', 5) or 5))
     quiet = max(0, int(((now or datetime.now()) - (_dt(a['asked_at']) or datetime.now())).total_seconds() // 86400))
-    return ('forgotten', quiet - day) if quiet >= day else (None, 0)
+    return ('forgotten', quiet - day, quiet, day) if quiet >= day else (None, 0, quiet, day)
+
+
+def slipped_why(who_email: str, quiet: int, day: int) -> str:
+    from .processing_unread import holder_name
+    return f"No answer from {holder_name('person:' + str(who_email or ''))} in {quiet} days - late for them after {day}"
 
 
 def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = frozenset(),
@@ -891,7 +900,10 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         # the shared verdict decides the lane (PW-200), by the one rule the canonical rail uses too
         from .processing_all import idea_lane
         lane, tri = idea_lane(i), a.get('triage') or {}
-        slip, late = slipped_followup(store, a)
+        slip, late, quiet, day = slipped_followup(store, a)
+        if slip == 'answered':                                   # they wrote back: the line is over, like the owner's own reply
+            if reconcile: store.set_idea_status(i['IdeaId'], 'done', 'funnel')
+            continue
         if slip: lane = slip
         why = a.get('why') or 'the assistant raised this'
         if tri.get('error'): why = f"triage failed ({tri['error']}) - the next check retries; {why}"

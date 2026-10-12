@@ -131,7 +131,7 @@ delivered late. Reflection reads those rows as evidence, so a lesson can say "gr
 coder: you merge it, 8 of 8". A learned line never acts on its own; it changes which button comes
 first. It also keeps a page per person it deals with, compiled from the same ledger: how fast they
 answer, whether a chase is needed, who on copy moves them - and a thread gone quiet past that
-person's own day is *slipped*, first on your rail, with Chase, Let it go, They answered elsewhere
+person's own day is *slipped*, on your rail under On you, with Chase, Let it go, They answered elsewhere
 and Remind me under it. See [The Advisor](https://taskuary.com/docs/advisor).
 
 ![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=cards)

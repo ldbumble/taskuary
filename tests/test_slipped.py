@@ -131,7 +131,7 @@ def test_a_chase_opens_a_draft_on_the_thread_with_the_ledgers_cc(s):
 def test_a_chase_with_no_thread_is_refused_plainly(s):
     t = person_step(s, 7); card = next(c for c in rail(s) if c.get('tid') == t)
     r = run(s, 'task.chase', card)
-    assert r.status_code in (422, 200) and 'task page' in r.text
+    assert r.json()['status'] == 'error' and 'task page' in r.text               # refused, never a draft on nothing
 
 def test_the_advisor_counts_chases_from_the_ledger(s):
     for k, ans in enumerate((1.0, None, 2.0)):
@@ -149,3 +149,58 @@ def test_the_followup_line_names_the_persons_day(s):
     s.put_sent_verdict(mid, 'c7', True, False, None, None, 'test')
     c = next(x for x in assistant.followups(s, 24, ('followup',)) if x['kind'] == 'followup')
     assert 'late for them after 5 days' in c['facts']
+
+
+# ── the review's fix pass (2026-10-12): the lane's lifecycle and the verbs' gate ────────────────────────────────────────
+def test_let_it_go_on_a_thread_item_puts_the_follow_up_down_and_keeps_the_task(s):
+    iid, t = followup_idea(s, 6); card = next(c for c in rail(s) if c.get('idea') == iid)
+    r = run(s, 'task.let_go', card)
+    assert r.status_code == 200, r.text
+    assert s.get_task(t)['Status'] != 'dropped'                                            # the THREAD's task is not a person's step
+    assert s.get_idea(iid)['Status'] != 'open'
+    assert r.json()['outcome']['status'] == 'put down'
+
+def test_their_reply_ends_the_slip_and_closes_the_follow_up(s):
+    iid, t = followup_idea(s, 6)
+    assert next(c for c in rail(s) if c.get('tid') == t)['lane'] == 'forgotten'
+    s.add_message({'ConversationId': f'c{t}', 'Channel': 'email', 'Subject': 'Re: Budget', 'FromEmail': RAY, 'FromName': 'Ray Colton', 'SentAt': ago(hours=2), 'BodyText': 'Here it is.', 'Status': 'routed', 'TaskId': t})
+    card = next(c for c in rail(s) if c.get('tid') == t)
+    assert card['lane'] != 'forgotten' and not card.get('late_days')
+    assert s.get_idea(iid)['Status'] == 'done'
+
+def test_a_slipped_why_is_live_not_the_ideas_frozen_text(s):
+    iid, t = followup_idea(s, 6)
+    card = next(c for c in rail(s) if c.get('tid') == t)
+    assert 'late for them after 5' in card['why'] and '6 days' in card['why']
+
+def test_next_keeps_a_slipped_row_on_the_rail_as_passed(s):
+    t = person_step(s, 7); card = next(c for c in rail(s) if c.get('tid') == t)
+    funnel.settle(s, card['key'], 'surfaced', 'owner', read=True, put_down=True); funnel.invalidate()       # the Next press
+    still = next((c for c in processing_unread.build(s, live_state=[])['items'] if c.get('tid') == t), None)
+    assert still is not None and (still.get('put_down') or still.get('surfaced'))                        # Passed, never gone
+
+def test_the_three_answers_need_a_slipped_card(s):
+    t = s.create_task({'Title': 'Plain work', 'Status': 'open'}, 'owner')
+    s.add_message({'ConversationId': 'c8', 'Channel': 'email', 'Subject': 'Plain', 'FromEmail': 'gail@northwind.example', 'SentAt': ago(hours=3), 'BodyText': 'q', 'Status': 'routed', 'TaskId': t})
+    card = next(c for c in rail(s) if c.get('tid') == t)
+    assert card['lane'] != 'forgotten'
+    for v in ('chase', 'let_go', 'elsewhere'): assert concierge.cannot(card, v, s)
+    r = run(s, 'task.let_go', card)
+    assert r.json()['status'] == 'error' and s.get_task(t)['Status'] == 'open'
+
+def test_a_chase_on_a_step_goes_to_the_person_who_owes_it(s):
+    t = person_step(s, 7)
+    s.add_message({'ConversationId': 'c9', 'Channel': 'email', 'Subject': 'Schema', 'FromEmail': RAY, 'FromName': 'Ray Colton', 'SentAt': ago(days=9), 'BodyText': 'I will sign off.', 'Status': 'filed', 'TaskId': t})
+    gail = s.add_message({'ConversationId': 'c9', 'Channel': 'email', 'Subject': 'Re: Schema', 'FromEmail': 'gail@northwind.example', 'FromName': 'Gail Moreno', 'SentAt': ago(days=8), 'BodyText': 'Any news?', 'Status': 'filed', 'TaskId': t})
+    card = next(c for c in rail(s) if c.get('tid') == t)
+    with mock.patch('taskuary.responder.write_draft', return_value='Ray - a nudge.') as wd:
+        r = run(s, 'task.chase', card)
+    assert r.status_code == 200, r.text
+    rv = s.get_review(r.json()['outcome']['reviewId'])
+    assert rv['MessageId'] != gail and (s.get_message(rv['MessageId']) or {}).get('FromEmail') == RAY
+    assert 'ray@northwind.example' in (wd.call_args.kwargs.get('nudge') or '')
+
+def test_answered_elsewhere_on_a_thread_item_is_a_done_not_a_turn_down(s):
+    iid, t = followup_idea(s, 6); card = next(c for c in rail(s) if c.get('idea') == iid)
+    assert run(s, 'task.elsewhere', card, 'he called').status_code == 200
+    assert s.get_idea(iid)['Status'] == 'done' and s.get_task(t)['Status'] == 'open'

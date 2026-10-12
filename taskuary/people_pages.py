@@ -60,8 +60,12 @@ def refresh(store, llm=None, limit: int = 5, days: int = 30) -> list:
     rows = store._rows("SELECT json_extract(FactsJson, '$.who') AS who, COUNT(*) AS n FROM outcome WHERE ResolvedAt IS NOT NULL AND At>=? "
                        "AND json_extract(FactsJson, '$.who') IS NOT NULL AND json_extract(FactsJson, '$.who')!='' GROUP BY who HAVING n>=3 ORDER BY n DESC LIMIT ?",
                        (since, limit))
+    from .autoreply import STATUS as AUTO
+    me = str(store.get_setting('owner_email', '') or '').lower()
     out = []
     for r in rows:
+        # not a page about the owner, and none about a mailbox that only ever auto-replies
+        if r['who'] == me or store._one('SELECT 1 x FROM message WHERE lower(FromEmail)=? AND Status=? LIMIT 1', (r['who'], AUTO)): continue
         try:
             if compile(store, r['who'], llm): out.append(r['who'])
         except Exception as e: logger.warning(f"people_pages: {r['who']} not compiled - {e}")

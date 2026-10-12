@@ -64,7 +64,7 @@ def _arrived_after_close(task, view) -> bool:
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
-OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time')
+OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time', 'forgotten')
 # a goal's CHILD in one of these lanes is told by the goal's row ("coder on step 5 · Ray owes step 4"), not by a row of its
 # own; in any other lane it is the owner's move and stays a row (spec 2026-10-12, "many steps, one row")
 FOLD_LANES = ('working', 'queued', 'theirs', 'fyi')
@@ -290,8 +290,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             except (ValueError, TypeError): action = {}
             triage = action.get('triage') or {}
             lane = processing_all.idea_lane(idea)
-            slip, late = funnel.slipped_followup(store, action, now)        # a quiet thread past the person's day: the owner's move
-            if slip: lane = slip
+            slip, late, quiet, day = funnel.slipped_followup(store, action, now)   # a quiet thread past the person's day: the owner's move
+            if slip == 'answered': store.set_idea_status(idea['IdeaId'], 'done', 'funnel'); late = 0
+            elif slip: lane = slip
             base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action,
                         priority=triage.get('priority'), tid=action.get('tid') or tid,
                         mid=action.get('mid'), settling=bool(triage.get('pending')), who_email=action.get('who_email') or '', late_days=late,
@@ -341,10 +342,14 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     if not row.get('MessageId') and task.get('Status') == 'waiting' and not review and card['lane'] == 'yours': card['lane'] = 'theirs'
     # ...and a step a PERSON owes, quiet past its day plus that person's usual day, is SLIPPED: the owner's move (spec 2026-10-12)
     who = str(task.get('Assignee') or '')
-    if card['lane'] == 'theirs' and who.startswith('person:') and str(task.get('DueAt') or '')[:10]:
+    # ...whatever row leads the item (their mail, somebody else's on the thread, none): the step is theirs while it waits, and it
+    # has slipped unless THEY have written on it since its day
+    if (card['lane'] in ('theirs', 'asked', 'yours', 'fyi') and who.startswith('person:') and task.get('Status') == 'waiting'
+            and str(task.get('DueAt') or '')[:10]):
         from . import outcomes
         try: due = date.fromisoformat(str(task['DueAt'])[:10])
         except ValueError: due = None
+        if due and store._one("SELECT 1 x FROM message WHERE TaskId=? AND lower(FromEmail)=? AND SentAt>=? LIMIT 1", (tid, who[7:].lower(), due.isoformat())): due = None
         if due:
             day = outcomes.late_after(store, who[7:], int(store.get_setting('slipped_default_days', 5) or 5))
             past = (now.date() - due).days - day
@@ -358,10 +363,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             if i.get('Status') != 'open' or i.get('Kind') != 'followup': continue
             try: a = json.loads(i.get('ActionJson') or '{}')
             except (ValueError, TypeError): a = {}
-            slip, late = funnel.slipped_followup(store, a, now)
+            slip, late, quiet, day = funnel.slipped_followup(store, a, now)
+            if slip == 'answered': store.set_idea_status(i['IdeaId'], 'done', 'funnel'); continue
             if slip:
-                card.update(lane=slip, who_email=a.get('who_email') or '', late_days=late, idea=card.get('idea') or i['IdeaId'],
-                            idea_kind=card.get('idea_kind') or i.get('Kind'), why=i.get('Text') or card.get('why')); break
+                card.update(lane=slip, who_email=a.get('who_email') or '', late_days=late, idea=card.get('idea') or i['IdeaId'], action=a,
+                            idea_kind=card.get('idea_kind') or i.get('Kind'), why=funnel.slipped_why(a.get('who_email'), quiet, day)); break
     # A GOAL IS ONE ROW (spec 2026-10-12): its kind says its state, its sub line says the count and who is holding it, its
     # date sits where the age goes, and it is never gone while open. Its children fold into it unless they are your move.
     from .store import is_goal

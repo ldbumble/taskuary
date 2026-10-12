@@ -1,6 +1,6 @@
 """The WhatsApp bridge, managed by Taskuary: install if needed, start detached, report the phase -
 so neither a person nor an agent runs a server in the foreground and waits on it."""
-import json, os, time, unittest
+import json, os, threading, time, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import server, wabridge
@@ -13,6 +13,7 @@ class BridgeManagerTests(unittest.TestCase):
     def setUp(self):
         wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
         if wabridge._LOCK.locked(): wabridge._LOCK.release()
+        self.addCleanup(setattr, wabridge, '_GRACE_OWED', False)     # start_configured owes it; never leak it into a later poll
 
     def test_a_bridge_started_by_hand_is_found_by_its_port_and_restarted(self):
         """The owner's bridge predated the code that reports the paired number; only a restart picks the
@@ -167,28 +168,68 @@ class LaunchGraceIsSpentByThePollTests(unittest.TestCase):
     """uvicorn accepts no connection until the FastAPI lifespan yields, and wait_listening(8)
     sat inside it: both launches on 2026-09-09 spent the full 8s there, so the desktop window
     was up saying "can't connect" for 18 seconds. wait_listening only delays its caller, so the
-    grace cannot simply move to a thread - it is spent by whichever poll asks first, which is
-    who the grace was always for."""
+    grace cannot simply move to a thread - it is spent by the WhatsApp poll, which is who the
+    grace was always for. And only when this launch started a bridge (P11): owed always, the
+    catch-up waited 8 s ahead of all mail on every launch with WhatsApp off, the default."""
 
     def setUp(self):
-        wabridge._GRACE_SPENT = False
-        self.addCleanup(setattr, wabridge, "_GRACE_SPENT", False)
+        wabridge._GRACE_OWED = False
+        self.addCleanup(setattr, wabridge, "_GRACE_OWED", False)
+        wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
+
+    def _on(self):
+        s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
+        s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'owner')
+        s.save_source({'Channel': 'whatsapp', 'Address': '155@s.whatsapp.net', 'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'o')
+        return s
 
     def test_the_launch_grace_is_spent_once_and_never_again(self):
         waits = []
         def fake_wait(secs): waits.append(secs); return False
+        wabridge._GRACE_OWED = True
         with mock.patch.object(wabridge, "wait_listening", fake_wait):
             wabridge.ready(3); wabridge.ready(3); wabridge.ready(3)
         self.assertEqual(waits, [3], f"the bridge grace was waited {len(waits)} times")
 
-    def test_the_startup_catch_up_waits_for_the_bridge_before_it_polls(self):
+    def test_whatsapp_off_owes_no_grace_and_the_catch_up_reads_mail_at_once(self):
+        s = MemoryStore()
+        self.assertEqual(wabridge.start_configured(s)['reason'], 'WhatsApp is off')
         order = []
-        gate = mock.patch.object(wabridge, "ready", lambda *a, **k: order.append("bridge"))
-        poll = mock.patch.object(server, "_poll_reports", lambda *a, **k: order.append("poll"))
-        days = mock.patch.object(server.store, "get_settings", return_value={"startup_sync_days": "1"})
-        with gate, poll, days:
-            server.catch_up_on_startup()
-            for _ in range(200):
-                if "poll" in order: break
-                time.sleep(.02)
-        self.assertEqual(order[:2], ["bridge", "poll"], f"order was {order}")
+        s.set_setting('startup_sync_days', '1', 't')
+        with mock.patch.object(wabridge, "wait_listening", lambda secs: order.append("wait") or False), \
+             mock.patch.object(server, "store", s), mock.patch.object(server, "_heal_ended"), \
+             mock.patch.object(server, "_poll_reports", lambda *a, **k: order.append("poll")), \
+             mock.patch.object(server, "report_pass"), mock.patch("taskuary.learn.reflect_if_due"):
+            t0 = time.monotonic(); server.catch_up_on_startup().join(10); took = time.monotonic() - t0
+        self.assertEqual(order, ["poll"], "nothing was started, so nothing is waited for")
+        self.assertLess(took, 2, f"the catch-up sat {took:.1f}s before the mail")
+
+    def test_a_started_bridge_is_given_its_grace_once_by_the_whatsapp_poll(self):
+        from taskuary import messengers
+        s = self._on()
+        with mock.patch.object(wabridge, '_listening', return_value=False), mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}):
+            self.assertTrue(wabridge.start_configured(s)['started'])
+        calls, waits = [], []
+        def wa(c_, path, body=None): calls.append(path); return {'seq': 0, 'messages': []}
+        def wait(secs): calls.append('grace'); waits.append(secs); return True
+        c = s.get_connector_by_type('whatsapp', with_secret=True)
+        with mock.patch.object(messengers, '_wa', wa), mock.patch.object(wabridge, 'wait_listening', wait):
+            messengers.poll_whatsapp(s, c, s.list_sources(), llm=None)
+            messengers.poll_whatsapp(s, c, s.list_sources(), llm=None)
+        self.assertEqual(waits, [8], 'the grace is spent once, by the first poll')
+        self.assertEqual(calls[0], 'grace', f'the bridge was asked before its grace: {calls}')
+
+    def test_a_second_poller_waits_out_the_first_ones_grace(self):
+        """The old flag was spent BEFORE the wait: the chat clock found it spent while the catch-up was still waiting,
+        polled a bridge still coming up, and filed the false "bridge not running" the grace was for."""
+        wabridge._GRACE_OWED = True
+        release, seen = threading.Event(), []
+        def slow_wait(secs): release.wait(5); return True
+        with mock.patch.object(wabridge, 'wait_listening', slow_wait):
+            first = threading.Thread(target=wabridge.ready); first.start()
+            time.sleep(.1)
+            second = threading.Thread(target=lambda: seen.append(wabridge.ready())); second.start()
+            time.sleep(.2)
+            self.assertEqual(seen, [], 'the second poller went ahead while the bridge was still starting')
+            release.set(); first.join(5); second.join(5)
+        self.assertEqual(seen, [True])

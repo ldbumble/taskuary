@@ -396,7 +396,11 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     from datetime import datetime
     from .ingest import ingest_message
     from .channels import images_for_triage, ingest_own_message, save_attachments
-    from . import voice
+    from . import voice, wabridge
+    # the launch grace lives HERE, in front of the one call that files "bridge not running": the catch-up, the chat clock,
+    # the doorway and Sync now all come through, and none of them - nor the mail beside them - waits when no bridge was started
+    try: wabridge.ready(8)
+    except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
     cfg = _cfg(c)
     # NAMED CHATS ONLY. Every chat that comes in is one somebody listed: a person by their number,
     # a group by its JID. There is no catch-all - a paired account sees everything its owner does,

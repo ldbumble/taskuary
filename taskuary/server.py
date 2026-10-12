@@ -80,6 +80,37 @@ try:
 except Exception as _e:
     from loguru import logger as _log
     _log.warning(f'could not drop the per-CLI coding clones: {_e}')
+# A relaunch opens a NEW chat (retire_dock + funnel.reset_walk) - but not in front of the window. It ran inside the lifespan,
+# which uvicorn will not accept a connection until it yields: 629 ms the first call, up to 1,061 ms on the owner's machine
+# (2.5-3.5 s on a copy of that store, cold), every launch, with the window saying "can't connect". So it runs on a thread,
+# and everything that would see the OLD walk waits for it: every /api request (walk_gate), the four clocks and the catch-up.
+_WALK_READY = threading.Event(); _WALK_READY.set()      # set = no reset pending: a test app without a lifespan never waits
+_WALK_THREAD = [None]
+WALK_WAIT = 15                   # a reset that hangs (a locked store) must not hold the app shut for ever; it logs and lets go
+
+
+def _new_walk():
+    try:
+        from . import funnel as _f
+        from .general import retire_dock
+        if retire_dock(store, ACTOR) is not None: _f.reset_walk(store)
+    except Exception as e: logger.warning(f'assistant dock retire failed: {e}')
+    finally: _WALK_READY.set()
+
+
+def _start_new_walk():
+    _WALK_READY.clear()
+    _WALK_THREAD[0] = t = threading.Thread(target=_new_walk, daemon=True, name='taskuary-new-walk')
+    t.start()
+    return t
+
+
+def _walk_settled(timeout: float = WALK_WAIT) -> bool:
+    """Wait until the launch's new walk is in place - free once it is (one is_set check)."""
+    if _WALK_READY.is_set() or _WALK_READY.wait(timeout): return True
+    logger.warning(f'the new chat was not ready after {timeout:.0f}s - going on without it'); return False
+
+
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
@@ -125,12 +156,8 @@ async def _lifespan(_app):
         from . import remind
         remind.tick(store)
     except Exception as e: logger.warning(f'reminders on start skipped: {e}')
+    _start_new_walk()              # a relaunch opens a NEW chat rather than resuming the last one - off the window's path
     catch_up_on_startup()          # defined below; resolved when the app actually starts
-    try:                           # a relaunch opens a NEW chat rather than resuming the last one
-        from . import funnel as _f
-        from .general import retire_dock
-        if retire_dock(store, ACTOR) is not None: _f.reset_walk(store)
-    except Exception as e: logger.warning(f'assistant dock retire failed: {e}')
     try:                           # archived chats past their keep-days go on the app's own clock (PW-158), never on a history read
         from . import retention
         retention.tick(store)
@@ -164,6 +191,9 @@ async def _lifespan(_app):
         async with processing_all.membership_lifecycle(store):
             yield
     finally:
+        t = _WALK_THREAD[0]
+        if t is not None and t.is_alive(): t.join(WALK_WAIT)   # never close the store under it
+        _WALK_READY.set()
         if not _close_drain_workers(timeout=DRAIN_WAIT, target_store=store):
             logger.warning('triage drain still stopping during shutdown')
         # Both watched PTYs and one-shot CLI brains are children of this process. An orderly
@@ -186,6 +216,13 @@ ATTACH_QUIET = 10
 from loguru import logger
 import time as _time
 QUIET_GETS = {'/api/ingest/status'}     # polled GETs that are not logged when they succeed (request_log)
+
+@app.middleware('http')
+async def walk_gate(request: Request, call_next):
+    # innermost (registered first): a refused request never waits. /api/health is the desktop's "is it up" pulse
+    if not _WALK_READY.is_set() and request.url.path.startswith('/api') and request.url.path != '/api/health':
+        await asyncio.to_thread(_walk_settled)    # the first rail, chat or pile read sees the new walk, never yesterday's
+    return await call_next(request)
 
 @app.middleware('http')
 async def request_log(request: Request, call_next):
@@ -6625,6 +6662,7 @@ def poll_forever():
 
     This is the FULL lane's clock only. The chat clock is quick_forever, on its own thread: while
     this loop sits inside a long sync, a branch here could never fire."""
+    _walk_settled()
     while True:
         try:
             # the heartbeat sits OUTSIDE the sync switch on purpose: poll_minutes 0 means
@@ -6654,6 +6692,7 @@ def doorway_forever():
     is the SAME one the chat clock does - the per-type lock in _poll_quick means whichever gets there
     first wins and the other tick is a no-op, and remote_assistant._claim makes a message answered by
     both readers answer once. Nothing else about the poll changes: no reports, no CI."""
+    _walk_settled()                 # the phone IS the walk: it must not answer from yesterday's
     while True:
         try:
             from . import remote_assistant
@@ -6672,10 +6711,9 @@ def quick_forever():
 
     It also carries the by-the-way push: while the walk is in a phone chat, an interruption has to
     go THERE, and an agent raising its hand is not something a mailbox poll would ever discover.
-    That is why it sits outside the sync switch and throttles itself (remote_assistant.push_alerts)."""
-    from . import wabridge
-    try: wabridge.ready(8)          # whichever lane polls first spends the grace; the other is free
-    except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
+    That is why it sits outside the sync switch and throttles itself (remote_assistant.push_alerts).
+    The WhatsApp launch grace is the poll's own now (messengers.poll_whatsapp -> wabridge.ready)."""
+    _walk_settled()                 # an alert put down in the old chat may speak once more - after the new chat exists
     while True:
         try:
             from . import remote_assistant
@@ -7019,7 +7057,7 @@ def catch_up_on_startup():
     try: days = int(store.get_setting('startup_sync_days') or 0)
     except ValueError: days = 0
     if days <= 0:
-        t = threading.Thread(target=lambda: (_heal_ended(), report_pass(startup=True)), daemon=True)
+        t = threading.Thread(target=lambda: (_walk_settled(), _heal_ended(), report_pass(startup=True)), daemon=True)
         t.start()
         return t
     hours = _catchup_hours(days)
@@ -7028,11 +7066,11 @@ def catch_up_on_startup():
     # the greeting waits for the mail: said mid catch-up it was "nothing new came in" on a Monday, spent and never corrected (B4)
     welcome.catch_up_began()
     def _catch_up():
+        # Behind the new walk, on purpose - and no longer behind the WhatsApp grace, which kept the mail behind the reset
+        # only by accident: it waited 8 s before the first mail on every launch, WhatsApp on or off (P11). Only the
+        # WhatsApp poll waits now, and only for a bridge this launch started (messengers.poll_whatsapp -> wabridge.ready).
+        _walk_settled()
         _heal_ended()
-        # the bridge's launch grace, spent here instead of in front of the owner's first request
-        from . import wabridge
-        try: wabridge.ready(8)
-        except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
         # EVERYTHING IN FIRST. A report is not the mail, and running the due ones inside this
         # pass charged their minutes to the catch-up: 27 hours of mail was 91 s of a 264 s
         # startup and six reports were the other 165 s, all of it behind one 'catching up on

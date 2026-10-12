@@ -119,7 +119,8 @@ def wait_listening(secs: float) -> bool:
     return False
 
 
-_GRACE_SPENT = False
+_GRACE_OWED = False             # start_configured sets it: only a bridge THIS launch started or adopted is owed a grace
+_GRACE_LOCK = threading.Lock()
 
 
 def ready(secs: float = 8) -> bool:
@@ -130,13 +131,20 @@ def ready(secs: float = 8) -> bool:
     connection until it yields: both launches on 2026-09-09 burned the full 8 seconds there, so
     the window was up in front of the owner saying "can't connect" for 18s. wait_listening has no
     side effect - it only delays whoever calls it - so the grace cannot move to a thread and
-    still mean anything. It belongs to whichever POLL asks first, which is who it was always for:
-    the point was that the first poll must not file a false "bridge not running".
+    still mean anything. It belongs to the WhatsApp poll (messengers.poll_whatsapp calls it), which
+    is who it was always for: the first poll must not file a false "bridge not running".
+
+    Owed only when start_configured launched or adopted a bridge. It used to be owed always, and the
+    catch-up spent it ahead of ALL mail: with WhatsApp off - the default - every launch read nothing
+    for 8 seconds, waiting on a bridge nobody had started. And a second poller is held behind the
+    first one's wait: the old flag was set before the wait, so the chat clock sailed past while the
+    catch-up waited and polled the bridge still coming up - the very false error the grace was for.
     """
-    global _GRACE_SPENT
-    if _GRACE_SPENT: return True
-    _GRACE_SPENT = True          # a LAUNCH grace, spent whether or not it answered in time
-    return wait_listening(secs)
+    global _GRACE_OWED
+    with _GRACE_LOCK:
+        if not _GRACE_OWED: return True
+        _GRACE_OWED = False      # a LAUNCH grace, spent whether or not it answered in time
+        return wait_listening(secs)
 
 
 def filter_policy(store, connector_id: int) -> dict:
@@ -180,6 +188,8 @@ def start_configured(store) -> dict:
         out = state()
     else:
         out = start(filter_policy=filter_policy(store, c['ConnectorId']))
+    global _GRACE_OWED
+    _GRACE_OWED = True           # this launch's bridge: the first poll gives it a moment (ready)
     logger.info(f'wa bridge startup: connector {c["ConnectorId"]}, {out.get("phase")}')
     return {**out, 'started': True, 'connectorId': c['ConnectorId']}
 

@@ -10,7 +10,7 @@ test("a goal's gutter says its date, short", () => {
   assert.equal(dueWord(null), "");
 });
 
-test("a goal is in Goals only while it has unread news", () => {
-  assert.equal(levelOf({ kind: "goal_slipped", order_band: 2, news: true, unread: true }), "goals");
-  assert.equal(levelOf({ kind: "goal", order_band: 2, news: false, unread: true }), "later");
+test("a goal is in Goals only while it has news you have not walked past", () => {
+  assert.equal(levelOf({ kind: "goal_slipped", order_band: 2, news: true, surfaced: false }), "goals");
+  assert.equal(levelOf({ kind: "goal", order_band: 2, news: true, surfaced: true }), "later");
 });

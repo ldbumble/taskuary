@@ -101,3 +101,27 @@ class DemoTests(unittest.TestCase):
         self.assertEqual(len(goals), 1)
         steps = s.goal_steps(goals[0]['TaskId'])
         self.assertGreaterEqual(len(steps), 4); self.assertTrue(any(x['child'] for x in steps))
+
+
+class FixPassTests(unittest.TestCase):
+    """The whole-branch review's findings (2026-10-12): a running child escaped the fold; a goal came back on the quiet
+    hours instead of on news."""
+    def test_a_child_an_agent_is_running_folds_into_the_goal(self):
+        s, settle = settled(); g = goal(s)
+        c = s.create_task({'Title': 'Map the schema', 'Kind': 'coding', 'Status': 'in_progress', 'ParentId': g}, 'owner')
+        s.link_step(g, checklist_id('Map the schema'), c, 'owner'); s.start_run(c, 'coder', 'map it', 'owner'); settle()
+        items = rail(s, include_read=True)
+        self.assertNotIn(c, [i.get('tid') for i in items])
+        self.assertIn('coder on step 2', card(s, g)['why'])
+
+    def test_a_read_goal_comes_back_on_a_childs_close_and_not_on_the_quiet_hours(self):
+        s, settle = settled(); g = goal(s)
+        c = s.create_task({'Title': 'Map the schema', 'Kind': 'general', 'ParentId': g}, 'owner'); s.link_step(g, checklist_id('Map the schema'), c, 'owner')
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()      # reads register once active
+        k = card(s, g); funnel.settle(s, k['key'], 'surfaced', read=True, shown={k['key']: k.get('view_revision')}); settle()
+        k = card(s, g); self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'later')
+        later = datetime.now() + timedelta(hours=4)                         # past the quiet hours, with no news
+        k = next(i for i in rail(s, include_read=True, now=later) if i.get('tid') == g)
+        self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'later')
+        s.update_task(c, {'Status': 'done'}, 'agent:coder'); settle()      # news: a step closed since you read it
+        k = card(s, g); self.assertFalse(k.get('surfaced')); self.assertTrue(k['actionable']); self.assertEqual(funnel.level_of(k), 'goals')

@@ -922,8 +922,9 @@ def level_of(item: dict) -> str:
         if item.get('kind') == 'meeting' and (item.get('calendar_ready') is False or (item.get('mins') or 0) > 15): band = 2
         elif item.get('kind') == 'agentdone': band = 2
         else: band = _BAND_FALLBACK.get(item.get('lane'), 2)
-    # A GOAL is one row and never gone: Goals while it has news you have not read, For later otherwise (spec 2026-10-12)
-    if str(item.get('kind') or '').startswith('goal'): return 'goals' if item.get('news') and item.get('unread') else 'later'
+    # A GOAL is one row and never gone: Goals while it has news you have not walked past, For later once you have (spec
+    # 2026-10-12). `surfaced` is the Passed mark: a read open task stays unread on purpose, so unread cannot be the signal.
+    if str(item.get('kind') or '').startswith('goal'): return 'goals' if item.get('news') and not item.get('surfaced') else 'later'
     # FOR LATER IS WHAT YOU PUT THERE - Next or Remind me - never a card merely shown: clicking another row on the rail moved the
     # task on the table under For later for three hours (the owner, 2026-10-08: "it moved 1003 automatically to later?")
     if band == 2 and (item.get('put_down') or item.get('deferred')): return 'later'

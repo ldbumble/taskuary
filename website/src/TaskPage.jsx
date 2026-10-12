@@ -184,10 +184,19 @@ const askedAgo = (t) => {
 // a box with a task shows its ref and state and opens it. The parent's box ticks itself when the child closes (store).
 function GoalSteps({ task, onOpenTask, onChanged }) {
   const [steps, setSteps] = useState([]);
+  const [draft, setDraft] = useState("");
   const load = useCallback(() => api.get(`/api/tasks/${task.TaskId}/steps`).then((r) => setSteps(r.data.steps || [])).catch(() => setSteps([])), [task.TaskId]);
   useEffect(() => { load(); }, [load, task.UpdatedAt]);
   const start = async (s) => { const { data } = await api.post(`/api/tasks/${task.TaskId}/steps/${s.id}/start`); load(); onChanged?.(); onOpenTask?.(data.taskId); };
   const moveDate = async (e) => { await api.patch(`/api/tasks/${task.TaskId}`, { DueAt: e.target.value || null }); onChanged?.(); };
+  // "Track it, I have the plan" needs doors of its own (the review, 2026-10-12): a step done by hand is ticked here, and a
+  // step is added here - the same checklist endpoints the task card uses; a step with a child ticks itself when it closes
+  const tick = async (s) => { await api.patch(`/api/tasks/${task.TaskId}/checklist/${s.id}`, { done: !s.done }); load(); onChanged?.(); };
+  const add = async () => {
+    const text = draft.trim(); if (!text) return;
+    await api.put(`/api/tasks/${task.TaskId}/checklist`, { items: [...steps.map((s) => s.text), text] });
+    setDraft(""); load(); onChanged?.();
+  };
   const done = steps.filter((s) => s.done).length;
   return (
     <Box sx={{ mt: 0.85, maxWidth: 900 }}>
@@ -202,6 +211,8 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
       {steps.map((s, k) => (
         <Box key={s.id} sx={{ display: "flex", alignItems: "center", gap: 0.8, py: 0.35, borderBottom: `1px solid ${BORDER}` }}>
           <Typography variant="caption" sx={{ color: FAINT, width: 16, fontVariantNumeric: "tabular-nums" }}>{k + 1}</Typography>
+          <Checkbox size="small" checked={!!s.done} onChange={() => tick(s)} disabled={!!s.ref} inputProps={{ "aria-label": `Step ${k + 1} done` }}
+            sx={{ p: 0.25, color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
           <Typography variant="body2" sx={{ flex: 1, color: s.done ? FAINT : INK, textDecoration: s.done ? "line-through" : "none" }}>{s.text}</Typography>
           {s.who && <Typography variant="caption" sx={{ color: FAINT }}>{s.who}</Typography>}
           {s.ref
@@ -209,6 +220,12 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
             : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}>Start</Button>}
         </Box>
       ))}
+      <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", mt: 0.6 }}>
+        <TextField size="small" fullWidth placeholder="Add a step" value={draft} onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} inputProps={{ "aria-label": "Add a step" }}
+          sx={{ "& .MuiInputBase-root": { fontSize: 12 } }} />
+        <Button size="small" variant="outlined" onClick={add} disabled={!draft.trim()} sx={{ fontSize: 11, textTransform: "none" }}>Add</Button>
+      </Box>
     </Box>
   );
 }

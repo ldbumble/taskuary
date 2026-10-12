@@ -641,21 +641,17 @@ def _read_hand_task(tid: int, text: str, goal: bool = False):
 
 
 def plan_goal(tid: int, text: str):
-    """The model writes the goal's steps (spec 2026-10-12); a step already started keeps its child whatever the new words
-    are - matched by its words first (set_task_checklist keeps it), else by the slot it stood in."""
+    """The model writes the goal's steps (spec 2026-10-12); a step already started is never reworded away: it stays, in
+    its place, with its child (set_task_checklist keeps a box by its words), and the model's new words come around it
+    (the review, 2026-10-12: a slot fallback pinned the child to whatever the model put in that slot)."""
     try:
         from . import concierge, triage
         ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True), goal=True)
         texts = [x for x in ask.get('checklist') or [] if x]
         if not texts: return
-        old = store.task_checklist(tid)
-        started = [(k, i) for k, i in enumerate(old) if i.get('tid')]
+        for k, i in enumerate(store.task_checklist(tid)):
+            if i.get('tid') and i['text'] not in texts: texts.insert(min(k, len(texts)), i['text'])
         store.set_task_checklist(tid, texts, 'triage')
-        new = store.task_checklist(tid)
-        for k, i in started:
-            if any(n.get('tid') == i['tid'] for n in new): continue
-            slot = new[k] if k < len(new) else None
-            if slot and not slot.get('tid'): store.link_step(tid, slot['id'], i['tid'], 'triage')
     except Exception as e: logger.info(f'could not plan {task_ref(tid)}: {e}')
 
 

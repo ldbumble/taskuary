@@ -190,8 +190,13 @@ def goal_facts(store, task, tid, now) -> dict:
     slipped = bool((due and due < today and done < n) or late_kid)
     started = bool(done or any(x['child'].get('Status') != 'open' or x['child'].get('Assignee') for x in kids))
     kind = 'goal_slipped' if slipped else 'goal_fresh' if not started else 'goal'
-    recent = (now - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
-    news = slipped or any(str(x['child'].get('ClosedAt') or '') >= recent for x in kids)
+    # WHEN the news happened, so a read goal comes back only for news newer than the read (card_for): the latest step
+    # closed, the day the goal slipped, the day a late step slipped
+    stamps = [str(x['child'].get('ClosedAt') or '')[:19].replace('T', ' ') for x in kids if x['child'].get('ClosedAt')]
+    if due and due < today and done < n: stamps.append(f'{due} 00:00:00')
+    stamps += [f"{str(x['child'].get('DueAt'))[:10]} 00:00:00" for x in kids
+               if x['child'].get('Status') == 'waiting' and str(x['child'].get('DueAt') or '')[:10] and str(x['child'].get('DueAt'))[:10] < today]
+    news_at = max(stamps) if stamps else None
     bits = [f'{done} of {n}' if n else 'no steps yet']
     for k, x in enumerate(steps, 1):
         c = x['child']
@@ -201,8 +206,8 @@ def goal_facts(store, task, tid, now) -> dict:
         elif who.startswith('person:'): bits.append(f"{who.split(':', 1)[1].split('@')[0]} owes step {k}")
         elif c.get('Status') == 'open': bits.append(f'step {k} is on you')
     if slipped and due and due < today: bits.append(f"slipped {(now - datetime.strptime(due, '%Y-%m-%d')).days}d")
-    return {'kind': kind, 'news': bool(news), 'due': due, 'steps': n, 'steps_done': done, 'why': ' · '.join(bits),
-            'back_at': f'{due} 08:00:00' if due else None, 'folded': False}
+    return {'kind': kind, 'news': bool(news_at), 'news_at': news_at, 'due': due, 'steps': n, 'steps_done': done,
+            'why': ' · '.join(bits), 'back_at': f'{due} 08:00:00' if due else None, 'folded': False}
 
 
 def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES, walk_at=None):
@@ -322,7 +327,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # date sits where the age goes, and it is never gone while open. Its children fold into it unless they are your move.
     from .store import is_goal
     if is_goal(task) and active and not review and not worker: card.update(**goal_facts(store, task, tid, now))
-    elif task.get('ParentId') and active: card.update(goal=funnel.task_ref(task['ParentId']), folded=card['lane'] in FOLD_LANES)
+    elif task.get('ParentId') and active: card.update(goal=funnel.task_ref(task['ParentId']), folded=False)   # folded below, once the lane is final
     if queued and card['lane'] in ('asked', 'yours'):
         card.update(lane='queued', why=f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'the regular agent'}, not started yet")
     # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a
@@ -367,10 +372,18 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # made a task handed to an agent the one row Done could not shift - the same question answered two
     # ways in one column (the owner, 2026-09-15: "why is that one showing up but not 575"). It clears
     # like the rest now, and the quiet hours (task_return_minutes) bring it back. A Remind me date outranks it.
+    # ...a goal's CHILD is folded here, once its lane is final: the worker relabel above is where `working` comes from, so
+    # a fold decided earlier let a running child escape as a row beside its goal (the review, 2026-10-12)
+    if task.get('ParentId') and active: card['folded'] = card['lane'] in FOLD_LANES
     read_at = processing_all._stamp(read.get('read_at'))
     back = bool(tid and active and not read.get('deferred') and read_at
                 and read_at <= now - timedelta(minutes=quiet))
     if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
+    # A GOAL COMES BACK ON NEWS, never on the quiet hours (the review, 2026-10-12): a step closed or a day slipped since you
+    # last read it is what puts it in Goals; a quiet goal stays in For later however long it has been quiet
+    if str(card.get('kind') or '').startswith('goal'):
+        back = bool(card.get('news_at') and (not read_at or read_at <= processing_all._stamp(card['news_at'])))   # same second counts
+        card.pop('why_open', None)
     # ...and a yes still owed, or an agent waiting on you, read before this walk began is back in Your task: shown in the
     # old chat is not answered (funnel.reset_walk). Clearing the shown mark alone left it read and unmarked - off the rail
     # for the quiet hours while the task list still showed it (2026-09-29).

@@ -42,8 +42,20 @@ class StepsTests(unittest.TestCase):
         with mock.patch.object(triage, 'extract_ask', return_value=ask):
             server.plan_goal(g, 'anything')
         steps = server.store.goal_steps(g)
-        self.assertEqual([x['text'] for x in steps], ['Inventory the fields', 'Map them onto the ledger schema', 'Schema sign-off'])
-        self.assertEqual(steps[1]['tid'], child)                      # the rephrased box kept its child
+        # a started step is never reworded away: it stays, in its place, and the model's new words come after it
+        self.assertEqual([x['text'] for x in steps], ['Inventory the fields', 'Map the schema', 'Map them onto the ledger schema', 'Schema sign-off'])
+        self.assertEqual([x['tid'] for x in steps], [None, child, None, None])
+
+    def test_a_replan_that_inserts_a_step_does_not_move_the_started_one(self):
+        g = goal()
+        server.store.set_task_checklist(g, ['Inventory the fields', 'Map the schema'], 'owner')
+        child = c.post(f'/api/tasks/{g}/steps/{checklist_id("Map the schema")}/start').json()['taskId']
+        ask = {'summary': 'x', 'checklist': ['Inventory the fields', 'Agree the field list with Gail', 'Map them onto the ledger schema'], 'outputs': []}
+        with mock.patch.object(triage, 'extract_ask', return_value=ask):
+            server.plan_goal(g, 'anything')
+        steps = server.store.goal_steps(g)
+        self.assertEqual([(x['text'], x['tid']) for x in steps if x['tid']], [('Map the schema', child)])
+        self.assertEqual(len(steps), 4)
 
     def test_read_ask_on_a_goal_plans_its_steps(self):
         g = goal()

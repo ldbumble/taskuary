@@ -419,7 +419,7 @@ export const asPressed = (items, { leaving = null, continuing = null } = {}) => 
 export const levelOf = (item) => {
   const band = attentionBand(item);
   // A GOAL is one row and never gone: Goals while it has news you have not read, For later otherwise (spec 2026-10-12)
-  if (String(item?.kind || "").startsWith("goal")) return item?.news && item?.unread ? "goals" : "later";
+  if (String(item?.kind || "").startsWith("goal")) return item?.news && !item?.surfaced ? "goals" : "later";
   // For later is what you PUT there - Next or Remind me - never a card merely shown and clicked away from (funnel.level_of)
   if (band === 2 && (item?.put_down || item?.deferred)) return "later";
   if (band === 4 && item?.kind === "idea") return "ideas";

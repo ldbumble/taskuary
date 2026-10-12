@@ -109,7 +109,7 @@
       "lane": "yours",
       "order_band": 2,
       "news": true,
-      "unread": true
+      "surfaced": false
     },
     "goals"
   ],
@@ -119,7 +119,7 @@
       "lane": "yours",
       "order_band": 2,
       "news": true,
-      "unread": true
+      "surfaced": false
     },
     "goals"
   ],
@@ -129,7 +129,7 @@
       "lane": "yours",
       "order_band": 2,
       "news": true,
-      "unread": false
+      "surfaced": true
     },
     "later"
   ],
@@ -139,7 +139,7 @@
       "lane": "yours",
       "order_band": 2,
       "news": false,
-      "unread": true
+      "surfaced": false
     },
     "later"
   ],
@@ -147,8 +147,7 @@
     {
       "kind": "goal_fresh",
       "lane": "yours",
-      "order_band": 2,
-      "unread": true
+      "order_band": 2
     },
     "later"
   ]

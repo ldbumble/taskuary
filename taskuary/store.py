@@ -2129,12 +2129,19 @@ class SQLiteStore:
         if t and t.get('Status') not in ('done', 'dropped'): self.update_task(t['TaskId'], {'Status': 'done'}, 'promise')
     def promise_task(self, mid): return self._one('SELECT * FROM task WHERE SourceRef=?', (f'promise:{mid}',))
     def task_for_promise(self, mid: int, what: str, due) -> int:
-        """The owner's own promise as a task on them (spec 2026-10-12): made once per sent message, dated when it was."""
+        """The owner's own promise as a task on them (spec 2026-10-12): made once per sent message, dated when it was,
+        saying whom it was made to and carrying the thread it was made in (the review, 2026-10-12: a title alone)."""
         t = self.promise_task(mid)
         if t: return t['TaskId']
         what = ' '.join(str(what or '').split())[:120] or 'what you promised'
-        return self.create_task({'Title': what[:1].upper() + what[1:], 'Kind': 'task', 'Status': 'open', 'Assignee': 'owner',
-                                 'Source': 'promise', 'SourceRef': f'promise:{mid}', 'DueAt': due or None}, 'promise')
+        m = self.get_message(mid) or {}
+        other = self.last_inbound_in(m['ConversationId']) if m.get('ConversationId') else None
+        who = (other or {}).get('FromName') or (other or {}).get('FromEmail') or 'them'
+        summary = f"You told {who} on {str(m.get('SentAt') or '')[:10]} re \"{m.get('Subject') or ''}\" you would {what}."
+        tid = self.create_task({'Title': what[:1].upper() + what[1:], 'Summary': summary, 'Kind': 'task', 'Status': 'open', 'Assignee': 'owner',
+                                'Source': m.get('Channel') or 'email', 'SourceRef': f'promise:{mid}', 'DueAt': due or None}, 'promise')
+        self._exec('UPDATE message SET TaskId=? WHERE MessageId=? AND TaskId IS NULL', (tid, mid))
+        return tid
     def open_promises(self, since, before='9999', conversation_id=None):
         """Promises the model read in the owner's sent words that nothing later of theirs delivered, newest first, with
         the message they were made in. The other side replying does not close one - "Great, thanks!" is not the budget."""

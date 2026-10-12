@@ -61,6 +61,35 @@ table: a receipt, not a transcript. Each entry says the event, what it decided (
 line) or what it dropped and why (nothing to say, a verb the item did not carry, the hour's cap,
 no brain), and the evidence it cited by id - what it cited, not everything it read. "Why?" in the chat is answered from the same line.
 
+## What was not followed up
+
+A thread you wrote on that nobody answered, or a step somebody owes past its day, is **slipped**
+once it has been quiet past that person's usual day: half again their median answer, once the
+ledger has seen them answer three times, and the default from Settings → Advisor until then.
+Someone whose auto-reply says they are away never slips. A slipped row sits inside **On you**, the
+pipe count says "3 slipped", and when Next brings it up the card offers four answers, each an
+outcome the ledger keeps:
+
+- **Chase them** drafts a short nudge on the thread, in your voice, for your yes - copying whoever
+  the ledger has seen get them to answer, when it has. When it goes out, the reply is marked a chase,
+  and how long the answer took is counted against them.
+- **Let it go** puts it down: the step is dropped, or the follow-up closed. Three Let-it-gos on one
+  person and the Advisor stops raising that person; nothing else changes.
+- **They answered elsewhere** closes the step as done (its box ticks) and keeps where, in your words.
+- **Remind me** is the same Remind me as everywhere else.
+
+A reply arriving ends it on its own: the follow-up closes and the step leaves the lane. The morning
+brief carries the same facts, one line each, with the person's day named.
+
+## A page per person
+
+Facts about other people go to a page per person, derived from the ledger at reflection and kept
+under **Settings → Docs → People** by address: how fast they answer, whether a chase is needed, who
+on copy moves them, what they deliver late - each line with the evidence ids it rests on, and the
+counted numbers underneath. The lines are the model's reading; the numbers are the ledger's. Your
+own lines above the block are yours and survive every recompile. The page is read wherever the hub's
+dossier is read: the reply drafter, triage's context, meeting prep, and the Advisor's bigger read.
+
 ## The outcome ledger
 
 Every store Taskuary keeps is written from one signal: your click or your sentence, at the moment
@@ -106,6 +135,5 @@ so it needs nothing new.
 Built: goals as tasks (a task whose boxes are tasks, a person as an assignee, a promise as a task
 on you with its day, one row per goal on the rail); the outcome ledger with its daily sweep and
 reflection reading it; the Advisor on the event, with the prompt-box pill and the notes in the
-clock menu. Next, in order: per-person pages and a per-person chase ladder, with the slipped
-thread's four answers (chase, let it go, they answered elsewhere, later); and triage naming which
-goal step a mail serves.
+clock menu; a page per person and a per-person day, with the slipped lane and its four answers.
+Next: triage naming which goal step a mail serves, and work facts proposed into playbooks.

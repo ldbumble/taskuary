@@ -140,3 +140,12 @@ def test_the_advisor_counts_chases_from_the_ledger(s):
         outcomes.settle(s, i, 'x', 'settled')
     from taskuary import advisor
     assert advisor.habit(s, 'chase', {}) == (2, 3)
+
+
+def test_the_followup_line_names_the_persons_day(s):
+    t = s.create_task({'Title': 'Budget'}, 'owner')
+    s.add_message({'ConversationId': 'c7', 'Channel': 'email', 'Subject': 'Budget', 'FromEmail': RAY, 'FromName': 'Ray Colton', 'SentAt': ago(days=8), 'BodyText': 'q', 'Status': 'filed', 'TaskId': t})
+    mid = s.add_message({'ConversationId': 'c7', 'Channel': 'email', 'Subject': 'Re: Budget', 'FromEmail': 'alex@northwind.example', 'SentAt': ago(days=7), 'BodyText': 'Can you send it?', 'Status': 'context', 'TaskId': t})
+    s.put_sent_verdict(mid, 'c7', True, False, None, None, 'test')
+    c = next(x for x in assistant.followups(s, 24, ('followup',)) if x['kind'] == 'followup')
+    assert 'late for them after 5 days' in c['facts']

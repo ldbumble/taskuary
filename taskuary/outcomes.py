@@ -104,3 +104,23 @@ def sweep_if_due(store, now: datetime = None):
     n = resolve(store, now)
     store.set_setting(SWEPT_KEY, today, 'outcomes')
     return n
+
+
+def _sentence(store, r: dict) -> str:
+    """The row as one factual sentence with the owner's words verbatim - what happened, never what it means."""
+    f = json.loads(r.get('FactsJson') or '{}'); kind = r['Kind']
+    ref = f"TQ-{int(r['TargetId']):04d}" if r['TargetKind'] == 'task' and r['TargetId'] else r['TargetKind']
+    who = str(r.get('Actor') or '').split(':', 1)[-1]
+    nxt = f'; you then said "{r["NextMove"]}"' if kind == 'agent.stopped' and r.get('NextMove') and r['Verdict'] == 'continued' else ''
+    head = {'reply.sent': f"you sent a reply on {ref} (approved as drafted)" if f.get('verb') == 'approve' else f"you sent a reply on {ref} (edited first)",
+            'task.closed': f"{ref} was closed by {who} ({f.get('how', '')})", 'agent.stopped': f"{who} stopped on {ref}" + (' (PR open)' if f.get('pr') else ''),
+            'agent.continued': f'you continued {ref} with "{r.get("NextMove")}"' if r.get('NextMove') else f'you continued {ref} with no words',
+            'pr.merged': f"PR #{f.get('pr')} on {ref} was merged", 'promise.made': f"you promised on {ref}" + (f" by {f.get('due')}" if f.get('due') else ''),
+            'sender.ignored': f"you ignored {f.get('from')}"}.get(kind, kind)
+    return f"{head}{nxt}; outcome: {r.get('Outcome') or ''} [{r.get('Verdict') or ''}]"
+
+
+def evidence(store, since: str, limit: int = 40) -> list:
+    """One line per resolved row, newest first, `out{id}: ...` - what reflection reads (learn.gather) and cites."""
+    rows = store._rows('SELECT * FROM outcome WHERE ResolvedAt IS NOT NULL AND At>=? ORDER BY Id DESC LIMIT ?', (since, limit))
+    return [f"out{r['Id']}: {_sentence(store, r)}" for r in rows]

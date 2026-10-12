@@ -128,3 +128,21 @@ class DoorsTests(unittest.TestCase):
         s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
         outcomes.record(s, 'agent.continued', 'task', t, next_move=None, facts={'door': 'continue-session'})
         self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['NextMove'], '')
+
+
+class EvidenceTests(unittest.TestCase):
+    def test_resolved_rows_become_evidence_lines_with_their_ids(self):
+        s = MemoryStore(); t = s.create_task({'Title': 'Export job'}, 'owner')
+        i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', facts={'pr': True}, at=ago(hours=30))
+        outcomes.record(s, 'agent.continued', 'task', t, next_move='merge it', at=ago(hours=29)); outcomes.resolve(s)
+        lines = outcomes.evidence(s, ago(days=30))
+        self.assertTrue(lines[0].startswith(f'out{i}: ') or lines[1].startswith(f'out{i}: '))
+        self.assertTrue(any('"merge it"' in l and 'coder stopped' in l for l in lines))
+
+    def test_reflection_gathers_the_ledger_and_the_graph_resolves_out_ids(self):
+        from taskuary import learn, learnedgraph
+        s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'done'}, 'owner')
+        i = outcomes.record(s, 'task.closed', 'task', t, at=ago(days=8)); outcomes.resolve(s)
+        self.assertIn('WHAT CAME OF ACTIONS', learn.gather(s, ago(days=30)))
+        self.assertIn(f'out{i}', learn.gather(s, ago(days=30)))
+        self.assertEqual(learnedgraph._EV.match(f'out{i}').group(1), 'out')

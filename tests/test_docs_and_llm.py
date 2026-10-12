@@ -383,6 +383,50 @@ class LearnTests(unittest.TestCase):
         self.assertFalse(learn.reflect(s, llm=lambda sys_, usr, **kw: fat))
         self.assertIn('Short replies, no filler', s.get_doc('learned'))
 
+    def test_reflect_sends_every_marker_of_a_doc_past_six_thousand(self):
+        """The prompt used to be `doc[:6000]`: a doc past that lost its later markers on the way out,
+        so no answer could carry them back and every reflection was refused."""
+        s = MemoryStore()
+        doc = s.get_doc('learned')
+        pad = '\n'.join(f'- Erin Blake likes item {i} handled early. [s:2 | ev: rv{i} | seen: 2026-08-{i % 28 + 1:02d}]'
+                        for i in range(60))
+        doc = learn._put_block(doc, learn.HYP_START, learn.HYP_END, pad)
+        s.save_doc('learned', doc, 'owner')
+        self.assertGreater(len(doc), 6000)
+        seen = {}
+        def fake(sys_, usr, **kw): seen['usr'], seen['kw'] = usr, kw; return doc
+        self.assertTrue(learn.reflect(s, llm=fake))
+        sent = seen['usr'].split('CURRENT LEARNED.md:\n', 1)[1].split('\n\nSOUL.md', 1)[0]
+        for m in (learn.HYP_START, learn.HYP_END, learn.PROP_START, learn.PROP_END): self.assertIn(m, sent)
+        self.assertIn('item 59 handled early', sent)                   # whole doc, under the cap
+        self.assertGreater(seen['kw']['max_tokens'], 1800)             # room to write it all back
+        self.assertEqual(s.get_settings().get('learn_pending'), '0')
+        # past the cap, the gated blocks lend their stalest lines - no cut - and get them back after
+        big = learn._put_block(doc, learn.HYP_START, learn.HYP_END, pad + '\n' + pad.replace('handled early', 'x' * 120))
+        out, held = learn._fit(big)
+        self.assertLessEqual(len(out), learn.REFLECT_FIT)
+        for m in (learn.HYP_START, learn.HYP_END, learn.PROP_START, learn.PROP_END): self.assertEqual(out.count(m), 1)
+        self.assertEqual(len(learn._restore(out, held)), len(big))
+
+    def test_a_refused_reflection_waits_for_tomorrow(self):
+        s = MemoryStore()
+        calls = []
+        def bad(sys_, usr, **kw): calls.append(sys_ is learn.REFLECT_SYSTEM); return '# LEARNED.md\nno markers here' if calls[-1] else ''
+        s.set_setting('learn_pending', str(learn.REFLECT_AT + 2), 't')
+        with mock.patch('taskuary.llm.build_llm', return_value=bad):
+            with mock.patch.object(learn.logger, 'warning') as warn:
+                self.assertFalse(learn.reflect_if_due(s))
+            self.assertTrue(warn.called)                                # a failure says so, not silently
+            self.assertEqual(s.get_settings().get('learn_reflect_failed'), learn._today())
+            self.assertFalse(learn.reflect_if_due(s))                   # the next launch today: no call
+            learn.learn_from(s, 'rv9: owner edited a draft', llm=bad)   # nor the next correction
+        self.assertEqual(calls.count(True), 1)
+        s.set_setting('learn_reflect_failed', '2020-01-01', 't')        # tomorrow: it tries again
+        good = s.get_doc('learned')
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
+            self.assertTrue(learn.reflect_if_due(s))
+        self.assertEqual(s.get_settings().get('learn_reflect_failed'), '')
+
     def test_reflect_if_due_debounce(self):
         s = MemoryStore()
         self.assertFalse(learn.reflect_if_due(s))                # nothing pending: silence

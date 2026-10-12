@@ -215,7 +215,7 @@ def learn_from(store, event: str, llm=None):
             new_doc = settle(store, doc, _put_block(doc, HYP_START, HYP_END, out))
             store.save_doc(DOC, new_doc, 'learn')
             from . import learnedgraph; learnedgraph.record(store, doc, new_doc, 'learn')
-        if n >= REFLECT_AT: reflect(store, llm)
+        if n >= REFLECT_AT and not _failed_today(store): reflect(store, llm)
     except Exception as e:
         logger.warning(f'learning skipped: {e}')
 
@@ -248,6 +248,43 @@ def gather(store, since: str) -> str:
     return '\n'.join(out)
 
 
+REFLECT_FIT = 10_000     # the doc a reflection sends; under the 12k answer cap so the rewrite has room to grow
+_SEEN = re.compile(r'\| seen: ([^|\]]*)')
+
+def _fit(doc: str, cap: int = REFLECT_FIT) -> tuple:
+    """(doc to send, {start marker: held lines}) - never a cut through the doc. The old `doc[:6000]`
+    sliced off three of the four markers once the doc passed 6k, so every answer failed the marker
+    check: a paid call that could not succeed, on every launch. Past the cap, the gated blocks lend
+    their least recently seen lines instead and the answer gets them back (_restore) unjudged - a
+    line the model never saw is no evidence it should go."""
+    held = {}
+    for a, b in ((HYP_START, HYP_END), (PROP_START, PROP_END)):
+        body = _block(doc, a, b)
+        if len(doc) <= cap or body is None: continue
+        ls = body.splitlines()
+        def seen(l): m = _SEEN.search(l); return (bool(m), m[1].strip() if m else '')
+        for l in sorted(ls, key=seen):
+            if len(doc) <= cap: break
+            ls.remove(l); held.setdefault(a, []).append(l)
+            doc = _put_block(doc, a, b, '\n'.join(ls))
+    return doc, held
+
+def _restore(doc: str, held: dict) -> str:
+    for a, ls in held.items():
+        b = {HYP_START: HYP_END, PROP_START: PROP_END}[a]
+        doc = _put_block(doc, a, b, '\n'.join([_block(doc, a, b) or ''] + ls))
+    return doc
+
+def _failed_today(store) -> bool: return (store.get_setting('learn_reflect_failed') or '') == _today()
+def _failed(store, why) -> bool:
+    """A refused rewrite is refused again until the doc or the evidence moves, so the automatic doors
+    (launch, the REFLECT_AT-th correction) hold off for the rest of the day instead of paying for it on
+    every one. The Reflect button still runs: the owner asked."""
+    store.set_setting('learn_reflect_failed', _today(), 'reflect')
+    logger.warning(f'LEARNED.md reflection failed ({why}) - kept the old doc; next automatic try tomorrow')
+    return False
+
+
 def reflect(store, llm=None) -> bool:
     """The consolidation: whole-doc rewrite against the event window. Modeled on digest.py's
     gather -> synthesize -> save_doc, but with NO no-AI fallback - a mechanical rewrite of a
@@ -258,20 +295,23 @@ def reflect(store, llm=None) -> bool:
     if not llm or not doc.strip(): return False
     since = (store.get_setting('learn_last_reflect')
              or (datetime.now() - timedelta(days=DAYS)).isoformat(sep=' ', timespec='seconds'))
+    sent, held = _fit(doc)
     try:
+        # the answer is the whole doc again, so its budget follows the doc (~3 chars a token, plus room)
         new = _unfence(llm(REFLECT_SYSTEM,
-                           f'(today: {_today()})\n\nCURRENT LEARNED.md:\n{doc[:6000]}\n\n'
+                           f'(today: {_today()})\n\nCURRENT LEARNED.md:\n{sent}\n\n'
                            f"SOUL.md (context only - it outranks, never contradict it):\n{(store.doc('soul') or '')[:2500]}\n\n"
-                           f'EVENTS SINCE {since}:\n{gather(store, since)[:5000]}', max_tokens=1800))
-    except Exception as e:
-        logger.warning(f'reflection failed: {e}'); return False
+                           f'EVENTS SINCE {since}:\n{gather(store, since)[:5000]}', max_tokens=max(1800, len(sent) // 3 + 800)))
+    except Exception as e: return _failed(store, e)
     # the 120-line budget in the prompt is a request; this is the law. A doc past the cap is a
     # model that ignored its instructions, and an ever-growing LEARNED.md would silently lose
     # its tail to the injection caps - the old doc is always the better answer than a bloated one.
     markers = (HYP_START, HYP_END, PROP_START, PROP_END)
     if not (new.startswith('#') and 200 < len(new) <= 12_000 and new.count('\n') <= 160
             and all(new.count(m) == 1 for m in markers)):
-        logger.warning('reflection produced an unusable doc - kept the old one'); return False
+        return _failed(store, f'unusable answer: {len(new)} chars, {new.count(chr(10))} lines, '
+                              f'{sum(new.count(m) == 1 for m in markers)}/4 markers')
+    new = _restore(new, held)
     from . import learnedgraph
     # this reflection is itself an opportunity: it read the window, so every line it did not
     # touch has just gone one tick quieter. Recorded BEFORE settle, which measures against it.
@@ -283,6 +323,7 @@ def reflect(store, llm=None) -> bool:
     learnedgraph.record(store, new, settled, 'decay')          # and what the clock did to the ones it left alone
     auto_adopt(store)                              # what the owner already said does not wait for a click
     store.set_setting('learn_pending', '0', 'reflect')
+    store.set_setting('learn_reflect_failed', '', 'reflect')
     store.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'), 'reflect')
     logger.info('LEARNED.md reflected')
     return True
@@ -341,6 +382,10 @@ def reflect_if_due(store) -> bool:
     if cfg.get('learn_enabled', '1') != '1': return False
     try: n = int(cfg.get('learn_pending') or 0)
     except ValueError: n = 0
-    if n <= 0: return False
+    # no model in it, so it never waits on one: a rule the owner already stated goes live even on a
+    # day the rewrite cannot run - it did not for ten days while every reflection was refused
+    try: auto_adopt(store)
+    except Exception as e: logger.warning(f'auto-adopt skipped: {e}')
+    if n <= 0 or _failed_today(store): return False
     if n < REFLECT_AT and (cfg.get('learn_last_reflect') or '').startswith(_today()): return False
     return reflect(store)

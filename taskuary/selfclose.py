@@ -210,8 +210,6 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
                           'the Done button on the task still works.')
         return {'closed': False, 'why': str(e)[:200]}
     store.audit('task', tid, 'self_close', agent or 'coder', 'agent', {'why': why[:300], 'drafting': out.get('drafting')})
-    from . import outcomes
-    outcomes.record(store, 'task.closed', 'task', tid, agent or 'coder', facts={'how': 'self_close'})   # the ledger: did it stay closed?
     logger.info(f'{task_ref(tid)} closed itself - {why[:120]}'
                 + (' (reply drafted)' if out.get('drafting') else ''))
     return {'closed': True, 'drafting': bool(out.get('drafting')), 'why': why, **out}

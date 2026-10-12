@@ -28,7 +28,7 @@ from loguru import logger
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
-from . import asks, operations, outcomes, workerstate as ws
+from . import asks, operations, workerstate as ws
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
@@ -2021,7 +2021,6 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
     from . import selfclose
     selfclose.unclaim(store, tid, actor)            # a finished task is nobody's to end any more
     store.audit('task', tid, 'close_from_assistant', actor)
-    outcomes.record(store, 'task.closed', 'task', tid, actor, facts={'how': 'close_from_assistant'})   # the ledger: did it stay closed?
     # ...and the row goes off Unread with it (the owner, 2026-09-07: "it should just go off the unread
     # timeline"). Closing is the decision, wherever it was made; only the CHAT's close used to post the
     # read receipt, so a close on the Tasks page left the mail behind it sitting in the pipe as an fyi.

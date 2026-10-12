@@ -2607,8 +2607,6 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
     pid = store.save_policy({'Name': f'Skip {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'skip',
                              'Reason': f'the owner said to ignore mail from {em}', 'Active': 1}, ACTOR)
     store.audit('policy', pid, 'create', ACTOR, detail={'from': em, 'message_id': mid, 'via': 'ignore-sender'})
-    from . import outcomes                           # the ledger: regret if their mail becomes work anyway
-    outcomes.record(store, 'sender.ignored', 'policy', pid, ACTOR, facts={'from': em, 'rule': 'skip'})
     saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
     hidden = policy_engine.apply_retroactively(store, saved or {})
     if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden})
@@ -2628,6 +2626,8 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
             quieted.append(t['TaskId'])
         except Exception as e: logger.debug(f"task {t['TaskId']} did not settle under the new rule: {e}")
     if quieted: store.audit('policy', pid, 'quiet_tasks', ACTOR, detail={'tasks': quieted})
+    from . import outcomes                           # the ledger: regret if their mail becomes work anyway (after the rule has done its work)
+    outcomes.record(store, 'sender.ignored', 'policy', pid, ACTOR, facts={'from': em, 'rule': 'skip'})
     return {'ok': True, 'how': 'rule', 'policyId': pid, 'affected': hidden, 'sender': em,
             'quieted': quieted}
 

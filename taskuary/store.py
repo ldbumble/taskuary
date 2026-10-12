@@ -1637,6 +1637,7 @@ class SQLiteStore:
     def update_task(self, task_id, fields, actor):
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
+        was = (self._one('SELECT Status FROM task WHERE TaskId=?', (task_id,)) or {}).get('Status') if 'Status' in fields else None
         # ClosedAt describes the CURRENT lifecycle, not merely that the task was closed once.
         # An explicit reopen used to change Status while retaining the old close timestamp, so
         # the API simultaneously said "waiting" and "closed" and different views chose a
@@ -1667,6 +1668,13 @@ class SQLiteStore:
             if any(not i.get('done') for i in items):
                 self._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps([{**i, 'done': True} for i in items]), task_id))
             self._tick_parent_step(task_id, actor)
+        # THE LEDGER'S ONE CLOSE DOOR (outcomes.py): every road that closes a live task - Done, a batch, the chat, a self-close, a
+        # pull request's end - passes here, so the "did it stay closed?" row is written once, from the same place. A write that
+        # leaves the task waiting (a self-close that drafted a reply) is not a close and gets no row; a delivered promise is
+        # already its own row (promise.made) and the actor says so.
+        if fields.get('Status') in ('done', 'dropped') and was not in (None, 'done', 'dropped') and actor != 'promise':
+            from . import outcomes
+            outcomes.record(self, 'task.closed', 'task', task_id, actor, facts={'from': was, 'to': fields['Status']})
         self._bump_snapshots()
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)
@@ -2133,9 +2141,11 @@ class SQLiteStore:
         t = self.promise_task(mid)
         if t and t.get('Status') not in ('done', 'dropped'): self.update_task(t['TaskId'], {'Status': 'done'}, 'promise')
         if t:                                           # delivered: the ledger row resolves now, not at the sweep
-            from . import outcomes
-            for r in outcomes.rows_for(self, 'task', t['TaskId']):
-                if r['Kind'] == 'promise.made' and not r['ResolvedAt']: outcomes._resolve_one(self, r, datetime.now())
+            try:
+                from . import outcomes
+                for r in outcomes.rows_for(self, 'task', t['TaskId']):
+                    if r['Kind'] == 'promise.made' and not r['ResolvedAt']: outcomes._resolve_one(self, r, datetime.now())
+            except Exception as e: logger.warning(f'promise {mid}: its outcome row was not resolved - {e}')
     def promise_task(self, mid): return self._one('SELECT * FROM task WHERE SourceRef=?', (f'promise:{mid}',))
     def task_for_promise(self, mid: int, what: str, due) -> int:
         """The owner's own promise as a task on them (spec 2026-10-12): made once per sent message, dated when it was,

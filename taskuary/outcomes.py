@@ -20,10 +20,31 @@ def _dt(s):
 
 
 def record(store, kind: str, target_kind: str, target_id, actor: str = 'owner', facts: dict = None, next_move: str = None, at: str = None) -> int:
+    """One row for an action just taken. A storage failure is logged and returns 0: the ledger rides along on a send, a close,
+    a hook - none of which may fail for it. An unknown kind is a programming error and raises."""
     if kind not in KINDS: raise ValueError(f'not an outcome kind: {kind}')
-    return store._exec('INSERT INTO outcome (Kind,TargetKind,TargetId,Actor,At,FactsJson,NextMove,NextAt) VALUES (?,?,?,?,?,?,?,?)',
-                       (kind, target_kind, int(target_id or 0), actor, at or _now(), json.dumps(facts or {}),
-                        '' if next_move is None else str(next_move)[:300], _now() if next_move is not None else None))
+    try:
+        return store._exec('INSERT INTO outcome (Kind,TargetKind,TargetId,Actor,At,FactsJson,NextMove,NextAt) VALUES (?,?,?,?,?,?,?,?)',
+                           (kind, target_kind, int(target_id or 0), actor, at or _now(), json.dumps(facts or {}),
+                            '' if next_move is None else str(next_move)[:300], _now() if next_move is not None else None))
+    except Exception as e:
+        logger.warning(f'outcome {kind} on {target_kind} {target_id} not recorded: {e}'); return 0
+
+
+def open_stop(store, tid) -> dict | None:
+    return store._one("SELECT * FROM outcome WHERE Kind='agent.stopped' AND TargetKind='task' AND TargetId=? AND ResolvedAt IS NULL ORDER BY Id DESC LIMIT 1", (int(tid),))
+def stopped(store, tid, actor: str, facts: dict = None) -> int:
+    """A stop is ONE row per stretch of waiting, not one per turn: the Stop hook fires at every response's end, and a session
+    the owner is typing into ends thirty of them. The row opens at the first stop and closes at the owner's next move."""
+    return 0 if open_stop(store, tid) else record(store, 'agent.stopped', 'task', tid, actor, facts=facts)
+def moved_on(store, tid, words: str, where: str = 'pane'):
+    """The owner's next move after a stop, in their words (a prompt typed into the pane): the open stop row closes now."""
+    r = open_stop(store, tid)
+    if not r: return
+    now, at = datetime.now(), _dt(r['At']) or datetime.now()
+    mins = max(0, int((now - at).total_seconds() // 60)); words = ' '.join(str(words or '').split())[:300]
+    store._exec('UPDATE outcome SET NextMove=?, NextAt=? WHERE Id=?', (words, now.strftime('%Y-%m-%d %H:%M:%S'), r['Id']))
+    settle(store, r['Id'], f'continued {mins} min later in the {where}' + ('' if words else ' with no words'), 'continued')
 
 
 def rows_for(store, target_kind: str, target_id) -> list:
@@ -37,9 +58,10 @@ def _material_inbound_after(store, cid: str, at: str) -> list:
     """Their words on the thread after `at`: not the owner's, not an auto-reply, not a calendar response."""
     from .autoreply import is_auto
     from .counsel import is_invite
+    from .ingest import is_ours                                 # the repo's one own-mail predicate: Status, Direction, FromName
     me = str(store.get_setting('owner_email', '') or '').lower()
-    rows = store._rows("SELECT * FROM message WHERE ConversationId=? AND SentAt>? AND Status!='context' ORDER BY SentAt", (cid, at))
-    return [r for r in rows if str(r.get('FromEmail') or '').lower() != me and not is_auto(r) and not is_invite(r)]
+    rows = store._rows('SELECT * FROM message WHERE ConversationId=? AND SentAt>? ORDER BY SentAt', (cid, at))
+    return [r for r in rows if not is_ours(r) and (not me or str(r.get('FromEmail') or '').lower() != me) and not is_auto(r) and not is_invite(r)]
 
 
 def _resolve_one(store, r: dict, now: datetime):
@@ -48,6 +70,7 @@ def _resolve_one(store, r: dict, now: datetime):
     age = (now - at).days
     t = store.get_task(r['TargetId']) if r['TargetKind'] == 'task' else None
     if kind == 'reply.sent':
+        if not facts.get('cid'): return settle(store, r['Id'], 'no thread to watch', 'unknown')   # new mail, no conversation: nothing to read
         if age < WINDOW[kind]: return
         later = _material_inbound_after(store, facts.get('cid') or '', r['At'])
         reopened = t and t.get('Status') not in ('done', 'dropped') and facts.get('closed')
@@ -63,8 +86,8 @@ def _resolve_one(store, r: dict, now: datetime):
         if nxt:
             verdict = 'continued' if nxt['Kind'] == 'agent.continued' else 'closed'
             mins = max(0, int(((_dt(nxt['At']) or now) - at).total_seconds() // 60))
-            store._exec('UPDATE outcome SET NextMove=?, NextAt=? WHERE Id=?', (nxt.get('NextMove') or verdict, nxt['At'], r['Id']))
-            return settle(store, r['Id'], f'{verdict} {mins} min later', verdict)
+            store._exec('UPDATE outcome SET NextMove=?, NextAt=? WHERE Id=?', (nxt.get('NextMove') or '', nxt['At'], r['Id']))   # their words or none, never ours
+            return settle(store, r['Id'], f'{verdict} {mins} min later' + (' with no words' if verdict == 'continued' and not nxt.get('NextMove') else ''), verdict)
         if age >= WINDOW[kind]: return settle(store, r['Id'], 'nothing for two days', 'left')
         return
     if kind == 'agent.continued': return settle(store, r['Id'], 'the owner continued it', 'continued')
@@ -111,7 +134,8 @@ def _sentence(store, r: dict) -> str:
     f = json.loads(r.get('FactsJson') or '{}'); kind = r['Kind']
     ref = f"TQ-{int(r['TargetId']):04d}" if r['TargetKind'] == 'task' and r['TargetId'] else r['TargetKind']
     who = str(r.get('Actor') or '').split(':', 1)[-1]
-    nxt = f'; you then said "{r["NextMove"]}"' if kind == 'agent.stopped' and r.get('NextMove') and r['Verdict'] == 'continued' else ''
+    nxt = ('' if kind != 'agent.stopped' or r['Verdict'] != 'continued' else
+           f'; you then said "{r["NextMove"]}"' if r.get('NextMove') else '; you then continued it with no words')
     head = {'reply.sent': f"you sent a reply on {ref} (approved as drafted)" if f.get('verb') == 'approve' else f"you sent a reply on {ref} (edited first)",
             'task.closed': f"{ref} was closed by {who} ({f.get('how', '')})", 'agent.stopped': f"{who} stopped on {ref}" + (' (PR open)' if f.get('pr') else ''),
             'agent.continued': f'you continued {ref} with "{r.get("NextMove")}"' if r.get('NextMove') else f'you continued {ref} with no words',
@@ -122,5 +146,5 @@ def _sentence(store, r: dict) -> str:
 
 def evidence(store, since: str, limit: int = 40) -> list:
     """One line per resolved row, newest first, `out{id}: ...` - what reflection reads (learn.gather) and cites."""
-    rows = store._rows('SELECT * FROM outcome WHERE ResolvedAt IS NOT NULL AND At>=? ORDER BY Id DESC LIMIT ?', (since, limit))
+    rows = store._rows("SELECT * FROM outcome WHERE ResolvedAt IS NOT NULL AND Verdict!='unknown' AND At>=? ORDER BY Id DESC LIMIT ?", (since, limit))
     return [f"out{r['Id']}: {_sentence(store, r)}" for r in rows]

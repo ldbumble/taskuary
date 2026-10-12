@@ -4206,6 +4206,20 @@ def concierge_chips(key: str):
     if not item: raise HTTPException(404, 'that one is not in the pipe any more')
     return {'key': key, 'chips': concierge.chips_for(store, item)}
 
+@app.get('/api/advice')
+def advice_for(key: str):
+    """The Advisor's line and pill for the item on the table, at its current revision - or nothing (advisor.py)."""
+    from . import advisor
+    return advisor.for_key(store, key)
+
+
+@app.get('/api/advice/notes')
+def advice_notes(key: str, limit: int = 10):
+    """The Advisor's notes on an item: what it looked at, decided and dropped, per revision (advisor.notes)."""
+    from . import advisor
+    return {'rows': advisor.notes(store, key, limit)}
+
+
 class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False
 
 @app.post('/api/concierge/propose')

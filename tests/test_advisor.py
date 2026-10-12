@@ -77,7 +77,7 @@ def brain_saying(answer: dict):
     return llm
 
 
-class JudgeTests(unittest.TestCase):
+class _Rail(unittest.TestCase):
     """The rail is built the way a real install builds it (processing reads on), so the card is the one the owner sees."""
     def setUp(self):
         self._p = [mock.patch.object(terminal, 'live_sessions', lambda tail=0: []), mock.patch.object(funnel, '_agenda', lambda _s, **kw: [])]
@@ -96,6 +96,8 @@ class JudgeTests(unittest.TestCase):
         s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
         return t
 
+
+class JudgeTests(_Rail):
     def test_a_verb_the_item_carries_lands_with_the_ledgers_number(self):
         s = MemoryStore(); t = self._stopped_task(s)
         for _ in range(3):
@@ -195,3 +197,48 @@ class DoorTests(unittest.TestCase):
         with mock.patch.object(advisor, 'notice') as n:
             remind.deadlines(s, datetime(2026, 1, 9, 9)); remind.deadlines(s, datetime(2026, 1, 10, 9))
         self.assertEqual([c.args[1:] for c in n.call_args_list], [('due.late', 'task', t)])
+
+
+class ReadTests(_Rail):
+    def _advised(self):
+        s = MemoryStore(); t = self._stopped_task(s)
+        rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=brain_saying({'verb': 'continue', 'line': 'You usually continue it.', 'evidence': []}))
+        return s, t, rid
+
+    def test_for_key_reads_the_rows_line_and_pill(self):
+        s, t, rid = self._advised()
+        with mock.patch.object(advisor, 'notice') as n:
+            d = advisor.for_key(s, f'task:{t}')
+        self.assertEqual((d['verb'], d['line'], d['pill']), ('continue', 'You usually continue it.', d['label']))
+        self.assertEqual(n.call_args.kwargs.get('tier'), 2)                         # the item on the table earns the bigger read, once
+
+    def test_advice_vanishes_when_the_item_moves(self):
+        s, t, rid = self._advised()
+        s.update_task(t, {'Status': 'waiting'}, 'owner')
+        with mock.patch.object(advisor, 'notice'): self.assertEqual(advisor.for_key(s, f'task:{t}'), {})
+
+    def test_notes_say_what_was_decided_and_dropped(self):
+        s, t, rid = self._advised()
+        advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=brain_saying({'verb': 'approve', 'line': 'x', 'evidence': []}))   # same revision: skipped, no row
+        s.update_task(t, {'Status': 'waiting'}, 'owner'); funnel.invalidate()
+        advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=brain_saying({'verb': 'approve', 'line': 'Send it.', 'evidence': []}))
+        ns = advisor.notes(s, f'task:{t}')
+        self.assertEqual([(n['verb'], bool(n['dropped'])) for n in ns], [(None, True), ('continue', False)])
+        self.assertIn('approve', ns[0]['dropped'])
+
+    def test_the_chat_block_carries_the_line_for_why(self):
+        s, t, rid = self._advised()
+        self.assertIn('You usually continue it.', advisor.block(s, {'key': f'task:{t}', 'tid': t}))
+        self.assertEqual(advisor.block(s, {'key': 'conn:1'}), '')
+
+
+class ApiTests(unittest.TestCase):
+    def test_the_routes_answer(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'in_progress'}, 'owner')
+        with mock.patch.object(server, 'store', s), mock.patch.object(advisor, 'notice'):
+            c = TestClient(server.app)
+            self.assertEqual(c.get(f'/api/advice?key=task:{t}').json(), {})
+            self.assertEqual(c.get(f'/api/advice/notes?key=task:{t}').json(), {'rows': []})
+            self.assertEqual(c.get('/api/advice?key=conn:1').json(), {})

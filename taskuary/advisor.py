@@ -165,3 +165,42 @@ def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wai
         threading.Thread(target=go, daemon=True, name=f'advise-{target_kind}-{target_id}').start()
     except Exception as e: logger.warning(f'advisor: {event} on {target_kind} {target_id} skipped - {e}')
     return None
+
+
+def _payload(r: dict) -> dict:
+    count = json.loads(r.get('CountJson') or '[0,0]')
+    return {'key': r['Key'], 'line': r['Line'], 'verb': r['Verb'], 'label': r['Label'], 'pill': pill(r['Label'], count), 'count': count,
+            'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
+
+
+def for_key(store, key: str) -> dict:
+    """What the prompt box shows for the item on the table: the row at the item's CURRENT revision, or nothing. A changed
+    item drops its old pill by this one comparison - no cleanup pass. The item on the table earns the bigger read, once."""
+    tgt = target_of(store, key)
+    if not tgt: return {}
+    rev = revision(store, *tgt); r = row(store, tgt[0], tgt[1], rev)
+    if r and int(r.get('Tier') or 1) < 2: notice(store, r['Event'], tgt[0], tgt[1], tier=2)
+    return _payload(r) if r and r.get('Verb') else {}
+
+
+def notes(store, key: str, limit: int = 10) -> list:
+    """The receipt: what it decided and what it dropped, per revision, with the evidence resolved to labels."""
+    from .learnedgraph import _resolve
+    tgt = target_of(store, key)
+    if not tgt: return []
+    out = []
+    for r in rows(store, tgt[0], tgt[1], limit):
+        ev = [{'id': e, **{k: v for k, v in _resolve(store, e).items() if k in ('kind', 'label')}} for e in json.loads(r.get('EvidenceJson') or '[]')]
+        out.append({'at': r['CreatedAt'], 'event': r['Event'], 'tier': r['Tier'], 'line': r['Line'], 'verb': r['Verb'], 'label': r['Label'],
+                    'pill': pill(r['Label'], json.loads(r.get('CountJson') or '[0,0]')) if r.get('Verb') else '', 'dropped': r['Dropped'],
+                    'model': r['Model'], 'evidence': ev})
+    return out
+
+
+def block(store, item: dict) -> str:
+    """The Advisor's line for the chat's system prompt, so 'why?' is answered from its evidence - a lookup, not a think."""
+    d = for_key(store, (item or {}).get('key') or '') if item else {}
+    if not d: return ''
+    ev = ', '.join(d['evidence']) or 'the item itself'
+    return (f"THE ADVISOR'S LINE on this item (if the owner asks why, this is the answer; the numbers are the ledger's): "
+            f"\"{d['line']}\" - the pill offers {d['pill']} (verb {d['verb']}); evidence: {ev}.")

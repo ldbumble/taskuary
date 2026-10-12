@@ -832,6 +832,16 @@ WHAT_ABOUT = ('WHAT THEIR WORDS ARE ABOUT, in this order: the item on the table 
               'sentence; an old task they ask you to FIND - search for it.')
 
 
+def _advice_block(store, item: dict | None) -> str:
+    """The Advisor's line on the item on the table (advisor.block): 'why?' is answered from it, never recomputed here."""
+    if not item: return ''
+    try:
+        from . import advisor
+        return advisor.block(store, item)
+    except Exception as e:
+        logger.debug(f'concierge: no advice block - {e}'); return ''
+
+
 def table_line(store, item: dict | None) -> str:
     """What a look-up round and a retry carry, so "it" still means the item on the table after the first round."""
     if not item: return ''
@@ -3294,7 +3304,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
                       + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item else '')
-                      + (f"{table_actions(store, item)}\n\n{WHAT_ABOUT}\n\n" if item else '')
+                      + (f"{table_actions(store, item)}\n\n" + (f"{adv}\n\n" if (adv := _advice_block(store, item)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
                       + f"The owner says: {text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')

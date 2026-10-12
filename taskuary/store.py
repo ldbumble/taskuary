@@ -927,6 +927,12 @@ class SQLiteStore:
             self.cx.execute('CREATE TABLE IF NOT EXISTS outcome (Id INTEGER PRIMARY KEY, Kind TEXT, TargetKind TEXT, TargetId INTEGER, '
                             'Actor TEXT, At TEXT, FactsJson TEXT, NextMove TEXT, NextAt TEXT, Outcome TEXT, ResolvedAt TEXT, Verdict TEXT)')
             self.cx.execute('CREATE INDEX IF NOT EXISTS outcome_target ON outcome(TargetKind, TargetId)')
+            # THE ADVISOR'S ADVICE (spec 2026-10-12, build step 3): one row per item per revision - the line, the verb, the
+            # evidence ids, what was dropped. The rail never reads it (test_the_rail_is_the_same_with_and_without_advice).
+            self.cx.execute('CREATE TABLE IF NOT EXISTS advice (Id INTEGER PRIMARY KEY, TargetKind TEXT, TargetId INTEGER, Key TEXT, Event TEXT, '
+                            'Revision TEXT, Tier INTEGER, Line TEXT, Verb TEXT, Label TEXT, CountJson TEXT, EvidenceJson TEXT, Model TEXT, '
+                            'Dropped TEXT, CreatedAt TEXT)')
+            self.cx.execute('CREATE INDEX IF NOT EXISTS advice_target ON advice(TargetKind, TargetId)')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')

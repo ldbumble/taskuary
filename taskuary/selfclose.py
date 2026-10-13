@@ -146,7 +146,8 @@ def forget(tid: int) -> None:
 
 
 # ── the one road ────────────────────────────────────────────────────────────────────────
-OWNER_ENDS = 'the owner opened this session, so they complete the task - your summary is filed on it for them'
+OWNER_ENDS = ('the owner opened this session, so they complete the task - your summary is filed on it for them. '
+              'If whoever asked is owed a reply, save it now with `taskuary --reply "<text>"` - one written only in the chat is not kept')
 
 
 def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: bool = False) -> dict:
@@ -232,8 +233,11 @@ SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --r
 # agent must NOT do is end it. Said in the prompt, because CODER.md's finishing rules say the
 # reverse and an agent reading both without this line picks the one with a command in it. It says
 # what `declare` does: the command is refused here and the owner completes the task.
-STAY_LINE = ('THE OWNER OPENED THIS SESSION: they complete this task, not you - `taskuary --done` is refused here. '
-             'Summarize finished work and wait.')
+STAY_LINE = ('THE OWNER OPENED THIS SESSION: `taskuary --done` is refused. Reply via `taskuary --reply "<text>"`, not chat. '
+             'Summarize, then wait.')
+# ...because this line REPLACES SEED_LINE (terminal.seed_parts), the reply road was the one thing an owner-opened session never
+# heard of: an agent wrote the whole reply into its chat, ran a refused --done, said "the reply above is ready", and the
+# drafter wrote a placeholder from that pointer (2026-10-13)
 
 
 # ── the general chat's version of the same thing ────────────────────────────────────────

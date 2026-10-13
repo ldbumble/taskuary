@@ -109,6 +109,13 @@ export const pendingProposals = (reviews = []) =>
 // a letter suggested underneath it, in the box that sends (the owner, 2026-09-22, TQ-0674).
 export const NO_ONE_BEHIND = ["", "own", "report", "assistant"];
 export const hasCorrespondent = (m) => !!m && !NO_ONE_BEHIND.includes(String(m?.Channel || "").toLowerCase());
+// WHAT A REPLY ANSWERS: the newest row that came in from SOMEBODY (coder.reply_target) - a report joined onto the task is newer
+// than the colleague's mail and said "Nobody sent this one" over a task with a person waiting (2026-10-13); only a task with
+// nobody behind any row falls back to its newest
+export const replySource = (messages = []) => {
+  const inbound = [...(messages || [])].reverse().filter((m) => m.Status !== "context" && m.Direction !== "out");
+  return inbound.find(hasCorrespondent) || inbound[0];
+};
 
 // lanes.json's word for the approve lane - ONE word for a reply and a close-out alike (the owner, 2026-09-27: "it should
 // the same everywhere"), because both are the step that closes the task

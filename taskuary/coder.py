@@ -102,8 +102,11 @@ def reply_source(transcript: str, final_message: str = '') -> str:
 def reply_target(store, task_id: int):
     """Which message a reply answers: the last one that came IN. Our own sent mail rides in
     the chain as 'context', and answering that would mail ourselves; a chat app's mail copy of a
-    chat line rides as 'skipped', and answering that mails its no-reply address."""
-    return next((m['MessageId'] for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped')), None)
+    chat line rides as 'skipped', and answering that mails its no-reply address. And the last one SOMEBODY sent: a report
+    joined onto the task (the End of day checkup) became the newest row, so the session's reply to the colleague who had
+    written again went to "nobody" and was filed as a result (2026-10-13). Only a task with nobody behind any row gets one."""
+    rows = [m for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped')]
+    return next((m['MessageId'] for m in rows if not no_one_behind(m.get('Channel'))), rows[0]['MessageId'] if rows else None)
 
 
 # ── the agent's own words ───────────────────────────────────────────────────────────────

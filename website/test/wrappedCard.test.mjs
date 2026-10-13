@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { sentElsewhere, unsentReplyReview, replyPhase } from "../src/taskLifecycle.js";
+import { replySource, sentElsewhere, unsentReplyReview, replyPhase } from "../src/taskLifecycle.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 // Close out, from its heading to the Context & history fold under it
@@ -44,6 +44,15 @@ test("what went out elsewhere is your own outgoing messages, not a send from her
   const mine = [{ ReviewId: 9, Status: "edited", DraftText: "Yes, keep it.", FinalText: "Gail - any ideas?\n\nThanks,\nAlex" }];
   const copy = { MessageId: 7, Direction: "out", OwnText: "Gail - any ideas?\n\n\nThanks,\n\nAlex" };
   assert.deepEqual(sentElsewhere([copy, { MessageId: 8, Direction: "out", BodyText: "Something else" }], mine).map((m) => m.MessageId), [8]);
+});
+test("a reply answers the newest row somebody sent - never a report joined on after them (2026-10-13)", () => {
+  const rows = [
+    { MessageId: 1, Channel: "email", Direction: "in", Status: "routed", BodyText: "First" },
+    { MessageId: 2, Channel: "email", Direction: "in", Status: "routed", BodyText: "Wrote again" },
+    { MessageId: 3, Channel: "report", Direction: "in", Status: "routed", BodyText: "End of day checkup" },
+  ];
+  assert.equal(replySource(rows).MessageId, 2);
+  assert.equal(replySource([rows[2]]).MessageId, 3);          // nobody behind any row: its newest, as before
 });
 test("What was sent is the text that left - the owner's edit, not the draft under it", () => {
   assert.match(closeOut(), /\{sentReview\.FinalText \|\| sentReview\.DraftText\}/);

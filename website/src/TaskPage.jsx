@@ -67,7 +67,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails,
-  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentElsewhere, sentReplyReview, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
@@ -681,8 +681,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     .filter((m) => cleanText(m.BodyText) && !ownBodies.has(cleanText(m.BodyText)));
   const taskMessages = [...storedMessages, ...reviewMessages]
     .sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt));
-  const sourceMessage = [...storedMessages].reverse()
-    .find((m) => m.Status !== "context" && m.Direction !== "out");
+  const sourceMessage = replySource(storedMessages);
   // ...and whether there is anybody at the other end of it (taskLifecycle.hasCorrespondent). Every
   // reply door hangs off this, so a task you typed yourself offers no reply to write.
   // a BATCH owes nobody one reply: its items are four authors, each answered (or merged, or closed) on its own line (batch.py)

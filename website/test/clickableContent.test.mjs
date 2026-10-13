@@ -95,3 +95,16 @@ test("re-check CI in the PR status line is a real button", () => {
   assert.match(recheck[2], /border: 0/);
   assert.match(source, /\{busy === "ci" \? "Checking CI…" : "re-check CI"\}/);
 });
+
+test("the CC chip's remove ✕ is a real button, and it is named", () => {
+  // Each address chip in the CC row carries a ✕ that drops that address; it was a
+  // clickable <Box component="span"> with no accessible name, and Tab never reached
+  // it (#138). Anchor on the ✕ glyph, which appears once in ui.jsx.
+  const source = read("ui.jsx");
+  const remove = source.match(/<Box component="(\w+)"((?:(?!<Box)[\s\S])*?)>✕<\/Box>/);
+  assert.ok(remove, "CC chip remove control exists in ui.jsx CcRow");
+  assert.equal(remove[1], "button");
+  assert.match(remove[2], /type="button"/);
+  assert.match(remove[2], /aria-label=\{`Remove \$\{a\} from CC`\}/);
+  assert.match(remove[2], /border: 0/);
+});

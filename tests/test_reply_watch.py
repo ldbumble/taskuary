@@ -100,7 +100,7 @@ def test_their_answer_is_said_once_and_ends_the_watch_even_when_it_was_filed_on_
     mail(s, tid, 'Thursday at 2 works.', status='filed', n=5, at=ago(), task=False)   # triage filed it: a round trip
     with rail(): line = asks.check(s, tid)
     assert line and 'Erin Blake answered: Thursday at 2 works.' in line
-    assert not s.get_task(tid)['AskedWatch'] and line in dock_lines(s)
+    assert not s.get_task(tid)['AskedWatch'] and line not in dock_lines(s)   # the Advisor says it
     with rail(): assert asks.check(s, tid) is None
 
 
@@ -123,7 +123,7 @@ def started(s, tid, days):
     s._exec('UPDATE task SET AskedWatchAt=? WHERE TaskId=?', (ago(days=days), tid))
 
 
-def test_two_quiet_days_offer_one_nudge_in_the_app_only(s):
+def test_two_quiet_days_mark_one_nudge_and_the_phone_never_speaks_first(s):
     tid, rid = asked(s); send(s, rid); started(s, tid, 1)
     assert asks.nudge(s, s.get_task(tid)) is None                               # one day is not silence yet
     started(s, tid, 3)
@@ -131,7 +131,7 @@ def test_two_quiet_days_offer_one_nudge_in_the_app_only(s):
          mock.patch.object(remote_assistant, 'send') as phone:
         line = asks.nudge(s, s.get_task(tid))
     assert line and 'still nothing from Erin' in line and 'nudge' in line
-    assert not phone.called and line in dock_lines(s)                          # the phone never speaks first
+    assert not phone.called and line not in dock_lines(s)                      # the phone never speaks first; the desk hears nothing
     assert asks.nudge(s, s.get_task(tid)) is None                               # offered once
 
 
@@ -153,7 +153,7 @@ def test_at_thirty_days_the_watch_ends_and_says_so(s):
     tid, rid = asked(s); send(s, rid); started(s, tid, 31)
     with rail(): asks.sweep(s)
     assert not s.get_task(tid)['AskedWatch']
-    assert any("I've stopped watching for Erin's answer" in l and 'Keep going?' in l for l in dock_lines(s))
+    assert not any("I've stopped watching" in l for l in dock_lines(s))
     asks.watch_task(s, tid, 'reply')                                           # keep going: a fresh 30 days
     assert s.get_task(tid)['AskedWatch'] == 'reply' and s.get_task(tid)['AskedWatchAt'] > ago(days=1)
 

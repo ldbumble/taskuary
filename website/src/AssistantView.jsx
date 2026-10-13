@@ -1233,7 +1233,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // a line of the assistant's own that needs no turn - a section walk running out
   const noteLine = useCallback((text) => setMsgs((m) => [...m, { id: `s${Date.now()}`, role: "assistant", text }]), []);
   // pull the next thing (or the one named; or the next piece of mail) out of the pipe and say it
-  const surface = useCallback(async (key = null, asUser = null, leaving = null) => {
+  // `blind`: pressed with no item in front of the owner (the walk's start, a chat chip on an empty table) - see the retry below
+  const surface = useCallback(async (key = null, asUser = null, leaving = null, blind = false) => {
     if (busy || resetting || handoff || turnFlight.current) return;
     // WALKING A SECTION: Next stays inside it - the next of its rows the walk has not shown - and once it is empty it
     // says so and the walk goes on as normal (the canvas redesign, 2026-09-29)
@@ -1282,7 +1283,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
       const navigation = capture ? nextSelectionBody(capture) : scope;
-      landed(await turn({ mode: "next", key, leaving, ...navigation }));
+      let data;
+      try { data = await turn({ mode: "next", key, leaving, ...navigation }); }
+      catch (e) {
+        // A BLIND PRESS HAS NO PICK TO PROTECT: the guard (PW-050) refuses a Next whose item is not the one the page shows,
+        // and nothing was shown - a reply landing between the morning card and its button made the owner press twice
+        // (2026-10-13). A plain stale refusal ran nothing, so the server's fresh capture is taken once, never more.
+        const g = blind && selectionGuardDetail(e), fresh = g && !g.reason && g.retryable !== false ? captureNextSelection(g, scope) : null;
+        if (!fresh || epoch !== chatEpoch.current) throw e;
+        selectionRef.current = fresh;
+        setPile((p) => replaceSelectionToken(p, g));
+        data = await turn({ mode: "next", key, leaving, ...nextSelectionBody(fresh) });
+      }
+      landed(data);
     } catch (e) {
       const guard = selectionGuardDetail(e);
       if (guard) {
@@ -1318,7 +1331,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // resume what is on the table only if you have not PASSED it: a passed item waits in Passed for
       // its hour, and starting the walk put it straight back in front of you (the owner, 2026-09-23:
       // "it's in the passed section but showing up on assistant first")
-      if (!currentRef.current || currentRef.current.surfaced) await surface(null, null);
+      if (!currentRef.current || currentRef.current.surfaced) await surface(null, null, null, true);
     } catch (e) {
       // the owner's line is on screen now, so a failure has to be answered on screen too -
       // an unhandled rejection would leave "Walk me through my tasks." sitting there alone. The line is taken back, so the
@@ -1509,7 +1522,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (c.verb === "tour") { await setup(); return; }
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
-    if (c.verb === "next") { surface(null, null, key); return; }
+    if (c.verb === "next") { surface(null, null, key, !item); return; }
     // one item by name - one the walk already showed and will not repeat yet ("N things you've already seen")
     if (c.verb === "open" && c.key) { surface(c.key); return; }
     // REMIND ME asks for the day - the task page's own picker - and the walk moves on once it is put away

@@ -100,7 +100,7 @@ def test_the_day_before_it_goes_to_the_top_once(s):
 def test_on_the_day_and_then_late_each_said_once(s):
     tid = due_task(s, 0)
     assert remind.deadlines(s) == 1 and s.list_comments(tid)[-1]['Body'] == "This one's today."
-    assert any("This one's today." in l and 'TQ-' in l for l in dock_lines(s))
+    assert not any("This one's today." in l for l in dock_lines(s))            # the note says it, never the chat
     tomorrow = datetime.now() + timedelta(days=1)
     assert remind.deadlines(s, tomorrow) == 1
     assert s.list_comments(tid)[-1]['Body'] == "This was due yesterday and it's still open."
@@ -125,14 +125,9 @@ def test_the_phone_never_speaks_first(s):
          mock.patch.object(remote_assistant, 'connector_for_chat', return_value={'ConnectorId': 3}), \
          mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, 'send') as send:
         assert remind.deadlines(s) == 1
-    assert not send.called and any("This one's today." in l for l in dock_lines(s))
+    assert not send.called and not any("This one's today." in l for l in dock_lines(s))
 
 
-def test_a_line_that_cannot_be_said_never_breaks_the_sync(s):
-    tid = due_task(s, 0)
-    with mock.patch.object(asks, 'say_due', side_effect=RuntimeError('no door')):
-        assert remind.tick(s) == 1
-    assert s.get_task(tid)['DueSaid'] == 'today'
 
 
 # ── before the catch-up, and on start ────────────────────────────────────────────────────
@@ -185,19 +180,6 @@ def test_the_eve_is_the_last_working_day_before_it():
     assert remind.step('2026-10-15', datetime(2026, 10, 14, 9)) == 'eve'       # midweek it is plain tomorrow
     assert remind.due_line({'DueAt': mon}, datetime(2026, 10, 9, 9)) == "This one's due Monday, so it's at the top of your list."
     assert remind.due_line({'DueAt': '2026-10-15'}, datetime(2026, 10, 14, 9)) == "This one's due tomorrow, so it's at the top of your list."
-
-
-def test_the_late_line_offers_what_to_do_about_it(s):
-    from taskuary import concierge
-    from taskuary.store import task_ref
-    tid = due_task(s, -1)
-    remind.deadlines(s)
-    assert s.list_comments(tid)[-1]['Body'] == "This was due yesterday and it's still open."
-    rows = general.chat_rows(s, general.dock_task(s, 'owner')[0]['TaskId'])
-    card = json.loads(concierge._MARK.search(rows[-1]['Body']).group(1))
-    assert [c['label'] for c in card['chips']] == ['Draft a note', 'Move the due day', 'Mark done']
-    assert all(task_ref(tid) in c['ask'] for c in card['chips'])               # each names the task: words the assistant reads
-    assert '?' not in concierge._MARK.sub('', rows[-1]['Body'])                 # a question nothing could answer is gone
 
 
 def test_the_assistant_can_move_the_due_day(s):

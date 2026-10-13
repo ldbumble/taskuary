@@ -55,12 +55,27 @@ so the terminal, the desktop shell and the agent presets are best exercised ther
 Linux may still have rough edges.
 :::
 
+## Try the demo
+
+You do not have to connect anything to see what Taskuary does:
+
+```bash
+taskuary --demo                    # or: docker compose --profile demo up
+```
+
+The demo is the real interface over invented work, with scripted replies where the AI would answer
+and replayed sessions where coding agents would work. Nothing it offers can reach a real system:
+nothing sends, no connection can be created or given a secret, no shell or CLI starts, and no tool
+runs. A request that would touch something real is refused, and says so. Reload the page and its
+changes are gone.
+
 ## Command-line options
 
 The everyday options for the Python install are:
 
 | Option | What it does |
 |---|---|
+| `--demo` | Runs a throwaway demo instance: invented work, scripted replies, and nothing that can reach a real system |
 | `--port PORT` | Overrides the configured server port for this run |
 | `--host HOST` | Overrides the configured server host; use `0.0.0.0` to listen on all interfaces |
 | `--no-browser` | Starts the server without opening a browser tab |

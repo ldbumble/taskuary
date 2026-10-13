@@ -220,6 +220,11 @@ is what you see if those cards cannot load.</li>
 <p><code>kb_semantic_min</code> · type: number · default: <code>0.5</code></p>
 <p>How close a passage must be in meaning to count as a hit.</p>
 <p>A nearest-neighbour search always has a nearest neighbour, even when nothing is related, so passages below this cosine similarity are dropped. Raise it if unrelated passages turn up; lower it if related ones are missed. Scales differ between models, and the default 0.5 is a starting point, not a measurement for yours.</p>
+<h3 id="fast-mode">Fast mode<a class="anchor" href="#fast-mode" aria-label="Link to this section">#</a></h3>
+<p><code>concierge_fast</code> · type: select · default: <code>auto</code></p>
+<p>Runs the Assistant&#39;s CLI on its provider&#39;s fast tier: Codex&#39;s fast service tier, Claude Code&#39;s fast mode. By default on for Codex and off for Claude.</p>
+<p>Options: <code>auto</code>, <code>on</code>, <code>off</code></p>
+<p>Claude bills fast mode as extra usage, outside your subscription, and runs it only when extra usage is turned on in your Claude account; Codex spends your plan&#39;s credits faster. Coding and general agents are not changed.</p>
 <h3 id="the-pipe-reaches-back-hours">The pipe reaches back (hours)<a class="anchor" href="#the-pipe-reaches-back-hours" aria-label="Link to this section">#</a></h3>
 <p><code>funnel_hours</code> · type: number · default: <code>12</code></p>
 <p>How far back ordinary mail, reports and fyi enter the pipe the assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.</p>
@@ -501,7 +506,7 @@ answer to &quot;why did this happen&quot; and &quot;who did this&quot; for anyth
 
     </article>
     <nav class="pager"><a class="pn prev" href="./phone"><span>Previous</span>On your phone</a><a class="pn next" href="./faq"><span>Next</span>FAQ</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.8.0 · updated 2026-10-12</p>
+    <p class="stamp">Documentation for Taskuary 0.3.8.1 · updated 2026-10-13</p>
   </main>
 </div>
 <script src="./docs.js"></script>

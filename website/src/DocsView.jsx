@@ -651,8 +651,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             <Box sx={{ display: "flex", border: "1px solid #e1dcd5", borderRadius: 99, overflow: "hidden", fontSize: 11.5, fontWeight: 600, alignSelf: "center",
               flexShrink: 0, whiteSpace: "nowrap" }}>
               {[["text", "Text"], ["changes", "What changed"], ["viz", "Visualize"]].map(([k, label]) => (
-                <Box key={k} onClick={() => setView(k)} sx={{ px: 1.5, py: 0.55, cursor: "pointer",
-                  color: view === k ? "#fff" : "#4d4a43", background: view === k ? "linear-gradient(90deg, #55697a, #7d9a7c)" : "#fffdfb" }}>{label}</Box>
+                <Box key={k} component="button" type="button" aria-pressed={view === k} onClick={() => setView(k)} sx={{ px: 1.5, py: 0.55, cursor: "pointer",
+                  color: view === k ? "#fff" : "#4d4a43", background: view === k ? "linear-gradient(90deg, #55697a, #7d9a7c)" : "#fffdfb", border: 0, font: "inherit" }}>{label}</Box>
               ))}
             </Box>
           )}

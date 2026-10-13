@@ -56,3 +56,12 @@ test("Settings help links are keyboard-operable buttons", () => {
   assert.ok(settings.includes('type="button"'));
   assert.ok(settings.includes('onClick={() => setHelp(SECTION_HELP.audit)}'));
 });
+
+test("LEARNED.md view switch uses accessible buttons", () => {
+  const docs = read("DocsView.jsx");
+
+  assert.ok(docs.includes('component="button"'));
+  assert.ok(docs.includes('type="button"'));
+  assert.ok(docs.includes("aria-pressed={view === k}"));
+  assert.ok(docs.includes("onClick={() => setView(k)}"));
+});

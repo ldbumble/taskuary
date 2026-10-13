@@ -232,6 +232,16 @@ class ReadTests(_Rail):
         s.update_task(t, {'Status': 'waiting'}, 'owner')
         with mock.patch.object(advisor, 'notice'): self.assertEqual(advisor.for_key(s, f'task:{t}'), {})
 
+    def test_an_agent_at_work_has_no_line_until_it_stops_again(self):
+        # a continue writes nothing the revision sees until the prompt lands: the stop's line stood over a working coder
+        from taskuary import workerstate as ws
+        s, t, rid = self._advised()
+        with mock.patch.object(advisor, 'notice'), mock.patch.object(ws, 'status', return_value={'state': 'working'}):
+            self.assertEqual(advisor.for_key(s, f'task:{t}'), {})
+        for state in ('input_needed', 'approval_needed', 'unknown', 'disconnected'):
+            with mock.patch.object(advisor, 'notice'), mock.patch.object(ws, 'status', return_value={'state': state}):
+                self.assertEqual(advisor.for_key(s, f'task:{t}')['verb'], 'continue', state)
+
     def test_notes_say_what_was_decided_and_dropped(self):
         s, t, rid = self._advised()
         advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=brain_saying({'verb': 'approve', 'line': 'x', 'evidence': []}))   # same revision: skipped, no row

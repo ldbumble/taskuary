@@ -40,8 +40,8 @@ test("a greyed verb is never the advised one", () => {
 });
 
 test("the next step sits over the row and the box is plain: no ghost text, no pill", () => {
-  assert.match(src, /<AdvisorNext advice=\{advice\}/);
-  assert.match(src, /<ActionRow [^>]*advised=\{advice\}/);
+  assert.match(src, /<AdvisorNext advice=\{shownAdvice\}/);
+  assert.match(src, /<ActionRow [^>]*advised=\{shownAdvice\}/);
   assert.doesNotMatch(src, /ghostText|tq-pill|tq-advised/);
   assert.doesNotMatch(css, /\.tq-pill|tq-advised/);
   assert.match(row, /if \(!advice\?\.verb \|\| !advice\.line\) return null;/);                // nothing to say draws nothing
@@ -51,7 +51,7 @@ test("the next step sits over the row and the box is plain: no ghost text, no pi
 test("while the NEXT strip stands, the task's own Open again line is hidden - only on the canvas", () => {
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /<Typography className="tq-news"[^>]*>Open again: \{news\.line\}/);
-  assert.match(src, /className=\{advice\?\.verb && advice\.line \? "tq-asst-col advising" : "tq-asst-col"\}/);
+  assert.match(src, /className=\{shownAdvice \? "tq-asst-col advising" : "tq-asst-col"\}/);
   assert.match(css, /\.tq-asst-col\.advising \.tq-news \{ display: none; \}/);
 });
 

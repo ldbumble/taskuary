@@ -1923,8 +1923,9 @@ export const CcRow = ({ cc, setCc, channel }) => {
         <Box key={a} sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.8, py: 0.15,
           borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>
           <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
-          <Box component="span" onClick={() => setCc((cc || []).filter((x) => x !== a))}
-            sx={{ cursor: "pointer", color: FAINT, fontSize: 12, lineHeight: 1, "&:hover": { color: "#6b2733" } }}>✕</Box>
+          <Box component="button" type="button" aria-label={`Remove ${a} from CC`}
+            onClick={() => setCc((cc || []).filter((x) => x !== a))}
+            sx={{ cursor: "pointer", color: FAINT, fontSize: 12, lineHeight: 1, border: 0, bgcolor: "transparent", p: 0, fontFamily: "inherit", "&:hover": { color: "#6b2733" } }}>✕</Box>
         </Box>
       ))}
       {open ? (

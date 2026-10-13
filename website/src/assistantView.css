@@ -494,11 +494,16 @@
 .tq-compose-box { width: min(980px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
 .tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: min(40vh, 280px); overflow-y: auto; }
 .tq-compose-box textarea::placeholder { color: #8f8b84; }
+/* the Advisor's suggestion is advice, not a hint about the box: it reads as words, darker and upright (2026-10-13) */
+.tq-compose-box textarea.tq-advised::placeholder { color: #3f4a41; font-weight: 500; }
 /* the mic arrives wrapped in a Tooltip <span>; inline descender space under it lifted the
    icon above the emoji next door. Both controls are flex items of the same height now. */
 .tq-compose-box > span { width: 34px; height: 34px; flex: 0 0 34px; display: flex; align-items: center; justify-content: center; }
 .tq-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-send:disabled { opacity: .4; cursor: default; }
+/* the Advisor's pill sits where the arrow does and does what the card's primary button does; typing brings the arrow back */
+.tq-pill { height: 34px; flex: 0 0 auto; max-width: 46%; padding: 0 12px; border: 0; border-radius: 17px; cursor: pointer; color: white; background: #738275; font: 600 12.5px/34px 'IBM Plex Sans', system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pill:disabled { opacity: .4; cursor: default; }
 .tq-compose-hint { margin: 6px auto 0; text-align: center; color: #746e64; font: 400 11.5px/1.3 'IBM Plex Sans', system-ui, sans-serif; }
 /* the walk is on the phone: the composer is replaced by the way back, never sat beside it */
 .tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid #d5d0c7; border-top-width: 1px; border-radius: 12px; background: #fffdfb; display: flex; align-items: center; gap: 10px; color: #4a5d4f; }

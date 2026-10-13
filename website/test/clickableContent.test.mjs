@@ -33,3 +33,9 @@ test("a failed report run offers Try again as a real button, not a span", () => 
   assert.match(retry[2], /bgcolor: "transparent"/);
   assert.match(retry[2], /font: "inherit"/);
 });
+
+test("AI defaults navigation links are keyboard-operable buttons", () => {
+  const aiDefaults = read("AiDefaults.jsx");
+  assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="caption" onClick={() => onGo(slot.owner_link)}'));
+  assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="body2" onClick={() => onGo("connectors")}'));
+});

@@ -71,6 +71,8 @@ Signs it is new: a different ask, problem, system, facility or number; a failure
 
 Joining a CLOSED task makes sense when this message is that work coming back. An Advisor idea is Taskuary's own thought, not the sender writing again, and a report run that needs nothing from the owner is better as its own quiet row than filed on a closed task where nobody sees it - weigh both before joining a closed one. Sharing a sender or a word is not being the same. Still answer `intent` for THIS message - fyi when it adds nothing that needs the owner.
 
+**A step of a goal.** When `open_goals` is given, say which step this message serves with `serves`: {"task": the goal's tid, "step": the step's id, "done": true|false} - the step it delivers, answers or is plainly about, whatever thread it arrived on. `done` is true only when the message completes that step (the file it waited on is attached, the sign-off is given), never for a message that only mentions it. A message that serves no step answers null. Serving a step does not change `intent`: still say whether the owner has something to do.
+
 ## 4. Who does it (`kind`)
 
 Ask first: **does the work CHANGE something inside a system this install holds the code or the credentials for?**
@@ -97,6 +99,7 @@ Signs against coding: the work only reads from a system (a query, a report, a lo
 - **outputs** (a task) - only messages the sender asks the owner to send to OTHER people: `to` (the address when given, else the name as written) and `about`. A reply to the sender is not an output; most tasks have none.
 - **urgent** - true only when time presses: a deadline today or tomorrow, a meeting it serves happening today, someone blocked right now. A failure or a request with no time on it is not urgent, nor is "ASAP" alone, nor any fyi. Almost everything is false.
 - **due** - the day the work must be done by when the message names one ("by Friday", "before the 15th", "due 10/9"), worked out from `sent_on`; null when no day is named. A meeting's date is a due date only when something must be ready for it.
+- **goal** (a task) - true only for an OPEN-ENDED ask: no single deliverable, several people or systems, steps over days or weeks ("move the census to the new ledger for all three sites"), with **done_when** the one sentence that says when it is finished. A single thing to do or to answer is not a goal, however big; without a done_when sentence it is not a goal. Do not write its steps - the checklist stays empty for a goal, and the steps are planned after. Otherwise false, with done_when null.
 - **sender_class** - who wrote it, for every verdict: "person" when a human wrote this message (a colleague, a customer, a vendor's account manager - whatever address they write from), "automated" when a system generated it (an alert, a notification, a receipt, a report), "bulk" when it went out to a list (a newsletter, marketing, an announcement). Judge from the words and the sender, not the address alone; when unsure, "person".
 - **why** - one concrete sentence, 25 words max: what you saw and what tipped the verdict. The owner reads it to judge you.
 
@@ -118,4 +121,4 @@ Each is a sign to weigh; an absent field is not evidence either way.
 
 ## 7. The answer
 
-JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "...", "title": "...", "summary": "...", "checklist": ["..."], "outputs": [{"to": "...", "about": "..."}], "urgent": false, "due": "YYYY-MM-DD or null", "sender_class": "person|automated|bulk"} - plus `same_as`, `profile`, `playbook`, `repository` / `needs_repo_choice` / `repo_reason`, and for a chat line `relationship` / `related_message_ids` / `existing_task_id` / `same_problem`, whenever the input gives you what they are chosen from.
+JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "...", "title": "...", "summary": "...", "checklist": ["..."], "outputs": [{"to": "...", "about": "..."}], "urgent": false, "due": "YYYY-MM-DD or null", "sender_class": "person|automated|bulk", "goal": false, "done_when": null} - plus `same_as`, `serves`, `profile`, `playbook`, `repository` / `needs_repo_choice` / `repo_reason`, and for a chat line `relationship` / `related_message_ids` / `existing_task_id` / `same_problem`, whenever the input gives you what they are chosen from.

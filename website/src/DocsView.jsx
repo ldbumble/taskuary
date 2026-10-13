@@ -101,6 +101,9 @@ function HowItWorks() {
 // each is done (docs/beyond-code.md). They open in the same editor, but never share the operator
 // document shelf—a company can have hundreds without burying the owner's identity card.
 const isPb = (n) => n.startsWith("pb:");
+// a person's page (people_pages.py): a doc named person-<address>, compiled from the outcome ledger at reflection
+const isPerson = (n) => String(n || "").startsWith("person-");
+const PERSON_BLURB = "What the outcome ledger says about them, compiled at reflection: how fast they answer, whether a chase is needed, who on copy moves them. Your own lines above the block are yours; the block is rewritten.";
 // A PROFILE's rules document (RESEARCHER.md, ANALYST.md, ...). Its own section rather than more
 // entries in the fixed eight: the operator set is a constitution that always exists, profiles are a
 // roster the owner adds to and removes from - the same reason playbooks got their own shelf. The
@@ -253,6 +256,20 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   }, []);
   useEffect(() => { loadBooks(); }, [loadBooks]);
 
+  const [people, setPeople] = useState([]);          // the pages the ledger keeps per person (/api/people/pages)
+  const loadPeople = useCallback(async () => {
+    try { const { data } = await api.get("/api/people/pages"); setPeople(data.data || []); }
+    catch { /* an older server: no People group */ }
+  }, []);
+  useEffect(() => { loadPeople(); }, [loadPeople]);
+  const openPerson = useCallback(async (name) => {
+    setSection("documents"); setGenMsg(""); setGenEv(null); setPbMsg(""); setDocName(name);
+    try {
+      const { data } = await api.get(`/api/doc/${name}`);
+      setDocs((d) => ({ ...d, [name]: data.content || "" })); setSaved((d) => ({ ...d, [name]: data.content || "" }));
+    } catch (e) { setErr(e?.response?.data?.detail || `could not open ${name}`); }
+  }, []);
+
   const loadProfs = useCallback(async () => {
     try {
       const { data } = await api.get("/api/agents");
@@ -329,6 +346,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     if (action === "new-playbook") { setSection("playbooks"); setNewPlaybook({ connectorType: "" }); return; }
     if (group === "profiles" && doc) { openProf(doc); return; }
     if (group === "playbooks" && doc) { openPb(doc); return; }
+    if (doc && isPerson(doc)) { openPerson(doc); return; }
     // ...and a link can name the VIEW too: the opening screen's "learned this week" lands on LEARNED.md's What changed
     if (doc) { setSection("documents"); setDocName(doc); if (sel.view) setView(sel.view); return; }
     // a group with no document named: the rail's own header, which behaves like the tab it replaced
@@ -337,7 +355,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   }, [selKey]);
 
   // ...and the rail draws the two lists this page already fetches, so nothing fetches them twice.
-  useEffect(() => { onCatalog?.({ profiles: profs, playbooks: books }); }, [onCatalog, profs, books]);
+  useEffect(() => { onCatalog?.({ profiles: profs, playbooks: books, people }); }, [onCatalog, profs, books, people]);
 
 
   // #playbook=<slug> (a connector card's link) opens it; #playbook=new:<type> starts one for that card
@@ -423,6 +441,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     ? { label: `${profName(docName).toUpperCase()}.md`, blurb: PROF_BLURB }
     : isPb(docName)
     ? { label: docName === "pb:new" ? "New playbook" : `${pbSlug(docName)}.md`, blurb: PB_BLURB }
+    : isPerson(docName)
+    ? { label: docName.slice(7), blurb: PERSON_BLURB }
     : DOCS[docName];
 
   if (manageProfiles) return <AgentsPage initialCreate={createProfile} onCreated={async (name, rulesDoc) => {

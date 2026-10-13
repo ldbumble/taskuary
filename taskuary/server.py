@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from . import config
 from . import store as store_mod
-from .store import SQLiteStore, task_ref
+from .store import SQLiteStore, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
 from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports, run_one)
 from . import agents as hub_agents
@@ -641,18 +641,9 @@ def _read_hand_task(tid: int, text: str, goal: bool = False):
 
 
 def plan_goal(tid: int, text: str):
-    """The model writes the goal's steps (spec 2026-10-12); a step already started is never reworded away: it stays, in
-    its place, with its child (set_task_checklist keeps a box by its words), and the model's new words come around it
-    (the review, 2026-10-12: a slot fallback pinned the child to whatever the model put in that slot)."""
-    try:
-        from . import concierge, triage
-        ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True), goal=True)
-        texts = [x for x in ask.get('checklist') or [] if x]
-        if not texts: return
-        for k, i in enumerate(store.task_checklist(tid)):
-            if i.get('tid') and i['text'] not in texts: texts.insert(min(k, len(texts)), i['text'])
-        store.set_task_checklist(tid, texts, 'triage')
-    except Exception as e: logger.info(f'could not plan {task_ref(tid)}: {e}')
+    """The model writes the goal's steps (goals.plan - one planner for the New sheet, Re-plan and triage's goal)."""
+    from . import goals
+    goals.plan(store, tid, text)
 
 
 @app.post('/api/tasks/{task_id}/read-ask')
@@ -762,11 +753,11 @@ def goal_steps(task_id: int):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     from . import taskstate
     from .processing_unread import holder_name
-    out = []
+    out, arr = [], store.step_arrivals(task_id)       # ...and the mail triage said served each step (spec 2026-10-12, step 5)
     for x in store.goal_steps(task_id):
         c = x.pop('child')
         out.append({**x, 'ref': task_ref(c['TaskId']) if c else None, 'status': (c or {}).get('Status'),
-                    'who': holder_name((c or {}).get('Assignee')), 'state': taskstate.state(store, c) if c else None})
+                    'who': holder_name((c or {}).get('Assignee')), 'state': taskstate.state(store, c) if c else None, 'arrivals': arr.get(x['id'], [])})
     return {'steps': out}
 
 
@@ -827,6 +818,20 @@ def _run_operation(op: dict, background: BackgroundTasks):
             raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
         return out
     if kind == 'task.set_kind':
+        t = store.get_task(tid) or {}
+        # A GOAL OR NOT (spec 2026-10-12): "that was a task, not a goal" and "make this a goal" are kind corrections like any, taught on
+        # the same curve. A goal let go keeps its boxes as plain boxes; a task made a goal takes its ask as what done looks like and
+        # the planner proposes steps when it has none.
+        if str(p.get('kind')) == 'goal':
+            from . import goals
+            store.update_task(tid, {'DoneWhen': t.get('DoneWhen') or t.get('Summary') or t.get('Title') or ''}, ACTOR); store.tag_task(tid, 'goal', actor=ACTOR)
+            if not store.task_checklist(tid): goals.plan_later(store, tid, goals.words(store.get_task(tid)))
+            if p.get('learn', True): _teach_routing(tid, 'kind', 'goal', background=background)
+            return {'kind': 'goal'}
+        if str(p.get('kind')) == 'task' and is_goal(t):
+            store.update_task(tid, {'DoneWhen': None}, ACTOR); store.tag_task(tid, 'goal', on=False, actor=ACTOR)
+            if p.get('learn', True): _teach_routing(tid, 'kind', 'task', background=background)
+            return {'kind': 'task'}
         if str(p.get('kind')) == 'task': return not_coding(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
         # ...and every other kind down the task page's own road, not a bare field write. Writing
         # the column directly skipped BOTH things the PATCH does: it taught nothing (so "hand it
@@ -1019,6 +1024,53 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
     # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
+    if kind in ('task.chase', 'task.let_go', 'task.elsewhere'):
+        # THE SLIPPED ANSWERS (spec 2026-10-12): each is an outcome. The item is the rail's card (a person's step, or a thread with
+        # a follow-up on it); the person is its `who_email`, the ledger's key. A chase is a draft for your yes, never a send.
+        import json as _json
+        from . import assistant, funnel, outcomes
+        key = str(p.get('key') or ''); item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+        if not item: raise HTTPException(404, 'that one is not on the rail any more')
+        # ...and only while it IS slipped: pressed after they wrote back, or on a card that never slipped, nothing is changed
+        if item.get('lane') != 'forgotten': raise HTTPException(409, 'That one is not slipped any more - they wrote back, or it moved on. Nothing was changed.')
+        who, tid_, iid, text = str(item.get('who_email') or ''), item.get('tid'), item.get('idea'), str(p.get('text') or '').strip()[:300]
+        task_ = store.get_task(tid_) if tid_ else None
+        step = bool(task_ and str(task_.get('Assignee') or '').startswith('person:') and task_.get('Status') not in ('done', 'dropped'))   # a step somebody owes
+        if kind == 'task.chase':
+            # the thread's last word FROM THE PERSON WHO OWES IT: a follow-up's own inbound, or the step's conversation filtered by them
+            a = item.get('action') or {}
+            if a.get('type') == 'followup' and a.get('mid'): mid = a['mid']
+            else:
+                row = store._one("SELECT MessageId FROM message WHERE TaskId=? AND lower(FromEmail)=? AND Status!='context' ORDER BY SentAt DESC LIMIT 1",
+                                 (tid_, who)) if tid_ and who else None                      # the step's own mail from them
+                mid = (row or {}).get('MessageId')
+            if not mid: raise HTTPException(422, 'There is no thread with them to chase on - write to them from the task page, and the ledger will count it.')
+            n = (sum(1 for r in outcomes.rows_for(store, 'task', tid_) if _json.loads(r.get('FactsJson') or '{}').get('chase')) if tid_ else 0) + 1
+            cc = outcomes.chase_cc(store, who) if who else None
+            instr = f'a short chase to {who or "them"}, in my voice: no answer yet, what I need and by when' + (f'; copy {cc}, who gets them to answer' if cc else '')
+            if a.get('type') == 'followup': out = open_reply(mid, OpenReplyBody(instruction=instr))     # their thread: its newest line is theirs
+            else:
+                # a step somebody owes: the review answers THEIR last word, even when somebody else wrote on the thread since -
+                # open_reply would re-target to the newest line, and the chase would go to the wrong person
+                from . import responder
+                rv = store.pending_review(tid_) if tid_ else None
+                rid = rv['ReviewId'] if rv and rv.get('MessageId') == mid else store.add_review({'TaskId': tid_, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': f'chase:{n}'})
+                try: draft = responder.write_draft(store, tid_, rid, actor=ACTOR, nudge=instr)
+                except Exception as e: logger.warning(f'chase draft on {task_ref(tid_)} not written: {e}'); draft = ''
+                out = {'reviewId': rid, 'taskId': tid_, 'draft': draft, 'drafting': not draft}
+            store._exec('UPDATE review SET Reason=? WHERE ReviewId=?', (f'chase:{n}' + (f' cc:{cc}' if cc else ''), out['reviewId']))
+            return {**out, 'cc': cc}
+        # Let it go is a turn-down on the follow-up; answered elsewhere is a done. Only a step somebody OWES is dropped or closed -
+        # a thread's own task is never touched for its follow-up (the review, 2026-10-12)
+        if iid: assistant.act(store, iid, 'dismiss' if kind == 'task.let_go' else 'done', ACTOR)
+        status = 'put down'
+        if step and kind == 'task.let_go':
+            store.add_comment(tid_, ACTOR, 'human', 'Let it go - nobody is chasing this further.'); store.update_task(tid_, {'Status': 'dropped'}, ACTOR); status = 'dropped'
+        elif step:
+            store.add_comment(tid_, ACTOR, 'human', f"Answered elsewhere{': ' + text if text else ''}."); store.update_task(tid_, {'Status': 'done'}, ACTOR); status = 'done'
+        outcomes.record(store, 'chase.let_go' if kind == 'task.let_go' else 'chase.elsewhere', 'task' if tid_ else 'message', tid_ or item.get('mid') or 0, ACTOR,
+                        facts={'who': who, **({'where': text} if text else {})})
+        return {'status': status, 'who': who}
     if kind == 'item.settle':
         from . import funnel, verdicts
         verb = str(p.get('verb') or 'done')
@@ -1244,6 +1296,10 @@ def task_detail(task_id: int):
     memo = {}
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
+    from . import batch as _batch, cloudfix as _cloudfix
+    batch_rows = store.batch_items(task_id)
+    batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
+    fixable = not batch_outside or _cloudfix.enabled(store)
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
@@ -1258,11 +1314,15 @@ def task_detail(task_id: int):
             'ranOn': _ran_on(task_id, tr),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': _agent_story(task_id),
+            # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that
+            # on - a button that could only say "turn it on" was offered anyway (the owner, 2026-10-12: "what does this do?")
+            'batchOutside': batch_outside,
             # ...and what ended it upstream (a merge, a close): Close out says that instead of an empty reply nobody is owed
             'ended': _ended_line(task_id, d.get('comments')),
             # ...and a BATCH's items, in ranked order, each with what the agent found and where it stands (batch.py)
-            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose')} | {'reviewed': bool(i.get('Sha'))}
-                      for i in store.batch_items(task_id)] or None,
+            # (Screen: what stage two said - cleared to run here, or why it stays read-only; batch.screen)
+            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose', 'Fix', 'FixLink', 'Screen')}
+                      | {'reviewed': bool(i.get('Sha')), 'canFix': fixable or bool(i.get('Trusted'))} for i in batch_rows] or None,
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}
@@ -2994,6 +3054,13 @@ def board_read(note_id: int, who: str = ''):
     store.mark_note_read(note_id, who or ACTOR)
     return {'ok': True}
 
+@app.get('/api/people/pages')
+def people_pages_list():
+    """The pages the ledger keeps per person (people_pages.py): who, the doc name, when, how many lines."""
+    from . import people_pages
+    return {'data': people_pages.pages(store)}
+
+
 @app.get('/api/people')
 def people(limit: int = 300):
     """The address book behind every place a person is picked - looping somebody in on a reply,
@@ -3569,8 +3636,25 @@ def batch_act(tid: int, idx: int, body: BatchActBody):
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
     if not batch.is_batch(store, tid): raise HTTPException(422, 'this task is not a batch')
     out = batch.act(store, tid, idx, body.action)
+    if out.get('setup'): return out              # not a failure: the repository is not set up for cloud fixes yet - the page offers Set up
     if not out.get('ok'): raise HTTPException(422, out.get('why') or 'not done')
     return out
+
+class CloudFixBody(BaseModel): repo: str
+
+@app.get('/api/cloudfix')
+def cloudfix_state(repo: str):
+    """Is this repository ready to fix outside pull requests in GitHub's cloud: the workflow, and the secret (cloudfix.py)."""
+    from . import cloudfix
+    return cloudfix.setup_state(store, repo)
+
+@app.post('/api/cloudfix/setup')
+def cloudfix_setup(body: CloudFixBody):
+    """The owner's press: commit the cloud-fix workflow to the repository's default branch."""
+    from . import cloudfix
+    try: out = cloudfix.install(store, body.repo, ACTOR)
+    except Exception as e: raise HTTPException(422, str(e)[:300])
+    return {**out, **cloudfix.setup_state(store, body.repo)}
 
 @app.get('/api/tasks/{tid}/diff')
 def task_diff(tid: int, scope: str = 'task'):
@@ -4206,13 +4290,32 @@ def concierge_chips(key: str):
     if not item: raise HTTPException(404, 'that one is not in the pipe any more')
     return {'key': key, 'chips': concierge.chips_for(store, item)}
 
-class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False
+@app.get('/api/advice')
+def advice_for(key: str):
+    """The Advisor's line and pill for the item on the table, at its current revision - or nothing (advisor.py)."""
+    from . import advisor
+    return advisor.for_key(store, key)
+
+
+@app.get('/api/advice/notes')
+def advice_notes(key: str, limit: int = 10):
+    """The Advisor's notes on an item: what it looked at, decided and dropped, per revision (advisor.notes)."""
+    from . import advisor
+    return {'rows': advisor.notes(store, key, limit)}
+
+
+class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False; revision: str | None = None
 
 @app.post('/api/concierge/propose')
 def concierge_propose(body: ConciergeProposeBody):
     """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
     from . import concierge
     _hands_off()
+    if body.revision:                                   # the Advisor's pill carries the stamp it was judged at: a moved item refuses it
+        from . import advisor
+        tgt = advisor.target_of(store, body.key)
+        if tgt and advisor.revision(store, *tgt) != body.revision:
+            raise HTTPException(409, 'That one changed since the Advisor looked at it - read it again before pressing.')
     try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact)
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -6984,6 +7087,11 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             ci.poll(target_store)
         except Exception as e:
             logger.warning(f'CI poll failed: {e}')
+        try:                                            # ...and an outside pull request being fixed in GitHub's cloud (cloudfix.py)
+            from . import cloudfix
+            cloudfix.poll(target_store)
+        except Exception as e:
+            logger.warning(f'cloud fix poll failed: {e}')
         # the agent wall composts once a day: yesterday's notes become one summary per checkout,
         # so what an agent reads tomorrow is what still matters (blackboard.roll_up)
         try:

@@ -10,7 +10,7 @@ each stage owns exactly one state badge.
 | Part | What it records | Main controls | What it never does by itself |
 |---|---|---|---|
 | **Task** | The durable job and who owns it | owner, kind, priority, Reopen, Mark done | Starting or ending an agent session does not complete it |
-| **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, new prompt, start, prompt, pause, finish, stop | Stopping does not mark the task done or send a reply |
+| **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, start, save and end session | Ending a session does not mark the task done or send a reply |
 | **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | write, generate, edit; **Close out**, **Decline**, **Not yet** | Sending it marks the task done — unless an agent is still working, a new message came in, or its merge still waits |
 
 While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
@@ -86,10 +86,7 @@ and topic history, the learned profile, and reports from related closed tasks.
 |---|---|
 | **Start coding session** | Starts the selected harness and model |
 | **Start new coding session** | Picks a different harness after an earlier run stopped or hit a limit; the checkout and history are kept |
-| **Give new prompt** | Queues another instruction for the live session |
-| **Pause & save** | Ends the session after writing a handoff note for the next one |
 | **Save and end session** | Ends the session and writes its result; the task stays open until you mark it done |
-| **Stop session** | Ends only the process. Deliberately changes neither task nor reply state |
 
 **Mark done** is stronger than all of them: it closes the task *and* ends any live session,
 because a finished task should not leave an orphan process running.
@@ -250,7 +247,7 @@ it until it is empty, then says so ("FYI done.") and the walk goes on as usual.
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
-| **On you** | A person's ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished | For later work when its time comes |
+| **On you** | A person's ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person's usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished | For later work when its time comes |
 | **Goals** | A goal - an outcome with a date whose steps are tasks - while it has news: it slipped, a step finished, somebody it is waiting on is late. One row per goal; its steps fold into the row ("3 of 7 · coder on step 5 · Ray owes step 4") unless one is your move, which is a row of its own under On you | For later while it is quiet, with its date in the time column; never gone until it is done |
 | **Agents working** | An agent busy on a task - nothing for you until it stops or asks | - |
 | **For later** | Your work you pressed **Next** on, and tasks put away with **Remind me** - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first | - |

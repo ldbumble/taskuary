@@ -135,6 +135,27 @@
       "desc": "Open work with no comment, message or run for this many days gets a line. 3 by default.",
       "help": "A task with a live agent on it is never cold. One with a draft waiting on the task is named as waiting on you."
     },
+    "slipped_default_days": {
+      "group": "Advisor",
+      "label": "Days of silence before a thread has slipped",
+      "type": "number",
+      "desc": "A thread you wrote on, or a step somebody owes, is 'slipped' - first on your rail, with Chase, Let it go, They answered elsewhere and Remind me - once it has been quiet this many days. For a person the outcome ledger has seen answer three times, their own usual day is used instead. 5 by default.",
+      "help": "Someone whose auto-reply says they are away never slips. The day is read from the ledger, never from the mail."
+    },
+    "advisor_events": {
+      "group": "Advisor",
+      "label": "Advise on the item that changed",
+      "type": "switch",
+      "desc": "When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor runs one small prompt on the light model and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.",
+      "help": "Never a row and never a change to the rail's order: the line attaches to the item and shows when the walk reaches it. The verb is one the item already carries; the number beside it is read from the outcome ledger. Off, the Advisor still runs on its schedule."
+    },
+    "advisor_event_cap": {
+      "group": "Advisor",
+      "label": "Event judgements per hour, at most",
+      "type": "number",
+      "desc": "The small prompt runs once per item per change and never more than this many times an hour; past it, the change is noted as dropped and the item simply has no pill. 30 by default.",
+      "help": "The Advisor's notes on an item (the clock menu) say when a judgement was dropped for the cap."
+    },
     "assistant_producers": {
       "group": "Advisor",
       "label": "What it looks for",
@@ -192,6 +213,33 @@
       "optionLabels": {"cli": "do what your CLI agent can", "look": "only look things up"},
       "desc": "What a general (non-coding) agent on a CLI may do. Same as the CLI agent = a shell, files and the connections below, each up to its Authority. Only look things up = read files and search the web, change nothing.",
       "help": "A general agent used to be read-only by inheritance from the brain that reads incoming mail - not by a decision (2026-10-05). It now runs with your CLI agent's own permissions, in Taskuary's scratch folder, unless you choose 'only look things up'.\n\nWhat it may change in your other systems is each connection's Authority, in the table below. Every connection starts at full - what your CLI agent could already do with those credentials - and you narrow the ones you want: at read it can look, and any change becomes a proposal you approve on the task; at write it makes the change itself. A SQL query through a read-level connection is rolled back, whatever it contains.\n\nMail from someone you do not know never starts an agent by itself - general or coding - so these permissions are only used on work you or a trusted sender started."
+    },
+    "repo_trust_private": {
+      "group": "Agent permissions",
+      "label": "Private GitHub repositories",
+      "type": "select",
+      "options": ["ours", "outside"],
+      "optionLabels": {"ours": "your own people - a normal agent", "outside": "treat as outside"},
+      "desc": "Who writes pull requests on a private repository. Your own people get an ordinary agent that starts by itself, no prompts.",
+      "help": "Only people you added can write to a private repository, so its pull requests are your own people's work: they batch together and an ordinary coding agent reviews them, started by itself, with no prompts.\n\nChoose \"treat as outside\" to give them the same protection as a stranger's pull request on a public repository."
+    },
+    "repo_trust_public": {
+      "group": "Agent permissions",
+      "label": "Public GitHub repositories - who is yours",
+      "type": "select",
+      "options": ["writers", "nobody", "anyone"],
+      "optionLabels": {"writers": "people with write access", "nobody": "nobody - every PR is outside", "anyone": "anyone - no protection"},
+      "desc": "On a public repository anyone can open a pull request. People with write access can push anyway, so trusting their pull requests adds nothing; everyone else's are outside.",
+      "help": "Trust comes from the role GitHub reports for the author - owner, member or collaborator - which only you can grant and nobody can fake. Having had a pull request merged before does NOT count: one small good change would buy trust for the next.\n\nAn outside pull request batches apart from your own people's and is reviewed read-only: everything beyond reading is refused, never asked. Its brief carries GitHub's CI results, so nothing of theirs runs on this machine."
+    },
+    "outside_prs": {
+      "group": "Agent permissions",
+      "label": "Outside pull requests",
+      "type": "select",
+      "options": ["review", "cloud"],
+      "optionLabels": {"review": "review here, read-only", "cloud": "review here, fix in GitHub's cloud"},
+      "desc": "What an outside contributor's pull request gets. Fix it in the cloud runs the agent and the tests on a machine GitHub throws away, never yours.",
+      "help": "With \"fix in GitHub's cloud\", an outside pull request whose review asks for changes gets a Fix it button. It runs a workflow in the repository: one job with a read-only token checks out exactly the reviewed head, runs Claude Code there (tests, builds) and hands back a patch; a second job, which never runs their code, pushes it to taskuary/pr-<number>. Taskuary opens the fix's pull request with your token so your CI runs on it, and Merge merges it with the contributor's commits.\n\nThe repository needs the workflow (Taskuary adds it when you press Set up) and one secret, CLAUDE_CODE_OAUTH_TOKEN - run `claude setup-token` and paste the result under the repository's Settings -> Secrets and variables -> Actions. The secret sits beside the stranger's code in that throwaway job: it is revocable, and it cannot reach your repository or this machine."
     },
     "answer_to_agent": {
       "group": "Coder agent",

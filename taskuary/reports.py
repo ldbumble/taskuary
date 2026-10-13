@@ -21,6 +21,10 @@ PLANNED = ['graphql',
            'stooq']    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
+# The Morning digest's data is the whole window (digest.gather: ~30K on an ordinary weekday), not a table of rows. Under
+# AI_CHARS the model read the asks and the threads and never saw the standing verdicts, open work, finished work or what
+# the assistant already raised - and briefed as if none of it existed (2026-10-13).
+DIGEST_AI_CHARS = 80000
 # What separates a report's CONCLUSION from the evidence under it. Defined once because two
 # places must agree on it: the composer writes it, and the routing judge cuts at it.
 RAW_MARK = '\n\n--- raw data ---\n'
@@ -1223,6 +1227,9 @@ def decide_for(store, cfg: dict, res: dict, default_llm) -> dict:
     return decide(cfg, res, **with_judge(judge_for(store, cfg, default_llm), default_llm))
 
 
+def is_digest(cfg: dict) -> bool: return 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}
+
+
 def report_system(store, cfg: dict, charts: bool = False) -> str:
     """The system prompt of a report's AI pass. Rows from a database get the report summarizer;
     the Morning digest is the ASSISTANT speaking (digest.system: COUNSEL.md's voice and its honesty
@@ -1289,8 +1296,9 @@ def render_report(store, cfg: dict, llm=None):
             instr, used, missing = substitute(cfg['ai_prompt'], sections)
             if missing: logger.warning(f'report prompt names sources this report does not have: {", ".join(missing)}')
             rest = '\n\n'.join(s for k, s in sections.items() if k not in used) if used else summary
-            data = rest[:AI_CHARS]
-            if len(rest) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
+            cap = DIGEST_AI_CHARS if is_digest(cfg) else AI_CHARS
+            data = rest[:cap]
+            if len(rest) > cap: data +='\n…(data truncated here - later rows were NOT shown to you)'
             charts = str(store.get_setting('report_images_enabled') or '1') == '1'
             ai = (llm(report_system(store, cfg, charts),
                       f"Instruction: {instr[:AI_CHARS]}\n\nData ({head}):\n"
@@ -1692,6 +1700,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         funnel.settle(store, f'report:{mid}', 'done', 'report')
     expire_previous_runs(store, src, cfg, mid)
     store.audit('message', mid, 'report', 'report', 'agent', title)
+    from . import advisor                            # the Advisor on the event (advisor.py): a report is on the rail
+    advisor.notice(store, 'report.landed', 'task' if out.get('task_id') else 'message', out.get('task_id') or mid)
     err = _after(store, src, cfg, d, title, subject, text, mid)
     # the digest report is ALSO what keeps DIGEST.md alive: the Timeline row, and the doc Settings shows
     if not failed and 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:

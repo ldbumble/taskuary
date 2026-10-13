@@ -57,6 +57,7 @@ _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
+         'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
          'rerun', 'setup', 'done', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
          'confirm', 'cancel', 'none')
 # The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
@@ -64,7 +65,8 @@ VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'rem
 # that map to actions"); only which of them fits the thing on the table is decided per item, from its kind.
 # The model still reads free text - it just never invents a button. Every word here maps to a verb the cards
 # and the typed sentence already run, so a chip, a button and a sentence are one road.
-CHIP_WORDS = {'approve': 'Send & close', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Send to a coding agent',
+CHIP_WORDS = {'chase': 'Chase them', 'let_go': 'Let it go', 'elsewhere': 'They answered elsewhere',
+              'approve': 'Send & close', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Send to a coding agent',
               'regular_agent': 'Send to agent', 'mine': 'Make a task', 'not_ours': 'Not ours',
               'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
               'not_ours_kind': 'No more ideas like this', 'archive': 'Archive it', 'close': 'Mark done',
@@ -72,7 +74,10 @@ CHIP_WORDS = {'approve': 'Send & close', 'redraft': 'Redraft it', 'reply': 'Repl
               'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
               'prep': 'Prep me', 'defer': 'Remind me', 'continue': 'Continue session', 'test_connection': 'Test it'}
 # What the word will actually DO, on hover - written where the difference matters.
-CHIP_HINTS = {'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
+CHIP_HINTS = {'chase': 'Drafts a short nudge on the thread, in your voice, copying whoever the ledger says gets them to answer',
+              'let_go': 'Puts it down: the step is dropped or the follow-up closed; three on one person and the Advisor stops raising them',
+              'elsewhere': 'Say where they answered - the step closes as done',
+              'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
               'regular_agent': 'Hand the work off - whether it needs code is picked for you, and you can change it on the card',
               'mine': "A task on your own list - no agent starts", 'next': 'Read it and move on',
          'defer': 'Put the task away until a day - it is Upcoming in Tasks and back on your rail that morning',
@@ -159,7 +164,8 @@ OPENING = (
     "Do not walk through any item yet - the owner starts that with a button. Under 90 words. No options line.")
 
 # what the assistant says when a decision is carried out - the fact of what happens now, never a claim
-RECEIPTS = {'reply': "I'll draft that - nothing goes out until you say so.", 'approve': 'Sending it as drafted. Moving on.',
+RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so.", 'let_go': 'Put down.', 'elsewhere': 'Closed - they answered elsewhere.',
+            'reply': "I'll draft that - nothing goes out until you say so.", 'approve': 'Sending it as drafted. Moving on.',
             'not_ours': "Not ours, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
             'not_ours_sender': "Noted: that sender is noise - everything from them files itself from now on. Moving on.",
             'remember': "Remembered. Moving on.", 'coder': "Handed off - the code work starts now, and what it finds comes back here.",
@@ -600,11 +606,12 @@ def assent_verb(item: dict | None) -> str | None:
 # through task.create_from_text from the item's facts and the owner's words.
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
-         'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid'}
+         'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid',
+         'chase': 'key', 'let_go': 'key', 'elsewhere': 'key'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coder': 'hand to a coding agent', 'regular_agent': 'hand to a regular agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
-             'split': 'split', 'defer': 'put away', 'continue': 'continue'}
+             'split': 'split', 'defer': 'put away', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere'}
 
 def no_agent(store) -> str:
     """The coding agent the dispatch would use, when there is not one - so "Sent off to the coding
@@ -649,6 +656,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # an idea triage already opened a task for IS that task - Make a task on it made nothing new (the owner, 2026-10-01:
     # "no Make a task on an item that already is a task"); a closed one is history, and new work may be a task again
     if verb == 'mine' and item.get('kind') == 'idea' and _live_task(store, item): return f"{what} is already a task on your list."
+    # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
+    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten': return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     if verb == 'not_ours_kind': return f"{what} is not one of the assistant's ideas - say Not ours."
     if verb == 'answer_agent' and item.get('kind') != 'agent':
@@ -734,6 +743,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     if not item: return []
     kind = 'task' if str(item.get('kind') or '').startswith('goal') else item.get('kind')   # a goal is a task on the table (spec 2026-10-12)
     verbs = list(CHIPS[kind] if kind in CHIPS else ('next',))    # the handful's () is deliberate
+    # SLIPPED (spec 2026-10-12): the four answers, whatever row leads the item - Chase, Let it go, They answered elsewhere, Remind me
+    if item.get('lane') == 'forgotten': verbs = ['chase', 'let_go', 'elsewhere', 'defer', 'next']
     # CONTINUE SESSION leads on work an agent left - stopped, saved by you, or paused when Taskuary stopped (A19)
     if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused')): verbs = ['continue'] + [v for v in verbs if v != 'continue']
     # ...and on FINISHED work it is offered after the card's own close: the session is still there to be asked for more
@@ -830,6 +841,16 @@ WHAT_ABOUT = ('WHAT THEIR WORDS ARE ABOUT, in this order: the item on the table 
               'never the whole pipe; ANOTHER task when they name one (its TQ ref, its title or its person) - read that task with '
               'task.read, finding its ref with tasks.list or timeline.search on the person and a subject word, never their whole '
               'sentence; an old task they ask you to FIND - search for it.')
+
+
+def _advice_block(store, item: dict | None) -> str:
+    """The Advisor's line on the item on the table (advisor.block): 'why?' is answered from it, never recomputed here."""
+    if not item: return ''
+    try:
+        from . import advisor
+        return advisor.block(store, item)
+    except Exception as e:
+        logger.debug(f'concierge: no advice block - {e}'); return ''
 
 
 def table_line(store, item: dict | None) -> str:
@@ -2353,6 +2374,8 @@ PROPOSALS = {
     # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
     'stop_agent': ('agent.stop', 'Save and end session', True), 'rerun': ('report.rerun', 'Run the report again', True),
     'continue': ('agent.continue', 'Continue session', False),
+    # the slipped card's answers (spec 2026-10-12): a chase is a draft for your yes; the other two settle the item
+    'chase': ('task.chase', 'Chase them', False), 'let_go': ('task.let_go', 'Let it go', True), 'elsewhere': ('task.elsewhere', 'They answered elsewhere', True),
     'test_connection': ('connection.test', 'Test the connection', False),
     'remember': ('memory.remember', 'Remember it', False), 'split': ('task.split', 'Split it in two', False),
     'setup': ('task.setup', 'Open the walk-through', False),
@@ -2546,6 +2569,9 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb == 'block_sender': target = it.get('mid')      # the rule is keyed on the sender of THIS message
     elif verb == 'archive': target = it.get('mid')
     elif verb == 'close': target = it.get('tid')
+    elif verb in ('chase', 'let_go', 'elsewhere'):
+        if not it.get('key'): raise ValueError('nothing is on the table')
+        target, params = it.get('tid') or it.get('idea') or it.get('mid') or 0, {'key': it['key'], 'text': d_text or text or None}
     elif verb in ('done', 'later', 'skip'):
         if not it.get('key'): raise ValueError('nothing is on the table')
         # "done" said about an agent parked on a question is not a row to tick: the job is over, so the task
@@ -2762,7 +2788,10 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
             else f"{label}: {summary}")
     text = head + ('.' if tail.startswith('\n') else '. ') + tail
     record_related(store, dock_tid, item, 'assistant', text, {'kind': 'proposal', 'key': None, 'title': label, 'op': op['id'], 'tid': None, 'ref': None})
-    return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text}
+    # OVER THE CARD only what the card does not say - its heading is the label and its line the summary (the 2026-09-24 rule
+    # propose_for keeps; this road never did, so "Clear 21 from the pipe: 21 items - ..." was said twice, the owner, 2026-10-12)
+    return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text,
+            'say_card': tail.strip()}
 
 
 def _routing_words(cfg: dict) -> str:
@@ -3291,7 +3320,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
                       + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item else '')
-                      + (f"{table_actions(store, item)}\n\n{WHAT_ABOUT}\n\n" if item else '')
+                      + (f"{table_actions(store, item)}\n\n" + (f"{adv}\n\n" if (adv := _advice_block(store, item)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
                       + f"The owner says: {text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')

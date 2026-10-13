@@ -6,7 +6,7 @@ read policy, history windows, or an independent size limit after activation.
 import copy
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from . import processing_all, proposals
 
@@ -64,7 +64,7 @@ def _arrived_after_close(task, view) -> bool:
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
-OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time')
+OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time', 'forgotten')
 # a goal's CHILD in one of these lanes is told by the goal's row ("coder on step 5 · Ray owes step 4"), not by a row of its
 # own; in any other lane it is the owner's move and stays a row (spec 2026-10-12, "many steps, one row")
 FOLD_LANES = ('working', 'queued', 'theirs', 'fyi')
@@ -251,7 +251,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...or a regular-agent task nobody has started yet: unassigned when triage named no specialist, it read as the
     # owner's own work (A10, 2026-09-25)
     from .processing_all import _has_conversation
-    queued = active and not workers and not persisted_working and (
+    # NEWS AFTER THE AGENT (the owner, 2026-10-12): a sender wrote again after the agent's last session - the task is that
+    # message now, on you, not "handed to coder" nor "you ended the session" from days before
+    news = funnel.news_since_agent(store, tid) if active and tid and not workers else None
+    queued = active and not workers and not persisted_working and not news and (
         str(task.get('Assignee') or '').startswith('agent:') or funnel.general_not_started(task, _has_conversation(view, tid), view.get('routes', []))
         or funnel.held_for_repo(task))    # a start that stopped on "which repository?" is on the rail until you pick one
     # a done task is not work any more - its own row, the assistant's note that became it, AND the mail
@@ -287,9 +290,12 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             except (ValueError, TypeError): action = {}
             triage = action.get('triage') or {}
             lane = processing_all.idea_lane(idea)
+            slip, late, quiet, day = funnel.slipped_followup(store, action, now)   # a quiet thread past the person's day: the owner's move
+            if slip == 'answered': store.set_idea_status(idea['IdeaId'], 'done', 'funnel'); late = 0
+            elif slip: lane = slip
             base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action,
                         priority=triage.get('priority'), tid=action.get('tid') or tid,
-                        mid=action.get('mid'), settling=bool(triage.get('pending')),
+                        mid=action.get('mid'), settling=bool(triage.get('pending')), who_email=action.get('who_email') or '', late_days=late,
                         urgent_request=lane == 'asked' and (bool(triage.get('urgent')) or funnel.priority_rank(triage.get('priority')) == 0))
             card = funnel._item('', 'idea', lane, compact['title'], **base)
         else:
@@ -334,11 +340,43 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # task page said "waiting on them" - the rail had no lane for it. The TASK only: a message from them is their
     # answer, and that is your move again (FollowUpTests)
     if not row.get('MessageId') and task.get('Status') == 'waiting' and not review and card['lane'] == 'yours': card['lane'] = 'theirs'
+    # ...and a step a PERSON owes, quiet past its day plus that person's usual day, is SLIPPED: the owner's move (spec 2026-10-12)
+    who = str(task.get('Assignee') or '')
+    # ...whatever row leads the item (their mail, somebody else's on the thread, none): the step is theirs while it waits, and it
+    # has slipped unless THEY have written on it since its day
+    if (card['lane'] in ('theirs', 'asked', 'yours', 'fyi') and who.startswith('person:') and task.get('Status') == 'waiting'
+            and str(task.get('DueAt') or '')[:10]):
+        from . import outcomes
+        try: due = date.fromisoformat(str(task['DueAt'])[:10])
+        except ValueError: due = None
+        if due and store._one("SELECT 1 x FROM message WHERE TaskId=? AND lower(FromEmail)=? AND SentAt>=? LIMIT 1", (tid, who[7:].lower(), due.isoformat())): due = None
+        if due:
+            day = outcomes.late_after(store, who[7:], int(store.get_setting('slipped_default_days', 5) or 5))
+            past = (now.date() - due).days - day
+            if past >= 0:
+                card.update(lane='forgotten', who_email=who[7:].lower(), late_days=past,
+                            why=f"{holder_name(who)} has been quiet {(now.date() - due).days} days past {due:%b %d} - late for them after {day}")
+    # ...and a SLIPPED FOLLOW-UP among the item's members is the owner's move whatever row leads the item: on this rail the
+    # Advisor's line about a thread joins the thread's own item, so the rule reads the members, not only the target
+    if card['lane'] not in ('forgotten', 'blocked', 'approve', 'time'):
+        for i in view.get('ideas') or []:
+            if i.get('Status') != 'open' or i.get('Kind') != 'followup': continue
+            try: a = json.loads(i.get('ActionJson') or '{}')
+            except (ValueError, TypeError): a = {}
+            slip, late, quiet, day = funnel.slipped_followup(store, a, now)
+            if slip == 'answered': store.set_idea_status(i['IdeaId'], 'done', 'funnel'); continue
+            if slip:
+                card.update(lane=slip, who_email=a.get('who_email') or '', late_days=late, idea=card.get('idea') or i['IdeaId'], action=a,
+                            idea_kind=card.get('idea_kind') or i.get('Kind'), why=funnel.slipped_why(a.get('who_email'), quiet, day)); break
     # A GOAL IS ONE ROW (spec 2026-10-12): its kind says its state, its sub line says the count and who is holding it, its
     # date sits where the age goes, and it is never gone while open. Its children fold into it unless they are your move.
     from .store import is_goal
     if is_goal(task) and active and not review and not worker: card.update(**goal_facts(store, task, tid, now))
     elif task.get('ParentId') and active: card.update(goal=funnel.task_ref(task['ParentId']), folded=False)   # folded below, once the lane is final
+    if news:
+        who = str(task.get('Assignee') or '').split(':', 1)[-1] or 'the agent'
+        frm = str(news.get('FromName') or news.get('FromEmail') or 'they').split(' at ')[0]
+        card.update(lane='asked' if card['lane'] in ('queued', 'saved', 'stopped') else card['lane'], why=f'{frm} wrote again since {who} finished')
     if queued and card['lane'] in ('asked', 'yours'):
         card.update(lane='queued', why=f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'the regular agent'}, not started yet")
     # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a

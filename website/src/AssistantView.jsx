@@ -28,6 +28,7 @@ import { useRowVerbs, useVerbs } from "./actionRow.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
+import { adviceKeyFor, ghostText } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -130,7 +131,7 @@ function SinceBlock({ onOpen }) {
   const o = d?.overnight || {}, cards = d?.cards || [], dg = d?.digest || {};
   // "Write a fresh one" runs the report now (about twenty seconds) and the folded line follows it until the new one is in
   const fresh = async () => {
-    if (!dg.source_id || writing) return;
+    if (!dg.source_id || writing.startsWith("Writing")) return;
     const was = dg.at;
     setWriting("Writing a fresh one…");
     try { await api.post(`/api/reports/${dg.source_id}/rerun`); }
@@ -168,8 +169,11 @@ function SinceBlock({ onOpen }) {
         {dg.at ? <span>written {agoText(dg.at)}</span> : <span>not written yet today</span>}
         {dg.at && <button type="button" className="tq-linkish" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? "Fold it ▴" : "See the full digest ▾"}</button>}
         <span className="sep">|</span>
-        <button type="button" className="tq-linkish" disabled={!!writing && writing.startsWith("Writing")} onClick={fresh}>Write a fresh one</button>
-        {writing && <span>{writing}</span>}
+        {/* while it writes, the button IS the status - a spinner, not the button beside a second line saying the same (2026-10-13) */}
+        {writing.startsWith("Writing")
+          ? <span role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CircularProgress size={12} thickness={5} sx={{ color: "#827356" }} />{writing}</span>
+          : <button type="button" className="tq-linkish" onClick={fresh}>Write a fresh one</button>}
+        {writing && !writing.startsWith("Writing") && <span>{writing}</span>}
       </div>}
       {open && dg.text && <div className="tq-since-body"><DigestText text={dg.text} sourceId={dg.source_id} /></div>}
     </div>
@@ -719,6 +723,32 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
 }
 
 // ── the page ─────────────────────────────────────────────────────────────────────────────────
+/* THE ADVISOR'S NOTES (spec 2026-10-12, "Seeing the Advisor's thinking"): a receipt, not a transcript - what it decided
+   on the item on the table, what it dropped and why, with the evidence it cited. Read from /api/advice/notes; shown in
+   the clock menu above the past chats, only while something is on the table. */
+function AdvisorNotes({ keyOnTable }) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let on = true;
+    api.get("/api/advice/notes", { params: { key: keyOnTable, limit: 8 } }).then(({ data }) => { if (on) setRows(data?.rows || []); }).catch(() => { if (on) setRows([]); });
+    return () => { on = false; };
+  }, [keyOnTable]);
+  return (
+    <div className="tq-advisor-notes">
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, px: 1.5, pt: 1.25 }}>Advisor's notes on this one</Typography>
+      {rows === null && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Reading…</Typography>}
+      {rows && !rows.length && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Nothing judged on it yet.</Typography>}
+      {(rows || []).map((r, i) => (
+        <div key={i} style={{ padding: "6px 12px", borderTop: "1px solid #eee9e2" }}>
+          <Typography sx={{ fontSize: 11.5, color: FAINT }}>{[ageText(r.at), r.event, r.tier > 1 ? "the bigger read" : ""].filter(Boolean).join(" · ")}</Typography>
+          <Typography sx={{ fontSize: 12.5, color: INK }}>{r.verb ? `${r.pill} - ${r.line}` : `dropped: ${r.dropped}${r.line ? ` ("${r.line}")` : ""}`}</Typography>
+          {!!(r.evidence || []).length && <Typography sx={{ fontSize: 11.5, color: FAINT }}>{r.evidence.map((e) => `${e.id}: ${e.label || e.kind || ""}`).join(" · ")}</Typography>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode, onMode, active = true, request = null }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
@@ -756,6 +786,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [current, setCurrent] = useState(null);       // the key on the table
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [text, setText] = useState("");
+  const [advice, setAdvice] = useState(null);     // the Advisor's line for the key on the table (advisor.py), or null
   // THE BOX GROWS WITH WHAT YOU TYPE, like every chat app: one row empty, a row per line after that, up to the CSS
   // cap (40% of the window) - then it scrolls inside. rows={1} alone held a paragraph in a one-and-a-half-line slot
   // (the owner, 2026-09-24: "how do we deal with this when you type in many lines?")
@@ -1080,6 +1111,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, []);
   useEffect(() => { currentRef.current = currentItem; }, [currentItem]);
   useEffect(() => { loadState().catch((e) => setErr(errText(e))); }, [loadState]);
+  // the Advisor's line for the item on the table: read when the table changes and when its event lands; a changed
+  // item answers {} and the pill goes with it - nothing on the rail moves for it (spec 2026-10-12, mechanics 3-5)
+  const readAdvice = useCallback(async (key) => {
+    if (!key) { setAdvice(null); return; }
+    try { const { data } = await api.get("/api/advice", { params: { key } }); setAdvice(data && data.verb ? data : null); }
+    catch { setAdvice(null); }
+  }, []);
+  // ...re-read when the table changes AND when the card on it refreshes (a reply landing keeps the key and moves the
+  // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
+  useEffect(() => { readAdvice(current); }, [current, currentItem?.view_revision, readAdvice]);
+  useEffect(() => onLive("advice", (ev) => { const key = adviceKeyFor(ev, currentRef.current); if (key) readAdvice(key); }), [readAdvice]);
   // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
   // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
   // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
@@ -1191,7 +1233,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // a line of the assistant's own that needs no turn - a section walk running out
   const noteLine = useCallback((text) => setMsgs((m) => [...m, { id: `s${Date.now()}`, role: "assistant", text }]), []);
   // pull the next thing (or the one named; or the next piece of mail) out of the pipe and say it
-  const surface = useCallback(async (key = null, asUser = null, leaving = null) => {
+  // `blind`: pressed with no item in front of the owner (the walk's start, a chat chip on an empty table) - see the retry below
+  const surface = useCallback(async (key = null, asUser = null, leaving = null, blind = false) => {
     if (busy || resetting || handoff || turnFlight.current) return;
     // WALKING A SECTION: Next stays inside it - the next of its rows the walk has not shown - and once it is empty it
     // says so and the walk goes on as normal (the canvas redesign, 2026-09-29)
@@ -1240,7 +1283,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
       const navigation = capture ? nextSelectionBody(capture) : scope;
-      landed(await turn({ mode: "next", key, leaving, ...navigation }));
+      let data;
+      try { data = await turn({ mode: "next", key, leaving, ...navigation }); }
+      catch (e) {
+        // A BLIND PRESS HAS NO PICK TO PROTECT: the guard (PW-050) refuses a Next whose item is not the one the page shows,
+        // and nothing was shown - a reply landing between the morning card and its button made the owner press twice
+        // (2026-10-13). A plain stale refusal ran nothing, so the server's fresh capture is taken once, never more.
+        const g = blind && selectionGuardDetail(e), fresh = g && !g.reason && g.retryable !== false ? captureNextSelection(g, scope) : null;
+        if (!fresh || epoch !== chatEpoch.current) throw e;
+        selectionRef.current = fresh;
+        setPile((p) => replaceSelectionToken(p, g));
+        data = await turn({ mode: "next", key, leaving, ...nextSelectionBody(fresh) });
+      }
+      landed(data);
     } catch (e) {
       const guard = selectionGuardDetail(e);
       if (guard) {
@@ -1276,7 +1331,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // resume what is on the table only if you have not PASSED it: a passed item waits in Passed for
       // its hour, and starting the walk put it straight back in front of you (the owner, 2026-09-23:
       // "it's in the passed section but showing up on assistant first")
-      if (!currentRef.current || currentRef.current.surfaced) await surface(null, null);
+      if (!currentRef.current || currentRef.current.surfaced) await surface(null, null, null, true);
     } catch (e) {
       // the owner's line is on screen now, so a failure has to be answered on screen too -
       // an unhandled rejection would leave "Walk me through my tasks." sitting there alone. The line is taken back, so the
@@ -1433,8 +1488,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   };
   // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the
   // target is explicit. The card lands in the chat and runs from its own button, like any proposal.
-  const proposeDirect = async (verb, key, table = false) => {
-    const { data } = await api.post("/api/concierge/propose", { verb, key, table });
+  const proposeDirect = async (verb, key, table = false, revision = null) => {
+    // the pill carries the stamp it was judged at, and a moved item refuses it (409); the plain road is unchanged
+    const { data } = revision ? await api.post("/api/concierge/propose", { verb, key, table, revision })
+      : await api.post("/api/concierge/propose", { verb, key, table });
     // refused before any proposal existed: the reason and this item's other words, as a line of its own (no card to confirm)
     if (!data.id) {
       setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], card: { kind: "words", chips: data.chips || [] } }]);
@@ -1465,7 +1522,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (c.verb === "tour") { await setup(); return; }
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
-    if (c.verb === "next") { surface(null, null, key); return; }
+    if (c.verb === "next") { surface(null, null, key, !item); return; }
     // one item by name - one the walk already showed and will not repeat yet ("N things you've already seen")
     if (c.verb === "open" && c.key) { surface(c.key); return; }
     // REMIND ME asks for the day - the task page's own picker - and the walk moves on once it is put away
@@ -1505,7 +1562,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     try {
       if (c.verb === "prep") await prep(item);
       else {
-        const pr = await proposeDirect(c.verb, key, true);
+        const pr = await proposeDirect(c.verb, key, true, c.revision || null);
         if (pr?.auto) await runProposal(pr);
       }
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
@@ -2002,6 +2059,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <div className="tq-chats">
           <div className="tq-chats-head">Chats<span style={{ flex: 1 }} /><IconButton aria-label="Close past chats" size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>
           <div className="tq-chats-list">
+            {current && <AdvisorNotes keyOnTable={current} />}
             {chatsLoading && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>Loading past chats…</Typography>}
             {chatsErr && <Typography role="alert" sx={{ color: "#7a2f3c", fontSize: 12, p: 1.5 }}>{chatsErr}{" "}
               <button type="button" className="tq-chip" onClick={openChats}>Try again</button></Typography>}
@@ -2116,10 +2174,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             </Tooltip>
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
-            <textarea ref={composeRef} rows={1} value={text} disabled={resetting} placeholder={phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
-              : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
+            <textarea ref={composeRef} rows={1} value={text} disabled={resetting}
+              className={!text.trim() && ghostText(advice?.line, phone) ? "tq-advised" : undefined}
+              placeholder={(!text.trim() && ghostText(advice?.line, phone))   /* the Advisor's ghost text (advice.js); the phone keeps its short hint */
+                || (phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
+                : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…")}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            {/* THE PILL (spec 2026-10-12): the Advisor's verb where the arrow sits, while the box is empty. It presses the card's
+                own button through the same chip path (runChip -> propose -> receipt); typing anything brings the arrow back */}
+            {advice?.verb && !text.trim() && !pics.imgs.length ? (
+              <button type="button" className="tq-pill" title={advice.line} disabled={busy || resetting}
+                onClick={() => runChip({ verb: advice.verb, label: advice.label, revision: advice.revision })}>{advice.pill}</button>
+            ) : (
+              <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            )}
           </div>
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}

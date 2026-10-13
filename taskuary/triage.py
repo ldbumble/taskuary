@@ -33,6 +33,9 @@ FIELDS = {
     'recently_closed': "recently_closed is work on this thread, sender or subject that was closed in the last few days, each with its "
                        "tid and how it ended - the finding the agent wrote, or the ask if no agent ran.",
     'open_work': "open_work is the OPEN tasks this message touches, each with its tid.",
+    'open_goals': "open_goals is the owner's OPEN GOALS, each with its tid, what done looks like and its steps (id, text, done, who holds it): "
+                  "when this message serves one step - it delivers it, answers it, or is plainly about it - answer serves {task, step, done}, "
+                  "done true only when the message completes that step; a message that serves no step answers serves null.",
     'assistant_said': "assistant_said is what the Advisor already raised about this thread and what the owner did with it.",
 }
 
@@ -103,7 +106,7 @@ def _bullet(name: str) -> str:
 # WHAT THE ANSWER MUST CONTAIN (title, summary, checklist...), as opposed to what the verdict should BE: appended when a
 # document never asks for it, because without it every task carried the whole email as its ask (2026-09-10, TQ-0665).
 TASK_FIELDS = shipped_section('## 5.') + '\n\n' + shipped_section('## 7.')
-URGENT, DUE, SENDER = _bullet('urgent'), _bullet('due'), _bullet('sender_class')
+URGENT, DUE, SENDER, GOAL = _bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal')
 
 
 def due_of(j: dict, sent=None) -> str | None:
@@ -118,7 +121,7 @@ def due_of(j: dict, sent=None) -> str | None:
     except ValueError: base = datetime.now().date()
     return s if base - timedelta(days=7) <= d <= base + timedelta(days=366) else None
 
-def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False) -> dict:
+def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -135,6 +138,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          'due': {'type': ['string', 'null']},
          # who wrote it (categories.sender_class) - the Timeline's info/automated/promo and the Advisor's people (2026-10-11)
          'sender_class': {'type': 'string', 'enum': ['person', 'automated', 'bulk']},
+         # an open-ended ask opens a GOAL with no steps, and the planner proposes them (spec 2026-10-12, build step 5)
+         'goal': {'type': 'boolean'}, 'done_when': {'type': ['string', 'null']},
          # what closes it beyond the reply (slots.py): emails to OTHER people the message asks the owner to send
          'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
@@ -147,6 +152,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
                  related_message_ids={'type': ['array', 'null'], 'items': {'type': 'integer'}},
                  existing_task_id={'type': ['integer', 'null']}, same_problem={'type': ['boolean', 'null']})
     if same: p['same_as'] = {'type': ['integer', 'null']}
+    if goals: p['serves'] = {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['task', 'step', 'done'],
+                             'properties': {'task': {'type': 'integer'}, 'step': {'type': 'string'}, 'done': {'type': 'boolean'}}}
     return {'name': 'triage_verdict',
             'schema': {'type': 'object', 'additionalProperties': False, 'required': list(p), 'properties': p}}
 
@@ -587,6 +594,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if playbooks: system += "\n\nPLAYBOOKS - the owner's written procedures, each with the arrival that starts it (when):\n" + str(playbooks)[:3000]
             if profiles: system += '\n\nTHE WORKERS - the specialists for non-coding work, each with what it is for:\n' + str(profiles)[:2000]
             same_ids = {int(w['tid']) for key in ('open_work', 'recently_closed') for w in ((thread or {}).get(key) or []) if w.get('tid')}
+            goal_steps = {int(g['tid']): {x['id'] for x in g.get('steps') or []} for g in (thread or {}).get('open_goals') or []}
             how = addressed_to_you(msg, mine)
             # THE SENDER'S OWN WORDS ON TOP, the chain they wrote on top of quoted under them, and the
             # budget's cut taken out of the chain (sender_body). `own_text` is Graph's uniqueBody where
@@ -623,6 +631,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"urgent"' not in base: system += '\n\n' + URGENT
             if not shape and '"due"' not in base: system += '\n\n' + DUE          # ...and the due day (2026-10-06)
             if not shape and 'sender_class' not in base: system += '\n\n' + SENDER   # ...and who wrote it (2026-10-11)
+            if not shape and 'done_when' not in base: system += '\n\n' + GOAL       # ...and whether it is a goal (2026-10-12)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -630,7 +639,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # behind it, for a CLI brain that has no wire to put a schema on - one more ask, naming
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
-            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids)),
+            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps)),
                               need=('title', 'summary'), **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
             if j is None: raise ValueError(answer.error or 'the response was not JSON')
@@ -661,6 +670,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 try: same = int(j.get('same_as')) if j.get('same_as') is not None else None
                 except (TypeError, ValueError): same = None
                 if same in same_ids: out['same_as'] = same
+                # serves: only a goal and a step it was actually shown - a step it made up lands nowhere (spec 2026-10-12)
+                sv = j.get('serves') if isinstance(j.get('serves'), dict) else {}
+                try: gt = int(sv.get('task')) if sv.get('task') is not None else None
+                except (TypeError, ValueError): gt = None
+                if gt in goal_steps and str(sv.get('step')) in goal_steps[gt]: out['serves'] = {'task': gt, 'step': str(sv['step']), 'done': sv.get('done') is True}
                 if repos and out['intent'] == 'task': out.update(repo_choice_of(j, repos))
                 # the work, named (PW-074): a title and summary of what was asked - validated, never
                 # trusted; the router falls back when absent. Kept on EVERY verdict now, not only on
@@ -681,6 +695,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
                     out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
                 if out['intent'] == 'task' and parse_outputs(j): out['outputs'] = parse_outputs(j)
+                # a GOAL needs its done-when sentence: "goal" on a two-line question with nothing to stop on is a task
+                dw = ' '.join(str(j.get('done_when') or '').split())[:1000]
+                if out['intent'] == 'task' and j.get('goal') is True and dw: out.update(goal=True, done_when=dw)
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

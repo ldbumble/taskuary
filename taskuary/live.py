@@ -14,7 +14,9 @@ FEED, INGEST, TASK, RUN = 'feed-changed', 'ingest-status', 'task-changed', 'run-
 CHAT = 'chat-changed'
 # the startup catch-up finished (or outlived its wait) with a greeting held for it: the page asks for the greeting again (welcome.py)
 ARRIVE = 'arrive'
-KINDS = (FEED, INGEST, TASK, RUN, CHAT, ARRIVE)
+# the Advisor's line landed on an item (advisor.judge): the prompt box fills for that key, nothing on the rail moves
+ADVICE = 'advice'
+KINDS = (FEED, INGEST, TASK, RUN, CHAT, ARRIVE, ADVICE)
 
 _loop = None
 _clients = set()
@@ -23,7 +25,7 @@ _pending = {}          # kind -> payload (last writer wins for that kind)
 _timers = {}           # kind -> Timer
 # run-tail is a screen you watch, so it can wait a beat to fold pty bursts; the other two
 # are "something landed" and should reach the tab before the next glance.
-_DELAY = {RUN: 0.25, FEED: 0.08, INGEST: 0.08, TASK: 0.08, CHAT: 0.05, ARRIVE: 0.05}
+_DELAY = {RUN: 0.25, FEED: 0.08, INGEST: 0.08, TASK: 0.08, CHAT: 0.05, ARRIVE: 0.05, ADVICE: 0.05}
 
 
 def bind(loop):

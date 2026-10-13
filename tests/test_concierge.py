@@ -720,6 +720,9 @@ class SweepTests(unittest.TestCase):
         out = cleared_by(s, "all the reports for paula vance you can remove. I don't need them", {'sender': 'Paula Vance'})
         p = out['proposal']; self.assertEqual((p['kind'], p['label']), ('pipe.clear', 'Clear 3 from the pipe'))
         self.assertIn('Northwind Financial Report', p['summary'], 'the card names which ones before the yes')
+        # ...and the line over the card says only what the card does not (the owner, 2026-10-12: "there should not be text and a card")
+        self.assertNotIn('Northwind Financial Report', p['say_card']); self.assertNotIn(p['label'], p['say_card'])
+        self.assertIn('nothing is deleted', p['say_card'])
         self.assertEqual(len(funnel.build(s)['items']), 4)                                       # nothing swept on the words
         o = run(s, p).json()['outcome']
         self.assertEqual(o['cleared'], 3)

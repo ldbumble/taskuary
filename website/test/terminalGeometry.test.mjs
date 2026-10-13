@@ -37,7 +37,7 @@ test("only the owner tells the PTY a size", () => {
 test("the geom frame is handled, and taking ownership back re-sends the size", () => {
   const at = term.indexOf('else if (m.type === "geom")');
   assert.notEqual(at, -1, "the client must handle the server's geom frame");
-  const handler = term.slice(at, at + 600);
+  const handler = term.slice(at, at + 900);
   assert.ok(handler.includes('ownsGeometry = m.owner !== false && !!ui;'),
     "absent or true means this pane owns it - an older server sends no geom at all - unless it is put away");
   assert.ok(handler.includes("fitSafely();"), "the new geometry has to be applied at once");
@@ -89,7 +89,7 @@ test("nothing touches xterm after the pane is disposed", () => {
   assert.match(term, /s\.dispose = \(\) => \{\n\s+if \(disposed\) return;\n\s+disposed = true; s\.alive = false; unbind\(\);/);
   assert.match(term, /term\.write\(data, \(\) => \{ if \(disposed\) return; pendingWrites -= 1;/);
   assert.match(term, /const lift = \(\) => \{\n\s+if \(disposed\) return;/);
-  assert.match(term, /const onResize = \(\) => \{\n\s+if \(disposed \|\| !ui\) return;/);
+  assert.match(term, /const onResize = \((?:real = true)?\) => \{\n\s+if \(disposed \|\| !ui\) return;/);
 });
 
 test("a pane put away hands the geometry back and follows the pty out of sight", () => {
@@ -105,9 +105,22 @@ test("a pane put away hands the geometry back and follows the pty out of sight",
   // its box and grew it back, which moved its rows (the Wall, 2026-10-01)
   const attach = term.slice(term.indexOf("s.attach = (host, binding) => {"), term.indexOf("s.detach = () => {"));
   assert.match(attach, /const back = opened;/);
-  assert.match(attach, /if \(back\) claim\(\);/);
+  assert.match(attach, /if \(back( \|\| geomSeen)?\) claim\(\);/);
   assert.doesNotMatch(attach.slice(attach.indexOf("binding.setState")), /ownsGeometry = true/, "only a fresh pane assumes the geometry");
   assert.match(term, /const d = fit\.proposeDimensions\(\);/, "the claim sends its box's size without resizing xterm to it");
   assert.match(term, /if \(readOnly \|\| !s\.alive\) s\.dispose\(\);\n\s+else POOL\.keep\(sid, s, keptCap\(\)\);/,
     "a read-only preview or an ended session is let go, never kept");
+});
+
+test("a pane shorter than the pty at its width keeps the pty's rows - coming back, connecting, or regaining it", () => {
+  // the owner, 2026-10-12: Codex "every time i switch to it, or type in answer" reprinted its history. Measured on a live Codex:
+  // back with a question card under it shrank the pty 37 -> 22 and the answer grew it back - two reprints - and a fresh page
+  // opened short did the same. The claim held, but the layout observer unpinned it before the server's yes arrived.
+  assert.match(term, /const holdForPty = \(\) => \{/);
+  assert.match(term, /d\.cols !== ptySize\.cols \|\| safeTerminalRows\(d\.rows\) >= ptySize\.rows\) return false;/, "same width, fewer rows: only then");
+  assert.match(term, /if \(holdForPty\(\)\) fitSafely\(\);/, "the claim holds before it measures");
+  assert.match(term, /if \(ownsGeometry && \(first \|\| !was\)\) holdForPty\(\);/, "first geom or regained: the same hold");
+  assert.match(term, /ws\.readyState !== 1 \|\| !geomSeen\) return;/, "no size goes out before the pty's is known");
+  assert.match(term, /if \(!wasHidden && holdTerminalHeight\(/, "the hold survives the layout observer, owner or not");
+  assert.doesNotMatch(term, /ws\.onopen = \(\) => \{ show\.state\("live"\); sendSize\(\); \};/, "the first size waits for the geom frame");
 });

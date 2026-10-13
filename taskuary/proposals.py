@@ -67,6 +67,9 @@ ACTIONS = {
     # and an agent that knows it did: a playbook is filed only past the owner's click
     'write_playbook': ('file a new PLAYBOOK - how this kind of job is done here - for the next agent to follow',
                        ('slug', 'text'), 'playbooks_enabled'),
+    # what the outcome ledger counted about a kind of work, as a block on its playbook (playbook_facts.py): reflection proposes it,
+    # the owner's yes writes it - a derived line never edits a playbook on its own (spec 2026-10-12, build step 5)
+    'amend_playbook': ('add what the ledger learned to a playbook', ('slug', 'text'), 'playbooks_enabled'),
     # An instruction that BELONGS in a switch should be written there, not left as a note the
     # classifier merely weighs - but nothing may change a switch on its own. So it arrives as a
     # proposal: the assistant says which switch it means, the owner's click applies it, and only the
@@ -378,7 +381,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     what gets filed - the owner tightening an `alone:` line before the first run is the point."""
     p = json.loads(rv.get('DraftText') or '{}')
     edited = str(final_text or '').strip() and not str(final_text).lstrip().startswith('{')
-    if edited and (p.get('action') == 'write_playbook' or (p.get('action') in CLOSEOUT and p.get('text'))):
+    if edited and (p.get('action') in ('write_playbook', 'amend_playbook') or (p.get('action') in CLOSEOUT and p.get('text'))):
         p['text'] = final_text.strip()
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
@@ -445,8 +448,11 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
                 store.set_setting(c['name'], str(c['value']), actor)
                 done.append(f"{c['name']} = {c['value']}")
         out = {'changed': done}
-    elif a == 'write_playbook':
+    elif a in ('write_playbook', 'amend_playbook'):
         from . import playbooks
+        if a == 'amend_playbook' and p.get('block') and not edited:      # the ledger's block onto the page as it is NOW (playbook_facts)
+            from .people_pages import splice
+            p['text'] = splice(playbooks.read(p['slug']) or p['text'], p['block'])
         slug = playbooks.write(p['slug'], p['text'])
         out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}
     else:                                   # run_tool
@@ -454,6 +460,6 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card
         head, body = REGISTRY[p['type']](resolve_cfg(store, {**{k: v for k, v in p.items() if k != 'action'}, '_write': True}))
         out = {'headline': str(head)[:200], 'output': (body or '')[:2000]}
-    store.add_comment(tid, actor, 'human', f'APPROVED PROPOSAL ({a}): {json.dumps(out)[:600]}')
+    if tid: store.add_comment(tid, actor, 'human', f'APPROVED PROPOSAL ({a}): {json.dumps(out)[:600]}')   # a task-less one has no card to say it on
     store.audit('review', rv['ReviewId'], 'proposal_executed', actor, detail={'action': a, 'result': out})
     return out

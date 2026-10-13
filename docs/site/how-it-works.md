@@ -14,8 +14,9 @@ row for the full message, its attachments, what triage decided and why, any draf
 the actions available on it.
 
 Beside the Timeline, the **work rail** holds what is actually waiting on you, under Urgent, On you,
-Goals, Agents working, For later, Reports, Advisor ideas and FYI. A finished or closed item gets no row: the rail is what still
-wants something from you, never a history. See [The work rail](tasks-and-agents#the-work-rail) for what
+Goals, Agents working, For later, Reports, Advisor ideas and FYI. A thread or a step gone quiet past that person's usual day is
+*slipped*, inside On you, with Chase, Let it go, They answered elsewhere and Remind me under it (see [The Advisor](advisor#what-was-not-followed-up)).
+A finished or closed item gets no row: the rail is what still wants something from you, never a history. See [The work rail](tasks-and-agents#the-work-rail) for what
 puts a row there and what takes it off.
 
 ## The five roads a message can take
@@ -123,9 +124,9 @@ allowed to read and to do, not by where they run.
 
 | | What it does | What it reads | When | Acts? |
 |---|---|---|---|---|
-| **Triage** | Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the thread's task, names the profile, playbook and repository, assigns the worker | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the recent open tasks | every poll | makes rows; never sends |
+| **Triage** | Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the thread's task, names the goal step a mail serves, opens a goal for the open-ended ask, names the profile, playbook and repository, assigns the worker | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the recent open tasks; the open goals and their steps | every poll | makes rows; never sends |
 | **The assistant** | The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb | `COUNSEL.md`, `SOUL.md` and `JOB.md` whole; the one item on the table | on a turn | moves things; never does the work, never proposes |
-| **The Advisor** | The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting | the head of `SOUL.md` and `JOB.md`, `COUNSEL.md`; your work as the hub sees it; the calendar; the knowledge base; the sources it watches; its own notes. At reflection: `LEARNED.md` whole, hypotheses too, and the outcome ledger | on its schedule and when the app opens; reflection at launch and after three corrections | never; it leaves a line, an idea row or a proposal |
+| **The Advisor** | The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting | the head of `SOUL.md` and `JOB.md`, `COUNSEL.md`; your work as the hub sees it; the calendar; the knowledge base; the sources it watches; its own notes; `LEARNED.md`'s promoted lines and the last month of the outcome ledger with the pages of the people it names. At reflection: `LEARNED.md` whole, hypotheses too, and the outcome ledger | on its schedule and when the app opens; reflection at launch and after three corrections; and on the event - an agent stop or ask (or an agent cut off by a close, heard at the next launch), a reply, an attached mail, a PR, a close, a missed day, a report - one small prompt that leaves a line and a pill on that item | never; it leaves a line, an idea row or a proposal |
 
 The workers (the coding agent, the general agent) are the fourth kind and not always on: they do
 the work a task names, in a session you can watch. `COUNSEL.md` is the voice for the assistant and

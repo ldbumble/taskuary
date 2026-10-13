@@ -72,7 +72,7 @@
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show The Advisor's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./advisor#what-it-reads">What it reads</a><a class="sec" href="./advisor#two-clocks">Two clocks</a><a class="sec" href="./advisor#the-outcome-ledger">The outcome ledger</a><a class="sec" href="./advisor#the-one-rule">The one rule</a><a class="sec" href="./advisor#what-is-built-and-what-is-next">What is built, and what is next</a></div>
+      <div class="secs" hidden><a class="sec" href="./advisor#what-it-reads">What it reads</a><a class="sec" href="./advisor#two-clocks">Two clocks</a><a class="sec" href="./advisor#what-was-not-followed-up">What was not followed up</a><a class="sec" href="./advisor#a-page-per-person">A page per person</a><a class="sec" href="./advisor#the-outcome-ledger">The outcome ledger</a><a class="sec" href="./advisor#the-one-rule">The one rule</a><a class="sec" href="./advisor#what-is-built-and-what-is-next">What is built, and what is next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./phone">On your phone</a>
@@ -111,7 +111,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <tbody><tr>
 <td><strong>table</strong></td>
 <td>decide about the item on the table</td>
-<td>reply(text), approve, redraft(text), mine, regular_agent(text, as?, new?), coder(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel</td>
+<td>reply(text), approve, redraft(text), mine, regular_agent(text, as?, new?), coder(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere</td>
 </tr>
 <tr>
 <td><strong>task</strong></td>
@@ -217,7 +217,16 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p>The owner&#39;s yes to the card already waiting - only when one is.</p>
 <p class="runs">At once.</p><h3 id="cancel"><code>cancel</code><a class="anchor" href="#cancel" aria-label="Link to this section">#</a></h3>
 <p>The owner&#39;s no to it.</p>
-<p class="runs">At once.</p><h2 id="task">Task<a class="anchor" href="#task" aria-label="Link to this section">#</a></h2>
+<p class="runs">At once.</p><h3 id="chase"><code>chase</code><a class="anchor" href="#chase" aria-label="Link to this section">#</a></h3>
+<p>Chase the person who has gone quiet on the item - a short nudge in the owner&#39;s voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="let-go"><code>let_go</code><a class="anchor" href="#let-go" aria-label="Link to this section">#</a></h3>
+<p>Let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="elsewhere"><code>elsewhere</code><a class="anchor" href="#elsewhere" aria-label="Link to this section">#</a></h3>
+<p>They answered elsewhere; the step somebody owed closes as done, or the follow-up is put down.</p>
+<ul>
+<li><code>text</code> - where (a call, a meeting)</li>
+</ul>
+<p class="runs">Waits for your yes on a card.</p><h2 id="task">Task<a class="anchor" href="#task" aria-label="Link to this section">#</a></h2>
 <p>Change any task - the one on the table or one named with ref.</p>
 <h3 id="task-update"><code>task.update</code><a class="anchor" href="#task-update" aria-label="Link to this section">#</a></h3>
 <p>Change a task&#39;s priority, title, owner or due day. Any other value is refused with the allowed ones.</p>
@@ -611,7 +620,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.7.18 · updated 2026-10-12</p>
+    <p class="stamp">Documentation for Taskuary 0.3.8.0 · updated 2026-10-12</p>
   </main>
 </div>
 <script src="./docs.js"></script>

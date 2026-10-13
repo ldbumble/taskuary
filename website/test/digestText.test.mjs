@@ -33,3 +33,19 @@ test("no AI connected says so, in words", () => {
   assert.equal(got.plain, "No AI is connected, so this morning's digest could not be written.");
   assert.equal(parseDigest("📅 Meetings today\n1. 9:00 — Standup\n").plain, "");
 });
+
+test("a brief is the model's words: the evidence filed under it never merges into its sections", () => {
+  const got = parseDigest("🙋 People want\n1. Erin needs your decision on the export.\n\n🚀 In flight\n1. TQ-0042 is in progress.\n\n--- raw data ---\nNOW: Tuesday\n\nTHEIR ASKS YOU HAVE NOT ANSWERED (their last word wants something):\n  Erin Blake asked Mon re \"Export\"\n\nNOT JUDGED (triage failed on these - while any are\nhere, never say nobody is waiting on you):\n  Ray Colton wrote Tue re \"PR\"\n");
+  assert.deepEqual(got.sections.map((s) => s.title), ["🙋 People want", "🚀 In flight"]);
+  assert.deepEqual(got.sections[0].items, ["Erin needs your decision on the export."]);
+  assert.equal(got.meta, "");
+});
+
+test("a failed digest's wrapped block explanations are headings, never numbered items", () => {
+  const got = parseDigest("(AI summary failed: timeout)\n\nNOW: Tuesday\n\nASKS YOUR STANDING VERDICTS ALREADY COVER (you ruled the topic is not yours, so these are NOT \"People want\"\nand rank below everything above; only a NEW ask outranks the verdict named on its line):\n  Gail asked about refunds\n\nNOT JUDGED (triage failed on these or has not run - while any are\nhere, never say nobody is waiting on you):\n  Ray Colton wrote Tue re \"PR\"\n\nWHAT ARRIVED (xN = that many alike):\n- x2 [ignored] vendor.example: \"Vendor create\"\n");
+  assert.deepEqual(got.sections.map((s) => [s.title, s.items]), [
+    ["📌 Asks your verdicts cover", ["Gail asked about refunds"]],
+    ["❔ Not judged yet", ["Ray Colton wrote Tue re \"PR\""]],
+    ["📥 What arrived", ["x2 [ignored] vendor.example: \"Vendor create\""]],
+  ]);
+});

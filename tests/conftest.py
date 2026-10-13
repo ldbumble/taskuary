@@ -483,6 +483,16 @@ def no_connection_brains():
 
 
 @pytest.fixture(autouse=True)
+def no_advisor_in_the_background():
+    """The Advisor's event path judges a changed item on a daemon thread (advisor.notice): a close in one test spawned a pile
+    build whose agenda thread outlived the test and tripped the teardown join above. A test that wants a judgement asks for
+    it inline (`notice(..., wait=True)`); nobody gets one by accident."""
+    from taskuary import advisor
+    from taskuary import goals
+    advisor.BACKGROUND = goals.BACKGROUND = False; yield; advisor.BACKGROUND = goals.BACKGROUND = True
+
+
+@pytest.fixture(autouse=True)
 def no_wa_filter_carryover():
     """messengers._WA_FILTERED remembers the /filter a bridge was last sent, per bridge url - and every test's
     fake bridge has the same url, so one test's sent filter would skip the next test's (P13)."""

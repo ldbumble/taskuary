@@ -446,6 +446,16 @@ class CoreTests(unittest.TestCase):
         self.assertIn('never describe a capped or truncated slice as complete', seen['sys'])
         self.assertIn('capped at 20', seen['usr'])
 
+    def test_the_digest_model_reads_its_whole_window(self):
+        # a weekday's evidence is ~30K; under the 12K report cap the brief never saw the verdicts, open or finished work
+        from taskuary import reports
+        s, seen, tail = MemoryStore(), {}, 'FINISHED THIS WINDOW: TQ-0042 shipped'
+        was, reports.REGISTRY['digest'] = reports.REGISTRY['digest'], lambda cfg: ('the window', 'x' * 30000 + tail)
+        try: reports.render_report(s, {'type': 'digest', 'ai_prompt': 'brief me'}, llm=lambda sys_, usr_, **kw: seen.update(usr=usr_) or 'ok')
+        finally: reports.REGISTRY['digest'] = was
+        self.assertIn(tail, seen['usr'])
+        self.assertNotIn('truncated', seen['usr'])
+
     def test_html_mail_keeps_its_paragraphs(self):
         from taskuary.channels import _clean
         txt = _clean('<p>The form was rejected.</p><p>Thanks,<br>Roseanna</p>'

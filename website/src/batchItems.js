@@ -16,13 +16,26 @@ const isPull = (i) => /github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(i?.Link || "")
 // what the owner can press on one line. Merge only on a pull request the agent has reviewed: the merge is pinned to the head
 // it read (batch.act), so with nothing reviewed there is nothing to pin it to. The filled one is what the agent PROPOSED
 // (--propose): a duplicate it says to close must not wear a filled Merge. Asking for changes is said on GitHub, so it opens it.
+// FIX IT (batch.fix): where the review asked for changes, the changes made - by the batch's agent for our own people, in GitHub's
+// cloud for an outsider (cloudfix.py). A fix that is done has its own pull request, and Merge merges that one.
+export const fixing = (i) => i?.Fix === "running";
+export function fixLine(i) {
+  if (fixing(i)) return "Being fixed in GitHub's cloud…";
+  if (i?.Fix === "done") return "Fixed in GitHub's cloud - its pull request is ready to merge.";
+  if (i?.Fix === "failed") return "The cloud fix did not work.";
+  return "";
+}
 export function actions(i) {
   if (!i) return [];
+  if (fixing(i)) return [];
   if (!isOpen(i)) return [{ action: "reopen", label: "Open again" }];
   if (i.State !== "needs_you") return [{ action: "settle", label: "Nothing to do" }];
-  const p = i.Propose;
-  const all = [...(i.Link && p === "changes" ? [{ action: "open", label: "Ask for changes", href: i.Link, primary: true }] : []),
-    ...(isPull(i) && i.reviewed ? [{ action: "merge", label: "Merge", primary: p === "merge" }] : []),
+  const p = i.Propose, fixed = i.Fix === "done";
+  const canFix = isPull(i) && p === "changes" && i.canFix !== false;
+  const all = [...(canFix ? [{ action: "fix", label: i.Fix === "failed" ? "Fix it again" : "Fix it", primary: true }] : []),
+    ...(i.Link && p === "changes" ? [{ action: "open", label: "Ask for changes", href: i.Link, primary: !canFix }] : []),
+    ...(fixed && i.FixLink ? [{ action: "open-fix", label: "See the fix", href: i.FixLink }] : []),
+    ...(isPull(i) && i.reviewed ? [{ action: "merge", label: fixed ? "Merge the fix" : "Merge", primary: p === "merge" }] : []),
     ...(isPull(i) ? [{ action: "close", label: "Close it", primary: p === "close" }] : []), { action: "settle", label: "Nothing to do" }];
   return [...all.filter((a) => a.primary), ...all.filter((a) => !a.primary)];
 }

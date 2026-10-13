@@ -21,10 +21,13 @@ export const CLOSEOUT = {
 };
 export const closeoutOf = (review) => CLOSEOUT[proposalFrom(review)?.action] || null;
 
+// a proposal whose words ARE a playbook page: a new one (the agent's on-close draft) or the ledger's block on one (build step 5)
+export const PAGES = new Set(["write_playbook", "amend_playbook"]);
+
 export const reviewText = (review) => {
   const proposal = proposalFrom(review);
   if (CLOSEOUT[proposal?.action]) return proposal.text || "";      // never the JSON envelope: an empty box sends nothing extra
-  return proposal?.action === "write_playbook" && proposal.text ? proposal.text : review?.DraftText || "";
+  return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
 export const proposalPresentation = (review) => {
@@ -48,13 +51,15 @@ export const proposalPresentation = (review) => {
       placeholder: pr ? "No summary - GitHub writes the merge message" : "No comment - the reply carries it",
     };
   }
-  if (proposal?.action === "write_playbook") {
+  if (PAGES.has(proposal?.action)) {
     const title = String(proposal.text || "").match(/^#\s+(.+)$/m)?.[1]?.trim();
     const slug = String(proposal.slug || "playbook").trim();
+    const amend = proposal.action === "amend_playbook";
     return {
       kind: "playbook",
       title: title ? `Playbook · ${title}` : "New playbook",
-      context: "Playbook proposal · nothing will be sent to the conversation",
+      context: amend ? "What the outcome ledger counted about this kind of work, added to its playbook · nothing is sent"
+        : "Playbook proposal · nothing will be sent to the conversation",
       destinationLabel: "Save to",
       destination: `Docs → Playbooks → ${slug}.md`,
       approveLabel: "Save playbook",

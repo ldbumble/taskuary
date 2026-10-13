@@ -72,7 +72,7 @@
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show The Advisor's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./advisor#what-it-reads">What it reads</a><a class="sec" href="./advisor#two-clocks">Two clocks</a><a class="sec" href="./advisor#the-outcome-ledger">The outcome ledger</a><a class="sec" href="./advisor#the-one-rule">The one rule</a><a class="sec" href="./advisor#what-is-built-and-what-is-next">What is built, and what is next</a></div>
+      <div class="secs" hidden><a class="sec" href="./advisor#what-it-reads">What it reads</a><a class="sec" href="./advisor#two-clocks">Two clocks</a><a class="sec" href="./advisor#what-was-not-followed-up">What was not followed up</a><a class="sec" href="./advisor#a-page-per-person">A page per person</a><a class="sec" href="./advisor#the-outcome-ledger">The outcome ledger</a><a class="sec" href="./advisor#the-one-rule">The one rule</a><a class="sec" href="./advisor#what-is-built-and-what-is-next">What is built, and what is next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./phone">On your phone</a>
@@ -119,8 +119,8 @@ each stage owns exactly one state badge.</p>
 <tr>
 <td><strong>Agent work</strong></td>
 <td>One or more attempts by a coding or non-coding agent, plus the saved result</td>
-<td>harness, model, new prompt, start, prompt, pause, finish, stop</td>
-<td>Stopping does not mark the task done or send a reply</td>
+<td>harness, model, start, save and end session</td>
+<td>Ending a session does not mark the task done or send a reply</td>
 </tr>
 <tr>
 <td><strong>Close out</strong></td>
@@ -296,20 +296,8 @@ and topic history, the learned profile, and reports from related closed tasks.</
 <td>Picks a different harness after an earlier run stopped or hit a limit; the checkout and history are kept</td>
 </tr>
 <tr>
-<td><strong>Give new prompt</strong></td>
-<td>Queues another instruction for the live session</td>
-</tr>
-<tr>
-<td><strong>Pause &amp; save</strong></td>
-<td>Ends the session after writing a handoff note for the next one</td>
-</tr>
-<tr>
 <td><strong>Save and end session</strong></td>
 <td>Ends the session and writes its result; the task stays open until you mark it done</td>
-</tr>
-<tr>
-<td><strong>Stop session</strong></td>
-<td>Ends only the process. Deliberately changes neither task nor reply state</td>
 </tr>
 </tbody></table>
 <p><strong>Mark done</strong> is stronger than all of them: it closes the task <em>and</em> ends any live session,
@@ -549,7 +537,7 @@ it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on 
 </tr>
 <tr>
 <td><strong>On you</strong></td>
-<td>A person&#39;s ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a check that failed, a task an agent finished</td>
+<td>A person&#39;s ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person&#39;s usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished</td>
 <td>For later work when its time comes</td>
 </tr>
 <tr>
@@ -665,7 +653,7 @@ moves it down without deleting it.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./connections"><span>Previous</span>Connections</a><a class="pn next" href="./assistant"><span>Next</span>Assistant buttons</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.7.18 · updated 2026-10-12</p>
+    <p class="stamp">Documentation for Taskuary 0.3.8.0 · updated 2026-10-12</p>
   </main>
 </div>
 <script src="./docs.js"></script>

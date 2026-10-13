@@ -10,6 +10,14 @@ export const changedTerminalSize = (previous, rows, cols) => {
 // repaint once while hidden and again when the owner returns.
 export const usableTerminalBox = (width, height) => width >= 80 && height >= 40;
 
+// THE PAGE MOVING IS NOT A NEW WINDOW. The pane fills what its stage leaves, so a card coming and going beside it - the
+// "agent is asking" card under a session that asks for every command - shrank and grew it on each approval, and Codex
+// reprints its whole history on every pty resize: it "starts from the top and scrolls down" every half minute (the owner,
+// 2026-10-12). A height that only SHRANK, at the same width, from the layout rather than the window keeps the pty as it
+// is and shows its bottom rows; the window, the font and a fresh attach still resize for real.
+export const holdTerminalHeight = ({ real, held, width, height }) =>
+  !real && !!held && Math.abs(width - held.width) < 1 && height < held.height;
+
 // FitAddon can land exactly on a fractional cell boundary that the browser then rounds down when
 // painting. Reserve one row so a full-screen TUI's status/prompt line is always inside the pane.
 // This is shared by Claude, Codex and every other CLI rendered through xterm.

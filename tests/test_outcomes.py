@@ -216,3 +216,58 @@ class FixPassTests(unittest.TestCase):
                        'BodyText': 'Also: the PO is attached.', 'Status': 'filed'})                # sent by us, no FromEmail (outbox.py)
         outcomes.record(s, 'reply.sent', 'task', t, facts={'cid': 'c4', 'mid': mid}, at=ago(days=8)); outcomes.resolve(s)
         self.assertEqual(outcomes.rows_for(s, 'task', t)[0]['Verdict'], 'settled')
+
+
+class PersonFactsTests(unittest.TestCase):
+    """The ledger's person facts (spec 2026-10-12, build step 4): who answered, how fast, after what, who was copied."""
+    def _answered(self, s, who, days, chase=False, cc=()):
+        """A reply sent to `who` eight days ago that they answered `days` days later."""
+        cid = f"c{(s._one('SELECT COUNT(*) AS n FROM outcome') or {}).get('n', 0) + 1}"
+        t = s.create_task({'Title': 'x'}, 'owner')
+        s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'x', 'FromEmail': who, 'SentAt': ago(days=10), 'BodyText': 'q', 'Status': 'filed', 'TaskId': t})
+        s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'Re: x', 'FromEmail': who, 'SentAt': ago(days=8 - days), 'BodyText': 'a', 'Status': 'filed', 'TaskId': t})
+        return outcomes.record(s, 'reply.sent', 'task', t, facts={'cid': cid, 'mid': 1, 'verb': 'approve', 'who': who, 'cc': list(cc), 'chase': chase}, at=ago(days=8))
+
+    def test_an_answer_records_how_many_days_it_took(self):
+        s = MemoryStore(); i = self._answered(s, 'ray@northwind.example', 3)
+        outcomes.resolve(s)
+        f = json.loads(s._one('SELECT FactsJson FROM outcome WHERE Id=?', (i,))['FactsJson'])
+        self.assertAlmostEqual(f['answer_days'], 3.0, delta=0.2); self.assertEqual(f['answered_by'], 'ray@northwind.example')
+
+    def test_person_facts_are_counts_from_the_rows(self):
+        s = MemoryStore(); who = 'ray@northwind.example'
+        for d, chase, cc in ((2, False, ()), (4, True, ('omar@northwind.example',)), (3, True, ('omar@northwind.example',))): self._answered(s, who, d, chase, cc)
+        outcomes.resolve(s)
+        outcomes.record(s, 'chase.let_go', 'message', 9, facts={'who': who}); outcomes.resolve(s)
+        f = outcomes.person_facts(s, who)
+        self.assertEqual((f['replies'], f['answered'], f['chased'], f['answered_after_chase'], f['let_go']), (3, 3, 2, 2, 1))
+        self.assertAlmostEqual(f['median_days'], 3.0, delta=0.2)
+        self.assertEqual(f['cc']['omar@northwind.example'], [2, 2])
+        self.assertEqual(outcomes.chase_cc(s, who), 'omar@northwind.example')
+        self.assertEqual(outcomes.person_facts(s, 'nobody@northwind.example')['replies'], 0)
+
+    def test_late_after_needs_three_answers(self):
+        s = MemoryStore(); who = 'gail@northwind.example'
+        self._answered(s, who, 1); outcomes.resolve(s)
+        self.assertEqual(outcomes.late_after(s, who), 5)                                   # one answer is not a habit
+        self._answered(s, who, 1); self._answered(s, who, 2); outcomes.resolve(s)
+        self.assertEqual(outcomes.late_after(s, who), 2)                                   # median 1 day -> 1.5 -> at least 2
+        self.assertEqual(outcomes.late_after(s, who, default=9), 2)
+
+    def test_a_persons_step_closing_records_who_and_how_late(self):
+        s = MemoryStore()
+        t = s.create_task({'Title': 'Schema sign-off', 'Status': 'waiting', 'Assignee': 'person:ray@northwind.example',
+                           'DueAt': (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d')}, 'owner')
+        s.update_task(t, {'Status': 'done'}, 'owner')
+        f = json.loads(outcomes.rows_for(s, 'task', t)[0]['FactsJson'])
+        self.assertEqual((f['who'], f['late_days']), ('ray@northwind.example', 3))
+        self.assertEqual(outcomes.person_facts(s, 'ray@northwind.example')['steps_late'], 1)
+
+
+class OwnerWordsTests(unittest.TestCase):
+    def test_a_resume_keeps_the_owners_words_and_drops_ours(self):
+        from taskuary.continuity import RESUME_PROMPT
+        from taskuary.outcomes import owner_words
+        self.assertEqual(owner_words(f'FROM THE OWNER: merge it if the tests pass {RESUME_PROMPT}'), 'merge it if the tests pass')
+        self.assertEqual(owner_words(RESUME_PROMPT), '')
+        self.assertEqual(owner_words('just keep going'), 'just keep going')

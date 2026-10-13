@@ -92,7 +92,7 @@ _LOCK = threading.Lock()
 
 
 MUTES_KEY = 'funnel_mutes'            # the owner's standing "never show me these again" rules
-MUTED_LANES = ('fyi', 'report', 'forgotten')   # only what has nothing to do: a real ask still reaches them
+MUTED_LANES = ('fyi', 'report')     # only what has nothing to do: a real ask still reaches them; slipped is the owner's move (2026-10-12)
 
 
 def mutes(store) -> list:
@@ -485,6 +485,36 @@ def hold_for_repo(store, tid, reason=''):
                           + (' '.join(str(reason).split())[:200] + ' ' if reason else '') + 'Pick a repo on the task and the session starts.')
 
 
+def news_since_agent(store, tid) -> dict | None:
+    """The message somebody sent AFTER the agent's last session ended - what an open task is about now - or None.
+
+    A coder finished, the task closed, and days later the sender wrote again: the task reopened, correctly, and then
+    opened on the old session's "You ended the session - its report is written" as if that were the news (the owner,
+    2026-10-12: "it has to be clear what is going on ... it was reopened since x happened so reopen coding session")."""
+    from . import terminal
+    t = store.get_task(tid) or {}
+    if not t or t.get('Status') in ('done', 'dropped'): return None
+    if getattr(terminal.session_for(tid), 'alive', False): return None
+    tr = store.last_transcript(tid) or {}
+    evs = store.worker_events(tid) or []
+    ended = max(str(tr.get('CreatedAt') or ''), str(evs[-1].get('CreatedAt') or '') if evs else '')
+    if not ended: return None                     # no agent ever ran: nothing for news to come after
+    m = store.last_inbound_on_task(tid) or {}
+    return m if str(m.get('SentAt') or '') > ended else None
+
+
+def news_line(store, tid, m=None) -> str:
+    m = m or news_since_agent(store, tid) or {}
+    if not m: return ''
+    t = store.get_task(tid) or {}
+    who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'the agent'
+    frm = str(m.get('FromName') or m.get('FromEmail') or 'Someone').split(' at ')[0]
+    when = str(m.get('SentAt') or '')
+    day = 'today' if when[:10] == datetime.now().strftime('%Y-%m-%d') else when[:10]
+    return (f"{frm} wrote again {day} at {when[11:16]}, after {who}'s last session - its record is below. "
+            'Continue the session to hand it the new message, or answer it yourself.')
+
+
 def not_started_why(store, tid) -> str:
     """Why nothing is running on a task that was handed to an agent and never began.
 
@@ -503,6 +533,8 @@ def not_started_why(store, tid) -> str:
     who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
     tags = str(t.get('Tags') or '')
     old = ' It has been waiting since yesterday.' if str(t.get('CreatedAt') or '')[:10] < datetime.now().strftime('%Y-%m-%d') else ''
+    news = news_since_agent(store, tid)
+    if news: return news_line(store, tid, news)
     if terminal.SAVED in [x.strip() for x in tags.split(',')]:
         return 'You ended the session - its report is written. Continue it, or mark the task done.'
     if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
@@ -570,6 +602,7 @@ def agent_story(store, tid) -> dict | None:
     if not t or t.get('Status') in ('done', 'dropped'): return None
     tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
     who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
+    if news_since_agent(store, tid): return {'kind': 'news', 'line': news_line(store, tid)}
     left, q, why = agent_left(store, tid), store.get_dispatch(tid), not_started_why(store, tid)
     held = why.startswith('Triage did not start it') or held_for_repo(t)
     if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held): return None
@@ -638,6 +671,7 @@ def agent_left(store, tid) -> bool:
     interrupted / needs you, and the rail said "handed to coder, not started yet" (2026-09-17)."""
     from . import terminal
     t = store.get_task(tid) or {}
+    if news_since_agent(store, tid): return False        # what is open now is the message, not the session that went before it
     if terminal.INTERRUPTED in [x.strip() for x in str(t.get('Tags') or '').split(',')]: return True
     if session_saved(store, tid): return True
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])): return True
@@ -809,6 +843,27 @@ def from_calendar(store, now: datetime) -> list:
     return out
 
 
+def slipped_followup(store, action: dict, now: datetime = None) -> tuple:
+    """SLIPPED (spec 2026-10-12): a follow-up quiet past THAT person's day is the owner's move, in the slipped lane. The day is
+    the ledger's (outcomes.late_after), the default the owner's (Settings -> Advisor); someone away never slips, and a reply
+    from them ends it. Returns (lane, days past the person's day, days quiet, the person's day): lane is 'forgotten', 'answered'
+    (close the idea) or None - one rule for the legacy pile and the processing rail."""
+    a = action or {}
+    if a.get('type') != 'followup' or not a.get('who_email') or not a.get('asked_at') or a.get('away'): return (None, 0, 0, 0)
+    from . import outcomes
+    # THEIR REPLY ENDS IT: a material word from them on the thread since the ask is the answer, whatever the idea row still says
+    m = store.get_message(a.get('mid')) if a.get('mid') else None
+    if m and m.get('ConversationId') and outcomes._material_inbound_after(store, m['ConversationId'], a['asked_at']): return ('answered', 0, 0, 0)
+    day = outcomes.late_after(store, a['who_email'], int(store.get_setting('slipped_default_days', 5) or 5))
+    quiet = max(0, int(((now or datetime.now()) - (_dt(a['asked_at']) or datetime.now())).total_seconds() // 86400))
+    return ('forgotten', quiet - day, quiet, day) if quiet >= day else (None, 0, quiet, day)
+
+
+def slipped_why(who_email: str, quiet: int, day: int) -> str:
+    from .processing_unread import holder_name
+    return f"No answer from {holder_name('person:' + str(who_email or ''))} in {quiet} days - late for them after {day}"
+
+
 def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = frozenset(),
                    reconcile: bool = True) -> list:
     """The assistant's own open lines (assistant.py posts them on its half-hourly check: the ask that
@@ -845,6 +900,11 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         # the shared verdict decides the lane (PW-200), by the one rule the canonical rail uses too
         from .processing_all import idea_lane
         lane, tri = idea_lane(i), a.get('triage') or {}
+        slip, late, quiet, day = slipped_followup(store, a)
+        if slip == 'answered':                                   # they wrote back: the line is over, like the owner's own reply
+            if reconcile: store.set_idea_status(i['IdeaId'], 'done', 'funnel')
+            continue
+        if slip: lane = slip
         why = a.get('why') or 'the assistant raised this'
         if tri.get('error'): why = f"triage failed ({tri['error']}) - the next check retries; {why}"
         elif tri.get('pending'): why = f'awaiting triage (no AI connector); {why}'
@@ -858,6 +918,7 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
                          who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
                          idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'),
+                         who_email=a.get('who_email') or '', late_days=late,
                          urgent_request=tri.get('intent') in ('task', 'reply_only') and (bool(tri.get('urgent')) or priority_rank(tri.get('priority')) == 0)))
     return out
 
@@ -910,7 +971,7 @@ def _band(item):
                           # a task an agent FINISHED is still a task - Your task until Next reads it, never a report:
                           # reports are what a report you set up filed (the owner, 2026-09-24: "reports are never
                           # tasks just information" / "it's not agent working if task is done")
-                          actionable=lane in ('broken', 'asked', 'yours', 'theirs', 'queued', 'stopped', 'saved') or item.get('kind') == 'agentdone'
+                          actionable=lane in ('broken', 'asked', 'yours', 'theirs', 'queued', 'stopped', 'saved', 'forgotten') or item.get('kind') == 'agentdone'
                                      or (lane == 'unjudged' and bool(item.get('held'))),
                           result=lane == 'report')
 
@@ -925,7 +986,7 @@ SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'goals': 'Goals', 'agents
 _LEVEL_OF_BAND = {1: 'urgent', 2: 'task', 3: 'reports', 4: 'fyi', 5: 'agents'}
 # the page's fallback for a row that carries no band (funnelPile.attentionBand) - kept identical, never _band's
 _BAND_FALLBACK = {'blocked': 2, 'time': 1, 'approve': 2, 'broken': 2, 'asked': 2, 'yours': 2, 'queued': 2, 'stopped': 2,
-                  'saved': 2, 'forgotten': 4, 'report': 3, 'fyi': 4, 'working': 5}
+                  'saved': 2, 'forgotten': 2, 'report': 3, 'fyi': 4, 'working': 5}
 
 
 def level_of(item: dict) -> str:

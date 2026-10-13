@@ -850,3 +850,31 @@ class SourceTests(unittest.TestCase):
         old = {'candidates': {'cold': 2}, 'skipped': [], 'model': True, 'people': 3, 'recent': 41,
                'week': 2, 'open': 18, 'said': 22}
         self.assertIn('41 sender/subject line(s) from the last two days', assistant._footer(old))
+
+
+class MemoryBlocksTests(unittest.TestCase):
+    """The clock pass read less of what the app had learned than the event pass did: no LEARNED.md, no ledger, no people pages
+    (the owner, 2026-10-12: "it should be much better if it is"). Two blocks on the Memory card close that."""
+    def test_learned_lines_reach_the_clock_pass(self):
+        from taskuary import assistant, learn
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        s.save_doc('learned', s.get_doc('learned').replace('## Voice & style', '## Voice & style' + chr(10) + '- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]'), 'reflect')
+        text = assistant.inputs(s, [])
+        self.assertIn('LEARNED (', text); self.assertIn('Short replies, no filler', text)
+
+    def test_the_ledger_and_the_people_named_reach_the_clock_pass(self):
+        from taskuary import assistant, outcomes, people_pages
+        from taskuary.store import MemoryStore
+        s = MemoryStore(); t = s.create_task({'Title': 'Vendor loop'}, 'owner')
+        i = outcomes.record(s, 'task.closed', 'task', t, 'owner', facts={'how': 'done'}); outcomes.settle(s, i, 'stayed closed', 'held')
+        s.save_doc(people_pages.doc_name('dana@vendor.example'), '- answers in three days, needs one chase [ev: out1]', 'reflect')
+        text = assistant.inputs(s, [{'key': 'followup:c1', 'kind': 'followup', 'facts': 'dana@vendor.example owes the Q3 ledger'}])
+        self.assertIn('THE OUTCOME LEDGER (', text); self.assertIn(f'out{i}:', text)
+        self.assertIn('dana@vendor.example', text.split('THE OUTCOME LEDGER (', 1)[1]); self.assertIn('needs one chase', text)
+
+    def test_a_fresh_install_adds_neither(self):
+        from taskuary import assistant
+        from taskuary.store import MemoryStore
+        text = assistant.inputs(MemoryStore(), [])
+        self.assertNotIn('LEARNED (', text); self.assertNotIn('THE OUTCOME LEDGER (', text)

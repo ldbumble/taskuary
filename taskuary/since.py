@@ -101,7 +101,9 @@ def digest(store) -> dict:
     run = next((r for r in store.report_runs(src['SourceId'], 5) if not r.get('failed') and r.get('messageId')), None)
     if not run: return {'source_id': src['SourceId'], 'at': None, 'text': ''}
     m = store.get_message(run['messageId']) or {}
-    return {'source_id': src['SourceId'], 'at': run.get('at'), 'text': str(m.get('BodyText') or '').strip()}
+    # the brief, not the evidence the model was handed under it (reports.RAW_MARK): a failed run's evidence IS its body
+    from .reports import RAW_MARK
+    return {'source_id': src['SourceId'], 'at': run.get('at'), 'text': str(m.get('BodyText') or '').split(RAW_MARK)[0].strip()}
 
 
 def summary(store, now: datetime = None) -> dict:

@@ -43,3 +43,14 @@ test("a verdict is shown in the words the owner used, never the column value", (
   assert.equal(reviewStatusLabel("some_new_state"), "some new state");   // never blank, never a column name
   assert.equal(reviewStatusLabel(null), "");
 });
+
+// the ledger's facts about a kind of work reach its playbook as a proposal: the card shows the page, and says where it goes (build step 5)
+test("an amend_playbook proposal shows the page and saves to its playbook", () => {
+  const review = { Kind: "action", DraftText: JSON.stringify({ action: "amend_playbook", slug: "vendor-onboarding", text: "# Vendor onboarding\nwhen: x\n\n- ask first" }) };
+  assert.equal(reviewText(review), "# Vendor onboarding\nwhen: x\n\n- ask first");
+  const p = proposalPresentation(review);
+  assert.equal(p.kind, "playbook");
+  assert.equal(p.title, "Playbook · Vendor onboarding");
+  assert.match(p.destination, /vendor-onboarding\.md/);
+  assert.match(p.context, /ledger/);
+});

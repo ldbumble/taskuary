@@ -188,7 +188,7 @@ Four things shape it:
 - `COUNSEL.md` in Settings → Docs — how it speaks, and how readily it takes a position.
 - The **Advisor** report — what it watches, its schedule, its model.
 - **Settings → Advisor** — thresholds such as how long a reply or task must be quiet.
-- **Settings → Learning** — whether your verdicts feed back into `LEARNED.md`.
+- **Settings → Triage & routing → Learn from your verdicts** — whether your verdicts feed back into `LEARNED.md`.
 - **The outcome ledger** — what came of what Taskuary did: a reply that got more rounds, a close
   that reopened, a promise delivered late, your own next move after an agent stopped. Resolved
   once a day from the store's own facts; reflection reads it as evidence. See

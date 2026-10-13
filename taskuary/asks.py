@@ -136,13 +136,12 @@ def send_picked(store, sends: list) -> str:
     return '. '.join(s[:1].upper() + s[1:] for s in said) + '.'
 
 
-def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: str = '', desktop: bool = False, card: dict = None) -> bool:
+def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: str = '', desktop: bool = False) -> bool:
     """One line at the ask's door. The phone it was asked from - or, failing that, the phone the walk is handed to - only
     in a gap of the conversation (remote_assistant.quiet: never between a card and its answer); False = not now, try
-    again. Everywhere else, the desktop Assistant chat. `via`: a door other than the ask's (a reminder's). `desktop`: a
-    line nobody asked for at that moment - a due day, a nudge, a watch ending - which the phone never speaks first (the
-    owner, 2026-10-02)."""
-    from . import concierge, general, live, remote_assistant
+    again. Never the desktop chat. `via`: a door other than the ask's (a reminder's). `desktop`: a line nobody asked for
+    at that moment - a due day, a nudge, a watch ending - which the phone never speaks first (the owner, 2026-10-02)."""
+    from . import concierge, general, remote_assistant
     via, handed = via or of(task) or 'desktop', None if desktop else remote_assistant.handoff(store)
     doors = ([tuple(via.split(':', 1))] if ':' in via and not desktop else []) + ([(handed['channel'], handed['chat'])] if handed else [])
     for channel, chat in doors:
@@ -156,13 +155,11 @@ def _say(store, task: dict, line: str, via: str = None, lane: str = None, says: 
         try: concierge.record(store, general.dock_task(store, 'owner')[0]['TaskId'], 'assistant', line, phone=True)
         except Exception as e: logger.warning(f'asks: said on the phone, not kept in the chat - {e}')   # never said twice
         return True
-    # ON THE DESKTOP A LANE MOVE IS NOT A LINE: the rail row and the task's own card already say it, and the lines piled
-    # under the task being worked - "asked you", "left without finishing", the same ask twice in two wordings (the owner,
-    # 2026-10-06: "Task they are working on should be the main thing, nothing else"). What the owner ASKED to hear - a
-    # reply on a watched task, a reminder coming due - still comes here; a phone, which has no card, still hears it all.
-    if lane: return True
-    concierge.record(store, general.dock_task(store, 'owner')[0]['TaskId'], 'assistant', line, card)     # `card`: the chips under it
-    live.emit(live.CHAT)                     # the open Assistant tab shows it now, not on its next tick
+    # THE DESKTOP CHAT HEARS NOTHING IN THE BACKGROUND: the rail row, the task's own note and the Advisor in the prompt box
+    # already say it. A lane move piled lines under the task being worked (the owner, 2026-10-06: "Task they are working on
+    # should be the main thing, nothing else"); a watched reply, a due day, a nudge landed above the morning card - a
+    # "thank you" said back from a watch the owner never asked for (2026-10-13: "i don't like the random reminders"). Said
+    # = told: the phone, which has no card and no prompt box, still hears it all.
     return True
 
 
@@ -222,6 +219,8 @@ def _reply(store, t: dict) -> str | None:
     line = f"{task_ref(t['TaskId'])} {str(t.get('Title') or '').strip()} - {_who(m, first=False)} answered: {words}"
     if not _say(store, t, line): return None
     store._exec('UPDATE task SET AskedSeenMid=? WHERE TaskId=?', (m['MessageId'], t['TaskId']))
+    from . import advisor
+    advisor.notice(store, 'reply.arrived', 'task', t['TaskId'])     # the Advisor on the event (advisor.py)
     if t.get('AskedWatch') == 'reply': store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (t['TaskId'],))
     return line
 
@@ -296,15 +295,6 @@ def stop_watching(store, t: dict, quiet: bool = False) -> str | None:
     if line and not _say(store, t, line, desktop=True): return None
     store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (t['TaskId'],))
     return line
-
-
-def say_due(store, tid: int, line: str, chips: list = None) -> bool:
-    """A due day's line (remind.deadlines), in the desktop chat only - with `chips` under it when there is something to
-    do about it (a day that has passed, remind.late_chips)."""
-    from .store import task_ref
-    t = store.get_task(tid) or {}
-    return bool(t) and _say(store, t, f"{task_ref(tid)} {_title(t)} - {line}", via='desktop', desktop=True,
-                            card={'kind': 'words', 'key': None, 'chips': chips} if chips else None)
 
 
 WATCHES = ('done', 'reply', 'any', 'off')

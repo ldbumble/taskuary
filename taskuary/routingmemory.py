@@ -127,7 +127,9 @@ def facts_for(store, msg: dict) -> list:
 MEANS = {'kind': {'coding': 'a coding agent working in a checkout',
                   'general': "a conversation with the assistant, which needs no repository",
                   'general_': '', 'task': "the owner's own list, with nothing working it",
-                  'reply': 'a drafted reply and nothing else'}}
+                  'reply': 'a drafted reply and nothing else',
+                  # a goal is an open-ended ask with steps (spec 2026-10-12); "that was a task" teaches `task` back
+                  'goal': 'a goal - an open-ended ask with a done-when and steps, not one thing to do'}}
 
 
 def lesson(store, task_id: int, field: str, value: str, belongs_to: str = None, ev: str = None) -> str:
@@ -148,6 +150,8 @@ def lesson(store, task_id: int, field: str, value: str, belongs_to: str = None, 
         what = MEANS['kind'].get(value, value)
         line = (f'triage said {was} and the owner made it {value}' if was
                 else f'the owner made it {value}') + f' - {what}'
+        # a goal let go is not a move to the owner's list: it was one thing to do, not an open-ended ask (spec 2026-10-12)
+        if value == 'task' and v.get('goal'): line = 'triage called it a goal and the owner said it was one thing to do, not a goal'
     elif field == 'profile':
         line = (f'triage said {was} would work it and the owner handed it to the {value} agent instead' if was
                 else f'the owner put the {value} agent on it')

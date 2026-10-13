@@ -110,6 +110,8 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
     _save_pr(store, task_id, pr, actor)
     store.audit('task', task_id, 'pr_opened', actor, detail={'repo': repo, 'number': pr['number']})
+    from . import advisor
+    advisor.notice(store, 'pr.opened', 'task', task_id)             # the Advisor on the event (advisor.py)
     logger.info(f'PR #{pr["number"]} opened for task {task_id} ({repo} {branch} -> {base})')
     return pr
 

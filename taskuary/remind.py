@@ -222,19 +222,8 @@ def due_line(task: dict, now: datetime = None) -> str:
     if s == 'today': return "This one's today."
     if s != 'late': return ''
     yday = (now - timedelta(days=1)).strftime('%Y-%m-%d') == str(at)[:10]
-    # said as a fact: "Want the note ready?" was a question with nothing under it to press (B18) - late_chips are the answers
+    # said as a fact: "Want the note ready?" was a question with nothing under it to press (B18)
     return f"This was due {'yesterday' if yday else when(at, now)} and it's still open."
-
-
-def late_chips(tid: int, task: dict, now: datetime = None) -> list:
-    """What to do about a day that has passed, under the late line: each is the owner's words naming the task, so the
-    assistant reads them as it reads anything typed (a chip's verb acts on whatever is on the table, and this line has
-    nothing on it)."""
-    from .store import task_ref
-    ref, at = task_ref(tid), when((task or {}).get('DueAt'), now)
-    return [{'label': 'Draft a note', 'ask': f"Draft a note on {ref} to say where it stands - it was due {at}"},
-            {'label': 'Move the due day', 'ask': f"Move the due day on {ref}"},
-            {'label': 'Mark done', 'ask': f"Mark {ref} done"}]
 
 
 def set_due(store, tid: int, day: str, actor: str = 'triage'):
@@ -252,7 +241,7 @@ def set_due(store, tid: int, day: str, actor: str = 'triage'):
 
 def deadlines(store, now: datetime = None) -> int:
     """Each open task whose due day is near, said once per step: a note on the task (new activity, so it is back on the
-    rail unread) and a line in the desktop chat. From the eve on it is urgent - the top of the list - and late too: a task
+    rail unread). From the eve on it is urgent - the top of the list - and late too: a task
     first seen past its day (the app off over it, or a date triage read that had gone) never reached the top (B18)."""
     now, n = now or datetime.now(), 0
     for t in store._rows("SELECT * FROM task WHERE IFNULL(DueAt,'')<>'' AND Status NOT IN ('done','dropped')"):
@@ -267,11 +256,11 @@ def deadlines(store, now: datetime = None) -> int:
             # ...remembering what it was, so a day moved out puts it back (set_due); written after, as update_task clears it
             store.update_task(t['TaskId'], {'Priority': 'urgent'}, 'assistant')
             store._exec('UPDATE task SET DueRaised=? WHERE TaskId=?', (t.get('Priority') or 'normal', t['TaskId']))
-        store.add_comment(t['TaskId'], 'assistant', 'agent', line)
-        from . import asks
-        try: asks.say_due(store, t['TaskId'], line, late_chips(t['TaskId'], t, now) if s == 'late' else None)
-        except Exception as e: logger.warning(f"due day on {t['TaskId']} not said: {e}")
+        store.add_comment(t['TaskId'], 'assistant', 'agent', line)      # the note IS the saying: the desktop chat hears nothing (asks._say)
         store._exec('UPDATE task SET DueSaid=? WHERE TaskId=?', (s, t['TaskId'])); n += 1
+        if s == 'late':                              # the Advisor on the event (advisor.py): a step slipped
+            from . import advisor
+            advisor.notice(store, 'due.late', 'task', t['TaskId'])
     return n
 
 

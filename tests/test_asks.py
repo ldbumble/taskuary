@@ -365,11 +365,10 @@ def test_a_phone_ask_whose_connection_is_gone_goes_to_the_handed_walk(s):
     assert send.call_args[0][2] == 'c2@example.com'
 
 
-def test_a_desktop_line_wakes_the_chat(s):
-    # what the owner asked to hear still comes to the desktop chat, at once: a reminder coming due
+def test_the_desktop_chat_hears_nothing_in_the_background(s):
+    # a reply, a due day, a nudge: the rail, the task's note and the Advisor say it - a line here landed above the morning card
     tid = made(s)
-    with mock.patch('taskuary.live.emit') as emit: asks._say(s, s.get_task(tid), 'TQ-0001 is back on your rail.', via='desktop')
-    assert any(c[0][0] == 'chat-changed' for c in emit.call_args_list)
+    assert asks._say(s, s.get_task(tid), 'TQ-0001 is back on your rail.', via='desktop') and dock_lines(s) == []
 
 
 def test_the_advisor_skips_threads_tied_to_an_open_ask(s):
@@ -491,11 +490,11 @@ def test_a_reminder_set_on_the_phone_is_said_on_the_phone_when_due(s):
     assert send.called and 'Reminder' in send.call_args[0][3] and 'TQ-0001' in send.call_args[0][3]
 
 
-def test_a_reminder_set_on_the_desktop_is_a_chat_line(s):
+def test_a_reminder_set_on_the_desktop_is_no_chat_line(s):
     from taskuary import remind
     tid = mail_born(s); remind.set_reminder(s, tid, DAY, 'owner')
     remind.due(s, AT)
-    assert any('Reminder' in l for l in dock_lines(s))
+    assert not any('Reminder' in l for l in dock_lines(s)) and not s.get_task(tid)['RemindOwed']
 
 
 def test_a_reminder_for_a_busy_phone_chat_is_kept_for_the_next_look(s):

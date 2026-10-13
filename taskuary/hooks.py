@@ -381,9 +381,12 @@ def _events(t, p: dict) -> None:
             said, asks = selfclose.ask_markers(str(p.get('last_assistant_message') or ''))
             ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook')
             try:                                        # the ledger: what the owner does next after a stop (outcomes.py); never breaks a hook
-                from . import ci, outcomes
+                from . import advisor, ci, outcomes
                 agent = getattr(t, 'agent', '') or 'coder'
-                outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent})
+                # ...and the Advisor hears of it once per stretch - unless the turn ASKED: then the ask below is the event, and a
+                # stop judged here would be stale the moment the question is recorded (the review, 2026-10-12)
+                if outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent}) and not asks:
+                    advisor.notice(st, 'agent.stopped', 'task', tid)
             except Exception as e: logger.debug(f'task {tid}: the stop was not ledgered - {e}')
             g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None
             for i, (q, choices) in enumerate(asks, 1):

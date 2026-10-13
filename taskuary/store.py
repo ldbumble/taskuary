@@ -543,6 +543,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
                     'general_agent_hands': 'cli',   # ...with the CLI agent's own permissions unless the owner narrows it (general.full_hands)
+                    # who counts as ours on a GitHub repository (batch.outside_row), and what an outsider's PR gets (cloudfix.py)
+                    'repo_trust_private': 'ours', 'repo_trust_public': 'writers', 'outside_prs': 'review',
                     # who may start a worker UNATTENDED (senders.known, PW-079..081): the owner's own domains, verified
                     # Sent Items evidence that the receiving mailbox wrote to the exact address, chat channels inside a
                     # workspace the owner controls. Prior incoming mail is never a rule here.
@@ -822,7 +824,9 @@ class SQLiteStore:
                 if c not in acols: self.cx.execute(f'ALTER TABLE task_artifact ADD COLUMN {c} TEXT')
             # the head a batch's agent reviewed: a merge is pinned to it (batch.act), so a push after the review is refused
             bcols = {r[1] for r in self.cx.execute('PRAGMA table_info(batch_item)')}
-            for c in ('Sha', 'Propose'):
+            # ...and a fix made in GitHub's cloud (cloudfix.py): running | done | failed | nothing, when it was sent, its pull request
+            # ...and a stranger's change cleared to run HERE (batch.screen): the head it was cleared at, and what the screen said
+            for c in ('Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen'):
                 if c not in bcols: self.cx.execute(f'ALTER TABLE batch_item ADD COLUMN {c} TEXT')
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
             if 'RawOutput' not in routecols:
@@ -927,6 +931,12 @@ class SQLiteStore:
             self.cx.execute('CREATE TABLE IF NOT EXISTS outcome (Id INTEGER PRIMARY KEY, Kind TEXT, TargetKind TEXT, TargetId INTEGER, '
                             'Actor TEXT, At TEXT, FactsJson TEXT, NextMove TEXT, NextAt TEXT, Outcome TEXT, ResolvedAt TEXT, Verdict TEXT)')
             self.cx.execute('CREATE INDEX IF NOT EXISTS outcome_target ON outcome(TargetKind, TargetId)')
+            # THE ADVISOR'S ADVICE (spec 2026-10-12, build step 3): one row per item per revision - the line, the verb, the
+            # evidence ids, what was dropped. The rail never reads it (test_the_rail_is_the_same_with_and_without_advice).
+            self.cx.execute('CREATE TABLE IF NOT EXISTS advice (Id INTEGER PRIMARY KEY, TargetKind TEXT, TargetId INTEGER, Key TEXT, Event TEXT, '
+                            'Revision TEXT, Tier INTEGER, Line TEXT, Verb TEXT, Label TEXT, CountJson TEXT, EvidenceJson TEXT, Model TEXT, '
+                            'Dropped TEXT, CreatedAt TEXT)')
+            self.cx.execute('CREATE INDEX IF NOT EXISTS advice_target ON advice(TargetKind, TargetId)')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')
@@ -1637,7 +1647,8 @@ class SQLiteStore:
     def update_task(self, task_id, fields, actor):
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
-        was = (self._one('SELECT Status FROM task WHERE TaskId=?', (task_id,)) or {}).get('Status') if 'Status' in fields else None
+        was_row = (self._one('SELECT Status, Assignee, DueAt, Tags FROM task WHERE TaskId=?', (task_id,)) or {}) if 'Status' in fields else {}
+        was = was_row.get('Status')
         # ClosedAt describes the CURRENT lifecycle, not merely that the task was closed once.
         # An explicit reopen used to change Status while retaining the old close timestamp, so
         # the API simultaneously said "waiting" and "closed" and different views chose a
@@ -1674,7 +1685,24 @@ class SQLiteStore:
         # already its own row (promise.made) and the actor says so.
         if fields.get('Status') in ('done', 'dropped') and was not in (None, 'done', 'dropped') and actor != 'promise':
             from . import outcomes
-            outcomes.record(self, 'task.closed', 'task', task_id, actor, facts={'from': was, 'to': fields['Status']})
+            facts = {'from': was, 'to': fields['Status']}
+            if str(was_row.get('Assignee') or '').startswith('person:'):     # a step somebody owed: whom, and how late (build step 4)
+                facts['who'] = was_row['Assignee'][7:].lower(); facts['due'] = was_row.get('DueAt')
+                try: facts['late_days'] = max(0, (datetime.now().date() - datetime.strptime(str(was_row.get('DueAt') or '')[:10], '%Y-%m-%d').date()).days)
+                except ValueError: pass
+            # ...the playbook it was worked from, and whether the last mail on it asked something - what the ledger counts about a
+            # KIND of work (playbook_facts.py, build step 5): "closed with a question open" is the model's intent, never a word match
+            from . import playbooks as _pb
+            if _pb.of_task(was_row):
+                # ...and still open only when the owner's own word did not come after it (the review, 2026-10-12: the opening mail alone
+                # counted every task as closed on an open question)
+                li = self.last_inbound_on_task(task_id); v = self.message_verdict(li['MessageId']) if li else None
+                own = self.own_reply_on_thread(li.get('ConversationId'), task_id) if li else None
+                facts.update(playbook=_pb.of_task(was_row), asked=bool(v and v.get('intent') in ('task', 'reply_only')
+                                                                    and not (own and str(own.get('SentAt') or '') >= str(li.get('SentAt') or ''))))
+            outcomes.record(self, 'task.closed', 'task', task_id, actor, facts=facts)
+            from . import advisor
+            advisor.notice(self, 'task.closed', 'task', task_id)        # the Advisor on the event (advisor.py)
         self._bump_snapshots()
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)
@@ -1797,6 +1825,14 @@ class SQLiteStore:
         self._write_checklist(task_id, items, actor)
         self._exec('UPDATE task SET ParentId=? WHERE TaskId=?', (task_id, int(child_tid)))
         return True
+    def step_arrivals(self, goal_tid) -> dict:
+        """Mail that served a goal's steps, by step id - the route rows triage wrote with `serves` (spec 2026-10-12)."""
+        rows = self._rows("SELECT r.MessageId mid, json_extract(r.VerdictJson, '$.serves.step') step, m.FromName who, m.FromEmail em, m.SentAt at, "
+                          "m.Subject subject FROM route r JOIN message m ON m.MessageId=r.MessageId "
+                          "WHERE json_extract(r.VerdictJson, '$.serves.task')=? ORDER BY m.SentAt, r.RouteId", (int(goal_tid),))
+        out = {}
+        for r in rows: out.setdefault(r['step'], []).append({'mid': r['mid'], 'who': r['who'] or r['em'] or '', 'at': r['at'], 'subject': r['subject'] or ''})
+        return out
     def _tick_parent_step(self, child_tid, actor: str):
         """A child closed `done` ticks the parent's box that points at it; the parent itself is never closed for it."""
         row = self._one('SELECT ParentId FROM task WHERE TaskId=?', (child_tid,))
@@ -3897,7 +3933,9 @@ class SQLiteStore:
         return self._rows(f"SELECT * FROM message WHERE Status='triaging' ORDER BY {order} LIMIT ?", (limit,))
     def ranked_held(self, channel) -> int: return len(self.ranked_head(channel))
     # ── batches (batch.py) ──────────────────────────────────────────────────────────────────
-    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose')
+    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen')
+    def batch_items_fixing(self) -> list:
+        return self._rows("SELECT * FROM batch_item WHERE Fix='running' ORDER BY ItemId")
     def add_batch_item(self, tid, conv, mid, place, title, link):
         self._exec('INSERT OR IGNORE INTO batch_item (TaskId, ConversationId, MessageId, Place, Title, Link, State, CreatedAt, UpdatedAt) '
                    "VALUES (?,?,?,?,?,?,'waiting',?,?)", (tid, conv, mid, place, title, link, _now(), _now()))

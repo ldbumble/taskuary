@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml/badge.svg)](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ldbumble/taskuary/badge)](https://scorecard.dev/viewer/?uri=github.com/ldbumble/taskuary)
-[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.7.18&asof=2026-10-11T2000)](https://pypi.org/project/taskuary/)
+[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.8.0&asof=2026-10-12T2000)](https://pypi.org/project/taskuary/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://github.com/ldbumble/taskuary)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/ldbumble/taskuary?style=flat&color=d4a72c&label=%E2%98%85%20stars)](https://github.com/ldbumble/taskuary/stargazers)
@@ -19,7 +19,7 @@ Compared with hosted assistants like Fyxer, Taskuary is free and open source, ru
 
 ![The Assistant's Game view: an office where every task, message and agent is a figure, opening on the whole floor and zooming into each room - the Agent Floor, the Meeting Room where people wait on you, the Gym, the Coffee Room, the Memory Archive, and the Assistant Core.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
-Taskuary is early—currently **v0.3.7.18**—so breaking changes are still possible before 1.0.
+Taskuary is early—currently **v0.3.8.0**—so breaking changes are still possible before 1.0.
 
 <p align="center">
   <a href="https://taskuary.com/demo/"><img
@@ -41,7 +41,8 @@ numbers through the real app, using fictional demo data.
 Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by what they need:
 **Urgent**, **On you**, **Goals**, **For later**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
 one card: what changed since last night, what was learned, the morning digest, your meetings, and
-what waits in each section - so you never open each system in turn.
+what waits in each section - so you never open each system in turn. A goal is a task whose steps
+are tasks: triage opens one for an open-ended ask, and files later mail under the step it serves.
 
 ![The work rail sorting today's items into Urgent, On you, Agents working, Reports, Advisor ideas, and FYI, beside the opening card: agents that finished and a report that ran since last night, the memory and morning digest lines, today's meetings, and what waits in each section.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=cards)
 
@@ -129,7 +130,10 @@ words, a pull request merged, a promise made, a sender ignored - and a daily swe
 followed from facts already in the store: more rounds on the thread, a task reopened, a promise
 delivered late. Reflection reads those rows as evidence, so a lesson can say "green PR from the
 coder: you merge it, 8 of 8". A learned line never acts on its own; it changes which button comes
-first. See [The Advisor](https://taskuary.com/docs/advisor).
+first. It also keeps a page per person it deals with, compiled from the same ledger: how fast they
+answer, whether a chase is needed, who on copy moves them - and a thread gone quiet past that
+person's own day is *slipped*, on your rail under On you, with Chase, Let it go, They answered elsewhere
+and Remind me under it. See [The Advisor](https://taskuary.com/docs/advisor).
 
 ![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=cards)
 

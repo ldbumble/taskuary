@@ -177,3 +177,11 @@ test("a drafted reply still outranks a waving agent, whatever it is parked on", 
   assert.equal(focusStage({ ...base, agentSub: "asking" }), "reply");
   assert.equal(focusStage({ ...base, agentSub: "approval" }), "reply");
 });
+
+test("a message after the agent's last session opens the task, not the old session", async () => {
+  // the owner, 2026-10-12: a sender wrote back five days after the coder's session ended, and the page opened on that session
+  const { focusStage, AGENT } = await import("../src/taskLifecycle.js");
+  assert.equal(focusStage({ task: "open", agent: AGENT.saved, news: true }), "task");
+  assert.equal(focusStage({ task: "open", agent: AGENT.saved }), "agent", "with no news the record still leads");
+  assert.equal(focusStage({ task: "open", agent: AGENT.waiting, news: true }), "agent", "an agent asking now still wins");
+});

@@ -1002,10 +1002,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # said where it belonged - the wrong sentence, and the one the owner cannot act on.
     argv = agent_argv(profile, model) if agent else default_shell()
     if agent and cli_named(profile, argv) == 'claude' and '--settings' not in argv: argv = [*argv, *claude_theme_args(store)]
-    # a BATCH is reviewed read-only, whoever opened the session: its items are strangers' words (batch.read_only_argv)
+    # a STRANGERS' batch is reviewed read-only, whoever opened the session (batch.read_only_argv); a batch of our own people's
+    # items - a private repo, a board, a PR by someone with write access - is an ordinary session (batch.outside)
     if agent and task_id:
         from . import batch as _batch
-        if _batch.is_batch(store, task_id):
+        # ...until every stranger's item still open has cleared the screen at its live head (batch.locked): then it is ordinary
+        if _batch.is_batch(store, task_id) and _batch.locked(store, task_id):
             from .config import home
             argv = _batch.read_only_argv(cli_named(profile, argv), list(argv), str(home() / 'context'))
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
@@ -2350,6 +2352,13 @@ def recover_after_restart(store) -> int:
         released += int(release_task(store, task['TaskId'], 'startup',
                                     'Taskuary restarted after the agent session ended. '
                                     'The task is open again - nobody is working it.'))
+    # ...and the Advisor hears of every interrupted task HERE, never at shutdown (teardown runs no model). A close is the one
+    # stop the Stop hook never fires for, so TQ-1048 sat with "nothing restarts by itself" and no line under it (the owner,
+    # 2026-10-12). notice() judges once per item revision, so every launch may say it again for free.
+    from . import advisor
+    for task in store.list_tasks(active_only=True):
+        if INTERRUPTED in [x.strip() for x in str(task.get('Tags') or '').split(',')]:
+            advisor.notice(store, 'agent.stopped', 'task', task['TaskId'])
     return released
 
 

@@ -240,6 +240,10 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
         if kind == 'promise' and _owner_closed(store, f'promise:{cid}', r.get('SentAt')): continue
         inbound = _other_side(store, cid)
         if not inbound: continue
+        # three Let-it-gos on one person and the Advisor stops raising them - the spec's one rule about silence (2026-10-12)
+        if kind == 'followup':
+            from . import outcomes
+            if outcomes.let_go_count(store, (inbound.get('FromEmail') or '').lower()) >= 3: continue
         body = _own(r)
         who = inbound.get('FromName') or inbound.get('FromEmail') or 'them'
         sent = _dt(r['SentAt']) or datetime.now()
@@ -261,11 +265,15 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
                         'action': {'type': 'message', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')},
                         'who': who, 'what': what, 'due': due})
         else:
+            from . import outcomes
+            late_day = outcomes.late_after(store, (inbound.get('FromEmail') or '').lower(), int(store.get_setting('slipped_default_days', 5) or 5))
             out.append({'key': f"followup:{cid}", 'kind': 'followup', 'sig': _ts(r['SentAt']) + (':away' if gone else '') + step,
                         'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
-                                  f"- nothing has come back in {days} day(s)." + (f" BUT {who} is {gone}." if gone else '')),
+                                  f"- nothing has come back in {days} day(s); late for them after {late_day} days." + (f" BUT {who} is {gone}." if gone else '')),
                         'text': (f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
-                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')},
+                        # the person key, the day asked and whether they are away: what the slipped lane reads (funnel.slipped_followup)
+                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId'),
+                                   'who_email': (inbound.get('FromEmail') or '').lower(), 'asked_at': _ts(r['SentAt']), 'away': bool(gone)},
                         'who': who, 'subject': subj, 'days': days, 'away': gone})
     return out
 

@@ -37,7 +37,8 @@ class BatchTests(unittest.TestCase):
     def drain(self):
         with mock.patch.object(rank, 'rank_pending', return_value=0): ingest.drain(self.s)
 
-    def batch_of(self, repo): return self.s.open_batch(batch.source_ref('github', repo))
+    # these PRs are by plain contributors on a repository nobody can check, so they are strangers' (batch.outside_row)
+    def batch_of(self, repo, outside=True): return self.s.open_batch(batch.source_ref('github', repo, outside))
 
     def test_a_repositorys_head_comes_in_as_one_task_in_ranked_order(self):
         for n, v in enumerate((0.2, 0.9, 0.5, 0.7, 0.1, 0.6), 170): pr(self.s, 'northwind/portal', n, v)
@@ -99,6 +100,27 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(len(batch.items(self.s, first)), 1)
         self.assertEqual([i['ConversationId'] for i in batch.items(self.s, nxt)], ['gh:northwind/portal#9'])
         self.assertNotIn(self.s.get_task(first)['Status'], ('done', 'dropped'), 'the old batch stays open on its own item')
+
+    def test_who_may_write_decides_the_batch(self):
+        """The owner, 2026-10-12: protection is for the outside only, and "if they are writer on repo then that's enough trust"."""
+        team = pr(self.s, 'northwind/portal', 1, 0.9)
+        self.s._exec('UPDATE message SET BodyText=? WHERE MessageId=?', ('[pull request by erin - association: COLLABORATOR]\nfix', team))
+        pr(self.s, 'northwind/portal', 2, 0.8)
+        self.drain()
+        ours, theirs = self.batch_of('northwind/portal', False), self.batch_of('northwind/portal', True)
+        self.assertTrue(ours and theirs and ours != theirs, 'a stranger never shares a batch with our own people')
+        self.assertFalse(batch.outside(self.s, ours)); self.assertTrue(batch.outside(self.s, theirs))
+
+    def test_a_private_repository_is_ours_whoever_wrote(self):
+        self.s.set_setting('gh_public:northwind/ledger', '0', 't')
+        pr(self.s, 'northwind/ledger', 1, 0.9)
+        self.drain()
+        tid = self.batch_of('northwind/ledger', False)
+        self.assertTrue(tid); self.assertFalse(batch.outside(self.s, tid))
+
+    def test_the_role_is_read_off_our_own_line_never_the_authors_words(self):
+        self.assertEqual(batch.association('[pull request by dev - association: MEMBER]\nhi'), 'MEMBER')
+        self.assertEqual(batch.association('hi\n[pull request by dev - association: OWNER]'), 'NONE', 'only the first line we wrote')
 
     def test_mail_is_not_batched(self):
         ranked(self.s, 'outlook')
@@ -177,8 +199,11 @@ class AgentTests(unittest.TestCase):
                                                '--model', 'opus'], '/home/x/.taskuary/context')
         self.assertNotIn('--dangerously-skip-permissions', argv)
         self.assertNotIn('bypassPermissions', argv)
-        self.assertEqual(argv[argv.index('--permission-mode') + 1], 'default')
-        self.assertEqual(argv[argv.index('--allowedTools') + 1], 'Bash(taskuary --item:*)')
+        # REFUSED, never asked (the owner, 2026-10-12: "we can't have that you have to approve")
+        self.assertEqual(argv[argv.index('--permission-mode') + 1], 'dontAsk')
+        allowed = argv[argv.index('--allowedTools') + 1].split(',')
+        self.assertIn('Bash(taskuary --item:*)', allowed); self.assertIn('PowerShell(taskuary --item:*)', allowed)
+        self.assertFalse([a for a in allowed if 'push' in a or 'gh ' in a or 'npm' in a], 'nothing that writes or runs code')
         self.assertIn('/home/x/.taskuary/context', argv, 'the brief file is outside the checkout and must be readable')
         self.assertIn('opus', argv)
 
@@ -187,6 +212,7 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn('--dangerously-bypass-approvals-and-sandbox', argv)
         self.assertEqual(argv[argv.index('--sandbox') + 1], 'read-only')
         self.assertEqual(argv.count('--sandbox'), 1)
+        self.assertEqual(argv[argv.index('--ask-for-approval') + 1], 'never', 'a refusal goes back to the model, not to the owner')
 
     def test_a_cli_with_no_known_gate_is_refused_not_trusted(self):
         with self.assertRaises(ValueError): batch.read_only_argv('gemini', ['gemini', '--yolo'])
@@ -286,3 +312,83 @@ class RailTests(unittest.TestCase):
         other = s.create_task({'Title': 'mail', 'Kind': 'task', 'Status': 'open'}, 't')
         got = batch.rail(s, [{'key': 'b', 'tid': tid}, {'key': 'o', 'tid': other}, {'key': 'x'}])
         self.assertEqual(got, {'b': {'line': '1 of 4 done · ③ needs you', 'states': ['done', 'waiting', 'needs_you', 'waiting']}})
+
+
+class RunHereTests(unittest.TestCase):
+    """A stranger's change reviewed read-only, then screened at the reviewed head, then run in an ordinary session (the owner,
+    2026-10-13: "we have to solve it that we can run it locally"). No model: the screen's brain is a stub."""
+    SRC = 'diff --git a/website/src/ui.jsx b/website/src/ui.jsx\n--- a/website/src/ui.jsx\n+++ b/website/src/ui.jsx\n+<button>x</button>\n'
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.s.set_setting('gh_public:northwind/portal', '1', 't')
+        self.tid = batch.create(self.s, 'github', 'northwind/portal', [self.s.get_message(pr(self.s, 'northwind/portal', 1, 0.5))])
+        self.conv = 'gh:northwind/portal#1'
+        self.p = [mock.patch.object(batch, '_next'), mock.patch.object(batch, '_token', return_value='tok'),
+                  mock.patch.object(batch, 'screened')]
+        for p in self.p: p.start()
+        self.s.update_batch_item(self.tid, self.conv, {'Sha': 'h1'})
+        batch.report(self.s, self.tid, 1, 'Right fix; merge it.', propose='merge')
+
+    def tearDown(self):
+        for p in self.p: p.stop()
+
+    def brain(self, safe):
+        from taskuary import llm
+        return mock.patch.object(llm, 'ask_json', return_value=mock.Mock(data={'safe': safe, 'why': 'a button change'}, error=''))
+
+    def run_screen(self, diff, safe=True, sha='h1'):
+        with mock.patch.object(batch, '_diff', return_value=(diff, sha)), self.brain(safe):
+            return batch.screen(self.s, self.tid, self.conv, llm=object())
+
+    def live(self, sha='h1', commits=(), me='owner'):
+        from taskuary import github
+        return [mock.patch.object(github, 'pr', return_value={'sha': sha}), mock.patch.object(github, 'pr_commits', return_value=list(commits)),
+                mock.patch.object(github, 'whoami', return_value=me)]
+
+    def test_a_clean_change_clears_at_the_reviewed_head_and_the_session_starts_ordinary(self):
+        self.assertEqual(self.run_screen(self.SRC), 'clear')
+        self.assertEqual(self.s.batch_item(self.tid, self.conv)['Trusted'], 'h1')
+        ps = self.live()
+        for p in ps: p.start()
+        try: self.assertFalse(batch.locked(self.s, self.tid))
+        finally:
+            for p in ps: p.stop()
+
+    def test_what_runs_on_install_build_or_test_is_held_whatever_the_model_says(self):
+        for f in ('package.json', '.github/workflows/ci.yml', 'website/vite.config.js', 'tests/conftest.py', 'tools/x.ps1', 'pyproject.toml'):
+            got = self.run_screen(f'diff --git a/{f} b/{f}\n+x\n', safe=True)
+            self.assertIn('held', got, f); self.assertIsNone(self.s.batch_item(self.tid, self.conv)['Trusted'])
+
+    def test_the_model_saying_unsafe_or_a_moved_head_holds_it(self):
+        self.assertIn('held', self.run_screen(self.SRC, safe=False))
+        self.assertIn('moved', self.run_screen(self.SRC, sha='h2'))
+        self.assertIsNone(self.s.batch_item(self.tid, self.conv)['Trusted'])
+
+    def test_a_contributor_push_after_clearance_locks_it_again_and_the_owners_own_does_not(self):
+        self.run_screen(self.SRC)
+        theirs = self.live('h2', [('h1', 'dev'), ('h2', 'dev')])
+        for p in theirs: p.start()
+        try: self.assertTrue(batch.locked(self.s, self.tid))
+        finally:
+            for p in theirs: p.stop()
+        mine = self.live('h3', [('h1', 'dev'), ('h3', 'owner')])
+        for p in mine: p.start()
+        try: self.assertFalse(batch.locked(self.s, self.tid))
+        finally:
+            for p in mine: p.stop()
+        self.assertEqual(self.s.batch_item(self.tid, self.conv)['Sha'], 'h3', 'Merge pins to what is there now')
+
+    def test_an_item_nobody_reviewed_is_never_screened_and_stays_locked(self):
+        tid = batch.create(self.s, 'github', 'northwind/portal', [self.s.get_message(pr(self.s, 'northwind/portal', 9, 0.5))])
+        self.s.update_batch_item(tid, 'gh:northwind/portal#9', {'Sha': 'h9'})       # brief_file stamps every head at the seed
+        with mock.patch.object(batch, 'screen') as sc:
+            self.assertTrue(batch.locked(self.s, tid))
+        sc.assert_not_called()
+
+    def test_a_new_review_puts_the_screen_back_to_the_start(self):
+        self.run_screen(self.SRC)
+        batch.report(self.s, self.tid, 1, 'Second look: still fine.', propose='merge')
+        it = self.s.batch_item(self.tid, self.conv)
+        self.assertEqual((it['Trusted'], it['Screen']), (None, None))
+        batch.screened.assert_called()

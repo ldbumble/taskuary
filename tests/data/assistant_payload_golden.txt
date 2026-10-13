@@ -2,7 +2,7 @@ NOW: <now>
 
 CANDIDATES:
 [promise:c-audit] You told Sam Okoro on <date> re "Re: Audit questions": "I will send you the answers tomorrow." - the promise: send the answers - it was due <date>; made 2 day(s) ago, and nothing you have sent since delivers it.
-[followup:c-invoice] You wrote Priya Shah on <date> re "Re: Invoice 4471": "Could you send the signed copy before Friday?" - nothing has come back in 3 day(s).
+[followup:c-invoice] You wrote Priya Shah on <date> re "Re: Invoice 4471": "Could you send the signed copy before Friday?" - nothing has come back in 3 day(s); late for them after 5 days.
 [cold:TQ-0001] TQ-0001 "Reconcile the Q3 ledger" [open, kind coding] - nothing has happened on it for 9 days
 
 CONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):

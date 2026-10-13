@@ -951,7 +951,7 @@ const NAV = ["about", "docs", "config", "policies", "memory", "audit", "updates"
 // with their files under them, and the buttons that used to sit on a shelf inside the page - New
 // playbook, Manage profiles - are entries here too. Nothing about this page lives in a header any
 // more (the owner, 2026-09-22: "everything moves to sidebar").
-const docsTree = ({ profiles = [], playbooks = [] }) => [
+const docsTree = ({ profiles = [], playbooks = [], people = [] }) => [
   { key: "g:documents", label: "Operator documents", head: true, sel: { group: "documents" } },
   ...OPERATOR_DOCS.map((d) => ({ key: `d:${d.name}`, label: d.label, sel: { group: "documents", doc: d.name } })),
   { key: "g:profiles", label: "Profiles", head: true, sel: { group: "profiles" } },
@@ -964,6 +964,9 @@ const docsTree = ({ profiles = [], playbooks = [] }) => [
   { key: "g:playbooks", label: "Playbooks", head: true, sel: { group: "playbooks" } },
   ...playbooks.map((b) => ({ key: `b:${b.slug}`, label: b.title || b.slug, sel: { group: "playbooks", doc: b.slug } })),
   { key: "a:new-playbook", label: "+ New playbook", sel: { action: "new-playbook" } },
+  // the pages the ledger keeps per person (people_pages.py), by address; none until reflection has compiled one
+  ...(people.length ? [{ key: "g:people", label: "People", head: true, sel: { group: "people" } }] : []),
+  ...people.map((p) => ({ key: `pp:${p.name}`, label: p.who, sel: { group: "documents", doc: p.name } })),
   // no "Import skills" entry: that road was deliberately consolidated onto the Agents panel,
   // which holds both ways in - a second door from here is the thing that was removed.
   { key: "g:how", label: "How it works", head: true, sel: { group: "how" } },
@@ -979,10 +982,10 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   // Docs' rail entries switch the document, so the selection belongs here beside `page` - and the
   // catalog they draw comes from DocsView, which already fetches and derives both lists.
   const [docSel, setDocSel] = useState({ group: "documents", doc: OPERATOR_DOCS[0].name });
-  const [docCat, setDocCat] = useState({ profiles: [], playbooks: [] });
+  const [docCat, setDocCat] = useState({ profiles: [], playbooks: [], people: [] });
   const [catN, setCatN] = useState(0);    // a role just laid out new profiles and playbooks: read the catalogue again
   const onCatalog = useCallback((c) => setDocCat((cur) =>
-    (cur.profiles === c.profiles && cur.playbooks === c.playbooks ? cur : c)), []);
+    (cur.profiles === c.profiles && cur.playbooks === c.playbooks && cur.people === c.people ? cur : c)), []);
   // WHICH RAIL ENTRIES SHOW THEIR SECTIONS. The page you are in shows its own - it has to, or the
   // rail would highlight a section folded away under a title - and the rest stay shut. Scrolling
   // the whole document would otherwise leave all seven open behind you, with eleven Configuration

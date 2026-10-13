@@ -71,7 +71,8 @@ SYSTEM = (
     "again, nothing more - never call it a success, and never say something was merged, sent or fixed unless a line says exactly that. "
     "The line is plain words for the owner: the ids go in \"evidence\" only, and the verb is named by its label, never its id. "
     "The reason must be the fact that makes THIS verb right, and it must hold up on its own: someone or an agent waiting on the "
-    "owner is a reason to answer, never a reason to put it off. If none of the verbs offered is the right move, say nothing - a "
+    "owner is a reason to answer, never a reason to put it off. Ending an agent's session is right when its work is done or no "
+    "longer wanted; when it has finished something for the owner to review or send, the move is the one that reviews or sends it. If none of the verbs offered is the right move, say nothing - a "
     "wrong suggestion is worse than none. The line is at most 80 characters, so it is read whole. "
     "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
     "\"evidence\": [\"<ids from the lines below>\"]}.")
@@ -117,6 +118,15 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     facts = {k: item.get(k) for k in ('ref', 'kind', 'lane', 'title', 'who', 'when', 'why', 'channel') if item.get(k)}
     lines = [f'EVENT: {event}', 'THE ITEM: ' + json.dumps(facts), f"PREVIEW: {str(item.get('preview') or '')[:300]}",
              'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
+    if target_kind == 'task':
+        # what the agent itself last said and is asking: the card's preview is the sender's mail, so five stops in a row were
+        # judged "stop the agent" over a coder whose last words were "the reply above is ready for you to review and send"
+        from . import workerstate
+        try: st = workerstate.status(store, int(target_id))
+        except Exception: st = {}
+        if st.get('said'): lines.append('THE AGENT LAST SAID: ' + ' '.join(str(st['said']).split())[:600])
+        asks = [r.get('text') for r in st.get('requests') or [] if r.get('text')]
+        if asks: lines.append('THE AGENT IS ASKING: ' + ' | '.join(' '.join(str(q).split())[:200] for q in asks[:3]))
     lrn = injectable(store.doc('learned') or '')
     if lrn.strip(): lines.append('LEARNED (the owner, from their own verdicts):\n' + lrn[:2000])
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
@@ -143,6 +153,14 @@ def plain(line: str, verb: str, label: str) -> str:
     return ' '.join(re.sub(_ID, 'an earlier outcome', t).split())
 
 
+def _offered(verbs: list, said: str):
+    """The verb the model named, as the prompt listed it: "approve (Send & close)" copied whole, the bare id, or the label alone -
+    an exact-id match dropped three right answers as "verb not offered" (2026-10-13)."""
+    w = ' '.join(str(said or '').split()).lower(); bare = re.sub(r'\s*\(.*\)\s*$', '', w)
+    return next((v for v in verbs if w in (v['verb'].lower(), f"{v['verb']} ({v['label']})".lower(), str(v['label']).lower())
+                 or bare == v['verb'].lower()), None)
+
+
 def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1, llm=None) -> int:
     key = key_of(target_kind, target_id)
     def W(**kw): return _write(store, target_kind=target_kind, target_id=target_id, key=key, event=event, revision=rev, tier=tier, **kw)
@@ -161,7 +179,8 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     verb, line = d.get('verb'), ' '.join(str(d.get('line') or '').split())[:200]
     ev = [e for e in (d.get('evidence') or []) if isinstance(e, str) and _EV.match(e)][:6]
     if not verb or not line: return W(dropped='nothing to say', model=model, evidence=ev)
-    hit = next((v for v in verbs if v['verb'] == verb), None)
+    hit = _offered(verbs, verb)
+    verb = hit['verb'] if hit else verb
     if not hit: return W(dropped=f'verb not offered: {verb}'[:120], model=model, line=line, evidence=ev)
     line = plain(line, verb, hit['label'])
     rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model)

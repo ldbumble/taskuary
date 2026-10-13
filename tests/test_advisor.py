@@ -130,6 +130,14 @@ class JudgeTests(_Rail):
         r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
         self.assertEqual(r['Verb'], None); self.assertIn('approve', r['Dropped'])
 
+    def test_a_verb_named_as_the_prompt_lists_it_is_the_verb(self):
+        # "continue (Continue session)" copied whole from VERBS OFFERED was dropped as not offered
+        for said in ('continue (Continue session)', 'Continue session', 'continue'):
+            s = MemoryStore(); t = self._stopped_task(s)
+            rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=brain_saying({'verb': said, 'line': 'Pick it up again.', 'evidence': []}))
+            r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
+            self.assertEqual((r['Verb'], r['Dropped']), ('continue', None), said)
+
     def test_an_item_with_no_actions_is_dropped_without_a_call(self):
         s = MemoryStore()
         mid = s.add_message({'ConversationId': 'c2', 'Channel': 'email', 'Subject': 'Newsletter', 'FromEmail': 'news@vendor.example',
@@ -231,6 +239,17 @@ class ReadTests(_Rail):
         s, t, rid = self._advised()
         s.update_task(t, {'Status': 'waiting'}, 'owner')
         with mock.patch.object(advisor, 'notice'): self.assertEqual(advisor.for_key(s, f'task:{t}'), {})
+
+    def test_the_prompt_carries_what_the_agent_said_and_asks(self):
+        # the card's preview is the sender's mail: without the agent's own words a finished draft read as "stop the agent"
+        from taskuary import workerstate as ws
+        s = MemoryStore(); t = self._stopped_task(s)
+        st = {'said': 'The reply above is ready for you to review and send.', 'requests': [{'text': 'Send it now?'}], 'state': 'unknown'}
+        with mock.patch.object(ws, 'status', return_value=st):
+            p = advisor._prompt(s, 'agent.stopped', advisor._item(s, 'task', t) or {'ref': 'x'}, [{'verb': 'continue', 'label': 'Continue session'}], 1, 'task', t)
+        self.assertIn('THE AGENT LAST SAID: The reply above is ready for you to review and send.', p)
+        self.assertIn('THE AGENT IS ASKING: Send it now?', p)
+        self.assertIn('reviews or sends it', advisor.SYSTEM)
 
     def test_an_agent_at_work_has_no_line_until_it_stops_again(self):
         # a continue writes nothing the revision sees until the prompt lands: the stop's line stood over a working coder

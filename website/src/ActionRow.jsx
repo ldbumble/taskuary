@@ -14,6 +14,9 @@ export function AdvisorNext({ advice }) {
   const [at, setAt] = useState(null), [note, setNote] = useState(null);
   if (!advice?.verb || !advice.line) return null;
   const onRow = advisedIn(verbs.list, advice);
+  // a move the row cannot make is not advice: "Stop the agent" over a greyed Save and end session left Next the filled
+  // button under it (the owner, 2026-10-13: "it said stop agent but highlighted button was next?")
+  if (!onRow) return null;
   const [n, m] = advice.count || [0, 0];
   const why = (e) => {
     setAt(e.currentTarget); setNote(null);
@@ -28,7 +31,7 @@ export function AdvisorNext({ advice }) {
       <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
         transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
         <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
-          <div className="pick">Suggested: <b>{onRow?.label || advice.label}</b>{onRow ? " - the dark button below" : ""}</div>
+          <div className="pick">Suggested: <b>{onRow.label}</b> - the dark button below</div>
           <div className="said">{advice.line}</div>
           {m >= 2 && <div className="fact">You chose {advice.label} {n} of {m} times in a moment like this.</div>}
           {note === null ? <div className="fact">Reading its notes…</div> : (note.evidence || []).length > 0 && (

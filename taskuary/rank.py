@@ -42,13 +42,14 @@ HEAD_RANGE = (1, 20)
 RANK_BATCH = 40           # arrivals per listwise ranking call
 
 
-def head_size(store, channel: str = None) -> int:
+def head_size(store, channel: str = None, default: int = None) -> int:
     """How many of THIS input's ranked arrivals are judged at once.
 
     It belongs to the connector, beside the switch that turned ranking on: a repo firehose and a
     mailbox are not the same appetite (the owner, 2026-09-18: "per connector input you can choose
     how many you want in each batch"). Clamped either way - a 0 would judge nothing and a 500 would
-    spend the whole saving this exists to make."""
+    spend the whole saving this exists to make. A batched input passes its own `default` (batch.cap): the shared
+    setting is a mailbox's appetite, not how many pull requests go in one task."""
     lo, hi = HEAD_RANGE
     raw = None
     if channel:
@@ -56,11 +57,12 @@ def head_size(store, channel: str = None) -> int:
             if channel in _channels_of(c):
                 raw = _cfg(c).get('bulk_head')
                 break
-    if raw in (None, ''):
+    if raw in (None, '') and default is None:
         try: raw = store.get_setting('bulk_head')
         except AttributeError: raw = None
-    try: n = int(str(raw if raw not in (None, '') else HEAD_JUDGED).strip())
-    except (TypeError, ValueError): return HEAD_JUDGED
+    default = HEAD_JUDGED if default is None else default
+    try: n = int(str(raw if raw not in (None, '') else default).strip())
+    except (TypeError, ValueError): return default
     return max(lo, min(hi, n))
 
 

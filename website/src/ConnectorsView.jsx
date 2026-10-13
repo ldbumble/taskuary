@@ -3568,6 +3568,9 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
   );
 };
 
+// inputs whose ranked arrivals come in as batches - several items to one task (batch.CHANNELS)
+const BATCHED = new Set(["github", "gitlab", "azdo", "linear", "trello", "jira", "sentry", "pagerduty"]);
+
 const ProcessingStep = ({ conn, reload, n }) => {
   const saveConn = useSaveConnector(reload);
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
@@ -3582,9 +3585,11 @@ const ProcessingStep = ({ conn, reload, n }) => {
   // Settings: a repo firehose and a mailbox are not the same appetite (the owner, 2026-09-18: "per
   // connector input you can choose how many you want in each batch"). Clamped to the same 1-20 the
   // server clamps to, so the box cannot promise a number rank.head_size would refuse.
-  const head = Number(cfg.bulk_head) || 4;
+  // ...and for a batched input the same number is how many items go in ONE task, 10 unless set (batch.cap)
+  const batched = BATCHED.has(conn.Type), fallback = batched ? 10 : 4;
+  const head = Number(cfg.bulk_head) || fallback;
   const setHead = async (raw) => {
-    const n = Math.max(1, Math.min(20, Number(raw) || 4));
+    const n = Math.max(1, Math.min(20, Number(raw) || fallback));
     const next = { ...cfg, bulk_head: n }; setCfg(next);
     await saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) });
   };
@@ -3620,12 +3625,13 @@ const ProcessingStep = ({ conn, reload, n }) => {
             {v === "rank" && mode === "rank" && (
               <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${BORDER}`,
                 display: "flex", alignItems: "center", gap: 1 }}>
-                <TextField size="small" type="number" value={head} label="Read at once"
+                <TextField size="small" type="number" value={head} label={batched ? "Per task" : "Read at once"}
                   onChange={(e) => setCfg({ ...cfg, bulk_head: e.target.value })}
                   onBlur={(e) => setHead(e.target.value)}
                   inputProps={{ min: 1, max: 20, style: { width: 52 } }} />
                 <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.45 }}>
-                  The rest wait in rank order. One more is read each time you finish one.
+                  {batched ? `The best ${head} go in one task, worked by one agent; the next ${head} start another (up to 20).`
+                    : "The rest wait in rank order. One more is read each time you finish one."}
                 </Typography>
               </Box>
             )}

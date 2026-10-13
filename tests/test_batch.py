@@ -46,7 +46,7 @@ class BatchTests(unittest.TestCase):
         self.drain()
         tid = self.batch_of('northwind/portal')
         self.assertIsNotNone(tid)
-        self.assertEqual(self.s.get_task(tid)['Title'], '6 pull requests on northwind/portal', 'all of them: no cap (2026-10-13)')
+        self.assertEqual(self.s.get_task(tid)['Title'], '6 pull requests on northwind/portal', 'all of them: under the cap of ten')
         its = batch.items(self.s, tid)
         self.assertEqual([i['ConversationId'] for i in its], [f'gh:northwind/portal#{n}' for n in (171, 173, 175, 172, 170, 174)])
         self.assertEqual([i['Place'] for i in its], [1, 2, 3, 4, 5, 6])
@@ -76,7 +76,30 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(self.s.pending_triage(), [])
         self.assertIn('(3) #9 fix the totals', told.call_args[0][2], 'the live agent is told what joined')
 
-    def test_a_batch_has_no_cap_and_a_new_one_starts_only_when_none_is_open(self):
+    def test_ten_to_a_task_best_first_and_the_rest_start_the_next(self):
+        """The owner, 2026-10-13: "rank them and take top 10 and put them into one ... next 10 should go to new task"."""
+        for n in range(1, 8): pr(self.s, 'northwind/portal', n, 0.5)
+        self.drain(); first = self.batch_of('northwind/portal')
+        for n in range(20, 26): pr(self.s, 'northwind/portal', n, n / 100)
+        self.drain()
+        nxt = self.batch_of('northwind/portal')
+        self.assertNotEqual(nxt, first)
+        self.assertEqual([i['ConversationId'][-2:] for i in batch.items(self.s, first)][7:], ['25', '24', '23'], 'the best fill the room')
+        self.assertEqual([i['ConversationId'][-2:] for i in batch.items(self.s, nxt)], ['22', '21', '20'], 'the rest start the next')
+        self.assertEqual(len(batch.items(self.s, first)), batch.CAP)
+
+    def test_the_cards_own_number_sets_the_size(self):
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps({'bulk': 'rank', 'bulk_head': 3})}, 't')
+        self.s.set_setting('bulk_head', '1', 't')
+        self.assertEqual(batch.cap(self.s, 'github'), 3)
+        for n in range(1, 6): pr(self.s, 'northwind/portal', n, 0.5)
+        self.drain()
+        self.assertEqual(len(batch.items(self.s, self.batch_of('northwind/portal'))), 2, 'five in: three, then two')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        self.assertEqual(batch.cap(self.s, 'github'), batch.CAP, "the mailbox's shared number is not a batch's size")
+
+    def test_a_new_batch_starts_when_none_is_open(self):
         for n in range(1, 5): pr(self.s, 'northwind/portal', n, 0.5)
         self.drain(); first = self.batch_of('northwind/portal')
         pr(self.s, 'northwind/portal', 9, 1.0)

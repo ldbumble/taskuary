@@ -9,10 +9,10 @@ Now the top N of ONE repository come in as one task. Its items are rows of batch
 agent works them top-down and says what it found per item. The rules the owner set:
   - a batch is one input (SourceName - the repository, the board). Which input an arrival came from is a fact on it,
     never a judgement; the AI ranks only WITHIN an input.
-  - ONE TASK PER INPUT: an arrival joins the open batch, ranked behind what is there, with no cap, and its agent is put back
-    on it if it had finished; a new batch starts only when none is open (the owner, 2026-10-13: "as long as there is task
-    then add the new ones (lower ranked) ones behind them as well and keep it all on one tasks"). Before, a finished agent
-    or a full head meant a new batch, and nine pull requests sat in four tasks with four agents.
+  - TEN TO A TASK (CAP): an arrival joins the open batch while it has room, ranked behind what is there, and its agent is
+    put back on it if it had finished; what does not fit starts the next batch, best first (the owner, 2026-10-13: "rank them
+    and take top 10 and put them into one ... next 10 should go to new task"). Before, a finished agent meant a new batch
+    whatever its size, and nine pull requests sat in four tasks with four agents.
   - an item ending upstream (merged, closed) settles ITS line. The task closes when no line is left open.
   - a comment on an item re-opens that line, not a new task.
   - mail is not batched: four senders are not one job.
@@ -32,9 +32,14 @@ from .store import task_ref
 CHANNELS = frozenset({'github', 'gitlab', 'azdo', 'linear', 'trello', 'jira', 'sentry', 'pagerduty'})
 OPEN, SETTLED = ('waiting', 'working', 'needs_you'), ('done', 'ended')
 PREFIX = 'batch:'
+CAP = 10                # items to a batch by default: the next ten start the next one (cap)
 
 
 def batches(channel) -> bool: return str(channel or '') in CHANNELS
+def cap(store, channel) -> int:
+    "How many items go in one batch of this input: its card's own number (Processing -> Per task), 1-20, else CAP."
+    from .rank import head_size
+    return head_size(store, channel, CAP)
 def source_ref(channel, source, danger=False) -> str: return f'{PREFIX}{channel}:{source}' + (':danger' if danger else '')
 
 TEAM = ('OWNER', 'MEMBER', 'COLLABORATOR')                 # GitHub's author_association for people with write access
@@ -223,19 +228,25 @@ def admit(store, rows: list) -> list:
             split.setdefault((ch, source, r['MessageId'] in sus), []).append(r)
     for (ch, source, danger), rs in split.items():
         rs = sorted(rs, key=lambda r: (r.get('RankValue') is None, -(r.get('RankValue') or 0), r['MessageId']))
-        try:
-            ob = store.open_batch(source_ref(ch, source, danger))
-            # ONE TASK PER INPUT, with no cap: an arrival joins the open batch, ranked behind what is there, even once its agent
-            # has been and gone - that agent is put back on it - and a new batch starts only when none is open. A finished
-            # agent used to mean a new batch, and a head size capped the rest: nine pull requests sat in four tasks with four
-            # agents (the owner, 2026-10-13: "as long as there is task then add the new ones ... and keep it all on one task")
-            tid = ob or create(store, ch, source, rs, danger=danger)
-            if ob: join(store, ob, rs, source)
-            for r in rs:
-                if r['MessageId'] in sus:
-                    store.update_batch_item(tid, r.get('ConversationId') or f"m{r['MessageId']}", {'Warn': sus[r['MessageId']]})
-            if not ob or finished(store, ob): start(store, tid)
-        except Exception as e: logger.warning(f'batch: {source} could not be let in ({e})')
+        # TEN TO A TASK: an arrival joins the open batch while it has room, ranked behind what is there, even once its agent
+        # has been and gone - that agent is put back on it. What does not fit starts the next batch, the best ten first (the
+        # owner, 2026-10-13: "rank them and take top 10 and put them into one ... next 10 should go to new task"). A finished
+        # agent used to mean a new batch whatever its size: nine pull requests sat in four tasks with four agents.
+        n = cap(store, ch)
+        while rs:
+            try:
+                ob = store.open_batch(source_ref(ch, source, danger))
+                room = n - len(store.batch_items(ob)) if ob else 0
+                if room <= 0: ob = None
+                take, rs = rs[:room or n], rs[room or n:]
+                tid = ob or create(store, ch, source, take, danger=danger)
+                if ob: join(store, ob, take, source)
+                for r in take:
+                    if r['MessageId'] in sus:
+                        store.update_batch_item(tid, r.get('ConversationId') or f"m{r['MessageId']}", {'Warn': sus[r['MessageId']]})
+                if not ob or finished(store, ob): start(store, tid)
+            except Exception as e:
+                logger.warning(f'batch: {source} could not be let in ({e})'); break
     return rest
 
 

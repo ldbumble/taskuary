@@ -714,8 +714,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
             <Typography variant="body2" sx={{ color: DIM }}>
               {/* the page title above already says what these are; this line is the door to the rules of the rules */}
-              <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.policies)}
-                sx={{ color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+              <Typography component="button" type="button" variant="body2" onClick={() => setHelp(SECTION_HELP.policies)}
+                sx={{ color: "#55697a", cursor: "pointer", border: 0, background: "none", padding: 0, font: "inherit", "&:hover": { textDecoration: "underline" } }}>
                 How precedence works →
               </Typography>
             </Typography>
@@ -793,8 +793,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             <Typography variant="body2" sx={{ color: DIM }}>
               One dated line per verdict you gave, plus notes you write — the evidence LEARNED.md (Docs) distils its general lessons from.
               Lines that bear on a new message ride into its triage and draft.
-              <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.memory)}
-                sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+              <Typography component="button" type="button" variant="body2" onClick={() => setHelp(SECTION_HELP.memory)}
+                sx={{ color: "#55697a", cursor: "pointer", border: 0, background: "none", padding: 0, font: "inherit", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
                 How this relates to LEARNED.md →
               </Typography>
             </Typography>
@@ -852,8 +852,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             is one row in an append-only log. Each row carries a hash of its own contents and of the row before it, so changing history
             after the fact breaks every hash from that point on. <b>Verify</b> recomputes the chain and says whether the record you see is
             the record that was written.
-            <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.audit)}
-              sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+            <Typography component="button" type="button" variant="body2" onClick={() => setHelp(SECTION_HELP.audit)}
+              sx={{ color: "#55697a", cursor: "pointer", border: 0, background: "none", padding: 0, font: "inherit", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
               How to read it →
             </Typography>
           </Typography>

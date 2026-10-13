@@ -48,3 +48,11 @@ test("Hub topic rows are keyboard-operable buttons", () => {
   assert.ok(hub.includes('aria-current={topic === t.Topic ? "true" : undefined}'));
   assert.ok(hub.includes('onClick={() => setTopic(t.Topic)}'));
 });
+
+test("Settings help links are keyboard-operable buttons", () => {
+  const settings = read("SettingsView.jsx");
+
+  assert.ok(settings.includes('component="button"'));
+  assert.ok(settings.includes('type="button"'));
+  assert.ok(settings.includes('onClick={() => setHelp(SECTION_HELP.audit)}'));
+});

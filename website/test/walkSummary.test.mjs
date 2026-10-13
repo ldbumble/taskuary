@@ -86,3 +86,10 @@ test("an agent's finished work names the task, whatever field holds the agent", 
   const g = gistOf({ rows: [{ key: "p", kind: "agentdone", lane: "report", who: "coder", agent: null, title: "Recurring export timeout failures" }] });
   assert.equal(g, "Recurring export timeout failures");
 });
+
+test("a service's mail names the service, not the person whose name it borrowed (2026-10-13)", () => {
+  assert.equal(whoOf({ who: "Alex", email: "notifications@github.com", title: "[northwind/ledger] Run failed: ci", lane: "fyi" }), "github");
+  assert.equal(whoOf({ who: "Card alerts", email: "alerts@mail.bank.example", title: "Statement ready", lane: "fyi" }), "bank");
+  assert.equal(whoOf({ who: "Erin Blake", email: "erin@northwind.example", title: "Lunch", lane: "fyi" }), "Erin Blake");   // a person stays a person
+  assert.equal(whoOf({ who: "noreply-securityapp@vendor.example", email: "noreply-securityapp@vendor.example", title: "x", lane: "fyi" }), "securityapp");
+});

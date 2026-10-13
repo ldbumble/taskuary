@@ -22,6 +22,8 @@ What one run of the Advisor report hands the model, today:
 | The knowledge base | What agents have learned, by name, so it does not raise what is already known |
 | The sources it watches | The systems and saved data views on its report card, pulled silently each run |
 | Its own notes | What it reviewed last time and what you put down, so it never raises the same silence twice |
+| `LEARNED.md`'s promoted lines | What your own verdicts taught, with their counts - the habits it weighs, never restates as news |
+| The outcome ledger | The last month of what came of actions, each with an id to cite, and the ledger's page on each person the run names |
 
 Two more inputs reach the Advisor at **reflection**, the pass that rewrites `LEARNED.md`, rather
 than on a report run: `LEARNED.md` itself, whole, hypotheses included, and the outcome ledger

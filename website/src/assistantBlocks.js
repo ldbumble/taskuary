@@ -17,6 +17,8 @@ export const BLOCKS = [
   { id: "automation", label: "Worth automating", days: 30 },
   { id: "already_said", label: "Already said" },
   { id: "notes", label: "My notes from last check" },
+  { id: "learned", label: "Learned" },
+  { id: "ledger", label: "The outcome ledger", days: 30 },
   { id: "waiting_on", label: "Waiting on them", hours: 24 },
   { id: "promised", label: "What I promised", hours: 24 },
   { id: "meeting_prep", label: "Meeting prep" },
@@ -81,15 +83,17 @@ export const TASKUARY_CARDS = [
   { id: "automation", label: "Automation", blocks: ["automation"],
     knobs: [{ name: "days", label: "days counted", default: 30 }],
     says: "once a week, a month of traffic counted - what repeats enough to be worth automating" },
-  { id: "memory", label: "Memory", blocks: ["already_said", "notes", "knowledge"], knobs: [],
-    says: "what it already said, its note from the last check, and the knowledge base" },
+  { id: "memory", label: "Memory", blocks: ["already_said", "notes", "knowledge", "learned", "ledger"],
+    knobs: [{ name: "days", label: "days of outcomes", default: 30 }],
+    says: "what it already said, its note from the last check, the knowledge base, what its verdicts taught, and the outcome ledger" },
   { id: "systems", label: "Systems", blocks: ["health", "connectors"],
     knobs: [{ name: "days", label: "days of mentions", default: 30 }, { name: "floor", label: "threads before it is worth saying", default: 3 }],
     says: "the app's own health, and the systems people keep naming that nothing here reads" },
 ];
 // ...which block's window a card's number stands for, for a report saved before cards existed
 const KNOB_BLOCK = { messages: { days: "threads", hours: "waiting_on" }, calendar: { days: "calendar" },
-  work: { done_days: "done_this_week", quiet_days: "gone_quiet" }, systems: { days: "connectors" }, automation: { days: "automation" } };
+  work: { done_days: "done_this_week", quiet_days: "gone_quiet" }, systems: { days: "connectors" }, automation: { days: "automation" },
+  memory: { days: "ledger" } };
 
 // The cards a saved config amounts to. `taskuary_sources` present (even empty) is the whole truth;
 // absent, the block choice - or the defaults - is shown AS cards (assistantblocks.to_cards), and

@@ -39,3 +39,12 @@ test("AI defaults navigation links are keyboard-operable buttons", () => {
   assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="caption" onClick={() => onGo(slot.owner_link)}'));
   assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="body2" onClick={() => onGo("connectors")}'));
 });
+
+test("Hub topic rows are keyboard-operable buttons", () => {
+  const hub = read("HubView.jsx");
+
+  assert.ok(hub.includes('component="button"'));
+  assert.ok(hub.includes('type="button"'));
+  assert.ok(hub.includes('aria-current={topic === t.Topic ? "true" : undefined}'));
+  assert.ok(hub.includes('onClick={() => setTopic(t.Topic)}'));
+});

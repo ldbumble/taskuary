@@ -343,8 +343,10 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
         <Label>Topics</Label>
         <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, overflow: "hidden" }}>
           {[{ Topic: "", n: d?.count?.posts || 0 }, ...topics].map((t, i) => (
-            <Box key={t.Topic || "all"} onClick={() => setTopic(t.Topic)}
+            <Box key={t.Topic || "all"}
+            component="button" type="button" aria-current={topic === t.Topic ? "true" : undefined} onClick={() => setTopic(t.Topic)}
               sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.85, cursor: "pointer",
+                width: "100%", border: 0, font: "inherit",
                 borderTop: i ? `1px solid ${BORDER}` : "none",
                 bgcolor: topic === t.Topic ? PANEL2 : "transparent",
                 "&:hover": { bgcolor: topic === t.Topic ? PANEL2 : "#fcfaf7" } }}>

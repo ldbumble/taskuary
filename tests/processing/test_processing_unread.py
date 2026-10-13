@@ -121,8 +121,13 @@ def test_shown_approval_stays_unread_but_marked_so_next_does_not_bounce_back(sto
     _, shown = both(store)
     kept = next(i for i in shown['items'] if i.get('rid') == rid)
     assert kept['unread'] and kept['surfaced'] and kept['surfaced_at']
-    assert capture_selection(store).selected['key'] != approve['key'], 'just shown: Next moves to the FYI'
+    # on the table, Next moves on to the FYI: the page excludes what it holds
+    assert capture_selection(store, exclude=approve['key']).selected['key'] != approve['key'], 'just shown: Next moves to the FYI'
     assert not store.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
+    # ...but shown is not acted on: off the table, a walk takes it again until Next or Remind me puts it down (2026-10-13)
+    assert capture_selection(store).selected['key'] == approve['key']
+    funnel.settle(store, approve['key'], 'surfaced', read=False, put_down=True)
+    assert capture_selection(store).selected['key'] != approve['key'], 'put down: the walk does not bounce back to it'
 
 
 def test_assistant_digest_post_does_not_duplicate_its_own_idea(store):

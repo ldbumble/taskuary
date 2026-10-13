@@ -67,11 +67,13 @@ export function movesOf(node, group = "decide", prefix = "m") {
 // ONE FILLED BUTTON AT MOST: Next is the filled one only when nothing else on the row is a move of its own.
 const ROOM = 4;                                            // how many chips the row holds before the rest wait behind More
 const isDone = (v) => v.id === "done" || /:done$/.test(String(v.id));
-// THE ADVISOR'S PICK (advisor.py, {verb, label}) as the row verb it names: the chip's own words, or the act behind them
-// when the card words it differently - Mark done is the advisor's `close`, a draft's Send is its `approve`
+// THE ADVISOR'S PICK (advisor.py, {verb, label}) as the row verb it names: the same id (the task registers `reply`, `continue`), the
+// chip's own words, or the act behind them when the card words it differently - the advisor's Reply is the task's "Write reply"
+// (it drew a second Reply on the strip, 2026-10-13), Mark done is its `close`, a draft's Send is its `approve`
 const sameAct = (v, pick) => {
-  const l = String(v.label || "").trim().toLowerCase(), want = String(pick?.label || "").trim().toLowerCase();
-  return (want && l === want) || (pick?.verb === "close" && isDone(v)) || (pick?.verb === "approve" && l.startsWith("send"));
+  const l = String(v.label || "").trim().toLowerCase(), want = String(pick?.label || "").trim().toLowerCase(), id = String(v.id || "");
+  return id === pick?.verb || id.endsWith(`:${pick?.verb}`) || (want && l === want)
+    || (pick?.verb === "close" && isDone(v)) || (pick?.verb === "approve" && l.startsWith("send"));
 };
 export const advisedIn = (list, pick) => (pick?.verb ? list.find((v) => !v.disabled && v.group !== "next" && sameAct(v, pick)) || null : null);
 

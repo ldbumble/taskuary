@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { rowOf } from "../src/actionRow.js";
+import { advisedIn, rowOf } from "../src/actionRow.js";
 
 const src = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
 const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
@@ -25,6 +25,12 @@ test("a pick waiting behind More comes onto the bar, filled; nothing advised lea
   assert.deepEqual(filled(r), ["rerun"]); assert.ok(!r.more.some((x) => x.id === "rerun"));
   assert.deepEqual(filled(rowOf({ ref: "", list }, null)), filled(rowOf({ ref: "", list })));
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "chase", label: "Chase them" })), ["continue"]);   // not on the row: unchanged
+});
+
+test("the advisor's Reply is the task's Write reply: matched by the verb's id, so no second Reply is drawn", () => {
+  const list = [v("reply", "decide", { tone: "p", label: "Write reply" }), v("continue", "agent", { label: "Continue session" }), v("done", "more", { label: "Mark done" })];
+  assert.equal(advisedIn(list, { verb: "reply", label: "Reply" })?.id, "reply");
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "continue", label: "Continue session" })), ["continue"]);
 });
 
 test("a greyed verb is never the advised one", () => {

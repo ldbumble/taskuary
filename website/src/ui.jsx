@@ -1279,8 +1279,8 @@ export const PromptThumbs = ({ imgs, onDrop, h = 40, note = true }) => !imgs.len
     {imgs.map((im) => (
       <Box key={im.id} sx={{ position: "relative" }}>
         <Box component="img" src={im.url} alt="" sx={{ height: h, borderRadius: 0.75, border: "1px solid #ddd2b9", display: "block" }} />
-        <Box onClick={() => onDrop(im.id)} title="remove" sx={{ position: "absolute", top: -5, right: -5, width: 14, height: 14, borderRadius: 99,
-          bgcolor: "#6b5f45", color: "#fff", fontSize: 9, lineHeight: "14px", textAlign: "center", cursor: "pointer" }}>×</Box>
+        <Box component="button" type="button" onClick={() => onDrop(im.id)} aria-label="Remove this image" sx={{ position: "absolute", top: -5, right: -5, width: 14, height: 14, borderRadius: 99,
+          bgcolor: "#6b5f45", color: "#fff", fontSize: 9, lineHeight: "14px", textAlign: "center", cursor: "pointer", border: 0, p: 0 }}>×</Box>
       </Box>
     ))}
     {note && <Typography variant="caption" sx={{ color: "#6b5f45", fontSize: 10 }}>

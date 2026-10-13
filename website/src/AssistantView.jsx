@@ -28,7 +28,7 @@ import { useRowVerbs, useVerbs } from "./actionRow.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
-import { adviceKeyFor, ghostText } from "./advice.js";
+import { adviceKeyFor } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -58,7 +58,7 @@ import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
-import ActionRow from "./ActionRow.jsx";
+import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -2161,7 +2161,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <RetryVerbs item={currentItem} failed={(pile?.items || []).filter((i) => i.lane === "unjudged").length}
             onSaid={(text, status) => setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: status || "done", text }])}
             onDone={() => loadPile(true)} />
-          <ActionRow waited={currentItem?.ref ? waitedText(currentItem) : ""} />
+          {/* the Advisor at the foot of the canvas, and the filled button it picked on the row under it - never in the box (2026-10-13) */}
+          <AdvisorNext advice={advice} busy={busy || resetting}
+            onPick={() => runChip({ verb: advice.verb, label: advice.label, revision: advice.revision })} />
+          <ActionRow waited={currentItem?.ref ? waitedText(currentItem) : ""} advised={advice} />
           <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
           <div className="tq-compose-box">
             <AttachImage pics={pics} sx={{ color: DIM }} />
@@ -2175,19 +2178,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting}
-              className={!text.trim() && ghostText(advice?.line, phone) ? "tq-advised" : undefined}
-              placeholder={(!text.trim() && ghostText(advice?.line, phone))   /* the Advisor's ghost text (advice.js); the phone keeps its short hint */
-                || (phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
+              placeholder={(phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
                 : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…")}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-            {/* THE PILL (spec 2026-10-12): the Advisor's verb where the arrow sits, while the box is empty. It presses the card's
-                own button through the same chip path (runChip -> propose -> receipt); typing anything brings the arrow back */}
-            {advice?.verb && !text.trim() && !pics.imgs.length ? (
-              <button type="button" className="tq-pill" title={advice.line} disabled={busy || resetting}
-                onClick={() => runChip({ verb: advice.verb, label: advice.label, revision: advice.revision })}>{advice.pill}</button>
-            ) : (
-              <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
-            )}
+            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
           </div>
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}

@@ -67,13 +67,29 @@ export function movesOf(node, group = "decide", prefix = "m") {
 // ONE FILLED BUTTON AT MOST: Next is the filled one only when nothing else on the row is a move of its own.
 const ROOM = 4;                                            // how many chips the row holds before the rest wait behind More
 const isDone = (v) => v.id === "done" || /:done$/.test(String(v.id));
-export function rowOf({ list, ref }) {
+// THE ADVISOR'S PICK (advisor.py, {verb, label}) as the row verb it names: the chip's own words, or the act behind them
+// when the card words it differently - Mark done is the advisor's `close`, a draft's Send is its `approve`
+const sameAct = (v, pick) => {
+  const l = String(v.label || "").trim().toLowerCase(), want = String(pick?.label || "").trim().toLowerCase();
+  return (want && l === want) || (pick?.verb === "close" && isDone(v)) || (pick?.verb === "approve" && l.startsWith("send"));
+};
+export const advisedIn = (list, pick) => (pick?.verb ? list.find((v) => !v.disabled && v.group !== "next" && sameAct(v, pick)) || null : null);
+
+export function rowOf({ list, ref }, pick = null) {
   const by = (g) => list.filter((v) => v.group === g);
   let decide = by("decide"), more = by("more"), agent = by("agent");
-  let primary = decide.find((v) => v.tone === "p") || null;
+  // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice"):
+  // the verb it advises is the one filled - off More and onto the bar if it waited there - and every other one is outlined
+  const advised = advisedIn(list, pick);
+  if (advised) {
+    const fill = (xs) => xs.map((v) => (v.id === advised.id ? { ...v, tone: "p" } : v.tone === "p" ? { ...v, tone: "s" } : v));
+    decide = fill(decide); agent = fill(agent);
+    if (advised.group === "more") { more = more.filter((v) => v.id !== advised.id); agent = [{ ...advised, tone: "p" }, ...agent]; }
+  }
+  let primary = advised ? { ...advised, tone: "p" } : decide.find((v) => v.tone === "p") || null;
   // THE CARD ALREADY HOLDS THE MOVE (a waiting draft's Send & close, under the draft): the bar fills nothing, Next included -
   // two filled buttons on one screen leave the owner to work out which one is meant
-  const onCard = list.some((v) => v.onCard);
+  const onCard = !advised && list.some((v) => v.onCard);
   // no decision waiting: the session's way back in (Continue session / Start an agent) is the move, else Mark done
   const lead = !primary && !onCard && agent.find((v) => v.lead);
   if (lead) { agent = agent.map((v) => (v === lead ? { ...v, tone: "p" } : v)); primary = lead; }

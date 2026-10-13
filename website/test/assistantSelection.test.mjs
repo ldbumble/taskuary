@@ -138,8 +138,13 @@ test("Assistant echoes one captured selection and never retries a 409 through th
   assert.match(view, /if \(\[404, 405, 501\]\.includes\(res\.status\)\) return plain\(\)/);
   assert.doesNotMatch(view, /if \(!res\.ok \|\| !res\.body\).*return plain/);
   assert.match(view, /const navigation = capture \? nextSelectionBody\(capture\) : scope/);
-  assert.match(view, /landed\(await turn\(\{ mode: "next", key, leaving, \.\.\.navigation \}\)\)/);
+  assert.match(view, /try \{ data = await turn\(\{ mode: "next", key, leaving, \.\.\.navigation \}\); \}/);
   assert.match(view, /loadPile\(true\);\s*\/\/ refresh the rows, never retry the navigation/);
+  // ...save ONE retry for a BLIND press (the walk's start, a chat chip on an empty table: no pick shown, nothing to protect), and only
+  // on a plain stale refusal, which ran nothing - never an in-progress, completed or uncertain one (2026-10-13)
+  assert.match(view, /const g = blind && selectionGuardDetail\(e\), fresh = g && !g\.reason && g\.retryable !== false \? captureNextSelection\(g, scope\) : null;/);
+  assert.match(view, /if \(!fresh \|\| epoch !== chatEpoch\.current\) throw e;/);
+  assert.match(view, /await surface\(null, null, null, true\)/);
 });
 
 test("Walk validates Current without creating a turn and stale gestures remove their optimistic line", () => {

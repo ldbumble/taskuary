@@ -3,10 +3,30 @@
 // ONE filled button at most (the decision; Next only when there is no decision), and a greyed decision says why it is greyed.
 import React, { useState } from "react";
 import { Menu, MenuItem } from "@mui/material";
-import { press, rowOf, useHosted, useRowVerbs } from "./actionRow.js";
+import { advisedIn, press, rowOf, useHosted, useRowVerbs } from "./actionRow.js";
 
-export default function ActionRow({ inline = false, waited = "" }) {
-  const { ref, decide, agent, more, next, why } = rowOf(useRowVerbs());
+// THE ADVISOR'S NEXT STEP (advisor.py), written at the foot of the canvas, over the row whose filled button it picked: the line it
+// said and why - the box below stays the owner's own. Nothing to say draws nothing. A pick the row does not carry keeps its own
+// button here, so the advice can still be taken (it was the prompt box's pill, 2026-10-13).
+export function AdvisorNext({ advice, onPick, busy }) {
+  const verbs = useRowVerbs();
+  if (!advice?.verb || !advice.line) return null;
+  const onRow = !!advisedIn(verbs.list, advice);
+  const [n, m] = advice.count || [0, 0];
+  return (
+    <div className="tq-next" role="status" data-tq-advice="">
+      <span className="tq-next-tag">NEXT</span>
+      <div className="tq-next-txt">
+        <div className="line">{advice.line}</div>
+        {m >= 2 && <div className="habit">You chose {advice.label} {n} of {m} times in a moment like this</div>}
+      </div>
+      {!onRow && <button type="button" className="tq-ab p" disabled={busy} onClick={onPick}>{advice.label}</button>}
+    </div>
+  );
+}
+
+export default function ActionRow({ inline = false, waited = "", advised = null }) {
+  const { ref, decide, agent, more, next, why } = rowOf(useRowVerbs(), advised);
   const hosted = useHosted();
   const [at, setAt] = useState(null);
   if (!inline && hosted) return null;                  // a phone's task view carries its own row

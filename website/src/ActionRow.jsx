@@ -5,7 +5,7 @@ import React, { useState } from "react";
 import { Menu, MenuItem, Popover } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedIn, press, rowOf, useHosted, useRowVerbs } from "./actionRow.js";
+import { advisedIn, clustersOf, press, rowOf, useHosted, useRowVerbs } from "./actionRow.js";
 
 // THE ADVISOR'S SUGGESTION (advisor.py), over the row whose filled button it picked: the reason in a sentence, and Why? for the
 // reasoning behind it - the buttons stay on the row, the box below stays the owner's own. Nothing to say draws nothing (2026-10-13).
@@ -44,10 +44,34 @@ export function AdvisorNext({ advice }) {
   );
 }
 
-export default function ActionRow({ inline = false, waited = "", advised = null }) {
-  const { ref, decide, agent, more, next, why } = rowOf(useRowVerbs(), advised);
-  const hosted = useHosted();
+// ONE TYPE: its label, its two most likely buttons joined, and its own ▾ for the rest (clustersOf)
+function Cluster({ g, btn }) {
   const [at, setAt] = useState(null);
+  return (
+    <div className="tq-cl" role="group" aria-label={g.label || "This one"} data-tq-type={g.type}>
+      {g.label && <span className="tq-cl-h" aria-hidden="true">{g.label}</span>}
+      <div className="tq-cl-b">
+        {g.shown.map(btn)}
+        {g.rest.length > 0 && <>
+          <button type="button" className="tq-ab s tq-cl-more" aria-haspopup="menu" aria-expanded={!!at} aria-label={`More ${g.label ? g.label.toLowerCase() + " " : ""}actions`}
+            data-tq-more={g.type} onClick={(e) => setAt(e.currentTarget)}>▾</button>
+          <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
+            slotProps={{ paper: { sx: { minWidth: 200, borderRadius: 2 } } }}>
+            {g.rest.map((v) => (
+              <MenuItem key={v.id} dense disabled={v.disabled} title={(v.disabled && v.why) || v.title || undefined} data-tq-verb={v.id}
+                onClick={(e) => { const a = at; setAt(null); press(v.id, e, a); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
+            ))}
+          </Menu></>}
+      </div>
+    </div>
+  );
+}
+
+// the row says what to do, by type - not which task or how long it waited: the card above says both (the owner, 2026-10-13)
+export default function ActionRow({ inline = false, advised = null }) {
+  const row = rowOf(useRowVerbs(), advised);
+  const { ref, decide, agent, more, next, why } = row;
+  const hosted = useHosted();
   if (!inline && hosted) return null;                  // a phone's task view carries its own row
   if (!decide.length && !agent.length && !more.length && !next) return null;
   const btn = (v) => (
@@ -59,18 +83,7 @@ export default function ActionRow({ inline = false, waited = "", advised = null 
       <div className="tq-arow-verbs">
         {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" title={next.title || undefined} disabled={next.disabled}
           onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button>}
-        {decide.map(btn)}
-        {agent.map(btn)}
-        {more.length > 0 && <>
-          <button type="button" className="tq-ab q" aria-haspopup="menu" aria-expanded={!!at} data-tq-more="" onClick={(e) => setAt(e.currentTarget)}>More ▾</button>
-          <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
-            slotProps={{ paper: { sx: { minWidth: 210, borderRadius: 2 } } }}>
-            {more.map((v) => (
-              <MenuItem key={v.id} dense disabled={v.disabled} title={(v.disabled && v.why) || v.title || undefined} data-tq-verb={v.id}
-                onClick={(e) => { const a = at; setAt(null); press(v.id, e, a); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
-            ))}
-          </Menu></>}
-        {ref && <span className="tq-arow-ref" data-tq-row-ref="">{ref}{waited && <span className="waited" data-tq-row-waited=""> · {waited}</span>}</span>}
+        {clustersOf(row).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}
     </div>

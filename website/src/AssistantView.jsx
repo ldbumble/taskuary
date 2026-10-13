@@ -47,7 +47,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
-import { coveredByReload, heldSince, waitedText } from "./funnelPile.js";
+import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import DigestText from "./DigestText.jsx";
@@ -2174,7 +2174,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             onDone={() => loadPile(true)} />
           {/* the Advisor's suggestion over the row, whose filled button is the one it picked - never in the box (2026-10-13) */}
           <AdvisorNext advice={shownAdvice} />
-          <ActionRow waited={currentItem?.ref ? waitedText(currentItem) : ""} advised={shownAdvice} />
+          <ActionRow advised={shownAdvice} />
           <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
           <div className="tq-compose-box">
             <AttachImage pics={pics} sx={{ color: DIM }} />

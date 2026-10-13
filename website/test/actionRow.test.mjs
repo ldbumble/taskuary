@@ -77,12 +77,30 @@ test("Decline says what goes out with it: the text in the box exactly as edited,
   assert.doesNotMatch(src, /disabled: busy \|\| \(sendable && !value\.trim\(\)\), run: \(\) => decideBoth\(co\.alt/, "Decline is not disabled by an empty box");
 });
 
-test("Next is the FIRST control of the row, and the ref label comes last", () => {
+test("Next is the FIRST control of the row, then the types; no task number or waiting words on it (2026-10-13)", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
-  const at = (re) => src.search(re);
-  assert.ok(at(/data-tq-next/) < at(/decide\.map\(btn\)/), "Next before the decision");
-  assert.ok(at(/decide\.map\(btn\)/) < at(/data-tq-more/), "then the decision, then More");
-  assert.ok(at(/data-tq-more/) < at(/data-tq-row-ref/), "the faint item label is last");
+  const row = src.slice(src.indexOf("export default function ActionRow"));
+  assert.ok(row.search(/data-tq-next/) < row.search(/clustersOf\(row\)/), "Next before the types");
+  assert.doesNotMatch(row, /data-tq-row-ref|waited/);
+});
+
+test("the row by type: two buttons each, the rest behind that type's own arrow, the filled one always in view", async () => {
+  const { clustersOf, typeOf } = await import("../src/actionRow.js");
+  const row = rowOf({ ref: "", list: [v("reply", "decide", { tone: "p", label: "Write reply" }), v("email", "agent", { label: "Send out results" }),
+    v("hand", "more", { label: "Hand it to a person" }), v("continue", "agent", { label: "Continue session" }), v("run-another", "agent"),
+    v("save-end", "more"), v("done", "more"), v("close-note", "more"), v("remind", "more"), v("nat", "more"), v("next", "next")] });
+  const g = Object.fromEntries(clustersOf(row).map((c) => [c.type, c]));
+  assert.deepEqual(clustersOf(row).map((c) => c.type), ["reply", "agent", "close", "task"]);
+  assert.deepEqual(g.reply.shown.map((x) => x.id), ["reply", "email"]); assert.deepEqual(g.reply.rest.map((x) => x.id), ["hand"]);
+  assert.deepEqual(g.close.shown.map((x) => x.id), ["done", "close-note"]);
+  assert.deepEqual([...g.task.shown, ...g.task.rest].map((x) => x.id).sort(), ["nat", "remind"]);
+  // the Advisor's pick behind the arrow comes into view, filled
+  const picked = clustersOf(rowOf({ ref: "", list: [v("continue", "agent", { label: "Continue session" }), v("run-another", "agent"), v("save-end", "more", { label: "Save and end session" })] },
+    { verb: "stop_agent", label: "Save and end session" }));
+  assert.equal(typeOf({ id: "save-end" }), "agent");
+  assert.ok(picked[0].shown.some((x) => x.id === "save-end" && x.tone === "p"));
+  assert.equal(typeOf({ id: "123:approve" }), "reply");                 // a draft's own verbs, by the act
+  assert.equal(typeOf({ id: "w:Make a task" }), "act");                  // a card's own words lead, unlabelled
 });
 
 test("no rule above the chat line: the row and the composer float", () => {

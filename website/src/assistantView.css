@@ -579,9 +579,17 @@
    behind More, Next last. CENTRED over the composer (the owner: "center them and make them obvious"), ONE filled button at most
    (p), outlined for the rest (s), plain text for the quiet ones (q); a greyed decision says why underneath. */
 .tq-arow { display: flex; flex-direction: column; align-items: center; gap: 2px; width: min(980px, 100%); margin: 0 auto 5px; }
-.tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }   /* a narrow screen wraps, still centred */
-.tq-arow-ref { font: 600 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; color: #a09b92; margin-left: 4px; }
-.tq-arow-ref .waited { font: 500 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: 0; color: #6f6a61; }
+.tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 6px 14px; }   /* a narrow screen wraps, still centred */
+/* ONE TYPE (canvas H2): a faint label over its buttons, joined into one control - the label names the type, colour stays the filled one's */
+.tq-cl { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.tq-cl-h { font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; color: #8a857c; }
+.tq-cl-b { display: flex; }
+.tq-cl-b > .tq-ab { border-radius: 0; margin-left: -1px; }
+.tq-cl-b > .tq-ab:first-child { border-radius: 99px 0 0 99px; margin-left: 0; }
+.tq-cl-b > .tq-ab:last-child { border-radius: 0 99px 99px 0; }
+.tq-cl-b > .tq-ab:only-child { border-radius: 99px; }
+.tq-cl-b > .tq-ab.p { position: relative; z-index: 1; }
+.tq-cl-more { padding-inline: 9px; }
 .tq-arow-sep { width: 1px; height: 22px; background: #ddd6cb; flex: 0 0 auto; margin: 0 2px; }
 .tq-arow-why { font-size: 11px; line-height: 1.25; color: #8a6d1f; text-align: center; }
 /* ONE VOICE SAYS WHAT TO DO (the owner, 2026-10-13: "why would we need both?"): while the NEXT strip stands, the task's own

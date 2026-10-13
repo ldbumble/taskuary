@@ -64,7 +64,7 @@ test("the strip gives the suggestion, not the move's name: a lead-in that is the
 });
 
 test("the strip has no NEXT tag and no button of its own - the buttons are the row's - and Why? opens the Advisor's reasoning", () => {
-  const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("export default function ActionRow"));
+  const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
   assert.doesNotMatch(strip, /NEXT|className="tq-ab/);
   assert.match(strip, /suggestion\(advice\.line, advice\.label, advice\.verb\)/);
   assert.match(strip, /className="tq-next-why"[^>]*>Why\?<\/button>/);
@@ -78,7 +78,7 @@ test("the clock menu offers the Advisor's notes for the item on the table", () =
 });
 
 test("a move the row cannot make is no advice: a greyed or missing button draws no strip", () => {
-  const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("export default function ActionRow"));
+  const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
   assert.match(strip, /if \(!onRow\) return null;/);
   const list = [v("stop_agent", "agent", { label: "Save and end session", disabled: true }), v("next", "next")];
   assert.equal(advisedIn(list, { verb: "stop_agent", label: "Save and end session" }), null, "greyed: nothing to fill, so nothing to say");

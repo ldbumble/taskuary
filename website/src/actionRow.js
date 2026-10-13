@@ -127,3 +127,26 @@ export function rowOf({ list, ref }, pick = null) {
   return { ref, decide, agent, more, primary, next: next && { ...next, tone: primary || onCard ? "s" : "p" },
     why: primary?.disabled && primary.why ? `${primary.label} is off - ${primary.why}` : "" };
 }
+
+// THE ROW BY TYPE (the owner, 2026-10-13, canvas H2: "2 most common buttons per type and then down arrow for more on all of them"):
+// what a button acts on - the reply, the agent, closing the task, the task itself - read off its id (a draft's own verbs are
+// `<rid>:approve`, so the last part counts). A card's own words (a report's "Make a task", a chat chip) are none of these:
+// they lead, unlabelled. The order inside each type is rowOf's - the decision first - and its filled button is always in view.
+export const TYPES = [["reply", "Reply"], ["agent", "Agent"], ["close", "Close"], ["task", "Task"]];
+const TYPE_OF = {
+  reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", "ask-sender": "reply", hand: "reply", attach: "reply",
+  "start-agent": "agent", "run-another": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
+  done: "close", "close-note": "close", reopen: "close",
+  remind: "task", nat: "task", reshape: "task",
+};
+export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
+export function clustersOf(row, keep = 2) {
+  const all = [...row.decide, ...row.agent, ...row.more];
+  return ["act", ...TYPES.map(([t]) => t)].map((type) => {
+    const vs = all.filter((v) => typeOf(v) === type);
+    if (!vs.length) return null;
+    const lead = vs.findIndex((v) => v.tone === "p");
+    const shown = lead >= keep ? [...vs.slice(0, keep - 1), vs[lead]] : vs.slice(0, keep);
+    return { type, label: (TYPES.find(([t]) => t === type) || [])[1] || "", shown, rest: vs.filter((v) => !shown.includes(v)) };
+  }).filter(Boolean);
+}

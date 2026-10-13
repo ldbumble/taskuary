@@ -5,7 +5,7 @@ import React, { useState } from "react";
 import { Menu, MenuItem, Popover } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedIn, clustersOf, press, rowOf, useHosted, useRowVerbs } from "./actionRow.js";
+import { advisedIn, clustersOf, press, rowOf, shortLabel, useHosted, useRowVerbs } from "./actionRow.js";
 
 // THE ADVISOR'S SUGGESTION (advisor.py), over the row whose filled button it picked: the reason in a sentence, and Why? for the
 // reasoning behind it - the buttons stay on the row, the box below stays the owner's own. Nothing to say draws nothing (2026-10-13).
@@ -74,15 +74,21 @@ export default function ActionRow({ inline = false, advised = null }) {
   const hosted = useHosted();
   if (!inline && hosted) return null;                  // a phone's task view carries its own row
   if (!decide.length && !agent.length && !more.length && !next) return null;
-  const btn = (v) => (
-    <button key={v.id} type="button" className={`tq-ab ${v.tone}`} title={(v.disabled && v.why) || v.title || undefined} disabled={v.disabled} data-tq-verb={v.id}
-      onClick={(e) => press(v.id, e, e.currentTarget)}>{v.label}</button>
-  );
+  // the bar says the verb; the hover says the whole thing - the full name first, then what it does
+  const btn = (v) => {
+    const word = shortLabel(v), full = word === v.label ? "" : v.label;
+    return (
+      <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} aria-label={full || undefined}
+        title={(v.disabled && v.why) || [full, v.title].filter(Boolean).join(" - ") || undefined}
+        onClick={(e) => press(v.id, e, e.currentTarget)}>{word}</button>
+    );
+  };
   return (
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row="">
       <div className="tq-arow-verbs">
-        {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" title={next.title || undefined} disabled={next.disabled}
-          onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button>}
+        {next && <div className="tq-cl" role="group" aria-label="Move on">
+          <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" title={next.title || undefined} disabled={next.disabled}
+            onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button></div></div>}
         {clustersOf(row).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}

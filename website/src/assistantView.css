@@ -500,7 +500,6 @@
 .tq-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-send:disabled { opacity: .4; cursor: default; }
 /* the Advisor's pill sits where the arrow does and does what the card's primary button does; typing brings the arrow back */
-.tq-compose-hint { margin: 6px auto 0; text-align: center; color: #746e64; font: 400 11.5px/1.3 'IBM Plex Sans', system-ui, sans-serif; }
 /* the walk is on the phone: the composer is replaced by the way back, never sat beside it */
 .tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid #d5d0c7; border-top-width: 1px; border-radius: 12px; background: #fffdfb; display: flex; align-items: center; gap: 10px; color: #4a5d4f; }
 .tq-handed .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -579,24 +578,23 @@
    behind More, Next last. CENTRED over the composer (the owner: "center them and make them obvious"), ONE filled button at most
    (p), outlined for the rest (s), plain text for the quiet ones (q); a greyed decision says why underneath. */
 .tq-arow { display: flex; flex-direction: column; align-items: center; gap: 2px; width: min(980px, 100%); margin: 0 auto 5px; }
-.tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 6px 14px; }   /* a narrow screen wraps, still centred */
-/* ONE TYPE (canvas H2): a faint label over its buttons, joined into one control - the label names the type, colour stays the filled one's */
-.tq-cl { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.tq-cl-h { font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; color: #8a857c; }
-.tq-cl-b { display: flex; }
-.tq-cl-b > .tq-ab { border-radius: 0; margin-left: -1px; }
-.tq-cl-b > .tq-ab:first-child { border-radius: 99px 0 0 99px; margin-left: 0; }
-.tq-cl-b > .tq-ab:last-child { border-radius: 0 99px 99px 0; }
-.tq-cl-b > .tq-ab:only-child { border-radius: 99px; }
-.tq-cl-b > .tq-ab.p { position: relative; z-index: 1; }
-.tq-cl-more { padding-inline: 9px; }
+.tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: 8px 10px; }   /* a narrow screen wraps, still centred */
+/* ONE TYPE (canvas J3): its own soft section, the label inside on the left, one-word pills of one width - the label names the noun */
+.tq-cl { display: flex; align-items: center; gap: 5px; padding: 6px; border-radius: 16px; background: #f3f1ec; }
+.tq-cl-h { width: 44px; padding-left: 8px; font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: #8a857c; }
+.tq-cl-b { display: flex; gap: 5px; }
+.tq-cl .tq-ab { min-height: 30px; min-width: 78px; padding: 0 14px; font-size: 12.5px; }
+.tq-cl .tq-ab.next { min-width: 0; }
+.tq-cl-more { min-width: 30px !important; width: 30px; padding: 0 !important; color: #6e685f; }
 .tq-arow-sep { width: 1px; height: 22px; background: #ddd6cb; flex: 0 0 auto; margin: 0 2px; }
 .tq-arow-why { font-size: 11px; line-height: 1.25; color: #8a6d1f; text-align: center; }
 /* ONE VOICE SAYS WHAT TO DO (the owner, 2026-10-13: "why would we need both?"): while the NEXT strip stands, the task's own
    "Open again: ... continue the session, or answer it yourself" line goes - the Tasks tab, with no strip, keeps it */
 .tq-asst-col.advising .tq-news { display: none; }
-.tq-next { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 9px 14px; border: 1px solid #e4dfd6; border-radius: 10px; background: #f6f5f1; }
-.tq-next-txt { flex: 1 1 auto; min-width: 0; font: 500 13.5px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
+/* THE SUGGESTION (canvas J3): one centred line over the row, no box - a slate dot, the sentence, Why? */
+.tq-next { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 2px 8px; }
+.tq-next::before { content: ""; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #55697a; }
+.tq-next-txt { flex: 0 1 auto; min-width: 0; font: 500 14px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
 .tq-next-why { flex: 0 0 auto; border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: 600 12.5px/1 'IBM Plex Sans', system-ui, sans-serif; color: #55697a; text-decoration: underline; text-underline-offset: 3px; }
 .tq-next-why:hover { background: #ece9e3; }
 .tq-next-why:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }

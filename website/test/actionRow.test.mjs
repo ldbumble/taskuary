@@ -265,3 +265,19 @@ test("how long it has waited on you: owed lanes only, from an hour, in the rail'
   assert.equal(waitedText({ lane: "report", when: at(5) }, now), "");             // a report owes nobody
   assert.equal(waitedText({ lane: "theirs", when: at(5) }, now), "");             // waiting on THEM is not on you
 });
+
+test("one word on the bar, the whole name on hover and in the menus (canvas J3, 2026-10-13)", async () => {
+  const { shortLabel } = await import("../src/actionRow.js");
+  assert.equal(shortLabel({ id: "continue", label: "Continue session" }), "Continue");
+  assert.equal(shortLabel({ id: "run-another", label: "Run another agent" }), "New");
+  assert.equal(shortLabel({ id: "close-note", label: "Close with a note" }), "Note");
+  assert.equal(shortLabel({ id: "nat", label: "Not a task" }), "Dismiss");
+  assert.equal(shortLabel({ id: "12:approve", label: "Send & close" }), "Send");      // a draft's own verb, by its act
+  assert.equal(shortLabel({ id: "reply", label: "Drafting…" }), "Drafting…");         // a state is said as it is
+  assert.equal(shortLabel({ id: "remind", label: "Back Tue" }), "Back Tue");
+  assert.equal(shortLabel({ id: "w:Make a task", label: "Make a task" }), "Make a task");   // a card's own words stay its own
+  const src = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
+  assert.match(src, /title=\{\(v\.disabled && v\.why\) \|\| \[full, v\.title\]\.filter\(Boolean\)\.join\(" - "\) \|\| undefined\}/);
+  const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
+  assert.doesNotMatch(view, /tq-compose-hint|Enter sends · Shift\+Enter/);           // no hint under the box
+});

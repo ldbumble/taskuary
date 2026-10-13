@@ -150,3 +150,17 @@ export function clustersOf(row, keep = 2) {
     return { type, label: (TYPES.find(([t]) => t === type) || [])[1] || "", shown, rest: vs.filter((v) => !shown.includes(v)) };
   }).filter(Boolean);
 }
+
+// ONE WORD ON THE BAR (the owner, 2026-10-13: "the buttons look horrible with double words on one button"): the section's label
+// names the noun - REPLY, AGENT, CLOSE, TASK - so the button is the verb. The full name rides in the hover text and in the
+// section's menu, which can afford it. A label that says a state ("Drafting…", "Back Tue") is kept as it is.
+const SHORT = {
+  reply: "Draft", approve: "Send", redraft: "Redraft", email: "Share", hand: "Forward", "ask-sender": "Ask",
+  continue: "Continue", "run-another": "New", "start-agent": "Start", "send-general": "Start", "save-end": "End", diff: "Changes",
+  done: "Done", "close-note": "Note", reopen: "Reopen", remind: "Snooze", nat: "Dismiss", reshape: "Split",
+};
+export const shortLabel = (v) => {
+  const label = String(v?.label || "");
+  if (/…$/.test(label) || /^Back /.test(label)) return label;
+  return SHORT[String(v?.id || "").split(":").pop()] || label;
+};

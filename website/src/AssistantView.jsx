@@ -2209,8 +2209,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             </Box>
             {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
           </Popover>
-          <div className="tq-compose-hint">{phone ? "Enter sends · the buttons above the box do the acting"   /* no rail on the left on a phone */
-            : "Enter sends · Shift+Enter adds a line · click a row on the left to bring it here · the buttons above the box do the acting"}</div>
         </div>
       )}
     </div>

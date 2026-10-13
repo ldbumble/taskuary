@@ -45,7 +45,7 @@ import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
-import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
+import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince, waitedText } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
@@ -609,7 +609,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     : c?.kind === "setup" ? "setup" : c?.kind === "walk" ? "walk" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
   // the short line only over a LIVE card, which shows the brief and the repository itself; one read back from
   // history carries only its heading, so there the sentence is still the only place the brief is written
-  const text = kind === "proposal" && m.proposal?.say_card ? m.proposal.say_card : m.text;
+  const text = kind === "proposal" ? proposalSay(m.proposal?.say_card || m.text, m.proposal || c, live) : m.text;
   // From the DURABLE turn, never from `fresh`: the vocabulary was chosen when the line was written and
   // is recorded with it, while a pile refresh rebuilds the live item WITHOUT chips - reading them off
   // `fresh` made the words vanish on the next poll. A verb that has since stopped applying is refused

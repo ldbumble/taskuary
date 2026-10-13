@@ -149,3 +149,12 @@ test("a locked card says where the walk is, and the tab follows a hand-off start
   assert.match(view, /The walk is in \{actions\.handedTo\}/);
   assert.match(view, /\{ \.\.\.s, handoff: st\.handoff \|\| null \}/);
 });
+
+test("an answered proposal drops its 'confirm below' - the receipt under it says what happened", async () => {
+  const { proposalSay } = await import("../src/proposalCard.js");
+  const say = "Put it on my list. Nothing has been started - confirm below, or tell me what to change.";
+  assert.equal(proposalSay(say, { id: "op1" }, true), say);                    // still waiting on its Confirm
+  assert.equal(proposalSay(say, { id: "op1", status: "done" }, true), "Put it on my list.");
+  assert.equal(proposalSay(say, { id: "op1" }, false), "Put it on my list."); // walked past, its card folded
+  assert.equal(proposalSay("Nothing has been started - confirm below, or tell me what to change.", { status: "cancelled" }, true), "");
+});

@@ -89,6 +89,11 @@ export function afterConfirm(p, out, current) {
   return p.kind === "item.settle" || out.handoff ? "advance" : "settle";
 }
 
+// A PROPOSAL ANSWERED keeps its question but not its invitation: "Nothing has been started - confirm below" over the
+// receipt that says it started read as a contradiction (the owner, 2026-10-13: "it's already shows that the task was started")
+const INVITE = /\s*Nothing has been started - confirm below, or tell me what to change\.\s*$/;
+export function proposalSay(text, p, live) { return p && (p.status || !live) ? String(text || "").replace(INVITE, "") : text; }
+
 export function afterCancel(p) { return { receipt: `Cancelled - nothing changed; ${p.ref || "it"} is where it was.`, status: "cancelled" }; }
 
 // The owner said yes IN WORDS. The server (concierge.confirm_open) had already run the operation by the

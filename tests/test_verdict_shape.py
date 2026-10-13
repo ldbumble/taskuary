@@ -54,11 +54,11 @@ class DocumentSaysTheShapeTests(unittest.TestCase):
         self.assertNotIn(store_mod._SHAPE_WAS, TEMPLATE)
 
     def test_a_document_that_stopped_tracking_the_template_gets_the_line_back(self):
-        mine = 'MY OWN RULE: anything from Maya is urgent.\n\n' + store_mod._SHAPE_WAS + '\n\nAnd my last line.'
+        mine = 'MY OWN RULE: anything from Paula is urgent.\n\n' + store_mod._SHAPE_WAS + '\n\nAnd my last line.'
         after = self._reopen(mine).doc('triage')
         self.assertNotIn(store_mod._SHAPE_WAS, after)
         self.assertIn('"summary"', after)
-        self.assertIn('MY OWN RULE: anything from Maya is urgent.', after)   # nothing else touched
+        self.assertIn('MY OWN RULE: anything from Paula is urgent.', after)   # nothing else touched
         self.assertIn('And my last line.', after)
 
     def test_it_runs_once_and_never_edits_a_document_again(self):

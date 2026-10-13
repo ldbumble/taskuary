@@ -85,7 +85,7 @@ def _match(conv, sender, toks, own, convs, senders, title_toks):
 
     ...and the same report outranks ANOTHER source's task that merely shares two words with it. Below them, a
     report's own earlier tasks lost all three seats to a bills mail and a phishing notice that shared "export" or
-    "check" with the run's text, while the run said "Viv ... timed out" and its tasks said "Viventium timeout":
+    "check" with the run's text, while the run said "Pay ... timed out" and its tasks said "Payworth timeout":
     triage never saw that the failure had been looked at, and one recurring timeout opened eight tasks in three
     days (2026-10-09)."""
     shared = toks & title_toks

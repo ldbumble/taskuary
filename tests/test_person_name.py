@@ -1,8 +1,8 @@
-"""Who asked, by name (the owner, 2026-09-28: "the name of the email is hamos but it should pull the correct name ...
+"""Who asked, by name (the owner, 2026-09-28: "the name of the email is pvance but it should pull the correct name ...
 that's the first and last letter of their name").
 
 Triage was handed only the sender's ADDRESS, so the summary every surface leads with named people after their
-mailbox ("hamos@" -> "Hamos"). It now gets the display name too, as a person is called: Outlook's directory writes
+mailbox ("pvance@" -> "Pvance"). It now gets the display name too, as a person is called: Outlook's directory writes
 "Last, First M." and appends " at <organisation>" to people outside it.
 """
 import inspect

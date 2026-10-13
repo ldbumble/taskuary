@@ -42,11 +42,11 @@ class HistgenTests(unittest.TestCase):
         self.assertEqual(histgen.cut_quoted('plain\nreply'), 'plain\nreply')
 
     def test_style_sample_keeps_the_signature_at_the_end_of_a_long_email(self):
-        body = 'Hello,\n\n' + ('detail ' * 200) + '\n\nBest,\nAlex\nNorthwind Heritage\n555-0100'
+        body = 'Hello,\n\n' + ('detail ' * 200) + '\n\nBest,\nAlex\nNorthwind Trading\n555-0100'
         sample = histgen.style_sample(body, 200)
         self.assertLess(len(sample), 240)
         self.assertTrue(sample.startswith('Hello,'))
-        self.assertIn('Best,\nAlex\nNorthwind Heritage\n555-0100', sample)
+        self.assertIn('Best,\nAlex\nNorthwind Trading\n555-0100', sample)
 
     def test_triage_generates_into_marker_block(self):
         s = MemoryStore()

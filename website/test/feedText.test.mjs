@@ -71,16 +71,16 @@ test("what it says has to fit the pill: one line, cut on a word", () => {
 test("a body with a list is split into its lead and its lines", () => {
   const body = "Error summary: 5 runs show duplicate-vendor discards in Vendors to Intacct.\n\n"
     + "By runTime / runId:\n"
-    + "- 2026-09-15 14:39:04, runId 976445: Patricia Heflin already exists (V68593)\n"
+    + "- 2026-09-15 14:39:04, runId 976445: Paula Harbor already exists (V68593)\n"
     + "- 2026-09-15 13:39:05, runId 976407: Capital Caring Health already exists (V68661)";
   const { lead, bullets } = structured(body);
   assert.equal(lead, "Error summary: 5 runs show duplicate-vendor discards in Vendors to Intacct.\n\nBy runTime / runId:");
   assert.equal(bullets.length, 2);
-  assert.equal(bullets[0], "2026-09-15 14:39:04, runId 976445: Patricia Heflin already exists (V68593)");
+  assert.equal(bullets[0], "2026-09-15 14:39:04, runId 976445: Paula Harbor already exists (V68593)");
 });
 
 test("ordinary mail is left exactly as it was", () => {
-  const body = "Hi Alex,\n\nCan you approve the refund for Heflin before Friday?\n\nThanks";
+  const body = "Hi Alex,\n\nCan you approve the refund for Harbor before Friday?\n\nThanks";
   const { lead, bullets } = structured(body);
   assert.equal(lead, body, "a body with no list must not be re-cut - a greeting is not a summary");
   assert.deepEqual(bullets, []);

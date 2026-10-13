@@ -21,7 +21,7 @@ test("typing searches every option, not only the five visible recents", () => {
 });
 
 test("the recognizable name is used as the field label", () => {
-  assert.equal(recipientLabel({ to: "opaque-id", name: "Jessica Rockne" }), "Jessica Rockne");
+  assert.equal(recipientLabel({ to: "opaque-id", name: "Erin Blake" }), "Erin Blake");
   assert.equal(recipientLabel({ to: "opaque-id" }), "opaque-id");
 });
 

@@ -58,7 +58,7 @@ class AskedOnScreenTests(unittest.TestCase):
 
     def setUp(self):
         self.s = MemoryStore(); handraise.reset()
-        self.tid = self.s.create_task({'Title': 'Ashley confirmed PDF links', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        self.tid = self.s.create_task({'Title': 'Erin confirmed PDF links', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
 
     def _term(self, tail):
         t = FakeTerm(self.tid, 'run1', waiting=False, tail=tail)
@@ -106,7 +106,7 @@ class ScreenChooserTests(unittest.TestCase):
 
     def setUp(self):
         self.s = MemoryStore(); handraise.reset()
-        self.tid = self.s.create_task({'Title': 'Ashley confirmed PDF links', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        self.tid = self.s.create_task({'Title': 'Erin confirmed PDF links', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
         self.t = FakeTerm(self.tid, 'run1', waiting=False, tail=self.SCREEN[-3:])
         terminal.stable_phase_of(self.t, now=0); terminal.stable_phase_of(self.t, now=terminal.PHASE_DWELL + 1)
 

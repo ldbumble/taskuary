@@ -28,7 +28,7 @@ import { useRowVerbs, useVerbs } from "./actionRow.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
-import { adviceKeyFor } from "./advice.js";
+import { adviceKeyFor, adviceShown } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -875,6 +875,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // the next one, and resetting the fold then drew the task just closed again until the next landed (the owner, 2026-10-05:
   // "the task stayed open and popped back open before closing")
   const tableKey = currentItem?.key || null;
+  const shownAdvice = adviceShown(advice, currentItem, busy);      // the strip speaks only for the item on the table, at rest
   useEffect(() => { if (!tableKey) return; setExpanded(false); setFoldedKey(null); }, [tableKey]);
   // the chat body's height is the task view's (CanvasItem): measured, never guessed, and re-measured with the window
   useEffect(() => {
@@ -1113,15 +1114,23 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   useEffect(() => { loadState().catch((e) => setErr(errText(e))); }, [loadState]);
   // the Advisor's line for the item on the table: read when the table changes and when its event lands; a changed
   // item answers {} and the pill goes with it - nothing on the rail moves for it (spec 2026-10-12, mechanics 3-5)
-  const readAdvice = useCallback(async (key) => {
-    if (!key) { setAdvice(null); return; }
-    try { const { data } = await api.get("/api/advice", { params: { key } }); setAdvice(data && data.verb ? data : null); }
-    catch { setAdvice(null); }
+  // ...stamped with the key it was read FOR, and a read that comes back after the table moved on is dropped
+  const adviceAsk = useRef(0);
+  const readAdvice = useCallback(async (key, keep) => {
+    const n = ++adviceAsk.current;
+    if (!keep) setAdvice(null);                     // a new item starts with no line, never the last item's
+    if (!key) return;
+    let got = null;
+    try { const { data } = await api.get("/api/advice", { params: { key } }); got = data && data.verb ? { ...data, for: key } : null; }
+    catch { got = null; }
+    if (n === adviceAsk.current) setAdvice(got);
   }, []);
   // ...re-read when the table changes AND when the card on it refreshes (a reply landing keeps the key and moves the
   // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
-  useEffect(() => { readAdvice(current); }, [current, currentItem?.view_revision, readAdvice]);
-  useEffect(() => onLive("advice", (ev) => { const key = adviceKeyFor(ev, currentRef.current); if (key) readAdvice(key); }), [readAdvice]);
+  // ...and when its lane moves (an agent continued is at work: its "waiting on you" line must go)
+  useEffect(() => { readAdvice(current); }, [current, readAdvice]);
+  useEffect(() => { if (current) readAdvice(current, true); }, [currentItem?.view_revision, currentItem?.lane]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => onLive("advice", (ev) => { const key = adviceKeyFor(ev, currentRef.current); if (key) readAdvice(key, true); }), [readAdvice]);
   // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
   // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
   // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
@@ -2029,7 +2038,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, [shown, lastCardIdx, current]);
 
   const chat = (
-    <div className={advice?.verb && advice.line ? "tq-asst-col advising" : "tq-asst-col"} style={{ position: "relative", flex: 1, minHeight: 0 }}>
+    <div className={shownAdvice ? "tq-asst-col advising" : "tq-asst-col"} style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
@@ -2104,10 +2113,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             <div className="tq-browse-line" ref={(el) => { if (el && !el.dataset.seen) { el.dataset.seen = "1"; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } }}>
               <ContinueBox inline task={continueOn.task} taskRef={continueOn.ref} onClose={() => setContinueOn(null)}
                 onPress={() => setContinuingTid(continueOn.task.TaskId)} onFail={() => setContinuingTid(null)}
-                onDone={(_out, note) => {
-                  setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: continueOn.task.TaskId, ref: continueOn.ref,
-                    text: `Continuing${note ? " with your note" : ""} - it picks up where it left off, and comes back here when it stops or asks.` }]);
-                  // ...and the table STAYS on it: you continued it to watch it work, not to be walked past it (the owner,
+                onDone={() => {
+                  // NO RECEIPT: the session on the table shows it working - "Continuing with your note..." under it was clutter
+                  // (the owner, 2026-10-13). ...and the table STAYS on it: you continued it to watch it work, not to be walked past it (the owner,
                   // 2026-09-30: "the session started but then closed and moved on without hitting next"); the view shows the
                   // session when it opens (TaskPage hears task-changed)
                 }} />
@@ -2165,8 +2173,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             onSaid={(text, status) => setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: status || "done", text }])}
             onDone={() => loadPile(true)} />
           {/* the Advisor's suggestion over the row, whose filled button is the one it picked - never in the box (2026-10-13) */}
-          <AdvisorNext advice={advice} />
-          <ActionRow waited={currentItem?.ref ? waitedText(currentItem) : ""} advised={advice} />
+          <AdvisorNext advice={shownAdvice} />
+          <ActionRow waited={currentItem?.ref ? waitedText(currentItem) : ""} advised={shownAdvice} />
           <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
           <div className="tq-compose-box">
             <AttachImage pics={pics} sx={{ color: DIM }} />

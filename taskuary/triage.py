@@ -50,7 +50,7 @@ FIELDS = {
 #
 # A REPLY LANDS AS A ROW TOO. This said "for a task", and reply_only is a different intent - so a
 # question triage decided to answer came back as intent/why alone, took the same fallback, and put
-# Maya's whole mail on the card: her one sentence, her signature, the legal notice and the thread
+# Paula's whole mail on the card: her one sentence, her signature, the legal notice and the thread
 # under it, 5,998 characters of it (the owner, 2026-09-14). Answering for a reply as well costs a
 # title and two sentences on a call already being made, and it is the same question the model has
 # just answered for itself in `why`. The checklist stays the task's: what a reply owes is the reply.
@@ -305,7 +305,7 @@ def split_own(text: str, floor: int = None) -> tuple:
                 or (_re.match(r'^\s*from:\s', l, _re.I) and i + 1 < len(lines) and _re.match(r'^\s*(sent|date):\s', lines[i + 1], _re.I)))
         if head and len(NL.join(lines[:i]).strip()) >= (_KEEP_MIN if floor is None else floor):
             return strip_boilerplate(NL.join(lines[:i]).rstrip()), NL.join(lines[i:]).strip()
-        # ...and Outlook's HTML often glues the quote head onto the signature's last line ("MFA Heritage From: Ashley ...",
+        # ...and Outlook's HTML often glues the quote head onto the signature's last line ("Northwind From: Erin ...",
         # "Sent:" under it): a "2:30 Thursday works." read as asking, from the "?" in the mail it quoted (2026-10-06)
         glued = _re.search(r'\sfrom:\s', l, _re.I) if i + 1 < len(lines) and _re.match(r'^\s*(sent|date):\s', lines[i + 1], _re.I) else None
         if glued and len(NL.join(lines[:i] + [l[:glued.start()]]).strip()) >= (_KEEP_MIN if floor is None else floor):
@@ -600,7 +600,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # budget's cut taken out of the chain (sender_body). `own_text` is Graph's uniqueBody where
             # the mailbox carried one: the mailbox saying where the ask ends beats guessing at it.
             body_text, body_cut = sender_body(str(msg.get('body') or ''), msg.get('own_text'), known=seen)
-            # ...and WHO, by name: only the address went in, so the model made a name out of it - "hamos@" became "Hamos"
+            # ...and WHO, by name: only the address went in, so the model made a name out of it - "pvance@" became "Pvance"
             # in the summary every surface leads with (the owner, 2026-09-28: "it should pull the correct name")
             user = json.dumps({'from': msg.get('from_email'), **({'from_name': person_name(msg.get('from_name'))} if person_name(msg.get('from_name')) else {}),
                                'subject': msg.get('subject'),

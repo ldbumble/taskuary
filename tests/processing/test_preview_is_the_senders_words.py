@@ -62,9 +62,9 @@ def test_a_message_that_is_only_a_banner_still_says_something(db):
 
 
 def test_an_ordinary_body_is_untouched(db):
-    body = 'Can you approve the Heflin refund before Friday?\n\nThanks,\nMaya'
-    mid = a_message(db, 'Refund', body, sender='maya@example.test')
-    assert row_for(db, mid)['Preview'].startswith('Can you approve the Heflin refund')
+    body = 'Can you approve the Harbor refund before Friday?\n\nThanks,\nPaula'
+    mid = a_message(db, 'Refund', body, sender='paula@example.test')
+    assert row_for(db, mid)['Preview'].startswith('Can you approve the Harbor refund')
 
 
 def test_stripping_for_display_does_not_reclassify_the_sender(db):

@@ -132,7 +132,7 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     # the only road to a reply.
     kind = kind if kind in ('coding', 'general', 'task') else 'task'
     # THE ASK, NOT THE EMAIL. This stored body[:1000], so a task's own summary was the greeting, the
-    # signature, the legal footer and the quoted thread underneath - 5,998 characters of Maya's
+    # signature, the legal footer and the quoted thread underneath - 5,998 characters of Paula's
     # reply, of which the ask was the first sentence (the owner, 2026-09-14: "why is the whole email
     # showing up not the specific task?"). The hand-promote road was fixed this way on 2026-09-10
     # (ingest.promote); the automatic one kept the raw body. A verdict that names its own summary

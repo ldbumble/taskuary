@@ -13,3 +13,29 @@ test("an advice event is about the item on the table when it names its key or on
   assert.equal(adviceKeyFor({ key: "task:1" }, null), null);
   assert.equal(adviceKeyFor({}, cur), null);
 });
+
+// WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "not while waiting or walking through things"): only the line read for the
+// item on the table now, only at rest, and never over an agent at work.
+test("the strip speaks only for the item on the table, at rest, and never over an agent at work", async () => {
+  const { adviceShown } = await import("../src/advice.js");
+  const a = { verb: "continue", line: "You usually continue it.", for: "processing:7" };
+  const item = { key: "processing:7", lane: "blocked" };
+  assert.equal(adviceShown(a, item, false), a);
+  assert.equal(adviceShown(a, { key: "processing:8", lane: "blocked" }, false), null, "the last item's line over the next one");
+  assert.equal(adviceShown(a, item, true), null, "an act in flight");
+  assert.equal(adviceShown(a, { ...item, lane: "working" }, false), null, "an agent continued and at work");
+  assert.equal(adviceShown({ ...a, for: undefined }, item, false), null, "a line nobody read for this table");
+  assert.equal(adviceShown(a, null, false), null);
+  assert.equal(adviceShown({ ...a, line: "" }, item, false), null);
+});
+
+test("the page draws the gated line, starts each item with none, and drops a read the table outran", async () => {
+  const fs = await import("node:fs"), path = await import("node:path");
+  const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
+  assert.match(src, /<AdvisorNext advice=\{shownAdvice\} \/>/);
+  assert.match(src, /advised=\{shownAdvice\}/);
+  assert.doesNotMatch(src, /<AdvisorNext advice=\{advice\}/);
+  assert.match(src, /if \(!keep\) setAdvice\(null\)/);
+  assert.match(src, /if \(n === adviceAsk\.current\) setAdvice\(got\)/);
+  assert.doesNotMatch(src, /picks up where it left off, and comes back here/, "the continue receipt is gone");
+});

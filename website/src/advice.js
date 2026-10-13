@@ -12,7 +12,7 @@ export function adviceKeyFor(ev, cur) {
   return k === cur.key || (cur.aliases || []).includes(k) ? cur.key : null;
 }
 
-/* The suggestion as the strip says it: the Advisor's sentence without its verb in front ("Reply: Mindy is asking..." -> "Mindy is
+/* The suggestion as the strip says it: the Advisor's sentence without its verb in front ("Reply: Gail is asking..." -> "Gail is
    asking...") - the filled button below already names the move (the owner, 2026-10-13: "it should not say NEXT Reply - just give
    suggestion"). Only a lead-in that IS the move's own word goes; any other sentence is kept whole. */
 export function suggestion(line, label, verb) {
@@ -21,4 +21,13 @@ export function suggestion(line, label, verb) {
   const m = l.match(/^["“]?([^:"”]{1,40}?)["”]?\s*(?::|\s[-–—]|\s+because\b)\s*(.+)$/i);
   if (!m || !names.includes(m[1].trim().toLowerCase())) return l;
   return m[2].charAt(0).toUpperCase() + m[2].slice(1);
+}
+
+/* WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "there should not be an updated advisor comment when it's refreshing ... not while
+   waiting or walking through things"). Only the line read for the item on the table NOW - a line read for the item before
+   it stood over the next one until the new read came back - and only while nothing is in flight. An agent at work is
+   nothing for the owner to do: "the coder stopped and is waiting on you" stood over a coder that had been continued. */
+export function adviceShown(advice, item, busy) {
+  if (!advice?.verb || !advice.line || busy || !item?.key || advice.for !== item.key) return null;
+  return item.lane === "working" ? null : advice;
 }

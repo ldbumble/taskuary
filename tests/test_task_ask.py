@@ -32,7 +32,7 @@ of the individual or entity to whom they are addressed.
 
 From: Alex Doyle <owner@northwind.example>
 Sent: Wednesday, September 2, 2026 17:53
-To: Ellis, J. D. <jdhancock@northwind.example>
+To: Ellis, J. D. <jellis@northwind.example>
 """
 
 
@@ -95,16 +95,16 @@ class AutomaticRoadTests(unittest.TestCase):
         self.assertIn('"summary"', triage.TASK_FIELDS)
         s = MemoryStore()
         llm = mock.Mock(return_value=json.dumps({
-            'intent': 'reply_only', 'why': 'Maya asks which documentation you meant',
-            'title': 'Answer Maya on the EPR documentation',
-            'summary': 'Maya Cohen asks which documentation you were referring to; she says the PAM and Review PDFs are all that is in use.'}))
+            'intent': 'reply_only', 'why': 'Paula asks which documentation you meant',
+            'title': 'Answer Paula on the EPR documentation',
+            'summary': 'Paula Vance asks which documentation you were referring to; she says the PAM and Review PDFs are all that is in use.'}))
         with mock.patch.object(ingest, '_spawn'):
-            r = ingest.ingest_message(s, {'external_id': 'd', 'channel': 'email', 'from_email': 'dcohen@vendor.example',
+            r = ingest.ingest_message(s, {'external_id': 'd', 'channel': 'email', 'from_email': 'pvance@vendor.example',
                                           'conversation_id': 'c-epr', 'subject': 'RE: Erin Blake Annual EPR- AUG 2026',
                                           'body': MAIL, 'sent_at': '2026-09-14 09:02:00'}, llm=llm)
         task = s.get_task(r['task_id'])
         self.assertEqual(task['Kind'], 'reply')
-        self.assertEqual(task['Title'], 'Answer Maya on the EPR documentation')
+        self.assertEqual(task['Title'], 'Answer Paula on the EPR documentation')
         self.assertIn('which documentation you were referring to', task['Summary'])
         for gone in ('Harbor Way', 'confidential', 'From: Alex'):
             self.assertNotIn(gone, task['Summary'], gone)
@@ -202,7 +202,7 @@ class ExtractTests(unittest.TestCase):
 
 class PromoteTests(unittest.TestCase):
     def _msg(self, s):
-        return s.add_message({'Channel': 'email', 'FromEmail': 'jdhancock@northwind.example', 'FromName': 'J. D. Ellis',
+        return s.add_message({'Channel': 'email', 'FromEmail': 'jellis@northwind.example', 'FromName': 'J. D. Ellis',
                               'Subject': 'Re: Hosting for Interview Screening Tool', 'BodyText': MAIL,
                               'SentAt': '2026-09-10T09:00:00'})
 
@@ -313,7 +313,7 @@ class BackfillTests(unittest.TestCase):
     a copy of the message, and never over a checklist they may have ticked."""
 
     def _task(self, s, summary, body=MAIL, closed=False):
-        mid = s.add_message({'Channel': 'email', 'FromEmail': 'jdhancock@northwind.example', 'Subject': 'Re: Hosting',
+        mid = s.add_message({'Channel': 'email', 'FromEmail': 'jellis@northwind.example', 'Subject': 'Re: Hosting',
                              'BodyText': body, 'SentAt': '2026-09-10T09:00:00'})
         tid = s.create_task({'Title': 'Hosting', 'Summary': summary, 'Kind': 'coding',
                              **({'Status': 'done'} if closed else {})}, 'owner')

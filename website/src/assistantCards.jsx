@@ -541,7 +541,7 @@ function CombinedTaskText({ card, list = true }) {
 }
 
 // what every card shares: where it came from (logo, lane dot, two words, when), then who wants what.
-// The lane colours the DOT only - never an edge or a wash (uri-taste: colour identifies).
+// The lane colours the DOT only - never an edge or a wash (the owner's taste: colour identifies).
 export function CardShell({ card, kicker, title, lead, sub, children, err }) {
   const meta = laneMeta(card?.lane);
   const when = card?.when ? agoText(card.when) : "";

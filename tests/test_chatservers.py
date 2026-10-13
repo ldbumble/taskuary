@@ -44,7 +44,7 @@ class MattermostTests(unittest.TestCase):
         """A url pasted out of a browser ends in / more often than not, and //api/v4 is a 404 the
         owner has no way to read."""
         with mock.patch.object(chatservers.requests, 'request',
-                               return_value=_Resp({'username': 'uri'})) as req:
+                               return_value=_Resp({'username': 'alex'})) as req:
             chatservers.test_mattermost(MemoryStore(), self.CARD)
         self.assertEqual(req.call_args[0][1], 'https://chat.acme.com/api/v4/users/me')
 
@@ -59,9 +59,9 @@ class MattermostTests(unittest.TestCase):
         self.assertEqual(ing.call_args[0][2], 'mattermost')
 
     def test_a_join_or_leave_is_not_a_message(self):
-        """Mattermost marks room events with a `type`; ingesting them would put "uri joined the
+        """Mattermost marks room events with a `type`; ingesting them would put "alex joined the
         channel" on the Timeline as work."""
-        posts = {'order': ['p1'], 'posts': {'p1': {'message': 'uri joined', 'type': 'system_join_channel',
+        posts = {'order': ['p1'], 'posts': {'p1': {'message': 'alex joined', 'type': 'system_join_channel',
                                                    'create_at': 1789000000000}}}
         with mock.patch.object(chatservers.requests, 'request', return_value=_Resp(posts)):
             with mock.patch.object(chatservers, '_ingest', return_value=1) as ing:
@@ -81,7 +81,7 @@ class RocketChatTests(unittest.TestCase):
         """Rocket.Chat authenticates with a token AND the user id it belongs to. A card holding
         only the token gets a 401 that reads like a bad token."""
         with mock.patch.object(chatservers.requests, 'request',
-                               return_value=_Resp({'username': 'uri'})) as req:
+                               return_value=_Resp({'username': 'alex'})) as req:
             chatservers.test_rocketchat(MemoryStore(), self.CARD)
         h = req.call_args.kwargs['headers']
         self.assertEqual((h['X-Auth-Token'], h['X-User-Id']), ('tok', 'uid1'))
@@ -93,8 +93,8 @@ class RocketChatTests(unittest.TestCase):
 
     def test_a_room_event_is_skipped_and_a_message_is_not(self):
         hist = {'messages': [{'_id': 'm1', 'msg': 'hello', 'ts': '2026-09-02T10:00:00Z',
-                              'u': {'name': 'Uri'}},
-                             {'_id': 'm2', 'msg': 'uri added x', 't': 'au', 'ts': '2026-09-02T10:01:00Z'}]}
+                              'u': {'name': 'Alex'}},
+                             {'_id': 'm2', 'msg': 'alex added x', 't': 'au', 'ts': '2026-09-02T10:01:00Z'}]}
         with mock.patch.object(chatservers.requests, 'request', return_value=_Resp(hist)):
             with mock.patch.object(chatservers, '_ingest', return_value=1) as ing:
                 n = chatservers.poll_rocketchat(MemoryStore(), self.CARD, SRC, SINCE)
@@ -118,10 +118,10 @@ class MatrixTests(unittest.TestCase):
 
     def test_a_blank_homeserver_means_matrix_org(self):
         with mock.patch.object(chatservers.requests, 'request',
-                               return_value=_Resp({'user_id': '@uri:matrix.org'})) as req:
+                               return_value=_Resp({'user_id': '@alex:matrix.org'})) as req:
             detail = chatservers.test_matrix(MemoryStore(), self.CARD)
         self.assertTrue(req.call_args[0][1].startswith(chatservers.MATRIX_HOME))
-        self.assertIn('@uri:matrix.org', detail)
+        self.assertIn('@alex:matrix.org', detail)
 
     def test_the_room_id_is_escaped_because_it_starts_with_a_bang_and_holds_a_colon(self):
         """!AbC:matrix.org unescaped in a path is a different url than the one meant."""
@@ -191,7 +191,7 @@ class GoogleChatTests(unittest.TestCase):
         msgs = {'messages': [{'name': 'spaces/A/messages/1', 'createTime': '2026-09-02T10:00:00Z',
                               'sender': {'displayName': 'Bot'}},
                              {'name': 'spaces/A/messages/2', 'text': 'real words',
-                              'createTime': '2026-09-02T10:01:00Z', 'sender': {'displayName': 'Uri'}}]}
+                              'createTime': '2026-09-02T10:01:00Z', 'sender': {'displayName': 'Alex'}}]}
         with mock.patch.object(chatservers, '_google_access', return_value='at'):
             with mock.patch.object(chatservers.requests, 'request', return_value=_Resp(msgs)):
                 with mock.patch.object(chatservers, '_ingest', return_value=1) as ing:

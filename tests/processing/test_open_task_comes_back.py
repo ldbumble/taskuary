@@ -83,14 +83,14 @@ def only_key(db):
 
 
 def test_a_cleared_open_task_waits_in_passed(db):
-    a_task(db, 'Call Maya about PAM review')
+    a_task(db, 'Call Paula about PAM review')
     key = only_key(db)
     clear_it(db, key)
     assert passed(db, key), 'an open task left the rail while the task list still showed it'
 
 
 def test_it_comes_back_once_the_hour_is_up(db):
-    a_task(db, 'Call Maya about PAM review')
+    a_task(db, 'Call Paula about PAM review')
     key = only_key(db)
     clear_it(db, key)
     assert passed(db, key, after(minutes=59)), 'it came back before the hour was up'
@@ -108,7 +108,7 @@ def test_a_task_handed_to_an_agent_clears_like_any_other(db):
 
 def test_later_still_holds_it_past_the_hour(db):
     """The nudge must not undo the owner's own "not now"."""
-    a_task(db, 'Call Maya about PAM review')
+    a_task(db, 'Call Paula about PAM review')
     key = only_key(db)
     funnel.settle(db, key, 'later', hours=6)
     # put away is still on the rail since the canvas redesign (2026-09-29) - in For later, never offered
@@ -119,7 +119,7 @@ def test_later_still_holds_it_past_the_hour(db):
 
 
 def test_a_closed_task_never_comes_back(db):
-    tid = a_task(db, 'Call Maya about PAM review')
+    tid = a_task(db, 'Call Paula about PAM review')
     key = only_key(db)
     clear_it(db, key)
     db.update_task(tid, {'Status': 'done'}, 'owner')
@@ -128,7 +128,7 @@ def test_a_closed_task_never_comes_back(db):
 
 def test_the_setting_moves_the_clock(db):
     db.set_setting('task_return_minutes', '5', 'owner')
-    a_task(db, 'Call Maya about PAM review')
+    a_task(db, 'Call Paula about PAM review')
     key = only_key(db)
     clear_it(db, key)
     assert key in work(db, after(minutes=6)), 'the setting did not shorten the quiet spell'
@@ -136,7 +136,7 @@ def test_the_setting_moves_the_clock(db):
 
 def test_it_says_why_it_is_back(db):
     """"if they ask why explain it should be closed" - the card carries that sentence itself."""
-    a_task(db, 'Call Maya about PAM review')
+    a_task(db, 'Call Paula about PAM review')
     key = only_key(db)
     assert not work(db)[key].get('why_open'), 'a task you have not cleared yet is not back from anywhere'
     clear_it(db, key)

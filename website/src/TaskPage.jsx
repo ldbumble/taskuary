@@ -660,7 +660,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // close) and what you - or an agent under your login - sent outside Taskuary (the owner, 2026-10-12: "if agent already
   // sent message show what it sent")
   const ended = detail?.ended || null;
-  const sentOutside = sentElsewhere(detail?.messages || []);
+  const sentOutside = sentElsewhere(detail?.messages || [], detail?.reviews || []);
   // A successful Review send is the reply even before (or when) the external channel ingests an
   // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
   // message; otherwise completed tasks showed one inbound message and claimed that was the whole
@@ -1896,14 +1896,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               ))}
                             </Box>
                           )}
-                          {sentReview?.DraftText && (
+                          {/* the words that LEFT: an edit before the send is the FinalText - the draft read "keep it active" over a
+                              mail that had said something else (2026-10-13) */}
+                          {(sentReview?.FinalText || sentReview?.DraftText) && (
                             <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
                               px: 1.1, py: 0.85, mt: 0.9 }}>
                               <Typography sx={{ ...label, display: "block" }}>What was sent</Typography>
                               <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap",
                                 overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
                                 WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                                {sentReview.DraftText}</Typography>
+                                {sentReview.FinalText || sentReview.DraftText}</Typography>
                             </Box>
                           )}
                           {/* the draft closed without sending stays readable here, the task done or not */}

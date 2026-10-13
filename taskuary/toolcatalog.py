@@ -218,7 +218,7 @@ def block(store=None) -> str:
 # the decision road the card's buttons take. Each takes `on` for an item other than the one on the table.
 DECISIONS = {
     'reply':           ("write a reply to the sender - `text`: the gist, in the owner's words; `cc`: people to loop in on it, by name "
-                        "or address (\"loop Mindy in and ask her\" is a reply with Mindy copied, never an agent). Nothing is sent"),
+                        "or address (\"loop Gail in and ask her\" is a reply with Gail copied, never an agent). Nothing is sent"),
     'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out (Close out) it merges "
                         "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never "
                         "continues an agent's session - that is agent.continue"),

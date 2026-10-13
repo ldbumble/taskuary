@@ -29,7 +29,7 @@ Decide about the item on the table.
 Write a reply to the sender. Nothing is sent.
 
 - `text` - the gist, in the owner's words
-- `cc` (optional) - people to loop in on it, by name or address ("loop Mindy in and ask her" is a reply with Mindy copied, never an agent)
+- `cc` (optional) - people to loop in on it, by name or address ("loop Gail in and ask her" is a reply with Gail copied, never an agent)
 
 <p class="runs">At once - a draft, nothing sent.</p>
 

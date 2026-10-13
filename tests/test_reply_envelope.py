@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from taskuary import outbound, responder, server, verdicts
 from taskuary.store import MemoryStore
 
-STYLE = '## Reply style\n\n- Two sentences, answer first.\n- Sign off: "Best,\nAlex Doyle\nNorthwind Heritage"\n'
+STYLE = '## Reply style\n\n- Two sentences, answer first.\n- Sign off: "Best,\nAlex Doyle\nNorthwind Trading"\n'
 
 
 def store():
@@ -92,8 +92,8 @@ class PinnedAndSentTests(unittest.TestCase):
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')
         sent = {}
         with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, to=None, cc=None, attachments=None: sent.update(body=body) or {'channel': 'email', 'to': to, 'cc': cc}):
-            verdicts.decide(s, s.get_review(rid), 'edit', 'Attached - the numbers are final.\n\nBest,\nAlex Doyle\nNorthwind Heritage')
-        self.assertEqual(sent['body'], 'Attached - the numbers are final.\n\nBest,\nAlex Doyle\nNorthwind Heritage')
+            verdicts.decide(s, s.get_review(rid), 'edit', 'Attached - the numbers are final.\n\nBest,\nAlex Doyle\nNorthwind Trading')
+        self.assertEqual(sent['body'], 'Attached - the numbers are final.\n\nBest,\nAlex Doyle\nNorthwind Trading')
 
 
 class PerConnectorEnvelopeTests(unittest.TestCase):
@@ -164,7 +164,7 @@ class SignatureTests(unittest.TestCase):
 
     def test_the_signature_comes_from_style_md_or_the_setting(self):
         s = store()
-        self.assertEqual(responder.signature_for(s), 'Best,\nAlex Doyle\nNorthwind Heritage')
+        self.assertEqual(responder.signature_for(s), 'Best,\nAlex Doyle\nNorthwind Trading')
         s.set_setting('email_signature', 'Regards,\nAlex', 'owner')
         self.assertEqual(responder.signature_for(s), 'Regards,\nAlex')
 
@@ -172,20 +172,20 @@ class SignatureTests(unittest.TestCase):
         s, tid, mid, rid = self.thread()
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')
         text = s.get_review(rid)['DraftText']
-        self.assertTrue(text.endswith('Best,\nAlex Doyle\nNorthwind Heritage')); self.assertEqual(text.count('Northwind Heritage'), 1)
-        responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is again.\n\nBest,\nAlex Doyle\nNorthwind Heritage')   # the model signed already
-        self.assertEqual(s.get_review(rid)['DraftText'].count('Northwind Heritage'), 1)
+        self.assertTrue(text.endswith('Best,\nAlex Doyle\nNorthwind Trading')); self.assertEqual(text.count('Northwind Trading'), 1)
+        responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is again.\n\nBest,\nAlex Doyle\nNorthwind Trading')   # the model signed already
+        self.assertEqual(s.get_review(rid)['DraftText'].count('Northwind Trading'), 1)
         with mock.patch.object(server, 'store', s):
             r = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': 'Attached.'}).json()
-        self.assertEqual(r['draft'].count('Northwind Heritage'), 1); self.assertTrue(r['draft'].startswith('Attached.'))
+        self.assertEqual(r['draft'].count('Northwind Trading'), 1); self.assertTrue(r['draft'].startswith('Attached.'))
         with mock.patch.object(server, 'store', s):
             r2 = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': r['draft']}).json()
-        self.assertEqual(r2['draft'].count('Northwind Heritage'), 1)                              # saving again adds nothing
+        self.assertEqual(r2['draft'].count('Northwind Trading'), 1)                              # saving again adds nothing
 
     def test_chat_gets_no_signature(self):
         s, tid, mid, rid = self.thread('teams')
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'on it')
-        self.assertNotIn('Northwind Heritage', s.get_review(rid)['DraftText'])
+        self.assertNotIn('Northwind Trading', s.get_review(rid)['DraftText'])
 
 
 if __name__ == '__main__':

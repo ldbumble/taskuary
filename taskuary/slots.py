@@ -36,7 +36,7 @@ def clean(outputs) -> list:
 
 
 def split(to: str) -> tuple:
-    """('JD Hancock', 'jd@x.example') out of 'JD Hancock <jd@x.example>' - the recipient is the ADDRESS: the provider was
+    """('Ray Colton', 'ray@x.example') out of 'Ray Colton <ray@x.example>' - the recipient is the ADDRESS: the provider was
     handed the whole string as one and an agent writes them that way (TQ-0957). A bare name or address: ('', it)."""
     name, addr = parseaddr(str(to or ''))
     return (name.strip(), addr.strip()) if '@' in addr and '<' in str(to) else ('', ' '.join(str(to or '').split()))

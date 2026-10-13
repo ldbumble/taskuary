@@ -77,8 +77,18 @@ export const unsentReplyReview = (reviews = []) =>
 
 // what went out on this task from OUTSIDE a draft here - your reply in the mail client, your comment on the pull request,
 // and an agent's under your login, which come back as your own messages (channels.ingest_own_message). Oldest first.
-export const sentElsewhere = (messages = []) =>
-  (messages || []).filter((m) => m.Direction === "out" && !m.ReviewSent && String(m.OwnText || m.BodyText || "").trim());
+// ...never our own send come back: the mailbox's Sent copy of a reply approved here is that reply, not one "already sent" from
+// somewhere else - it was drawn as a second letter over the approved one (2026-10-13). Matched on the words, spacing aside:
+// the provider's copy re-wraps the signature and may carry the quoted thread after it.
+const flat = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
+export const sentElsewhere = (messages = [], reviews = []) => {
+  const ours = (reviews || []).filter((r) => ["approved", "edited", "sent"].includes(r.Status))
+    .map((r) => flat(r.FinalText || r.DraftText).slice(0, 200)).filter(Boolean);
+  return (messages || []).filter((m) => {
+    const body = flat(m.OwnText || m.BodyText);
+    return m.Direction === "out" && !m.ReviewSent && body && !ours.some((o) => body.startsWith(o) || o.startsWith(body.slice(0, 200)));
+  });
+};
 
 export const sentReplyReview = (reviews = []) =>
   reviews.find((review) => isReply(review) &&

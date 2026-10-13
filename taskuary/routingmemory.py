@@ -28,7 +28,7 @@ from loguru import logger
 from .projects import CONTEXT_CONFIDENCE, PUBLIC_MAIL, ROUTE_CONFIDENCE
 
 FIELDS = ('kind', 'profile', 'playbook', 'system')
-# A chat's "subject" is the ROOM ("Teams chat with Robin Gorelick"), so a topic key made from it
+# A chat's "subject" is the ROOM ("Teams chat with Gail Moreno"), so a topic key made from it
 # says "chats with Robin", which is wrong in both directions: it would not fire on the same ask
 # from anyone else, and it would damp a real bug she reports tomorrow. Chat learns by sender only.
 from .ingest import CHAT_CHANNELS

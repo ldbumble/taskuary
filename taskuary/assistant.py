@@ -1306,7 +1306,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     # COUNSEL is the chat's document; its walkthrough rules governed idea generation until 2026-09-06.
     system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               # WHOLE (the owner, 2026-09-25): cut at 1500 chars it stopped inside "Escalate", and the systems, people and
-              # repository map - what FanApp is, who owns what - never reached the voice that reasons about them
+              # repository map - what the ledger repository is, who owns what - never reached the voice that reasons about them
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:SOUL_CHARS]}" if soul else '')
               # ...and what their JOB is - what they are accountable for, who they serve, the cadences. SOUL says how the
               # funnel behaves; this is what "matters" is measured against when the assistant says what comes first

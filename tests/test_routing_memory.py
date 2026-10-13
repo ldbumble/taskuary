@@ -20,7 +20,7 @@ def store():
     return s
 
 
-def arrived(s, email='mgorelick@northwind.example', channel='teams', subject='Teams chat with Robin Gorelick',
+def arrived(s, email='gmoreno@northwind.example', channel='teams', subject='Teams chat with Gail Moreno',
             kind='coding', title='Clock out Robin at 3:40 Thursday'):
     """A task as triage left it, with the message it was judged from."""
     tid = s.create_task({'Title': title, 'Kind': kind, 'Source': channel}, 'router')
@@ -69,10 +69,10 @@ class ACorrectionIsLearned(unittest.TestCase):
     def test_one_correction_is_a_hypothesis_and_two_may_route(self):
         s = store()
         rmem.learn_correction(s, arrived(s), 'kind', 'task', 'owner')
-        one = s.routing_facts('kind', [('sender', 'mgorelick@northwind.example')])[0]
+        one = s.routing_facts('kind', [('sender', 'gmoreno@northwind.example')])[0]
         self.assertAlmostEqual(one['Confidence'], .72, places=2)
         rmem.learn_correction(s, arrived(s), 'kind', 'task', 'owner')
-        two = s.routing_facts('kind', [('sender', 'mgorelick@northwind.example')])[0]
+        two = s.routing_facts('kind', [('sender', 'gmoreno@northwind.example')])[0]
         self.assertAlmostEqual(two['Confidence'], .86, places=2)
 
     def test_pressing_the_same_button_twice_does_not_make_it_surer(self):
@@ -87,7 +87,7 @@ class ACorrectionIsLearned(unittest.TestCase):
         self.assertTrue(s.routing_facts('system')[0]['Confirmed'])
 
     def test_a_chat_room_is_never_the_key(self):
-        # "Teams chat with Robin Gorelick" is the ROOM. Keyed on it, the lesson would not fire on
+        # "Teams chat with Gail Moreno" is the ROOM. Keyed on it, the lesson would not fire on
         # the same ask from anyone else, and would damp a real bug she reports tomorrow.
         s = store()
         rmem.learn_correction(s, arrived(s), 'kind', 'task', 'owner')
@@ -110,7 +110,7 @@ class WhatTheNextVerdictIsTold(unittest.TestCase):
         self.s = store()
         rmem.learn_correction(self.s, arrived(self.s), 'kind', 'task', 'owner')
         rmem.learn_correction(self.s, arrived(self.s), 'system', 'ADP', 'owner')
-        self.her = {'FromEmail': 'mgorelick@northwind.example', 'Channel': 'teams', 'Subject': 'Teams chat with Robin Gorelick'}
+        self.her = {'FromEmail': 'gmoreno@northwind.example', 'Channel': 'teams', 'Subject': 'Teams chat with Gail Moreno'}
         self.colleague = {'FromEmail': 'someone@northwind.example', 'Channel': 'email', 'Subject': 'Budget question'}
 
     def test_the_sender_it_was_learned_from_is_told(self):
@@ -176,7 +176,7 @@ class TheKindControlTeaches(unittest.TestCase):
         self.tid = arrived(self.s)
 
     def facts(self, field):
-        return [f for f in self.s.routing_facts(field) if f['SignalKey'] == 'mgorelick@northwind.example']
+        return [f for f in self.s.routing_facts(field) if f['SignalKey'] == 'gmoreno@northwind.example']
 
     def test_changing_the_kind_to_task_is_a_verdict(self):
         self.assertEqual(self.c.patch(f'/api/tasks/{self.tid}', json={'Kind': 'task'}).status_code, 200)

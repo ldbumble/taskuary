@@ -40,6 +40,13 @@ test("what went out elsewhere is your own outgoing messages, not a send from her
   ];
   assert.deepEqual(sentElsewhere(rows).map((m) => m.MessageId), [2]);
   assert.deepEqual(sentElsewhere(), []);
+  // ...but the Sent copy of a reply approved HERE is that reply, however the provider re-spaced it (2026-10-13)
+  const mine = [{ ReviewId: 9, Status: "edited", DraftText: "Yes, keep it.", FinalText: "Gail - any ideas?\n\nThanks,\nAlex" }];
+  const copy = { MessageId: 7, Direction: "out", OwnText: "Gail - any ideas?\n\n\nThanks,\n\nAlex" };
+  assert.deepEqual(sentElsewhere([copy, { MessageId: 8, Direction: "out", BodyText: "Something else" }], mine).map((m) => m.MessageId), [8]);
+});
+test("What was sent is the text that left - the owner's edit, not the draft under it", () => {
+  assert.match(closeOut(), /\{sentReview\.FinalText \|\| sentReview\.DraftText\}/);
 });
 
 test("a draft the close swept away stays readable, and a decided one reads not needed", () => {

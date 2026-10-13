@@ -216,11 +216,20 @@ def _payload(r: dict) -> dict:
             'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
 
 
+def _at_work(store, target_kind: str, target_id) -> bool:
+    """An agent at work on the task is nothing for the owner to do. Its continue writes no event the revision sees until the
+    prompt lands, so "the coder stopped and is waiting on you" stood over a coder already continued (the owner, 2026-10-13)."""
+    if target_kind != 'task': return False
+    from . import workerstate
+    try: return workerstate.status(store, int(target_id)).get('state') == 'working'
+    except Exception: return False
+
+
 def for_key(store, key: str) -> dict:
     """What the prompt box shows for the item on the table: the row at the item's CURRENT revision, or nothing. A changed
     item drops its old pill by this one comparison - no cleanup pass. The item on the table earns the bigger read, once."""
     tgt = target_of(store, key)
-    if not tgt: return {}
+    if not tgt or _at_work(store, *tgt): return {}
     rev = revision(store, *tgt); r = row(store, tgt[0], tgt[1], rev)
     if r and int(r.get('Tier') or 1) < 2: notice(store, r['Event'], tgt[0], tgt[1], tier=2)
     return _payload(r) if r and r.get('Verb') else {}

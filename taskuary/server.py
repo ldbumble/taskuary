@@ -2493,6 +2493,12 @@ def open_reply(mid: int, body: OpenReplyBody = None):
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
     if body is not None and body.redraft and draft: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
+    # WHO IT GOES TO, AT ONCE: the envelope was pinned only when the AI's draft landed (responder.write_draft), so a fresh box -
+    # Write another above all - showed the sender alone and no CC for the seconds the model took (2026-10-13). It is a lookup on
+    # the message, nothing to wait for; a draft finds it set and keeps it, an envelope the owner set already stays.
+    if str(m.get('Channel') or '').lower() == 'email' and not store.review_envelope(rid):
+        env = outbound.reply_envelope(store, m)
+        if env: store.set_review_envelope(rid, env)
     store.audit('review', rid, 'redraft' if (body is not None and body.redraft) else 'open_reply', ACTOR, detail={'message_id': mid})
     looped, unknown = _loop_in(rid, m, (body.cc if body is not None else None) or [])
     return {'reviewId': rid, 'taskId': tid, 'draft': draft, 'drafting': bool(owed and later),

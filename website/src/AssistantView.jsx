@@ -1428,7 +1428,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       }
       // the reply's card comes up at once and its draft fills in behind it - never a wait on the model (2026-10-01)
       if (verb === "reply" && mid) {
-        const data = await openReply(api, mid, d.text || null);
+        const data = await openReply(api, mid, d.text || null, d.cc || null);
+        // a name to loop in that nobody by it has written as is said, never guessed: the card's CC row takes an address
+        if (data?.cc_unknown?.length) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt",
+          text: `I have no address for ${data.cc_unknown.join(", ")} - add them in the reply's CC.` }]);
         // ...wherever it was asked about: "send Omar the answer" with nothing on the table was told "it lands below for your
         // yes", and the draft went onto his task with nothing landing here (2026-10-06)
         if (data.reviewId) { if (!elsewhere) setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }

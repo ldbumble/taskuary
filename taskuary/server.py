@@ -2436,6 +2436,9 @@ class OpenReplyBody(BaseModel):
     # REPLY OPENS AT ONCE (the owner, 2026-10-01: "never waits on the AI"): the box now, the draft owed - the page asks
     # /api/reviews/{rid}/draft for it behind the card, which reads the provider first as this door would have
     later: bool = False
+    # LOOP THEM IN (the owner, 2026-10-13: "it should create reply with looping in the new person"): names or addresses copied
+    # on the reply - looked up among the people who have written, the hand-off's book; one nobody knows is said, not guessed
+    cc: list[str] | None = None
 
 @app.post('/api/messages/{mid}/reply')
 def open_reply(mid: int, body: OpenReplyBody = None):
@@ -2491,7 +2494,27 @@ def open_reply(mid: int, body: OpenReplyBody = None):
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
     if body is not None and body.redraft and draft: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
     store.audit('review', rid, 'redraft' if (body is not None and body.redraft) else 'open_reply', ACTOR, detail={'message_id': mid})
-    return {'reviewId': rid, 'taskId': tid, 'draft': draft, 'drafting': bool(owed and later)}
+    looped, unknown = _loop_in(rid, m, (body.cc if body is not None else None) or [])
+    return {'reviewId': rid, 'taskId': tid, 'draft': draft, 'drafting': bool(owed and later),
+            **({'cc': looped} if looped else {}), **({'cc_unknown': unknown} if unknown else {})}
+
+
+def _loop_in(rid: int, m: dict, who: list) -> tuple:
+    """Copy `who` on the reply: its envelope is the reply's own (Reply all, outbound.reply_envelope) with them in CC - the card
+    shows the CC line and Approve sends it. ([addresses copied], [names nobody by that name has written as])."""
+    from . import concierge, outbound
+    if not who: return [], []
+    found = [(w, concierge.person(store, w)) for w in who if str(w or '').strip()]
+    adds, unknown = [p['Email'].lower() for _, p in found if p and p.get('Email')], [w for w, p in found if not p]
+    if not adds or str(m.get('Channel') or '').lower() != 'email': return [], unknown     # a chat has members, not a cc
+    rv = store.get_review(rid) or {}
+    try: env = json.loads(rv.get('Deliver') or '{}') or {}
+    except ValueError: env = {}
+    if not env: env = outbound.reply_envelope(store, m) or {'kind': 'reply'}
+    have = {a.lower() for a in (env.get('to') or []) + (env.get('cc') or [])}
+    env['cc'] = list(env.get('cc') or []) + [a for a in dict.fromkeys(adds) if a not in have]
+    store.set_review_deliver(rid, json.dumps(env))
+    return [a for a in adds], unknown
 
 
 def _reply_nudge(instruction) -> str | None:
@@ -6842,7 +6865,8 @@ def _refresh_after(out: dict):
     def work():
         try: _refresh_items(members)
         except Exception as e: logger.debug(f'the change-check after the four could not ask the provider: {e}')
-    t = threading.Thread(target=work, daemon=True, name='refresh-after'); _AFTER.append(t); t.start()
+    # started BEFORE it is recorded: a waiter that found it in _AFTER first joined a thread not yet started, which raises
+    t = threading.Thread(target=work, daemon=True, name='refresh-after'); t.start(); _AFTER.append(t)
     return t
 
 

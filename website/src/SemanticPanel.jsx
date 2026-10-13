@@ -123,7 +123,7 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
                 <TextField key={k} size="small" placeholder={ph} value={nf[k]} onChange={(e) => setNf({ ...nf, [k]: e.target.value })}
                   sx={{ width: w, bgcolor: PANEL2, "& input": { fontSize: 11, py: 0.5 } }} />
               ))}
-              <Button size="small" disabled={!!busy || !nf.Expected} onClick={addFixture} sx={{ fontSize: 10.5 }}>add known number</Button>
+              <Button size="small" disabled={!!busy || !nf.Expected} onClick={addFixture} sx={{ fontSize: 10.5 }}>Add known number</Button>
             </Box>
           </Box>
 
@@ -134,7 +134,7 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
             <TextField size="small" placeholder="2026-07" value={t.period} onChange={(e) => setT({ ...t, period: e.target.value })}
               sx={{ width: 90, bgcolor: PANEL2, "& input": { fontSize: 11, py: 0.5 } }} />
             <Button size="small" disabled={!!busy} onClick={tryIt} sx={{ fontSize: 10.5 }}>
-              {busy === "run it" ? "running…" : "run it once"}
+              {busy === "run it" ? "Running…" : "Run it once"}
             </Button>
             {tried && <Typography variant="caption" sx={{ ...mono, color: INK }}>
               {num(tried.value)} <Typography component="span" variant="caption" sx={{ color: FAINT }}>from {tried.rows} row(s), {tried.ms}ms</Typography>
@@ -142,7 +142,7 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
             <Box sx={{ flex: 1 }} />
             <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={check}
               sx={{ fontSize: 10.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
-              {busy === "check it" ? "checking…" : "check every known number"}
+              {busy === "check it" ? "Checking…" : "Check every known number"}
             </Button>
           </Box>
 

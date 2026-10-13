@@ -22,8 +22,9 @@ export function draftBehind(api, rid, instruction = null) {
 }
 
 // THE REPLY PRESS: the box at once, the draft behind it. Resolves with /reply's answer as soon as the review exists.
-export async function openReply(api, mid, instruction = null) {
-  const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, later: true, instruction });
+// `cc`: the people the owner asked to loop in - the server copies the ones it knows and names the ones it does not
+export async function openReply(api, mid, instruction = null, cc = null) {
+  const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, later: true, instruction, ...(cc?.length ? { cc } : {}) });
   if (data?.reviewId && data.drafting) draftBehind(api, data.reviewId, instruction);
   return data;
 }

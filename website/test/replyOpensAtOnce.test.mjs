@@ -27,6 +27,9 @@ test("the box opens before the model answers, says Drafting, and fills in when i
   const opened = await openReply(api, 9, "say yes");
   assert.equal(opened.reviewId, 41, "the card can be drawn now");
   assert.deepEqual(api.calls[0], ["/api/messages/9/reply", { draft: true, later: true, instruction: "say yes" }]);
+  // ...and the people to loop in ride along only when there are some (the reply's CC, 2026-10-13)
+  await openReply(api, 9, "ask her", ["Gail"]);
+  assert.deepEqual(api.calls.at(-1), ["/api/messages/9/reply", { draft: true, later: true, instruction: "ask her", cc: ["Gail"] }]);
   assert.deepEqual(api.calls[1], ["/api/reviews/41/draft", { instruction: "say yes" }], "the draft is asked for behind it, with the owner's words");
   assert.equal(draftJob(41).state, "drafting");
   api.release(); await draftJob(41).promise;
@@ -56,7 +59,7 @@ test("every Reply press opens at once, and both views of a draft show Drafting w
   const cards = read("assistantCards.jsx"), view = read("AssistantView.jsx"), page = read("TaskPage.jsx"), dec = read("ReviewDecision.jsx");
   assert.doesNotMatch(cards, /\/reply`, \{ draft: true/, "no card waits on the model");
   assert.equal((cards.match(/openReply\(api, /g) || []).length, 2, "Draft a reply, an fyi's Reply");
-  assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null\);/);
+  assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null, d\.cc \|\| null\);/);
   assert.match(page, /await \(generate \? draftReply\(api, replyMessage\.MessageId\)/);   // the import, renamed: the page's own openReply shadowed it
   for (const src of [cards, dec]) assert.match(src, /useDraftJob\(/);
   assert.match(dec, /drafting \? "Drafting…"/);

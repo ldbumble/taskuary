@@ -217,7 +217,8 @@ def block(store=None) -> str:
 # DECIDE lines and verbs on CALL lines; there is one line now, and concierge turns a CALL to one of these into
 # the decision road the card's buttons take. Each takes `on` for an item other than the one on the table.
 DECISIONS = {
-    'reply':           "write a reply to the sender - `text`: the gist, in the owner's words. Nothing is sent",
+    'reply':           ("write a reply to the sender - `text`: the gist, in the owner's words; `cc`: people to loop in on it, by name "
+                        "or address (\"loop Mindy in and ask her\" is a reply with Mindy copied, never an agent). Nothing is sent"),
     'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out (Close out) it merges "
                         "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never "
                         "continues an agent's session - that is agent.continue"),
@@ -289,7 +290,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coder': 'text, as?, new?',
+HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coder': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 

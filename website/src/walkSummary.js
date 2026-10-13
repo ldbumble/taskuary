@@ -13,8 +13,18 @@ const AGENT_LANES = new Set(["blocked", "stopped", "saved", "queued", "working",
 // said nothing (the owner, 2026-09-30). An address shows its name part: "securityapp", not "noreply-securityapp@...".
 const isAgentRow = (i) => !!i?.agent && (AGENT_LANES.has(i.lane) || ["agent", "agentdone", "action"].includes(i.kind));
 const person = (w) => w.includes("@") ? w.split("@")[0].replace(/^no-?reply[-._]?/i, "") || w.split("@")[0] : w;
+// A SERVICE'S MAIL names the service, not the display name it borrowed: GitHub sends a failed run from notifications@github.com
+// under the name of whoever pushed - the owner - so the FYI band read the owner's own first name (2026-10-13: "why does fyi say my name??")
+const SERVICE = /^(no-?reply|do-?not-?reply|notifications?|notify|alerts?|mailer(-daemon)?|bounces?)([-._+]|@)/i;
+const service = (e) => {
+  const [local, dom] = String(e || "").toLowerCase().split("@");
+  if (!dom || !SERVICE.test(`${local}@`)) return "";
+  const parts = dom.split("."); let k = parts.length - 2;
+  if (k > 0 && ["co", "com", "org", "net", "ac", "gov"].includes(parts[k])) k -= 1;     // github.co.uk -> github
+  return parts[Math.max(k, 0)];
+};
 export const whoOf = (i) => {
-  const who = person(String((isAgentRow(i) ? i.agent : i?.who || i?.agent) || "").trim()), title = String(i?.title || "");
+  const named = String(i?.who || ""), who = person(String((isAgentRow(i) ? i.agent : (!named.includes("@") && service(i?.email)) || i?.who || i?.agent) || "").trim()), title = String(i?.title || "");
   if (who && !title.toLowerCase().startsWith(who.toLowerCase().slice(0, 16))) return who;
   return i?.kind === "report" || i?.lane === "report" ? "Report" : who || "someone";
 };

@@ -21,6 +21,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
+import SearchEverything, { SearchBar } from "./SearchEverything.jsx";
 import { fadeBand } from "./timelineFade.js";
 import { syncFace, syncPhaseLabel } from "./syncTiming.js";
 import { observeSync } from "./syncObserver.js";
@@ -161,50 +162,7 @@ export const filterLabel = (cat, pick, cats = CATEGORIES, labels = CHANNEL_LABEL
 // the sidebar buttons' marks, one per SIDE_NAV key
 const NAV_ICONS = { new: AddIcon, reports: BarChartIcon, connections: PowerOutlinedIcon, hub: TravelExploreIcon, settings: TuneIcon };
 
-// A TASK FOUND BY ITS WORDS, open or closed (the owner, 2026-09-30: "filter should be able to search for tasks that are closed
-// not just filter by category or source") - the old Tasks sidebar's search, so an old task is reopened from Work, not dug
-// out of the Timeline. The server searches (/api/tasks?q=); the closed ones sit under their own heading.
-const CLOSED = ["done", "dropped"];
-function TaskSearch({ onOpen }) {
-  const [q, setQ] = useState(""), [hits, setHits] = useState(null);
-  useEffect(() => {
-    const t = q.trim();
-    if (t.length < 2) { setHits(null); return undefined; }
-    let alive = true;
-    const h = setTimeout(() => api.get("/api/tasks", { params: { q: t } })
-      .then(({ data }) => { if (alive) setHits(data.data || []); }).catch(() => { if (alive) setHits([]); }), 250);
-    return () => { alive = false; clearTimeout(h); };
-  }, [q]);
-  const byNew = (a, b) => String(b.ClosedAt || b.UpdatedAt || b.CreatedAt || "").localeCompare(String(a.ClosedAt || a.UpdatedAt || a.CreatedAt || ""));
-  const groups = hits ? [["Open tasks", hits.filter((t) => !CLOSED.includes(t.Status))], ["Done tasks", hits.filter((t) => CLOSED.includes(t.Status)).sort(byNew)]] : [];
-  return (
-    <>
-      <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Tasks</Typography>
-      <TextField fullWidth autoFocus placeholder="search tasks, closed ones too…" value={q} onChange={(e) => setQ(e.target.value)}
-        data-tq-task-search="true" sx={{ bgcolor: "#fff", mb: 0.5 }} inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
-      {hits && (
-        <Box sx={{ maxHeight: 220, overflowY: "auto", mx: -0.5, mb: 1 }}>
-          {!hits.length && <Typography sx={{ fontSize: 11, color: FAINT, px: 1, py: 0.5 }}>No task matches “{q.trim()}”</Typography>}
-          {groups.filter(([, ts]) => ts.length).flatMap(([label, ts]) => [
-            <ListSubheader key={`h${label}`} sx={{ fontSize: 9.5, lineHeight: 1.9, color: FAINT, letterSpacing: 1, textTransform: "uppercase", bgcolor: PANEL, px: 1 }}>
-              {label} · {ts.length}</ListSubheader>,
-            ...ts.slice(0, 30).map((t) => (
-              <MenuItem key={t.TaskId} data-tq-task-hit={t.TaskId} onClick={() => onOpen(t.TaskId)}
-                title={CLOSED.includes(t.Status) ? `Closed ${t.ClosedAt || ""} - open it to read or reopen it` : t.Title}
-                sx={{ fontSize: 11.5, pl: 1.25, borderRadius: 1, gap: 1 }}>
-                <Box component="span" sx={{ ...mono, fontSize: 10, color: FAINT, flexShrink: 0 }}>{ref(t.TaskId)}</Box>
-                <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  color: CLOSED.includes(t.Status) ? DIM : INK }}>{t.Title}</Box>
-              </MenuItem>
-            )),
-          ])}
-        </Box>
-      )}
-    </>
-  );
-}
-
-function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChange, onOpenTask }) {
+function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChange }) {
   const [el, setEl] = useState(null);
   const close = () => { setEl(null); setSrcQ(""); };
   const narrowed = !!cat || !!pick;
@@ -226,7 +184,6 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
         transformOrigin={{ vertical: "top", horizontal: "left" }}
         slotProps={{ paper: { sx: { width: 320, maxHeight: 560, p: 1.25 } } }}>
-        {onOpenTask && <TaskSearch onOpen={(tid) => { close(); onOpenTask(tid); }} />}
         <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Kind</Typography>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6, mb: 1.25 }}>
           {CATEGORIES.map((o) => (
@@ -839,7 +796,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       setSrcByChannel(by);
     }).catch(() => {});
   }, []);
-  useEffect(() => { allRequest.current += 1; setPick(""); }, [cat]); // switching category clears the narrower pick
+  const pendingPick = useRef("");
+  useEffect(() => { allRequest.current += 1; setPick(pendingPick.current); pendingPick.current = ""; }, [cat]); // switching category clears the narrower pick
+  // SEARCH OVER EVERYTHING (SearchEverything.jsx): the bar on the rail, or Ctrl+K while this view is on screen
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    if (!active) return undefined;
+    const k = (e) => { if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); } };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [active]);
 
   // (Re)fetch from the top - span covers everything already on screen so the 30s
   // refresh never shrinks the list under the user.
@@ -1561,6 +1526,14 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             </Box>
           ))}
 
+          <SearchBar onOpen={() => setSearchOpen(true)} />
+          <SearchEverything open={searchOpen} onClose={() => setSearchOpen(false)} onOpenTask={onOpenTask}
+            onOpenMessage={(mid) => openByMid(mid)}
+            onPickSource={(next) => {
+              allRequest.current += 1; detailEpoch.current += 1; want.current = null;
+              if (cat) { pendingPick.current = next; setCat(""); } else setPick(next);
+            }} />
+
           {/* THE SELECTOR, full width, the filter a small icon beside it. Work | Timeline sits with the rail because it
               changes the task rows only (the canvas redesign, 2026-09-29); New moved up to the sidebar's buttons. */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
@@ -1576,7 +1549,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               ))}
             </Box>
             <FilterButton cat={cat} pick={pickerChannels.length ? pick : ""} channels={pickerChannels}
-              srcByChannel={srcByChannel} srcQ={srcQ} setSrcQ={setSrcQ} onOpenTask={onOpenTask}
+              srcByChannel={srcByChannel} srcQ={srcQ} setSrcQ={setSrcQ}
               onChange={(nextCat, nextPick) => {
                 allRequest.current += 1; detailEpoch.current += 1; want.current = null;
                 if (nextCat !== cat) setCat(nextCat);

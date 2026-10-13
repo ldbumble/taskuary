@@ -10,7 +10,8 @@ and whatever part of the app is in use opens inside it.
 | Where | What is there |
 |---|---|
 | Top of the sidebar | **New** (a task, a report or a workflow), then **Reports**, **Connections**, **Hub** and **Settings** |
-| Under the buttons | **Work \| Timeline** - which rows the rail shows - and the filter, then the day's count and **Sync now** |
+| Under the buttons | **Search** (or Ctrl+K anywhere), then **Work \| Timeline** - which rows the rail shows - and the filter, then the day's count and **Sync now** |
+| Search | One box over everything, open or closed: tasks, mail, chats, pull requests and issues, Advisor posts, reports and your sources. Each result wears a pill saying what it is; the strip above them narrows to one kind (**Tab** steps through it). **Enter** opens the result - a task on the canvas, a message in full, a source as the rail's filter - and the task number on a message opens the task it is on |
 | The rail | **On you**, **Agents working**, **For later**, **Reports**, **Advisor ideas**, **FYI** - click a heading to walk that section |
 | The canvas | The item on the table: a task opens as its full task view - Task, Agent work, Close out - with **Next** under it |
 | The top bar | **Board** - every agent and its session, full screen - and back to the Assistant |

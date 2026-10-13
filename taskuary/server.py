@@ -19,6 +19,7 @@ from . import agents as hub_agents
 from . import cli_connections
 from . import blackboard
 from . import taskstate
+from . import search
 from . import guard
 from . import policy as policy_engine
 from . import reshape
@@ -608,6 +609,12 @@ def tasks(status: str = None, active: bool = False, q: str = None):
                       # what the task IS right now - the one state the list's chip and the Board's column both draw (T1-T9)
                       'State': taskstate.state(store, t, sessions.get(t['TaskId']), qs.get(t['TaskId']))}
                      for t in store.list_tasks(status, active_only=active, q=q, also=rail)]}
+
+
+@app.get('/api/search')
+def search_everything(q: str = ''):
+    """Tasks, mail, chats, pull requests, Advisor posts and sources for the words typed - each with its pill (search.py)."""
+    return search.everything(store, q)
 
 
 def _rail_tids() -> set:

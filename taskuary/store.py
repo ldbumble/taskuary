@@ -5319,12 +5319,13 @@ class SQLiteStore:
             return True
         except sqlite3.OperationalError as e:
             logger.warning(f'message search index unavailable - the timeline search scans instead: {e}'); return False
-    def message_search(self, words, sender='', days=3650, limit=400, loose=False) -> list:
+    def message_search(self, words, sender='', days=3650, limit=400, loose=False, prefix=False) -> list:
         """MessageIds, best match first: every word somewhere in the subject, the sender or the body,
         over the whole history. None when there is no index - the caller scans the feed instead.
-        `loose`: ANY of the words, each as a prefix (the caller scores how many each row has)."""
+        `loose`: ANY of the words, each as a prefix (the caller scores how many each row has).
+        `prefix`: every word, each as a prefix - the search box, which matches while a word is still being typed."""
         if not getattr(self, 'msg_fts', False): return None
-        terms = (' OR ' if loose else ' ').join('"' + w.replace('"', '') + '"' + ('*' if loose else '') for w in words if w.replace('"', ''))
+        terms = (' OR ' if loose else ' ').join('"' + w.replace('"', '') + '"' + ('*' if loose or prefix else '') for w in words if w.replace('"', ''))
         where, p = ["m.CreatedAt >= datetime('now', 'localtime', ?)"], [f'-{int(days)} days']
         if sender:
             where.append("lower(IFNULL(m.FromName,'') || ' ' || IFNULL(m.FromEmail,'')) LIKE ?"); p.append(f'%{sender.lower()}%')

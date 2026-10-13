@@ -1,5 +1,5 @@
-// A batch's items (batch.py): the ranked arrivals of one repository, let in as one task and worked top-down by a read-only
-// agent. One shape for the task page and the rail: what each item's state is called, what the owner may press on it, and
+// A batch's items (batch.py): the ranked arrivals of one repository, let in as one task and worked top-down by one agent
+// (read-only only where the triage judged an item dangerous). One shape for the task page and the rail: what each item's state is called, what the owner may press on it, and
 // the one line that says how far the batch got.
 
 export const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";

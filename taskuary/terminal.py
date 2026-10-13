@@ -1002,11 +1002,11 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # said where it belonged - the wrong sentence, and the one the owner cannot act on.
     argv = agent_argv(profile, model) if agent else default_shell()
     if agent and cli_named(profile, argv) == 'claude' and '--settings' not in argv: argv = [*argv, *claude_theme_args(store)]
-    # a STRANGERS' batch is reviewed read-only, whoever opened the session (batch.read_only_argv); a batch of our own people's
-    # items - a private repo, a board, a PR by someone with write access - is an ordinary session (batch.outside)
+    # a DANGEROUS batch is reviewed read-only, whoever opened the session (batch.read_only_argv); every other batch
+    # is an ordinary session
     if agent and task_id:
         from . import batch as _batch
-        # ...until every stranger's item still open has cleared the screen at its live head (batch.locked): then it is ordinary
+        # ...only while it holds an item the triage judged dangerous (batch.locked)
         if _batch.is_batch(store, task_id) and _batch.locked(store, task_id):
             from .config import home
             argv = _batch.read_only_argv(cli_named(profile, argv), list(argv), str(home() / 'context'))

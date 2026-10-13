@@ -361,7 +361,7 @@ is what you see if those cards cannot load.</li>
 <p>On a public repository anyone can open a pull request. People with write access can push anyway, so trusting their pull requests adds nothing; everyone else&#39;s are outside.</p>
 <p>Options: <code>writers</code>, <code>nobody</code>, <code>anyone</code></p>
 <p>Trust comes from the role GitHub reports for the author - owner, member or collaborator - which only you can grant and nobody can fake. Having had a pull request merged before does NOT count: one small good change would buy trust for the next.</p>
-<p>An outside pull request batches apart from your own people&#39;s and is reviewed read-only: everything beyond reading is refused, never asked. Its brief carries GitHub&#39;s CI results, so nothing of theirs runs on this machine.</p>
+<p>An outside pull request joins the same task as your own people&#39;s and runs with the agent&#39;s normal permissions. The triage first reads its text and its diff; one it judges dangerous - a prompt injection, or a change that reaches beyond the project - ranks last, batches apart and is reviewed read-only: everything beyond reading is refused, never asked.</p>
 <h3 id="outside-pull-requests">Outside pull requests<a class="anchor" href="#outside-pull-requests" aria-label="Link to this section">#</a></h3>
 <p><code>outside_prs</code> · type: select · default: <code>review</code></p>
 <p>What an outside contributor&#39;s pull request gets. Fix it in the cloud runs the agent and the tests on a machine GitHub throws away, never yours.</p>

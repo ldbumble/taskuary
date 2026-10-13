@@ -85,8 +85,9 @@ class FixTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.s.set_setting(f'gh_public:{REPO}', '1', 't')
         rows = [self.s.get_message(row(self.s, 7))]
-        self.tid = batch.create(self.s, 'github', REPO, rows, strangers=True)
+        self.tid = batch.create(self.s, 'github', REPO, rows, danger=True)
         self.it = batch.items(self.s, self.tid)[0]
+        self.s.update_batch_item(self.tid, self.it['ConversationId'], {'Warn': 'posts the token to a server'})   # batch.dangers
         batch.report(self.s, self.tid, 1, 'Right idea, but the label is missing.', propose='changes')
         self.s.update_batch_item(self.tid, self.it['ConversationId'], {'Sha': 'abc'})
         self.tok = mock.patch.object(batch, '_token', return_value='tok'); self.tok.start()
@@ -142,8 +143,8 @@ class FixTests(unittest.TestCase):
         self.assertEqual(merged.call_args.args[1:4], (REPO, 9, 'fixhead'), 'the fix, pinned to the head the cloud pushed')
         self.assertEqual(merged.call_args.kwargs['method'], 'merge', "a merge commit keeps the contributor's commits")
 
-    def test_our_own_peoples_fix_goes_to_the_agent_here(self):
-        self.s.set_setting(f'gh_public:{REPO}', '0', 't')
+    def test_a_change_not_judged_dangerous_is_fixed_by_the_agent_here(self):
+        self.s.update_batch_item(self.tid, self.it['ConversationId'], {'Warn': None})
         with mock.patch('taskuary.waitroom.add') as told:
             out = batch.act(self.s, self.tid, 1, 'fix')
         self.assertTrue(out['ok']); self.assertIn('FIX ITEM 1', told.call_args.args[2])
@@ -156,9 +157,11 @@ class TaskPageTests(unittest.TestCase):
         from taskuary import server
         c, s = TestClient(server.app), server.store
         s.set_setting(f'gh_public:{REPO}', '1', 't'); s.set_setting('outside_prs', 'review', 't')
-        tid = batch.create(s, 'github', REPO, [s.get_message(row(s, 41))], strangers=True)
+        tid = batch.create(s, 'github', REPO, [s.get_message(row(s, 41))])
         d = c.get(f'/api/tasks/{tid}').json()
-        self.assertTrue(d['batchOutside']); self.assertFalse(d['batch'][0]['canFix'])
+        self.assertTrue(d['batchOutside']); self.assertTrue(d['batch'][0]['canFix'], 'nothing judged dangerous: fixed here')
+        s.update_batch_item(tid, f'gh:{REPO}#41', {'Warn': 'posts the token to a server'})
+        self.assertFalse(c.get(f'/api/tasks/{tid}').json()['batch'][0]['canFix'])
         s.set_setting('outside_prs', 'cloud', 't')
         self.assertTrue(c.get(f'/api/tasks/{tid}').json()['batch'][0]['canFix'])
 

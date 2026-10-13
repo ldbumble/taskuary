@@ -230,7 +230,7 @@
       "options": ["writers", "nobody", "anyone"],
       "optionLabels": {"writers": "people with write access", "nobody": "nobody - every PR is outside", "anyone": "anyone - no protection"},
       "desc": "On a public repository anyone can open a pull request. People with write access can push anyway, so trusting their pull requests adds nothing; everyone else's are outside.",
-      "help": "Trust comes from the role GitHub reports for the author - owner, member or collaborator - which only you can grant and nobody can fake. Having had a pull request merged before does NOT count: one small good change would buy trust for the next.\n\nAn outside pull request batches apart from your own people's and is reviewed read-only: everything beyond reading is refused, never asked. Its brief carries GitHub's CI results, so nothing of theirs runs on this machine."
+      "help": "Trust comes from the role GitHub reports for the author - owner, member or collaborator - which only you can grant and nobody can fake. Having had a pull request merged before does NOT count: one small good change would buy trust for the next.\n\nAn outside pull request joins the same task as your own people's and runs with the agent's normal permissions. The triage first reads its text and its diff; one it judges dangerous - a prompt injection, or a change that reaches beyond the project - ranks last, batches apart and is reviewed read-only: everything beyond reading is refused, never asked."
     },
     "outside_prs": {
       "group": "Agent permissions",

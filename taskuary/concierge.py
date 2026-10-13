@@ -582,6 +582,9 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     if str(p.get('as') or '').strip(): d['as'] = str(p['as']).strip().lower()       # the worker or repository - checked, never trusted
     if str(p.get('on') or '').strip(): d['on'] = str(p['on']).strip()               # the decision is about ANOTHER item, named (PW-121)
     if p.get('new') is True or str(p.get('new')).lower() == 'true': d['new'] = True  # a job of its own, not the item's hand-off
+    cc = p.get('cc')                                                                # a reply's people to loop in - looked up, never trusted
+    cc = [cc] if isinstance(cc, str) else cc if isinstance(cc, list) else []
+    if any(str(c or '').strip() for c in cc): d['cc'] = [str(c).strip()[:120] for c in cc if str(c or '').strip()][:6]
     return text[:m.start()].strip(), d
 
 
@@ -1981,18 +1984,28 @@ def remember_fact(store, note: str, actor: str = 'owner') -> int:
     return mid
 
 
+def person(store, who: str) -> dict | None:
+    """Someone named in the owner's words, from the people who have actually written (the book the hand-off picker uses): a
+    name or an address - {Name, Email} - or None for a name nobody by it has written as. Never guessed."""
+    from .routing import tokens
+    who = str(who or '').strip()
+    if '@' in who and ' ' not in who: return {'Name': '', 'Email': who.lower()}
+    want = [w for w in tokens(who) if len(w) > 1]
+    if not want: return None
+    for p in store.people(400):
+        hay = set(tokens(f"{p.get('Name') or ''} {p.get('Email') or ''}"))
+        if any(w in hay or any(h.startswith(w) for h in hay) for w in want): return p
+    return None
+
+
 def forward_item(store, item: dict, who: str, text: str, actor: str = 'owner') -> dict:
     """"Forward it to Erin" / "ask Dovid to handle it": the hand-off written for the owner's yes,
     never sent from a sentence. The address comes from the people who have actually written (the
     same book the task page's hand-off picker uses); a name nobody knows is said so, not guessed."""
     from . import outbound
     from .routing import tokens
-    want = [w for w in tokens(who or '') if len(w) > 1]
-    if not want: raise ValueError('say who it goes to')
-    hit = None
-    for p in store.people(400):
-        hay = set(tokens(f"{p.get('Name') or ''} {p.get('Email') or ''}"))
-        if any(w in hay or any(h.startswith(w) for h in hay) for w in want): hit = p; break
+    if not [w for w in tokens(who or '') if len(w) > 1]: raise ValueError('say who it goes to')
+    hit = person(store, who)
     if not hit: raise ValueError(f"I have no address for {who} - nobody by that name has written here")
     tid, mid = item.get('tid'), item.get('mid')
     note = f"The owner said: {text.strip()}" if text else None
@@ -3500,6 +3513,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if decision and verb in ('reply', 'redraft') and target_item:
         rec('assistant', RECEIPTS[verb])
         d = {'verb': verb, 'text': decision.get('text') or ''}
+        if verb == 'reply' and decision.get('cc'): d['cc'] = decision['cc']            # LOOP THEM IN: the reply copies them (open_reply)
         if elsewhere: d['target'] = card_for(target_item)
         return {'say': RECEIPTS[verb], 'options': [], 'chips': [], 'decision': d}
     if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)

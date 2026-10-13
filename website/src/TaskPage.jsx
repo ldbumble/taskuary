@@ -6,7 +6,6 @@
 import { says, subState } from "./laneSays.js";
 import ContinueBox from "./ContinueBox.jsx";
 import QueuedStart from "./QueuedStart.jsx";
-import AgentAsks from "./AgentAsks.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -44,7 +43,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -304,7 +303,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [askingSender, setAskingSender] = useState(false);
   const [openingReply, setOpeningReply] = useState(false);
   const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
-  const waitingN = listRow?.Waiting || 0;   // prompts in this task's funnel
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
 
@@ -643,7 +641,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // reply should automatically pop up"). Cleared, focusStage picks - and a draft ready outranks all.
   useEffect(() => { if (!liveSession) { setPeek(false); setOpenStage(null); } }, [liveSession]);
   const liveCodingSession = !isGeneral && liveSession;
-  const agentWaiting = liveSession && isWaiting(term);
   // Proposals are queued after the reply, so they must not be mistaken for it - but they SHARE
   // its stage. lanes.json has one lane for both ("a reply or an action is drafted and waits for
   // your yes"), and one lane on the rail is one section on the page (the owner, 2026-09-22: "put
@@ -1587,7 +1584,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
                       gap: 0.35, flexWrap: "wrap", flex: { xs: "1 0 100%", sm: 1 }, minWidth: 0, mt: liveSession ? { xs: 0.5, sm: 0 } : 1 }}>
                       {/* A LIVE SESSION HAS NO PRIMARY. "Answer agent" / "Give new prompt" opened a
-                          Dialog whose whole body was the SAME TellAgent that is already inline under
+                          Dialog whose whole body was the SAME TellAgent that was then inline under
                           the terminal - a modal copy of a control on the page (the owner, 2026-09-16:
                           "answer agent really does nothing, it's just type into the prompt window").
                           While an agent is working the next move is typing, so nothing here is filled;
@@ -1759,19 +1756,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box sx={{ mt: 0.75, flexShrink: 0, "&:empty": { display: "none" } }}>
                       <PublishedPages pages={(detail?.artifacts || []).filter(isPublished)} />
                     </Box>
-                    {/* the waiting room, right under the session it feeds: type here instead of into the
-                        terminal, and it goes in when the agent stops rather than on top of its work */}
-                    {/* the waiting room IS the answer box: when the agent is parked on a question,
-                        waitroom.deliver() types what you write straight in rather than queueing it */}
-                    {/* what it is asking, with its options - read off the polled detail, which is fresh where `term` is not (B11) */}
-                    {term.alive && <AgentAsks taskId={selected} session={detail?.session?.sid === term.sid ? detail.session : term}
-                      onAnswered={() => loadDetail(selected)} />}
-                    {term.alive && <Box sx={{ mt: 0.75, flexShrink: 0, display: "flex", alignItems: "center", gap: 0.9 }}>
-                      <Box sx={{ flex: 1, minWidth: 0, ...(agentWaiting ? { "& .MuiOutlinedInput-notchedOutline": { borderColor: "#dfc7cc" } } : {}) }}>
-                        <TellAgent taskId={selected} taskRef={detail?.ref} compact onQueued={() => loadDetail(selected)} />
-                      </Box>
-                      {!!waitingN && <Typography variant="caption" sx={{ color: FAINT, flexShrink: 0 }}>{waitingN} queued</Typography>}
-                    </Box>}
+                    {/* NO ANSWER BOX UNDER THE PANE (the owner, 2026-10-13: "we know it's waiting on us from the emoji and we will
+                        respond in chat"): the asks box and the type-in-for-later line said again what the rail's mark and the
+                        terminal already say. Answer in the terminal, or in the chat - the Assistant draws a question's options. */}
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
                         Closing the session and writing up what is on screen — the agent is not asked anything.

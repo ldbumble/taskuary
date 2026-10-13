@@ -12,7 +12,6 @@
 //   Worker -> Bindings -> Add binding -> D1 database: DEMO_EVENTS -> taskuary-demo
 // Unbound it is a no-op, so a preview deploy or a fork never errors and never collects.
 
-import { hasStatsSession } from "../lib/statsAuth.js";
 
 const KINDS = new Set(["open", "tab", "row", "verdict", "ask", "watch", "dwell", "leave", "cta"]);
 const cut = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
@@ -39,12 +38,10 @@ export async function onRequestPost({ request, env }) {
   return new Response(null, { status: 204 });
 }
 
-// Reading analytics requires the signed session issued by /api/stats-auth. Event collection above
-// remains anonymous and public; a login must never get in the way of a sendBeacon from the demo.
+// Reading analytics is public, like collecting it (the owner, 2026-10-13: "remove the login and just keep the stats page
+// to see"): the counts are of anonymous tab sessions, and a login nobody had set up only showed an error.
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
-  if (!(await hasStatsSession(request, env)))
-    return statsJson({ error: "Sign in to view analytics." }, 401);
   if (!env.DEMO_EVENTS) return statsJson({ visits: 0, note: "no D1 binding" });
   const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days")) || 14));
   const since = new Date(Date.now() - days * 86400000).toISOString();

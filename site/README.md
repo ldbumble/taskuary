@@ -49,32 +49,12 @@ pieces, no third-party script and no cookie:
 
 Both POST to `functions/api/ev.js`, routed by `worker.mjs`. The Worker keeps the events in its own
 SQLite-backed `StatsStore`; `wrangler.jsonc` creates and binds it automatically on deployment.
-There is no database id or manual database binding to configure. Anonymous event collection
-works independently of the admin login. A fork that already has the old `DEMO_EVENTS` D1
-binding can keep using it.
+There is no database id or manual database binding to configure. A fork that already has the old
+`DEMO_EVENTS` D1 binding can keep using it.
 
-The admin login requires deployment secrets. Set a fresh password and an independently
-generated random session secret of at least 32 UTF-8 bytes through Cloudflare's secret prompts:
+Reading the stats is public, like collecting them: `/stats` and `GET /api/ev` need no login. The counts
+are of anonymous tab sessions; nothing in them names a person.
 
-```sh
-npx wrangler secret put STATS_PASSWORD
-npx wrangler secret put STATS_SESSION_SECRET
-```
-
-Use a password manager to create and keep these values; do not put them in source, build
-variables printed in logs, or command arguments. The default username is `admin`; an optional
-`STATS_USERNAME` Worker variable changes it. For Pages deployments, configure the same two
-secrets and optional variable in the project's production environment. Local tests use only
-invented credentials.
-
-Without both secrets, login returns 503 and analytics readers return 401. Changing either
-secret invalidates existing sessions. The previous public password must be retired; removing
-it from the current source does not remove it from repository history. These source changes
-take effect after deployment with fresh secrets configured.
-
-Read it at **`https://taskuary.com/stats.html`**. It has a normal username/password sign-in and
-keeps a signed, secure, HttpOnly session for 12 hours. Credentials never appear in the URL or
-browser storage. Once signed in it shows sessions per day, how far people got (bounced after one
+Read it at **`https://taskuary.com/stats.html`**. It shows sessions per day, how far people got (bounced after one
 event, or stayed for fifteen), which buttons were pressed and which tabs were opened. The page is
-not linked from the site and has no data of its own; `/api/ev` returns 401 without a valid admin
-session.
+not linked from the site and has no data of its own; it reads `/api/ev`.

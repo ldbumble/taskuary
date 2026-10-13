@@ -2,16 +2,6 @@
 // endpoints need to run before the static asset layer. The handlers remain shared with Pages so
 // a fork can deploy either way without maintaining two versions of the analytics code.
 import { onRequestGet as readEvents, onRequestPost as recordEvents } from "./functions/api/ev.js";
-import { hasStatsSession } from "./functions/lib/statsAuth.js";
-import {
-  onRequestDelete as signOut,
-  onRequestGet as readSession,
-  onRequestPost as signIn,
-} from "./functions/api/stats-auth.js";
-
-const ROUTES = {
-  "/api/stats-auth": { GET: readSession, POST: signIn, DELETE: signOut },
-};
 
 class Statement {
   constructor(sql, query) { this.sql = sql; this.query = query; this.args = []; }
@@ -21,7 +11,7 @@ class Statement {
 }
 
 // A tiny D1-shaped adapter lets the same audited event handlers run against a built-in,
-// SQLite-backed Durable Object. Its binding is automatic; reader credentials are deployment secrets.
+// SQLite-backed Durable Object. Its binding is automatic.
 export class StatsStore {
   constructor(ctx, env = {}) {
     this.env = env;
@@ -47,9 +37,6 @@ export class StatsStore {
 const analytics = async (request, env) => {
   const handler = request.method === "POST" ? recordEvents : request.method === "GET" ? readEvents : null;
   if (!handler) return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
-  // Reject before forwarding so an anonymous request never reaches the Durable Object reader.
-  if (request.method === "GET" && !(await hasStatsSession(request, env)))
-    return Response.json({ error: "Sign in to view analytics." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   // Keep compatibility with the original D1 deployment when a fork already has that binding.
   if (env.DEMO_EVENTS) return handler({ request, env });
   const namespace = env.ANALYTICS_STORE;
@@ -61,15 +48,6 @@ export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname.replace(/\/$/, "") || "/";
     if (path === "/api/ev") return analytics(request, env);
-    const route = ROUTES[path];
-    if (route) {
-      const handler = route[request.method];
-      if (handler) return handler({ request, env });
-      return new Response("Method not allowed", {
-        status: 405,
-        headers: { Allow: Object.keys(route).join(", "), "Cache-Control": "no-store" },
-      });
-    }
     return env.ASSETS.fetch(request);
   },
 };

@@ -54,6 +54,9 @@ _DONE = set()                     # task ids a self-close has already run for, t
 _LOCK = threading.Lock()
 
 
+# the note a `--done` leaves on the task - its sentence after this; responder.resolution_of reads it back
+DONE_SAID = 'The agent says it is finished: '
+
 def mode(store) -> str:
     """'on' | 'off'. There used to be three: 'auto' also let a judge close a quiet screen, 'ask' did not.
     The judge is gone (2026-09-24), so the two behaved the same and one is left; a stored 'ask' reads as on."""
@@ -159,7 +162,7 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
     if why: return {'closed': False, 'why': why}
     line = ' '.join(str(summary or '').split())[:1200]
     if stays_open(store, tid):
-        store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
+        store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.')
         return {'closed': False, 'why': OWNER_ENDS}
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     result = _finished(store, tid, term.session_for(tid), line)

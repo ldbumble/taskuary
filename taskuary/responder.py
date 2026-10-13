@@ -360,10 +360,17 @@ def resolution_of(store, task_id: int):
     have that section, so their filed transcript is the fallback; only legacy records with neither
     retain the compact CODER REPORT. This is also what makes Review -> Redraft lossless.
     """
-    report = next((c['Body'] for c in reversed(store.list_comments(task_id))
-                   if str(c.get('Body') or '').startswith('CODER REPORT')), None)
+    from .selfclose import DONE_SAID
+    notes = list(reversed(store.list_comments(task_id)))
+    report = next((c['Body'] for c in notes if str(c.get('Body') or '').startswith('CODER REPORT')), None)
     if not report:
         return None
+    # THE REPORT AND THE DONE NOTE RIDE WITH IT, always: the final response alone was the agent's last line - "The reply above
+    # is ready for you to review" - while what it found was in the report and its refused `--done`, and the draft came out
+    # generic ("I'm reviewing the sample files now", 2026-10-13). The final response leads; these say what it decided.
+    said = next((str(c['Body'])[len(DONE_SAID):] for c in notes if str(c.get('Body') or '').startswith(DONE_SAID)), '')
+    beside = (f"\n\nTHE SESSION'S OWN REPORT (what it found and decided):\n{report}"
+              + (f"\n\nWHAT THE AGENT SAID WHEN IT CALLED ITSELF DONE: {said}" if said and said not in report else ''))
     try:
         from . import session_artifacts
         # the NEWEST session: an agent that ran twice leaves two, and the first one's transcript is
@@ -377,13 +384,13 @@ def resolution_of(store, task_id: int):
             if marker in body:
                 final = body.split(marker, 1)[1].split(end, 1)[0].strip()
                 if final:
-                    return 'COMPLETE FINAL RESPONSE FROM THE WORK SESSION:\n' + final
+                    return 'COMPLETE FINAL RESPONSE FROM THE WORK SESSION:\n' + final + beside
     except Exception as e:
         logger.debug(f'could not recover final response artifact for task {task_id}: {e}')
     transcript = store.last_transcript(task_id) or {}
     if str(transcript.get('Text') or '').strip():
         return ('COMPLETE WORK SESSION TRANSCRIPT (the final response is near the end):\n'
-                + str(transcript['Text']).strip())
+                + str(transcript['Text']).strip() + beside)
     return report
 
 

@@ -47,9 +47,24 @@ class SessionArtifactTests(unittest.TestCase):
         session_artifacts.coding(store, tid, 'Summary: compact.', 'transcript fallback', 'coder',
                                  final_message=final)
         recovered = responder.resolution_of(store, tid)
-        self.assertNotIn('only the first item', recovered)
         for n in range(1, 9):
             self.assertIn(f'Full outcome {n}.', recovered)
+        # the full answer leads; the compact report rides after it, never instead of it
+        self.assertLess(recovered.index('Full outcome 8.'), recovered.index('only the first item'))
+
+    def test_a_final_line_that_only_points_back_still_gives_the_drafter_what_was_decided(self):
+        """The agent's last line was "The reply above is ready for you to review" and its `--done` was refused; the draft came
+        out generic. The report and the done note always ride with the final response (2026-10-13)."""
+        from taskuary.selfclose import DONE_SAID
+        store = MemoryStore()
+        tid = store.create_task({'Title': 'Vendor sample', 'Kind': 'coding'}, 'owner')
+        store.add_comment(tid, 'coder', 'agent', f"{DONE_SAID}The vendor's sample is an empty backup, not the export we import.")
+        store.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nDetermination: the sample was rejected; the reply asks for the monthly export.')
+        session_artifacts.coding(store, tid, 'Summary: compact.', 'transcript', 'coder',
+                                 final_message='The reply above is ready for you to review and send.')
+        got = responder.resolution_of(store, tid)
+        self.assertIn('the sample was rejected', got)
+        self.assertIn('an empty backup, not the export', got)
 
 
 if __name__ == '__main__':

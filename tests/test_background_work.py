@@ -103,6 +103,18 @@ class StopWithWorkRunning(Files, Base):
         self.fire('Stop', last_assistant_message='Done.', background_tasks=[], transcript_path=self.file(SHELL))
         self.assertIsNone(ws.waiting_of(self.s, t))
 
+    def test_the_idle_notice_while_a_job_runs_is_not_a_question(self):
+        """A minute after a turn that left a shell running, Claude sends its idle notice. It wakes itself when the job
+        reports, so it is waiting on its own work: still working, not "on you" (TQ-1059, 2026-10-13). A real ask counts."""
+        self.session()
+        listed = [{'id': 'b1', 'type': 'shell', 'status': 'running', 'description': 'wait for CI', 'command': 'gh run watch'}]
+        self.fire('Stop', last_assistant_message='Waiting on CI.', background_tasks=listed, transcript_path=self.file([]))
+        self.fire('Notification', notification_type='idle_prompt', message='Claude is waiting for your input')
+        st = self.state()
+        self.assertEqual((st['state'], st['requests']), ('working', []))
+        self.fire('Notification', notification_type='agent_needs_input', message='Merge it now or wait for review?')
+        self.assertEqual(self.state()['state'], 'input_needed')
+
     def test_a_job_waking_the_agent_is_not_the_owner_answering(self):
         """A job ending wakes Claude with a UserPromptSubmit nobody typed. It is working again - but a question
         it asked is still the owner's to answer."""

@@ -2709,7 +2709,31 @@ def start_session(store_, tid: int, agent: str = None, model: str = None, instru
         raise HTTPException(422, str(e))
 
 
+# ONE START AT A TIME PER TASK. A start takes seconds (a CLI booting in its checkout) and the live-session check below
+# only sees a session once it exists, so two dispatches 0.5 s apart both passed it: TQ-1059 got two coder sessions in
+# one checkout, the second finding "changes I didn't make", and its rail row read the idle one as waiting on you while
+# the other worked (2026-10-13). A dispatch that arrives while one is under way waits for it and answers with ITS
+# start - the same session, `existing` - rather than a second worker or a 409 for a press that was only sent twice.
+_STARTING, _STARTED, _STARTING_LOCK = {}, {}, threading.Lock()
+
+
 def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: BackgroundTasks) -> dict:
+    with _STARTING_LOCK: gate = _STARTING.setdefault(int(tid), threading.Lock())
+    waited = not gate.acquire(blocking=False)
+    if waited: gate.acquire()
+    try:
+        first = _STARTED.pop(int(tid), None) if waited else None
+        live = hub_term.session_for(tid)
+        if first and ((live and live.alive) or first.get('dispatch') == 'assistant'):
+            return {**first, 'started': False, 'existing': True}
+        _STARTED.pop(int(tid), None)
+        out = _dispatch_one(tid, body, background)
+        _STARTED[int(tid)] = out
+        return out
+    finally: gate.release()
+
+
+def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> dict:
     """Start the explicitly selected kind of agent, or preserve an existing task kind.
 
     ``general`` is the conversational assistant; ``coding`` is a CLI in a checkout.  The caller

@@ -59,3 +59,36 @@ class ChipTests(Base):
         item = {'kind': 'message', 'tid': self.tid, 'mid': self.mid, 'ref': 'TQ-0001', 'lane': 'asked'}
         server.hub_term.SESSIONS['s1'].alive = False
         self.assertEqual(concierge.cannot(item, 'regular_agent', self.s), '')
+
+
+class TwoStartsAtOnceTests(unittest.TestCase):
+    """Two dispatches half a second apart both passed the live check - the first session did not exist yet - and one task
+    got two coder sessions in one checkout (2026-10-13). The second now waits for the first and answers with its start."""
+    def setUp(self):
+        self.s = MemoryStore()
+        self.tid = self.s.create_task({'Title': 'Review the pull requests', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
+        live = mock.patch.dict(server.hub_term.SESSIONS, {}); live.start(); self.addCleanup(live.stop)
+
+    def test_a_second_dispatch_during_a_start_reuses_it_and_starts_nothing(self):
+        import threading, time
+        starts = []
+        def slow(tid, body, background):
+            starts.append(tid); time.sleep(0.3)
+            server.hub_term.SESSIONS['s9'] = Live(tid)
+            return {'dispatch': 'coding', 'started': True, 'existing': False, 'taskId': tid, 'session': {'sid': 's9'}}
+        out = []
+        with mock.patch.object(server, '_dispatch_one', side_effect=slow):
+            ts = [threading.Thread(target=lambda: out.append(server._dispatch_task_to_its_agent(self.tid, server.DispatchBody(kind='coding'), None)))
+                  for _ in range(2)]
+            for t in ts: t.start(); time.sleep(0.05)
+            for t in ts: t.join()
+        self.assertEqual(starts, [self.tid])                                     # one session, not two
+        self.assertEqual(sorted((o['started'], o['existing']) for o in out), [(False, True), (True, False)])
+        self.assertTrue(all(o['session']['sid'] == 's9' for o in out))
+
+    def test_a_later_dispatch_is_not_answered_from_an_old_start(self):
+        with mock.patch.object(server, '_dispatch_one', return_value={'dispatch': 'coding', 'started': True, 'existing': False}) as one:
+            server._dispatch_task_to_its_agent(self.tid, server.DispatchBody(kind='coding'), None)
+            server._dispatch_task_to_its_agent(self.tid, server.DispatchBody(kind='coding'), None)
+        self.assertEqual(one.call_count, 2)                                      # one after another: each is its own start

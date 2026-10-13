@@ -357,9 +357,14 @@ def _events(t, p: dict) -> None:
                     text = msg or 'Claude needs your permission'
                     ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')
             elif kind in ('agent_needs_input', 'idle_prompt'):
-                # the agent asking INSIDE its TUI - a chooser, a prompt - which no tool hook ever reports
-                text = msg or 'Claude is waiting for your input'
-                ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, source='hook')
+                # the agent asking INSIDE its TUI - a chooser, a prompt - which no tool hook ever reports. Not the idle
+                # notice a minute after a turn that left a shell running, though: Claude wakes itself when that job
+                # reports, so it is waiting on its own work, not on you - and it flipped a working agent to "on you"
+                # every turn (TQ-1059, 2026-10-13). A real ask (agent_needs_input) still counts.
+                evs = ws.events(st, tid, sid)
+                if not (kind == 'idle_prompt' and evs and ws.background_jobs(evs[-1])):
+                    text = msg or 'Claude is waiting for your input'
+                    ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, source='hook')
             elif kind == 'quota_auto_resume_fired': close(('stalled',), 'resumed after the limit lifted')
         elif ev == 'StopFailure':
             # THE WALL. A rate limit, a token ceiling, an overloaded API: the turn ends, the CLI sits at its

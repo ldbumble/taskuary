@@ -2026,7 +2026,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, [shown, lastCardIdx, current]);
 
   const chat = (
-    <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
+    <div className={advice?.verb && advice.line ? "tq-asst-col advising" : "tq-asst-col"} style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>

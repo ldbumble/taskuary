@@ -48,6 +48,13 @@ test("the next step sits over the row and the box is plain: no ghost text, no pi
   assert.match(css, /\.tq-next \{/);
 });
 
+test("while the NEXT strip stands, the task's own Open again line is hidden - only on the canvas", () => {
+  const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /<Typography className="tq-news"[^>]*>Open again: \{news\.line\}/);
+  assert.match(src, /className=\{advice\?\.verb && advice\.line \? "tq-asst-col advising" : "tq-asst-col"\}/);
+  assert.match(css, /\.tq-asst-col\.advising \.tq-news \{ display: none; \}/);
+});
+
 test("the clock menu offers the Advisor's notes for the item on the table", () => {
   assert.match(src, /Advisor's notes/);
   assert.match(src, /api\.get\("\/api\/advice\/notes", \{ params: \{ key/);

@@ -1325,8 +1325,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         the same words twice, an inch apart. */}
                     <Box sx={{ minWidth: 0 }}>
                         {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
-                            session is the record under Agent work, not the news (the owner, 2026-10-12) */}
-                        {news && <Typography sx={{ fontSize: 12.5, color: INK, fontWeight: 600, mb: 0.9 }}>Open again: {news.line}</Typography>}
+                            session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
+                            strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
+                        {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600, mb: 0.9 }}>Open again: {news.line}</Typography>}
                         <Typography sx={{ ...label, display: "block", mb: 0.25 }}>What needs doing</Typography>
                         {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task;
                             the card says so once - how many, and what they need now (concierge.repeats, counted by code) */}

@@ -25,6 +25,7 @@ import html, io, json, os, re, time, zipfile
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
+from . import kbembed      # nothing in it runs while semantic search is off (numpy is imported only if installed)
 
 EXTS = ('txt', 'md', 'csv', 'tsv', 'json', 'html', 'htm', 'docx', 'pptx', 'xlsx', 'pdf')
 CHUNK, OVERLAP = 1200, 150       # chars; a chunk is one passage a model can quote, with a little of its neighbour
@@ -201,6 +202,7 @@ def reindex(store, connector_id=None, prune: bool = True) -> dict:
     changed; drop what is gone. Unchanged files (same modified stamp and size) are not re-read -
     a nightly run over a library that did not move costs a listing and nothing else."""
     t0, res = time.time(), {'indexed': 0, 'unchanged': 0, 'removed': 0, 'skipped': 0, 'errors': [], 'sources': 0}
+    emb = _embedder(store, res)            # None unless the owner switched semantic search on (and it is reachable)
     for c in cards(store, connector_id):
         cid, cfg = c['ConnectorId'], cfg_of(c)
         exts = exts_of(cfg)
@@ -222,17 +224,31 @@ def reindex(store, connector_id=None, prune: bool = True) -> dict:
                         res['errors'].append(f'{name}: {e}'); continue
                     parts = chunk(text)
                     if not parts: res['skipped'] += 1; continue
+                    vecs = None
+                    if emb:
+                        try: vecs = emb(parts)
+                        except Exception as e:     # a dead embedder never blocks indexing: keyword search still works, the backfill retries
+                            res['errors'].append(f'semantic search: {e} - this run indexes keywords only'); emb = None
                     store.kb_put({'ConnectorId': cid, 'Source': label, 'Path': rel, 'Name': name, 'Modified': modified,
-                                  'Size': size, 'Chars': len(text)}, parts)
+                                  'Size': size, 'Chars': len(text)}, parts, vecs, getattr(emb, 'model', '') if vecs else '')
                     res['indexed'] += 1
                 if prune: res['removed'] += store.kb_prune(cid, label, seen)
             except Exception as e:
                 res['errors'].append(f'{label}: {e}')
                 logger.warning(f'knowledge: {label} failed - {e}')
+        if emb:                                    # passages indexed before it was switched on, or with another model, or while it was down
+            try: res['embedded'] = kbembed.backfill(store, emb, cid)
+            except Exception as e: res['errors'].append(f'semantic search: {e}')
         store.set_setting(f'kb_last:{cid}', json.dumps({'at': datetime.now().isoformat(sep=' ', timespec='seconds'), **store.kb_count(cid),
                                                          **{k: v for k, v in res.items() if k != 'errors'}, 'errors': res['errors'][:5]}), 'knowledge')
     res.update(store.kb_count(connector_id), ms=int((time.time() - t0) * 1000))
     return res
+
+def _embedder(store, res: dict):
+    """The embedder when semantic search is on, else None - and then no embedder is built and nothing is sent anywhere."""
+    if store.get_setting('kb_semantic', '0') != '1': return None
+    try: return kbembed.make(store)
+    except Exception as e: res['errors'].append(f'semantic search: {e}'); return None
 
 def _query(text: str, most: int = 40) -> str:
     """An FTS5 query out of prose: the distinctive words, OR-ed, so bm25 ranks by how many a passage
@@ -249,7 +265,27 @@ def search(store, text: str, limit: int = 8, connector_id=None) -> list:
     """Ranked passages for a question or a thread: [{'name','path','source','modified','snippet','score'}]."""
     q = _query(text)
     hits = store.kb_search(q, limit, connector_id) if q else []
+    if store.get_setting('kb_semantic', '0') == '1': hits = _hybrid(store, text, hits, limit, connector_id)
     return [{**h, 'snippet': passage(h.pop('text', '') or '', h.get('snippet') or '')} for h in hits]
+
+
+def _hybrid(store, text: str, keyword: list, limit: int, connector_id=None) -> list:
+    """Keyword hits merged with the nearest passages by reciprocal rank fusion, per document. A document
+    both found keeps the keyword passage (its snippet shows the match); one only meaning found shows its
+    nearest passage. Any trouble with the embedder - down, wrong model, nothing embedded yet - returns the
+    keyword hits unchanged: semantic search adds recall, it is never a way for search to fail."""
+    if not (text or '').strip(): return keyword
+    try:
+        emb = kbembed.make(store)
+        near = kbembed.semantic_hits(store, emb, text, limit, connector_id) if emb else []
+    except Exception as e:
+        logger.warning(f'knowledge: semantic search unavailable, keyword results only - {e}')
+        return keyword
+    if not near: return keyword
+    by_doc = {h['doc_id']: h for h in near}
+    by_doc.update({h['doc_id']: h for h in keyword})
+    fused = kbembed.fuse([h['doc_id'] for h in keyword], [h['doc_id'] for h in near])
+    return [{**by_doc[d], 'score': round(s, 4)} for d, s in fused[:limit]]
 
 
 def passage(text: str, snip: str = '', size: int = HIT_CHARS * 2) -> str:
@@ -291,6 +327,7 @@ def run_kb_reindex(cfg):
     picks one Knowledge card when there are several."""
     r = reindex(cfg['store'], cfg.get('connector_id'))
     head = (f"{r['indexed']} indexed, {r['unchanged']} unchanged, {r['removed']} removed - {r['docs']} documents / {r['chunks']} passages"
+            + (f", {r['embedded']} passages embedded" if r.get('embedded') else '')
             + (f", {len(r['errors'])} problems" if r['errors'] else ''))
     return head, json.dumps(r, indent=1)
 

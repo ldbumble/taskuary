@@ -175,6 +175,16 @@ agents call the same search as a tool, and the reply drafter, the assistant and 
 are handed the passages that bear on a thread. Passages are treated as facts to cite, never as
 instructions.
 
+Search matches words by default, so "time off" misses a policy titled "Leave of absence". Switch on
+**Semantic search** (Settings → Assistant) and each passage is also embedded by a small model
+when it is indexed; a search then merges the passages nearest in meaning with the keyword hits, and
+every caller gets results in the same shape. It is off by default, and off changes nothing. The
+embedder is any server that answers `/v1/embeddings`; the default is Ollama on this machine
+(`ollama pull nomic-embed-text`), so no document leaves it. Pointing the address at a remote server
+sends your documents' text there. Passages indexed before you switched it on are embedded by the next
+Reindex, a changed model re-embeds them the same way, and if the model is unreachable search simply
+uses keywords. `pip install taskuary[semantic]` adds numpy for a faster scan on a large library.
+
 :::warn Planned is not available
 The Connections page lists cards that are on the roadmap as well as ones that work — NetSuite,
 SAP, Workday, ADP, Epic, Cerner, PointClickCare among them. A planned card tells you so on its

@@ -197,6 +197,24 @@ is what you see if those cards cannot load.</li>
 <p>When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.</p>
 <p>Agents can read the same thing: POST /api/tools/run with type &quot;calendar&quot;.</p>
 <h2 id="assistant">Assistant<a class="anchor" href="#assistant" aria-label="Link to this section">#</a></h2>
+<h3 id="semantic-search">Semantic search<a class="anchor" href="#semantic-search" aria-label="Link to this section">#</a></h3>
+<p><code>kb_semantic</code> · type: switch · default: off</p>
+<p>Find documents by meaning, not only by their words: &quot;time off&quot; finds the leave policy.</p>
+<p>Off (the default): the knowledge base is searched by keywords, exactly as before, and nothing extra is installed or run.</p>
+<p>On: each passage is turned into a vector by a small embedding model as it is indexed, and a search merges the nearest passages with the keyword hits. Needs an embedding model served at the address below (Ollama by default: <code>ollama pull nomic-embed-text</code>). Passages indexed before you switched this on are embedded by the next Reindex. If the model is unreachable, search quietly falls back to keywords.</p>
+<p>The text of your documents goes to that address to be embedded. The default is this machine; point it at a remote server only if you are content for the documents to go there. <code>pip install taskuary[semantic]</code> (numpy) makes the scan faster on a large library.</p>
+<h3 id="embedding-server">Embedding server<a class="anchor" href="#embedding-server" aria-label="Link to this section">#</a></h3>
+<p><code>kb_embed_url</code> · type: text · default: <code>http://127.0.0.1:11434</code></p>
+<p>Address of a server that answers /v1/embeddings (Ollama, LM Studio, llama.cpp, vLLM).</p>
+<p>Default <a href="http://127.0.0.1:11434">http://127.0.0.1:11434</a>, Ollama on this machine. Any server speaking the OpenAI embeddings surface works.</p>
+<h3 id="embedding-model">Embedding model<a class="anchor" href="#embedding-model" aria-label="Link to this section">#</a></h3>
+<p><code>kb_embed_model</code> · type: text · default: <code>nomic-embed-text</code></p>
+<p>The model that turns passages into vectors (default nomic-embed-text).</p>
+<p>Changing it re-embeds the library on the next Reindex; passages embedded with the old model are ignored meanwhile, so results fall back to keywords until then.</p>
+<h3 id="least-similarity-0-1">Least similarity (0-1)<a class="anchor" href="#least-similarity-0-1" aria-label="Link to this section">#</a></h3>
+<p><code>kb_semantic_min</code> · type: number · default: <code>0.5</code></p>
+<p>How close a passage must be in meaning to count as a hit.</p>
+<p>A nearest-neighbour search always has a nearest neighbour, even when nothing is related, so passages below this cosine similarity are dropped. Raise it if unrelated passages turn up; lower it if related ones are missed. Scales differ between models, and the default 0.5 is a starting point, not a measurement for yours.</p>
 <h3 id="the-pipe-reaches-back-hours">The pipe reaches back (hours)<a class="anchor" href="#the-pipe-reaches-back-hours" aria-label="Link to this section">#</a></h3>
 <p><code>funnel_hours</code> · type: number · default: <code>12</code></p>
 <p>How far back ordinary mail, reports and fyi enter the pipe the assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.</p>

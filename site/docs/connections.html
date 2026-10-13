@@ -357,6 +357,15 @@ SQLite. Once anything is indexed, a <code>kb_search</code> report answers questi
 agents call the same search as a tool, and the reply drafter, the assistant and coding sessions
 are handed the passages that bear on a thread. Passages are treated as facts to cite, never as
 instructions.</p>
+<p>Search matches words by default, so &quot;time off&quot; misses a policy titled &quot;Leave of absence&quot;. Switch on
+<strong>Semantic search</strong> (Settings → Assistant) and each passage is also embedded by a small model
+when it is indexed; a search then merges the passages nearest in meaning with the keyword hits, and
+every caller gets results in the same shape. It is off by default, and off changes nothing. The
+embedder is any server that answers <code>/v1/embeddings</code>; the default is Ollama on this machine
+(<code>ollama pull nomic-embed-text</code>), so no document leaves it. Pointing the address at a remote server
+sends your documents&#39; text there. Passages indexed before you switched it on are embedded by the next
+Reindex, a changed model re-embeds them the same way, and if the model is unreachable search simply
+uses keywords. <code>pip install taskuary[semantic]</code> adds numpy for a faster scan on a large library.</p>
 <div class="callout warn"><p class="eyebrow">Planned is not available</p><p>The Connections page lists cards that are on the roadmap as well as ones that work — NetSuite,
 SAP, Workday, ADP, Epic, Cerner, PointClickCare among them. A planned card tells you so on its
 face. If the assistant suggests connecting one, saying yes is a vote for building it, not a

@@ -411,6 +411,9 @@ CREATE TABLE IF NOT EXISTS invoice_item (ItemId INTEGER PRIMARY KEY, BatchId INT
 CREATE TABLE IF NOT EXISTS kb_doc (DocId INTEGER PRIMARY KEY, ConnectorId INTEGER, Source TEXT, Path TEXT, Name TEXT, Modified TEXT,
   Size INTEGER, Chars INTEGER, IndexedAt TEXT);
 CREATE TABLE IF NOT EXISTS kb_chunk (ChunkId INTEGER PRIMARY KEY, DocId INTEGER, Seq INTEGER, Text TEXT);
+-- optional semantic search (kbembed.py): one unit-length float32 vector per passage, written only while the
+-- owner has it switched on. Keyed by the embedding MODEL: a changed model leaves old rows unread, then re-embedded.
+CREATE TABLE IF NOT EXISTS kb_vec (ChunkId INTEGER PRIMARY KEY, Model TEXT, Dim INTEGER, Vec BLOB);
 CREATE TABLE IF NOT EXISTS metric (MetricId INTEGER PRIMARY KEY, Name TEXT UNIQUE, Label TEXT, Grain TEXT,
   Definition TEXT, SpecJson TEXT, Notes TEXT, Status TEXT DEFAULT 'draft', ConnectorId INTEGER,
   Skill TEXT, LastCheckAt TEXT, LastCheckPass INTEGER, LastCheckNote TEXT,
@@ -565,6 +568,9 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # a sound in the app and the browser's own desktop notification - each its own switch
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
+                    # optional semantic search over the knowledge base (kbembed.py). OFF: nothing is embedded or imported.
+                    'kb_semantic': '0', 'kb_embed_url': 'http://127.0.0.1:11434', 'kb_embed_model': 'nomic-embed-text',
+                    'kb_semantic_min': '0.5',
                     # the assistant's POST on the Timeline (assistant.py): what it looks for, the silence and
                     # quiet that count as news, how much it says. Its clock and its instruction live on the
                     # Reports tab (the seeded 'Assistant' report).
@@ -5268,9 +5274,10 @@ class SQLiteStore:
     # ── knowledge base (knowledge.py): documents as passages behind an FTS5 index ──
     def kb_doc(self, cid, source, path):
         return self._one('SELECT * FROM kb_doc WHERE ConnectorId=? AND Source=? AND Path=?', (cid, source, path))
-    def kb_put(self, doc: dict, chunks: list) -> int:
+    def kb_put(self, doc: dict, chunks: list, vecs: list = None, model: str = '') -> int:
         """Replace one document's passages in a single transaction - _exec commits per statement,
-        and a library of a thousand files is not a thousand fsyncs per file."""
+        and a library of a thousand files is not a thousand fsyncs per file. `vecs` (kbembed.pack blobs,
+        one per passage) ride in the same transaction, so a passage and its vector are never out of step."""
         with self.lock:
             cur = self.cx.cursor()
             old = cur.execute('SELECT DocId FROM kb_doc WHERE ConnectorId=? AND Source=? AND Path=?',
@@ -5282,12 +5289,42 @@ class SQLiteStore:
             did = cur.lastrowid
             for i, t in enumerate(chunks):
                 cur.execute('INSERT INTO kb_chunk (DocId, Seq, Text) VALUES (?,?,?)', (did, i, t))
-                if self.kb_fts: cur.execute('INSERT INTO kb_fts (Text, ChunkId) VALUES (?,?)', (t, cur.lastrowid))
+                cid = cur.lastrowid
+                if self.kb_fts: cur.execute('INSERT INTO kb_fts (Text, ChunkId) VALUES (?,?)', (t, cid))
+                if vecs and i < len(vecs) and vecs[i]:
+                    cur.execute('INSERT OR REPLACE INTO kb_vec (ChunkId, Model, Dim, Vec) VALUES (?,?,?,?)', (cid, model, len(vecs[i]) // 4, vecs[i]))
             self.cx.commit(); self._writes += 1
             return did
     def _kb_drop(self, cur, did):
         if self.kb_fts: cur.execute('DELETE FROM kb_fts WHERE ChunkId IN (SELECT ChunkId FROM kb_chunk WHERE DocId=?)', (did,))
+        cur.execute('DELETE FROM kb_vec WHERE ChunkId IN (SELECT ChunkId FROM kb_chunk WHERE DocId=?)', (did,))
         cur.execute('DELETE FROM kb_chunk WHERE DocId=?', (did,)); cur.execute('DELETE FROM kb_doc WHERE DocId=?', (did,))
+    def kb_unembedded(self, model: str, cid=None, limit: int = 64) -> list:
+        """Passages with no vector from `model` yet: what a first run after switching semantic search on, a changed
+        model, or a reindex whose embedder was down still owes. [{'ChunkId', 'Text'}]"""
+        w, p = (' AND d.ConnectorId=?', (cid,)) if cid else ('', ())
+        return self._rows('SELECT c.ChunkId, c.Text FROM kb_chunk c JOIN kb_doc d ON d.DocId=c.DocId '
+                          f'LEFT JOIN kb_vec v ON v.ChunkId=c.ChunkId AND v.Model=? WHERE v.ChunkId IS NULL{w} ORDER BY c.ChunkId LIMIT ?',
+                          (model, *p, limit))
+    def kb_vec_put(self, model: str, items: list):
+        """items: [(ChunkId, blob)]. One transaction; a passage that already has a vector (another model's) is replaced."""
+        with self.lock:
+            self.cx.executemany('INSERT OR REPLACE INTO kb_vec (ChunkId, Model, Dim, Vec) VALUES (?,?,?,?)',
+                                [(i, model, len(b) // 4, b) for i, b in items])
+            self.cx.commit(); self._writes += 1
+    def kb_vectors(self, model: str, cid=None) -> list:
+        """[(ChunkId, Dim, blob)] for every passage embedded with `model` - the whole set, because the search is a brute-force scan."""
+        w, p = (' JOIN kb_chunk c ON c.ChunkId=v.ChunkId JOIN kb_doc d ON d.DocId=c.DocId WHERE v.Model=? AND d.ConnectorId=?', (model, cid)) \
+            if cid else (' WHERE v.Model=?', (model,))
+        with self.lock: return [tuple(r) for r in self.cx.execute(f'SELECT v.ChunkId, v.Dim, v.Vec FROM kb_vec v{w}', p).fetchall()]
+    def kb_chunk_hits(self, chunk_ids: list) -> list:
+        """The kb_search hit shape for these passages, in the order given (no snippet: nothing matched a WORD)."""
+        if not chunk_ids: return []
+        rows = {r['ChunkId']: r for r in self._rows(
+            'SELECT c.ChunkId, d.DocId, d.Name, d.Path, d.Source, d.Modified, c.Seq, c.Text FROM kb_chunk c JOIN kb_doc d ON d.DocId=c.DocId '
+            f'WHERE c.ChunkId IN ({",".join("?" * len(chunk_ids))})', tuple(chunk_ids))}
+        return [{'doc_id': r['DocId'], 'name': r['Name'], 'path': r['Path'], 'source': r['Source'], 'modified': r['Modified'] or '',
+                 'seq': r['Seq'], 'score': 0.0, 'snippet': '', 'text': r['Text'] or ''} for i in chunk_ids if (r := rows.get(i))]
     def kb_prune(self, cid, source, keep: set) -> int:
         """Drop the documents of one source that a fresh walk did not see - deleted files leave the index."""
         gone = [r for r in self._rows('SELECT DocId, Path FROM kb_doc WHERE ConnectorId=? AND Source=?', (cid, source)) if r['Path'] not in keep]

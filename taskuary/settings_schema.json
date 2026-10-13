@@ -27,6 +27,34 @@
     "Other"
   ],
   "knobs": {
+    "kb_semantic": {
+      "group": "Assistant",
+      "label": "Semantic search",
+      "type": "switch",
+      "desc": "Find documents by meaning, not only by their words: \"time off\" finds the leave policy.",
+      "help": "Off (the default): the knowledge base is searched by keywords, exactly as before, and nothing extra is installed or run.\n\nOn: each passage is turned into a vector by a small embedding model as it is indexed, and a search merges the nearest passages with the keyword hits. Needs an embedding model served at the address below (Ollama by default: `ollama pull nomic-embed-text`). Passages indexed before you switched this on are embedded by the next Reindex. If the model is unreachable, search quietly falls back to keywords.\n\nThe text of your documents goes to that address to be embedded. The default is this machine; point it at a remote server only if you are content for the documents to go there. `pip install taskuary[semantic]` (numpy) makes the scan faster on a large library."
+    },
+    "kb_embed_url": {
+      "group": "Assistant",
+      "label": "Embedding server",
+      "type": "text",
+      "desc": "Address of a server that answers /v1/embeddings (Ollama, LM Studio, llama.cpp, vLLM).",
+      "help": "Default http://127.0.0.1:11434, Ollama on this machine. Any server speaking the OpenAI embeddings surface works."
+    },
+    "kb_embed_model": {
+      "group": "Assistant",
+      "label": "Embedding model",
+      "type": "text",
+      "desc": "The model that turns passages into vectors (default nomic-embed-text).",
+      "help": "Changing it re-embeds the library on the next Reindex; passages embedded with the old model are ignored meanwhile, so results fall back to keywords until then."
+    },
+    "kb_semantic_min": {
+      "group": "Assistant",
+      "label": "Least similarity (0-1)",
+      "type": "number",
+      "desc": "How close a passage must be in meaning to count as a hit.",
+      "help": "A nearest-neighbour search always has a nearest neighbour, even when nothing is related, so passages below this cosine similarity are dropped. Raise it if unrelated passages turn up; lower it if related ones are missed. Scales differ between models, and the default 0.5 is a starting point, not a measurement for yours."
+    },
     "intent_classify_enabled": {
       "group": "Triage & routing",
       "label": "Intent triage",

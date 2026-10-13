@@ -1,6 +1,10 @@
 {
   "_": "The shipped default of every Settings knob that has one, for the docs build (website/tools/build-docs.mjs), which runs in node and cannot import store.py: store.DEFAULT_SETTINGS, plus the knobs whose fallback is a named constant in code. tests/test_settings_defaults_json.py fails when this copy is out of date and says how to regenerate it.",
   "defaults": {
+    "kb_semantic": "0",
+    "kb_embed_url": "http://127.0.0.1:11434",
+    "kb_embed_model": "nomic-embed-text",
+    "kb_semantic_min": "0.5",
     "intent_classify_enabled": "1",
     "triage_ai": "",
     "triage_backup_ai": "",

@@ -537,9 +537,10 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       return (
         <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 360 }}>
           {keys.map((k) => (
-            <Box key={k} title={m.flags[k].help} onClick={() => saveSetting(k, val(k) ? "0" : "1")}
+            <Box key={k} component="button" type="button" title={m.flags[k].help} aria-pressed={!!val(k)}
+              onClick={() => saveSetting(k, val(k) ? "0" : "1")}
               sx={{ display: "inline-flex", alignItems: "center", px: 0.9, py: 0.35, borderRadius: 99,
-                cursor: "pointer", fontSize: 11.5, fontWeight: val(k) ? 700 : 500, userSelect: "none",
+                cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: val(k) ? 700 : 500, userSelect: "none",
                 bgcolor: val(k) ? "#eae4d8" : "#e9e3d8", color: val(k) ? "#55697a" : DIM,
                 border: `1px solid ${val(k) ? "#d8cfbe" : BORDER}`, "&:hover": { borderColor: "#d8cfbe" } }}>
               {m.flags[k].label}
@@ -561,9 +562,9 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       return (
         <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 340 }}>
           {m.options.map((ch) => (
-            <Box key={ch} onClick={() => toggle(ch)}
+            <Box key={ch} component="button" type="button" aria-pressed={on.has(ch)} onClick={() => toggle(ch)}
               sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.9, py: 0.35, borderRadius: 99,
-                cursor: "pointer", fontSize: 11.5, fontWeight: on.has(ch) ? 700 : 500, userSelect: "none",
+                cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: on.has(ch) ? 700 : 500, userSelect: "none",
                 bgcolor: on.has(ch) ? "#eae4d8" : "#e9e3d8", color: on.has(ch) ? "#55697a" : DIM,
                 border: `1px solid ${on.has(ch) ? "#d8cfbe" : BORDER}`, "&:hover": { borderColor: "#d8cfbe" } }}>
               <ChannelIcon channel={ch} sx={{ fontSize: 12 }} />{ch}

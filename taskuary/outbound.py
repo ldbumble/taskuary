@@ -768,8 +768,12 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         if not store.github_replies_ok():
             raise RuntimeError("replying on GitHub is off - flip 'Reply to issue/PR authors' "
                                'on the GitHub connector card to post comments')
-        repo, _, num = ext[3:].rpartition('#')              # 'gh:owner/repo#N'
-        if not (ext.startswith('gh:') and repo and num.isdigit()):
+        # the CONVERSATION names the item bare ('gh:owner/repo#N'); the row's own id never is - the item is a revision
+        # ('gh:owner/repo#N@<hash>', ingest.rev_id) and a comment 'gh:owner/repo#N:c<id>', so parsing it refused every reply (#205)
+        ref = str(msg.get('ConversationId') or '') if str(msg.get('ConversationId') or '').startswith('gh:') else ext
+        ref = re.sub(r'(?:@[0-9a-f]+|:c\d+)$', '', ref)
+        repo, _, num = ref[3:].rpartition('#')
+        if not (ref.startswith('gh:') and repo and num.isdigit()):
             raise RuntimeError('this github item carries no issue/PR reference to comment on')
         connector_id = _source_connector_id(store, 'github', repo)
         c = store.get_connector(connector_id, with_secret=True) if connector_id else \

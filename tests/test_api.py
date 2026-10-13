@@ -138,6 +138,24 @@ class GithubIngestTests(unittest.TestCase):
         self.assertIn('/repos/o/app/issues/7/comments', seen['url'])
         self.assertEqual(seen['body']['body'], 'answer text')
 
+    def test_a_github_reply_finds_its_item_from_the_ids_rows_really_carry(self):
+        # a stored item is a revision ('#7@<hash>') and a comment '#7:c<id>' - the bare '#7' above never happens (#205)
+        from taskuary import outbound
+        s = self._store(True)
+        gh = next(x for x in s.list_connectors() if x['Type'] == 'github')
+        s.save_connector({'ConnectorId': gh['ConnectorId'], 'Secret': 'ghp_x'}, 'o')
+        class R:
+            def raise_for_status(self): pass
+            def json(self): return {'html_url': 'https://gh/c/1'}
+        for ext, conv in (('gh:o/app#7@1d75c0ffee12', 'gh:o/app#7'), ('gh:o/app#7:c123', 'gh:o/app#7'),
+                          ('gh:o/app#7@1d75c0ffee12', None), ('gh:o/app#7:c123', None)):
+            seen = {}
+            msg = {'Channel': 'github', 'ExternalId': ext, 'ConversationId': conv, 'FromEmail': 'x@users.noreply.github.com'}
+            with mock.patch('taskuary.github.requests.post', side_effect=lambda url, **k: seen.update(url=url) or R()):
+                out = outbound.reply_to_message(s, msg, 'answer')
+            self.assertEqual(out['to'], ['o/app#7'], ext)
+            self.assertIn('/repos/o/app/issues/7/comments', seen['url'])
+
     def test_github_items_never_auto_dispatch(self):
         """An open repo must not start a coding agent per drive-by item: github messages carry
         no_auto, so they queue as needs-you while ordinary mail still self-dispatches."""

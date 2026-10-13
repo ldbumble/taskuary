@@ -8,12 +8,15 @@ fresh build produces, so the site and the source cannot drift apart.
 
 | Page | Covers |
 |---|---|
-| [Start here](https://taskuary.com/docs/) | What Taskuary is, installing it, the first run, where your data lives |
-| [How it works](https://taskuary.com/docs/how-it-works) | The Timeline, the five roads, what triage decides, the documents that govern it |
-| [Connections](https://taskuary.com/docs/connections) | The accounts Taskuary may read, and the role that says what it may do |
-| [Tasks and agents](https://taskuary.com/docs/tasks-and-agents) | The task, the agent work and the reply as three separate lives |
-| [Reports and the Advisor](https://taskuary.com/docs/reports) | The report pipeline, and the report whose job is to judge |
-| [On your phone](https://taskuary.com/docs/phone) | The same assistant over WhatsApp or Telegram |
+| [Start here](https://taskuary.com/docs/) | What Taskuary is, how to install it, and what the first hour looks like |
+| [How it works](https://taskuary.com/docs/how-it-works) | One message from arrival to approval: the Timeline, the five roads, and what triage actually decides |
+| [Connections](https://taskuary.com/docs/connections) | The accounts Taskuary may read, and the role that says what it may do with each |
+| [Tasks and agents](https://taskuary.com/docs/tasks-and-agents) | A task, the agent work on it and the reply to the sender are three separate lives |
+| [Assistant buttons](https://taskuary.com/docs/assistant) | Every button under an Assistant card, the one question two of them ask, Remind me, and the words that work typed |
+| [What the Assistant sees](https://taskuary.com/docs/assistant-tools) | Every tool the Assistant has: the summary it gets on every turn, and each tool in detail |
+| [Reports and the Advisor](https://taskuary.com/docs/reports) | Reading the systems you work in on a schedule, and the report whose job is to judge |
+| [The Advisor](https://taskuary.com/docs/advisor) | What goes into the brain that says what should happen next, its two clocks, and the outcome ledger |
+| [On your phone](https://taskuary.com/docs/phone) | The same assistant over WhatsApp or Telegram, and what it may do there |
 | [Settings reference](https://taskuary.com/docs/settings) | Every setting — generated from `taskuary/settings_schema.json` |
 | [When something is wrong](https://taskuary.com/docs/troubleshooting) | What to check, in the order worth checking it |
 

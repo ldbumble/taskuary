@@ -191,13 +191,19 @@ function liveSession(sid, readOnly) {
   const sendSize = () => {
     // A Timeline preview watches the same PTY as the task page. It must never resize that PTY
     // to its smaller card or make the real terminal redraw and reflow beneath the agent.
-    if (readOnly || !ownsGeometry || !ui || ws.readyState !== 1) return;
+    // ...and nothing before the server has said the pty's size: a pane shorter than it keeps its rows (holdForPty)
+    if (readOnly || !ownsGeometry || !ui || ws.readyState !== 1 || !geomSeen) return;
     const sizeNow = changedTerminalSize(sentSize, term.rows, term.cols);
     if (!sizeNow) return;
     sentSize = sizeNow;
     send({ type: "resize", rows: term.rows, cols: term.cols });
   };
-  ws.onopen = () => { show.state("live"); sendSize(); };
+  // the first size goes out once the server has said the pty's (the first geom frame, below): a pane shorter than the pty
+  // at its width keeps the pty's rows instead of shrinking it (holdForPty)
+  // ...and that first resize still gets the barrier's `ready`: a pane not owning the pty asks at the pty's own size, so its
+  // curtain lifts without the four-second fallback
+  let geomSeen = false;
+  ws.onopen = () => { show.state("live"); };
   // Every xterm write is asynchronous. The replay can finish while live redraw frames are still
   // queued behind it, so one replayPending boolean was not enough: the curtain lifted between
   // those writes and exposed Codex repainting from top to bottom. Count ALL queued writes and
@@ -262,8 +268,11 @@ function liveSession(sid, readOnly) {
       ownsGeometry = m.owner !== false && !!ui;
       ptySize = { rows: m.rows, cols: m.cols };
       adoptPtyGeometry(term, m);                       // ConPTY grows top-anchored; xterm must too
+      const first = !geomSeen; geomSeen = true;
+      if (ownsGeometry && (first || !was)) holdForPty();   // gaining the pty, a shorter pane keeps its rows - first or regained
       fitSafely();
-      if (ownsGeometry && !was) { sentSize = ""; sendSize(); }
+      if (!first && ownsGeometry && !was) { sentSize = ""; sendSize(); }
+      else if (first) { sentSize = ""; if (ownsGeometry) sendSize(); else if (!readOnly) send({ type: "resize", rows: m.rows, cols: m.cols }); }
     }
     else if (m.type === "ready") { output.flush(); readySeen = true; maybeLift(); }
     else if (m.type === "exit") {
@@ -293,11 +302,26 @@ function liveSession(sid, readOnly) {
   let wasHidden = false;
   let held = null;                                  // the box of the last REAL fit (holdTerminalHeight)
   const pin = (h, hostH) => { el.style.height = h == null ? "100%" : `${h}px`; el.style.marginTop = h == null ? "0" : `${hostH - h}px`; };
+  // THE SESSION'S ROWS, NOT A SHORTER BOX'S (the owner, 2026-10-12: "every time i switch to it, or type in answer"). A pane
+  // coming back - or connecting - at the pty's width but shorter than it (a question card under it, a list open above it)
+  // keeps the pty's rows and shows their bottom. It used to fit the short box: Codex reprinted its whole history, and the
+  // card leaving grew it back and reprinted it again. The cell height is the one FitAddon itself divides by.
+  const cellH = () => term._core?._renderService?.dimensions?.css?.cell?.height || 0;
+  const holdForPty = () => {
+    if (readOnly || !ptySize) return false;
+    pin(null);
+    const box = el.parentElement?.getBoundingClientRect(), c = cellH(), d = fit.proposeDimensions();
+    if (!box || !c || !d?.cols || d.cols !== ptySize.cols || safeTerminalRows(d.rows) >= ptySize.rows) return false;
+    const h = Math.ceil((ptySize.rows + 1) * c);     // the height FitAddon divides to exactly these rows (safeTerminalRows keeps one)
+    held = { width: box.width, height: h }; pin(h, box.height);
+    return true;
+  };
   const onResize = (real = true) => {
     if (disposed || !ui) return;
     const box = el.parentElement?.getBoundingClientRect();
     if (!box || !usableTerminalBox(box.width, box.height)) { wasHidden = true; return; }
-    if (!wasHidden && ownsGeometry && holdTerminalHeight({ real, held, width: box.width, height: box.height })) {
+    // owner or not: a pane that claimed with a hold must keep it while the server's yes is on its way, or this unpins it
+    if (!wasHidden && holdTerminalHeight({ real, held, width: box.width, height: box.height })) {
       pin(held.height, box.height); return;           // the rows stay; the top ones slide out of view until the page gives them back
     }
     pin(null); held = { width: box.width, height: box.height };
@@ -358,6 +382,7 @@ function liveSession(sid, readOnly) {
   // Wall (2026-10-01). The server answers with a geom frame either way, and a yes refits it (see m.type === "geom").
   const claim = () => {
     if (readOnly || ws.readyState !== 1) return;
+    if (holdForPty()) fitSafely();                 // the rows it fits to are the pty's; the resize below then changes nothing
     const d = fit.proposeDimensions();
     if (!d?.cols || !d?.rows) return;
     const rows = safeTerminalRows(d.rows);
@@ -376,7 +401,7 @@ function liveSession(sid, readOnly) {
     ro = new ResizeObserver(onLayout);
     ro.observe(host);
     onResize();
-    if (back) claim();
+    if (back || geomSeen) claim();                // ...and a fresh pane whose pty size is already known gets the same hold
     if (!readOnly && binding.autoFocus && !s.restoring) term.focus();
   };
   s.detach = () => {

@@ -4,6 +4,9 @@
 const RAW_HEADINGS = [
   ["MEETINGS TODAY", "📅 Meetings today"],
   ["THEIR ASKS YOU HAVE NOT ANSWERED", "🙋 People want"],
+  ["ASKS YOUR STANDING VERDICTS ALREADY COVER", "📌 Asks your verdicts cover"],
+  ["NOT JUDGED", "❔ Not judged yet"],
+  ["STANDING RULES THAT APPLY EVERYWHERE", "📌 Memory in effect"],
   ["MY OPEN LOOPS", "🔁 Follow up"],
   ["WAITING ON THE OWNER", "⏳ Waiting on you"],
   ["WHAT PEOPLE SAID", "💬 What people said"],
@@ -30,12 +33,14 @@ export function digestSections(text) {
     current = sections.find((s) => s.title === title);
     if (!current) { current = { title, items: [] }; sections.push(current); }
   };
+  let wrap = 0;   // lines left of a raw heading whose explanation wraps: it runs on until a line ends in ":"
   for (const raw of String(text || "").replace(/\r/g, "").split("\n")) {
     const line = raw.trimEnd();
-    if (!line.trim() || line.trim() === "--- raw data ---") continue;
+    if (!line.trim() || line.trim() === "--- raw data ---") { wrap = 0; continue; }
+    if (wrap) { wrap = /:$/.test(line) ? 0 : wrap - 1; continue; }
     if (/^NOW:\s*/.test(line)) { meta = line.replace(/^NOW:\s*/, ""); continue; }
     const mapped = rawHeading(line);
-    if (mapped) { section(mapped[1]); continue; }
+    if (mapped) { section(mapped[1]); wrap = /:$/.test(line) ? 0 : 3; continue; }
     if (emojiHeading(line)) { section(line.trim().replace(/[:\s]+$/, "")); continue; }
     // This is the second line of one legacy internal heading, not a digest item.
     if (/^\s*and the mail they quote is already decided\):?$/i.test(line)) continue;
@@ -52,7 +57,10 @@ export function digestSections(text) {
 export function parseDigest(text) {
   const body = String(text || "").replace(/\r/g, "").trim();
   const failed = /^\((?:AI summary failed|AI prompt set, but no active AI connector|the model returned an empty summary)/i.test(body);
-  if (!failed) return { error: "", plain: "", source: "", ...digestSections(body) };
+  // what the model was GIVEN rides under its brief for the record and is never part of it: parsed as one, the evidence's
+  // asks merged into the model's own "People want" and the blocks' explanations became numbered items (2026-10-13)
+  const cut = body.indexOf("\n--- raw data ---");
+  if (!failed) return { error: "", plain: "", source: "", ...digestSections(cut >= 0 ? body.slice(0, cut) : body) };
   const lines = body.split("\n");
   const sourceAt = lines.findIndex((line) => /^NOW:\s*/.test(line));
   const errorLines = lines.slice(0, sourceAt < 0 ? lines.length : sourceAt).filter((line) => line.trim());

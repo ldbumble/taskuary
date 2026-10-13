@@ -87,6 +87,12 @@ class WhatChangedTests(unittest.TestCase):
         s.add_report_run(self.digest, {'at': '2026-10-08 08:00:45', 'type': 'digest', 'title': 'Morning digest', 'message_id': mid})
         self.assertEqual(since.digest(s), {'source_id': self.digest, 'at': '2026-10-08 08:00:45', 'text': 'People want\n1. Erin wants the export.'})
         self.assertNotIn('digest', [c.get('text', '').lower() for c in since.cards(s)], 'the digest is the line under the cards, not a card')
+        # the evidence the model was handed rides under the brief; the folded digest is the brief alone
+        from taskuary.reports import RAW_MARK
+        mid = s.add_message({'ExternalId': 'd2', 'Channel': 'report', 'Subject': 'Morning digest',
+                             'BodyText': f"People want\n1. Erin wants the export.{RAW_MARK}THEIR ASKS YOU HAVE NOT ANSWERED:\n  Erin asked"})
+        s.add_report_run(self.digest, {'at': '2026-10-09 08:00:45', 'type': 'digest', 'title': 'Morning digest', 'message_id': mid})
+        self.assertEqual(since.digest(s)['text'], 'People want\n1. Erin wants the export.')
 
     def test_a_report_whose_subject_is_only_a_heading_shows_its_first_real_line(self):
         s = self.store()

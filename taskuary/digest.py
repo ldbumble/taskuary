@@ -367,6 +367,13 @@ def gather(store, days: int = DAYS) -> str:
     except Exception as e:
         lines = [f'  COULD NOT READ: {str(e)[:160]}']
     _block(out, 'MEETINGS TODAY:', lines)
+    # The digest reads the same applicable standing verdicts as triage and the Timeline assistant.
+    # Match against the source material's real subjects and senders, not a model's paraphrase of
+    # them: that is how "Resident Refund Request - Doe" keeps matching the owner's resident-refund
+    # ruling even when the summary uses different words. Unrelated scoped memory stays out.
+    # They GOVERN every section, so they come before the material they rule on, not after it (2026-10-13).
+    people, recent = A._people(store, span), A._recent(store, span)
+    if verdicts := A._verdicts_block(store, [], f'{people}\n{recent}'): out += [verdicts.strip(), '']
     # what slipped: their ask, nobody answered - the one block a brief of counts never had
     state = {i['Key']: i for i in store.list_ideas()}
     def said(c):
@@ -411,20 +418,10 @@ def gather(store, days: int = DAYS) -> str:
     _block(out, 'WAITING ON THE OWNER (pending reviews):',
            (f"  TQ-{r['TaskId']:04d} ({(r.get('Title') or '?')[:60]}) {r.get('Kind')} "
             f"on mail: {(r.get('Subject') or '(no subject)')[:90]} {task_link(r['TaskId'])}" for r in store.list_reviews('pending')[:15]))
-    people = A._people(store, span)
     _block(out, 'WHAT PEOPLE SAID (the window, by thread, newest first; the last lines of each, oldest first; "you" = the owner):',
            people)
     away = A.ooo(store)
     _block(out, 'OUT OF OFFICE (from their auto-replies):', (f'  {k}: {v}' for k, v in away.items()))
-    recent = A._recent(store, span)
-    _block(out, 'WHAT ARRIVED (xN = that many alike; a report carries its schedule, a failure its cause):', recent)
-    # The digest reads the same applicable standing verdicts as triage and the Timeline assistant.
-    # Match against the source material's real subjects and senders, not a model's paraphrase of
-    # them: that is how "Resident Refund Request - Doe" keeps matching the owner's resident-refund
-    # ruling even when the summary uses different words. Unrelated scoped memory stays out.
-    verdicts = A._verdicts_block(store, [], f'{people}\n{recent}')
-    if verdicts:
-        out += [verdicts.strip(), '']
     _block(out, 'OPEN WORK (each line ends with the link that opens the task):', _linked(A._open(store)))
     _block(out, 'FINISHED THIS WINDOW (with the agent\'s own summary where there is one):', _linked(A._done(store, span)))
     notes = [m for m in store.list_memories() if str(m.get('CreatedAt') or '') >= since]
@@ -437,6 +434,8 @@ def gather(store, days: int = DAYS) -> str:
            A.raised(store, span))
     n, at = A.notes(store)
     _block(out, "THE ASSISTANT'S NOTES TO ITSELF (its facts and timings from its last check" + (f", {A._ts(at)}" if at else '') + '):', n or '(none)')
+    # the biggest block and the least of it matters (machines, ignored senders, x6 of a report) - last, so a cap cuts it first
+    _block(out, 'WHAT ARRIVED (xN = that many alike; a report carries its schedule, a failure its cause):', recent)
     # the counts, ONE line: the brief is not a report of numbers, but "43 things arrived, 30 of them
     # machines" is a fact worth a glance
     feed = [m for m in store.feed(limit=500, days=math.ceil(span)) if A._ts(m.get('SentAt')) >= since]

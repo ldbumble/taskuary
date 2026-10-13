@@ -30,14 +30,25 @@ function DigestWayOn({ sourceId }) {
 }
 
 const URL = /(https?:\/\/[^\s<>"')\]]+)/g;
-const Linked = ({ children }) => String(children || "").split(URL).map((part, i) =>
-  /^https?:\/\//.test(part)
+const REF = /\b(TQ-\d{3,})\b/g;
+const goTask = (e, id) => { e.preventDefault(); window.location.hash = `task=${id}`; };
+// a ref the model wrote WITHOUT the link the data gave it is still a door into the task, unless the item links it already
+const Refs = ({ text, linked }) => text.split(REF).map((part, i) => {
+  const id = /^TQ-(\d+)$/.exec(part)?.[1];
+  return id && !linked.has(Number(id))
+    ? <a key={i} href={`#task=${Number(id)}`} onClick={(e) => goTask(e, Number(id))} style={{ color: "#526978", fontWeight: 600, textDecoration: "none" }}>{part}</a>
+    : <React.Fragment key={i}>{part}</React.Fragment>;
+});
+const Linked = ({ children }) => {
+  const text = String(children || ""), linked = new Set([...text.matchAll(/#task=(\d+)/g)].map((m) => Number(m[1])));
+  return text.split(URL).map((part, i) => /^https?:\/\//.test(part)
     ? <a key={i} href={part} target={/#task=\d+/.test(part) ? undefined : "_blank"} rel="noreferrer"
         style={{ color: "#526978", fontWeight: 600, textDecoration: "none" }}
         onClick={(e) => { const hit = /#task=(\d+)/.exec(part); if (hit) { e.preventDefault(); window.location.hash = `task=${hit[1]}`; } }}>
         {/#task=(\d+)/.test(part) ? `open TQ-${String(/#task=(\d+)/.exec(part)[1]).padStart(4, "0")} →` : part}
       </a>
-    : <React.Fragment key={i}>{part}</React.Fragment>);
+    : <Refs key={i} text={part} linked={linked} />);
+};
 
 const Sections = ({ sections }) => <Box sx={{ display: "grid", gap: 1.25 }}>
   {sections.map((section) => <Box component="section" key={section.title}

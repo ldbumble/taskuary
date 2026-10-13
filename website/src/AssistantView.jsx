@@ -131,7 +131,7 @@ function SinceBlock({ onOpen }) {
   const o = d?.overnight || {}, cards = d?.cards || [], dg = d?.digest || {};
   // "Write a fresh one" runs the report now (about twenty seconds) and the folded line follows it until the new one is in
   const fresh = async () => {
-    if (!dg.source_id || writing) return;
+    if (!dg.source_id || writing.startsWith("Writing")) return;
     const was = dg.at;
     setWriting("Writing a fresh one…");
     try { await api.post(`/api/reports/${dg.source_id}/rerun`); }
@@ -169,8 +169,11 @@ function SinceBlock({ onOpen }) {
         {dg.at ? <span>written {agoText(dg.at)}</span> : <span>not written yet today</span>}
         {dg.at && <button type="button" className="tq-linkish" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? "Fold it ▴" : "See the full digest ▾"}</button>}
         <span className="sep">|</span>
-        <button type="button" className="tq-linkish" disabled={!!writing && writing.startsWith("Writing")} onClick={fresh}>Write a fresh one</button>
-        {writing && <span>{writing}</span>}
+        {/* while it writes, the button IS the status - a spinner, not the button beside a second line saying the same (2026-10-13) */}
+        {writing.startsWith("Writing")
+          ? <span role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CircularProgress size={12} thickness={5} sx={{ color: "#827356" }} />{writing}</span>
+          : <button type="button" className="tq-linkish" onClick={fresh}>Write a fresh one</button>}
+        {writing && !writing.startsWith("Writing") && <span>{writing}</span>}
       </div>}
       {open && dg.text && <div className="tq-since-body"><DigestText text={dg.text} sourceId={dg.source_id} /></div>}
     </div>

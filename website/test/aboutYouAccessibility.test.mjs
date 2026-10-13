@@ -12,3 +12,13 @@ test("every About you text field has an accessible name", () => {
     assert.match(field, /inputProps=\{\{[\s\S]*?"aria-label":\s*"[^"]+"/, field);
   }
 });
+
+test("avatar style chips are buttons announcing their pressed state", () => {
+  // On About you, each avatar style chip must take keyboard focus and tell
+  // screen readers which style is active (#140).
+  const body = fs.readFileSync(path.join(process.cwd(), "src", "AboutYou.jsx"), "utf8");
+  assert.match(body, /const activeStyle = preview\?\.style \|\| f\.owner_avatar_style \|\| "monogram"/);
+  const chips = body.match(/<Box key=\{s\} component="button" type="button" aria-pressed=\{activeStyle === s\}[\s\S]*?>\{s\}<\/Box>/);
+  assert.ok(chips, "style chips are buttons with aria-pressed from the shared local");
+  assert.match(chips[0], /fontFamily: "inherit"/);
+});

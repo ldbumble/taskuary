@@ -38,6 +38,7 @@ export default function AboutYou() {
   const keep = async () => { if (preview) { await save({ owner_avatar_style: preview.style, owner_avatar_seed: preview.seed }); setPreview(null); } };
   if (!p) return err ? <Typography sx={{ color: "#6b2733" }}>{err}</Typography> : <CircularProgress size={22} sx={{ m: 4 }} />;
   const f = p.facts;
+  const activeStyle = preview?.style || f.owner_avatar_style || "monogram";
   const byChannel = p.identities.reduce((acc, i) => { (acc[i.channel] = acc[i.channel] || []).push(i); return acc; }, {});
   // no width of its own: every settings page is as wide as the shell's column (2026-09-18)
   return (
@@ -51,9 +52,9 @@ export default function AboutYou() {
             sx={{ width: 128, height: 128, borderRadius: 4, boxShadow: "0 6px 18px rgba(40,30,20,.14)" }} />
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, width: 128 }}>
             {p.styles.map((s) => (
-              <Box key={s} onClick={() => shuffle(s)}
-                sx={{ px: 0.9, py: 0.25, borderRadius: 99, cursor: "pointer", fontSize: 10.5, fontWeight: 600, userSelect: "none", textAlign: "center",
-                  bgcolor: (preview?.style || f.owner_avatar_style || "monogram") === s ? "#eae4d8" : "#fff",
+              <Box key={s} component="button" type="button" aria-pressed={activeStyle === s} onClick={() => shuffle(s)}
+                sx={{ px: 0.9, py: 0.25, borderRadius: 99, cursor: "pointer", fontSize: 10.5, fontWeight: 600, userSelect: "none", textAlign: "center", fontFamily: "inherit",
+                  bgcolor: activeStyle === s ? "#eae4d8" : "#fff",
                   border: `1px solid ${BORDER}`, color: "#55697a" }}>{s}</Box>
             ))}
           </Box>

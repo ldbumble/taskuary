@@ -12,7 +12,7 @@ export function adviceKeyFor(ev, cur) {
   return k === cur.key || (cur.aliases || []).includes(k) ? cur.key : null;
 }
 
-/* The suggestion as the strip says it: the Advisor's sentence without its verb in front ("Reply: Mindy is asking..." -> "Mindy is
+/* The suggestion as the strip says it: the Advisor's sentence without its verb in front ("Reply: Gail is asking..." -> "Gail is
    asking...") - the filled button below already names the move (the owner, 2026-10-13: "it should not say NEXT Reply - just give
    suggestion"). Only a lead-in that IS the move's own word goes; any other sentence is kept whole. */
 export function suggestion(line, label, verb) {

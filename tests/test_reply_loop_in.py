@@ -42,8 +42,16 @@ class LoopInTests(unittest.TestCase):
     def test_a_name_nobody_has_written_as_is_said_not_guessed(self):
         r = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'cc': ['Zelda']})
         self.assertEqual(r.json()['cc_unknown'], ['Zelda'])
-        self.assertNotIn('cc', self.deliver(r.json()['reviewId']))
+        self.assertEqual(self.deliver(r.json()['reviewId']).get('cc'), [])      # nobody guessed into the CC
 
     def test_an_address_is_taken_as_it_is(self):
         r = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'cc': ['omar@vendor.example']})
         self.assertEqual(self.deliver(r.json()['reviewId'])['cc'], ['omar@vendor.example'])
+
+    def test_who_it_goes_to_is_pinned_when_the_box_opens_not_when_the_draft_lands(self):
+        """Write another showed the sender alone, no CC, for the seconds the model took to write (2026-10-13)."""
+        self.s._exec('UPDATE message SET RecipientsJson=? WHERE MessageId=?',
+                     (json.dumps({'to': ['alex@northwind.example'], 'cc': ['paula@northwind.example']}), self.mid))
+        r = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False})
+        env = self.deliver(r.json()['reviewId'])
+        self.assertEqual((env['to'], env['cc']), (['ray@northwind.example'], ['paula@northwind.example']))

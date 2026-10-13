@@ -56,7 +56,7 @@ test("while the NEXT strip stands, the task's own Open again line is hidden - on
 });
 
 test("the strip gives the suggestion, not the move's name: a lead-in that is the verb goes, any other sentence stays whole", () => {
-  assert.equal(suggestion("Reply: Mindy is directly asking your access decision for this group.", "Reply", "reply"), "Mindy is directly asking your access decision for this group.");
+  assert.equal(suggestion("Reply: Gail is directly asking your access decision for this group.", "Reply", "reply"), "Gail is directly asking your access decision for this group.");
   assert.equal(suggestion("Reply because Jessica is directly asking for your okay.", "Reply", "reply"), "Jessica is directly asking for your okay.");
   assert.equal(suggestion("Continue session - coder was cut off, not finished.", "Continue session", "continue"), "Coder was cut off, not finished.");
   assert.equal(suggestion("Erin: the list is approved, send it.", "Reply", "reply"), "Erin: the list is approved, send it.");   // a name, not the verb

@@ -79,3 +79,19 @@ test("pasted screenshot thumbnails offer Remove as a real button", () => {
   assert.match(remove[2], /aria-label="Remove this image"/);
   assert.match(remove[2], /border: 0/);
 });
+
+test("re-check CI in the PR status line is a real button", () => {
+  // "re-check CI" was a clickable span, so it could not be reached with Tab and its
+  // busy state was signalled by colour alone (#158). Anchor on act("ci"): ui.jsx
+  // holds many other Box components.
+  const source = read("ui.jsx");
+  const recheck = source.match(
+    /<Box component="(\w+)"((?:(?!<Box)[\s\S])*?act\("ci"\)(?:(?!<Box)[\s\S])*?)>\s*\{busy === "ci"/
+  );
+  assert.ok(recheck, "re-check CI control exists in ui.jsx");
+  assert.equal(recheck[1], "button");
+  assert.match(recheck[2], /type="button"/);
+  assert.match(recheck[2], /disabled=\{!!busy\}/);
+  assert.match(recheck[2], /border: 0/);
+  assert.match(source, /\{busy === "ci" \? "Checking CI…" : "re-check CI"\}/);
+});

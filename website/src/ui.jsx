@@ -293,9 +293,10 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
               sx={{ fontSize: 11, fontWeight: 600, color: "#55697a", textDecoration: "none" }}>
               {ci.kind === "pr" ? "open PR ↗" : "the commit ↗"}
             </Box>
-            <Box component="span" onClick={() => !busy && act("ci")}
-              sx={{ fontSize: 11, fontWeight: 600, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
-              {busy === "ci" ? "checking…" : "re-check CI"}
+            <Box component="button" type="button" disabled={!!busy} onClick={() => act("ci")}
+              sx={{ border: 0, bgcolor: "transparent", p: 0, font: "inherit",
+                fontSize: 11, fontWeight: 600, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
+              {busy === "ci" ? "Checking CI…" : "re-check CI"}
             </Box>
           </>
         ) : (

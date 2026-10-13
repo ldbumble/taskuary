@@ -276,8 +276,8 @@ def _hybrid(store, text: str, keyword: list, limit: int, connector_id=None) -> l
     keyword hits unchanged: semantic search adds recall, it is never a way for search to fail."""
     if not (text or '').strip(): return keyword
     try:
-        emb = kbembed.make(store)
-        near = kbembed.semantic_hits(store, emb, text, limit, connector_id) if emb else []
+        emb = kbembed.make(store, kbembed.QUERY_TIMEOUT)      # inline: seconds, not a reindex's minutes
+        near =kbembed.semantic_hits(store, emb, text, limit, connector_id) if emb else []
     except Exception as e:
         logger.warning(f'knowledge: semantic search unavailable, keyword results only - {e}')
         return keyword

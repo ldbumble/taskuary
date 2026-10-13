@@ -24,6 +24,10 @@ DEFAULT_URL, DEFAULT_MODEL, DEFAULT_MIN = 'http://127.0.0.1:11434', 'nomic-embed
 BATCH = 32                 # passages per request: a local server answers a few dozen at once without a timeout
 QUERY_CHARS = 2000         # a thread can be pages long; the start of it is what the question is about
 RRF_K = 60                 # the constant from the original paper; it only damps how fast the ranks fall off
+INDEX_TIMEOUT = 180        # a reindex runs in the background, and the first call loads the model's weights
+# a search runs inline - in block() while a triage or a draft waits, in the assistant's knowledge.search -
+# so a dead or unreachable embedder must cost seconds, not three minutes: (connect, read), then keywords
+QUERY_TIMEOUT = (3, 15)
 
 try:
     import numpy as _np
@@ -82,10 +86,10 @@ def fuse(*ranked: list, k: int = RRF_K) -> list:
 
 
 # ── the embedder ──────────────────────────────────────────────────────────────────────────────
-def make(store):
+def make(store, timeout=INDEX_TIMEOUT):
     """The embedder the settings name - a callable `embed(texts) -> [packed vector bytes]` carrying `.model` -
-    or None when semantic search is off. It raises on a server that is down or answers badly; callers
-    (knowledge.reindex, knowledge.search) catch that and fall back to keyword search."""
+    or None when semantic search is off. It raises on a server that is down, slow past `timeout` or answers
+    badly; callers (knowledge.reindex, knowledge.search) catch that and fall back to keyword search."""
     if not enabled(store): return None
     base = (store.get_setting('kb_embed_url') or DEFAULT_URL).strip().rstrip('/')
     model = (store.get_setting('kb_embed_model') or DEFAULT_MODEL).strip()
@@ -96,7 +100,7 @@ def make(store):
         out = []
         for i in range(0, len(texts), BATCH):
             part = [redact.scrub(t) for t in texts[i:i + BATCH]]      # a credential in a document never reaches a remote embedder
-            r = requests.post(f'{base}/v1/embeddings', json={'model': model, 'input': part}, timeout=180)   # the first call loads weights
+            r = requests.post(f'{base}/v1/embeddings', json={'model': model, 'input': part}, timeout=timeout)
             if r.status_code != 200: raise RuntimeError(f'embeddings at {base} answered {r.status_code}: {r.text[:200]}')
             data = sorted(r.json().get('data') or [], key=lambda d: d.get('index', 0))
             if len(data) != len(part): raise RuntimeError(f'asked for {len(part)} embeddings, got {len(data)}')

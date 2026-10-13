@@ -179,5 +179,18 @@ class PartsTests(unittest.TestCase):
         with mock.patch('requests.post', return_value=bad), self.assertRaises(RuntimeError): emb(['x'])
         self.assertIsNone(kbembed.make(MemoryStore()))                            # off: no embedder
 
+    def test_a_search_waits_seconds_on_the_embedder_and_a_reindex_minutes(self):
+        import requests
+        s = MemoryStore(); _on(s)
+        _put(s, 'parking.md', 'Parking permits are issued at the front desk.')
+        with mock.patch('requests.post', side_effect=requests.Timeout('read timed out')) as post:
+            hits = kb.search(s, 'parking permits')
+        self.assertEqual(post.call_args.kwargs['timeout'], kbembed.QUERY_TIMEOUT)   # inline, while a triage or a draft waits
+        self.assertLess(sum(kbembed.QUERY_TIMEOUT), 30)
+        self.assertEqual([h['name'] for h in hits], ['parking.md'])               # a slow embedder leaves the keyword hits
+        with mock.patch('requests.post', side_effect=requests.Timeout('read timed out')) as post:
+            with self.assertRaises(requests.Timeout): kbembed.make(s)(['x'])
+        self.assertEqual(post.call_args.kwargs['timeout'], kbembed.INDEX_TIMEOUT)  # a reindex lets the model load
+
 
 if __name__ == '__main__': unittest.main()

@@ -149,5 +149,19 @@ class FixTests(unittest.TestCase):
         self.assertTrue(out['ok']); self.assertIn('FIX ITEM 1', told.call_args.args[2])
 
 
+class TaskPageTests(unittest.TestCase):
+    def test_fix_it_is_offered_only_where_it_can_run(self):
+        """The owner, 2026-10-12: a Fix it that could only answer "turn it on in Settings" - "what does this do?" """
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        c, s = TestClient(server.app), server.store
+        s.set_setting(f'gh_public:{REPO}', '1', 't'); s.set_setting('outside_prs', 'review', 't')
+        tid = batch.create(s, 'github', REPO, [s.get_message(row(s, 41))], strangers=True)
+        d = c.get(f'/api/tasks/{tid}').json()
+        self.assertTrue(d['batchOutside']); self.assertFalse(d['batch'][0]['canFix'])
+        s.set_setting('outside_prs', 'cloud', 't')
+        self.assertTrue(c.get(f'/api/tasks/{tid}').json()['batch'][0]['canFix'])
+
+
 if __name__ == '__main__':
     unittest.main()

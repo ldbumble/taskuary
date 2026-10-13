@@ -53,4 +53,8 @@ test("Fix it where the review asked for changes; while it runs nothing else; whe
   assert.deepEqual(actions(done).filter((a) => a.primary).map((a) => a.label), ["Merge the fix"]);
   assert.ok(actions(done).some((a) => a.action === "open-fix" && a.href === PR + "9"));
   assert.equal(actions({ ...asked, Fix: "failed" })[0].label, "Fix it again");
+  // an outsider's, with cloud fixes off: no button that can only refuse - Ask for changes is the move
+  const off = actions({ ...asked, canFix: false });
+  assert.ok(!off.some((a) => a.action === "fix"));
+  assert.deepEqual(off.filter((a) => a.primary).map((a) => a.action), ["open"]);
 });

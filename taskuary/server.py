@@ -1296,6 +1296,10 @@ def task_detail(task_id: int):
     memo = {}
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
+    from . import batch as _batch, cloudfix as _cloudfix
+    batch_rows = store.batch_items(task_id)
+    batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
+    fixable = not batch_outside or _cloudfix.enabled(store)
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
@@ -1310,11 +1314,14 @@ def task_detail(task_id: int):
             'ranOn': _ran_on(task_id, tr),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': _agent_story(task_id),
+            # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that
+            # on - a button that could only say "turn it on" was offered anyway (the owner, 2026-10-12: "what does this do?")
+            'batchOutside': batch_outside,
             # ...and what ended it upstream (a merge, a close): Close out says that instead of an empty reply nobody is owed
             'ended': _ended_line(task_id, d.get('comments')),
             # ...and a BATCH's items, in ranked order, each with what the agent found and where it stands (batch.py)
-            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose', 'Fix', 'FixLink')} | {'reviewed': bool(i.get('Sha'))}
-                      for i in store.batch_items(task_id)] or None,
+            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose', 'Fix', 'FixLink')}
+                      | {'reviewed': bool(i.get('Sha')), 'canFix': fixable} for i in batch_rows] or None,
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}

@@ -31,8 +31,9 @@ export function actions(i) {
   if (!isOpen(i)) return [{ action: "reopen", label: "Open again" }];
   if (i.State !== "needs_you") return [{ action: "settle", label: "Nothing to do" }];
   const p = i.Propose, fixed = i.Fix === "done";
-  const all = [...(isPull(i) && p === "changes" ? [{ action: "fix", label: i.Fix === "failed" ? "Fix it again" : "Fix it", primary: true }] : []),
-    ...(i.Link && p === "changes" ? [{ action: "open", label: "Ask for changes", href: i.Link }] : []),
+  const canFix = isPull(i) && p === "changes" && i.canFix !== false;
+  const all = [...(canFix ? [{ action: "fix", label: i.Fix === "failed" ? "Fix it again" : "Fix it", primary: true }] : []),
+    ...(i.Link && p === "changes" ? [{ action: "open", label: "Ask for changes", href: i.Link, primary: !canFix }] : []),
     ...(fixed && i.FixLink ? [{ action: "open-fix", label: "See the fix", href: i.FixLink }] : []),
     ...(isPull(i) && i.reviewed ? [{ action: "merge", label: fixed ? "Merge the fix" : "Merge", primary: p === "merge" }] : []),
     ...(isPull(i) ? [{ action: "close", label: "Close it", primary: p === "close" }] : []), { action: "settle", label: "Nothing to do" }];

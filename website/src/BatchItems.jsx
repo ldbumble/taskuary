@@ -88,6 +88,11 @@ export default function BatchItems({ taskId, items = [], onChanged, bare = false
               sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5, color: INK, borderColor: BORDER }}>Not now</Button>
           </Box>
         </Box>)}
+      {/* an outsider's changes are made only in GitHub's cloud, and that is off: said once, quietly, instead of a button that refuses */}
+      {items.some((i) => i.canFix === false && i.Propose === "changes" && isOpen(i)) && (
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.6 }}>
+          An outside contributor's changes are made only in GitHub's cloud, never on this machine. To have them made for you, turn on
+          Settings → Agent permissions → Outside pull requests → fix in GitHub's cloud.</Typography>)}
       {err && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block", mt: 0.5 }}>{err}</Typography>}
       <Confirm open={!!ask} title={ask ? `Merge ${ask.i.Title}?` : ""} confirmLabel="Merge on GitHub"
         text="It merges the version the agent reviewed. If anything was pushed to it since, GitHub refuses and nothing is merged."

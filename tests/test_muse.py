@@ -27,14 +27,23 @@ class CliRegistrationTests(unittest.TestCase):
         self.assertEqual(clis.readonly_args('muse', ['exec', '--yolo']), ['exec'])
         self.assertEqual(clis.report_read_args('muse', ['exec', '--yolo']), ['exec'])
 
-    def test_windows_gets_no_install_button(self):
-        """plan() is what the UI draws `installable` from - never a button over a road that
-        hard-fails. There is no npm package and no triple-named archive, so posix or nothing."""
-        self.assertEqual(cliinstall.plan('muse', has_npm=True, system='Windows'), [])
+    def test_every_operating_system_gets_the_vendors_own_script(self):
+        """Windows runs install.ps1 in Windows PowerShell 5.1 (pwsh 7 breaks the vendor's shim); posix the bash script."""
+        roads = cliinstall.plan('muse', has_npm=True, system='Windows')
+        self.assertEqual([(r['how'], r['cmd'][0]) for r in roads], [('script', 'powershell')])
+        self.assertIn('dev.meta.ai/install.ps1', roads[0]['cmd'][-1])
         for system in ('Darwin', 'Linux'):
             roads = cliinstall.plan('muse', has_npm=False, system=system)
             self.assertEqual([r['how'] for r in roads], ['script'], system)
             self.assertIn('dev.meta.ai/install.sh', roads[0]['cmd'][-1], system)
+
+    @unittest.skipUnless(cliinstall.WINDOWS, 'the LOCALAPPDATA install folder is a Windows path')
+    def test_windows_is_looked_for_where_the_installer_puts_it(self):
+        import tempfile, os
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'LOCALAPPDATA': d}),              mock.patch('taskuary.clis.which', return_value=None):
+            shim = Path(d) / 'Programs' / 'muse' / 'muse.cmd'; shim.parent.mkdir(parents=True); shim.write_text('@echo off')
+            self.assertEqual(cliinstall.find('muse'), str(shim))
 
     def test_the_binary_is_named_and_the_first_run_is_ours_to_open(self):
         self.assertEqual(cliinstall.BINARY['muse'], 'muse')

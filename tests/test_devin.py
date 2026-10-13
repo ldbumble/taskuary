@@ -53,7 +53,7 @@ class InstallRoadTests(unittest.TestCase):
 
     def test_every_operating_system_gets_the_vendors_own_script(self):
         """No npm package and no triple-named archive, so the script is the only road - but
-        unlike cursor and muse there IS a Windows one, which is the machine most owners arrive with."""
+        unlike cursor there IS a Windows one, which is the machine most owners arrive with."""
         for system, host in (('Windows', 'static.devin.ai/cli/setup.ps1'),
                              ('Darwin', 'cli.devin.ai/install.sh'), ('Linux', 'cli.devin.ai/install.sh')):
             roads = cliinstall.plan('devin', has_npm=False, system=system)

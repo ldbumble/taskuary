@@ -87,12 +87,16 @@ RECIPES = {
     ],
     # cursor-agent IS on npm but ships no bin, so npm is not a road; its installer is bash-only
     'cursor': [{'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl https://cursor.com/install -fsS | bash']}],
-    # muse is a static binary behind a shell installer - no npm package, and no release archive
-    # named by platform triple, so `binary` is not a road either. The installer itself exits
-    # `unsupported platform` on Windows (WSL2 is Meta's answer), which is why this is posix-only:
-    # plan() then returns [] on Windows and the row draws no Install button over a road that
-    # hard-fails. A Windows owner reaches Muse Spark through the `meta` connector instead.
-    'muse': [{'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl -fsSL https://dev.meta.ai/install.sh | bash']}],
+    # muse is a static binary behind a vendor script - no npm package, and no release archive named by
+    # platform triple, so `binary` is not a road. Windows got its own installer on 2026-09-16 (install.ps1:
+    # a muse.cmd shim under %LOCALAPPDATA%\Programs\muse, added to the USER path, no prompts); the bash
+    # script still exits `unsupported platform` on Git Bash. `powershell` is Windows PowerShell 5.1 on
+    # purpose: run from PowerShell 7 the vendor shim leaks pwsh's module path and Get-FileHash goes missing.
+    'muse': [
+        {'how': 'script', 'os': 'nt', 'cmd': ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-Command', powershell_installer('https://dev.meta.ai/install.ps1')]},
+        {'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl -fsSL https://dev.meta.ai/install.sh | bash']},
+    ],
     # devin publishes a script per OS and nothing else - no npm package, and its releases are
     # laid out by the installer's own versioned scheme rather than as triple-named archives, so
     # `binary` is not a road. Both scripts END BY RUNNING `devin setup`, the CLI's interactive
@@ -321,7 +325,8 @@ def find(name: str) -> str:
     # there is the difference between "installed" and "the installer said yes and left nothing"
     if WINDOWS: roots += [Path(os.getenv('APPDATA', '')) / 'npm', home / '.local' / 'bin',
                           Path(os.getenv('LOCALAPPDATA', '')) / 'devin' / 'cli' / 'bin',
-                          Path(os.getenv('LOCALAPPDATA', '')) / 'qwen-code' / 'bin']
+                          Path(os.getenv('LOCALAPPDATA', '')) / 'qwen-code' / 'bin',
+                          Path(os.getenv('LOCALAPPDATA', '')) / 'Programs' / 'muse']
     else: roots += [Path('/usr/local/bin'), Path('/opt/homebrew/bin')]
     for d in roots:
         for ext in ('.exe', '.cmd', '.bat', '') if WINDOWS else ('',):

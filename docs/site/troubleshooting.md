@@ -132,7 +132,8 @@ altered" is not, and it names the rows.
 | Desktop startup crash | `~/.taskuary/desktop-error.log` |
 | The database | `~/.taskuary/taskuary.db` |
 | Configuration | `~/.taskuary/config.toml` |
-| A coding session's full transcript | the task page → **Work details → Full artifact** |
+| A coding session's full transcript | the task page → the **Agent work** step → the session's **More → Every step** |
+| A finished session's written result | `~/.taskuary/artifacts/` |
 | The context an agent was handed | `~/.taskuary/context/` |
 | Playbooks | `~/.taskuary/playbooks/*.md` |
 

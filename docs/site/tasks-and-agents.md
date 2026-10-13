@@ -122,9 +122,10 @@ Timeline, the task page, the Board, the assistant's cards and the phone all use 
 handover) and a regular agent (its saved conversation). It asks what to tell it as it picks up - optional; on the
 phone the next thing you type is the note, or tap **Continue as is**.
 
-The saved result is deliberately short. Every finished coding session also writes a full Markdown
-artifact with that result and the complete transcript — **Work details → Full artifact** on the
-task page.
+The saved result is deliberately short. The complete transcript is on the task page: open the
+session on the **Agent work** step and choose **More → Every step**. A finished coding session also
+files a Markdown record of what it did under `~/.taskuary/artifacts/` — the outcome, not a copy of
+the terminal.
 
 ### When the agent opens a browser
 

@@ -6842,7 +6842,8 @@ def _refresh_after(out: dict):
     def work():
         try: _refresh_items(members)
         except Exception as e: logger.debug(f'the change-check after the four could not ask the provider: {e}')
-    t = threading.Thread(target=work, daemon=True, name='refresh-after'); _AFTER.append(t); t.start()
+    # started BEFORE it is recorded: a waiter that found it in _AFTER first joined a thread not yet started, which raises
+    t = threading.Thread(target=work, daemon=True, name='refresh-after'); t.start(); _AFTER.append(t)
     return t
 
 

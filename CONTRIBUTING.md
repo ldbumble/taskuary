@@ -9,7 +9,7 @@ first contribution.
 ```bash
 git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e ".[dev,mssql,desktop]"     # dev = pytest; extras optional
-python -m pytest -q                        # the whole suite runs offline in ~2s
+python -m pytest -q                        # the whole suite runs offline, no credentials needed
 taskuary --debug                           # run the server with debug logging
 ```
 

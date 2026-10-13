@@ -826,7 +826,8 @@ class SQLiteStore:
             bcols = {r[1] for r in self.cx.execute('PRAGMA table_info(batch_item)')}
             # ...and a fix made in GitHub's cloud (cloudfix.py): running | done | failed | nothing, when it was sent, its pull request
             # ...and a stranger's change cleared to run HERE (batch.screen): the head it was cleared at, and what the screen said
-            for c in ('Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen'):
+            # ...and Warn: its text read as an attempt to instruct an AI (batch.injections)
+            for c in ('Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen', 'Warn'):
                 if c not in bcols: self.cx.execute(f'ALTER TABLE batch_item ADD COLUMN {c} TEXT')
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
             if 'RawOutput' not in routecols:
@@ -3933,12 +3934,16 @@ class SQLiteStore:
         return self._rows(f"SELECT * FROM message WHERE Status='triaging' ORDER BY {order} LIMIT ?", (limit,))
     def ranked_held(self, channel) -> int: return len(self.ranked_head(channel))
     # ── batches (batch.py) ──────────────────────────────────────────────────────────────────
-    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen')
+    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen', 'Warn')
     def batch_items_fixing(self) -> list:
         return self._rows("SELECT * FROM batch_item WHERE Fix='running' ORDER BY ItemId")
     def add_batch_item(self, tid, conv, mid, place, title, link):
         self._exec('INSERT OR IGNORE INTO batch_item (TaskId, ConversationId, MessageId, Place, Title, Link, State, CreatedAt, UpdatedAt) '
                    "VALUES (?,?,?,?,?,?,'waiting',?,?)", (tid, conv, mid, place, title, link, _now(), _now()))
+    def move_batch_item(self, item_id, tid, place) -> None:
+        """One item into another batch, with its review, head and screen - batch.combine."""
+        self._exec('UPDATE batch_item SET TaskId=?, Place=?, UpdatedAt=? WHERE ItemId=?', (tid, place, _now(), item_id))
+        self._bump_snapshots(); self._poke('task-changed', task_id=tid)
     def batch_items(self, tid) -> list:
         return self._rows('SELECT * FROM batch_item WHERE TaskId=? ORDER BY Place, ItemId', (tid,))
     def batch_items_for(self, tids) -> list:

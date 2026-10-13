@@ -50,6 +50,10 @@ export default function BatchItems({ taskId, items = [], onChanged, bare = false
                   {i.State === "ended" ? i.EndedWhy : i.Result}</Typography>)}
               {i.Overlap && isOpen(i) && (
                 <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.2 }}>Overlaps: {i.Overlap}</Typography>)}
+              {/* a stranger's text that read as instructions to an AI (batch.injections): ranked last, and said where it is */}
+              {i.Warn && (
+                <Typography variant="caption" sx={{ color: ALERT_INK, fontWeight: 600, display: "block", mt: 0.2 }}>
+                  ⚠ Suspected prompt injection: {i.Warn}. It ranks last and never runs on this machine.</Typography>)}
               {/* stage two (batch.screen): a stranger's change cleared to build and test here, or why it stays read-only */}
               {i.Screen && isOpen(i) && (
                 <Typography variant="caption" sx={{ color: /^clear/.test(i.Screen) ? ACCENT2 : DIM, display: "block", mt: 0.2 }}>

@@ -373,6 +373,25 @@ def repo_tree(tok, repo, limit=3000) -> list:
         return []
 
 
+def ci_verified_paths(tok, repo) -> list:
+    """The paths this repository's OWN CI rebuilds and refuses to see differ (`git diff --exit-code -- <paths>` in a workflow
+    on the default branch): a committed build output CI proves is exactly what the source builds to. [] on any doubt."""
+    import base64
+    try:
+        r = requests.get(f'{GH}/repos/{repo}/contents/.github/workflows', headers=_h(tok), timeout=20)
+        if r.status_code != 200: return []
+        out = []
+        for f in r.json() or []:
+            if not str(f.get('name') or '').endswith(('.yml', '.yaml')): continue
+            y = requests.get(f['url'], headers=_h(tok), timeout=20)
+            if y.status_code != 200: continue
+            text = base64.b64decode(y.json().get('content') or '').decode('utf-8', 'replace')
+            for m in re.finditer(r'git diff --exit-code\s+--\s+([^\n;&|#]+)', text): out += m.group(1).split()
+        return sorted({p.strip('/') for p in out if p and not p.startswith('-')})
+    except Exception:
+        return []
+
+
 def readme_text(tok, repo) -> str:
     """The repo's README (decoded), '' when there isn't one."""
     import base64

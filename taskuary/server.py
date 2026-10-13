@@ -1321,7 +1321,7 @@ def task_detail(task_id: int):
             'ended': _ended_line(task_id, d.get('comments')),
             # ...and a BATCH's items, in ranked order, each with what the agent found and where it stands (batch.py)
             # (Screen: what stage two said - cleared to run here, or why it stays read-only; batch.screen)
-            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose', 'Fix', 'FixLink', 'Screen')}
+            'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose', 'Fix', 'FixLink', 'Screen', 'Warn')}
                       | {'reviewed': bool(i.get('Sha')), 'canFix': fixable or bool(i.get('Trusted'))} for i in batch_rows] or None,
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
@@ -3638,6 +3638,14 @@ def batch_act(tid: int, idx: int, body: BatchActBody):
     out = batch.act(store, tid, idx, body.action)
     if out.get('setup'): return out              # not a failure: the repository is not set up for cloud fixes yet - the page offers Set up
     if not out.get('ok'): raise HTTPException(422, out.get('why') or 'not done')
+    return out
+
+@app.post('/api/tasks/{tid}/batch-combine')
+def batch_combine(tid: int):
+    """Every other open batch of this one's input folded into it, so one agent goes through them all (batch.combine)."""
+    from . import batch
+    out = batch.combine(store, tid, ACTOR)
+    if not out.get('ok'): raise HTTPException(422, out.get('why') or 'not combined')
     return out
 
 class CloudFixBody(BaseModel): repo: str

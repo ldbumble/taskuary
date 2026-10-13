@@ -65,6 +65,12 @@
       "generated": "settings"
     },
     {
+      "slug": "faq",
+      "file": "faq.md",
+      "title": "FAQ",
+      "desc": "Does it run locally, what can it reach, what does the AI cost, BAAs, and teaching it your software."
+    },
+    {
       "slug": "troubleshooting",
       "file": "troubleshooting.md",
       "title": "When something is wrong",

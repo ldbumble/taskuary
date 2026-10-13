@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAQ — Taskuary documentation</title>
+<meta name="description" content="Does it run locally, what can it reach, what does the AI cost, BAAs, and teaching it your software.">
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./docs.css">
+</head>
+<body>
+<a class="skip" href="#doc">Skip to the documentation</a>
+<header class="nav">
+  <div class="navwrap">
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="26" height="26">Taskuary</a>
+    <span class="tag">your work, already underway</span>
+    <nav class="links">
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/demo/">Demo</a>
+      <a href="https://github.com/ldbumble/taskuary">GitHub</a>
+      <a class="btn" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">Download</a>
+    </nav>
+  </div>
+</header>
+<div class="shell">
+  <aside class="rail" id="rail">
+    <form class="search" role="search" onsubmit="return false">
+      <label class="sr" for="q">Search the documentation</label>
+      <input id="q" type="search" placeholder="Search the docs…" autocomplete="off">
+    </form>
+    <div class="results" id="results" hidden></div>
+    <nav class="entries" id="entries" aria-label="Documentation">
+<div class="entry">
+      <a class="page" href="./">Start here</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Start here's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#try-the-demo">Try the demo</a><a class="sec" href="./#command-line-options">Command-line options</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#next">Next</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./how-it-works">How it works</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#three-brains-one-voice">Three brains, one voice</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./connections">Connections</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Connections's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./connections#what-a-connection-is">What a connection is</a><a class="sec" href="./connections#the-five-roles">The five roles</a><a class="sec" href="./connections#mail">Mail</a><a class="sec" href="./connections#chat">Chat</a><a class="sec" href="./connections#repositories-and-trackers">Repositories and trackers</a><a class="sec" href="./connections#data-and-report-sources">Data and report sources</a><a class="sec" href="./connections#coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="./connections#adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="./connections#pushing-something-in-yourself">Pushing something in yourself</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./tasks-and-agents">Tasks and agents</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./assistant">Assistant buttons</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Assistant buttons's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./assistant#one-screen-the-sidebar-and-the-canvas">One screen: the sidebar and the canvas</a><a class="sec" href="./assistant#the-buttons-on-each-card">The buttons on each card</a><a class="sec" href="./assistant#the-two-buttons-that-ask-one-question">The two buttons that ask one question</a><a class="sec" href="./assistant#pictures-and-your-voice">Pictures, and your voice</a><a class="sec" href="./assistant#remind-me">Remind me</a><a class="sec" href="./assistant#everything-the-task-page-can-do">Everything the task page can do</a><a class="sec" href="./assistant#words-that-work-typed">Words that work typed</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./assistant-tools">What the Assistant sees</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show What the Assistant sees's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./assistant-tools#the-summary-sent-every-turn">The summary, sent every turn</a><a class="sec" href="./assistant-tools#table">Table</a><a class="sec" href="./assistant-tools#task">Task</a><a class="sec" href="./assistant-tools#agents">Agents</a><a class="sec" href="./assistant-tools#new">New</a><a class="sec" href="./assistant-tools#pipe">Pipe</a><a class="sec" href="./assistant-tools#reports">Reports</a><a class="sec" href="./assistant-tools#app">App</a><a class="sec" href="./assistant-tools#look">Look</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./reports">Reports and the Advisor</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./advisor">The Advisor</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show The Advisor's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./advisor#what-it-reads">What it reads</a><a class="sec" href="./advisor#two-clocks">Two clocks</a><a class="sec" href="./advisor#what-was-not-followed-up">What was not followed up</a><a class="sec" href="./advisor#a-page-per-person">A page per person</a><a class="sec" href="./advisor#the-outcome-ledger">The outcome ledger</a><a class="sec" href="./advisor#the-one-rule">The one rule</a><a class="sec" href="./advisor#what-is-built-and-what-is-next">What is built, and what is next</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./phone">On your phone</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show On your phone's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./phone#the-doorways">The doorways</a><a class="sec" href="./phone#what-it-can-do">What it can do</a><a class="sec" href="./phone#the-morning-line">The morning line</a><a class="sec" href="./phone#handing-over">Handing over</a><a class="sec" href="./phone#what-it-will-not-do">What it will not do</a><a class="sec" href="./phone#sections-for-later-and-browsing-on-the-phone">Sections, For later and browsing, on the phone</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./settings">Settings reference</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coder-agent">Coder agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+    </div>
+<div class="entry on">
+      <a class="page" href="./faq" aria-current="page">FAQ</a>
+      <button class="chev" type="button" aria-expanded="true" aria-label="Hide FAQ's sections"></button>
+      <div class="secs"><a class="sec" href="#does-it-run-locally" data-sec="does-it-run-locally">Does it run locally?</a><a class="sec" href="#does-it-need-internet-access-what-can-the-browser-reach" data-sec="does-it-need-internet-access-what-can-the-browser-reach">Does it need internet access? What can the browser reach?</a><a class="sec" href="#do-i-need-to-buy-tokens" data-sec="do-i-need-to-buy-tokens">Do I need to buy tokens?</a><a class="sec" href="#will-you-sign-a-baa-can-it-handle-patient-data" data-sec="will-you-sign-a-baa-can-it-handle-patient-data">Will you sign a BAA? Can it handle patient data?</a><a class="sec" href="#can-it-be-trained-on-our-software" data-sec="can-it-be-trained-on-our-software">Can it be trained on our software?</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./troubleshooting">When something is wrong</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show When something is wrong's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./troubleshooting#it-will-not-start">It will not start</a><a class="sec" href="./troubleshooting#a-connection-stopped">A connection stopped</a><a class="sec" href="./troubleshooting#triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="./troubleshooting#a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="./troubleshooting#an-agent-is-stuck">An agent is stuck</a><a class="sec" href="./troubleshooting#a-report-returned-nothing">A report returned nothing</a><a class="sec" href="./troubleshooting#reading-the-audit-log">Reading the audit log</a><a class="sec" href="./troubleshooting#where-the-logs-are">Where the logs are</a><a class="sec" href="./troubleshooting#still-wrong">Still wrong</a></div>
+    </div>
+    </nav>
+    <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
+  </aside>
+  <main id="doc">
+    <p class="eyebrow">FAQ</p>
+    <article>
+<p>The questions people ask before they install, answered short. Each one links to the page that
+holds the detail.</p>
+<h2 id="does-it-run-locally">Does it run locally?<a class="anchor" href="#does-it-run-locally" aria-label="Link to this section">#</a></h2>
+<p>Yes. Taskuary is an app on your own machine, not a service you sign up for. It keeps everything
+in a SQLite file under <code>~/.taskuary/</code> and serves its interface at <code>http://127.0.0.1:7787</code>, for you
+only. There is no Taskuary account and no Taskuary server: nothing you connect passes through us.</p>
+<p>Setup on Windows is one file, <a href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">Taskuary.exe</a>.
+Anywhere with Python 3.10+, it is <code>pip install taskuary</code>. Docker works too. From there, <strong>Set up
+Taskuary</strong> walks four steps: who you are, one AI, one work source, and a first read. See
+<a href="index#install-on-windows">Start here</a>.</p>
+<p>To look before connecting anything, <code>taskuary --demo</code> runs the real interface over invented work
+and cannot reach a real system.</p>
+<h2 id="does-it-need-internet-access-what-can-the-browser-reach">Does it need internet access? What can the browser reach?<a class="anchor" href="#does-it-need-internet-access-what-can-the-browser-reach" aria-label="Link to this section">#</a></h2>
+<p>Taskuary itself only talks to the services you connect — your mailbox, your chat, your trackers and
+the AI you chose. With a <a href="#do-i-need-to-buy-tokens">local model</a>, the AI calls never leave the machine.</p>
+<p>When an agent needs a website, it drives a real browser on your machine (the optional
+<code>agent-browser</code> tool), so it reaches whatever your machine can reach, over your network and VPN.
+The page shows live beside the agent&#39;s terminal. It never types a password or a 2FA code: you
+press <strong>Take over</strong>, sign in yourself, and hand it back. Sites it should only <em>read</em> can go through
+a search or reader connector instead, with no browser at all. See
+<a href="tasks-and-agents#when-the-agent-opens-a-browser">When the agent opens a browser</a>.</p>
+<h2 id="do-i-need-to-buy-tokens">Do I need to buy tokens?<a class="anchor" href="#do-i-need-to-buy-tokens" aria-label="Link to this section">#</a></h2>
+<p>No Taskuary tokens or seats exist: the app is free and open source (MIT). The AI is the only thing
+that costs, and you bring your own, in whichever of these you already pay for:</p>
+<table>
+<thead>
+<tr>
+<th>You have</th>
+<th>Taskuary uses</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>An API key (Anthropic, OpenAI, Azure OpenAI, OpenRouter)</td>
+<td>the key, billed per use by that provider</td>
+</tr>
+<tr>
+<td>A ChatGPT plan</td>
+<td><strong>Sign in with ChatGPT</strong>, billed to the plan under a weekly cap you set</td>
+</tr>
+<tr>
+<td>A coding CLI subscription (Claude Code, Codex and others)</td>
+<td>the CLI, with a light model for routine mail</td>
+</tr>
+<tr>
+<td>None of these</td>
+<td>Ollama or another local model server, at no cost per message</td>
+</tr>
+</tbody></table>
+<p>Triage reads many messages and wants a small cheap model; coding wants a strong one. They can be
+different. See <a href="index#choosing-the-ai-setup">Choosing the AI setup</a>.</p>
+<h2 id="will-you-sign-a-baa-can-it-handle-patient-data">Will you sign a BAA? Can it handle patient data?<a class="anchor" href="#will-you-sign-a-baa-can-it-handle-patient-data" aria-label="Link to this section">#</a></h2>
+<p>There is no Taskuary service holding your data, so there is nothing for us to sign a BAA for —
+the data stays on your machine and in the systems you already use. The agreements that matter are
+the ones you hold with whoever <em>does</em> receive data:</p>
+<ul>
+<li><strong>The AI provider.</strong> A hosted model receives the text of what it reads. If that can include PHI,
+use a provider and account under your organisation&#39;s BAA (Azure OpenAI and the enterprise tiers
+of the major providers offer one), or a local model, which sends nothing out.</li>
+<li><strong>Your mail and other systems.</strong> Taskuary reads them with your own sign-in, so the BAA you
+already hold with them still applies.</li>
+</ul>
+<p>Before a prompt reaches a hosted model, Taskuary replaces recognisable credentials with
+placeholders. It does not remove PHI: whether a given setup meets your HIPAA obligations is a
+decision for your compliance team. See <a href="index#what-leaves-your-machine">What leaves your machine</a>.</p>
+<h2 id="can-it-be-trained-on-our-software">Can it be trained on our software?<a class="anchor" href="#can-it-be-trained-on-our-software" aria-label="Link to this section">#</a></h2>
+<p>Not by retraining a model — it learns the way a new hire does, by being given the material and
+corrected on the job:</p>
+<ul>
+<li><strong>Your documents.</strong> The Knowledge base indexes folders on the machine and SharePoint libraries
+(manuals, SOPs, policies). Agents, the Assistant and reply drafts are handed the passages that
+bear on the work. See <a href="connections#data-and-report-sources">Connections</a>.</li>
+<li><strong>Your systems.</strong> Connect what has an API; for what only has a web screen, the agent works it in
+the browser while you watch.</li>
+<li><strong>Your jobs.</strong> The first time an agent does a kind of job, Taskuary drafts a playbook — the
+steps, what it may do alone, what to ask first, what counts as done. Approve it and the next job
+like it follows it. See <a href="tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a>.</li>
+<li><strong>Your judgment.</strong> Each verdict you correct becomes a lesson for the next message like it. See
+<a href="how-it-works">How it works</a>.</li>
+</ul>
+<p>All of it lives in files on your machine that you can read, edit or delete. Taskuary trains no
+model on it.</p>
+
+    </article>
+    <nav class="pager"><a class="pn prev" href="./settings"><span>Previous</span>Settings reference</a><a class="pn next" href="./troubleshooting"><span>Next</span>When something is wrong</a></nav>
+    <p class="stamp">Documentation for Taskuary 0.3.8.0 · updated 2026-10-12</p>
+  </main>
+</div>
+<script src="./docs.js"></script>
+</body>
+</html>

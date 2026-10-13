@@ -29,3 +29,11 @@ test("the chat takes the room on the task page, the way a live session does", ()
   assert.match(mount, /flex: "1 1 0"/);
   assert.match(mount, /minHeight: \{ xs: 360, md: 420 \}/);
 });
+
+// END SESSION ON A GENERAL AGENT (the owner, 2026-10-13): its chat stayed drawn under Agent work with Close out folded below,
+// where a coding session's terminal goes away. Drawn while live, or when the owner opens Agent work - otherwise the page's
+// own focus (focusStage: a draft ready is Close out) decides.
+test("an ended general session's chat gives the page back to the stage that is focused", () => {
+  const src = read("../src/TaskPage.jsx");
+  assert.match(src, /\{workspaceMode === "general" && \(liveSession \|\| stage === "agent"\) \? \(/);
+});

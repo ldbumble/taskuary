@@ -104,7 +104,7 @@
       "title": "Meta Model API (Muse Spark)",
       "group": "AI — agents & models",
       "planned": false,
-      "desc": "Meta's Muse Spark models through the Meta Model API — the way to reach Muse Spark on Windows, where the muse CLI does not install.",
+      "desc": "Meta's Muse Spark models through the Meta Model API, billed per token — the triage road; coding sessions use the muse CLI.",
       "match": [
         "meta model api (muse spark)",
         "meta",

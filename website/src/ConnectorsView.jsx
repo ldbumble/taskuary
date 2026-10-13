@@ -444,12 +444,12 @@ const META = {
   meta: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default muse-spark-1.2)", "model"], ["base_url (default https://api.meta.ai/v1)", "base_url"]],
     secretLabel: "Meta Model API key",
-    desc: "Meta's Muse Spark models through the Meta Model API — the way to reach Muse Spark on Windows, where the muse CLI does not install.",
+    desc: "Meta's Muse Spark models through the Meta Model API, billed per token — the triage road; coding sessions use the muse CLI.",
     howto: ["Create a key at dev.meta.ai → API keys (a payment method is required; Meta publishes no free tier).",
       "Paste it under Credentials. Leave model blank for muse-spark-1.2, or name muse-spark-1.3.",
       "muse-spark-1.2-contributor costs about a twelfth as much — because you opt in to Meta using your prompts and completions to improve its products, and it is rate-limited to 100 requests/minute against 3,000. Do not point it at real work mail unless you mean to share it.",
       "Test runs a real round trip. Enable to wire it into triage, drafts and the digest — or pick it explicitly under Settings → Triage & agents.",
-      "This is the TRIAGE road. For coding sessions on Muse Spark, install the muse CLI under AI CLI agents (macOS/Linux/WSL2 only)."] },
+      "This is the TRIAGE road. For coding sessions on Muse Spark, install the muse CLI under AI CLI agents (Windows, macOS and Linux)."] },
   // NINE PROVIDERS, ONE SURFACE. Each of these speaks the OpenAI chat-completions schema exactly,
   // so llm.py holds them as a table (OPENAI_COMPATIBLE) rather than nine branches, and a card here
   // is a base url, a default model and a key. base_url is offered on every one for the same reason

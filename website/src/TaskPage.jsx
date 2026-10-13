@@ -443,7 +443,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [repoPick, setRepoPick] = useState(false);
   const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
   const [sourceOpen, setSourceOpen] = useState(false);
-  const [itemsOpen, setItemsOpen] = useState(true);
+  // a batch's items start FOLDED to their progress line: with them open, the agent's session - the thing being watched -
+  // was pushed below the fold (the owner, 2026-10-13: "the coding agent should be the main view"). One click opens them.
+  const [itemsOpen, setItemsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); setReportOpen(false); setPeek(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
@@ -1694,7 +1696,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       }} />
                   </Box>
                 )}
-                {workspaceMode === "general" ? (
+                {/* ...while its session is live, or when you open Agent work yourself: drawn whenever the task had a chat, it
+                    stayed on screen after End session with Close out folded under it, where a coding session's terminal goes
+                    (the owner, 2026-10-13: "it should just move to the close out section when you close out agent run") */}
+                {workspaceMode === "general" && (liveSession || stage === "agent") ? (
                   /* the chat is this task's session: it gets the room a terminal gets, not the
                      height of its own content squeezed between the cards above and below it */
                   <Box sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 420 },

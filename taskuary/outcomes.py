@@ -38,12 +38,20 @@ def stopped(store, tid, actor: str, facts: dict = None) -> int:
     """A stop is ONE row per stretch of waiting, not one per turn: the Stop hook fires at every response's end, and a session
     the owner is typing into ends thirty of them. The row opens at the first stop and closes at the owner's next move."""
     return 0 if open_stop(store, tid) else record(store, 'agent.stopped', 'task', tid, actor, facts=facts)
+def owner_words(text: str) -> str:
+    """What the owner typed, without what Taskuary typed around it: a Resume arrives as "FROM THE OWNER: <words> <the resume
+    handover>", and the whole of it sat in the ledger as the owner's words - the Advisor read our own instructions back as theirs
+    (2026-10-13)."""
+    from .continuity import RESUME_PROMPT
+    t = ' '.join(str(text or '').split())
+    t = t.split(' '.join(RESUME_PROMPT.split()[:5]))[0].strip()
+    return t[len('FROM THE OWNER:'):].strip() if t.upper().startswith('FROM THE OWNER:') else t
 def moved_on(store, tid, words: str, where: str = 'pane'):
     """The owner's next move after a stop, in their words (a prompt typed into the pane): the open stop row closes now."""
     r = open_stop(store, tid)
     if not r: return
     now, at = datetime.now(), _dt(r['At']) or datetime.now()
-    mins = max(0, int((now - at).total_seconds() // 60)); words = ' '.join(str(words or '').split())[:300]
+    mins = max(0, int((now - at).total_seconds() // 60)); words = owner_words(words)[:300]
     store._exec('UPDATE outcome SET NextMove=?, NextAt=? WHERE Id=?', (words, now.strftime('%Y-%m-%d %H:%M:%S'), r['Id']))
     settle(store, r['Id'], f'continued {mins} min later in the {where}' + ('' if words else ' with no words'), 'continued')
 
@@ -146,7 +154,7 @@ def _sentence(store, r: dict) -> str:
     ref = f"TQ-{int(r['TargetId']):04d}" if r['TargetKind'] == 'task' and r['TargetId'] else r['TargetKind']
     who = str(r.get('Actor') or '').split(':', 1)[-1]
     nxt = ('' if kind != 'agent.stopped' or r['Verdict'] != 'continued' else
-           f'; you then said "{r["NextMove"]}"' if r.get('NextMove') else '; you then continued it with no words')
+           f'; you then said "{owner_words(r["NextMove"])}"' if owner_words(r.get('NextMove')) else '; you then continued it with no words')
     head = {'reply.sent': f"you sent a reply on {ref} (approved as drafted)" if f.get('verb') == 'approve' else f"you sent a reply on {ref} (edited first)",
             'task.closed': f"{ref} was closed by {who} ({f.get('how', '')})", 'agent.stopped': f"{who} stopped on {ref}" + (' (PR open)' if f.get('pr') else ''),
             'agent.continued': f'you continued {ref} with "{r.get("NextMove")}"' if r.get('NextMove') else f'you continued {ref} with no words',

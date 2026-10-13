@@ -2175,6 +2175,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting}
+              className={!text.trim() && ghostText(advice?.line, phone) ? "tq-advised" : undefined}
               placeholder={(!text.trim() && ghostText(advice?.line, phone))   /* the Advisor's ghost text (advice.js); the phone keeps its short hint */
                 || (phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
                 : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…")}

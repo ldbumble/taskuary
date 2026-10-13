@@ -262,3 +262,12 @@ class PersonFactsTests(unittest.TestCase):
         f = json.loads(outcomes.rows_for(s, 'task', t)[0]['FactsJson'])
         self.assertEqual((f['who'], f['late_days']), ('ray@northwind.example', 3))
         self.assertEqual(outcomes.person_facts(s, 'ray@northwind.example')['steps_late'], 1)
+
+
+class OwnerWordsTests(unittest.TestCase):
+    def test_a_resume_keeps_the_owners_words_and_drops_ours(self):
+        from taskuary.continuity import RESUME_PROMPT
+        from taskuary.outcomes import owner_words
+        self.assertEqual(owner_words(f'FROM THE OWNER: merge it if the tests pass {RESUME_PROMPT}'), 'merge it if the tests pass')
+        self.assertEqual(owner_words(RESUME_PROMPT), '')
+        self.assertEqual(owner_words('just keep going'), 'just keep going')

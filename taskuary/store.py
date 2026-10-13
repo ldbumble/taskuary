@@ -825,7 +825,8 @@ class SQLiteStore:
             # the head a batch's agent reviewed: a merge is pinned to it (batch.act), so a push after the review is refused
             bcols = {r[1] for r in self.cx.execute('PRAGMA table_info(batch_item)')}
             # ...and a fix made in GitHub's cloud (cloudfix.py): running | done | failed | nothing, when it was sent, its pull request
-            for c in ('Sha', 'Propose', 'Fix', 'FixAt', 'FixLink'):
+            # ...and a stranger's change cleared to run HERE (batch.screen): the head it was cleared at, and what the screen said
+            for c in ('Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen'):
                 if c not in bcols: self.cx.execute(f'ALTER TABLE batch_item ADD COLUMN {c} TEXT')
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
             if 'RawOutput' not in routecols:
@@ -3932,7 +3933,7 @@ class SQLiteStore:
         return self._rows(f"SELECT * FROM message WHERE Status='triaging' ORDER BY {order} LIMIT ?", (limit,))
     def ranked_held(self, channel) -> int: return len(self.ranked_head(channel))
     # ── batches (batch.py) ──────────────────────────────────────────────────────────────────
-    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose', 'Fix', 'FixAt', 'FixLink')
+    BATCH_ITEM_COLS = ('State', 'Result', 'Overlap', 'EndedWhy', 'Title', 'Link', 'MessageId', 'Place', 'Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen')
     def batch_items_fixing(self) -> list:
         return self._rows("SELECT * FROM batch_item WHERE Fix='running' ORDER BY ItemId")
     def add_batch_item(self, tid, conv, mid, place, title, link):

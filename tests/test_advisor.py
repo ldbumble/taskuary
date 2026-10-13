@@ -326,3 +326,18 @@ class FixPassTests(_Rail):
             c = TestClient(server.app)
             r = c.post('/api/concierge/propose', json={'verb': 'close', 'key': f'task:{t}', 'table': True, 'revision': 'stale'})
         self.assertEqual(r.status_code, 409); self.assertIn('changed', r.json()['detail'])
+
+
+class PlainLineTests(unittest.TestCase):
+    """The line is read by the owner: "You should stop_agent because out13 shows..." reached the prompt box (2026-10-13)."""
+    def test_ids_never_reach_the_owner(self):
+        from taskuary.advisor import plain
+        self.assertEqual(plain('You should stop_agent because out13 shows it resumed.', 'stop_agent', 'Save and end session'),
+                         'You should "Save and end session" because an earlier outcome shows it resumed.')
+        self.assertEqual(plain('Remind me later, the meeting moved (out4, mem2).', 'defer', 'Remind me'), 'Remind me later, the meeting moved.')
+        self.assertEqual(plain('Close it - Erin already answered.', 'close', 'Close'), 'Close it - Erin already answered.')
+
+    def test_continued_is_not_success_and_a_wrong_verb_is_silence(self):
+        from taskuary.advisor import SYSTEM
+        self.assertIn('never call it a success', SYSTEM)
+        self.assertIn('say nothing', SYSTEM)

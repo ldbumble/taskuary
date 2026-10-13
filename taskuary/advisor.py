@@ -67,7 +67,13 @@ SYSTEM = (
     "with it now, as ONE of the VERBS OFFERED (exactly as written) and one short sentence in the second person that says why, naming "
     "the habit or the fact it rests on - or say nothing. Say nothing unless the owner's own habits (LEARNED), the outcome ledger or "
     "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines are the only ones you may use, "
-    "and you cite their ids. Answer with JSON only: {\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
+    "and you cite their ids. A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
+    "again, nothing more - never call it a success, and never say something was merged, sent or fixed unless a line says exactly that. "
+    "The line is plain words for the owner: the ids go in \"evidence\" only, and the verb is named by its label, never its id. "
+    "The reason must be the fact that makes THIS verb right, and it must hold up on its own: someone or an agent waiting on the "
+    "owner is a reason to answer, never a reason to put it off. If none of the verbs offered is the right move, say nothing - a "
+    "wrong suggestion is worse than none. The line is at most 80 characters, so it is read whole. "
+    "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
     "\"evidence\": [\"<ids from the lines below>\"]}.")
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
                                          'evidence': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['verb', 'line', 'evidence']}
@@ -127,7 +133,17 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     return '\n\n'.join(lines)
 
 
-def judge(store, event: str, target_kind: str, target_id, rev: str, tier: int = 1, llm=None) -> int:
+_ID = r'\b(?:out|mem|rv|task)\d+\b'
+def plain(line: str, verb: str, label: str) -> str:
+    """The owner reads the line, not the prompt: "You should stop_agent because out13 shows..." put the verb's id and the ledger's
+    row id in the prompt box (2026-10-13). An id-shaped verb becomes its label; a cited id in brackets goes, one in the sentence
+    becomes what it is."""
+    t = re.sub(rf'\b{re.escape(verb)}\b', f'"{label}"', line) if '_' in verb else line
+    t = re.sub(rf'\s*\((?:{_ID}[,\s]*)+\)', '', t)
+    return ' '.join(re.sub(_ID, 'an earlier outcome', t).split())
+
+
+def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1, llm=None) -> int:
     key = key_of(target_kind, target_id)
     def W(**kw): return _write(store, target_kind=target_kind, target_id=target_id, key=key, event=event, revision=rev, tier=tier, **kw)
     item = _item(store, target_kind, target_id)
@@ -147,7 +163,8 @@ def judge(store, event: str, target_kind: str, target_id, rev: str, tier: int = 
     if not verb or not line: return W(dropped='nothing to say', model=model, evidence=ev)
     hit = next((v for v in verbs if v['verb'] == verb), None)
     if not hit: return W(dropped=f'verb not offered: {verb}'[:120], model=model, line=line, evidence=ev)
-    rid = W(line=line, verb=verb, label=hit['label'], count=habit(store, verb, item), evidence=ev, model=model)
+    line = plain(line, verb, hit['label'])
+    rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model)
     try:
         from . import live
         live.emit(live.ADVICE, key=key, target_kind=target_kind, target_id=int(target_id))
@@ -195,7 +212,7 @@ def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wai
 
 def _payload(r: dict) -> dict:
     count = json.loads(r.get('CountJson') or '[0,0]')
-    return {'key': r['Key'], 'line': r['Line'], 'verb': r['Verb'], 'label': r['Label'], 'pill': pill(r['Label'], count), 'count': count,
+    return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', r['Label'] or '') if r.get('Line') else r.get('Line'), 'verb': r['Verb'], 'label': r['Label'], 'pill': pill(r['Label'], count), 'count': count,
             'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
 
 

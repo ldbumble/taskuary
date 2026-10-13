@@ -187,6 +187,13 @@ def pr(tok, repo, number):
             'same_repo': ((j.get('head') or {}).get('repo') or {}).get('full_name') == ((j.get('base') or {}).get('repo') or {}).get('full_name')}
 
 
+def pr_commits(tok, repo, number) -> list:
+    """[(sha, author login)] of a pull request, oldest first - who pushed what after a given head (batch.head_ok)."""
+    r = _ok(requests.get(f'{GH}/repos/{repo}/pulls/{number}/commits', headers=_h(tok), params={'per_page': 100}, timeout=20),
+            f'read #{number} commits')
+    return [(c['sha'], ((c.get('author') or {}).get('login') or '')) for c in r.json()]
+
+
 def repo_info(tok, repo) -> dict:
     """What this repository allows and what the token may do in it: the merge methods its settings permit, and the
     token's own role (`permissions`: admin / maintain / push / triage / pull)."""

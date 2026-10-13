@@ -281,3 +281,12 @@ test("one word on the bar, the whole name on hover and in the menus (canvas J3, 
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.doesNotMatch(view, /tq-compose-hint|Enter sends · Shift\+Enter/);           // no hint under the box
 });
+
+test("one border around the three layers: the suggestion, the row and the box sit in one dock (2026-10-13)", () => {
+  const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
+  const dock = view.slice(view.indexOf('<div className="tq-dock">'), view.indexOf("<Popover open={!!emojiEl}"));
+  for (const part of ["<AdvisorNext", "<ActionRow", 'className="tq-compose-box"']) assert.ok(dock.includes(part), part);
+  const css = fs.readFileSync(path.join(process.cwd(), "src", "assistantView.css"), "utf8");
+  assert.match(css, /\.tq-dock \{[^}]*border: 1px solid/);
+  assert.match(css, /\.tq-dock \.tq-compose-box \{[^}]*border: 0;/);
+});

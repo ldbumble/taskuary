@@ -491,6 +491,12 @@
 
 /* the composer */
 .tq-compose { padding: 2px 20px 8px; background: #fffdfb; box-shadow: 0 -14px 14px -6px #fffdfb; position: relative; }   /* no rule above it: the row and the box float, a soft fade keeps scrolled content from showing through */
+/* THE DOCK (canvas I2): one border, three bands - the suggestion tinted on top, the row under a hairline, the box its floor */
+.tq-dock { width: min(1000px, 100%); margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d5d0c7; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #39352d0d; }
+.tq-dock .tq-next { margin: 0; padding: 9px 16px; justify-content: flex-start; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
+.tq-dock .tq-next .tq-next-why { margin-left: auto; }
+.tq-dock .tq-arow { width: 100%; margin: 0; padding: 10px 12px 12px; box-sizing: border-box; border-bottom: 1px solid #ece7de; }
+.tq-dock .tq-compose-box { width: 100%; border: 0; border-radius: 0; box-shadow: none; padding: 6px 8px; }
 .tq-compose-box { width: min(980px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
 .tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: min(40vh, 280px); overflow-y: auto; }
 .tq-compose-box textarea::placeholder { color: #8f8b84; }
@@ -578,10 +584,10 @@
    behind More, Next last. CENTRED over the composer (the owner: "center them and make them obvious"), ONE filled button at most
    (p), outlined for the rest (s), plain text for the quiet ones (q); a greyed decision says why underneath. */
 .tq-arow { display: flex; flex-direction: column; align-items: center; gap: 2px; width: min(980px, 100%); margin: 0 auto 5px; }
-.tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: 8px 10px; }   /* a narrow screen wraps, still centred */
-/* ONE TYPE (canvas J3): its own soft section, the label inside on the left, one-word pills of one width - the label names the noun */
-.tq-cl { display: flex; align-items: center; gap: 5px; padding: 6px; border-radius: 16px; background: #f3f1ec; }
-.tq-cl-h { width: 44px; padding-left: 8px; font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: #8a857c; }
+.tq-arow-verbs { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 10px 28px; }   /* a narrow screen wraps, still centred */
+/* ONE TYPE (canvas J2): a small label over its own separate pills, one word each, of one width - the label names the noun */
+.tq-cl { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.tq-cl-h { font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: #8a857c; }
 .tq-cl-b { display: flex; gap: 5px; }
 .tq-cl .tq-ab { min-height: 30px; min-width: 78px; padding: 0 14px; font-size: 12.5px; }
 .tq-cl .tq-ab.next { min-width: 0; }

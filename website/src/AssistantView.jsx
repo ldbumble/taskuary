@@ -2172,7 +2172,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <RetryVerbs item={currentItem} failed={(pile?.items || []).filter((i) => i.lane === "unjudged").length}
             onSaid={(text, status) => setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: status || "done", text }])}
             onDone={() => loadPile(true)} />
-          {/* the Advisor's suggestion over the row, whose filled button is the one it picked - never in the box (2026-10-13) */}
+          {/* ONE PANEL, THREE LAYERS (the owner, 2026-10-13: "i thought there will be one border around all 3"): the Advisor's
+              suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
+          <div className="tq-dock">
           <AdvisorNext advice={shownAdvice} />
           <ActionRow advised={shownAdvice} />
           <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
@@ -2192,6 +2194,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
                 : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…")}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+          </div>
           </div>
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}

@@ -190,12 +190,12 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
     ] : r.CanSend === false ? [
-      { id: no("approve"), label: busy ? "closing…" : "Mark done", tone: "p", disabled: busy, run: () => decide("close_unsent"),
+      { id: no("approve"), label: busy ? "Closing…" : "Mark done", tone: "p", disabled: busy, run: () => decide("close_unsent"),
         title: `No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).` },
     ] : r.Stale ? [
-      { id: no("approve"), label: busy ? "refreshing…" : "Refresh the draft", tone: "p", disabled: busy, run: redraft, title: "Rewrites the draft from the newest message, then you approve it" },
+      { id: no("approve"), label: busy ? "Refreshing…" : "Refresh the draft", tone: "p", disabled: busy, run: redraft, title: "Rewrites the draft from the newest message, then you approve it" },
     ] : [
-      { id: no("approve"), label: busy ? (simulated ? "Simulating…" : "sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? (simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}` },
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
@@ -358,7 +358,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
             title={`No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).`}
             onClick={copyClose}>
-            {busy ? "closing…" : "Copy & close"}
+            {busy ? "Closing…" : "Copy & close"}
           </Button>
         ) : r.Stale ? (
           /* THE ROAD OUT OF THE WARNING. A stale draft disabled the only button on the card
@@ -368,7 +368,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
              action while the thread is ahead of the draft. */
           <Button size="small" variant="contained" disableElevation disabled={busy}
             onClick={redraft} title="Rewrites the draft from the newest message, then you approve it">
-            {busy ? "refreshing…" : "Refresh the draft"}
+            {busy ? "Refreshing…" : "Refresh the draft"}
           </Button>
         ) : (
           <Button size="small" variant="contained"
@@ -376,7 +376,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
             {/* on a task the one word is Close out, as everywhere; a draft with no task behind it is just sent */}
-            {busy ? (simulated ? "Simulating…" : "sending…")
+            {busy ? (simulated ? "Simulating…" : "Sending…")
               : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
           </Button>
         )}

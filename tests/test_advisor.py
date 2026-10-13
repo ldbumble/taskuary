@@ -187,6 +187,19 @@ class DoorTests(unittest.TestCase):
             ws.record(s, t, 'run1', 'input_needed', text='Open the PR?')
             self.assertEqual([c.args[1] for c in n.call_args_list], ['agent.stopped', 'agent.asked'])
 
+    def test_an_interrupted_agent_is_noticed_at_startup(self):
+        """Taskuary closed while the coder had TQ-1048: the Stop hook never fires for a close, so no door told the Advisor and the card
+        carried no line (the owner, 2026-10-12). The close itself may run no model, so the startup is where it hears of it."""
+        from taskuary import terminal
+        s = MemoryStore()
+        t = s.create_task({'Title': 'x', 'Status': 'in_progress', 'Assignee': 'agent:coder'}, 'owner')
+        terminal.release_task(s, t, 'shutdown', 'closed')                                   # the close, already recorded
+        u = s.create_task({'Title': 'y', 'Status': 'in_progress', 'Assignee': 'agent:coder'}, 'owner')   # died with the process
+        s.create_task({'Title': 'z', 'Status': 'open'}, 'owner')                               # nobody's stop
+        with mock.patch.object(advisor, 'notice') as n:
+            terminal.recover_after_restart(s)
+        self.assertEqual(sorted(c.args[1:] for c in n.call_args_list), [('agent.stopped', 'task', t), ('agent.stopped', 'task', u)])
+
     def test_a_close_notices_through_the_one_door(self):
         s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
         with mock.patch.object(advisor, 'notice') as n:

@@ -40,8 +40,8 @@ a sender you keep hearing from through a system you have not connected. Their fi
 judged like any arrival, because a forgotten task is work waiting on you and belongs on the rail
 where **Next** reads it in turn. Nothing fires for absence; something has to look.
 
-**On the event.** The same brain also runs when one item changes: an agent stops or asks, a reply
-arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a
+**On the event.** The same brain also runs when one item changes: an agent stops or asks (or was cut
+off by Taskuary closing, which the next launch reports), a reply arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a
 due day is missed, a report lands. One small prompt on the light model reads the event, the item's
 facts, the verbs the item carries, the promoted lines of `LEARNED.md` and the ledger rows that bear
 on it, and answers with one verb from the actions the app already has and one line, or nothing.

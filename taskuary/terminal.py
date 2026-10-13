@@ -2351,6 +2351,13 @@ def recover_after_restart(store) -> int:
         released += int(release_task(store, task['TaskId'], 'startup',
                                     'Taskuary restarted after the agent session ended. '
                                     'The task is open again - nobody is working it.'))
+    # ...and the Advisor hears of every interrupted task HERE, never at shutdown (teardown runs no model). A close is the one
+    # stop the Stop hook never fires for, so TQ-1048 sat with "nothing restarts by itself" and no line under it (the owner,
+    # 2026-10-12). notice() judges once per item revision, so every launch may say it again for free.
+    from . import advisor
+    for task in store.list_tasks(active_only=True):
+        if INTERRUPTED in [x.strip() for x in str(task.get('Tags') or '').split(',')]:
+            advisor.notice(store, 'agent.stopped', 'task', task['TaskId'])
     return released
 
 

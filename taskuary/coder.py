@@ -451,7 +451,11 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     word = ws.status(store, tid)
     spoken = str(word.get('result') or '') if word.get('state') == 'finished' and (not live or str(word.get('sid')) == str(getattr(live, 'sid', ''))) else ''
     witnessed = str(getattr(getattr(live, 'witness', None), 'said', '') or '')
-    final_message = str(final_message or spoken or witnessed).strip()
+    # ...and the whole final TURN beside it (witness.turn_text): a `--done` sentence is a summary, and the reply the agent wrote
+    # just before it was in neither - the drafter wrote a placeholder from "the reply above is ready" (2026-10-13)
+    spoken, witnessed = spoken.strip(), witnessed.strip()
+    turn = witnessed + (f'\n\n{spoken}' if spoken and spoken not in witnessed else '') if witnessed else spoken
+    final_message = str(final_message or turn).strip()
     text, agent, found = term.transcript_for(store, tid)
     if not text.strip(): raise ValueError('nothing to wrap up - this task has no session transcript')
     rep = report_from_transcript(store, tid, text, agent)

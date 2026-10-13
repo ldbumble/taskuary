@@ -81,6 +81,26 @@ class Witness:
 
 
 # ── Claude Code: hook payloads (hooks.py wires them, server.py receives them) ─────────────────
+def turn_text(path) -> str:
+    """Everything the agent SAID since the owner's last prompt, from Claude's own transcript - not only its last message.
+    An agent wrote the reply, ran `taskuary --done`, then said "The reply above is ready for you to review"; the Stop hook's
+    last_assistant_message is that last line alone, so the reply was drafted from a pointer to text it never saw - a
+    placeholder went out for review (2026-10-13). A wake (a background job reporting) is not the owner's prompt. '' when
+    the file cannot be read: the caller keeps the last message."""
+    try: rows = [json.loads(l) for l in open(path, encoding='utf-8', errors='replace') if l.strip()]
+    except (OSError, TypeError, ValueError): return ''
+    def prompt(r):
+        m = r.get('message') or {}
+        if r.get('type') != 'user' or m.get('role') != 'user': return False
+        c = m.get('content')
+        txt = c if isinstance(c, str) else ' '.join(b.get('text') or '' for b in c or [] if isinstance(b, dict) and b.get('type') == 'text')
+        return bool(txt.strip()) and not txt.lstrip().startswith(('<task-notification>', '<system_notification>'))
+    start = max((i for i, r in enumerate(rows) if prompt(r)), default=-1)
+    said = [b.get('text') or '' for r in rows[start + 1:] if (r.get('message') or {}).get('role') == 'assistant'
+            for b in ((r.get('message') or {}).get('content') or []) if isinstance(b, dict) and b.get('type') == 'text']
+    return '\n\n'.join(s.strip() for s in said if s.strip())
+
+
 def claude_notes(p: dict) -> list:
     from .agents import _fmt_input
     ev, at = p.get('hook_event_name') or '', _now()
@@ -97,7 +117,9 @@ def claude_notes(p: dict) -> list:
         # the tool itself failed: the pane shows the failure where a running tool would show its name
         return [{'k': 'tool', 'name': str(p.get('tool_name') or ''), 'target': _fmt_input(p.get('tool_input') or {}), 'at': at, 'source': 'hook',
                  'error': str(p.get('error') or p.get('error_message') or 'failed').strip()[:200]}]
-    if ev == 'Stop': return [{'k': 'done', 'text': str(p.get('last_assistant_message') or '').strip(), 'at': at, 'source': 'hook'}]
+    if ev == 'Stop':
+        last = str(p.get('last_assistant_message') or '').strip()
+        return [{'k': 'done', 'text': turn_text(p.get('transcript_path')) or last, 'at': at, 'source': 'hook'}]
     if ev == 'UserPromptSubmit': return [{'k': 'turn', 'at': at, 'source': 'hook'}]
     return []
 

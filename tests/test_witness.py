@@ -65,6 +65,35 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(len(w.snapshot([], '', '')['said']), 300)
 
 
+class FinalTurnTests(unittest.TestCase):
+    """The agent wrote the reply, ran `taskuary --done`, then said "The reply above is ready for you to review". The Stop hook's
+    last message was that pointer alone, and the reply was drafted from it - a placeholder (2026-10-13). The whole turn is kept."""
+    def transcript(self, rows):
+        f = tempfile.NamedTemporaryFile('w', suffix='.jsonl', delete=False, encoding='utf-8')
+        f.write('\n'.join(json.dumps(r) for r in rows)); f.close(); self.addCleanup(os.unlink, f.name)
+        return f.name
+
+    def test_stop_keeps_every_word_since_the_owners_last_prompt(self):
+        say = lambda t: {'type': 'assistant', 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': t}]}}
+        path = self.transcript([
+            {'type': 'user', 'message': {'role': 'user', 'content': 'Check the sample and draft the answer.'}},
+            say('Checked an earlier version.'),
+            {'type': 'user', 'message': {'role': 'user', 'content': 'Look again, every folder.'}},
+            say("Here's the reply.\n\nHi Erin,\n\nThe sample is not what we need."),
+            {'type': 'assistant', 'message': {'role': 'assistant', 'content': [{'type': 'tool_use', 'name': 'Bash', 'input': {'command': 'taskuary --done "x"'}}]}},
+            {'type': 'user', 'message': {'role': 'user', 'content': [{'type': 'tool_result', 'content': 'ok'}]}},
+            {'type': 'user', 'message': {'role': 'user', 'content': '<task-notification><status>completed</status></task-notification>'}},
+            say('The reply above is ready for you to review and send.')])
+        [note] = witness.claude_notes({'hook_event_name': 'Stop', 'transcript_path': path,
+                                       'last_assistant_message': 'The reply above is ready for you to review and send.'})
+        self.assertIn('Hi Erin,', note['text']); self.assertIn('The reply above is ready', note['text'])
+        self.assertNotIn('earlier version', note['text'])                       # before the owner's last prompt: not this turn
+
+    def test_no_transcript_keeps_the_last_message(self):
+        [note] = witness.claude_notes({'hook_event_name': 'Stop', 'transcript_path': None, 'last_assistant_message': 'All done.'})
+        self.assertEqual(note['text'], 'All done.')
+
+
 class HookWiringTests(unittest.TestCase):
     def setUp(self): self._keep = dict(term.SESSIONS); term.SESSIONS.clear()
     def tearDown(self): term.SESSIONS.clear(); term.SESSIONS.update(self._keep)

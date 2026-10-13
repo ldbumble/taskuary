@@ -587,11 +587,16 @@
 /* ONE VOICE SAYS WHAT TO DO (the owner, 2026-10-13: "why would we need both?"): while the NEXT strip stands, the task's own
    "Open again: ... continue the session, or answer it yourself" line goes - the Tasks tab, with no strip, keeps it */
 .tq-asst-col.advising .tq-news { display: none; }
-.tq-next { display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 10px 14px; border: 1px solid #e4dfd6; border-radius: 10px; background: #f6f5f1; }
-.tq-next-tag { flex: 0 0 auto; font: 500 10.5px/1 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .06em; color: #55697a; }
-.tq-next-txt { flex: 1 1 auto; min-width: 0; }
-.tq-next-txt .line { font: 600 13.5px/1.35 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
-.tq-next-txt .habit { font: 400 12px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; margin-top: 2px; }
+.tq-next { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 9px 14px; border: 1px solid #e4dfd6; border-radius: 10px; background: #f6f5f1; }
+.tq-next-txt { flex: 1 1 auto; min-width: 0; font: 500 13.5px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
+.tq-next-why { flex: 0 0 auto; border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: 600 12.5px/1 'IBM Plex Sans', system-ui, sans-serif; color: #55697a; text-decoration: underline; text-underline-offset: 3px; }
+.tq-next-why:hover { background: #ece9e3; }
+.tq-next-why:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
+.tq-next-pop { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font: 400 13px/1.45 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
+.tq-next-pop .said { font-weight: 500; }
+.tq-next-pop .fact, .tq-next-pop .when { color: #6e685f; font-size: 12.5px; }
+.tq-next-pop .rests .head { font: 500 10.5px/1 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: #6e685f; margin-bottom: 4px; }
+.tq-next-pop ul { margin: 0; padding-left: 18px; }
 .tq-ab { font: 600 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; min-height: 26px; border-radius: 99px; padding: 0 12px; border: 1px solid #d8d1c5; background: #fff; color: #262521; white-space: nowrap; cursor: pointer; }
 .tq-ab:hover:not(:disabled) { border-color: #55697a; }
 .tq-ab.p { background: #55697a; color: #fff; border-color: #55697a; }   /* the primary is the brand slate, like the walk's way in */

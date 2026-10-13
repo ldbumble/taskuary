@@ -2161,9 +2161,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <RetryVerbs item={currentItem} failed={(pile?.items || []).filter((i) => i.lane === "unjudged").length}
             onSaid={(text, status) => setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: status || "done", text }])}
             onDone={() => loadPile(true)} />
-          {/* the Advisor at the foot of the canvas, and the filled button it picked on the row under it - never in the box (2026-10-13) */}
-          <AdvisorNext advice={advice} busy={busy || resetting}
-            onPick={() => runChip({ verb: advice.verb, label: advice.label, revision: advice.revision })} />
+          {/* the Advisor's suggestion over the row, whose filled button is the one it picked - never in the box (2026-10-13) */}
+          <AdvisorNext advice={advice} />
           <ActionRow waited={currentItem?.ref ? waitedText(currentItem) : ""} advised={advice} />
           <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
           <div className="tq-compose-box">

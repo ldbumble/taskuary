@@ -2,25 +2,41 @@
 // next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
 // ONE filled button at most (the decision; Next only when there is no decision), and a greyed decision says why it is greyed.
 import React, { useState } from "react";
-import { Menu, MenuItem } from "@mui/material";
+import { Menu, MenuItem, Popover } from "@mui/material";
+import api from "./api.js";
+import { suggestion } from "./advice.js";
 import { advisedIn, press, rowOf, useHosted, useRowVerbs } from "./actionRow.js";
 
-// THE ADVISOR'S NEXT STEP (advisor.py), written at the foot of the canvas, over the row whose filled button it picked: the line it
-// said and why - the box below stays the owner's own. Nothing to say draws nothing. A pick the row does not carry keeps its own
-// button here, so the advice can still be taken (it was the prompt box's pill, 2026-10-13).
-export function AdvisorNext({ advice, onPick, busy }) {
+// THE ADVISOR'S SUGGESTION (advisor.py), over the row whose filled button it picked: the reason in a sentence, and Why? for the
+// reasoning behind it - the buttons stay on the row, the box below stays the owner's own. Nothing to say draws nothing (2026-10-13).
+export function AdvisorNext({ advice }) {
   const verbs = useRowVerbs();
+  const [at, setAt] = useState(null), [note, setNote] = useState(null);
   if (!advice?.verb || !advice.line) return null;
-  const onRow = !!advisedIn(verbs.list, advice);
+  const onRow = advisedIn(verbs.list, advice);
   const [n, m] = advice.count || [0, 0];
+  const why = (e) => {
+    setAt(e.currentTarget); setNote(null);
+    api.get("/api/advice/notes", { params: { key: advice.key, limit: 5 } })
+      .then(({ data }) => setNote((data?.rows || []).find((r) => r.verb === advice.verb && r.line) || {}))
+      .catch(() => setNote({}));
+  };
   return (
     <div className="tq-next" role="status" data-tq-advice="">
-      <span className="tq-next-tag">NEXT</span>
-      <div className="tq-next-txt">
-        <div className="line">{advice.line}</div>
-        {m >= 2 && <div className="habit">You chose {advice.label} {n} of {m} times in a moment like this</div>}
-      </div>
-      {!onRow && <button type="button" className="tq-ab p" disabled={busy} onClick={onPick}>{advice.label}</button>}
+      <div className="tq-next-txt">{suggestion(advice.line, advice.label, advice.verb)}</div>
+      <button type="button" className="tq-next-why" aria-haspopup="dialog" aria-expanded={!!at} onClick={why}>Why?</button>
+      <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
+        transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
+        <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
+          <div className="pick">Suggested: <b>{onRow?.label || advice.label}</b>{onRow ? " - the dark button below" : ""}</div>
+          <div className="said">{advice.line}</div>
+          {m >= 2 && <div className="fact">You chose {advice.label} {n} of {m} times in a moment like this.</div>}
+          {note === null ? <div className="fact">Reading its notes…</div> : (note.evidence || []).length > 0 && (
+            <div className="rests"><div className="head">What it rests on</div>
+              <ul>{note.evidence.map((e) => <li key={e.id}>{e.label || e.id}</li>)}</ul></div>)}
+          {note?.at && <div className="when">Judged {String(note.at).slice(0, 16)}{note.model ? ` · ${note.model}` : ""}</div>}
+        </div>
+      </Popover>
     </div>
   );
 }

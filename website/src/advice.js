@@ -11,3 +11,14 @@ export function adviceKeyFor(ev, cur) {
   if (!cur.key) return null;
   return k === cur.key || (cur.aliases || []).includes(k) ? cur.key : null;
 }
+
+/* The suggestion as the strip says it: the Advisor's sentence without its verb in front ("Reply: Mindy is asking..." -> "Mindy is
+   asking...") - the filled button below already names the move (the owner, 2026-10-13: "it should not say NEXT Reply - just give
+   suggestion"). Only a lead-in that IS the move's own word goes; any other sentence is kept whole. */
+export function suggestion(line, label, verb) {
+  const l = String(line || "").trim();
+  const names = [label, verb, String(verb || "").replace(/_/g, " ")].filter(Boolean).map((w) => String(w).trim().toLowerCase());
+  const m = l.match(/^["“]?([^:"”]{1,40}?)["”]?\s*(?::|\s[-–—]|\s+because\b)\s*(.+)$/i);
+  if (!m || !names.includes(m[1].trim().toLowerCase())) return l;
+  return m[2].charAt(0).toUpperCase() + m[2].slice(1);
+}

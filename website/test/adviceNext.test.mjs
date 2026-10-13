@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { advisedIn, rowOf } from "../src/actionRow.js";
+import { suggestion } from "../src/advice.js";
 
 const src = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
 const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
@@ -41,7 +42,6 @@ test("a greyed verb is never the advised one", () => {
 test("the next step sits over the row and the box is plain: no ghost text, no pill", () => {
   assert.match(src, /<AdvisorNext advice=\{advice\}/);
   assert.match(src, /<ActionRow [^>]*advised=\{advice\}/);
-  assert.match(src, /runChip\(\{ verb: advice\.verb, label: advice\.label, revision: advice\.revision \}\)/);   // a pick the row lacks: same chip path
   assert.doesNotMatch(src, /ghostText|tq-pill|tq-advised/);
   assert.doesNotMatch(css, /\.tq-pill|tq-advised/);
   assert.match(row, /if \(!advice\?\.verb \|\| !advice\.line\) return null;/);                // nothing to say draws nothing
@@ -53,6 +53,23 @@ test("while the NEXT strip stands, the task's own Open again line is hidden - on
   assert.match(page, /<Typography className="tq-news"[^>]*>Open again: \{news\.line\}/);
   assert.match(src, /className=\{advice\?\.verb && advice\.line \? "tq-asst-col advising" : "tq-asst-col"\}/);
   assert.match(css, /\.tq-asst-col\.advising \.tq-news \{ display: none; \}/);
+});
+
+test("the strip gives the suggestion, not the move's name: a lead-in that is the verb goes, any other sentence stays whole", () => {
+  assert.equal(suggestion("Reply: Mindy is directly asking your access decision for this group.", "Reply", "reply"), "Mindy is directly asking your access decision for this group.");
+  assert.equal(suggestion("Reply because Jessica is directly asking for your okay.", "Reply", "reply"), "Jessica is directly asking for your okay.");
+  assert.equal(suggestion("Continue session - coder was cut off, not finished.", "Continue session", "continue"), "Coder was cut off, not finished.");
+  assert.equal(suggestion("Erin: the list is approved, send it.", "Reply", "reply"), "Erin: the list is approved, send it.");   // a name, not the verb
+  assert.equal(suggestion("You usually merge these.", "Mark done", "close"), "You usually merge these.");
+});
+
+test("the strip has no NEXT tag and no button of its own - the buttons are the row's - and Why? opens the Advisor's reasoning", () => {
+  const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("export default function ActionRow"));
+  assert.doesNotMatch(strip, /NEXT|className="tq-ab/);
+  assert.match(strip, /suggestion\(advice\.line, advice\.label, advice\.verb\)/);
+  assert.match(strip, /className="tq-next-why"[^>]*>Why\?<\/button>/);
+  assert.match(strip, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: advice\.key/);
+  assert.match(strip, /<Popover open=\{!!at\}/);
 });
 
 test("the clock menu offers the Advisor's notes for the item on the table", () => {

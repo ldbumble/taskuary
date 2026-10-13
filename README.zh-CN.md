@@ -232,15 +232,17 @@ taskuary --demo
 
 完整文档（英文）在 **[taskuary.com/docs](https://taskuary.com/docs/)**。
 
-本地文件和 SharePoint 的 Excel（`.xlsx`）报表会保留表头重复或为空的每一列。
-空表头使用从零开始的列名，如 `col0`；重复列名依次添加 `_2`、`_3` 等后缀，直到各列名称唯一，与 Google Sheets 报表一致。
-
 - [入门指南](https://taskuary.com/docs/)：安装、初始配置、Docker 和数据存储。
 - [工作原理](https://taskuary.com/docs/how-it-works)：完整流程、五条路径、学习机制和配置文档。
 - [连接](https://taskuary.com/docs/connections)：消息渠道、AI、业务系统和报表来源。
 - [任务与智能体](https://taskuary.com/docs/tasks-and-agents)：任务、智能体工作与回复是三条独立的生命周期。
-- [报表与助手](https://taskuary.com/docs/reports)：报表处理流程及助手的检查范围。
+- [助手按钮](https://taskuary.com/docs/assistant)：助手卡片下的每个按钮、其中两个会问的那个问题，以及可以直接输入的词。
+- [助手能看到什么](https://taskuary.com/docs/assistant-tools)：助手可用的全部工具，以及每一轮都会拿到的摘要。
+- [报表与顾问](https://taskuary.com/docs/reports)：报表处理流程，以及以判断为职责的那份报表。
+- [顾问](https://taskuary.com/docs/advisor)：顾问的输入、它的两个时钟，以及教会它哪些做法有效的成效账本。
+- [在手机上](https://taskuary.com/docs/phone)：通过 WhatsApp 或 Telegram 使用同一个助手，以及它在那里可以做什么。
 - [设置参考](https://taskuary.com/docs/settings)：全部设置项，由应用自身读取的同一份 schema 生成。
+- [出问题时](https://taskuary.com/docs/troubleshooting)：该检查什么，以及按什么顺序检查。
 - [状态与路线图](docs/roadmap.md)：当前能力和后续计划。
 - [贡献指南](CONTRIBUTING.md)：开发环境与贡献方式。
 

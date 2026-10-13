@@ -234,17 +234,17 @@ Updated daily from PyPI with mirror traffic excluded. The raw series is
 
 The documentation is at **[taskuary.com/docs](https://taskuary.com/docs/)**.
 
-Excel (`.xlsx`) reports from local files and SharePoint preserve columns with repeated or blank
-headers. Blank headers use zero-based names such as `col0`; repeated names gain `_2`, `_3`, and
-so on until each column has a unique name, matching Google Sheets reports.
-
 - [Start here](https://taskuary.com/docs/)—installation, first run, Docker, and where your data lives
 - [How it works](https://taskuary.com/docs/how-it-works)—the Timeline, the five roads, what triage decides, the operator documents
 - [Connections](https://taskuary.com/docs/connections)—channels, AI providers, work systems, and report sources
 - [Tasks and agents](https://taskuary.com/docs/tasks-and-agents)—the task, the agent work and the reply as three separate lives
+- [Assistant buttons](https://taskuary.com/docs/assistant)—every button under an Assistant card, the one question two of them ask, and the words that work typed
+- [What the Assistant sees](https://taskuary.com/docs/assistant-tools)—every tool the Assistant has, and the summary it gets on every turn
 - [Reports and the Advisor](https://taskuary.com/docs/reports)—the report pipeline, AI-written source cards, and what Taskuary watches
 - [The Advisor](https://taskuary.com/docs/advisor)—what goes into it, its two clocks, and the outcome ledger that teaches it what worked
+- [On your phone](https://taskuary.com/docs/phone)—the same assistant over WhatsApp or Telegram, and what it may do there
 - [Settings reference](https://taskuary.com/docs/settings)—every setting, generated from the schema the app itself reads
+- [When something is wrong](https://taskuary.com/docs/troubleshooting)—what to check, in the order worth checking it
 - [Status and roadmap](docs/roadmap.md)—what works today and what is next
 - [Contributing](CONTRIBUTING.md)—development setup and contribution guide
 

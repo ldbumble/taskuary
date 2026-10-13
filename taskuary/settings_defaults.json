@@ -47,6 +47,7 @@
     "mark_read_enabled": "0",
     "timezone": "",
     "timeline_fade": "normal",
+    "concierge_fast": "auto",
     "funnel_hours": "12",
     "funnel_max": "25",
     "task_return_minutes": "180",

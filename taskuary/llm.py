@@ -85,9 +85,32 @@ ASSISTANT_DEFAULT = {'claude': 'sonnet', 'codex': 'effort:medium', 'gemini': 'ge
 ASSISTANT_EFFORT = {'claude': 'low'}
 
 
+FAST_DEFAULT = {'codex': True}     # auto: Codex's fast tier rides the plan; Claude's fast mode is billed as extra usage
+
+
+def fast_on(store, cli: str) -> bool:
+    """The Assistant's fast mode for this CLI: the owner's on/off, else FAST_DEFAULT (the owner, 2026-10-13: "on by default
+    if you choose codex but not for claude")."""
+    v = str(store.get_setting('concierge_fast') or 'auto').strip().lower()
+    return v == 'on' or (v != 'off' and FAST_DEFAULT.get(cli, False))
+
+
+def fast_args(cli: str) -> list:
+    """The CLI's own words for its fast tier. Claude's comes as a settings FILE: inline JSON through Windows' claude.cmd shim
+    is quoted by cmd.exe. Codex parses a -c value as TOML and keeps a bare word as a string, so no quotes either."""
+    if cli == 'codex': return ['-c', 'service_tier=fast']
+    if cli == 'claude':
+        from . import config
+        f = config.home() / 'assistant' / 'fast-settings.json'
+        f.parent.mkdir(parents=True, exist_ok=True)
+        if not f.exists() or f.read_text(encoding='utf-8') != '{"fastMode": true}': f.write_text('{"fastMode": true}', encoding='utf-8')
+        return ['--settings', str(f)]
+    return []
+
+
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
-                 research: bool = False, gear: str = 'light', keep: str = None):
+                 research: bool = False, gear: str = 'light', keep: str = None, extra_args: list = None):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -122,6 +145,9 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # The ACP road is for the general agent's tool-using runs only. `no_hands` is exactly the
     # classifier - triage and the drafter, one verdict with every tool off - and it keeps argv.
     if not no_hands: prof['acp_ok'] = True
+    if extra_args:
+        from .clis import preset_args
+        prof['args'] = list(prof.get('args') or preset_args(prof.get('cmd', 'claude')) or ['-p']) + list(extra_args)
     # WHICH GEAR this job rides. Session work - coding and general alike - takes the MAIN model;
     # the light gear is for the one-message jobs (triage, drafts, summaries, the digest). A
     # general worker session used to fall through to light whenever no main model was set, so

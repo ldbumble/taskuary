@@ -249,15 +249,16 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             # the Assistant's effort, unless the pick names one (ASSISTANT_EFFORT)
             if model and '@' not in model and llm_mod.ASSISTANT_EFFORT.get(cli): model = f'{model}@{llm_mod.ASSISTANT_EFFORT[cli]}'
             folder = config.home() / 'assistant'; folder.mkdir(parents=True, exist_ok=True)
+            fx = llm_mod.fast_args(cli) if llm_mod.fast_on(store, cli) else []      # the provider's fast tier (Settings > Assistant)
             cwd = None if fast else str(folder)                  # no cwd = make_cli_llm's read-only gear: no tools, no permission bypass
             if dflt.startswith('effort:'):
                 # an effort-only gear (codex) rides on a copy of the profile, never written back to the row
                 prof['light_model'] = dflt
                 store_get = store.get_agent
                 store.get_agent = lambda n, _r=row, _p=prof: (_r | {'Config': json.dumps(_p)}) if n == name else store_get(n)
-                try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep)
+                try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}))
                 finally: store.get_agent = store_get
-            return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep)
+            return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}))
         return llm_mod.build_llm(store, pick=p, model=str(store.get_setting(MODEL_KEY) or '').strip() or None, trace=trace, cancel=cancel)
     except Exception as e:
         logger.debug(f'concierge: no brain - {e}'); return None

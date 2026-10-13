@@ -475,6 +475,7 @@
       "desc": "How tall the soft fade is at the bottom edge of the Timeline viewport.",
       "help": "Rows are never dimmed because they are old. A row only gets lighter while it passes through the bottom edge, then returns to full contrast as you scroll it upward. Gentle, normal, and sharp change the height of that band; off removes it. Purely visual - nothing is hidden or removed."
     },
+    "concierge_fast": {"group": "Assistant", "label": "Fast mode", "type": "select", "options": ["auto", "on", "off"], "optionLabels": {"auto": "on for Codex, off for Claude", "on": "on", "off": "off"}, "desc": "Runs the Assistant's CLI on its provider's fast tier: Codex's fast service tier, Claude Code's fast mode. By default on for Codex and off for Claude.", "help": "Claude bills fast mode as extra usage, outside your subscription, and runs it only when extra usage is turned on in your Claude account; Codex spends your plan's credits faster. Coding and general agents are not changed."},
     "funnel_hours": {
       "group": "Assistant",
       "label": "The pipe reaches back (hours)",

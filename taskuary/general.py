@@ -498,6 +498,27 @@ def setup_skill() -> str:
         return ''
 
 
+def repos_block(store) -> str:
+    """The owner's repositories and WHERE THEY ARE on this machine: SOUL.md's repo map for what each one is, the agents'
+    cwd_map for its checkout. A coding agent is started inside one; this assistant runs in Taskuary's scratch folder and was
+    told of none - asked for a login kept in a repo's .env, it searched Documents, Desktop and OneDrive for ten minutes and
+    said it could not find the repo (the owner, 2026-10-14: "it can't find the repo that's in the system")."""
+    import json
+    from .terminal import repo_map
+    paths = {}
+    try:
+        for a in store.list_agents(active_only=False):
+            try: paths.update({k: v for k, v in (json.loads(a.get('Config') or '{}').get('cwd_map') or {}).items() if v and k not in paths})
+            except (ValueError, AttributeError): continue
+    except Exception as e: logger.debug(f'general: no agent paths - {e}')
+    desc = repo_map(store)
+    names = list(dict.fromkeys([*desc, *paths]))
+    if not names: return ''
+    line = lambda r: f"- {r}" + (f" - {_cut(desc[r], 160)}" if desc.get(r) else '') + (f"\n  checkout on this machine: {paths[r]}" if paths.get(r) else ' (no local checkout)')
+    return ("THE OWNER'S REPOSITORIES (what each is, and where it is on this machine - look there first, never search the disk "
+            "for one)\n" + '\n'.join(line(r) for r in names[:20]))
+
+
 def _prompt(store, tid: int) -> tuple[str, str]:
     detail = store.task_detail(tid) or {}
     task = detail.get('task') or {}
@@ -530,6 +551,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )
+    repos = repos_block(store)
+    if repos: system += f'\n\n{repos}'
     # The role triage named owns the INSTRUCTIONS for general work - which is what stops it being
     # "only a label on the task". Which brain runs them is a separate question, answered from
     # settings: the two no longer travel together (the 2026-09-16 spec).

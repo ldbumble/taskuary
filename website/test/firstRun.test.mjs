@@ -44,3 +44,12 @@ test("other email is the Connections card in its simple mode, and an AI not inst
   assert.match(fr, /if \(!ai\.installed && ai\.install && !ai\.done\) \{ install\(ai\); return; \}/);
   assert.match(fr, /Press Install to try again, or pick another AI\./);
 });
+
+// the owner, 2026-10-14: "what is this garbage ... where are the cards with choices" - Set up Taskuary opened the 13-stop walk
+test("Set up Taskuary opens the two cards, open on both steps, and only a fresh install opens on them by itself", () => {
+  const view = read("AssistantView.jsx");
+  assert.match(view, /if \(!DEMO\) \{ setMsgs\(\(m\) => \[\.\.\.m, \{ id: `f\$\{Date\.now\(\)\}`, role: "assistant", card: \{ key: "firstrun", kind: "firstrun"/);
+  assert.match(view, /firstrun: <FirstRun revisit onChanged=\{actions\.reload\} onWalk=\{\(\) => actions\.start\(null\)\} \/>/);
+  assert.match(view, /data\.step !== "done" && !data\.sorted\) setFirstRun\(true\)/, "an install already sorting mail opens on its day");
+  assert.match(read("FirstRun.jsx"), /\{\(s1 \|\| revisit\) && <AiStep/);
+});

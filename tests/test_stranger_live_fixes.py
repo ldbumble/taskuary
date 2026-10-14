@@ -7,6 +7,13 @@ from taskuary import origin, agents, terminal, hooks, floor, llm, workerstate as
 from taskuary.config import home
 from taskuary.store import MemoryStore
 
+# CI's machines have no AI CLI on them: these tests are about what a session is ALLOWED to do, never whether claude is
+# installed, so the command resolves to its own name here as it does on a machine that has it (CI, 2026-10-14)
+@pytest.fixture(autouse=True)
+def _cli_resolves(monkeypatch):
+    from taskuary import agents
+    monkeypatch.setattr(agents, '_resolve_cmd', lambda name: [str(name)])
+
 @pytest.fixture(autouse=True)
 def _claude(monkeypatch, tmp_path):
     monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': (2, 1, 300))   # nothing here may launch a real claude

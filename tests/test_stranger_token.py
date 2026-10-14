@@ -7,6 +7,13 @@ from fastapi.testclient import TestClient
 from taskuary import guard, server, terminal, origin, llm, agents, floor, cli, coder, selfclose
 from taskuary.store import MemoryStore
 
+# CI's machines have no AI CLI on them: these tests are about what a session is ALLOWED to do, never whether claude is
+# installed, so the command resolves to its own name here as it does on a machine that has it (CI, 2026-10-14)
+@pytest.fixture(autouse=True)
+def _cli_resolves(monkeypatch):
+    from taskuary import agents
+    monkeypatch.setattr(agents, '_resolve_cmd', lambda name: [str(name)])
+
 c = TestClient(server.app)
 SRV = lambda: server.cfg['server']
 ST = lambda tid: {'X-Taskuary-Token': guard.stranger_token(SRV(), tid)}

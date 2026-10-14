@@ -47,6 +47,8 @@ class ChooseAiTests(unittest.TestCase):
         self.assertIn('codex', self.cfg['cli_connections'])
         self.assertEqual(self.s.get_setting('triage_ai'), 'cli:codex')
         self.assertEqual(self.s.setting_writer('triage_ai'), 'owner', "the owner's own click, not an auto-pick")
+        # ...and it is THE AI, not triage's alone: general tasks, the Assistant and coding sessions run on it too
+        self.assertEqual([self.s.get_setting(k) for k in ('assistant_ai', 'concierge_ai', 'default_brain')], ['cli:codex', 'cli:codex', 'codex'])
 
 
 class KeyAndMailTests(unittest.TestCase):
@@ -60,6 +62,7 @@ class KeyAndMailTests(unittest.TestCase):
         with mock.patch('taskuary.channels.test_connector', return_value={'ok': True, 'detail': 'ok'}):
             good = firstrun.choose_key(s, 'anthropic', 'sk-ant-right-key-456')
         self.assertTrue(good['ok']); self.assertEqual(s.get_setting('triage_ai'), f'connector:{cid}')
+        self.assertEqual(s.get_setting('assistant_ai'), f'connector:{cid}', 'the key runs general work too')
         self.assertTrue(s.get_connector(cid)['Active'])
 
     def test_gmail_is_switched_on_its_mailbox_read_and_the_owner_named_from_the_address(self):

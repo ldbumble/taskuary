@@ -99,7 +99,7 @@ function AiStep({ st, reload }) {
       <Grid>
         {[...main, ...(more ? others : [])].map((ai) => (
           <Card key={ai.name} title={ai.title} sub={ai.installed ? ai.sub : `${ai.sub} · not installed yet`} busy={busy === ai.name}
-            disabled={!!busy && busy !== ai.name} on={fix?.name === ai.name} onClick={() => pick(ai)} />
+            disabled={!!busy && busy !== ai.name} on={fix?.name === ai.name || (st.brain.ready && st.brain.name === ai.title)} onClick={() => pick(ai)} />
         ))}
         <Card title="Use an API key" sub="Paste a Claude or OpenAI key instead" on={keyOpen} onClick={() => setKeyOpen((v) => !v)} />
       </Grid>
@@ -157,7 +157,9 @@ function MailStep({ st, reload }) {
   );
 }
 
-export default function FirstRun({ onWalk, onChanged }) {
+// `revisit`: opened from Set up Taskuary on an install that may be set up already - both steps stay open, so the AI or the
+// mailbox can be changed from the same cards
+export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   const [st, setSt] = useState(null), [err, setErr] = useState("");
   const was = useRef("");
   const reload = useCallback(async () => {
@@ -192,13 +194,13 @@ export default function FirstRun({ onWalk, onChanged }) {
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>{dot(1, s1, !s1)}
           <Typography sx={{ fontWeight: 650, color: INK }}>Pick your AI</Typography>
           {!s1 && <Typography sx={{ color: ok, fontSize: 13 }}>{st.brain.name} is ready</Typography>}</Box>
-        {s1 && <AiStep st={st} reload={reload} />}
+        {(s1 || revisit) && <AiStep st={st} reload={reload} />}
       </Box>
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1, opacity: s1 ? 0.55 : 1 }}>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>{dot(2, s2, reading)}
           <Typography sx={{ fontWeight: 650, color: INK }}>Connect your email</Typography>
           {reading && <Typography sx={{ color: ok, fontSize: 13 }}>{st.connected.join(", ")}</Typography>}</Box>
-        {s2 && <MailStep st={st} reload={reload} />}
+        {(s2 || (revisit && !s1)) && <MailStep st={st} reload={reload} />}
       </Box>
       {reading && (
         <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>

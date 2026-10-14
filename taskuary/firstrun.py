@@ -64,6 +64,17 @@ def state(store) -> dict:
             'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'next': nxt}
 
 
+# ONE PICK IS THE AI (the owner, 2026-10-14: "this is only triage ai not the other ai's"): the four brains - triage, general
+# tasks, the Assistant's voice and coding sessions - each read their own setting, and the first run set only triage's. A key
+# cannot run a coding session, so a pasted key leaves that one where it was.
+BRAINS = ('triage_ai', 'assistant_ai', 'concierge_ai')
+
+
+def _everywhere(store, pick: str, cli: str = ''):
+    for k in BRAINS: store.set_setting(k, pick, 'owner')
+    if cli: store.set_setting('default_brain', cli, 'owner')
+
+
 def choose_cli(store, cfg: dict, name: str) -> dict:
     """The owner clicked a CLI card: connect it, test it, make it the brain. {ok, why, fix} - `fix` is the ONE thing to press
     when it did not work: 'install' or 'signin'."""
@@ -89,7 +100,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
                        + (' Press Sign in, do what it asks in the window below, then click the card again.' if k.get('setup') else ''),
                 'detail': str(e)[:200]}
     worker = next((o['value'] for o in agents.cli_agent_options(store) if o['cli'] == name), '') or key
-    store.set_setting('triage_ai', f'cli:{worker}', 'owner')          # the owner's own click: theirs, not an auto-pick
+    _everywhere(store, f'cli:{worker}', cli=key)                       # the owner's own click: theirs, not an auto-pick
     store.audit('setting', 0, 'first_run_brain', 'owner', detail={'cli': name, 'pick': f'cli:{worker}'})
     return {'ok': True, 'why': f'{label} works - it will sort your mail.'}
 
@@ -106,7 +117,7 @@ def choose_key(store, typ: str, secret: str) -> dict:
     if not out.get('ok'):
         store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 'owner')
         return {'ok': False, 'why': f"That key didn't work: {str(out.get('detail') or 'the provider said no')[:200]}. Check you copied all of it."}
-    store.set_setting('triage_ai', f"connector:{c['ConnectorId']}", 'owner')
+    _everywhere(store, f"connector:{c['ConnectorId']}")
     return {'ok': True, 'why': f"Your {typ.capitalize()} key works - it will sort your mail."}
 
 

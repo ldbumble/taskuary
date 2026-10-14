@@ -656,6 +656,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       onRestart={actions.walkRestart} onFinish={() => actions.walk(-1)}
       onSaved={() => actions.walkSaved(m.id)} />,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
+    // SET UP TASKUARY is the two cards, not the 13-stop walk (the owner, 2026-10-14: "what is this garbage ... where are the cards")
+    firstrun: <FirstRun revisit onChanged={actions.reload} onWalk={() => actions.start(null)} />,
     fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} />,
   }[kind] : null;
   // A STOP THE WALK HAS MOVED PAST is a finished step, not something the assistant said. Falling
@@ -1190,10 +1192,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [mailReading, setMailReading] = useState(false);
   // set up when the page opened? then the canvas IS the setup until its walk starts (FirstRun.jsx); never in the demo
   const [firstRun, setFirstRun] = useState(false);
+  const setupRef = useRef(null);
   useEffect(() => {
     if (DEMO) return;
-    api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.step !== "done") setFirstRun(true); }).catch(() => {});
-    const show = () => setFirstRun(true);                       // the top bar's setup chip asks for it
+    // ...only an install with nothing sorted yet opens ON it: one already reading mail opens on its day, and the cards are a press away
+    api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.step !== "done" && !data.sorted) setFirstRun(true); }).catch(() => {});
+    const show = () => setupRef.current?.();                    // the top bar's setup chip asks for the cards
     window.addEventListener("tq-first-run", show); return () => window.removeEventListener("tq-first-run", show);
   }, []);       // the launch still reading the mail (SinceBlock): the counts wait
   useEffect(() => onLive(["chat-changed"], (ev) => {
@@ -1689,6 +1693,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [walking, setWalking] = useState(false);        // guards the chip against a double-click
   const setup = async () => {
     if (walking) return;
+    if (!DEMO) { setMsgs((m) => [...m, { id: `f${Date.now()}`, role: "assistant", card: { key: "firstrun", kind: "firstrun", lane: "report" }, options: [] }]); return; }
     if (DEMO) {
       setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "assistant", text:
         "## Set up Taskuary on your own machine\n\nThis browser demo uses fictional data and cannot connect an inbox. "
@@ -1981,6 +1986,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       </div>
     </div></div>
   );
+  setupRef.current = () => (firstRun || msgs.length ? setup() : setFirstRun(true));
   const actions = { done, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),

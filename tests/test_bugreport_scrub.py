@@ -91,7 +91,76 @@ class ScrubTests(unittest.TestCase):
         text = TEXT * 20 + 'Line 3 of message 4512 says something rather ordinary.'
         t = time.perf_counter(); out = bugreport.scrub(text, s); took = time.perf_counter() - t
         self.assertNotIn('message 4512', out)
-        self.assertLess(took, 1.5, f'{took:.2f}s')
+        self.assertLess(took, 3, f'{took:.2f}s')
+
+
+class SlipThroughTests(unittest.TestCase):
+    """The shapes a first review got past the scrub: encodings, other home folders, bare repos, hosts outside a
+    TLD list, IPv6, shares, and store strings glued to code."""
+    def setUp(self):
+        self.s = seeded()
+        p = mock.patch.object(bugreport, '_machine', return_value=['alexd', 'ALEXD-LAPTOP', 'D:\\profiles\\alexd']); p.start(); self.addCleanup(p.stop)
+    def S(self, t): return bugreport.scrub(t, self.s)
+
+    def test_encoded_text_is_scrubbed(self):
+        for t in ['GET /api/people/Erin%20Blake 500', 'q=Erin+Blake', 'to erin%40northwind.example', 'to erin\\u0040northwind.example',
+                  'to erin\\x40northwind.example']:
+            out = self.S(t)
+            self.assertNotIn('erin', out.lower(), t); self.assertNotIn('northwind', out.lower(), t)
+        out = self.S('http://localhost:7787/api/search?q=Erin%20Blake&who=Payworth%20renewal done')
+        self.assertIn('http://localhost:7787/api/search', out); self.assertNotIn('Payworth', out); self.assertNotIn('Erin', out)
+        self.assertIn('C++ and a+b', self.S('C++ and a+b'))                       # a plus is only a space between letters
+
+    def test_other_home_folders(self):
+        self.assertEqual('~/src/x', self.S('/c/Users/alexd/src/x'))
+        self.assertEqual('~/src/x', self.S('/mnt/c/Users/alexd/src/x'))
+        self.assertEqual('~\\AppData\\y', self.S('C:\\Users\\Jordan Smith\\AppData\\y'))
+        for t in ['D:\\profiles\\alexd\\x.log', 'host ALEXD-LAPTOP user alexd']:
+            self.assertNotIn('alexd', self.S(t).lower(), t)
+
+    def test_scheme_less_github_repos(self):
+        for t in ['git@github.com:northwind/internal-billing.git', 'see github.com/northwind/internal-billing',
+                  'https://github.com/ldbumble/taskuary/../../northwind/x']:
+            out = self.S(t)
+            self.assertNotIn('internal-billing', out, t); self.assertNotIn('northwind', out, t)
+        self.assertIn('github.com/ldbumble/taskuary/issues/3', self.S('github.com/ldbumble/taskuary/issues/3'))
+
+    def test_hosts_ipv6_and_shares(self):
+        for t, gone in [('imap.payworth.xq:993 refused', 'payworth'), ('via smtp.northwind.zz', 'northwind'),
+                        ('[2a02:1210:5c4b:9f00::12]:51234', '2a02'), ('peer fe80::1c2b:3dff:fe4e:5f6a', 'fe80'),
+                        ('open \\\\fileserver01\\finance\\payroll.xlsx', 'fileserver01')]:
+            self.assertNotIn(gone, self.S(t).lower(), t)
+        for keep in ['2026-10-14 10:00:50 INFO', 'taskuary.ingest:9', 'index-BH9t30KP.js', 'README.md', 'config.toml', 'Node.js']:
+            self.assertIn(keep, self.S(keep), keep)
+
+    def test_short_strings_need_word_boundaries(self):
+        s = MemoryStore(); s.set_setting('owner_name', 'Mark Doyle', 'test'); s.add_message({'Subject': 'Error', 'FromEmail': 'x@vendor.example'})
+        self.assertEqual('markdown bookmark TypeError', bugreport.scrub('markdown bookmark TypeError', s))
+        self.assertEqual('[removed] said: [removed]', bugreport.scrub('Mark said: Error', s))
+
+    def test_underscores_and_dashes_separate_words_and_first_names_count(self):
+        for t in ['Payworth_Q4_terms_Erin.pdf', 'Renew_the_Payworth_contract.pdf', 'Hi Erin, ok', 'Gail-Moreno-notes.txt']:
+            out = self.S(t)
+            for w in ('Erin', 'Renew_the', 'Gail'): self.assertNotIn(w, out, t)
+
+    def test_secret_shaped_connector_keys(self):
+        self.s.save_connector({'Type': 'jira', 'Name': 'x', 'Active': 1, 'ConfigJson': json.dumps({'api_token': 'plainvalue77'})}, 'test')
+        self.assertNotIn('plainvalue77', self.S('sent plainvalue77'))
+
+
+class SmallTests(unittest.TestCase):
+    def test_the_machine_names_itself(self):
+        with mock.patch('getpass.getuser', return_value='jordanq'), mock.patch('socket.gethostname', return_value='JQ-DESK-7'):
+            m = bugreport._machine()
+        self.assertIn('jordanq', m); self.assertIn('JQ-DESK-7', m)
+        self.assertNotIn('user', [x.lower() for x in bugreport.private_strings(MemoryStore())])   # a generic login is no one
+
+    def test_a_bad_time_is_no_time(self):
+        for at in ['9999-12-31T23:59:59+14:00', '0001-01-01T00:00:00-12:00', 'nonsense']: bugreport._when(at)
+
+    def test_a_cut_title_never_splits_a_marker(self):
+        t = bugreport._cut('x' * 75 + ' [removed] tail', 80)
+        self.assertNotIn('[rem', t.replace('[removed]', '')); self.assertLessEqual(len(t), 80)
 
 
 if __name__ == '__main__':

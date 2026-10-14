@@ -5,9 +5,10 @@ gathered by code - where, the error, versions, the log around it, action names -
 that might reach for a task title, and every string is scrubbed before the person sees the draft.
 Nothing leaves from here: the popup shows the text and the person presses Submit on GitHub.
 """
-import hashlib, json, os, platform, re, sys
+import hashlib, json, os, platform, posixpath, re, sys
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 from . import config
 
@@ -64,9 +65,10 @@ def env(store) -> str:
 
 def _when(at):
     """The client's ISO time as the log's own clock: loguru stamps local time, a browser sends UTC."""
-    try: t = datetime.fromisoformat(str(at).strip().replace('Z', '+00:00'))
-    except ValueError: return None
-    return t.astimezone().replace(tzinfo=None) if t.tzinfo else t
+    try:
+        t = datetime.fromisoformat(str(at).strip().replace('Z', '+00:00'))
+        return t.astimezone().replace(tzinfo=None) if t.tzinfo else t
+    except (ValueError, OverflowError, OSError): return None
 
 
 def log_near(at, n=N_LOG) -> str:
@@ -123,19 +125,33 @@ class Unsafe(Exception):
     """The scrub could not finish, so nothing is offered: a half-scrubbed report is worse than none."""
 
 
-_WIN_HOME = re.compile(r'(?i)\b[a-z]:[\\/]+users[\\/]+[^\\/\s"\'<>:|]+')
-_NIX_HOME = re.compile(r'(?<![\w~.])/(?:home|Users)/[^/\s"\'<>:|]+')
+# a user name runs to the next separator, spaces and all ("C:\Users\Jordan Smith\AppData"); with no separator after it, to a space
+_UNAME = r'(?:[^\\/\s"\'<>:|]+(?: [^\\/\s"\'<>:|]+)*(?=[\\/])|[^\\/\s"\'<>:|]+)'
+_WIN_HOME = re.compile(r'(?i)\b[a-z]:[\\/]+users[\\/]+' + _UNAME)
+_NIX_HOME = re.compile(r'(?<![\w~.])(?:/mnt/[a-z]|/[a-z])?/(?:home|Users)/' + _UNAME)      # Linux, macOS, Git Bash, WSL
 _EMAIL = re.compile(r'[\w.+%-]+@[\w-]+(?:\.[\w-]+)+')
-_URL = re.compile(r'\b[a-z][a-z0-9+.-]*://[^\s<>"\'`)\]]+', re.I)
+_URL = re.compile(r'\b[a-z][a-z0-9+.-]*://[^\s<>"\'`)\[\]]+', re.I)      # `[` too: a `[removed]` ends a URL
+# before the email rule: `git@github.com:org/repo` is a repo, and the email rule would leave `org/repo` behind
+_GH = re.compile(r'(?<![\w.-])github\.com[:/]+[\w.-]+/[\w.-]+[^\s<>"\'`)\[\]]*', re.I)
 _IP = re.compile(r'(?<![\w.])(\d{1,3})\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\w]|\.\d)')
-# a dotted word is a hostname only when it ends in a TLD - `taskuary.server:12` and `index-x.js` are code
-_HOST = re.compile(r'(?<![\w@.-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|io|dev|ai|app|co|us|uk|de|fr|nl|ca|au|in|eu|'
-                   r'biz|info|me|cloud|local|lan|internal|corp|intranet|home|example|test|invalid|localdomain)(?![\w-])', re.I)
+_IP6 = re.compile(r'\[[0-9a-f:]*:[0-9a-f:]*\](?::\d+)?|(?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\w:])', re.I)
+_UNC = re.compile(r'(?<![\w\\~])\\\\[^\\\s]+\\[^\\\s]+')
+_HOST = re.compile(r'(?<![\w@.-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,})(?![\w-]|\.\w)', re.I)
+# a dotted word ending like a file or a module is code, not a machine - `index-x.js`, `README.md`, `taskuary.server:12`
+_CODE_SUFFIX = set('js py css json ts tsx jsx mjs cjs log md toml yml yaml txt html htm exe dll so cfg ini lock map server pyc pyd '
+                   'pdf png jpg jpeg gif svg ico csv xlsx xls docx doc pptx zip gz tar whl sh ps1 bat cmd db sqlite xml env tmp bak '
+                   'wasm woff woff2 ttf vue scss less sql jsonl ipynb mp4 webm wav mp3 sock pid conf'.split())
+_CODE_HEAD = set('taskuary self this window document os sys json re e err error console math np pd asyncio uvicorn starlette '
+                 'fastapi sqlite3 http urllib pathlib subprocess threading react node'.split())
 _SAFE_HOSTS = {'localhost', 'github.com', 'taskuary.com', 'pypi.org'}
 # never a private string, whatever the store says: the report would lose its own address
 _SAFE_WORDS = {'taskuary', 'ldbumble', OWN_REPO, 'github', 'github.com', 'taskuary.com', 'localhost', 'the owner'}
+# a login this generic names no one, and taking it out would eat the word wherever it appears
+_GENERIC_LOGINS = {'user', 'users', 'admin', 'administrator', 'root', 'owner', 'default', 'public', 'guest', 'runner', 'localhost', 'home'}
 _ACCOUNT_KEY = re.compile(r'user|mail|account|login|address|tenant|host|server|owner|org|repo|domain|site|workspace|team|'
-                          r'project|name|url|from|path|folder|dir|cwd', re.I)
+                          r'project|name|url|from|path|folder|dir|cwd|token|secret|password|key', re.I)
+_SEP = re.compile(r'[_-]')
+_ESC = re.compile(r'\\u([0-9a-fA-F]{4})|\\x([0-9a-fA-F]{2})')
 
 
 def to_home(text) -> str:
@@ -151,10 +167,37 @@ def _safe_host(h) -> bool:
 def _keep_url(u) -> bool:
     m = re.match(r'[^:]+://([^/:?#]+)(?::\d+)?([^?#]*)', u)
     if not m: return False
-    host, path = m.group(1).lower(), m.group(2).lower()
+    host, path = m.group(1).lower(), posixpath.normpath('/' + m.group(2).lower().lstrip('/'))    # `/ldbumble/taskuary/../../x` is x
     if host in ('localhost', '127.0.0.1', '[::1]') or host.startswith('127.'): return True
     if host in ('taskuary.com', 'www.taskuary.com') or host.endswith('.taskuary.com'): return True
     return host == 'github.com' and (path + '/').startswith(f'/{OWN_REPO}/')
+
+
+def _url(m):
+    """A kept URL loses its query: `?q=` is where a search for a person's name sits."""
+    u = m.group(0)
+    return re.sub(r'\?[^#]*', '', u) if _keep_url(u) else REMOVED
+
+
+def _gh(m):
+    p = posixpath.normpath('/' + re.split(r'[:/]+', m.group(0), 1)[1].lstrip('/')).lower()
+    return m.group(0) if (p + '/').startswith(f'/{OWN_REPO}/') or p == f'/{OWN_REPO}.git' else REMOVED
+
+
+def _ip6(m):
+    t = m.group(0)
+    return REMOVED if ('::' in t or t.count(':') >= 3) and re.search(r'[0-9a-f]{3,4}', t, re.I) and t.strip('[]') != '::1' else t
+
+
+def _host(m):
+    t = m.group(0); low = t.lower()
+    return t if m.group(1).lower() in _CODE_SUFFIX or low.split('.')[0] in _CODE_HEAD or _safe_host(low) else REMOVED
+
+
+def _unescape(t) -> str:
+    """The text as a person reads it: `%20`, `\\u0040` and `+` between letters are how a name hides in a URL or a log."""
+    t = _ESC.sub(lambda m: c if (c := chr(int(m.group(1) or m.group(2), 16))).isprintable() else m.group(0), t)
+    return re.sub(r'(?<=[^\W\d_]{2})\+(?=[^\W\d_]{2})', ' ', unquote(t))
 
 
 def _ip(m): return m.group(0) if m.group(1) in ('0', '127') else REMOVED      # 0.x.y.z is a version number, not a peer
@@ -178,11 +221,21 @@ def _norm(s): return ' '.join(str(s or '').split())
 def _head(s): return s[:48].rsplit(' ', 1)[0]           # logs quote a long title by its start
 
 
+def _key(s): return _norm(_SEP.sub(' ', s.lower()))     # `_` and `-` are spaces: `Renew_the_Payworth_contract.pdf`
+
+
 def _add(out: dict, s, lo=4, hi=300):
     s = _norm(s).strip(' .,;:!?-')
     if lo <= len(s) <= hi and re.search(r'[^\W\d_]', s) and s.lower() not in _SAFE_WORDS:
-        out.setdefault(s.lower(), s)
-        if len(s) > 60 and len(h := _head(s)) >= 24: out.setdefault(h.lower(), h)
+        out.setdefault(_key(s), s)
+        if len(s) > 60 and len(h := _head(s)) >= 24: out.setdefault(_key(h), h)
+
+
+def _add_name(out: dict, s):
+    """A person by full name and by first name - "Hi Erin," names her as well as "Erin Blake" does."""
+    _add(out, s)
+    ws = _norm(s).split()
+    if len(ws) > 1 and len(f := ws[0].strip(',.;:"\'')) >= 4 and f.isalpha(): _add(out, f)
 
 
 def _add_text(out: dict, s):
@@ -193,8 +246,8 @@ def _add_text(out: dict, s):
     for p in s.replace('. ', '.\n').replace('! ', '!\n').replace('? ', '?\n').splitlines():
         p = p.strip(' \t.,;:!?-')
         if 12 <= len(p) <= 200:
-            if '  ' in p or '\t' in p: p = _norm(p)
             k = p.lower()
+            if '_' in k or '-' in k or '  ' in k or '\t' in k: k = _key(k)
             if k not in out and k not in _SAFE_WORDS:
                 out[k] = p
                 if len(p) > 60 and len(h := _head(p)) >= 24: out.setdefault(h.lower(), h)
@@ -202,7 +255,15 @@ def _add_text(out: dict, s):
 
 def _add_person(out: dict, s):
     m = re.match(r'\s*"?([^"<]*?)"?\s*<([^>]+)>', str(s or ''))
-    for x in ((m.group(1), m.group(2)) if m else (s,)): _add(out, x)
+    if m: _add_name(out, m.group(1)); _add(out, m.group(2))
+    else: _add_name(out, s)
+
+
+def _machine() -> list:
+    """This computer's own names: the login, the host, the home folder - in a path outside the Users folder, or a log line."""
+    import getpass, socket
+    fs = [lambda: Path.home().name, getpass.getuser, socket.gethostname, lambda: str(Path.home()), lambda: str(config.home())]
+    return [str(v) for v in (_fact(f, '') for f in fs) if v]
 
 
 def private_strings(store) -> list:
@@ -212,10 +273,10 @@ def private_strings(store) -> list:
     for r in store._rows('SELECT Title, Summary FROM task'): _add(out, r['Title']); _add_text(out, r['Summary'])
     for r in store._rows('SELECT Subject, FromName, FromEmail, RecipientsJson, substr(BodyText, 1, 20000) BodyText, '
                          'substr(OwnText, 1, 20000) OwnText FROM message'):
-        for k in ('Subject', 'FromName', 'FromEmail'): _add(out, r[k])
+        _add(out, r['Subject']); _add_name(out, r['FromName']); _add(out, r['FromEmail'])
         _add_text(out, r['BodyText']); _add_text(out, r['OwnText'])
         for _, v in _strings(_json(r['RecipientsJson'])): _add_person(out, v)
-    for p in store.people(limit=None): _add(out, p.get('Name')); _add(out, p.get('Email'))
+    for p in store.people(limit=None): _add_name(out, p.get('Name')); _add(out, p.get('Email'))
     o = store.owner() or {}
     for k in ('owner', 'owner_first', 'owner_email'): _add(out, o.get(k))
     for a in senders.own_addresses(store): _add(out, a)
@@ -232,31 +293,39 @@ def private_strings(store) -> list:
         cm = prof.get('cwd_map') if isinstance(prof.get('cwd_map'), dict) else {}
         for p in [*cm, *(str(v) for v in cm.values()), str(prof.get('cwd') or '')]:
             if str(p).lower() != OWN_REPO: _add(out, p); _add(out, to_home(p))
+    for m in _machine():
+        if m.lower() not in _GENERIC_LOGINS: _add(out, m)
     return list(out)                      # lower-cased, as the match reads them; _clean orders the hits
 
 
 def _present(cands, text) -> list:
     """The candidates the text holds. An interior word of a candidate is a whole word of the text too, so a set
     lookup rules most of ten thousand mails out before any substring search runs."""
-    low = _norm(text).lower()
+    low = _key(text)
     words = set(low.split())
     return [c for c in cands if words.issuperset(c.split()[1:-1]) and c in low]
 
 
+def _pattern(h) -> str:
+    p = r'[\s_-]+'.join(map(re.escape, h.split()))
+    return rf'(?<![^\W_]){p}(?![^\W_])' if len(h) < 12 else p     # a short one is a whole word: not `Mark` in `markdown`
+
+
 def _clean(text, cands) -> str:
     from . import redact
-    out = to_home(redact.scrub(text))
+    # URLs first while their queries are still encoded, then again once decoding can have made new ones
+    out = _URL.sub(_url, _GH.sub(_gh, to_home(redact.scrub(text))))
+    out = to_home(_unescape(out))
+    out = _URL.sub(_url, _GH.sub(_gh, out))
     # every hit's spans, merged: one alternation would let "X Y" win over an overlapping "Y Z" and leave "Z" behind
-    spans = sorted(m.span() for h in _present(cands, out) for m in re.finditer(r'\s+'.join(map(re.escape, h.split())), out, re.I))
+    spans = sorted(m.span() for h in _present(cands, out) for m in re.finditer(_pattern(h), out, re.I))
     merged = []
     for a, b in spans:
         if merged and a <= merged[-1][1]: merged[-1][1] = max(merged[-1][1], b)
         else: merged.append([a, b])
     for a, b in reversed(merged): out = out[:a] + REMOVED + out[b:]
-    out = _EMAIL.sub(REMOVED, out)
-    out = _URL.sub(lambda m: m.group(0) if _keep_url(m.group(0)) else REMOVED, out)
-    out = _IP.sub(_ip, out)
-    return _HOST.sub(lambda m: m.group(0) if _safe_host(m.group(0)) else REMOVED, out)
+    out = _IP6.sub(_ip6, _IP.sub(_ip, _EMAIL.sub(REMOVED, out)))
+    return _HOST.sub(_host, _UNC.sub(REMOVED, out))
 
 
 def scrub(text: str, store, known: list = None) -> str:
@@ -289,6 +358,13 @@ def _ask(store, brain, f) -> dict:
     except Exception: return {}
 
 
+def _cut(s, n=80) -> str:
+    """At most `n` characters, never ending inside a `[removed]` or `[redacted:..]` marker."""
+    t = s[:n]
+    i = t.rfind('[')
+    return (t[:i] if i >= 0 and ']' not in t[i:] and len(s) > n else t).rstrip()
+
+
 def draft(store, client: dict, llm=None) -> dict:
     """The report the popup shows: {title, explanation, where, error, env, log, actions, fingerprint}, every string
     scrubbed. The model is handed the scrubbed facts only, and its answer is scrubbed again. Raises Unsafe."""
@@ -299,5 +375,5 @@ def draft(store, client: dict, llm=None) -> dict:
     f = {**{k: S(v) for k, v in raw.items() if k != 'actions'}, 'actions': [S(a) for a in raw['actions']]}
     d = _ask(store, llm, f)
     first = next((l.strip() for l in f['error'].splitlines() if l.strip()), '') or NO_ERROR
-    title = _norm(S(_norm(d.get('title'))))[:80] or first[:80]
+    title = _cut(_norm(S(_norm(d.get('title'))))) or _cut(first)
     return {'title': title, 'explanation': S(str(d.get('explanation') or '').strip()), **f}

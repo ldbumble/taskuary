@@ -10,7 +10,12 @@ from .config import home
 
 _CREDS = ('.ssh', '.aws', '.azure', '.config/gh', '.config/gcloud', '.config/hub', 'AppData/Roaming/GitHub CLI', 'AppData/Roaming/gcloud',
           '.docker/config.json', '.git-credentials', '.netrc', '.npmrc', '.pypirc', '.claude/.credentials.json', '.claude.json',
-          '.codex/auth.json', '.gemini', '.qwen', '.kube')
+          '.codex/auth.json', '.gemini', '.qwen', '.kube',
+          # where hooks.install_user writes the SHARED agent token (and the hooks every session runs): read, it is every
+          # session's authority; written, it is a command the owner's next session runs (R28)
+          '.claude/settings.json', '.codex/hooks.json', '.copilot/hooks', '.config/devin/config.json', 'AppData/Roaming/devin/config.json')
+# the session's own variables, by NAME: expanding them here would read the SERVER's environment, not the session's
+_SESSION_VARS = re.compile(r'taskuary_(task_)?token|taskuary_url', re.I)
 _FILE_KEYS = ('file_path', 'notebook_path', 'path')
 _TEXT_KEYS = ('command', 'url', 'pattern', 'glob')
 _HOME_VAR = re.compile(r'\$\{?(?:env:)?(?:home|userprofile)\}?|%userprofile%|(?<![\w~])~(?=/|$|\s)', re.I)
@@ -43,6 +48,8 @@ def protected() -> list:
     import tempfile
     # the strangers' folders (origin.stranger_dir) sit outside Taskuary's home; each task is let into its OWN one by _own
     rs = [home(), os.path.join(tempfile.gettempdir(), 'taskuary-stranger')] + [os.path.join('~', c) for c in _CREDS]
+    # ...and the hook files where the CLI is told to keep them instead (hooks.install_user follows the same variables)
+    rs += [os.path.join(os.environ[v], *f) for v, f in (('COPILOT_HOME', ('hooks',)), ('APPDATA', ('devin', 'config.json'))) if os.environ.get(v)]
     return list(dict.fromkeys(_norm(r, real=rl) for r in rs for rl in (True, False)))
 
 def _names() -> list:
@@ -75,8 +82,14 @@ def _port() -> str:
     from . import config
     return str(config.load()['server'].get('port') or 7787)
 
+def _pn(p: str) -> str:
+    "posixpath.normpath, but a drive stays a ROOT: normpath('c:/') is 'c:', which no absolute-path test recognises (I5)."
+    n = posixpath.normpath(p)
+    return n + '/' if re.fullmatch(r'[a-z]:', n) else n
+
 def _text_hit(text: str, own: list, prot: list, cwd: str = ''):
     "Why a command/url/glob is refused, or ''. Checked token by token so an own file's name cannot launder a neighbour's."
+    if m := _SESSION_VARS.search(text): return f"it names the session's {m[0].upper()}"
     h = _norm('~', real=False)
     t = _HOME_VAR.sub(h, text); t = _cf(os.path.expandvars(t)).replace('"', '').replace("'", '')   # expand BEFORE folding, quotes are not part of a path
     if re.search(':' + _port() + r'(?!\d)', t):   # any host that reaches it - 127.1, a LAN name, [::ffff:127.0.0.1] - is still this port
@@ -85,11 +98,11 @@ def _text_hit(text: str, own: list, prot: list, cwd: str = ''):
     for tok in filter(None, _SPLIT.split(t)):
         cur, nxt = nxt or cur, ''                # a cd takes effect AFTER its own argument is checked against the old folder
         if prev in _CD and not tok.startswith('-'):
-            d = posixpath.normpath(tok); d = d if re.match(r'([a-z]:)?/', d) or not cur else posixpath.normpath(posixpath.join(cur, d))
+            d = _pn(tok); d = d if re.match(r'([a-z]:)?/', d) or not cur else _pn(posixpath.join(cur, d))
             nxt = d if re.match(r'([a-z]:)?/', d) else ''
         prev = tok
         rel = cur and '://' not in tok and not re.match(r'(/|[a-z]:/)', tok) and ('/' in tok or tok.startswith('..'))
-        n = posixpath.normpath(posixpath.join(cur, tok) if rel else tok); a = re.sub(r'^/(?=[a-z]:/)', '', n)   # "/c:/x" as bash on Windows writes it
+        n = _pn(posixpath.join(cur, tok) if rel else tok); a = re.sub(r'^/(?=[a-z]:/)', '', n)   # "/c:/x" as bash on Windows writes it
         if _under(a, own): continue
         if _under(a, prot) or _above(a, prot) and re.match(r'([a-z]:)?/', a) or any(re.search(r'(^|/)' + re.escape(s) + r'(/|$)', n) for s in _names()):
             return f'it names {tok}'

@@ -64,8 +64,28 @@ def _arrival_keys(msg: dict) -> tuple:
     from .routing import tokens
     from .store import OWN_CHANNELS
     own = msg.get('channel') in OWN_CHANNELS
-    words = f"{msg.get('subject') or ''} {msg.get('_title') or ''}" + (f" {str(msg.get('body') or '')[:600]}" if own else '')
+    # ...the WHOLE run, not its first 600 characters: a check that leads with a timeout and lists a second failure under it was
+    # matched on the timeout alone, and the task that had just fixed the second one was never shown (TQ-1088/1089, 2026-10-14)
+    words = f"{msg.get('subject') or ''} {msg.get('_title') or ''}" + (f" {str(msg.get('body') or '')[:4000]}" if own else '')
     return str(msg.get('conversation_id') or ''), str(msg.get('from_email') or '').lower(), set(tokens(words)), own
+
+
+# THE SAME RUN OR RECORD: a long number both texts carry - a run id, a ticket, an order. Two monitors reported one failed run
+# (runId 1001769) an hour apart; the second opened a task "after the prior one was closed" because it was never shown the first
+# (TQ-1088/1089, 2026-10-14). A shared id is the strongest evidence there is that two things are one - evidence for the model,
+# which still decides same_as; never a rule that joins them.
+_ID = re.compile(r'(?<![\w.])\d{6,}(?![\w.])')
+
+
+def ids_of(text: str) -> set: return set(_ID.findall(str(text or '')))
+
+
+def _shared_ids(store, t: dict, ids: set) -> set:
+    """The arrival's ids that this task's own words carry - its title, summary and the messages it was made from."""
+    if not ids: return set()
+    text = f"{t.get('Title') or ''} {t.get('Summary') or ''} " + ' '.join(str(m.get('BodyText') or '')[:4000]
+                                                                         for m in (store.list_messages(t['TaskId']) or [])[:6])
+    return ids & ids_of(text)
 
 
 def _who(sender, senders) -> str:
@@ -110,12 +130,14 @@ def recent_open(store, msg: dict, limit: int = RECENT) -> list:
     (the owner, 2026-09-25). Ranked like recent_closures; the model decides whether it is the same."""
     from .routing import tokens
     conv, sender, toks, own = _arrival_keys(msg)
+    ids = ids_of(f"{msg.get('subject') or ''} {msg.get('body') or ''}")
     out = []
     for t in store.tasks_open_linked():
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
         title_toks = set(tokens(t.get('Title') or ''))
-        hit = _match(conv, sender, toks, own, convs, senders, title_toks)
+        same = _shared_ids(store, t, ids)
+        hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, toks, own, convs, senders, title_toks)
         if not hit: continue
         why, rank = hit
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),
@@ -174,6 +196,7 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
     from .routing import tokens
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
     conv, sender, toks, own = _arrival_keys(msg)
+    ids = ids_of(f"{msg.get('subject') or ''} {msg.get('body') or ''}")
     # RANKED, then capped - not filtered by a cleverer rule. Weighting the shared words by how rare
     # they are in the window was tried and measured nothing: across 60 closed titles every shared word
     # appeared once or twice, so "spendly" and "failures" scored alike. What actually separates them is
@@ -184,7 +207,8 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
         title_toks = set(tokens(t.get('Title') or ''))
-        hit = _match(conv, sender, toks, own, convs, senders, title_toks)
+        same = _shared_ids(store, t, ids)
+        hit = (f"the same run or record ({', '.join(sorted(same)[:3])})", 4.0) if same else _match(conv, sender, toks, own, convs, senders, title_toks)
         if not hit: continue
         why, rank = hit
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'from': _who(sender, senders),

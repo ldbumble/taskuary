@@ -117,3 +117,28 @@ class NewestFirstTests(unittest.TestCase):
         for n in (11, 12, 13): self.assertIn(f'--- [NEW since your last run] Sender {n} ·', text)
         self.assertNotIn('[NEW since your last run] Sender 10 ·', text)
         self.assertIn('NEW SINCE YOUR LAST RUN: 3 messages', terminal.resume_seed('', s, tid), 'the seed counts the ones the file marks')
+
+
+class SameRunTests(unittest.TestCase):
+    """Two monitors reported one failed run an hour apart; the second opened a task "after the prior one was closed" because the
+    closed one - made from the first monitor's idea, on another thread - was never shown to triage (TQ-1088/1089, 2026-10-14)."""
+    def test_a_closed_task_carrying_the_same_run_id_is_shown_first(self):
+        s = MemoryStore()
+        first = s.create_task({'Title': 'Investigate ledger sync auth failures', 'Kind': 'coding'}, 't')
+        s.add_message({'TaskId': first, 'ExternalId': 'i1', 'ConversationId': 'report:9:idea:ledger', 'Channel': 'assistant',
+                       'Subject': 'Advisor idea', 'BodyText': 'Ledger Sync runId 4400917 failed with HTTP 401.', 'Status': 'routed'})
+        for n in range(3):                                     # the report's own older tasks, which used to take every seat
+            t = s.create_task({'Title': f'Ledger sync timeout {n}', 'Kind': 'coding'}, 't')
+            s.add_message({'TaskId': t, 'ExternalId': f'r{n}', 'ConversationId': 'report:4', 'Channel': 'report',
+                           'Subject': 'Process Error Check', 'BodyText': 'Ledger Sync timed out.', 'Status': 'routed'})
+            s.update_task(t, {'Status': 'done'}, 't')
+        s.update_task(first, {'Status': 'done'}, 't')
+        body = 'Error summary:\n' + 'Ledger Sync timed out. ' * 60 + '\nLedger Sync failed: runId 4400917 - 3 company failures, HTTP 401'
+        msg = {'channel': 'report', 'conversation_id': 'report:4', 'subject': 'Process Error Check - Error summary:', 'body': body}
+        rows = context.recent_closures(s, msg)
+        self.assertEqual(rows[0]['tid'], first)
+        self.assertEqual(rows[0]['why'], 'the same run or record (4400917)')
+
+    def test_no_shared_id_changes_nothing(self):
+        self.assertEqual(context.ids_of('a run at 2026-10-14 16:18:39, 7 failures, code 401'), set())
+        self.assertEqual(context.ids_of('runId 1001769 and ticket #3856864'), {'1001769', '3856864'})

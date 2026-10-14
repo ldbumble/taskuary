@@ -234,3 +234,34 @@ def test_the_powershell_removal_forms_stay_refused_in_a_script(content, tmp_path
                                  'pipx run --spec taskuary==1.0 taskuary --prompts'])
 def test_a_glued_split_string_and_pipx_are_refused(cmd):
     for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+
+
+# ── round 5 (R37): the script marks know PowerShell from the rest; a hit is counted by what it names ────────────────
+PS_REMOVALS = ['Remove-Item Env:$n', 'Remove-Item -Path Env:$n', 'Remove-Item Env:${n}', 'Set-Item Env:$n $null', 'rd Env:*', 'rmdir Env:*',
+               'erase Env:*', 'dir Env:* | Remove-Item', 'ls env:* | rm', 'Remove-Item -Path:Env:*']
+
+@pytest.mark.parametrize('content', PS_REMOVALS)
+@pytest.mark.parametrize('name', ['x.ps1', 'x.psm1', 'x.psd1', 'run'])
+def test_every_env_drive_removal_is_refused_in_a_powershell_file(name, content, tmp_path):
+    body = ('#!/usr/bin/env pwsh\n' if name == 'run' else '') + content + '\n'
+    assert denied(call('Write', file_path=str(tmp_path / name), content=body)), (name, content)
+
+@pytest.mark.parametrize('name', ['a.js', 'a.ts', 'a.py'])
+@pytest.mark.parametrize('content', ['const o = {env:"prod"}\n', 'const cli = meow({ env: process.env })\n', '# rm the cache, env: prod\n',
+                                     'parser.add_argument("--usenet")\n'])
+def test_the_narrowed_marks_hold_for_other_languages(name, content, tmp_path):
+    assert call('Write', file_path=str(tmp_path / name), content=content) == {}, (name, content)
+
+def test_a_powershell_read_of_one_variable_is_written(tmp_path):
+    assert call('Write', file_path=str(tmp_path / 'x.ps1'), content='$p = $env:PATH\n$env:FOO = "1"\nWrite-Output $p\n') == {}
+
+def test_an_edit_that_changes_what_a_hit_runs_is_refused(tmp_path):
+    "Same reason, new target: `env -i make test` turned into `env -i taskuary --reply x` is a new hit."
+    f = tmp_path / 'x.sh'; f.write_text('#!/bin/sh\nenv -i make test\n')
+    assert denied(call('Edit', file_path=str(f), old_string='env -i make test', new_string='env -i taskuary --reply x'))
+    assert call('Edit', file_path=str(f), old_string='#!/bin/sh', new_string='#!/bin/sh\n# runs the tests') == {}
+
+def test_uv_tool_run_is_refused(tmp_path):
+    for t in SHELLS: assert denied(call(t, command='uv tool run taskuary --prompts')), t
+    assert denied(call('Write', file_path=str(tmp_path / 'x.sh'), content='#!/bin/sh\nuv tool run taskuary --prompts\n'))
+    for t in SHELLS: assert call(t, command='uv tool run ruff check .') == {}, t

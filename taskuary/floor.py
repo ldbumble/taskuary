@@ -137,6 +137,9 @@ _SCRIPT_MARKS = re.compile(r'\bunset\s[^\n;|&]*\btaskuary_|^\s*(?:export\s+|set\
                            r'|(?<![$\w])env:[\\/]|(?<![$\w])(["\'])env:(?:\1|[*$])|(?<![$\w])env:\s*\|'
                            r'|\b(?:remove-item|ri|clear-item|cli|rm|del|get-childitem|gci|get-item|gi|set-item|si)(?:\s+-\w+)*\s+["\']?env:(?=[\w*])'
                            r'|\b(?:start-process|saps|start)\b[^\n]*\s-usen\w*', re.I | re.M)
+# ...but a PowerShell file IS PowerShell (R37): there every Env: drive reference but `$env:NAME` counts, as in a command -
+# `rd Env:*`, `Set-Item Env:$n $null`, `-Path:Env:*` - and the narrowed forms above are for everything else
+_PS_MARKS = re.compile(_SCRIPT_MARKS.pattern + '|' + _WIPE, re.I | re.M)
 # cli.STRANGER_ACTS and the options that go with them (test_floor_wave_b keeps the two in step)
 TASKUARY_OK = frozenset({'--reply', '--reply-file', '--draft', '--draft-file', '--attach', '--item', '--done', '--note'})
 _TASKUARY_WITH = frozenset({'--slot', '--to', '--subject', '--result', '--overlap', '--settled', '--propose', '--no-reply', '--kind'})
@@ -180,39 +183,51 @@ def _env_wipe(ws: list) -> str:
             i += 2 if (o in _ENV_VAL or _long(o, '--chdir') or _long(o, '--split-string') or _long(o, '--unset')) and val is None else 1
     return ''
 
-def _hits(text: str, script: bool = False) -> list:
-    "Every reason a command - or, `script`, the text of a file that will be run - is refused, in the order they are checked."
-    out = [f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process" for m in _PKG.finditer(text)]
-    out += [f"it changes the session's own environment ({m[0].strip()})" for m in (_SCRIPT_MARKS if script else _MARKS).finditer(text)]
+def _snip(s: str) -> str: return ' '.join(s.split()).casefold()
+
+def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
+    """Every (reason, what it matched) a command - or, `script`, the text of a file that will be run (`ps`: a PowerShell
+    one) - is refused for, in the order they are checked. The match is part of the key, so an edit that keeps a reason but
+    changes its target (`env -i make` into `env -i taskuary`) is a new hit."""
+    out = [(f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", _snip(m[0])) for m in _PKG.finditer(text)]
+    out += [(f"it changes the session's own environment ({m[0].strip()})", _snip(m[0]))
+            for m in ((_PS_MARKS if ps else _SCRIPT_MARKS) if script else _MARKS).finditer(text)]
     for seg in _SEG.split(text):
-        raw = [_uq(w) for w in _WORD.findall(seg)]
+        raw, k = [_uq(w) for w in _WORD.findall(seg)], _snip(seg)
         if raw and _prog(raw[0]) != 'git' and (m := _PKG_ANY.search(seg)):
-            out.append(f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process")
-        if why := _env_wipe(raw): out.append(f"it empties the session's own environment ({why})")
+            out.append((f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", k))
+        if why := _env_wipe(raw): out.append((f"it empties the session's own environment ({why})", k))
         ws = _words(seg)
         if not ws: continue
         p = _prog(ws[0])
-        if p == 'taskuary-desktop': out.append('it starts the Taskuary app')
+        if p == 'taskuary-desktop': out.append(('it starts the Taskuary app', k))
         # an installer's runner fetches and runs a package outside every check below
-        if p in ('pipx', 'uvx') and any(re.match(r'taskuary\b', _prog(w)) for w in ws[1:]): out.append(f"`{seg.strip()}` runs Taskuary outside the agent commands")
+        runner = p in ('pipx', 'uvx') or p == 'uv' and re.search(r'\stool\s+run\s', seg + ' ', re.I)
+        if runner and any(re.match(r'taskuary\b', _prog(w)) for w in ws[1:]): out.append((f"`{seg.strip()}` runs Taskuary outside the agent commands", k))
         if p != 'taskuary': continue
         flags = [w.split('=', 1)[0].lower() for w in ws[1:] if w.startswith('-') and w != '-']
         bad = [f for f in flags if f not in TASKUARY_OK | _TASKUARY_WITH | _TASKUARY_ASK]
         if bad or not any(f in TASKUARY_OK | _TASKUARY_ASK for f in flags):
-            out.append(f"`{' '.join(['taskuary', *(bad or ws[1:])])}` is not one of the agent commands a stranger's session runs")
+            out.append((f"`{' '.join(['taskuary', *(bad or ws[1:])])}` is not one of the agent commands a stranger's session runs", k))
     return out
+
+def _hits(text: str, script: bool = False, ps: bool = False) -> list: return [r for r, _ in _keyed(text, script, ps)]
 
 def _taskuary_hit(text: str, script: bool = False) -> str: return (_hits(text, script) or [''])[0]
 
 # What a session runs without naming it: a script - and the files a task runner runs lines of (npm test, make, just,
 # task). Other files - docs, YAML, JSON, TOML - are read, not run.
-_SCRIPT_EXT = ('.sh', '.bash', '.zsh', '.ps1', '.psm1', '.bat', '.cmd', '.py', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.rb', '.pl')
+_PS_EXT = ('.ps1', '.psm1', '.psd1')
+_SCRIPT_EXT = ('.sh', '.bash', '.zsh', *_PS_EXT, '.bat', '.cmd', '.py', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.rb', '.pl')
 _RUNNERS = ('package.json', 'makefile', 'gnumakefile', 'justfile', '.justfile', 'taskfile.yml', 'taskfile.yaml')
 
 def _is_script(path: str, content: str = '') -> bool:
     "`content`: the file as it will be after this write or edit."
     if str(path or '').lower().endswith(_SCRIPT_EXT) or os.path.basename(str(path or '')).lower() in _RUNNERS: return True
     return str(content or '').startswith('#!')
+
+def _is_ps(path: str, content: str = '') -> bool:
+    return str(path or '').lower().endswith(_PS_EXT) or bool(re.match(r'#![^\n]*\b(pwsh|powershell)\b', str(content or ''), re.I))
 
 def _before(path: str) -> str:
     try:
@@ -312,9 +327,9 @@ def check(payload: dict, tid: int, store=None) -> dict:
         # refused only for what this call ADDS (R36): an edit beside a `taskuary --demo` target already there is ordinary work.
         # Counted, so a second copy is new; a file that only now becomes a script brings everything in it.
         if _is_script(f, body):
-            was = Counter(_hits(_runner_text(f, old), script=True) if _is_script(f, old) else [])
-            if new := list((Counter(_hits(_runner_text(f, body), script=True)) - was).elements()):
-                return _deny(f'it writes a script that, run, would be refused: {new[0]}')
+            was = Counter(_keyed(_runner_text(f, old), True, _is_ps(f, old)) if _is_script(f, old) else [])
+            if new := list((Counter(_keyed(_runner_text(f, body), True, _is_ps(f, body))) - was).elements()):
+                return _deny(f'it writes a script that, run, would be refused: {new[0][0]}')
     if why := _taskuary_hit(str(inp.get('command') or '')) or _write_hit(str(inp.get('command') or ''), cwd): return _deny(why)
     if tool in ('Grep', 'Glob'):    # these walk a tree: a root ABOVE a protected folder reaches it just as well
         sr = {_cf(os.path.normcase(os.path.abspath(o))) for o in ((inp.get('path') and _forms(inp['path'], cwd)) or ([cwd] if cwd else []))}

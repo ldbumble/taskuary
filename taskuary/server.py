@@ -292,7 +292,8 @@ async def token_gate(request: Request, call_next):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic
             # "that did not work" fallback happened to be nearest (2026-09-10 audit).
-            return JSONResponse({'detail': 'This page is signed in with an out-of-date token - reload it.',
+            # ...and not "reload": a reload no longer re-seeds the token (R29). The page drops the stale one on this code.
+            return JSONResponse({'detail': 'This page is signed in with an out-of-date token. Open Taskuary from its app, or run `taskuary --link`.',
                                  'code': 'unauthorized'}, status_code=401)
     # WHAT AN AGENT MAY NOT DO, before a handler exists to be talked round (guard.py). A session
     # runs with the agent token in its environment, and the routes that SEND - approve a reply,

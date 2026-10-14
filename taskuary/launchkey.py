@@ -6,7 +6,7 @@ seeded only for `/?k=<key>`, a key minted here - by the desktop and the CLI in-p
 POST /api/launch-key - used once, within TTL seconds. A tab already holding the token in localStorage needs none.
 
 Stdlib only, imported before uvicorn starts: cli.open_when_ready's thread must import nothing (its docstring says why)."""
-import http.client, json, os, re, secrets, threading, time, urllib.parse
+import html, http.client, json, os, pathlib, re, secrets, threading, time, urllib.parse
 
 TTL = 120
 _KEYS, _LOCK = {}, threading.Lock()
@@ -34,6 +34,23 @@ def in_session() -> bool:
     return any(os.environ.get(k) for k in MARKERS) or bool(STRANGER_TOKEN.fullmatch(os.environ.get('TASKUARY_TOKEN') or ''))
 
 def link(url: str) -> str: return f"{url.rstrip('/')}/?k={mint()}"
+
+def via_file(url: str, folder) -> str:
+    """A file:// address of a page that goes on to `url` - for a keyed `url` handed to a browser process. Its command line
+    is in any local process's reach (the process list), so it carries the path of this file instead, and the file sits in
+    `folder` (Taskuary's home, which the floor keeps a stranger's session out of), owner-only. Files older than TTL go
+    first: by then their key is spent or expired, and the CLI that wrote one has usually exited."""
+    d = pathlib.Path(folder); d.mkdir(parents=True, exist_ok=True)
+    for o in d.glob('*.html'):
+        try:
+            if o.stat().st_mtime < time.time() - TTL: o.unlink()
+        except OSError: pass
+    f = d / f'{secrets.token_hex(8)}.html'
+    fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as w:
+        w.write(f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url={html.escape(url)}">'
+                f'<title>Taskuary</title><script>location.replace({json.dumps(url)})</script>')
+    return f.as_uri()
 
 def remote_link(url: str, token: str) -> str:
     """A keyed address from ANOTHER process's server (the instance already running), or the plain one if it gives none.

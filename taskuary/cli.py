@@ -60,9 +60,15 @@ def open_when_ready(url: str, wait, open_it=None):
     wait(url)
     (open_it or webbrowser.open)(url)
 
+def _open_private(url):
+    """Open `url` in the browser - through an owner-only file when it carries a launch key, so the key is never on the
+    browser's command line (launchkey.via_file). Residual: the file is readable by the owner's own account until it is
+    spent, expired or cleared - which a stranger's session, kept out of Taskuary's home by the floor, cannot reach."""
+    webbrowser.open(launchkey.via_file(url, config.home() / 'launch') if '?k=' in url else url)
+
 def _open_keyed(url):
     "The browser this process's own server opens, with a one-time key so the page carries the owner token (launchkey, R29)."
-    webbrowser.open(launchkey.link(url))
+    _open_private(launchkey.link(url))
 
 
 # ── INSIDE AN AGENT'S SESSION (wave B, B1) ──────────────────────────────────────────────────────────────────────────
@@ -482,7 +488,7 @@ def main():
         if _is_taskuary(url):
             # don't crash into 'address already in use' - reuse the running instance, signed in with a key it hands us
             print(f'Taskuary is already running at {url} - opening it.')
-            if not args.no_browser: webbrowser.open(launchkey.remote_link(url, cfg['server'].get('token') or ''))
+            if not args.no_browser: _open_private(launchkey.remote_link(url, cfg['server'].get('token') or ''))
             return
         from .desktop import free_port
         old, port = port, free_port(host)

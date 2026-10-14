@@ -63,20 +63,7 @@ def test_remote_link_asks_the_running_server_with_the_owner_token(monkeypatch):
     monkeypatch.setattr(launchkey.http.client, 'HTTPConnection', Bad)
     assert launchkey.remote_link('http://127.0.0.1:7795', 'own') == 'http://127.0.0.1:7795'   # an old server: the plain address
 
-def test_the_cli_opens_a_keyed_url_when_it_owns_the_server(monkeypatch):
-    opened = []
-    monkeypatch.setattr(cli.webbrowser, 'open', opened.append)
-    cli.open_when_ready('http://127.0.0.1:9', lambda u: True, open_it=cli._open_keyed)
-    assert opened[0].startswith('http://127.0.0.1:9/?k=') and launchkey.redeem(opened[0].split('k=')[1])
-
-def test_the_cli_opens_a_keyed_url_on_a_running_instance(monkeypatch):
-    opened = []
-    monkeypatch.setattr(cli.webbrowser, 'open', opened.append)
-    monkeypatch.setattr(cli, '_busy', lambda h, p: True); monkeypatch.setattr(cli, '_is_taskuary', lambda u: True)
-    monkeypatch.setattr(launchkey, 'remote_link', lambda url, tok: f'{url}/?k=fromserver')
-    monkeypatch.setattr(sys, 'argv', ['taskuary'])
-    cli.main()
-    assert opened and opened[0].endswith('/?k=fromserver')
+# the CLI's browser opens, keyed - through a private file since wave B: tests/test_launch_key_private.py
 
 def test_taskuary_link_prints_a_one_time_url(monkeypatch, capsys):
     monkeypatch.setattr(cli, '_busy', lambda h, p: True); monkeypatch.setattr(cli, '_is_taskuary', lambda u: True)

@@ -19,7 +19,20 @@ test("the Start panel shows the repository and pins it before the session starts
   const view = taskSource();
   assert.match(view, /<RepoSelect taskId=\{selected\}/);
   assert.match(view, /api\.put\(`\/api\/tasks\/\$\{id\}\/repo`, \{ repo: startRepo/);
-  assert.match(view, /disabled=\{!!startingAgent \|\| startRepo === ""\}/);
+  assert.match(view, /disabled=\{!!startingAgent \|\| startRepo === "" \|\| runPics\.busy\}/);
+  // the picker above already names it: a second "repo · …" by Cancel said it twice (the owner, 2026-10-13)
+  assert.doesNotMatch(view, /repo · \{repoOf\(t\)\}/);
+});
+
+test("the next-run box takes the mic and pictures like Continue, and both starts send what was typed with them", () => {
+  const view = taskSource();
+  const form = view.slice(view.indexOf("const nextRunForm = ("), view.indexOf("const [nextRunSlot"));
+  assert.match(form, /\{\.\.\.runPics\.drop\}/);
+  assert.match(form, /<AttachImage pics=\{runPics\}/);
+  assert.match(form, /<MicButton /);
+  assert.match(form, /<ImageTray pics=\{runPics\}/);
+  assert.match(view, /instructions: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
+  assert.match(view, /instruction: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
 });
 
 test("both reply buttons spin and say Drafting while the AI writes the draft", () => {

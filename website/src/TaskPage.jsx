@@ -5,6 +5,7 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import { says, subState } from "./laneSays.js";
 import ContinueBox from "./ContinueBox.jsx";
+import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import QueuedStart from "./QueuedStart.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -43,7 +44,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, MicButton, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -269,6 +270,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pickerTask = useRef(null);          // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });
+  // the next run's pictures - pasted, dropped or attached - ride in its instruction as paths, like Continue's (ContinueBox)
+  const runPics = usePromptImages();
   // the repository the Start panel will open the coding session in (RepoSelect); null = not loaded / not offered
   const [startRepo, setStartRepo] = useState(null);   // "" = the roster's default (served first)
   // Which KIND of worker this row is configuring. "Use non-coding agent" used to dispatch on the
@@ -846,10 +849,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // agent (422) and the repository come from the same road the general button and the assistant use -
       // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
       const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent, brain: run.brain || null,
-        model: run.model || null, instructions: run.instruction.trim() || null });
+        model: run.model || null, instructions: withImages(run.instruction.trim(), runPics.paths) || null });
       if (!stale(id)) setTerm(data?.session || null);
       if (!stale(id)) {
-        setRun((current) => ({ ...current, instruction: "" }));
+        setRun((current) => ({ ...current, instruction: "" })); runPics.clear();
         setRestartOpen(false);
       }
     } catch (e) {
@@ -872,10 +875,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
       // profile, brain and model - whichever of them was chosen; blank means "as configured"
       const { data } = await api.post(`/api/tasks/${id}/dispatch`,
-        { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null });
+        { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null,
+          // what was typed in the box goes to it - this sent the pickers and dropped the words
+          instruction: withImages(run.instruction.trim(), runPics.paths) || null });
       const outcome = outcomeOf(data);
       if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
-      if (!stale(id)) setRestartOpen(false);
+      if (!stale(id)) { setRun((current) => ({ ...current, instruction: "" })); runPics.clear(); setRestartOpen(false); }
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
     } catch (e) {
@@ -1057,12 +1062,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       </Box>
                       <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={run.instruction}
                         onChange={(e) => setRun({ ...run, instruction: e.target.value })}
-                        placeholder={detail?.transcript ? "What should this new agent do next?" : "Extra instructions for this session (optional)"}
-                        sx={{ mt: 0.85, bgcolor: "#fff" }} />
+                        placeholder={detail?.transcript ? "What should this new agent do next? - paste or drop a picture too" : "Extra instructions for this session (optional)"}
+                        {...runPics.drop}
+                        InputProps={{ endAdornment: (
+                          <Box sx={{ display: "flex", alignSelf: "flex-start", gap: 0.25 }}>
+                            <AttachImage pics={runPics} sx={{ width: 30, height: 30 }} />
+                            <MicButton size={18} sx={{ width: 30, height: 30, p: 0, color: "#6e685f" }}
+                              onText={(x) => setRun((cur) => ({ ...cur, instruction: cur.instruction ? `${cur.instruction} ${x}` : x }))} />
+                          </Box>) }}
+                        sx={{ mt: 0.85, bgcolor: "#fff", "& .MuiInputBase-root": { alignItems: "flex-start" } }} />
+                      <ImageTray pics={runPics} sx={{ mt: 0.75 }} />
                       {!handOff && <RepoSelect taskId={selected} agent={run.agent || "coder"} instruction={run.instruction}
                         value={startRepo} onChange={setStartRepo} />}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
-                        {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === ""}
+                        {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
@@ -1084,7 +1097,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />}
                           onClick={() => setHandOff(true)}>Use non-coding agent</Button>}
-                        {handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                        {handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || runPics.busy}
                           startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                           onClick={startGeneralAgent}>
                           {startingAgent === "general" ? "Starting…" : "Send to non-coding agent"}
@@ -1093,7 +1106,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onClick={() => { setHandOff(false); setRun({ ...run, agent: "", pick: "", model: "" }); }}>Back to coding</Button>}
                         {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
                           onClick={() => setRestartOpen(false)}>Cancel</Button>}
-                        {repoOf(t) && <Typography variant="caption" sx={{ ...mono, color: FAINT }}>repo · {repoOf(t)}</Typography>}
                       </Box>
                     </Box>
   );

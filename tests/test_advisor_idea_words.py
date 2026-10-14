@@ -145,3 +145,31 @@ class RailTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PrepLineAboutAnOpenTaskTests(unittest.TestCase):
+    """A meeting-prep line about a question already on an open task became a second task for the same ask - answered on the
+    first, still open on the second (the owner, 2026-10-14). Its `about` is read for every line, not only an idea's."""
+    def test_a_prep_line_about_an_open_task_is_tied_to_it_and_opens_nothing_new(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Send the portal SSO settings', 'Kind': 'task', 'Status': 'open'}, 'router')
+        cand = {'key': 'prep:2026-10-15 10:30:Portal link review', 'kind': 'prep', 'facts': 'MEETING 2026-10-15 10:30',
+                'action': {'type': 'meeting'}}
+        [line] = assistant.parse(s, _say(cand['key'], text='Ray asked what the portal button should say.', about=f'TQ-{tid:04d}',
+                                         suggest=f'Reply with the label - TQ-{tid:04d} has a draft waiting.'), [cand])
+        self.assertEqual(line['action']['tid'], tid)
+        s.cx.execute('INSERT INTO idea (Key, Kind, Text, ActionJson, Sig, Status, FirstSeen, LastSaid) VALUES (?,?,?,?,?,?,?,?)',
+                     (cand['key'], 'prep', line['text'], json.dumps(line['action']), 'sig', 'open', ago(minutes=1), ago(minutes=1)))
+        s.cx.commit()
+        before = len(s.list_tasks())
+        with mock.patch.object(ingest, 'judge', return_value=({'intent': 'task', 'kind': 'task', 'why': 'a wording decision'}, None)):
+            assistant.triage_ideas(s, s.list_ideas('open'), llm=object())
+        self.assertEqual(len(s.list_tasks()), before, 'tied to the open task, so no second one')
+        self.assertEqual(json.loads(s.list_ideas('open')[0]['ActionJson'])['triage']['linked_task'], tid)
+
+    def test_a_prep_line_about_closed_work_stays_untied(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Old ask', 'Kind': 'task', 'Status': 'done'}, 'router')
+        cand = {'key': 'prep:2026-10-15 10:30:Portal link review', 'kind': 'prep', 'facts': 'MEETING', 'action': {'type': 'meeting'}}
+        [line] = assistant.parse(s, _say(cand['key'], about=f'TQ-{tid:04d}'), [cand])
+        self.assertNotIn('tid', line['action'])

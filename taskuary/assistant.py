@@ -1003,6 +1003,12 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
         # the model says when its line rests on "nobody replied"; contradicts_sent_reply holds that against the send receipt
         if s.get('premise_unanswered') is True: said['unanswered'] = True
         if key in by:
+            # ...and the task it is ABOUT, for every line, not only an idea's: a meeting-prep line about a question already on an open
+            # task ("TQ-0702 already has a draft waiting") reached triage tied to nothing, and became a second task for the same ask -
+            # answered on the first, still open on the second (the owner, 2026-10-14). The ref is the model's `about`, never guessed.
+            about = re.search(r'\bTQ-?0*(\d+)\b', str(s.get('about') or ''), re.I)
+            pick = store.get_task(int(about.group(1))) if about else None
+            if pick and pick.get('Status') not in ('done', 'dropped') and not (by[key].get('action') or {}).get('tid'): said['tid'] = pick['TaskId']
             # the first line of the facts: prep's line carries a 1200-char dossier under it that belongs in 'skipped', not under a button
             out.append({**by[key], 'text': txt, 'action': (by[key].get('action') or {}) | said,
                         'why': (by[key].get('plain') or by[key]['facts']).split('\n', 1)[0] + (f"\nThe model's read: {why}" if why else '')})

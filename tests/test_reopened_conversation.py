@@ -76,14 +76,16 @@ class ContinueBringsTheMailTests(unittest.TestCase):
         self.assertEqual(args[0], continuity.RESUME_PROMPT, 'the owner said nothing - nothing is put in their mouth')
         self.assertIn('What would building it take', kw['delivery_instructions'])
 
-    def test_a_coding_agent_hears_the_new_mail_before_the_owners_note(self):
+    def test_a_coding_agents_instruction_is_the_owners_note_alone(self):
         s, tid = reopened()
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
              mock.patch.object(server, '_resumable', return_value=({'Agent': 'coder'}, '')), \
              mock.patch.object(server, 'continue_session', return_value={'session': 'sid'}) as reopen:
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'scope the build'})
-        said = reopen.call_args[0][1].instruction
-        self.assertTrue(said.startswith('NEW SINCE YOUR LAST TURN') and said.endswith('scope the build'), said)
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})
+        # the mail rode the instruction once: labelled FROM THE OWNER, clipped at the tty's ~1 KB command line, left unsent on the
+        # prompt (2026-10-14). terminal.resume_seed names the new mail and the context file that holds it; the note is the owner's.
+        self.assertEqual([c[0][1].instruction for c in reopen.call_args_list], ['scope the build', None])
 
 
 class AdvisorReadsTheStoryTests(unittest.TestCase):

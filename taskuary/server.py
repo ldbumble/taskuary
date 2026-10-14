@@ -1808,10 +1808,10 @@ def continue_work(task_id: int, body: ContinueBody = None):
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
     note = ' '.join(str((body.note if body else '') or '').split())[:4000]
     imgs = prompt_images(body.images if body else [])
-    # THE THREAD MOVED AFTER ITS LAST TURN: the mail that reopened the task goes in first - "pick up where work stopped" alone woke
-    # the agent at "reply sent, task closed" while two people had since asked for something new (the owner, 2026-10-14)
-    news = continuity.news_block(store, task_id)
     if general.handles(task):
+        # THE THREAD MOVED AFTER ITS LAST TURN: the mail that reopened the task goes in first, in the turn's instructions - "pick up
+        # where work stopped" alone woke the assistant at "reply sent, task closed" while two people had since asked for more (2026-10-14)
+        news = continuity.news_block(store, task_id)
         if not general.provider_options(store): raise HTTPException(422, 'Connect an AI provider in Connections to continue this work.')
         if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
         def go():
@@ -1829,12 +1829,15 @@ def continue_work(task_id: int, body: ContinueBody = None):
     # the conversation, else the one that last worked the task - never whatever the default happens to be today
     last = row or store.last_transcript(task_id) or {}
     brain = (last.get('Brain') or None) if isinstance(last, dict) else None
-    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, instruction=(f'{news}\n\n' if news else '') + (f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT))   # their words lead
+    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, instruction=(f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT))   # their words lead
     if row:
         # the conversation belongs to the CLI that made it; when THAT CLI cannot open now (out of sessions, signed out), a fresh
         # session seeded with the handover is the way on - not an error (the owner, 2026-09-30, TQ-0887: codex made it, codex was
         # unavailable, and every Continue failed)
-        try: out = continue_session(task_id, CodeBody(instruction='\n\n'.join(x for x in (news, note) if x) or None))
+        # a CODING agent is told of the new mail by terminal.resume_seed - a count and the context file that holds it whole. The
+        # mail itself must not ride the instruction: it was labelled the owner's words, clipped at the tty's ~1 KB command line,
+        # and left sitting unsent on the prompt (the owner, 2026-10-14)
+        try: out = continue_session(task_id, CodeBody(instruction=note or None))
         except HTTPException as e:
             if e.status_code != 422: raise
             store.add_comment(task_id, 'router', 'agent', f"{brain or row['Agent']} could not reopen its conversation ({e.detail}); "

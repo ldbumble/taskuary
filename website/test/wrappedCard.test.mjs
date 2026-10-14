@@ -27,7 +27,7 @@ test("Close out says what ended it and what already went out, before any envelop
   const c = closeOut();
   assert.match(c, /\|\| ended \|\| sentOutside\.length\) \?/, "an ended or answered task still opens its Close out");
   assert.ok(c.indexOf("{ended && (") < c.indexOf("THE ENVELOPE"), "the ending leads");
-  assert.ok(c.indexOf("{sentOutside.map(") < c.indexOf("THE ENVELOPE"), "then what was sent elsewhere");
+  assert.ok(c.indexOf("{newestFirst(sentOutside).map(") < c.indexOf("THE ENVELOPE"), "then what was sent elsewhere, newest first");
   assert.match(c, /\(replyMessage \|\| sentReview\) && \(!ended \|\| sentReview \|\| unsentReview\) &&/, "no envelope over nothing");
 });
 
@@ -62,4 +62,16 @@ test("a draft the close swept away stays readable, and a decided one reads not n
   const swept = { ReviewId: 4, Kind: "draft_reply", Status: "superseded", DraftText: "Merged - thanks, Erin." };
   assert.equal(unsentReplyReview([swept]).ReviewId, 4);
   assert.equal(replyPhase([{ ...swept, Status: "no_reply" }]), "not needed");
+});
+
+// the owner, 2026-10-14: each sent email says WHEN, the chain reads newest first, in the thread's own drawing
+test("the emails on a task read newest first, each with who and when on its first line", () => {
+  const page = read("TaskPage.jsx");
+  assert.match(page, /export const newestFirst = /);
+  assert.match(page, /newestFirst\(alsoSaid\)\.map\(/);
+  assert.match(page, /Sent by you\{m\.SourceName \? ` · \$\{m\.SourceName\}` : ""\}\{m\.SentAt \? ` · \$\{fmtDateTime\(m\.SentAt\)\}` : ""\}/);
+  assert.match(page, /What was sent\{sentReview\.DecidedAt \? ` · \$\{fmtDateTime\(sentReview\.DecidedAt\)\}` : ""\}/);
+  const sort = (ms) => [...ms].sort((a, b) => String(b.SentAt || "").localeCompare(String(a.SentAt || "")));
+  assert.deepEqual(sort([{ SentAt: "2026-10-06 13:26:00" }, { SentAt: "2026-10-14 12:29:30" }, { SentAt: "2026-10-13 17:10:20" }]).map((m) => m.SentAt.slice(5, 10)),
+    ["10-14", "10-13", "10-06"]);
 });

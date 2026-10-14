@@ -80,6 +80,8 @@ import EmailSomeone from "./EmailSomeone.jsx";
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
+// a thread on the task reads newest first, like the task does (the owner, 2026-10-14)
+export const newestFirst = (ms = []) => [...ms].sort((a, b) => String(b.SentAt || "").localeCompare(String(a.SentAt || "")));
 
 // `assistant` is a legacy alias from Timeline discussions. New discussions use `general`, but
 // old ones must still open here instead of falling through to the coding terminal.
@@ -1391,7 +1393,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* the rest of what they said, in order - indented so it reads as the same
                             person continuing rather than as separate business */}
                         {/* ...never on a batch: its other messages are its OTHER ITEMS, not the same person continuing */}
-                        {!detail?.batch && alsoSaid.map((m) => (
+                        {/* ...NEWEST FIRST, as the task reads elsewhere (the owner, 2026-10-14) */}
+                        {!detail?.batch && newestFirst(alsoSaid).map((m) => (
                           <Box key={m.MessageId} sx={{ mt: 0.6, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
                             <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
                               {m.FromName || m.FromEmail || m.Channel}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
@@ -1870,16 +1873,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               {ended.at && <Typography variant="caption" sx={{ color: FAINT, flexShrink: 0 }}>{fmtDateTime(ended.at)}</Typography>}
                             </Box>
                           )}
-                          {sentOutside.map((m) => (
-                            <Box key={m.MessageId} sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25, px: 1.1, py: 0.85, mt: 0.9 }}>
-                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, minWidth: 0 }}>
-                                <ChannelIcon channel={m.Channel} sx={{ color: FAINT }} />
-                                <Typography sx={{ ...label, flex: 1 }}>Already sent{m.SourceName ? ` · ${m.SourceName}` : ""}</Typography>
-                                {m.SentAt && <Typography variant="caption" sx={{ color: FAINT }}>{fmtDateTime(m.SentAt)}</Typography>}
-                              </Box>
-                              <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere", mt: 0.4 }}>
-                                {m.OwnText || m.BodyText}</Typography>
-                              {m.SourceLink && <Button size="small" sx={{ mt: 0.5, fontSize: 11, minHeight: 0, p: 0 }} href={m.SourceLink} target="_blank" rel="noreferrer">Open where it was sent</Button>}
+                          {/* the thread's own drawing - who and WHEN first, a rule on the left, newest first - not a grey box with its
+                              date pushed off the right edge (the owner, 2026-10-14: "you need time and date when each one was sent") */}
+                          {newestFirst(sentOutside).map((m) => (
+                            <Box key={m.MessageId} sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
+                              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
+                                Sent by you{m.SourceName ? ` · ${m.SourceName}` : ""}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap", overflowWrap: "anywhere",
+                                display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                                {cleanText(m.OwnText || m.BodyText)}</Typography>
+                              {m.SourceLink && <Button size="small" sx={{ mt: 0.3, fontSize: 11, minHeight: 0, p: 0 }} href={m.SourceLink} target="_blank" rel="noreferrer">Open where it was sent</Button>}
                             </Box>
                           ))}
                           {/* THE ENVELOPE over what was sent, read from the same Deliver blob
@@ -1915,11 +1919,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {/* the words that LEFT: an edit before the send is the FinalText - the draft read "keep it active" over a
                               mail that had said something else (2026-10-13) */}
                           {(sentReview?.FinalText || sentReview?.DraftText) && (
-                            <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
-                              px: 1.1, py: 0.85, mt: 0.9 }}>
-                              <Typography sx={{ ...label, display: "block" }}>What was sent</Typography>
-                              <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap",
-                                overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
+                            <Box sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
+                              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
+                                What was sent{sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}</Typography>
+                              <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
+                                overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 4,
                                 WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                                 {sentReview.FinalText || sentReview.DraftText}</Typography>
                             </Box>

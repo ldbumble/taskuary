@@ -244,7 +244,7 @@ class DoorTests(unittest.TestCase):
         r = c.post('/api/tasks/purge-dropped', headers={'X-Taskuary-Token': 'wrong'})
         self.assertEqual(r.headers['content-type'].split(';')[0], 'application/json')
         self.assertEqual(r.json()['code'], 'unauthorized')
-        self.assertIn('reload', r.json()['detail'].lower())
+        self.assertIn('taskuary --link', r.json()['detail'].lower())   # not "reload": a reload no longer re-seeds the token (R29)
         # ...which is also how an agent stops defeating the deny list by simply not sending its header
         self.assertEqual(guard.scope_of({'token': 'o', 'agent_token': 'a'}, {}), guard.ANON)
 

@@ -110,7 +110,7 @@ def fast_args(cli: str) -> list:
 
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
-                 research: bool = False, gear: str = 'light', keep: str = None, extra_args: list = None):
+                 research: bool = False, gear: str = 'light', keep: str = None, extra_args: list = None, task_id=None):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -144,7 +144,19 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         prof['cwd'] = cwd or str(scratch)
     # The ACP road is for the general agent's tool-using runs only. `no_hands` is exactly the
     # classifier - triage and the drafter, one verdict with every tool off - and it keeps argv.
-    if not no_hands: prof['acp_ok'] = True
+    # WHO WROTE THE TASK decides the flags (origin.py), here as in a pane: a stranger's run has the CLI's own reviewer, its
+    # session hooks, a trimmed environment and a folder outside Taskuary's home - or it does not run. No hands, no question.
+    if not no_hands and task_id:
+        from . import origin, clis
+        try: mode = origin.launch_mode(store, task_id, hub_agents.cli_of(prof, agent_name))
+        except origin.Refusal as e: raise ValueError(str(e))
+        if mode == 'auto':
+            from .clis import preset_args
+            c = prof.get('cmd', 'claude')
+            prof['args'] = clis.auto_args(c, list(prof.get('args') or preset_args(c) or ['-p'])) + ['--settings', origin.session_settings(store, task_id)]
+            prof['strict_env'], prof['cwd'] = True, str(origin.stranger_dir(task_id))
+            prof['acp_ok'] = False      # the reviewer rides argv; ACP's own permission answer allows everything
+    if not no_hands: prof.setdefault('acp_ok', True)
     if extra_args:
         from .clis import preset_args
         prof['args'] = list(prof.get('args') or preset_args(prof.get('cmd', 'claude')) or ['-p']) + list(extra_args)
@@ -216,14 +228,14 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
 
 def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
               cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-              gear: str = 'light', keep: str = None):
+              gear: str = 'light', keep: str = None, task_id=None):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
     the machine (demo.py)."""
     from . import demo
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
-    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, gear, keep)
+    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, gear, keep, task_id)
     return _Scrubbed(brain) if brain else brain
 
 
@@ -284,7 +296,7 @@ class _Scrubbed:
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
                cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
-               gear: str = 'light', keep: str = None):
+               gear: str = 'light', keep: str = None, task_id=None):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -316,9 +328,14 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         # brain starts its own
         chosen_model, chosen_resume, chosen_keep = (model, resume, keep) if first else (None, None, None)
         if candidate.startswith('cli:'):
-            return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
-                                resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
-                                research=research, gear=gear, keep=chosen_keep)
+            try:
+                return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
+                                    resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
+                                    research=research, gear=gear, keep=chosen_keep, task_id=task_id)
+            # a BACKUP that cannot run a stranger's task is no backup for it; the first brain's refusal is the answer
+            except ValueError:
+                if first or not task_id: raise
+                return None
         want = candidate[10:] if candidate.startswith('connector:') else None
         want_id = int(want) if want and want.isdigit() else None
         for c in store.list_connectors():

@@ -199,6 +199,7 @@ async def _lifespan(_app):
         t = _WALK_THREAD[0]
         if t is not None and t.is_alive(): t.join(WALK_WAIT)   # never close the store under it
         _WALK_READY.set()
+        _close_permits()           # a permit holds for days: released, its thread returns and the process can exit
         if not _close_drain_workers(timeout=DRAIN_WAIT, target_store=store):
             logger.warning('triage drain still stopping during shutdown')
         # Both watched PTYs and one-shot CLI brains are children of this process. An orderly
@@ -3452,6 +3453,14 @@ _HOOK_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix='cli-hook')
 # A permit can wait days for the owner, so it gets its OWN threads: on anyio's shared pool of 40, forty waiting strangers
 # would starve every other sync route.
 _PERMIT_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix='permit')
+
+def _close_permits():
+    "Shutdown: every held permit is refused, and a fresh pool takes its place (one process may start the app again - tests do)."
+    global _PERMIT_POOL
+    from . import workerstate as ws
+    ws.release_all()
+    _PERMIT_POOL.shutdown(wait=False, cancel_futures=True)
+    _PERMIT_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix='permit')
 
 @app.post('/api/hooks/claude/permit')
 async def cli_hook_permit(payload: dict, task: int, request: Request):

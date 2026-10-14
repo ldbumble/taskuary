@@ -268,6 +268,14 @@ def release(tid: int) -> bool:
     return got
 
 
+def release_all() -> bool:
+    """The app is closing: every held ask and permit lets go - a permit released is a refusal - so the threads holding
+    them return and the process can exit."""
+    with _HELD_LOCK:
+        for h in HELD.values(): h['released'] = True; h['event'].set()
+        return bool(HELD)
+
+
 def _answer_held(store, tid, h, answers: dict, actor) -> dict:
     """Answers for a held ask: kept until every question has one, then the hook is let go with all of them."""
     with _HELD_LOCK:

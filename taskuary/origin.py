@@ -79,6 +79,14 @@ def launch_mode(store, tid, cli: str) -> str:
         raise Refusal("a stranger's task needs Claude Code 2.1.295 or later (its hooks must refuse when Taskuary cannot answer)")
     return 'auto'
 
+def stranger_dir(tid: int):
+    "A stranger's headless and general work runs here: OUTSIDE Taskuary's home, so its own folder never sits inside what the floor protects."
+    import tempfile
+    from pathlib import Path
+    from .store import task_ref
+    d = Path(tempfile.gettempdir()) / 'taskuary-stranger' / task_ref(tid); d.mkdir(parents=True, exist_ok=True)
+    return d
+
 def _hook(path: str, tid: int, timeout: int) -> dict:
     from . import config, guard, hooks
     srv = config.load()['server']

@@ -39,8 +39,10 @@ def _norm(p, cwd: str = '', real: bool = True) -> str:
     return _cf(os.path.normcase((os.path.realpath if real else os.path.abspath)(p)))
 
 def protected() -> list:
-    "Taskuary's own folder plus the places credentials live, as normalised prefixes (symlink-resolved and as written)."
-    rs = [home()] + [os.path.join('~', c) for c in _CREDS]
+    "Taskuary's own folder, every stranger task's folder, and the places credentials live, as normalised prefixes (symlink-resolved and as written)."
+    import tempfile
+    # the strangers' folders (origin.stranger_dir) sit outside Taskuary's home; each task is let into its OWN one by _own
+    rs = [home(), os.path.join(tempfile.gettempdir(), 'taskuary-stranger')] + [os.path.join('~', c) for c in _CREDS]
     return list(dict.fromkeys(_norm(r, real=rl) for r in rs for rl in (True, False)))
 
 def _names() -> list:
@@ -49,11 +51,12 @@ def _names() -> list:
     return ns + ([_cf(home().name)] if home().name.startswith('.') else [])
 
 def _own(tid: int, store=None) -> list:
-    "This task's own files: its stranger file, its scratch folder, and the attachments of ITS messages - not another task's."
+    "This task's own files: its stranger file, its working folder (origin.stranger_dir), and the attachments of ITS messages - not another task's."
     from .store import task_ref
+    from .origin import stranger_dir
     ref = task_ref(tid)
     atts = [a['Path'] for m in (store.list_messages(tid) if store else []) for a in store.list_attachments(m['MessageId']) if a.get('Path')]
-    fs = [home() / 'context' / f'{ref}.stranger.md', home() / 'scratch' / ref, *atts]
+    fs = [home() / 'context' / f'{ref}.stranger.md', stranger_dir(tid), *atts]
     return list(dict.fromkeys(_norm(f, real=rl) for f in fs for rl in (True, False)))
 
 def _under(p, roots): return any(p == r or p.startswith(r.rstrip('/') + '/') for r in roots)

@@ -937,7 +937,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} over acp cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
     head0 = _git(cwd, 'rev-parse', 'HEAD')
-    env = child_env({**os.environ, **(extra_env or {})})
+    env = spawn_env(profile, extra_env)
 
     def show(u):
         # the agent's words arrive one TOKEN per update ("Hello", "!", "Shell", "command") and are
@@ -981,6 +981,13 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     finally:
         with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(client.p)
         client.close()
+
+
+def spawn_env(profile: dict, extra_env: dict = None) -> dict:
+    "A headless CLI's environment: the process's own, or - for a stranger's task (profile strict_env) - only what terminal.STRICT_ENV lets through."
+    from .terminal import strict_ok          # lazy: terminal imports this module
+    base = {k: v for k, v in os.environ.items() if not profile.get('strict_env') or strict_ok(k)}
+    return child_env({**base, **(extra_env or {})})
 
 
 def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None):
@@ -1039,7 +1046,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # A headless Assistant session can still own an embedded browser. Its session identity
         # rides here just as it does in a PTY; merge it over the real process environment so PATH,
         # login homes, and every configured CLI keep working.
-        env = child_env({**os.environ, **(extra_env or {})})
+        env = spawn_env(profile, extra_env)
         p = spawn.popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False,
                              env=env)
@@ -1221,7 +1228,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         shown = _live_line(j)
         if shown: trace('live', name, shown)
     try:
-        final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=child_env({**os.environ, **(extra_env or {})}),
+        final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=spawn_env(profile, extra_env),
                                  resume=resume, cancel=cancel, timeout=profile.get('timeout', 1200))
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e

@@ -1,7 +1,7 @@
 """Ways round the floor a reviewer found (fix round 1). Each is a spelling of a protected thing the OS or shell resolves
 differently from how the floor first read it."""
 import os, pathlib, pytest
-from taskuary import floor, config
+from taskuary import floor, config, origin
 
 H = os.path.expanduser('~')
 def chk(tool, cwd='', tid=7, **inp): return floor.check({'tool_name': tool, 'cwd': cwd, 'tool_input': inp}, tid)
@@ -38,11 +38,11 @@ def test_a_search_rooted_above_a_protected_folder_is_refused(hm):
     assert not denied(chk('Glob', cwd=os.getcwd(), pattern='**/*.py'))
 
 def test_this_task_s_own_path_cannot_be_walked_out_of(hm):
-    own = hm / 'scratch' / 'TQ-0007'
-    for cmd in (f'cat {own}/../../config.toml', f'cat {sl(own)}/../../config.toml', f'cat {hm}/context/TQ-0007.stranger.md/../../config.toml',
-                f'cat {sl(hm)}/scratch/TQ-0007/n.md/../../../config.toml'):
+    own, ctx = origin.stranger_dir(7), hm / 'context' / 'TQ-0007.stranger.md'
+    up = os.path.relpath(hm / 'config.toml', own).replace('\\', '/')    # from its own folder (outside Taskuary's) back into it
+    for cmd in (f'cat {own}/{up}', f'cat {sl(own)}/{up}', f'cat {ctx}/../../config.toml', f'cat {sl(ctx)}/../../config.toml'):
         assert denied(chk('Bash', command=cmd)), cmd
-    assert denied(chk('Bash', tid=1000, command=f'cat {sl(hm)}/scratch/TQ-10001/notes.md'))   # a longer id is not the same task
+    assert denied(chk('Bash', tid=1000, command=f'cat {sl(origin.stranger_dir(10001))}/notes.md'))   # a longer id is not the same task
     assert not denied(chk('Bash', command=f'cat {sl(own)}/notes.md')) and not denied(chk('Bash', command=f'cat "{own}/notes.md"'))
 
 def test_cheap_command_forms_are_refused(hm):
@@ -72,16 +72,17 @@ def test_a_variable_that_expands_elsewhere_cannot_hide_the_literal_path(hm, monk
     assert denied(chk('Read', file_path=f'{hm.parent}/$FLOORV/../{hm.name}/config.toml'))
 
 def test_a_relative_path_in_a_command_is_the_session_s_not_the_server_s(hm):
-    cwd = str(hm / 'scratch' / 'TQ-0007')
+    cwd = str(hm / 'work' / 'TQ-0007')          # a session that cd'd into Taskuary's tree: relative paths resolve from there
     for c in ('cat ../../config.toml', 'type ..\..\config.toml', 'cat ./../../config.toml', 'cat ../../context/TQ-0008.stranger.md'):
         assert denied(chk('Bash', cwd=cwd, command=c)), c
     assert denied(chk('PowerShell', cwd=cwd, command='Get-Content ..\..\config.toml'))
-    assert not denied(chk('Bash', cwd=cwd, command='cat ./notes.md')) and not denied(chk('Bash', cwd=cwd, command='python -m pytest -q tests/x.py'))
-    assert not denied(chk('Bash', cwd=cwd, command='curl -s https://vendor.example/a/b'))
+    own = str(origin.stranger_dir(7))           # its own folder is where it really runs
+    assert not denied(chk('Bash', cwd=own, command='cat ./notes.md')) and not denied(chk('Bash', cwd=own, command='python -m pytest -q tests/x.py'))
+    assert not denied(chk('Bash', cwd=own, command='curl -s https://vendor.example/a/b'))
 
 def test_a_cd_earlier_in_the_command_moves_the_base(hm, tmp_path):
-    own = hm / 'scratch' / 'TQ-0007'
+    own = hm / 'work' / 'TQ-0007'               # a folder inside Taskuary's tree, two levels down
     for c in (f'cd {own} && type ..\..\config.toml', f'pushd {sl(own)}; cat ../../config.toml', f'Set-Location {own}; gc ..\..\config.toml', f'sl "{own}"; gc ../../config.toml'):
         assert denied(chk('PowerShell', cwd=str(tmp_path), command=c)), c
-    assert not denied(chk('Bash', cwd=str(tmp_path), command=f'cd {sl(own)} && cat ./notes.md'))
+    assert not denied(chk('Bash', cwd=str(tmp_path), command=f'cd {sl(origin.stranger_dir(7))} && cat ./notes.md'))
     assert denied(chk('Bash', cwd=str(tmp_path), command=f'cd {sl(tmp_path)} && cd {sl(own)} && cat ../../config.toml'))   # the last cd before the token

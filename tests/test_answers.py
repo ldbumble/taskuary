@@ -139,7 +139,8 @@ class AttachHookTests(unittest.TestCase):
     def test_auto_hands_the_answer_over(self):
         s = MemoryStore(); s.set_setting('answer_to_agent', 'auto', 't')
         tid = self._attachable(s)
-        with mock.patch.object(terminal, 'say_to_task', return_value=True) as say:
+        # the sender is outside the owner's trust (origin.py): their answer reaches only a session running in auto mode
+        with mock.patch.object(terminal, 'say_to_task', return_value=True) as say, mock.patch.object(terminal, 'mode_of_task', return_value='auto'):
             out = ingest.ingest_message(s, {'external_id': 'ans1', 'channel': 'email', 'subject': 'RE: PTO import',
                                             'body': 'Use the 8/17 file.', 'from_email': 'sarah@x.com',
                                             'conversation_id': 'c1', 'sent_at': '2026-08-23 10:00:00'})
@@ -166,7 +167,8 @@ class BusyThreadTests(unittest.TestCase):
 
     def mail(self, ext, sender, body):
         llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'more to do', 'due': '2026-08-28'})
-        with mock.patch.object(terminal, 'say_to_task', return_value=True) as say, mock.patch.object(ingest, '_spawn') as spawn:
+        with mock.patch.object(terminal, 'say_to_task', return_value=True) as say, mock.patch.object(ingest, '_spawn') as spawn, \
+             mock.patch.object(terminal, 'mode_of_task', return_value='auto'):     # a stranger's line reaches only an auto session
             out = ingest.ingest_message(self.s, {'external_id': ext, 'channel': 'email', 'subject': 'RE: PTO import', 'body': body,
                                                  'from_email': sender, 'conversation_id': 'c1', 'sent_at': '2026-08-23 10:00:00'}, llm=llm)
         return out, say, spawn

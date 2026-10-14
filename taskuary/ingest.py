@@ -1401,8 +1401,8 @@ def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
     if cfg.get('answer_to_agent', 'ask') != 'auto': return
     try:
         from . import origin, terminal
-        # a stranger's words never reach a session started with full permissions: it waits for the next start, in auto mode
-        if origin.of_task(store, tid)[0] == 'stranger' and terminal.mode_of_task(tid) == 'full': return
+        # a stranger's words reach only a session started in auto mode - full, none or anything unknown waits for the next start
+        if origin.of_task(store, tid)[0] == 'stranger' and terminal.mode_of_task(tid) != 'auto': return
         terminal.say_to_task(store, tid, msg, actor)
     except Exception as e: logger.warning(f'answer_to_agent failed for task {tid}: {e}')
 

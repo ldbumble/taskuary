@@ -89,12 +89,21 @@ def seed_argv(profile: dict, seed: str):
 # inherit the parent's conversation - strip anything that would carry that in.
 _DIRTY = ('CLAUDE_CODE', 'CLAUDECODE', 'CLAUDE_SESSION', 'ANTHROPIC_SESSION', 'CODEX_SESSION', 'GEMINI_SESSION')
 
-def clean_env(extra: dict = None) -> dict:
+# what a stranger's session inherits: enough to run the CLI and its tools, not the owner's cloud keys and tokens
+STRICT_ENV = ('PATH', 'PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC', 'HOME', 'USERPROFILE', 'HOMEDRIVE',
+              'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'TEMP', 'TMP',
+              'USERNAME', 'LANG', 'TERM', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'OS', 'CODEX_HOME',
+              'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE',
+              'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDE_CONFIG_DIR')
+
+def strict_ok(k: str) -> bool: return k.upper() in STRICT_ENV or k.upper().startswith('LC_')
+
+def clean_env(extra: dict = None, strict: bool = False) -> dict:
     # child_env, not os.environ: a CLI with no home directory refuses to start at all
     # ("Error finding codex home: Could not find home directory") and a Taskuary launched
     # from a service or a scrubbed shortcut does not always have one to pass down.
     from .agents import child_env
-    env = {k: v for k, v in child_env().items() if not k.upper().startswith(_DIRTY)}
+    env = {k: v for k, v in child_env().items() if not k.upper().startswith(_DIRTY) and (not strict or strict_ok(k))}
     # per-session additions: the browser session name that ties an agent's agent-browser to
     # its pane (browserview) - set after the strip, so it wins over an inherited one
     env.update(extra or {})
@@ -145,12 +154,12 @@ def terminal_host_env(argv, sid: str = '') -> dict:
 
 
 class _WinPty:
-    def __init__(self, argv, cwd, rows, cols, env=None):
+    def __init__(self, argv, cwd, rows, cols, env=None, strict=False):
         try:
             from winpty import PtyProcess
         except ImportError:
             raise RuntimeError('the interactive terminal needs pywinpty on Windows - pip install pywinpty')
-        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols), env=clean_env(env))
+        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols), env=clean_env(env, strict))
     def read(self):
         try: return self.p.read(65536)
         except EOFError: return ''
@@ -163,12 +172,12 @@ class _WinPty:
 
 
 class _UnixPty:
-    def __init__(self, argv, cwd, rows, cols, env=None):
+    def __init__(self, argv, cwd, rows, cols, env=None, strict=False):
         import fcntl, pty, struct, termios
         self.fd, slave = pty.openpty()
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
         self.p = subprocess.Popen(argv, cwd=cwd, stdin=slave, stdout=slave, stderr=slave,
-                                  close_fds=True, start_new_session=True, env=clean_env(env))
+                                  close_fds=True, start_new_session=True, env=clean_env(env, strict))
         os.close(slave)
         import codecs
         self.dec = codecs.getincrementaldecoder('utf-8')(errors='replace')
@@ -238,7 +247,7 @@ class Term:
         # no arguments to know which agent, task and checkout it is speaking for
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(
             argv, cwd, rows, cols, {**terminal_host_env(argv, self.sid), **_bv.env(self.sid),
-                                    **session_env(agent or label, task_id, cwd, sid=self.sid)})
+                                    **session_env(agent or label, task_id, cwd, sid=self.sid)}, mode == 'auto')
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
         # used to reach keep() before the caller had handed the session anywhere to file itself
@@ -1010,12 +1019,25 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if agent and cli_named(profile, argv) == 'claude' and '--settings' not in argv: argv = [*argv, *claude_theme_args(store)]
     # a DANGEROUS batch is reviewed read-only, whoever opened the session (batch.read_only_argv); every other batch
     # is an ordinary session
+    mode = 'full'
     if agent and task_id:
-        from . import batch as _batch
+        from . import batch as _batch, origin as _origin, clis as _clis
         # ...only while it holds an item the triage judged dangerous (batch.locked)
-        if _batch.is_batch(store, task_id) and _batch.locked(store, task_id):
+        locked = _batch.is_batch(store, task_id) and _batch.locked(store, task_id)
+        if locked:
             from .config import home
             argv = _batch.read_only_argv(cli_named(profile, argv), list(argv), str(home() / 'context'))
+        # WHO WROTE THE TASK decides the flags (origin.py): a stranger's task runs in the CLI's own auto mode with the
+        # floor and the owner's answer as hooks, or not at all; the owner's and trusted work launch as they always did.
+        # The danger lock above still wins: a dangerous batch stays read-only, never auto on top of it.
+        try: mode = _origin.launch_mode(store, task_id, cli_named(profile, argv))
+        except _origin.Refusal as e: raise ValueError(str(e))
+        if mode == 'auto' and not locked:
+            i = argv.index('--settings') if '--settings' in argv else -1
+            try: theme = str(json.load(open(argv[i + 1], encoding='utf-8')).get('theme') or '') if 0 <= i < len(argv) - 1 else ''
+            except (OSError, ValueError, AttributeError): theme = ''
+            if i >= 0: argv = argv[:i] + argv[i + 2:]      # one --settings: the session's own file carries the theme
+            argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--settings', _origin.session_settings(store, task_id, theme)]
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
     # differ per CLI, and the typed road is the one verified against every TUI here.
@@ -1068,7 +1090,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                 _hooks.install_user(cli, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''), cmd=str(profile.get('cmd') or cli))
                 _hooks.retire_project(cwd)
         except Exception as e: logger.debug(f'agent hooks not installed for {cwd}: {e}')
-    t = Term(argv, cwd, label, task_id, agent, rows, cols, store, cli=cli_named(profile, argv))
+    t = Term(argv, cwd, label, task_id, agent, rows, cols, store, cli=cli_named(profile, argv), mode=mode)
     SESSIONS[t.sid] = t
     if assigned: bind_ext(t, assigned)     # resumable before it has drawn a single character
     # ...and a RESUMED pane is already named - by the conversation it reopens (`claude --resume <id>` keeps the id: the

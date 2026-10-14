@@ -394,3 +394,37 @@ def test_js_that_runs_taskuary_outside_the_agent_commands_is_refused(name, conte
                                      "os.system('taskuary --done \"fixed\"')\n", "find_packages(include=['taskuary', 'taskuary.*'])\n"])
 def test_code_that_names_taskuary_otherwise_is_written(content, tmp_path):
     assert call('Write', file_path=str(tmp_path / 'x.py'), content=content) == {}, content
+
+
+# ── follow-up fix round 3: no length past which the floor stops looking; one-argument spawns; a search may name a marker ─
+@pytest.mark.parametrize('content', ["subprocess.run(['bash','-c', '" + ' ' * 4100 + "taskuary --prompts'])\n",
+                                     "subprocess.run(['taskuary','--reply','" + 'x' * 4100 + "','--prompts'])\n",
+                                     "subprocess.run(['bash','-c', '" + ' ' * 50000 + "taskuary --prompts'])\n"], ids=['shell', 'argv', 'shell-50k'])
+def test_padding_does_not_hide_what_code_runs(content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / 'x.py'), content=content))
+
+def test_a_thousand_inline_shells_stay_fast(tmp_path):
+    import time
+    body = 'TASKS = {\n' + ''.join(f"    't{i}': ['bash', '-c', 'make t{i}'],\n" for i in range(1000)) + '}\n'
+    call('Write', file_path=str(tmp_path / 'warm.py'), content="['bash', '-c', 'make']\n")     # first-call setup is not the floor's work
+    t = time.perf_counter(); r = call('Write', file_path=str(tmp_path / 'tasks.py'), content=body)
+    assert r == {} and time.perf_counter() - t < 0.2, time.perf_counter() - t
+
+@pytest.mark.parametrize('content', ["spawnSync('taskuary-desktop')\n", "spawn('taskuary')\n", "execa('taskuary-desktop')\n",
+                                     "execFile('taskuary.exe')\n", "spawn(\"taskuary\", ['--link'])\n"])
+def test_a_one_argument_spawn_of_taskuary_is_refused(content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / 'x.js'), content=content)), content
+
+def test_a_one_argument_spawn_of_an_agent_command_is_written(tmp_path):
+    assert call('Write', file_path=str(tmp_path / 'x.js'), content="spawn('taskuary', ['--reply', 'done'])\nspawn('make')\n") == {}
+
+@pytest.mark.parametrize('cmd', ['grep -rn taskuary_ docs/', 'rg "TASKUARY_HOME" taskuary/', 'git grep -n taskuary_home', 'git log -S TASKUARY_X',
+                                 'Select-String -Pattern TASKUARY_DEMO -Path *.py', 'findstr /s taskuary_ *.md', 'cat taskuary_notes.txt'])
+def test_a_search_that_names_a_marker_passes(cmd):
+    for t in SHELLS: assert call(t, command=cmd) == {}, (t, cmd)
+
+@pytest.mark.parametrize('cmd', ['grep x $TASKUARY_HOME/config.toml', 'cat ${TASKUARY_HOME}/x', 'ls Env:', 'cat Env:TASKUARY_SID',
+                                 'grep x . > taskuary_out; unset TASKUARY_SID', 'grep taskuary_ x; export TASKUARY_TASK=', 'echo TASKUARY_X',
+                                 'grep -rn TASKUARY_TOKEN .'])
+def test_a_search_does_not_launder_an_expansion_or_a_wipe(cmd):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)

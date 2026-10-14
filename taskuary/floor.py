@@ -153,6 +153,8 @@ def _words(seg: str) -> list:
     while ws and (re.fullmatch(r'[A-Za-z_]\w*=.*', ws[0]) or ws[0].lower() in ('sudo', 'command', 'exec', 'nohup')): ws.pop(0)
     return ws
 
+from functools import lru_cache
+@lru_cache(maxsize=8192)
 def _prog(w: str) -> str: return re.sub(r'(\.exe|\.cmd|\.bat|\.ps1|-script\.pyw?)$', '', _cf(w).rsplit('/', 1)[-1])
 
 _ENV_VAL = ('-C', '-S', '-u', '-P', '--chdir', '--split-string', '--unset')    # env's options that take a value
@@ -207,30 +209,45 @@ _HEREDOC = re.compile(r'''<<-?\s*(["']?)(\w+)\1''')
 _ARGV = re.compile(r'''(?:\[|[(,](?=\s*["'][^"'\n]*["']\s*,))\s*(["'])((?:[^"'\n]*[/\\])?taskuary(?:\.exe|-desktop)?)\1''', re.I)
 _SPAWN = r'(?:subprocess\.\w+|Popen|check_call|check_output|call|run|os\.exec\w*|os\.spawn\w*|spawn\w*|exec\w*|execa\w*|Command)\s*\(\s*'
 _SPAWN_AT = re.compile(_SPAWN + r'$')
-_STR = re.compile(r'''(["'])((?:\\.|(?!\1)[^\\\n])*)\1''')
+_STR = re.compile(r'''"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)\'''')     # char classes, not a lookahead per character
 # ...and a string a shell runs - os.system('taskuary --prompts'), execSync(...), subprocess.run('...', shell=True)
 _SHELL_CALL = re.compile(r'''(?<![\w.])(?:os\.system|os\.popen|subprocess\.\w+|(?:child_process\.|cp\.)?exec(?:Sync)?)\s*\(\s*[fbru]?(["'`])((?:\\.|(?!\1)[^\\\n])*)\1''')
 
-def _close(text: str, at: int) -> int:
-    "Where the bracket the argv starts at - or the one it sits in - closes; quotes are skipped."
-    d, q, i = 0, '', at
-    while i < min(len(text), at + 4000):
-        c = text[i]
-        if q: q = '' if c == q and text[i - 1] != '\\' else q
-        elif c in '"\'': q = c
-        elif c in '([{': d += 1
-        elif c in ')]}':
-            d -= 1
-            if d <= 0: return i
-        i += 1
-    return i
+# ...and a spawn call's one string argument: spawn('taskuary'), execa('taskuary-desktop')
+_SPAWN1 = re.compile(r'(?<![\w.])' + _SPAWN + r'''(["'`])((?:[^"'`\n]*[/\\])?taskuary(?:\.exe|-desktop)?)\1''', re.I)
+_TOK = re.compile(r'''"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|[()\[\]{}]''')
+# every rule a launch's text is judged by needs one of these words: taskuary (the program, the package, a TASKUARY_ name),
+# env (env -i, Env:, environ, SetEnvironmentVariable), compgen, -UseNew*, exec -c
+_ANY_RULE = re.compile(r'taskuary|env|compgen|usen|exec', re.I)
+_BUDGET = 2_000_000      # characters judged per call for the spans below; past it the call is refused, never let through
+
+@lru_cache(maxsize=4)
+def _brackets(text: str) -> tuple:
+    "One linear pass, strings skipped: the bracket each string sits in, and where each bracket closes (never: the text's end)."
+    enc, close, st = {}, {}, []
+    for t in _TOK.finditer(text):
+        c = t[0]
+        if c[0] in '"\'': enc[t.start()] = st[-1] if st else -1
+        elif c in '([{': st.append(t.start())
+        elif st: close[st.pop()] = t.start()
+    return enc, close
+
+def _close(text: str, q: int) -> int:
+    """Where the list or call the string at `q` sits in ends. No length cap: a string the pass did not see, or a bracket
+    that never closes, runs to the end of the text - fail closed."""
+    enc, close = _brackets(text)
+    o = enc.get(q)
+    return len(text) if o is None else _region(text, q) if o < 0 else close.get(o, len(text))
 
 def _argv(text: str) -> list:
-    out = []
-    for m in _ARGV.finditer(text):
-        e = _close(text, m.start()); rest = [s[2] for s in _STR.finditer(text, m.end(), e)]
+    out, spent = [], 0
+    for m in [*_ARGV.finditer(text), *_SPAWN1.finditer(text)]:
+        e = _close(text, m.start(1)); spent += e - m.end()
+        if spent > _BUDGET: return out + [('it runs more code than the floor reads in one call', 'budget')]
+        rest = [s[1] if s[1] is not None else s[2] for s in _STR.finditer(text, m.end(), e)]
         # no flag and no spawn call: a list of names (packages=['taskuary'], include=['taskuary', 'taskuary.*'])
-        if not any(s.startswith('-') for s in rest) and _prog(m[2]) == 'taskuary' and not _SPAWN_AT.search(text[max(0, m.start() - 60):m.start()]): continue
+        if m.re is _ARGV and not any(s.startswith('-') for s in rest) and _prog(m[2]) == 'taskuary' \
+                and not _SPAWN_AT.search(text[max(0, m.start() - 60):m.start()]): continue
         out += [(f'{why} (from code)', _line(text, m)) for why in _taskuary_cmd([m[2], *rest])]
     return out
 
@@ -258,26 +275,29 @@ def _region(text: str, at: int) -> int:
 
 def _shells(text: str) -> list:
     """Each launch's text is judged ONCE, by checks that do not look for shells again: a launch inside a launch is found by
-    this same scan over the whole text, so recursing would judge it 2^k times."""
-    out, seen = [], set()
+    this same scan over the whole text, so recursing would judge it 2^k times. And a launch whose text ends where an
+    earlier one's does is a suffix of what was already judged - `sh -c sh -c ...` is judged once, not once per `sh`."""
+    out, seen, spent = [], set(), 0
     for m in _SHELL.finditer(text):
         # a quoted element of a list ['pwsh', '-c', ...] runs to that list's end; a shell word in a line, to its statement's
         q = m.start() - 1
         e = _close(text, q) if q >= 0 and text[q] in '"\'' and text[m.end():m.end() + 1] == text[q] else _region(text, m.end())
+        if m[1]:     # its own options, up to the command or the script they start: an encoded command is refused outright
+            for o in _PS_OPT.finditer(text, m.end(), e):
+                f = o[2].lower()
+                if f in ('e', 'ec') or len(f) > 1 and 'encodedcommand'.startswith(f):
+                    out.append((f"it runs an encoded PowerShell command ({m[0]} {o[0]}), which no rule can read", _line(text, m))); break
+                if o[1] == '-' and ('file'.startswith(f) or 'command'.startswith(f)): break
+        if (e, bool(m[1])) in seen: continue
         r = text[m.end():e]
         if not m[1] and not _INLINE.search(r): continue
+        seen.add((e, bool(m[1]))); spent += len(r)
+        if spent > _BUDGET: return out + [('it starts more inline shells than the floor reads in one call', 'budget')]
         if h := _HEREDOC.search(r):       # the heredoc's body is what the shell reads
             d = re.search(r'\n[ \t]*' + re.escape(h[2]) + r'[ \t]*(?:\n|$)', text[e:])
             r += text[e:e + d.start()] if d else text[e:]
+        if not _ANY_RULE.search(r): continue
         k, rq = _snip(m[0] + r), re.sub(r'''["'`]''', ' ', r)
-        if (k, bool(m[1])) in seen: continue
-        seen.add((k, bool(m[1])))
-        if m[1]:
-            for o in _PS_OPT.finditer(r):
-                f = o[2].lower()
-                if o[1] == '-' and 'file'.startswith(f): break       # what follows is the script's own arguments
-                if f in ('e', 'ec') or len(f) > 1 and 'encodedcommand'.startswith(f):
-                    out.append((f"it runs an encoded PowerShell command ({m[0]} {o[0]}), which no rule can read", k)); break
         if t := _TQ.search(rq): out.append((f'it starts a shell ({m[0]}) that runs {t[0]}', k))
         why = [f"it runs Taskuary's own package ({x[0].strip()})" for x in _PKG.finditer(rq)]
         why += [f"it changes the session's own environment ({x[0].strip()})" for x in (_PS_MARKS if m[1] else _SCRIPT_MARKS).finditer(rq)]
@@ -299,6 +319,22 @@ def _segs(text: str) -> list:
         out += [(w, k) for w in _taskuary_cmd(ws)]
     return out
 
+_READS = frozenset({'grep', 'egrep', 'fgrep', 'rg', 'findstr', 'select-string', 'sls', 'ls', 'dir', 'cat', 'type', 'head', 'tail', 'less', 'more', 'wc'})
+_GIT_READS = frozenset({'grep', 'log', 'show', 'diff'})
+
+def _searched(text: str, m) -> bool:
+    """A bare TASKUARY_ name that is only an argument of a search or a listing - `grep -rn TASKUARY_ docs/` reads files, not
+    the session. Never an expansion ($X, ${X}, %X%, Env:X), a redirection target, or the Env: drive itself."""
+    if m[0].lower() != 'taskuary_' or m.start() and text[m.start() - 1] not in ' \t"\'': return False
+    a = max((s.end() for s in _SEG.finditer(text, 0, m.start())), default=0)
+    b = next((s.start() for s in _SEG.finditer(text, m.end())), len(text))
+    seg = text[a:b]
+    if re.search(r'''>\s*["']?\S*$''', seg[:m.start() - a]): return False
+    ws = _words(seg)
+    if not ws: return False
+    p = _prog(ws[0])
+    return p in _READS or p == 'git' and next((w.lower() for w in ws[1:] if not w.startswith('-')), '') in _GIT_READS
+
 def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
     """Every (reason, where) a command - or, `script`, the text of a file that will be run (`ps`: a PowerShell one) - is
     refused for, in the order they are checked. `where` is the hit's normalised line (a segment's, for what is judged per
@@ -306,7 +342,7 @@ def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
     Env:CI` into `rd Env:*` - is a new hit, and a reindent is not."""
     out = [(f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", _line(text, m)) for m in _PKG.finditer(text)]
     out += [(f"it changes the session's own environment ({m[0].strip()})", _line(text, m))
-            for m in ((_PS_MARKS if ps else _SCRIPT_MARKS) if script else _MARKS).finditer(text)]
+            for m in ((_PS_MARKS if ps else _SCRIPT_MARKS) if script else _MARKS).finditer(text) if script or not _searched(text, m)]
     out += _shells(text) + _argv(text)
     out += [(f'{w} (from code)', _line(text, m)) for m in _SHELL_CALL.finditer(text) for w, _ in _segs(m[2])]
     return out + _segs(text)

@@ -45,7 +45,7 @@ GENESIS = '0' * 64
 # the channels Taskuary writes itself - its reports and the Advisor's ideas - which carry no sender address
 OWN_CHANNELS = ('report', 'assistant')
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt',
-             'DoneWhen', 'ParentId')
+             'DoneWhen', 'ParentId', 'OriginBase', 'TrustedThrough', 'Origin', 'OriginWhy')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
             'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass')
@@ -886,6 +886,11 @@ class SQLiteStore:
             # parent (spec 2026-10-12, goals as tasks). Derived everywhere from DoneWhen - no kind, no second object.
             if 'DoneWhen' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN DoneWhen TEXT')
             if 'ParentId' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN ParentId INTEGER')
+            # where the task's words came from (origin.py): what the owner raised it to, through which message, and the
+            # last computed answer the card reads. Computed on read from the messages, so no ingest road can skip it.
+            for col in ('OriginBase', 'Origin', 'OriginWhy'):
+                if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
+            if 'TrustedThrough' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN TrustedThrough INTEGER')
             # an email slot an agent addressed as "Name <address>" handed the provider the whole string (TQ-0957): the
             # recipient is the address, the name rides beside it (slots.split) - repaired once, on start
             from .slots import split

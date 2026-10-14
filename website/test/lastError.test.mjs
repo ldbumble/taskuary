@@ -34,3 +34,14 @@ test("snapshot carries screen, error, stack, actions and time", () => {
 });
 
 test("with no error the snapshot is still a dict", () => assert.deepEqual({ ...snapshot("Home"), at: 0 }, { screen: "Home", route: "", error: "", stack: "", actions: [], at: 0 }));
+
+test("ids of every shape and the host are normalised away", () => {
+  recordAction("POST", "http://127.0.0.1:7787/api/tasks/123e4567-e89b-12d3-a456-426614174000/x/deadbeef12/y?q=1");
+  recordAction("POST", "/api/repos/some-org/some-repo-name/sync");
+  assert.deepEqual(snapshot("x").actions, ["POST /api/tasks/:id/x/:id/y", "POST /api/repos/:id/:id/sync"]);
+});
+
+test("an unserialisable detail does not throw", () => {
+  const a = {}; a.a = a; record({ message: "m", response: { status: 500, data: { detail: a } } });
+  assert.ok(last().message.startsWith("m"));
+});

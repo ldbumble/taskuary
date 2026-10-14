@@ -28,19 +28,28 @@ export const fullReport = (title, body) => `${title}\n\n${body}`;
 
 const link = (title, body) => `${NEW}?${new URLSearchParams({ title, body, labels: "bug" })}`;
 
+// a slice that never ends in half a surrogate pair (it would encode as U+FFFD)
+const head = (s, n) => { const t = s.slice(0, n); return /[\ud800-\udbff]$/.test(t) ? t.slice(0, -1) : t; };
+const LOG = "<details><summary>Log lines</summary>";
+
 export function issueUrl(title, body, max = 7500) {
-  const ok = (b) => link(title, b).length <= max;
-  if (ok(body)) return { url: link(title, body), cut: false };
-  let b = body.replace(/<details>[\s\S]*?<\/details>\n*/, "");
-  if (!ok(b)) b = b.replace(/### Error\n[\s\S]*?(?=\n### Environment|$)/, `### Error\n${NOTE}\n`);
-  if (!ok(b)) {                                       // still over: the explanation itself is huge - binary-search its longest fitting head
-    const m = b.match(/(### What happened\n)([\s\S]*?)(\n\n### |$)/);
-    if (m) {
-      const at = m.index + m[1].length, tail = `\n${NOTE}`, mk = (n) => b.slice(0, at) + m[2].slice(0, n) + tail + b.slice(at + m[2].length);
-      let lo = 0, hi = m[2].length;
-      while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ok(mk(mid))) lo = mid; else hi = mid - 1; }
-      b = mk(lo);
-    }
+  const ok = (t, b) => link(t, b).length <= max, done = (t, b) => ({ url: link(t, b), cut: true });
+  // the longest n for which f(n) still holds (encoded length only grows with n)
+  const fit = (n, f) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (f(m)) lo = m; else hi = m - 1; } return lo; };
+  if (ok(title, body)) return { url: link(title, body), cut: false };
+  let b = body;
+  const i = b.lastIndexOf(LOG), j = i < 0 ? -1 : b.indexOf("</details>", i);     // the last one: an Error may quote the tag
+  if (j >= 0) b = `${b.slice(0, i)}${LOG}\n\n${NOTE}\n${b.slice(j)}`;
+  if (!ok(title, b)) b = b.replace(/### Error\n[\s\S]*?(?=\n### Environment|$)/, `### Error\n${NOTE}\n`);
+  if (ok(title, b)) return done(title, b);
+  const m = b.match(/(### What happened\n)([\s\S]*?)(\n\n### |$)/);          // then the explanation's tail
+  if (m) {
+    const at = m.index + m[1].length, mk = (n) => `${b.slice(0, at)}${head(m[2], n)}\n${NOTE}${b.slice(at + m[2].length)}`;
+    const n = fit(m[2].length, (k) => ok(title, mk(k)));
+    if (ok(title, mk(n))) return done(title, mk(n));
   }
-  return { url: link(title, b), cut: true };
+  const mkb = (n) => `${head(b, n)}\n${NOTE}`;                                 // headings edited away or other parts huge: cut the body itself
+  b = mkb(fit(b.length, (k) => ok(title, mkb(k))));
+  if (ok(title, b)) return done(title, b);
+  return done(head(title, fit(title.length, (k) => ok(head(title, k), b))), b);
 }

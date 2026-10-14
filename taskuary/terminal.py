@@ -1993,7 +1993,7 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
             store.add_comment(tid, 'router', 'agent',
                               f'{chosen} became unavailable; continuing with backup {nxt}.')
             # same ROLE, next BRAIN - the job did not change because a CLI fell over
-            start_on_task(store, tid, agent, None, instruction, actor, cwd, _chain=remaining, brain=nxt)
+            start_on_task(store, tid, agent, None, instruction, actor, cwd, _chain=remaining, brain=nxt, instruction_theirs=instruction_theirs)
         term.failover = replace
     store.clear_dispatch(tid)          # started (by whatever road): it is no longer waiting
     if repo and why != 'tagged on the task':

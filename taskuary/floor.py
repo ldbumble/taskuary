@@ -6,6 +6,7 @@ config.toml, take the owner token, and act as the owner through Taskuary's API.
 
 It is a floor, not a sandbox: globbing, encoding or assembling a path from pieces in a shell are auto mode's to catch."""
 import os, re, posixpath
+from collections import Counter
 from .config import home
 
 _CREDS = ('.ssh', '.aws', '.azure', '.config/gh', '.config/gcloud', '.config/hub', 'AppData/Roaming/GitHub CLI', 'AppData/Roaming/gcloud',
@@ -131,8 +132,11 @@ _MARKS = re.compile(r'(?<![\w/\\.~-])taskuary_|' + _WIPE, re.I)
 _SCRIPT_MARKS = re.compile(r'\bunset\s[^\n;|&]*\btaskuary_|^\s*(?:export\s+|set\s+"?)?taskuary_\w*\s*=|\$env:taskuary_\w*\s*='
                            r'|environ\.pop\s*\(\s*[\'"]taskuary_|\bdel\s+os\.environ\s*\[\s*[\'"]taskuary_|environ\.update\s*\([^)]*taskuary_'
                            r'|\b(?:unsetenv|putenv)\s*\(\s*[\'"]taskuary_|environ\.clear\s*\('
-                           r'|environ\s*\[\s*[\'"]taskuary_\w*[\'"]\s*\]\s*=(?!=)|(?<![$\w])["\']?env:(?=[*"\'$]|\s*\|)|\bcompgen\s+-\w*e'
-                           r'|\b(?:remove-item|ri|clear-item|cli|rm|del)\b[^\n]*\benv:|setenvironmentvariable|-usen\w*', re.I | re.M)
+                           r'|environ\s*\[\s*[\'"]taskuary_\w*[\'"]\s*\]\s*=(?!=)|\bcompgen\s+-\w*e|setenvironmentvariable'
+                           # the Env: drive only where it reads as PowerShell - `{env:"prod"}`, `{ env: x }` and `# rm it, env: prod` do not
+                           r'|(?<![$\w])env:[\\/]|(?<![$\w])(["\'])env:(?:\1|[*$])|(?<![$\w])env:\s*\|'
+                           r'|\b(?:remove-item|ri|clear-item|cli|rm|del|get-childitem|gci|get-item|gi|set-item|si)(?:\s+-\w+)*\s+["\']?env:(?=[\w*])'
+                           r'|\b(?:start-process|saps|start)\b[^\n]*\s-usen\w*', re.I | re.M)
 # cli.STRANGER_ACTS and the options that go with them (test_floor_wave_b keeps the two in step)
 TASKUARY_OK = frozenset({'--reply', '--reply-file', '--draft', '--draft-file', '--attach', '--item', '--done', '--note'})
 _TASKUARY_WITH = frozenset({'--slot', '--to', '--subject', '--result', '--overlap', '--settled', '--propose', '--no-reply', '--kind'})
@@ -150,6 +154,7 @@ def _prog(w: str) -> str: return re.sub(r'(\.exe|\.cmd|\.bat|\.ps1|-script\.pyw?
 
 _ENV_VAL = ('-C', '-S', '-u', '-P', '--chdir', '--split-string', '--unset')    # env's options that take a value
 
+def _uq(w: str) -> str: return w[1:-1] if len(w) > 1 and w[:1] in '"\'' and w[-1:] == w[:1] else w   # -S"-i x" is -S with "-i x"
 def _long(o: str, full: str) -> bool: return len(o) >= 3 and full.startswith(o)    # GNU takes any prefix of a long option
 
 def _env_wipe(ws: list) -> str:
@@ -167,33 +172,37 @@ def _env_wipe(ws: list) -> str:
             o, val = ws[i].split('=', 1) if '=' in ws[i] else (ws[i], None)
             if val is not None and val[:1] in '"\'' and val[-1:] == val[:1]: val = val[1:-1]
             if o in ('-', '-i') or _long(o, '--ignore-environment') or re.fullmatch(r'-[a-z0]*i[a-z0]*', o) and not o.startswith('--'): return f'env {ws[i]}'
-            split = val if val is not None and _long(o, '--split-string') else ws[i + 1] if o == '-S' and i + 1 < len(ws) else o[2:] if re.fullmatch(r'-S\S+', o) else None
-            if split is not None and (why := _env_wipe(['env', *_WORD.findall(split)])): return why
+            split = val if val is not None and _long(o, '--split-string') else ws[i + 1] if o == '-S' and i + 1 < len(ws) else _uq(o[2:]) if o[:2] == '-S' else None
+            if split and (why := _env_wipe(['env', *_WORD.findall(split)])): return why
             unset = o in ('-u',) or _long(o, '--unset') or re.fullmatch(r'-u\S+', o)
-            named = val if val is not None else o[2:] if re.fullmatch(r'-u\S+', o) else ws[i + 1] if unset and i + 1 < len(ws) else ''
+            named = val if val is not None else _uq(o[2:]) if re.fullmatch(r'-u\S+', o) else ws[i + 1] if unset and i + 1 < len(ws) else ''
             if unset and named.lower().startswith('taskuary_'): return f'env {o} {named}'
             i += 2 if (o in _ENV_VAL or _long(o, '--chdir') or _long(o, '--split-string') or _long(o, '--unset')) and val is None else 1
     return ''
 
-def _taskuary_hit(text: str, script: bool = False) -> str:
-    "Why a command - or, `script`, the text of a file that will be run - is refused, or ''."
-    if m := _PKG.search(text): return f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process"
-    if m := (_SCRIPT_MARKS if script else _MARKS).search(text): return f"it changes the session's own environment ({m[0].strip()})"
+def _hits(text: str, script: bool = False) -> list:
+    "Every reason a command - or, `script`, the text of a file that will be run - is refused, in the order they are checked."
+    out = [f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process" for m in _PKG.finditer(text)]
+    out += [f"it changes the session's own environment ({m[0].strip()})" for m in (_SCRIPT_MARKS if script else _MARKS).finditer(text)]
     for seg in _SEG.split(text):
-        raw = [w[1:-1] if w[:1] in '"\'' and w[-1:] == w[:1] and len(w) > 1 else w for w in _WORD.findall(seg)]
+        raw = [_uq(w) for w in _WORD.findall(seg)]
         if raw and _prog(raw[0]) != 'git' and (m := _PKG_ANY.search(seg)):
-            return f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process"
-        if why := _env_wipe(raw): return f"it empties the session's own environment ({why})"
+            out.append(f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process")
+        if why := _env_wipe(raw): out.append(f"it empties the session's own environment ({why})")
         ws = _words(seg)
         if not ws: continue
         p = _prog(ws[0])
-        if p == 'taskuary-desktop': return 'it starts the Taskuary app'
+        if p == 'taskuary-desktop': out.append('it starts the Taskuary app')
+        # an installer's runner fetches and runs a package outside every check below
+        if p in ('pipx', 'uvx') and any(re.match(r'taskuary\b', _prog(w)) for w in ws[1:]): out.append(f"`{seg.strip()}` runs Taskuary outside the agent commands")
         if p != 'taskuary': continue
         flags = [w.split('=', 1)[0].lower() for w in ws[1:] if w.startswith('-') and w != '-']
         bad = [f for f in flags if f not in TASKUARY_OK | _TASKUARY_WITH | _TASKUARY_ASK]
         if bad or not any(f in TASKUARY_OK | _TASKUARY_ASK for f in flags):
-            return f"`{' '.join(['taskuary', *(bad or ws[1:])])}` is not one of the agent commands a stranger's session runs"
-    return ''
+            out.append(f"`{' '.join(['taskuary', *(bad or ws[1:])])}` is not one of the agent commands a stranger's session runs")
+    return out
+
+def _taskuary_hit(text: str, script: bool = False) -> str: return (_hits(text, script) or [''])[0]
 
 # What a session runs without naming it: a script - and the files a task runner runs lines of (npm test, make, just,
 # task). Other files - docs, YAML, JSON, TOML - are read, not run.
@@ -205,14 +214,21 @@ def _is_script(path: str, content: str = '') -> bool:
     if str(path or '').lower().endswith(_SCRIPT_EXT) or os.path.basename(str(path or '')).lower() in _RUNNERS: return True
     return str(content or '').startswith('#!')
 
+def _before(path: str) -> str:
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f: return f.read()
+    except (OSError, ValueError): return ''
+
 def _after(path: str, inp: dict) -> str:
     "The file's text once this call lands: a Write's content, or an Edit's replacement applied to what is there."
     if 'content' in inp: return str(inp.get('content') or '')
-    try:
-        with open(path, encoding='utf-8', errors='replace') as f: text = f.read()
-    except OSError: return ''
+    text = _before(path)
     for e in [inp] + [e for e in inp.get('edits') or [] if isinstance(e, dict)]:
-        if e.get('old_string') is not None and e.get('new_string') is not None: text = text.replace(str(e['old_string']), str(e['new_string']), 1)
+        if e.get('old_string') is None or e.get('new_string') is None: continue
+        o, n = str(e['old_string']), str(e['new_string'])
+        # not there as written, the CLI may still land it (it normalises quotes): what it adds is judged anyway
+        text = text.replace(o, n, -1 if e.get('replace_all') else 1) if o and o in text else text + '\n' + n
+    if inp.get('new_source') is not None: text += '\n' + str(inp['new_source'])     # a notebook cell: its source is what it adds
     return text
 
 def _runner_text(path: str, text: str) -> str:
@@ -292,9 +308,13 @@ def check(payload: dict, tid: int, store=None) -> dict:
         said = '\n'.join(str(o) for o in (inp.get('content'), inp.get('new_string'), inp.get('new_source'), *[e.get('new_string') for e in inp.get('edits') or [] if isinstance(e, dict)]) if o)
         f = next((str(inp[k]) for k in _FILE_KEYS if inp.get(k)), '')
         f = f if os.path.isabs(f) or not cwd else os.path.join(cwd, f)
-        body = _after(f, inp) or said                   # the whole file as it will be: an edit can make a script of what is there
-        if _is_script(f, body) and (why := _taskuary_hit(_runner_text(f, body), script=True)):
-            return _deny(f'it writes a script that, run, would be refused: {why}')
+        old, body = _before(f), _after(f, inp) or said      # the whole file as it will be: an edit can make a script of what is there
+        # refused only for what this call ADDS (R36): an edit beside a `taskuary --demo` target already there is ordinary work.
+        # Counted, so a second copy is new; a file that only now becomes a script brings everything in it.
+        if _is_script(f, body):
+            was = Counter(_hits(_runner_text(f, old), script=True) if _is_script(f, old) else [])
+            if new := list((Counter(_hits(_runner_text(f, body), script=True)) - was).elements()):
+                return _deny(f'it writes a script that, run, would be refused: {new[0]}')
     if why := _taskuary_hit(str(inp.get('command') or '')) or _write_hit(str(inp.get('command') or ''), cwd): return _deny(why)
     if tool in ('Grep', 'Glob'):    # these walk a tree: a root ABOVE a protected folder reaches it just as well
         sr = {_cf(os.path.normcase(os.path.abspath(o))) for o in ((inp.get('path') and _forms(inp['path'], cwd)) or ([cwd] if cwd else []))}

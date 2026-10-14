@@ -186,3 +186,51 @@ def test_a_package_json_without_them_is_written(tmp_path):
 def test_an_edit_that_makes_a_file_a_script_is_judged_as_one(tmp_path):
     f = tmp_path / 'run'; f.write_text('echo hi\ntaskuary --prompts\n')
     assert denied(call('Edit', file_path=str(f), old_string='echo hi', new_string='#!/bin/sh\necho hi'))
+
+
+# ── round 4 (R36): an edit is judged by what it ADDS; the script marks look like PowerShell before they count ─────────
+@pytest.mark.parametrize('name,before,old,new', [
+    ('test_x.py', 'import taskuary\n\ndef test_a(): assert 1\n', 'assert 1', 'assert 2'),
+    ('Makefile', 'demo:\n\ttaskuary --demo\ntest:\n\tpytest\n', 'pytest', 'pytest -q'),
+    ('package.json', '{"scripts": {"demo": "taskuary --demo", "test": "vitest"}}', '"vitest"', '"vitest run"')])
+def test_an_edit_beside_an_existing_hit_is_written(name, before, old, new, tmp_path):
+    f = tmp_path / name; f.write_text(before)
+    assert call('Edit', file_path=str(f), old_string=old, new_string=new) == {}, name
+    assert call('MultiEdit', file_path=str(f), edits=[{'old_string': old, 'new_string': new}]) == {}, name
+    assert call('Write', file_path=str(f), content=before.replace(old, new)) == {}, name     # a rewrite that keeps them, too
+
+@pytest.mark.parametrize('name,before,old,new', [
+    ('test_x.py', 'import json\n\ndef test_a(): assert 1\n', 'import json', 'import json\nimport taskuary'),
+    ('test_x.py', 'import taskuary\n\ndef test_a(): assert 1\n', 'assert 1', 'assert 1\nimport taskuary'),    # a second copy is new
+    ('x.sh', '#!/bin/sh\ntaskuary --demo\npytest\n', 'pytest', 'env -i taskuary --note x'),
+    ('x.sh', '#!/bin/sh\ntaskuary --demo\npytest\n', 'pytest', 'unset TASKUARY_TASK; pytest'),
+    ('Makefile', 'demo:\n\ttaskuary --demo\ntest:\n\tpytest\n', 'pytest', 'pytest; taskuary --prompts')])
+def test_an_edit_that_adds_a_hit_is_refused(name, before, old, new, tmp_path):
+    f = tmp_path / name; f.write_text(before)
+    assert denied(call('Edit', file_path=str(f), old_string=old, new_string=new)), (name, new)
+    assert denied(call('Write', file_path=str(f), content=before.replace(old, new))), (name, new)
+
+def test_an_edit_whose_old_text_is_not_there_is_judged_by_what_it_adds(tmp_path):
+    "The CLI may still land it (quote normalisation): fail closed."
+    f = tmp_path / 'x.py'; f.write_text('print(1)\n')
+    assert denied(call('Edit', file_path=str(f), old_string='print(“1”)', new_string='import taskuary'))
+
+def test_a_shebang_added_over_an_existing_hit_is_refused(tmp_path):
+    f = tmp_path / 'run'; f.write_text('echo hi\nimport taskuary\n')
+    assert denied(call('Edit', file_path=str(f), old_string='echo hi', new_string='#!/usr/bin/env python\necho hi'))
+
+@pytest.mark.parametrize('name,content', [('a.js', 'const o = {env:"prod"}\n'), ('a.ts', 'const cli = meow({ env: process.env })\n'),
+                                          ('a.py', '# rm the cache, env: prod\n'), ('a.py', 'parser.add_argument("--usenet")\n')])
+def test_object_syntax_and_prose_are_not_powershell(name, content, tmp_path):
+    assert call('Write', file_path=str(tmp_path / name), content=content) == {}, content
+
+@pytest.mark.parametrize('content', ['Remove-Item Env:TASKUARY_*\n', 'Remove-Item -Path Env:\\TASKUARY_TASK\n', 'Remove-Item "Env:$n"\n',
+                                     'Get-ChildItem Env: | Remove-Item\n', 'Get-Item Env:* | Remove-Item\n', 'Remove-Item -Path "Env:*"\n',
+                                     'Start-Process taskuary -UseNewEnvironment\n', 'ri env:FOO\n'])
+def test_the_powershell_removal_forms_stay_refused_in_a_script(content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / 'x.ps1'), content=content)), content
+
+@pytest.mark.parametrize('cmd', ['env -S"-i taskuary" --note x', "env -S'-i taskuary' --note x", 'pipx run taskuary --prompts',
+                                 'pipx run --spec taskuary==1.0 taskuary --prompts'])
+def test_a_glued_split_string_and_pipx_are_refused(cmd):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)

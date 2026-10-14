@@ -7,6 +7,7 @@ import { says, subState } from "./laneSays.js";
 import ContinueBox from "./ContinueBox.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import QueuedStart from "./QueuedStart.jsx";
+import { strangerLine } from "./strangerLine.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -1346,6 +1347,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {detail?.repeats?.line && (
                           <Typography variant="body2" sx={{ color: INK, mt: 0.45, lineHeight: 1.55, maxWidth: 900, overflowWrap: "anywhere" }}>
                             {detail.repeats.line}
+                          </Typography>
+                        )}
+                        {/* WHOSE WORDS: a stranger's task runs in its CLI's auto mode (origin.py) - said once, quietly, with the
+                            reason on hover and the one owner action that changes it. Nothing for the owner's or trusted work. */}
+                        {strangerLine(detail) && (
+                          <Typography variant="body2" sx={{ color: DIM, mt: 0.45, fontSize: 12.5 }}>
+                            <Tooltip title={strangerLine(detail).why}><span>{strangerLine(detail).text}</span></Tooltip>
+                            {" · "}
+                            <Link component="button" underline="hover" sx={{ fontSize: 12.5, verticalAlign: "baseline" }}
+                              onClick={async () => {
+                                try { await api.post(`/api/tasks/${selected}/trust`); loadDetail(selected); loadTasks(); onChanged?.(); }
+                                catch (e) { console.error("trust this task failed", e); }
+                              }}>
+                              Trust this task
+                            </Link>
                           </Typography>
                         )}
                         {taskAsk && (

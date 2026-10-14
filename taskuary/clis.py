@@ -111,6 +111,11 @@ READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '', '--d
             # and headlessly there is nobody to ask, which is exactly the point.
             'devin': (('--permission-mode', 'dangerous'), ('--permission-mode', 'normal'))}
 
+# A STRANGER'S TASK runs in the CLI's own reviewer mode instead of its bypass (spec 2026-10-14). A CLI enters this
+# table only after a live probe shows its reviewer engaging in the argv Taskuary builds; absent means "refuse
+# stranger work". --strict-mcp-config with no --mcp-config: the owner's MCP servers (mail, a database) do not load.
+AUTO = {'claude': (('--dangerously-skip-permissions',), ('--permission-mode', 'auto', '--strict-mcp-config'))}
+
 # A report is allowed to LOOK, but not to act. That is deliberately different from the mail
 # classifier above, which gets no tools at all because the text it classifies is untrusted input.
 # Claude's built-ins are named explicitly, and every MCP tool is denied because MCP permissions
@@ -140,6 +145,12 @@ def _base(cmd: str) -> str:
     import re
     # both separators on purpose: a Windows path in config.toml is still a claude on a Linux host's CI
     return re.split(r'[\\/]', str(cmd or ''))[-1].lower().rsplit('.', 1)[0]
+
+
+def auto_args(cmd: str, args: list) -> list:
+    "`args` with the bypass swapped for the CLI's own reviewer mode (a stranger's task)."
+    drop, add = AUTO[_base(cmd)]
+    return [a for a in args if a not in drop] + list(add)
 
 
 def readonly_args(cmd: str, args: list) -> list:

@@ -27,6 +27,7 @@ import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { plannedFor } from "./connectorCatalog.js";
 import { pollSecondsField } from "./pollFields.js";
+import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
@@ -3685,7 +3686,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
                 <Typography sx={{ ...mono, color: INK, flex: 1, fontSize: 13 }} noWrap>{s.Address}</Typography>
                 {gc.private === false && <Chip size="small" label="public" sx={{ height: 18, fontSize: 9.5, bgcolor: "#f1e1da", color: "#6b2733" }} />}
                 {["issues", "prs", "auto"].map((kind) => (
-                  <Select key={kind} size="small" value={gc[kind] || (kind === "issues" ? "tasks" : "off")}
+                  <Select key={kind} size="small" value={githubInboundValue(gc, roles, kind)}
                     sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
                     onChange={(e) => {
                       const v = e.target.value;

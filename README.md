@@ -214,6 +214,11 @@ On first run, connect an AI provider or local Ollama model, add at least one inb
 channel, then choose the coding CLI that should receive tasks. The setup wizards test each
 connection before it goes live.
 
+GitHub repository pickers apply to their own connection. Until an issues picker is set,
+an inbound trigger creates tasks, a feed connection adds Timeline items, and a tool-only
+connection leaves issues off. PRs default off. An explicit repository picker overrides
+that connection's role without enabling other repositories or connections.
+
 ## Try it without installing anything
 
 ```bash

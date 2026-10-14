@@ -1082,8 +1082,13 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         except _origin.Refusal as e: raise _origin.refused(e)
         if locked:
             from .config import home
+            theme = ''
+            if mode == 'auto': argv, theme = _take_settings(argv)
             # --add-dir takes several folders: the stranger's joins the context one
             argv = _batch.read_only_argv(cli_named(profile, argv), list(argv), str(home() / 'context')) + ([sd] if sd else [])
+            # ...and read-only is not the floor: Read is free under it, so a stranger's locked batch keeps its session hooks
+            # too (the option also closes --add-dir's list). launch_mode already refused any CLI without them.
+            if mode == 'auto': argv += ['--settings', _origin.session_settings(store, task_id, theme)]
         if mode == 'auto' and not locked:
             argv, theme = _take_settings(argv)          # one --settings: the session's own file carries the theme
             # ...and an option straight after it closes --add-dir's list, so the prompt is never read as a folder

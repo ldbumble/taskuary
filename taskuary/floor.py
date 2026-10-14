@@ -14,7 +14,9 @@ _CREDS = ('.ssh', '.aws', '.azure', '.config/gh', '.config/gcloud', '.config/hub
           # where hooks.install_user writes the SHARED agent token (and the hooks every session runs): read, it is every
           # session's authority; written, it is a command the owner's next session runs (R28)
           '.claude/settings.json', '.codex/hooks.json', '.copilot/hooks', '.config/devin/config.json', 'AppData/Roaming/devin/config.json')
-# the session's own variables, by NAME: expanding them here would read the SERVER's environment, not the session's
+# the session's own variables, by NAME: expanding them here would read the SERVER's environment, not the session's.
+# Fail-closed on purpose: `grep -r TASKUARY_TOKEN .` in a stranger's repository is refused too - a name match cannot tell
+# reading a value from mentioning it, and a refused search costs less than a printed token
 _SESSION_VARS = re.compile(r'taskuary_(task_)?token|taskuary_url', re.I)
 _FILE_KEYS = ('file_path', 'notebook_path', 'path')
 _TEXT_KEYS = ('command', 'url', 'pattern', 'glob')

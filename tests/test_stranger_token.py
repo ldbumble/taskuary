@@ -187,3 +187,68 @@ def test_the_strict_env_keeps_taskuary_s_home_and_address(monkeypatch):
     for env in (agents.spawn_env({'strict_env': True}), terminal.clean_env({}, strict=True)):
         assert env['TASKUARY_HOME'] == 'C:/elsewhere' and env['TASKUARY_PORT'] == '7795' and 'GH_TOKEN' not in env
         assert guard.AGENT_ENV not in env                              # the process's own token is never inherited by a stranger
+
+
+# ── fix round 1: only the routes a restricted session needs, the floor on a locked batch, the socket header ─────────
+def test_the_stranger_reads_only_the_named_parts_of_its_task():
+    d = lambda p: guard.stranger_denied('GET', p, {}, 7, lambda k, a: None)
+    for p in ('', '/history', '/worker', '/proof', '/work', '/diff', '/record', '/waitroom'):
+        assert not d(f'/api/tasks/7{p}'), p
+    for p in ('/merge-candidates', '/repos', '/steps', '/split/suggest', '/assistant', '/anything-new'):   # other tasks, checkouts, a model call
+        assert d(f'/api/tasks/7{p}'), p
+
+def test_the_leaky_task_routes_are_refused_over_http():
+    t, _ = _task()
+    for p in ('merge-candidates', 'repos', 'steps', 'split/suggest'):
+        assert c.get(f'/api/tasks/{t}/{p}', headers=ST(t)).status_code == 403, p
+    for p in ('history', 'worker', 'waitroom'):
+        assert c.get(f'/api/tasks/{t}/{p}', headers=ST(t)).status_code == 200, p
+
+def test_a_stranger_token_in_the_socket_header_is_refused_on_a_tokened_install():
+    t, _ = _task()
+    class W: headers, query_params = {'host': '127.0.0.1:7787', 'x-taskuary-token': guard.stranger_token(SRV(), t)}, {}
+    assert server.cfg['server'].get('token') and server._ws_ok(W) is False
+    W.headers = {'host': '127.0.0.1:7787', 'x-taskuary-token': SRV()['token']}; assert server._ws_ok(W) is True
+
+def _pane(s, t, tmp_path):
+    with mock.patch.object(terminal, 'Term') as T, mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        terminal.open_session(s, 'coder', task_id=t, cwd=str(tmp_path))
+    return T.call_args.args[0]
+
+def test_a_locked_stranger_batch_runs_read_only_and_under_the_floor(tmp_path):
+    from taskuary import batch
+    s = _store(); t, _ = _task(s)
+    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch.object(batch, 'locked', return_value=True), \
+            mock.patch('taskuary.config.load', return_value=server.cfg):
+        argv = _pane(s, t, tmp_path)
+    assert argv[argv.index('--permission-mode') + 1] == 'dontAsk' and argv.count('--settings') == 1
+    hooks_ = json.loads(Path(argv[argv.index('--settings') + 1]).read_text(encoding='utf-8'))['hooks']
+    assert '/api/hooks/claude/floor' in hooks_['PreToolUse'][0]['hooks'][0]['command']
+    assert str(origin.stranger_dir(t)) in argv[argv.index('--add-dir') + 1:argv.index('--settings')]
+
+def test_a_locked_owner_batch_is_read_only_as_before(tmp_path):
+    from taskuary import batch
+    s = _store(); t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
+    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch.object(batch, 'locked', return_value=True):
+        argv = _pane(s, t, tmp_path)
+    assert argv[argv.index('--permission-mode') + 1] == 'dontAsk' and not any('sessions' in str(a) and str(a).endswith('.json') for a in argv)
+
+def test_a_locked_stranger_batch_on_codex_is_refused(tmp_path):
+    from taskuary import batch
+    s = _store('codex'); t, _ = _task(s)
+    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch.object(batch, 'locked', return_value=True), pytest.raises(ValueError):
+        _pane(s, t, tmp_path)
+
+def test_a_live_conversation_restarts_when_its_environment_s_keys_change(monkeypatch):
+    from taskuary import clipool
+    made = []
+    class Live:
+        def __init__(self, key, cmd, cwd, env, sig): self.sig, self.turns, self.sid, self.lock = sig, 0, '', __import__('threading').Lock(); made.append(sig)
+        def alive(self): return True
+        def close(self): pass
+        def turn(self, *a, **k): self.turns += 1; return ({}, [])
+    monkeypatch.setattr(clipool, 'Live', Live); monkeypatch.setattr(clipool, '_POOL', {})
+    clipool.run('k', ['claude'], 'hi', None, env={'A': '1', guard.TASK_ENV: 'p'}, resume='s')
+    clipool.run('k', ['claude'], 'hi', None, env={'A': '2', guard.TASK_ENV: 'q'}, resume='s')     # same keys: kept
+    clipool.run('k', ['claude'], 'hi', None, env={'A': '1'}, resume='s')                          # a key gone: a new process
+    assert len(made) == 2 and made[0] != made[1]

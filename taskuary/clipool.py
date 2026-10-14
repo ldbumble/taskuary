@@ -124,7 +124,9 @@ def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resum
         timeout: float = 1200) -> tuple:
     """One turn on the conversation's live process: (result event, raw lines). A process that died between
     turns is started again once, resumed by its id, before the turn fails."""
-    sig = (tuple(cmd), str(cwd or ''))
+    # ...and the environment's NAMES: a session whose token changed kind (a task that became a stranger's: no task proof,
+    # its own token - terminal.stranger_env) must not carry on in a process started with the other one
+    sig = (tuple(cmd), str(cwd or ''), hash(tuple(sorted(env or {}))))
     for attempt in (1, 2):
         lv = _take(key, cmd, cwd, env, resume, sig)
         with lv.lock:

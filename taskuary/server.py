@@ -3436,9 +3436,17 @@ def cli_hook_ask(payload: dict):
 def cli_hook_floor(payload: dict, task: int, request: Request):
     """A stranger's session asks, before every tool call, whether the floor allows it (floor.check). An error here is a
     non-2xx, and the hook's onFailure: block refuses the call - this door fails closed. Only the session's OWN task asks."""
-    from . import floor
+    from . import floor, hooks, workerstate as ws
     _own_task_only(request, task)
-    return floor.check(payload if isinstance(payload, dict) else {}, task, store)
+    payload = payload if isinstance(payload, dict) else {}
+    out = floor.check(payload, task, store)
+    why = (out.get('hookSpecificOutput') or {}).get('permissionDecisionReason') if out else ''
+    if why:
+        # on the task, under Taskuary's own run (hooks.run_sid - Claude's id would be dropped as another run's): the refusal
+        # is the owner's to see. A failed note must not turn the deny into an error the agent reads as something else.
+        try: ws.record(store, task, hooks.run_sid(payload, task), 'floor_denied', text=f"{payload.get('tool_name') or 'a tool'}: {why}", source='floor')
+        except Exception as e: logger.warning(f'floor denial on task {task} not recorded: {e}')
+    return out
 
 
 # A hook writes the store, and run on the loop it froze every pane, socket and screencast whenever another thread held

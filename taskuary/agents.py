@@ -1267,14 +1267,20 @@ def task_context(store, task_id: int) -> str:
     return '\n'.join(lines)
 
 
-def memory_block(store, messages: list) -> str:
+# A VERDICT note is written by Taskuary and quotes the mail it was given on - its subject, its sender (server._learn_promotion
+# and its siblings). On a stranger's task that is the stranger's text, and under "learned from the owner - FOLLOW these" the
+# reviewer and the agent read it as the owner's (task 10 live check: a stranger's subject line rode into the first prompt).
+OWNER_SOURCES = ('manual', 'writing')
+
+def memory_block(store, messages: list, owner_only: bool = False) -> str:
     """The standing notes an agent working this thread has to follow - the ones that bear on
     THIS thread, not every note on file. It used to be every match with no cap at all, which
     grows without limit as the owner keeps giving verdicts; ranking by what the thread actually
     says puts the ones that matter at the top and says how many were left out."""
     from .ingest import relevant_notes
     text = ' '.join(f"{m.get('Subject') or ''} {m.get('BodyText') or ''}" for m in messages)[:4000]
-    notes, left = relevant_notes(store, [(m.get('FromEmail') or '') for m in messages], text)
+    keep = (lambda n: n.get('Source') in OWNER_SOURCES) if owner_only else None   # a stranger's task: only notes in the owner's own words
+    notes, left = relevant_notes(store, [(m.get('FromEmail') or '') for m in messages], text, keep=keep)
     if not notes: return ''
     return ('Standing notes (learned from the owner - FOLLOW these):\n'
             + '\n'.join(f'- {n}' for n in notes)

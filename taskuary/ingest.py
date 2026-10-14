@@ -1098,11 +1098,12 @@ def applicable_notes(store, senders, subject: str = '', text: str = '', source: 
 
 
 def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET,
-                   subject: str = '', source: str = '') -> tuple:
+                   subject: str = '', source: str = '', keep=None) -> tuple:
     """(the notes to put in a prompt, most pointed first; how many matched but were left out).
 
-    `senders` is every address on the thread - one message's sender, or a whole chain's."""
-    hits = applicable_notes(store, senders, subject, text, source)
+    `senders` is every address on the thread - one message's sender, or a whole chain's. `keep`, when given, says which
+    note rows may be used at all."""
+    hits = [n for n in applicable_notes(store, senders, subject, text, source) if keep is None or keep(n)]
     words = set(tokens(text))
     hits.sort(key=lambda n: _note_score(n, words), reverse=True)
     out, used = [], 0

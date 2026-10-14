@@ -1060,17 +1060,22 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from . import batch as _batch, origin as _origin, clis as _clis
         # ...only while it holds an item the triage judged dangerous (batch.locked)
         locked = _batch.is_batch(store, task_id) and _batch.locked(store, task_id)
-        if locked:
-            from .config import home
-            argv = _batch.read_only_argv(cli_named(profile, argv), list(argv), str(home() / 'context'))
         # WHO WROTE THE TASK decides the flags (origin.py): a stranger's task runs in the CLI's own auto mode with the
         # floor and the owner's answer as hooks, or not at all; the owner's and trusted work launch as they always did.
-        # The danger lock above still wins: a dangerous batch stays read-only, never auto on top of it.
-        try: mode = _origin.launch_mode(store, task_id, cli_named(profile, argv))
+        # The danger lock below still wins: a dangerous batch stays read-only, never auto on top of it.
+        try:
+            mode = _origin.launch_mode(store, task_id, cli_named(profile, argv), str(profile.get('cmd') or ''))
+            # its stranger file sits in its own folder outside the checkout (R25): added, so reading it never asks
+            sd = str(_origin.stranger_dir(task_id)) if mode == 'auto' else ''
         except _origin.Refusal as e: raise _origin.refused(e)
+        if locked:
+            from .config import home
+            # --add-dir takes several folders: the stranger's joins the context one
+            argv = _batch.read_only_argv(cli_named(profile, argv), list(argv), str(home() / 'context')) + ([sd] if sd else [])
         if mode == 'auto' and not locked:
             argv, theme = _take_settings(argv)          # one --settings: the session's own file carries the theme
-            argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--settings', _origin.session_settings(store, task_id, theme)]
+            # ...and an option straight after it closes --add-dir's list, so the prompt is never read as a folder
+            argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--add-dir', sd, '--settings', _origin.session_settings(store, task_id, theme)]
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
     # differ per CLI, and the typed road is the one verified against every TUI here.
@@ -1639,7 +1644,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # gave - who to defer to, what is not ours, what never gets touched - reached the triage
     # brain and the reply writer, and never the agent that does the work.
     from .agents import memory_block
-    mem = memory_block(store, msgs)
+    mem = memory_block(store, msgs, owner_only=stranger)
     if mem: parts.append(no_emails(' '.join(mem.split())[:DOC_CHARS]))
     # Everything else the hub knows goes in a FILE, not the command line: the sender's history,
     # the topic elsewhere, the calendar, the learned profile, the whole thread - and PAST WORK, the

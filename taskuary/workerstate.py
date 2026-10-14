@@ -14,7 +14,11 @@ import hashlib, json, re, threading, time
 from pathlib import Path
 from loguru import logger
 
-KINDS = ('working', 'turn_end', 'background', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped')
+KINDS = ('working', 'turn_end', 'background', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped',
+         'floor_denied')
+# A NOTE on the run, not a state of it: the floor refused one call of a stranger's session (floor.py) and the agent carries on,
+# so the run's state is still read off the event before it
+NOTES = ('floor_denied',)
 # A `stalled` request is a turn that DIED on a wall - a rate limit, a token ceiling, an API error - with the
 # CLI alive at its prompt. On the screen that looks exactly like a question. It is not terminal (Claude can
 # auto-resume; the owner can retry), so it is a request: open until the run speaks again (hooks.py).
@@ -175,6 +179,7 @@ def status(store, tid: int) -> dict:
     # see any of the questions")
     said = next((e['Text'] for e in reversed(evs) if e['Kind'] == 'turn_end' and e.get('Text')), '')
     out = {'sid': sid, 'live': live, 'requests': requests, 'result': None, 'state': 'unknown', 'said': said}
+    evs = [e for e in evs if e['Kind'] not in NOTES]
     if not evs: return out
     last = evs[-1]
     if last['Kind'] in TERMINAL: out['state'] = last['Kind']; return out
@@ -246,11 +251,19 @@ def hold(tid: int, sid: str, group: str, rids: list) -> dict:
     return h
 
 
-def wait_held(group: str, seconds: float) -> dict | None:
-    """Block until the owner answers every question of the group; None on release or timeout."""
+# SET WHEN TASKUARY STOPS (desktop.Server). uvicorn waits for open requests BEFORE the lifespan shutdown that releases the
+# holds (release_all), so a permit held for the owner held the process open with it (R26, the task 10 live check). Every wait
+# watches this as well as its own event, and lets go the moment the server is told to exit.
+STOP = threading.Event()
+
+
+def wait_held(group: str, seconds: float, step: float = 1.0) -> dict | None:
+    """Block until the owner answers every question of the group; None on release, timeout or Taskuary stopping."""
     h = HELD.get(group)
     if not h: return None
-    h['event'].wait(seconds)
+    end = None if seconds is None else time.monotonic() + seconds
+    while not h['event'].wait(step if end is None else max(0.0, min(step, end - time.monotonic()))):
+        if STOP.is_set() or end is not None and time.monotonic() >= end: break
     with _HELD_LOCK: HELD.pop(group, None)
     return None if h['released'] or len(h['answers']) < len(h['rids']) else dict(h['answers'])
 

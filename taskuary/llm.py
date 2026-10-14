@@ -151,7 +151,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     if task_id:
         from . import origin, clis
         try:
-            if not no_hands: stranger_mode = origin.launch_mode(store, task_id, hub_agents.cli_of(prof, agent_name))
+            if not no_hands: stranger_mode = origin.launch_mode(store, task_id, hub_agents.cli_of(prof, agent_name), str(prof.get('cmd') or ''))
             # ...and a run that would LOOK (research: Read, WebFetch) gets no tools at all: the floor is a hook, and a
             # headless look has none, so a stranger's mail could read a key and fetch it out
             elif research and origin.of_task(store, task_id)[0] == 'stranger':
@@ -161,7 +161,8 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         from .clis import preset_args
         c = prof.get('cmd', 'claude'); args = list(raw_args or preset_args(c) or ['-p'])
         if stranger_mode == 'auto':
-            prof['args'] = clis.auto_args(c, args) + ['--settings', origin.session_settings(store, task_id)]
+            # its folder is its cwd already; --add-dir says so to Claude whatever cwd a resume or a profile brings (R25)
+            prof['args'] = clis.auto_args(c, args) + ['--add-dir', sd, '--settings', origin.session_settings(store, task_id)]
             prof['acp_ok'] = False      # the reviewer rides argv; ACP's own permission answer allows everything
         elif stranger_mode == 'look': prof['args'] = clis.readonly_args(c, args)
         if stranger_mode in ('auto', 'look'):

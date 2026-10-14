@@ -413,7 +413,12 @@ def main():
     if not args.no_browser:
         from .desktop import serving        # on the MAIN thread, before uvicorn starts importing
         threading.Thread(target=open_when_ready, args=(url, serving), daemon=True).start()
-    uvicorn.run('taskuary.server:app', host=host, port=port, log_level='warning')
+    # what uvicorn.run does, on the server whose stop is bounded and lets every held permit go (desktop.Server, R26)
+    from .desktop import Server, server_config
+    srv = Server(server_config('taskuary.server:app', host, port))
+    try: srv.run()
+    except KeyboardInterrupt: pass
+    if not srv.started: raise SystemExit(3)           # uvicorn's own STARTUP_FAILURE
 
 
 if __name__ == '__main__':

@@ -520,6 +520,14 @@ def no_token_carryover():
     net.clear(); channels._TEAMS_ME.clear()
 
 
+@pytest.fixture(autouse=True)
+def no_stop_carryover():
+    """workerstate.STOP is process-wide and set by a server told to exit (desktop.Server): a test that started and stopped
+    a real one left every later held wait letting go at once, as if Taskuary were closing."""
+    from taskuary import workerstate
+    workerstate.STOP.clear(); yield; workerstate.STOP.clear()
+
+
 @pytest.fixture
 def fx():
     """A MemoryStore wrapped in the picture factory. Named pictures (pending_draft,

@@ -8,7 +8,7 @@ from taskuary.store import MemoryStore
 
 @pytest.fixture(autouse=True)
 def _claude(monkeypatch, tmp_path):
-    monkeypatch.setattr(origin, '_claude_version', lambda: (2, 1, 299))   # nothing here may launch a real claude
+    monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': (2, 1, 299))   # nothing here may launch a real claude
     (tmp_path / 'temp').mkdir(); monkeypatch.setattr(tempfile, 'gettempdir', lambda: str(tmp_path / 'temp'))   # strangers' folders stay in the test's own
 
 def _stranger(s):

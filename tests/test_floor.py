@@ -35,12 +35,13 @@ def test_a_shell_command_naming_them_or_taskuary_s_address_is_refused():
     assert denied(call('WebFetch', url=f'http://127.0.0.1:{port}/'))
 
 def test_this_task_s_own_files_and_ordinary_work_pass():
-    assert call('Read', file_path=str(home() / 'context' / 'TQ-0007.stranger.md')) == {}
+    assert call('Read', file_path=str(origin.stranger_file_path(7))) == {}     # in its own folder, outside the home (R25)
     assert call('Read', file_path=str(origin.stranger_dir(7) / 'notes.md')) == {}
     assert call('Bash', command=f'cat {origin.stranger_dir(7) / "notes.md"}') == {}
     assert call('Bash', command='python -m pytest -q') == {}
     assert call('Edit', file_path=os.path.join(os.getcwd(), 'app.py')) == {}
-    assert denied(call('Read', file_path=str(home() / 'context' / 'TQ-0008.stranger.md')))   # another task's
+    assert denied(call('Read', file_path=str(origin.stranger_file_path(8))))   # another task's
+    assert denied(call('Read', file_path=str(home() / 'context' / 'TQ-0007.stranger.md')))   # the home is the home's, whatever the name
     assert denied(call('Read', file_path=str(home() / 'attachments' / 'other-task.pdf')))    # another task's attachment
     assert denied(call('Bash', command=f'cat {origin.stranger_dir(7) / "n.md"} {home() / "config.toml"}'))   # own file does not launder a neighbour
 

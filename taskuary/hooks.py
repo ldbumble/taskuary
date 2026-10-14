@@ -550,12 +550,24 @@ def ask(payload: dict, wait: float = None) -> dict:
                                    'permissionDecisionReason': 'answered by the owner in Taskuary', 'updatedInput': inp}}
 
 
+def run_sid(payload: dict, tid: int) -> str:
+    """The run a stranger session's hook speaks for, as workerstate keys it: Taskuary's OWN session id, never Claude's
+    conversation id. Recorded under Claude's, the permit's card was discarded as another run's and the agent held for
+    days with nothing to answer (task 10 live check). The pane bound to this payload, else the task's live session,
+    else - a headless run, no session of ours - the CLI's id, which workerstate keeps while no live run owns the task."""
+    from . import workerstate as ws
+    t = _pane(payload)
+    if t and t.task_id == tid: return str(t.sid)
+    live = ws._live(tid)
+    return str(live.sid) if live else str(payload.get('session_id') or '')
+
+
 def permit(payload: dict, tid: int, wait: float = None, store=None) -> dict:
     """A stranger's session whose reviewer will not decide: the request is the owner's, and the agent HOLDS until they
     answer Allow or Deny - no timeout here, the hook's own 7 days is the outer edge. Released (the session ended) is a
     refusal, and so is any answer but Allow. Allow is this ONE call; it grants nothing further."""
     from . import workerstate as ws, redact
-    sid, inp = str(payload.get('session_id') or ''), payload.get('tool_input')
+    sid, inp = run_sid(payload, tid), payload.get('tool_input')
     inp = inp if isinstance(inp, dict) else {}
     what = redact.scrub(str(inp.get('command') or inp.get('url') or inp.get('file_path') or inp))[:600]
     g = ws.group_key(f'permit:{tid}:{sid}:{time.time_ns()}')        # a new group per call, so one Allow can never cover the next
@@ -571,7 +583,8 @@ def permit(payload: dict, tid: int, wait: float = None, store=None) -> dict:
     # released: the card must not stay open, and a late answer must not be typed into whatever pane has the task now
     if got is None: ws.record(store, tid, sid, 'answered', request_id=rid, text='the session ended before you answered', source='hook')
     ok = bool(got) and str(got.get(rid) or '').strip().lower() == 'allow'
-    dec = {'behavior': 'allow'} if ok else {'behavior': 'deny', 'message': 'the owner did not allow it' if got else 'the session ended before the owner answered'}
+    dec = {'behavior': 'allow'} if ok else {'behavior': 'deny', 'message': 'the owner did not allow it' if got else
+           'Taskuary closed before the owner answered' if ws.STOP.is_set() else 'the session ended before the owner answered'}
     return {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': dec}}
 
 

@@ -77,6 +77,9 @@ class DocsReachThePromptTests(unittest.TestCase):
         """The notes are the part that was missing: an agent was handed the operator rules and
         the coder rules, and none of the verdicts the owner had actually given."""
         s = seeded()
+        # the sender is on the owner's own domain: a stranger's seed carries only the owner's own notes, never a verdict that
+        # quotes mail (tests/test_stranger_live_fixes.py)
+        s.set_setting('owner_email', 'owner@b.com', 't')
         # PW-184: SOUL stays with triage; JOB.md too - a worker that knows the mission starts helping with the mission instead of the ticket
         self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['agent'], MARK['coder'], NOTE], forbid=[MARK['soul'], MARK['job']])
 

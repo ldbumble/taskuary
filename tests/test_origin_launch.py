@@ -1,11 +1,11 @@
 import json, pytest
-from taskuary import clis, origin
+from taskuary import agents, clis, origin
 from taskuary.store import MemoryStore
 _real = origin._claude_version   # the autouse fixture patches it out; the cache test needs the real one
 
 @pytest.fixture(autouse=True)
 def _claude(monkeypatch):
-    monkeypatch.setattr(origin, '_claude_version', lambda: (2, 1, 300))   # nothing here may launch a real claude
+    monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': (2, 1, 300))   # nothing here may launch a real claude
 
 def _stranger(s):
     t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
@@ -27,12 +27,12 @@ def test_a_stranger_s_task_runs_auto_on_claude_and_is_refused_elsewhere():
 
 def test_an_old_claude_is_refused_stranger_work(monkeypatch):
     s = MemoryStore(); t = _stranger(s)
-    monkeypatch.setattr(origin, '_claude_version', lambda: (2, 1, 200))
+    monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': (2, 1, 200))
     with pytest.raises(origin.Refusal, match='2.1.295'): origin.launch_mode(s, t, 'claude')
 
 def test_an_old_claude_does_not_touch_owner_work(monkeypatch):
     s = MemoryStore(); t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
-    monkeypatch.setattr(origin, '_claude_version', lambda: (1, 0, 0))
+    monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': (1, 0, 0))
     assert origin.launch_mode(s, t, 'claude') == 'full'
 
 def test_the_session_file_carries_both_hooks_fail_closed_and_the_theme():
@@ -59,5 +59,5 @@ def test_claude_version_caches_only_a_success(monkeypatch):
         o = next(outs)
         if isinstance(o, BaseException): raise o
         return o
-    monkeypatch.setattr(origin.subprocess, 'run', run)
+    monkeypatch.setattr(origin.subprocess, 'run', run); monkeypatch.setattr(agents, '_resolve_cmd', lambda c: ['claude.exe'])
     assert origin._claude_version() == () and origin._claude_version() == (2, 1, 300) and origin._claude_version() == (2, 1, 300)

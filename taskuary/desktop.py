@@ -17,8 +17,27 @@ for _s in ('stdout', 'stderr'):
 
 import uvicorn
 from loguru import logger
+from taskuary import workerstate as _ws    # here, on the main thread: Server's flag reaches it from a signal or the quit road
 
 SHUTDOWN_WAIT = 30.0        # the lifespan's cleanup: drain, sessions, CLI children - bounded, and loud when it is not enough
+# uvicorn waits for open requests BEFORE the lifespan shutdown, and a stranger's permit is a request only that shutdown
+# ends: unbounded, an orderly stop hung for good while one was held (R26, the task 10 live check)
+GRACE = 5
+
+
+def server_config(app, host, port) -> uvicorn.Config:
+    return uvicorn.Config(app, host=host, port=port, log_level='warning', timeout_graceful_shutdown=GRACE)
+
+
+class Server(uvicorn.Server):
+    """uvicorn's server, whose exit flag also tells every held wait to let go (workerstate.STOP) - set by its own signal
+    handler (Ctrl+C, CTRL_BREAK) and by stop_server alike, before uvicorn starts waiting on the requests those waits hold."""
+    @property
+    def should_exit(self): return self._should_exit
+    @should_exit.setter
+    def should_exit(self, v):
+        self._should_exit = v
+        (_ws.STOP.set if v else _ws.STOP.clear)()      # a new server in the same process (tests, a restart) starts unstopped
 BOOT_WAIT = 120.0           # how long the splash will wait for the server before it says so
 
 # Shown in the window from the moment it opens until the server answers. Importing the app is
@@ -238,7 +257,7 @@ def start_server(host='127.0.0.1', port=None):
         want = config.load()['server'].get('port') or 7787
         probe = '127.0.0.1' if host in ('0.0.0.0', '::') else host
         with socket.socket() as s: port = want if s.connect_ex((probe, int(want))) != 0 else free_port(host)
-    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level='warning'))
+    server = Server(server_config(app, host, port))
     server.thread = threading.Thread(target=server.run, daemon=True); server.thread.start()   # kept: quitting joins it
     for _ in range(200):
         if server.started: break

@@ -46,7 +46,7 @@ class OneAppPerMachineTests(unittest.TestCase):
     def test_the_desktop_serves_the_configured_port_not_a_random_one(self):
         """A random port is why a running app could never be found by the port it was configured on."""
         with mock.patch.object(desktop, 'free_port', side_effect=AssertionError('a free port was taken instead')), \
-             mock.patch('uvicorn.Server') as srv, mock.patch('threading.Thread'), \
+             mock.patch.object(desktop, 'Server') as srv, mock.patch('threading.Thread'), \
              mock.patch.object(socket.socket, 'connect_ex', return_value=1):
             srv.return_value.started = True
             _server, url = desktop.start_server()

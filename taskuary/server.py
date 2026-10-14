@@ -464,11 +464,14 @@ async def bug_report_draft(request: Request):
     never a traceback and never a field that skipped the scrub."""
     from . import bugreport
     _owner_only(request, "a bug report is the owner's")
-    raw = await request.body()
-    if len(raw) > MAX_BUG_BODY: raise HTTPException(413, 'that report is too large')
-    try:
-        client = json.loads(raw or b'{}')
-        return bugreport.draft(store, client if isinstance(client, dict) else {})
+    if int(request.headers.get('content-length') or 0) > MAX_BUG_BODY: raise HTTPException(413, 'that report is too large')
+    raw = b''
+    async for chunk in request.stream():           # no length, no promise: stop reading at the cap
+        raw += chunk
+        if len(raw) > MAX_BUG_BODY: raise HTTPException(413, 'that report is too large')
+    try: client = json.loads(raw or b'{}')
+    except ValueError: raise HTTPException(400, 'the report was not valid JSON')
+    try: return await asyncio.to_thread(bugreport.draft, store, client if isinstance(client, dict) else {})      # blocking: the loop must stay free
     except Exception as e:
         logger.warning(f'bug report draft refused: {type(e).__name__}')
         raise HTTPException(422, bugreport.SAFE_MSG)
@@ -478,11 +481,12 @@ class OpenUrl(BaseModel):
     url: str = ''
 
 
-def _new_issue_url(u) -> bool:
-    from urllib.parse import urlsplit
+def _new_issue_url(u) -> str:
+    """The canonical URL if it is the new-issue page, else ''."""
+    from urllib.parse import urlsplit, urlunsplit
     try: p = urlsplit(u); port = p.port
-    except ValueError: return False
-    return (p.scheme, p.hostname, port, p.username, p.password, p.path) == ('https', 'github.com', None, None, None, '/ldbumble/taskuary/issues/new')
+    except ValueError: return ''
+    return urlunsplit(p) if (p.scheme, p.hostname, port, p.username, p.password, p.path) == ('https', 'github.com', None, None, None, '/ldbumble/taskuary/issues/new') else ''
 
 
 @app.post('/api/open-url')
@@ -490,8 +494,8 @@ def open_url(body: OpenUrl, request: Request):
     """Opens the tracker's new-issue page on this desktop (the app has no browser of its own). Only that page."""
     import webbrowser
     _owner_only(request, "opening a page is the owner's")
-    if not _new_issue_url(body.url): raise HTTPException(400, 'only the new-issue page can be opened')
-    threading.Thread(target=webbrowser.open, args=(body.url,), daemon=True).start()
+    if not (u := _new_issue_url(body.url)): raise HTTPException(400, 'only the new-issue page can be opened')
+    threading.Thread(target=webbrowser.open, args=(u,), daemon=True).start()
     return {'opened': True}
 
 

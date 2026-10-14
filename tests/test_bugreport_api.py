@@ -42,6 +42,24 @@ class DraftTests(unittest.TestCase):
         r = c.post('/api/bug-report/draft', content=json.dumps({'stack': 'x' * 250_000}), headers={'content-type': 'application/json'})
         self.assertEqual(r.status_code, 413)
 
+    def test_oversize_never_reaches_the_scrub(self):
+        big, hd = json.dumps({'stack': 'x' * 250_000}), {'content-type': 'application/json'}
+        with mock.patch.object(bugreport, 'draft') as d:
+            self.assertEqual(c.post('/api/bug-report/draft', content=big, headers=hd).status_code, 413)
+            self.assertEqual(c.post('/api/bug-report/draft', content=iter([big[:150_000].encode(), big[150_000:].encode()]), headers=hd).status_code, 413)
+        d.assert_not_called()
+
+    def test_malformed_json_is_a_400_not_the_privacy_sentence(self):
+        r = c.post('/api/bug-report/draft', content='{nope', headers={'content-type': 'application/json'})
+        self.assertEqual(r.status_code, 400); self.assertNotEqual(r.json()['detail'], bugreport.SAFE_MSG)
+
+    def test_a_draft_does_not_stall_the_server(self):
+        import threading
+        with mock.patch.object(bugreport, '_ask', side_effect=lambda *a: time.sleep(1) or {}):
+            t = threading.Thread(target=_post, args=('/api/bug-report/draft', CLIENT)); t.start(); time.sleep(.3)
+            t0 = time.time(); c.get('/api/health'); dt = time.time() - t0; t.join()
+        self.assertLess(dt, .3)
+
     def test_no_session_reaches_it(self):
         for h in (AGENT, STRANGER): self.assertEqual(_post('/api/bug-report/draft', CLIENT, h).status_code, 403)
 
@@ -55,6 +73,11 @@ class OpenUrlTests(unittest.TestCase):
                 time.sleep(.02)
         self.assertEqual((r.status_code, r.json()), (200, {'opened': True}))
         o.assert_called_once_with(GH + '?title=a%20b&body=x&labels=bug')
+
+    def test_the_validated_form_is_what_opens(self):
+        with mock.patch('webbrowser.open') as o:
+            _post('/api/open-url', {'url': GH + '?a=1#f'}); time.sleep(.2)
+        o.assert_called_once_with(GH + '?a=1#f')
 
     def test_nothing_else_opens(self):
         bad = ['https://example.com/', 'javascript:alert(1)', GH + '@evil.example', GH + '/../../x', GH + 'x', 'http://github.com/ldbumble/taskuary/issues/new',

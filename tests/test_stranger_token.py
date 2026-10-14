@@ -204,8 +204,8 @@ def test_the_leaky_task_routes_are_refused_over_http():
     for p in ('history', 'worker', 'waitroom'):
         assert c.get(f'/api/tasks/{t}/{p}', headers=ST(t)).status_code == 200, p
 
-def test_a_stranger_token_in_the_socket_header_is_refused_on_a_tokened_install():
-    t, _ = _task()
+def test_a_stranger_token_in_the_socket_header_is_refused_on_a_tokened_install(monkeypatch):
+    t, _ = _task(); monkeypatch.setitem(server.cfg['server'], 'token', 'owner-tok')     # tokened, whatever an earlier test left
     class W: headers, query_params = {'host': '127.0.0.1:7787', 'x-taskuary-token': guard.stranger_token(SRV(), t)}, {}
     assert server.cfg['server'].get('token') and server._ws_ok(W) is False
     W.headers = {'host': '127.0.0.1:7787', 'x-taskuary-token': SRV()['token']}; assert server._ws_ok(W) is True

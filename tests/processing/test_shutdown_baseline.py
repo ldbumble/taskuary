@@ -48,6 +48,7 @@ def test_desktop_window_exit_signals_the_embedded_server_to_shutdown():
          mock.patch.object(sys, 'argv', ['taskuary-desktop']):
         desktop.main()
 
-    assert ('load-url', 'http://127.0.0.1:54321') in events, events   # the splash gave way to the app
+    # the splash gave way to the app - at a one-time launch key, so the page carries the owner token (R29)
+    assert any(e[0] == 'load-url' and e[1].startswith('http://127.0.0.1:54321/?k=') for e in events), events
     assert events[-1] == ('server-exit', True)
     assert fake_server.should_exit is True

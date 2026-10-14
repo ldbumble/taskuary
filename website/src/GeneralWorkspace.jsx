@@ -468,6 +468,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     runtime.thread.append(text);
   }, [task, messages, runtime, onAsked]);
 
+  // ONE PLACE says what it is doing. Once its steps stream into the thread above, the band repeated the newest of them word for word
+  // beneath (the owner, 2026-10-14: "no need while it's working to tell you what it's doing in 2 places") - so it keeps only the
+  // dots that say it is alive. The band is for the wait with nothing on screen yet, where an API brain looked frozen (2026-09-07).
+  const atWork = dock || work?.steps?.length ? <Thinking provider={dock ? provider : name} />
+    : <AgentBand name={name} provider={provider} work={work} since={since} />;
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="tq-aui-thread">
@@ -485,8 +490,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           )}
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
           <ThreadPrimitive.If running>
-            {dock ? <Thinking provider={provider} />
-                  : <AgentBand name={name} provider={provider} work={work} since={since} />}
+            {atWork}
           </ThreadPrimitive.If>
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
               half-written answer is an offer to schedule something nobody has read yet - and it
@@ -494,8 +498,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           <ThreadPrimitive.If running={false}>
           {/* the answer is being written somewhere else - another tab, or this pane before it was
               reopened - and the poll is what tells us so */}
-          {serverBusy && (dock ? <Thinking provider={provider} />
-                                : <AgentBand name={name} provider={provider} work={work} since={since} />)}
+          {serverBusy && atWork}
           {dock && <DockActions messages={messages} expanded={dockExpanded} onNavigate={onDockNavigate} onChanged={onDockChanged} />}
           {/* THE HAND IT RAISED, and the answers it offered. The agent stops on a real blocker with the
               question and its choices (selfclose.ASK_LINE); both were recorded and neither was shown, so

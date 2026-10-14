@@ -1147,6 +1147,8 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
             <SourceMark item={i} size={13} />
             <b>{i.who || "someone"}</b>
             <span className="t">{i.title}</span>
+            {/* WHEN each came, as every message on a task says it (the owner, 2026-10-14) */}
+            {(i.since || i.when) && <span className="at">{fmtDateTime(i.since || i.when)}</span>}
             <span className="chev">{open === i.key ? "\u25be" : "\u25b8"}</span>
           </button>
           {open !== i.key && !folded && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}

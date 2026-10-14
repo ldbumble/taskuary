@@ -334,12 +334,14 @@
 .tq-card-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: #d3ccc1; }
 .tq-card-kicker .src { display: inline-flex; align-items: center; margin-right: 2px; }
 /* the fyi handful: one box, one line per message, the line itself opens it (2026-09-23) */
-.tq-fyi-box { margin-top: 8px; border-radius: 8px; background: #e9e3d8; border: 1px solid #ddd5c7; padding: 2px 4px; }
-.tq-fyi { border-top: 1px solid #ddd5c7; }
+/* white, like the messages on a task and in Close out (the owner, 2026-10-14) - the beige box read as a different kind of thing */
+.tq-fyi-box { margin-top: 8px; border-radius: 8px; background: #fffdfb; border: 1px solid #e6e0d6; padding: 2px 4px; }
+.tq-fyi { border-top: 1px solid #eee9e0; }
 .tq-fyi:first-child { border-top: 0; }
 .tq-fyi-line { display: flex; align-items: baseline; gap: 7px; width: 100%; min-width: 0; padding: 7px 8px 2px; border: 0; background: none;
   font: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
-.tq-fyi-line:hover { background: rgba(255,253,249,.55); }
+.tq-fyi-line:hover { background: #f7f3ec; }
+.tq-fyi-line .at { flex: 0 0 auto; font-size: 10.5px; color: #8a8378; white-space: nowrap; }
 .tq-fyi-line b { flex: 0 0 auto; font-size: 12.5px; color: #262521; }
 .tq-fyi-line .t { flex: 1 1 auto; min-width: 0; font-size: 12.5px; line-height: 1.45; color: #262521;
   overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }

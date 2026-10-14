@@ -11,8 +11,11 @@ test("a running turn says so, whichever backend is answering", () => {
   // Both roads still say it - the pane that is streaming the answer, and a turn running without us.
   // The DOCK says it with the dots it always had; a work window says it with the band, which also
   // says who is working, what it is doing now, how long, and what it has got (agentWork.js).
-  assert.match(view, /<ThreadPrimitive\.If running>\s*\{dock \? <Thinking[\s\S]*?: <AgentBand/);
-  assert.match(view, /\{serverBusy && \(dock \? <Thinking[\s\S]*?: <AgentBand/);
+  // ...the band only while nothing else on screen shows it working: once its steps stream into the thread the dots alone
+  // say it is alive (the owner, 2026-10-14: "no need ... to tell you what it's doing in 2 places")
+  assert.match(view, /const atWork = dock \|\| work\?\.steps\?\.length \? <Thinking[\s\S]*?: <AgentBand/);
+  assert.match(view, /<ThreadPrimitive\.If running>\s*\{atWork\}/);
+  assert.match(view, /\{serverBusy && atWork\}/);
   assert.match(view, /serverBusy=\{busy\} provider=\{session\?\.provider \|\| pickedLabel\} name=\{name\}/);
   assert.match(view, /const Thinking = \(/);
   assert.match(view, /const AgentBand = \(\{ name, provider, work, since \}\)/);

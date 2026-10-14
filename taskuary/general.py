@@ -600,6 +600,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             "when the walkthrough is complete."
         )
     sources = []
+    from . import origin
+    stranger = origin.of_task(store, tid)[0] == 'stranger'   # the reviewer reads this as the owner's words: theirs go in a file
     for m in (detail.get('messages') or [])[-12:]:
         who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
         files = store.list_attachments(m['MessageId'])
@@ -636,9 +638,12 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
     md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
-    head = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
-            f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n"
-            + (f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else '') + "\n"
+    ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
+    chk = f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else ''
+    if stranger: sources.insert(0, f"TITLE: {task.get('Title') or ''}\nSUMMARY: {task.get('Summary') or ''}\n{chk}")
+    head = (f"TASK {detail.get('ref') or tid}\n" + ours(f"TITLE: {task.get('Title') or ''}\n")
+            + ours(f"SUMMARY: {task.get('Summary') or ''}\n") + f"STATUS: {task.get('Status') or ''}\n"
+            + ours(chk) + "\n"
             + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')
             + (hub_context.strip() + '\n\n' if hub_context else ''))
@@ -650,6 +655,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     while len(turns) > 1 and len(head) + len('\n\n'.join(turns)) + len(tail) > MAX_CONTEXT: turns.pop(0)
     conv = "CONVERSATION\n" + '\n\n'.join(turns) + tail
     src, room = '\n\n'.join(sources), MAX_CONTEXT - len(head) - len(conv) - 20
+    if stranger and sources: src, room = origin.SEED_LINE.format(path=origin.stranger_file(store, tid, sources)), MAX_CONTEXT
     if len(src) > room: src = ('[older source material trimmed]\n\n' + src[-room:]) if room > 400 else ''
     return system, head + (f"SOURCE MATERIAL\n{src}\n\n" if src else '') + conv
 

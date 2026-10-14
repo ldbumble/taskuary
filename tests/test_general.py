@@ -232,6 +232,8 @@ class SharedSessionTests(unittest.TestCase):
         self.assertEqual((info['mode'], info['connector_id'], info['model']), ('assistant', cid, 'gpt-test'))
         self.assertTrue(all(hasattr(session, name) for name in ('write', 'scrollback', 'waiting', 'subscribe', 'files')))
 
+    # an owner's task quotes its source; a stranger's rides in a file (tests/test_origin_seed.py)
+    @mock.patch('taskuary.origin.of_task', new=lambda *a, **k: ('owner', 'test'))
     def test_source_message_and_its_attachment_ride_into_the_general_agent(self):
         store = MemoryStore(); tid = general_task(store)
         mid = store.add_message({'ExternalId': 'attached-email', 'Channel': 'email',

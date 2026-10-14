@@ -6,6 +6,9 @@ from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import server, terminal
+# these pin the OWNER's seed; a sender nobody has vouched for is a stranger's, which rides in a file (tests/test_origin_seed.py)
+_owner = mock.patch('taskuary.origin.of_task', new=lambda *a, **k: ('owner', 'test'))
+
 
 c = TestClient(server.app)
 ECHO = [sys.executable, '-c', "print('hello-from-pty')"]
@@ -645,6 +648,7 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    @_owner
     def test_the_prompt_carries_everything_so_the_agent_never_calls_back(self):
         """An agent that goes back to Taskuary for the message spends a minute of tool calls
         re-fetching what it was handed. The prompt says the message IS the context - and carries
@@ -685,6 +689,7 @@ class TerminalTests(unittest.TestCase):
         blank = c.post('/api/tasks', json={'Title': 'zzz qqq'}).json()['taskId']
         self.assertIsNone(terminal.guess_repo(server.store, blank, prof)[0])
 
+    @_owner
     def test_start_session_seeds_the_same_full_prompt_as_dispatch(self):
         """"Start session" in the Tasks header used to build its OWN thin prompt - title plus
         summary, no message, no rules - which is precisely why an agent started that way went
@@ -853,6 +858,7 @@ class TerminalTests(unittest.TestCase):
             terminal.close(ses['sid'])
 
 
+    @_owner
     def test_the_seed_carries_the_message_not_the_contact_block(self):
         """The trailing phone/address lines are a shape and stay out of the prompt; a sign-off is not where the
         sender's words end - a P.S. comes after it - so nothing is cut on its words (2026-10-11)."""
@@ -1342,12 +1348,14 @@ class SeedCompletenessTests(unittest.TestCase):
                        'SentAt': '2026-08-24 16:00:00', 'BodyText': body})
         return s, tid
 
+    @_owner
     def test_a_long_message_is_not_quietly_quartered(self):
         body = 'x' * 11000
         s, tid = self._task(body)
         seed = terminal.seed_text(s, tid)
         self.assertIn('x' * 10900, seed)              # 3000 used to be the whole allowance
 
+    @_owner
     def test_when_it_does_cut_it_says_so_and_says_how_much(self):
         s, tid = self._task('y' * 40000)
         seed = terminal.seed_text(s, tid)
@@ -1368,6 +1376,7 @@ class SeedCompletenessTests(unittest.TestCase):
         for must in ('WHAT TO DO', 'Do NOT push', 'CODING RULES (CODER.md)', 'RULES (AGENT.md'):   # PW-185 labels
             self.assertIn(must, seed, must)
 
+    @_owner
     def test_the_trim_cuts_only_the_message_never_the_rules_or_the_closing_instructions(self):
         """R4: `tail` used to run from FROM to the end of the WHOLE prompt, so a long ask trimmed
         the rules and the closing WHAT TO DO instead of itself - a seed could end mid-word at
@@ -1383,6 +1392,7 @@ class SeedCompletenessTests(unittest.TestCase):
         # the cut is IN the message, strictly ahead of the rules it must never reach
         self.assertLess(seed.index('truncated here'), seed.index('RULES (AGENT.md'))
 
+    @_owner
     def test_the_NEWEST_message_is_the_ask(self):
         """Ordering decided this, and a stale stamp format used to put a three-day-old line
         last - so that was the one handed over. See StampTests in test_core."""
@@ -1396,6 +1406,7 @@ class SeedCompletenessTests(unittest.TestCase):
         self.assertEqual(rows[-1]['BodyText'], 'the actual ask')   # ordering, not luck
         self.assertIn('the actual ask', terminal.seed_text(s, tid))
 
+    @_owner
     def test_a_short_message_is_passed_through_untouched(self):
         s, tid = self._task('the importer fails on Tuesdays')
         seed = terminal.seed_text(s, tid)

@@ -466,7 +466,14 @@ def seed(store, tid, repo: str = None, cwd: str = None, instruction: str = None)
     t, its = store.get_task(tid) or {}, store.batch_items(tid)
     todo = [i for i in its if i['State'] in OPEN]
     path = brief_file(store, tid)
-    parts = [f"BATCH {task_ref(tid)} - {t.get('Title') or ''}." + (f" REPO: {repo or cwd} - you are already in it." if repo or cwd else ''),
+    # the reviewer reads this prompt as the owner's intent: a stranger's titles and text ride in the labelled file, not here
+    from . import origin
+    stranger = origin.of_task(store, tid)[0] == 'stranger' or outside(store, tid)
+    if stranger:
+        from pathlib import Path
+        path = origin.stranger_file(store, tid, [Path(path).read_text(encoding='utf-8')])
+    parts = [f"BATCH {task_ref(tid)}" + (' - a stranger\'s batch' if stranger else f" - {t.get('Title') or ''}") + "." + (f" REPO: {repo or cwd} - you are already in it." if repo or cwd else ''),
+             f"ITEMS: {len(its)}, most valuable first; their titles, text and state are in the file." if stranger else
              'ITEMS, most valuable first: ' + '; '.join(f"({i['Place']}) {i.get('Title') or ''}"
                                                        + (' [JUDGED DANGEROUS - see the file]' if i.get('Warn') else '')
                                                        + ('' if i['State'] in OPEN else f" [{i['State']}]") for i in its) + '.',

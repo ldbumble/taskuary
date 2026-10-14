@@ -125,11 +125,12 @@ class Unsafe(Exception):
     """The scrub could not finish, so nothing is offered: a half-scrubbed report is worse than none."""
 
 
-# a user name runs to the next separator, spaces and all ("C:\Users\Jordan Smith\AppData"); a quote closes it too
-# ("'C:\Users\Pat Lee'"); with neither after it, it runs to a space
-_UNAME = r'(?:[^\\/\s"\'<>:|]+(?: [^\\/\s"\'<>:|]+)*(?=[\\/])|[^\\/"\'<>:|\r\n]{1,64}(?=["\'])|[^\\/\s"\'<>:|]+)'
+# a user name runs to the next separator, spaces and all ("C:\Users\Jordan Smith\AppData"); with none after it, to a space
+_UNAME = r'(?:[^\\/\s"\'<>:|]+(?: [^\\/\s"\'<>:|]+)*(?=[\\/])|[^\\/\s"\'<>:|]+)'
 _WIN_HOME = re.compile(r'(?i)\b[a-z]:[\\/]+users[\\/]+' + _UNAME)
 _NIX_HOME = re.compile(r'(?<![\w~.])(?:/mnt/[a-z]|/[a-z])?/(?:home|Users)/' + _UNAME)      # Linux, macOS, Git Bash, WSL
+# a path a quote opened is closed by the quote: "'C:\Users\Pat Lee'" - but only then, or a later quote eats the sentence
+_QUOTED_HOME = re.compile(r'(?i)(?<=["\'])(?:[a-z]:[\\/]+users[\\/]+|(?:/mnt/[a-z]|/[a-z])?/(?:home|Users)/)[^\\/"\'<>:|\r\n]{1,64}(?=["\'])')
 _EMAIL = re.compile(r'[\w.+%-]+@[\w-]+(?:\.[\w-]+)+')
 _URL = re.compile(r'\b[a-z][a-z0-9+.-]*://[^\s<>"\'`)\[\]]+', re.I)      # `[` too: a `[removed]` ends a URL
 _GH_HOST = r'(?:[\w-]+\.)*github(?:usercontent)?\.com'
@@ -138,7 +139,7 @@ _GH = re.compile(r'(?<![\w.-])(' + _GH_HOST + r')[:/]+([\w.-]+/[\w.-]+[^\s<>"\'`
 _IP = re.compile(r'(?<![\w.])(\d{1,3})\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\w]|\.\d)')
 _IP6 = re.compile(r'\[[0-9a-f:]*:[0-9a-f:]*\](?::\d+)?|(?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\w:])', re.I)
 _UNC = re.compile(r'(?<![\w\\~])\\\\[^\\\s]+\\[^\\\s]+')
-_HOST = re.compile(r'(?<![\w@.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+([A-Za-z][A-Za-z0-9-]*)(?![\w-]|\.\w)')
+_HOST = re.compile(r'(?<![\w@.-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z][a-z0-9-]*)(?![\w-]|\.\w)', re.I)
 # what makes a dotted word a machine by where it sits: a port, an @, a // or \\ before it, or a word that says so
 _HOST_AFTER = re.compile(r':\d+')
 _HOST_BEFORE = re.compile(r'(?:@|//|\\\\|(?i:\b(?:host|server|smtp|imap)\s*[=:]?\s*))$')
@@ -161,7 +162,7 @@ _ACCOUNT_KEY = re.compile(r'user|mail|account|login|address|tenant|host|server|o
                           r'project|name|url|from|path|folder|dir|cwd|token|secret|password|key', re.I)
 _SEP = re.compile(r'[_-]')
 _ESC = re.compile(r'\\+u([0-9a-fA-F]{4})|\\+x([0-9a-fA-F]{2})')         # `\\u0020`: an escape inside an escaped string
-_INVISIBLE = re.compile('[\u200b-\u200d\u2060\ufeff]')
+_JOINERS = re.compile('[\u200c\u200d\u2060\ufeff]')
 
 
 def _home_dirs() -> list: return [str(_fact(Path.home, ''))]
@@ -182,7 +183,7 @@ def _own_homes(text) -> str:
 
 def to_home(text) -> str:
     """A user folder becomes `~`: the rest of the path says where it broke, the folder says who."""
-    return _NIX_HOME.sub('~', _WIN_HOME.sub('~', _own_homes(str(text or ''))))
+    return _NIX_HOME.sub('~', _WIN_HOME.sub('~', _QUOTED_HOME.sub('~', _own_homes(str(text or '')))))
 
 
 def _safe_host(h) -> bool:
@@ -224,12 +225,14 @@ def _ip6(m):
 def _host(m):
     t, last = m.group(0), m.group(1)
     if _safe_host(t) or t.split('.')[0].lower() in _CODE_HEAD or last.lower() in _CODE_SUFFIX: return t
-    if last != last.lower() and last != last.upper(): return t                          # `HTMLButtonElement.onClick`
+    # a CamelCase last label is a member or a class (`HTMLButtonElement.onClick`, `exc.OperationalError`); a host's is
+    # one case throughout or capitalised, whatever the rest of it is (`Mail.Northwind.com`, `MAIL.NORTHWIND.COM`, `x.Com`)
+    if any(c.isupper() for c in last[1:]) and any(c.islower() for c in last): return t
     s, e = m.span()
     before, after = m.string[max(0, s - 12):s], m.string[e:e + 8]
     if _HOST_AFTER.match(after) or _HOST_BEFORE.search(before): return REMOVED
-    if after.startswith('(') or t != t.lower(): return t
-    return REMOVED if last in _TLDS else t
+    if after.startswith('('): return t
+    return REMOVED if last.lower() in _TLDS else t
 
 
 def _unescape(t) -> str:
@@ -239,7 +242,8 @@ def _unescape(t) -> str:
         u = unquote(html.unescape(_ESC.sub(lambda m: c if (c := chr(int(m.group(1) or m.group(2), 16))).isprintable() else m.group(0), t)))
         if u == t: break
         t = u
-    t = _INVISIBLE.sub(' ', t)                     # a space: "Erin<ZWSP>Blake" reads as two words.replace('\u00a0', ' ')
+    # a joiner hides inside a word and goes; a zero-width SPACE stands between two, so it reads as one
+    t = _JOINERS.sub('', t).replace('\u200b', ' ').replace('\u00a0', ' ')
     return re.sub(r'(?<=[^\W\d_]{2})\+(?=[^\W\d_]{2})', ' ', t)
 
 

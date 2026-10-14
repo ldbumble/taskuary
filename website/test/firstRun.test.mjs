@@ -23,9 +23,24 @@ test("two steps of cards, the server's next line on top, and every wait bounded"
   assert.match(fr, /Pick your AI/); assert.match(fr, /Connect your email/);
   assert.match(fr, /api\.post\("\/api\/setup\/first-run\/ai", \{ name: ai\.name \}, \{ timeout: CHECK_MS \}\)/);
   assert.match(fr, /api\.post\("\/api\/setup\/first-run\/key"/);
-  assert.match(fr, /api\.post\("\/api\/setup\/first-run\/mail"/);
+  assert.match(read("ConnectorsView.jsx"), /api\.post\("\/api\/setup\/first-run\/mail"/, "the Connections email card itself, in its simple mode");
   assert.match(fr, /if \(Date\.now\(\) > until\) throw new Error\("the install is taking too long"\)/, "an install never spins forever");
-  assert.match(fr, /<MsSignIn conn=\{ms\.conn\} cfg=\{ms\.cfg\} reload=\{loadMs\} onSignedIn=\{reload\} plain \/>/, "one Microsoft sign-in, in plain words");
+  assert.match(fr, /<MsSignIn conn=\{card\.conn\} cfg=\{card\.cfg\} reload=\{\(\) => load\("outlook"\)\} onSignedIn=\{reload\} plain \/>/, "one Microsoft sign-in, in plain words");
   assert.match(fr, /Click the card to try again\./, "a failure always says what to press");
   assert.doesNotMatch(fr, /<Dialog|<Popover|<Drawer/);
+});
+
+test("saving your name on the walk moves on to the next stop", () => {
+  assert.match(read("assistantCards.jsx"), /card\.key === "owner" && <OwnerForm onDone=\{async \(\) => \{ await onSaved\?\.\(\); onNext\?\.\(\); \}\} \/>/);
+});
+
+// the owner, 2026-10-14: "if it's not microsoft, it should show the settings page for email in connectors. reuse our component but
+// make it simple. if ai is not installed let them choose one, use the power shell to install, any errors it should handle"
+test("other email is the Connections card in its simple mode, and an AI not installed installs on its click", () => {
+  const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
+  assert.match(fr, /<ChannelDetail simple conn=\{card\.conn\}/);
+  assert.match(cv, /export function ChannelDetail\(\{[^}]*simple = false, onConnected \}\)/);
+  assert.match(cv, /const SIMPLE_FIELDS = \{ gmail: \["address"\], imap: \["address", "imap_host"\] \};/);
+  assert.match(fr, /if \(!ai\.installed && ai\.install && !ai\.done\) \{ install\(ai\); return; \}/);
+  assert.match(fr, /Press Install to try again, or pick another AI\./);
 });

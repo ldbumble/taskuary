@@ -2036,7 +2036,10 @@ function MacPermissions({ conn, test, busy, runTest }) {
 }
 
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
-function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate }) {
+// what the SIMPLE card asks for (the first run): the address and the server, never the optional calendar or TLS fields
+const SIMPLE_FIELDS = { gmail: ["address"], imap: ["address", "imap_host"] };
+
+export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected }) {
   // ONE SAVE FOR THE CARD (ConnectorDraft.jsx): every control below draws from the draft and stages into it
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
@@ -2231,6 +2234,39 @@ function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack:
     )},
   ];
 
+  // SIMPLE: this card's own fields and words, one Connect that saves, switches on, tests and starts reading
+  // (firstrun.connect_mail) - for the first run, where the stepper, roles and tabs are more than anyone needs yet
+  // (the owner, 2026-10-14: "it should show the settings page for email in connectors. reuse our component but make it simple")
+  if (simple) {
+    const keep = SIMPLE_FIELDS[conn.Type] || m.fields.map((f) => f[1]);
+    const connect = async () => {
+      setBusy("save"); setTest(null);
+      try {
+        const { data } = await api.post("/api/setup/first-run/mail",
+          { type: conn.Type, address: cfg.address || "", password: secret, host: cfg.imap_host || "" }, { timeout: 90000 });
+        setTest({ ok: data.ok, detail: data.why });
+        if (data.ok) { setSecret(""); onConnected?.(); }
+      } catch (e) { setTest({ ok: false, detail: `${e?.response?.data?.detail || e?.message || "That didn't work."} Press Connect to try again.` }); }
+      setBusy("");
+    };
+    return (
+      <Box data-tq-simple-mail={conn.Type} sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 520 }}>
+        {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
+          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
+            That is a Microsoft mailbox - use the Microsoft 365 / Outlook card instead.</Typography>
+        )}
+        {m.fields.filter(([, key]) => keep.includes(key)).map(([label, key, ph]) => (
+          <TextField key={key} size="small" label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
+            onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
+        ))}
+        {m.secretLabel && <TextField size="small" type="password" label={m.secretLabel} value={secret} sx={{ bgcolor: "#fff" }}
+          onChange={(e) => setSecret(e.target.value)} helperText={(m.howto || [])[1] || ""} />}
+        <Box><Button variant="contained" disableElevation disabled={busy === "save" || !(cfg.address || "").trim() || !secret.trim()} onClick={connect}>
+          {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Connect"}</Button></Box>
+        <TestLine test={test} mt={0} />
+      </Box>
+    );
+  }
   return (
     <DraftProvider value={draft.ctx}>
     <Box sx={{ maxWidth: 980, mx: "auto" }}>

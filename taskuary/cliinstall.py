@@ -260,6 +260,26 @@ def start_update(name: str, **kw) -> dict:
     return state()
 
 
+# NODE FIRST, when a CLI only installs through npm and Windows has no Node yet (the owner, 2026-10-14: "if ai is not installed
+# let them choose one, use the power shell to install, any errors it should handle"). Gemini's only road is npm, so a machine
+# without Node showed it as "not installed" with nothing to press. winget ships with Windows 10/11.
+NODE_WINGET = ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+               'winget install -e --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements']
+
+
+def can_get_node() -> bool: return WINDOWS and bool(shutil.which('winget'))
+
+
+def get_node(runner=None) -> str:
+    """Install Node with winget and put it on this process's PATH. '' when npm answers after, else what went wrong."""
+    rc, out = (runner or _run)(NODE_WINGET, timeout=600)
+    for d in (os.path.join(os.environ.get('ProgramFiles', r'C:\Program Files'), 'nodejs'),
+              os.path.join(os.environ.get('APPDATA', ''), 'npm')):
+        if os.path.isdir(d): ensure_on_path(d)
+    if npm(): return ''
+    return f'Node.js did not install (winget exited {rc}: {out[-200:]}). Install it from nodejs.org, then press Install again.'
+
+
 def npm() -> str:
     """The npm launcher, or ''. `npm` on Windows is npm.cmd, which which() finds only with the
     extension on some PATHs."""
@@ -282,7 +302,7 @@ def plan(name: str, has_npm: bool = None, system: str = None) -> list:
     for r in RECIPES.get(name, ()):
         if r.get('os') == 'nt' and not nt: continue
         if r.get('os') == 'posix' and nt: continue
-        if r['how'] == 'npm' and not have_npm: continue
+        if r['how'] == 'npm' and not have_npm and not (has_npm is None and can_get_node()): continue
         out.append(r)
     return out
 
@@ -449,6 +469,10 @@ def install(name: str, has_npm: bool = None, system: str = None, runner=None) ->
                 if runner: runner.message(f'Downloading {name} from GitHub releases ({r["repo"]}) into {bin_dir()}')
                 got = _binary(name, r)
             else:
+                if r['how'] == 'npm' and not npm():
+                    _set('installing', name, 'installing Node.js first…')
+                    why = get_node(runner)
+                    if why: last = why; continue
                 cmd = list(r['cmd']) if r['how'] == 'script' else npm_install(r['pkg'])
                 rc, out = (runner or _run)(cmd, timeout=r.get('timeout', 900))
                 if rc != 0:

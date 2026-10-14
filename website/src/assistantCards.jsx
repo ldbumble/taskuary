@@ -1319,7 +1319,9 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
           content is two text boxes, and because the bullet above it says "type your name and email
           right here" - a card that then offered only a button to Docs was making a promise it did not
           keep (the owner, 2026-09-17). Saving refreshes the stop, so its tick appears where you are. */}
-      {card.key === "owner" && <OwnerForm onDone={async () => { await onSaved?.(); }} />}
+      {/* ...and Save moves ON: it only re-ticked the stop, and the owner pressed Save and sat on a step that looked
+          finished and stuck (the owner, 2026-10-14: "hitting save on the walk for the first name does not move to the next step") */}
+      {card.key === "owner" && <OwnerForm onDone={async () => { await onSaved?.(); onNext?.(); }} />}
       {card.action === "sync" && <FirstSync enabled={card.enabled} ready={card.done}
         firstItems={card.first_items || []} onSaved={onSaved} onNavigate={onNavigate} />}
       {/* ...and this one because what it opens is a terminal, and a terminal has no page of its own

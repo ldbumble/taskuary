@@ -115,3 +115,32 @@ class StateTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class NodeFirstTests(unittest.TestCase):
+    """Gemini only installs through npm: on a Windows machine with no Node it showed "not installed" with nothing to press.
+    Node comes first, through winget in PowerShell, and a Node that will not install says what to do."""
+    def test_no_node_installs_node_with_winget_then_the_cli(self):
+        from taskuary import cliinstall
+        ran, have = [], {'npm': ''}
+        def run(cmd, timeout=900):
+            ran.append(cmd)
+            if cmd == cliinstall.NODE_WINGET: have['npm'] = 'C:/node/npm.cmd'
+            return 0, 'ok'
+        with mock.patch.object(cliinstall, 'WINDOWS', True), mock.patch.object(cliinstall, 'can_get_node', return_value=True), \
+             mock.patch.object(cliinstall, 'npm', side_effect=lambda: have['npm']), \
+             mock.patch.object(cliinstall, 'find', side_effect=lambda n: 'C:/node/gemini.cmd' if len(ran) > 1 else ''), \
+             mock.patch.object(cliinstall, 'broken', return_value=''), mock.patch.object(cliinstall, 'ensure_on_path'):
+            self.assertTrue(cliinstall.plan('gemini'), 'no Node is no longer "nothing to press"')
+            out = cliinstall.install('gemini', runner=run)
+        self.assertEqual(ran[0], cliinstall.NODE_WINGET)
+        self.assertEqual(ran[1][1:4], ['install', '-g', '--include=optional'])
+        self.assertEqual(out['phase'], 'done')
+
+    def test_a_node_that_will_not_install_says_where_to_get_it(self):
+        from taskuary import cliinstall
+        with mock.patch.object(cliinstall, 'WINDOWS', True), mock.patch.object(cliinstall, 'can_get_node', return_value=True), \
+             mock.patch.object(cliinstall, 'npm', return_value=''), mock.patch.object(cliinstall, 'ensure_on_path'):
+            out = cliinstall.install('gemini', runner=lambda cmd, timeout=900: (1, 'No package found'))
+        self.assertEqual(out['phase'], 'failed')
+        self.assertIn('Install it from nodejs.org, then press Install again', out['detail'])

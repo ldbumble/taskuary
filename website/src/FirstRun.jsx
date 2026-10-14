@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { ACCENT, ASSISTANT, BORDER, DIM, FAINT, INK, PANEL } from "./theme.jsx";
-import { MsSignIn } from "./ConnectorsView.jsx";
+import { ChannelDetail, MsSignIn } from "./ConnectorsView.jsx";
 import { CliPane, useCliSetup } from "./cliSetup.jsx";
 
 const CHECK_MS = 90_000;            // a card test is a minute at most server-side; past this we say so instead of spinning
@@ -58,6 +58,8 @@ function AiStep({ st, reload }) {
   const [more, setMore] = useState(false);
   const main = st.ais.filter((a) => !a.more), others = st.ais.filter((a) => a.more);
   const pick = async (ai) => {
+    // not on this computer: installing IS choosing it - one click, never a second "now press Install" (the owner, 2026-10-14)
+    if (!ai.installed && ai.install && !ai.done) { install(ai); return; }
     setBusy(ai.name); setFix(null);
     setSaid({ ok: true, text: `Checking that ${ai.title} works - this can take up to a minute…` });
     try {
@@ -75,12 +77,14 @@ function AiStep({ st, reload }) {
       for (;;) {
         await new Promise((r) => setTimeout(r, 2500));
         const { data } = await api.get("/api/cli/install/state");
+        if (data.phase === "installing" && data.detail) setSaid({ ok: true, text: `${data.detail} (this can take a few minutes)` });
         if (data.phase === "done") break;
         if (data.phase === "failed") throw new Error(data.detail || "the installer stopped");
         if (Date.now() > until) throw new Error("the install is taking too long");
       }
-      setBusy(""); await pick(ai);                          // installed: test it right away - one click, the whole step
-    } catch (e) { setBusy(""); setSaid({ ok: false, text: `Install didn't finish: ${errText(e)} Press Install to try again.` }); }
+      setBusy(""); await pick({ ...ai, installed: true, done: true });   // installed: test it right away - one click, the whole step
+    } catch (e) { setBusy(""); setFix({ ...ai, fix: "install" });
+      setSaid({ ok: false, text: `${ai.title} didn't install: ${errText(e)} Press Install to try again, or pick another AI.` }); }
   };
   const saveKey = async () => {
     setBusy("key"); setSaid(null);
@@ -129,42 +133,24 @@ function AiStep({ st, reload }) {
 }
 
 function MailStep({ st, reload }) {
-  const [open, setOpen] = useState(""), [busy, setBusy] = useState(false), [said, setSaid] = useState(null);
-  const [addr, setAddr] = useState(""), [pass, setPass] = useState(""), [host, setHost] = useState("");
-  const [ms, setMs] = useState(null);                       // the Outlook card, for the shared Microsoft sign-in
-  const loadMs = useCallback(async () => {
-    const card = st.mail.find((m) => m.type === "outlook");
-    if (!card) return;
+  const [open, setOpen] = useState(""), [said, setSaid] = useState(null);
+  const [card, setCard] = useState(null);                   // the chosen email card itself, as Connections draws it
+  const load = useCallback(async (type) => {
+    const want = st.mail.find((m) => m.type === type);
+    if (!want) return;
     try {
       const { data } = await api.get("/api/connectors");
-      const c = (data.data || data || []).find((x) => x.ConnectorId === card.cid);
-      if (c) { let cfg = {}; try { cfg = JSON.parse(c.ConfigJson || "{}"); } catch { /* blank is fine */ } setMs({ conn: c, cfg }); }
-    } catch (e) { setSaid({ ok: false, text: errText(e) }); }
+      const c = (data.data || data || []).find((x) => x.ConnectorId === want.cid);
+      if (c) { let cfg = {}; try { cfg = JSON.parse(c.ConfigJson || "{}"); } catch { /* blank is fine */ } setCard({ conn: c, cfg }); }
+    } catch (e) { setSaid({ ok: false, text: `${errText(e)} Click the card to try again.` }); }
   }, [st.mail]);
-  const choose = (t) => { setOpen((o) => (o === t ? "" : t)); setSaid(null); if (t === "outlook") loadMs(); };
-  const connect = async () => {
-    setBusy(true); setSaid(null);
-    try {
-      const { data } = await api.post("/api/setup/first-run/mail", { type: open, address: addr, password: pass, host }, { timeout: CHECK_MS });
-      setSaid({ ok: data.ok, text: data.why }); if (data.ok) { setPass(""); reload(); }
-    } catch (e) { setSaid({ ok: false, text: `${errText(e)} Press Connect to try again.` }); }
-    setBusy(false);
-  };
+  const choose = (t) => { setOpen((o) => (o === t ? "" : t)); setSaid(null); setCard(null); load(t); };
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       <Grid>{st.mail.map((m) => <Card key={m.type} title={m.title} sub={m.sub} on={open === m.type} onClick={() => choose(m.type)} />)}</Grid>
-      {open === "outlook" && ms && <MsSignIn conn={ms.conn} cfg={ms.cfg} reload={loadMs} onSignedIn={reload} plain />}
-      {(open === "gmail" || open === "imap") && (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, maxWidth: 520 }}>
-          <TextField size="small" label="Your email address" value={addr} onChange={(e) => setAddr(e.target.value)} />
-          <TextField size="small" type="password" label={open === "gmail" ? "Google App Password (16 letters)" : "Mailbox password"}
-            value={pass} onChange={(e) => setPass(e.target.value)}
-            helperText={open === "gmail" ? "Not your normal password: myaccount.google.com → Security → App passwords → Mail." : ""} />
-          {open === "imap" && <TextField size="small" label="Mail server (leave blank to guess)" placeholder="imap.yourdomain.com"
-            value={host} onChange={(e) => setHost(e.target.value)} />}
-          <Box><Button variant="contained" disableElevation disabled={busy || !addr.trim() || !pass.trim()} onClick={connect}>
-            {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Connect"}</Button></Box>
-        </Box>
+      {open === "outlook" && card && <MsSignIn conn={card.conn} cfg={card.cfg} reload={() => load("outlook")} onSignedIn={reload} plain />}
+      {(open === "gmail" || open === "imap") && card && (
+        <ChannelDetail simple conn={card.conn} sources={[]} reload={() => {}} onBack={() => setOpen("")} onConnected={reload} />
       )}
       <Said said={said} />
     </Box>

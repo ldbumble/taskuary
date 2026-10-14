@@ -202,8 +202,48 @@ _SHELL = re.compile(r'(?<![\w.-])(?:(pwsh|powershell)|(?:ba|z|da|k)?sh|cmd)(?:\.
 _INLINE = re.compile(r'(?<![\w-])-[a-z]*c[a-z]*(?![\w-])|(?<![\w])/[ck](?!\w)', re.I)
 _PS_OPT = re.compile(r'''(?:^|(?<=[\s"',\[(]))([-/])(\w+)(?=[\s"',:\])]|$)''')
 _HEREDOC = re.compile(r'''<<-?\s*(["']?)(\w+)\1''')
-# An argv list in code: ['taskuary', '--prompts'], spawn('taskuary', [...]) - held to the agent commands by its next element
-_ARGV = re.compile(r'''(?:\[|[(,](?=\s*["'][^"'\n]*["']\s*,))\s*(["'])(?:[^"'\n]*[/\\])?taskuary(?:\.exe)?\1(?:\s*,\s*\[?\s*(["'])([^"'\n]*)\2)?''', re.I)
+# An argv list in code - ['taskuary', '--prompts'], spawn('taskuary', [...]) - is the command it runs: its words from
+# `taskuary` on are held to the command rule. A one-word list (packages=['taskuary']) is argv only where a spawn call takes it.
+_ARGV = re.compile(r'''(?:\[|[(,](?=\s*["'][^"'\n]*["']\s*,))\s*(["'])((?:[^"'\n]*[/\\])?taskuary(?:\.exe|-desktop)?)\1''', re.I)
+_SPAWN = r'(?:subprocess\.\w+|Popen|check_call|check_output|call|run|os\.exec\w*|os\.spawn\w*|spawn\w*|exec\w*|execa\w*|Command)\s*\(\s*'
+_SPAWN_AT = re.compile(_SPAWN + r'$')
+_STR = re.compile(r'''(["'])((?:\\.|(?!\1)[^\\\n])*)\1''')
+# ...and a string a shell runs - os.system('taskuary --prompts'), execSync(...), subprocess.run('...', shell=True)
+_SHELL_CALL = re.compile(r'''(?<![\w.])(?:os\.system|os\.popen|subprocess\.\w+|(?:child_process\.|cp\.)?exec(?:Sync)?)\s*\(\s*[fbru]?(["'`])((?:\\.|(?!\1)[^\\\n])*)\1''')
+
+def _close(text: str, at: int) -> int:
+    "Where the bracket the argv starts at - or the one it sits in - closes; quotes are skipped."
+    d, q, i = 0, '', at
+    while i < min(len(text), at + 4000):
+        c = text[i]
+        if q: q = '' if c == q and text[i - 1] != '\\' else q
+        elif c in '"\'': q = c
+        elif c in '([{': d += 1
+        elif c in ')]}':
+            d -= 1
+            if d <= 0: return i
+        i += 1
+    return i
+
+def _argv(text: str) -> list:
+    out = []
+    for m in _ARGV.finditer(text):
+        e = _close(text, m.start()); rest = [s[2] for s in _STR.finditer(text, m.end(), e)]
+        # no flag and no spawn call: a list of names (packages=['taskuary'], include=['taskuary', 'taskuary.*'])
+        if not any(s.startswith('-') for s in rest) and _prog(m[2]) == 'taskuary' and not _SPAWN_AT.search(text[max(0, m.start() - 60):m.start()]): continue
+        out += [(f'{why} (from code)', _line(text, m)) for why in _taskuary_cmd([m[2], *rest])]
+    return out
+
+def _taskuary_cmd(ws: list) -> list:
+    "Why the words `ws` - a command that runs `taskuary` - are refused: what is not one of the agent commands."
+    p = _prog(ws[0])
+    if p == 'taskuary-desktop': return ['it starts the Taskuary app']
+    if p != 'taskuary': return []
+    flags = [w.split('=', 1)[0].lower() for w in ws[1:] if w.startswith('-') and w != '-']
+    bad = [f for f in flags if f not in TASKUARY_OK | _TASKUARY_WITH | _TASKUARY_ASK]
+    if bad or not any(f in TASKUARY_OK | _TASKUARY_ASK for f in flags):
+        return [f"`{' '.join(['taskuary', *(bad or ws[1:])])}` is not one of the agent commands a stranger's session runs"]
+    return []
 
 def _region(text: str, at: int) -> int:
     "Where the statement from `at` ends: lines are joined while a bracket or a quote is open, or the line goes on."
@@ -212,19 +252,26 @@ def _region(text: str, at: int) -> int:
         b = text.find('\n', end); b = len(text) if b < 0 else b
         r = text[at:b]
         open_ = sum(r.count(c) for c in '([{') > sum(r.count(c) for c in ')]}') or r.count('"') % 2 or r.count("'") % 2
-        if b >= len(text) or not (open_ or r.rstrip()[-1:] in ('\\', '`', '^', ',')): return b
+        if b >= len(text) or not (open_ or r.rstrip()[-1:] in ('\\', '`', '^')): return b
         end = b + 1
     return end
 
 def _shells(text: str) -> list:
-    out = []
+    """Each launch's text is judged ONCE, by checks that do not look for shells again: a launch inside a launch is found by
+    this same scan over the whole text, so recursing would judge it 2^k times."""
+    out, seen = [], set()
     for m in _SHELL.finditer(text):
-        e = _region(text, m.end()); r = text[m.end():e]
+        # a quoted element of a list ['pwsh', '-c', ...] runs to that list's end; a shell word in a line, to its statement's
+        q = m.start() - 1
+        e = _close(text, q) if q >= 0 and text[q] in '"\'' and text[m.end():m.end() + 1] == text[q] else _region(text, m.end())
+        r = text[m.end():e]
         if not m[1] and not _INLINE.search(r): continue
         if h := _HEREDOC.search(r):       # the heredoc's body is what the shell reads
             d = re.search(r'\n[ \t]*' + re.escape(h[2]) + r'[ \t]*(?:\n|$)', text[e:])
             r += text[e:e + d.start()] if d else text[e:]
         k, rq = _snip(m[0] + r), re.sub(r'''["'`]''', ' ', r)
+        if (k, bool(m[1])) in seen: continue
+        seen.add((k, bool(m[1])))
         if m[1]:
             for o in _PS_OPT.finditer(r):
                 f = o[2].lower()
@@ -232,7 +279,24 @@ def _shells(text: str) -> list:
                 if f in ('e', 'ec') or len(f) > 1 and 'encodedcommand'.startswith(f):
                     out.append((f"it runs an encoded PowerShell command ({m[0]} {o[0]}), which no rule can read", k)); break
         if t := _TQ.search(rq): out.append((f'it starts a shell ({m[0]}) that runs {t[0]}', k))
-        out += [(f'it starts a shell ({m[0]}) that {why[3:]}', k) for why, _ in _keyed(rq, True, bool(m[1]))]
+        why = [f"it runs Taskuary's own package ({x[0].strip()})" for x in _PKG.finditer(rq)]
+        why += [f"it changes the session's own environment ({x[0].strip()})" for x in (_PS_MARKS if m[1] else _SCRIPT_MARKS).finditer(rq)]
+        out += [(f'it starts a shell ({m[0]}) that {w[3:]}', k) for w in why + [w for w, _ in _segs(rq)]]
+    return out
+
+def _segs(text: str) -> list:
+    "What each command segment of `text` is refused for - by its words, never by looking for shells or code inside them."
+    out = []
+    for seg in _SEG.split(text):
+        raw, k = [_uq(w) for w in _WORD.findall(seg)], _snip(seg)
+        if raw and _prog(raw[0]) != 'git' and (m := _PKG_ANY.search(seg)):
+            out.append((f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", k))
+        if why := _env_wipe(raw): out.append((f"it empties the session's own environment ({why})", k))
+        ws = _words(seg)
+        if not ws: continue
+        # a runner fetches or wraps a package outside every check below (R39: by presence)
+        if _RUNNER.search(seg) and _TQ.search(seg): out.append((f"`{seg.strip()}` runs Taskuary through a runner, outside the agent commands", k))
+        out += [(w, k) for w in _taskuary_cmd(ws)]
     return out
 
 def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
@@ -243,26 +307,9 @@ def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
     out = [(f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", _line(text, m)) for m in _PKG.finditer(text)]
     out += [(f"it changes the session's own environment ({m[0].strip()})", _line(text, m))
             for m in ((_PS_MARKS if ps else _SCRIPT_MARKS) if script else _MARKS).finditer(text)]
-    out += _shells(text)
-    for m in _ARGV.finditer(text):
-        if (m[3] or '').lower() not in TASKUARY_OK | _TASKUARY_ASK: out.append((f'it runs taskuary {m[3] or ""} from code, outside the agent commands', _line(text, m)))
-    for seg in _SEG.split(text):
-        raw, k = [_uq(w) for w in _WORD.findall(seg)], _snip(seg)
-        if raw and _prog(raw[0]) != 'git' and (m := _PKG_ANY.search(seg)):
-            out.append((f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", k))
-        if why := _env_wipe(raw): out.append((f"it empties the session's own environment ({why})", k))
-        ws = _words(seg)
-        if not ws: continue
-        p = _prog(ws[0])
-        # a runner fetches or wraps a package outside every check below (R39: by presence)
-        if _RUNNER.search(seg) and _TQ.search(seg): out.append((f"`{seg.strip()}` runs Taskuary through a runner, outside the agent commands", k))
-        if p == 'taskuary-desktop': out.append(('it starts the Taskuary app', k))
-        if p != 'taskuary': continue
-        flags = [w.split('=', 1)[0].lower() for w in ws[1:] if w.startswith('-') and w != '-']
-        bad = [f for f in flags if f not in TASKUARY_OK | _TASKUARY_WITH | _TASKUARY_ASK]
-        if bad or not any(f in TASKUARY_OK | _TASKUARY_ASK for f in flags):
-            out.append((f"`{' '.join(['taskuary', *(bad or ws[1:])])}` is not one of the agent commands a stranger's session runs", k))
-    return out
+    out += _shells(text) + _argv(text)
+    out += [(f'{w} (from code)', _line(text, m)) for m in _SHELL_CALL.finditer(text) for w, _ in _segs(m[2])]
+    return out + _segs(text)
 
 def _hits(text: str, script: bool = False, ps: bool = False) -> list: return [r for r, _ in _keyed(text, script, ps)]
 

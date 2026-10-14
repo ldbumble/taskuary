@@ -362,3 +362,35 @@ def test_an_argv_list_running_an_agent_command_is_written(name, content, tmp_pat
 
 def test_exec_c_is_a_wipe_only_as_the_segment_s_program():
     for t in SHELLS: assert denied(call(t, command='exec -c make')), t
+
+
+# ── follow-up fix round 2: an inline shell is judged once (no blow-up); an argv array is held to the whole command rule ─
+@pytest.mark.parametrize('n', [16, 100])
+def test_many_inline_shells_in_one_file_are_judged_fast(n, tmp_path):
+    import time
+    body = 'TASKS = {\n' + ''.join(f"    't{i}': ['bash', '-c', 'make t{i}'],\n" for i in range(n)) + '}\n'
+    t = time.perf_counter(); r = call('Write', file_path=str(tmp_path / 'tasks.py'), content=body)
+    assert r == {} and time.perf_counter() - t < 0.2, time.perf_counter() - t
+
+def test_a_chain_of_inline_shells_is_judged_fast_and_still_refused():
+    import time
+    t = time.perf_counter(); r = call('Bash', command='echo ' + 'sh -c ' * 50 + '; taskuary --prompts')
+    assert denied(r) and time.perf_counter() - t < 0.2, time.perf_counter() - t
+
+@pytest.mark.parametrize('content', ["subprocess.run(['taskuary','--reply','hi','--prompts'])\n", "subprocess.run(['taskuary-desktop'])\n",
+                                     "subprocess.run(['C:/tools/taskuary.exe', '--link'])\n", "subprocess.run(['taskuary'])\n",
+                                     "os.system('taskuary --prompts')\n", "subprocess.run('taskuary --prompts', shell=True)\n",
+                                     "os.popen('taskuary --board')\n", "subprocess.run(\n    ['taskuary', '--note', 'x',\n     '--demo'])\n"])
+def test_code_that_runs_taskuary_outside_the_agent_commands_is_refused(content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / 'x.py'), content=content)), content
+
+@pytest.mark.parametrize('name,content', [('x.js', "execSync('taskuary --prompts')\n"), ('x.ts', 'exec("taskuary --link")\n'),
+                                          ('x.js', "spawn('taskuary', ['--reply', 'x', '--board'])\n")])
+def test_js_that_runs_taskuary_outside_the_agent_commands_is_refused(name, content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / name), content=content)), content
+
+@pytest.mark.parametrize('content', ["log = logging.getLogger('taskuary')\n", "setup(packages=['taskuary'])\n",
+                                     "subprocess.run(['taskuary', '--reply', 'hi', '--attach', 'out.pdf'])\n",
+                                     "os.system('taskuary --done \"fixed\"')\n", "find_packages(include=['taskuary', 'taskuary.*'])\n"])
+def test_code_that_names_taskuary_otherwise_is_written(content, tmp_path):
+    assert call('Write', file_path=str(tmp_path / 'x.py'), content=content) == {}, content

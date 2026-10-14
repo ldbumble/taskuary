@@ -292,8 +292,7 @@ def test_a_runner_s_program_is_held_to_the_taskuary_rules(cmd, tmp_path):
     assert denied(call('Write', file_path=str(tmp_path / 'x.sh'), content=f'#!/bin/sh\n{cmd}\n')), cmd
     assert denied(call('Write', file_path=str(tmp_path / 'package.json'), content='{"scripts": {"x": "%s"}}' % cmd)), cmd
 
-@pytest.mark.parametrize('cmd', ['uv run pytest', 'npx vitest', 'poetry run pytest -q', 'uv run --with taskuary pytest', 'pdm run lint',
-                                 'uv run taskuary --reply hi', 'npx taskuary --help'])
+@pytest.mark.parametrize('cmd', ['uv run pytest', 'npx vitest', 'poetry run pytest -q', 'pdm run lint', 'npm test', 'pnpm build'])
 def test_a_runner_s_ordinary_program_passes(cmd, tmp_path):
     for t in SHELLS: assert call(t, command=cmd) == {}, (t, cmd)
     assert call('Write', file_path=str(tmp_path / 'x.sh'), content=f'#!/bin/sh\n{cmd}\n') == {}, cmd
@@ -317,3 +316,49 @@ def test_an_encoded_powershell_command_is_refused(cmd):
 def test_ordinary_powershell_inside_another_language_is_written(name, content, tmp_path):
     assert call('Write', file_path=str(tmp_path / name), content=content) == {}, (name, content)
     for t in SHELLS: assert call(t, command='pwsh -NoProfile -File build.ps1 -Environment prod') == {}, t
+
+
+# ── follow-up fix round 1 (R39): presence, not parsing - one more flag or quote must not walk past a runner or a shell ─
+PRESENT = ['uv --directory . run taskuary --prompts', 'uv -q run taskuary --prompts', 'poetry -C . run taskuary --prompts',
+           'npm --prefix . exec taskuary --prompts', 'pnpm --dir . dlx taskuary --prompts', 'hatch -e default run taskuary --prompts',
+           'pdm -v run taskuary --prompts', 'uv run --no-extra dev taskuary --prompts', 'npx --registry https://r.example taskuary',
+           'npm exec --loglevel silent taskuary', 'npx -c "taskuary --prompts"', 'yarn taskuary', 'bun x taskuary', 'uv run Taskuary.exe --link',
+           'rye run taskuary', 'pixi run "taskuary" --prompts', 'nice uv run taskuary-desktop']
+
+@pytest.mark.parametrize('cmd', PRESENT)
+def test_a_runner_naming_taskuary_anywhere_is_refused(cmd, tmp_path):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+    assert denied(call('Write', file_path=str(tmp_path / 'x.sh'), content=f'#!/bin/sh\n{cmd}\n')), cmd
+
+INLINE = ["pwsh -c 'taskuary --prompts'", 'pwsh -c "taskuary --prompts"', "powershell 'rd Env:*'", 'powershell -NoProfile rd Env:*',
+          "pwsh -wd /f -c 'rd Env:*'", "pwsh -Command - <<'X'\nrd Env:*\nX", 'bash -c "taskuary --prompts"', 'uv run sh -c "taskuary --prompts"',
+          "sh -lc 'unset TASKUARY_TASK'", 'cmd /c "taskuary --prompts"', "zsh -c 'env -i make'", 'pwsh -NoLogo -NonInteractive -enc ZABpAHIA']
+
+@pytest.mark.parametrize('cmd', INLINE)
+def test_a_shell_launched_with_an_inline_command_is_judged_on_all_of_it(cmd, tmp_path):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+    assert denied(call('Write', file_path=str(tmp_path / 'x.sh'), content=f'#!/bin/sh\n{cmd}\n')), cmd
+    assert denied(call('Write', file_path=str(tmp_path / 'x.cmd'), content=f'{cmd}\n')), cmd
+
+@pytest.mark.parametrize('cmd', ['pwsh -File build.ps1 -e prod', "pwsh -c 'npm test'", 'bash -c "npm test"', 'npm exec -c make', "pnpm exec -c 'make'"])
+def test_an_ordinary_inline_shell_passes(cmd, tmp_path):
+    for t in SHELLS: assert call(t, command=cmd) == {}, (t, cmd)
+    assert call('Write', file_path=str(tmp_path / 'x.sh'), content=f'#!/bin/sh\n{cmd}\n') == {}, cmd
+
+def test_prose_naming_a_powershell_option_is_written(tmp_path):
+    assert call('Write', file_path=str(tmp_path / 'x.py'), content='# run it with PowerShell -Command if you must\nprint(1)\n') == {}
+
+@pytest.mark.parametrize('name,content', [('x.py', "import subprocess\nsubprocess.run(['taskuary','--prompts'])\n"),
+                                          ('x.py', "subprocess.run(['uv', 'run', 'taskuary', '--link'])\n"),
+                                          ('x.js', "spawn('taskuary', ['--prompts'])\n"), ('x.ts', 'execFile("taskuary", ["--board"])\n'),
+                                          ('x.py', "subprocess.run([\n    'taskuary',\n    '--demo',\n])\n")])
+def test_an_argv_list_running_taskuary_is_refused(name, content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / name), content=content)), content
+
+@pytest.mark.parametrize('name,content', [('x.py', "subprocess.run(['taskuary', '--reply', 'done'])\n"),
+                                          ('x.js', "spawn('taskuary', ['--note', 'tests pass'])\n"), ('x.py', "subprocess.run(['pytest', '-q'])\n")])
+def test_an_argv_list_running_an_agent_command_is_written(name, content, tmp_path):
+    assert call('Write', file_path=str(tmp_path / name), content=content) == {}, content
+
+def test_exec_c_is_a_wipe_only_as_the_segment_s_program():
+    for t in SHELLS: assert denied(call(t, command='exec -c make')), t

@@ -165,7 +165,8 @@ def _env_wipe(ws: list) -> str:
     TASKUARY_ name, or the same inside -S/--split-string; `exec -c` among exec's own options."""
     for j, w in enumerate(ws):
         p = _prog(w)
-        if p == 'exec':
+        # the shell builtin only - as the segment's program, not `npm exec -c make`
+        if p == 'exec' and all(re.fullmatch(r'[A-Za-z_]\w*=.*', v) or v.lower() in ('sudo', 'command', 'builtin', 'nohup') for v in ws[:j]):
             for a in ws[j + 1:]:
                 if not a.startswith('-'): break
                 if re.fullmatch(r'-[a-z]*c[a-z]*', a): return 'exec -c'
@@ -190,58 +191,48 @@ def _line(text: str, m) -> str:
     a, b = text.rfind('\n', 0, m.start()) + 1, text.find('\n', m.end())
     return _snip(text[a:] if b < 0 else text[a:b])
 
-# The runners that run a project's program - `uv run X`, `npx X` - and the options of theirs that take a value: what they
-# run is the program, held to the same rules. An unknown option's next word is taken as the program, which fails closed.
-_RUN = {'uv': 'run', 'poetry': 'run', 'pdm': 'run', 'hatch': 'run', 'pipenv': 'run', 'conda': 'run', 'npm': ('exec', 'x'),
-        'pnpm': ('exec', 'dlx'), 'yarn': ('exec', 'dlx'), 'npx': None, 'pnpx': None, 'bunx': None}
-_RUN_VAL = frozenset({'--with', '-w', '--with-editable', '--with-requirements', '--python', '-p', '--package', '--extra', '--group',
-                      '--only-group', '--no-group', '--index', '--default-index', '--index-url', '-i', '--extra-index-url', '--find-links',
-                      '-f', '--directory', '--project', '--env-file', '--config-file', '--cache-dir', '--color', '--index-strategy',
-                      '--keyring-provider', '--resolution', '--prerelease', '--exclude-newer', '--link-mode', '--python-platform',
-                      '--refresh-package', '--reinstall-package', '--upgrade-package', '-P', '--config-setting', '-C', '--allow-insecure-host',
-                      '-n', '--name', '--prefix', '-e', '--env', '--call', '-c', '--shell', '--userconfig', '--workspace'})
+# Presence, not parsing (R39): a runner's options and a shell's are too many to parse, and the one a parser does not know
+# walks past it. A segment that names a runner AND Taskuary is refused, whatever sits between them.
+_RUNNER = re.compile(r'(?<![\w.-])(?:uvx?|pipx|poetry|pdm|hatch|pipenv|npx|npm|pnpm|pnpx|yarn|bunx?|rye|pixi|conda)(?:\.exe|\.cmd)?(?![\w.-])', re.I)
+_TQ = re.compile(r'(?<![\w-])taskuary(?!\w)', re.I)     # taskuary, Taskuary.exe, taskuary-desktop - not TASKUARY_X
+# A shell started with an inline command - `pwsh -c '...'` in a .sh, ['pwsh','-c','...'] in a .py, `bash -c`, `cmd /c` -
+# is judged on everything after it, quotes stripped, by the rules of the shell it starts (PowerShell's for pwsh); an
+# encoded PowerShell command, which no rule can read, is refused outright.
+_SHELL = re.compile(r'(?<![\w.-])(?:(pwsh|powershell)|(?:ba|z|da|k)?sh|cmd)(?:\.exe)?(?![\w.-])', re.I)
+_INLINE = re.compile(r'(?<![\w-])-[a-z]*c[a-z]*(?![\w-])|(?<![\w])/[ck](?!\w)', re.I)
+_PS_OPT = re.compile(r'''(?:^|(?<=[\s"',\[(]))([-/])(\w+)(?=[\s"',:\])]|$)''')
+_HEREDOC = re.compile(r'''<<-?\s*(["']?)(\w+)\1''')
+# An argv list in code: ['taskuary', '--prompts'], spawn('taskuary', [...]) - held to the agent commands by its next element
+_ARGV = re.compile(r'''(?:\[|[(,](?=\s*["'][^"'\n]*["']\s*,))\s*(["'])(?:[^"'\n]*[/\\])?taskuary(?:\.exe)?\1(?:\s*,\s*\[?\s*(["'])([^"'\n]*)\2)?''', re.I)
 
-def _unwrap(ws: list) -> list:
-    "The words from the program a runner runs - through any number of runners - or `ws` as it is."
-    while ws and (p := _prog(ws[0])) in _RUN:
-        sub, i = _RUN[p], 1
-        if sub:
-            if len(ws) < 2 or ws[1].lower() not in ((sub,) if isinstance(sub, str) else sub): return ws
-            i = 2
-        while i < len(ws) and ws[i].startswith('-'):
-            if ws[i] == '--': i += 1; break
-            i += 2 if ws[i] in _RUN_VAL else 1
-        if i >= len(ws): return ws
-        ws = ws[i:]
-    return ws
-
-# PowerShell started from another language - `pwsh -c '...'` in a .sh, ['pwsh','-c','...'] in a .py - is PowerShell: its
-# command is held to the PowerShell rules, and an encoded one, which no rule can read, is refused outright.
-_PWSH = re.compile(r'(?<![\w-])(?:pwsh|powershell)(?:\.exe)?(?![\w-])', re.I)
-_PS_OPT = re.compile(r'''(?:^|(?<=[\s"',\[(]))[-/](\w+)(?=[\s"',:\])]|$)''')
-
-def _pwsh_region(text: str, at: int) -> str:
-    "From `at` to the end of its statement: lines are joined while a bracket or a quote is open, or the line goes on."
-    end, n = at, 0
-    while n < 50:
+def _region(text: str, at: int) -> int:
+    "Where the statement from `at` ends: lines are joined while a bracket or a quote is open, or the line goes on."
+    end = at
+    for _ in range(50):
         b = text.find('\n', end); b = len(text) if b < 0 else b
-        r = text[at:b]; n += 1
+        r = text[at:b]
         open_ = sum(r.count(c) for c in '([{') > sum(r.count(c) for c in ')]}') or r.count('"') % 2 or r.count("'") % 2
-        if b >= len(text) or not (open_ or r.rstrip()[-1:] in ('\\', '`', '^', ',')): return r
+        if b >= len(text) or not (open_ or r.rstrip()[-1:] in ('\\', '`', '^', ',')): return b
         end = b + 1
-    return text[at:end]
+    return end
 
-def _pwsh(text: str) -> list:
+def _shells(text: str) -> list:
     out = []
-    for m in _PWSH.finditer(text):
-        r = _pwsh_region(text, m.end())
-        for o in _PS_OPT.finditer(r):
-            f = o[1].lower()
-            if 'file'.startswith(f): break           # what follows is the script's own arguments
-            if f in ('e', 'ec') or len(f) > 1 and 'encodedcommand'.startswith(f):
-                out.append((f"it runs an encoded PowerShell command ({m[0]} -{o[1]}), which no rule can read", _snip(m[0] + r))); break
-            if 'command'.startswith(f):
-                out += [(f'it runs PowerShell that {why[3:]}', _snip(m[0] + r)) for why, _ in _keyed(r[o.end():], True, True)]; break
+    for m in _SHELL.finditer(text):
+        e = _region(text, m.end()); r = text[m.end():e]
+        if not m[1] and not _INLINE.search(r): continue
+        if h := _HEREDOC.search(r):       # the heredoc's body is what the shell reads
+            d = re.search(r'\n[ \t]*' + re.escape(h[2]) + r'[ \t]*(?:\n|$)', text[e:])
+            r += text[e:e + d.start()] if d else text[e:]
+        k, rq = _snip(m[0] + r), re.sub(r'''["'`]''', ' ', r)
+        if m[1]:
+            for o in _PS_OPT.finditer(r):
+                f = o[2].lower()
+                if o[1] == '-' and 'file'.startswith(f): break       # what follows is the script's own arguments
+                if f in ('e', 'ec') or len(f) > 1 and 'encodedcommand'.startswith(f):
+                    out.append((f"it runs an encoded PowerShell command ({m[0]} {o[0]}), which no rule can read", k)); break
+        if t := _TQ.search(rq): out.append((f'it starts a shell ({m[0]}) that runs {t[0]}', k))
+        out += [(f'it starts a shell ({m[0]}) that {why[3:]}', k) for why, _ in _keyed(rq, True, bool(m[1]))]
     return out
 
 def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
@@ -252,7 +243,9 @@ def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
     out = [(f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", _line(text, m)) for m in _PKG.finditer(text)]
     out += [(f"it changes the session's own environment ({m[0].strip()})", _line(text, m))
             for m in ((_PS_MARKS if ps else _SCRIPT_MARKS) if script else _MARKS).finditer(text)]
-    out += _pwsh(text)
+    out += _shells(text)
+    for m in _ARGV.finditer(text):
+        if (m[3] or '').lower() not in TASKUARY_OK | _TASKUARY_ASK: out.append((f'it runs taskuary {m[3] or ""} from code, outside the agent commands', _line(text, m)))
     for seg in _SEG.split(text):
         raw, k = [_uq(w) for w in _WORD.findall(seg)], _snip(seg)
         if raw and _prog(raw[0]) != 'git' and (m := _PKG_ANY.search(seg)):
@@ -261,10 +254,8 @@ def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
         ws = _words(seg)
         if not ws: continue
         p = _prog(ws[0])
-        # an installer's runner fetches and runs a package outside every check below
-        runner = p in ('pipx', 'uvx') or p == 'uv' and re.search(r'\stool\s+run\s', seg + ' ', re.I)
-        if runner and any(re.match(r'taskuary\b', _prog(w)) for w in ws[1:]): out.append((f"`{seg.strip()}` runs Taskuary outside the agent commands", k))
-        ws = _unwrap(ws); p = _prog(ws[0])
+        # a runner fetches or wraps a package outside every check below (R39: by presence)
+        if _RUNNER.search(seg) and _TQ.search(seg): out.append((f"`{seg.strip()}` runs Taskuary through a runner, outside the agent commands", k))
         if p == 'taskuary-desktop': out.append(('it starts the Taskuary app', k))
         if p != 'taskuary': continue
         flags = [w.split('=', 1)[0].lower() for w in ws[1:] if w.startswith('-') and w != '-']

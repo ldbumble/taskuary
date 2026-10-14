@@ -128,17 +128,22 @@ def without_strangers(store, rows: list, for_tid=None) -> list:
     """The notes minus those written on a stranger-origin task - except on that task itself (wave B). What its agent wrote
     is the stranger's words carried on, and every other surface here rides into a session that runs with full permissions.
     Kept in the database, and on the owner's own Board. Fail closed: a task whose origin cannot be read counts as a stranger's.
-    A note with no task is judged by the task of the session that wrote it (its Sid), when that session is still known."""
+    A note with no task is judged by the task of the session that wrote it (its Sid): a live session, or another of that
+    session's notes that names one. A Sid known to neither - its session ended - could have been a stranger's: left out."""
     from . import origin, terminal as term
-    memo, by_sid = {}, {str(getattr(o, 'sid', k)): getattr(o, 'task_id', None) for k, o in list(term.SESSIONS.items())}
+    by_sid = {str(getattr(o, 'sid', k)): getattr(o, 'task_id', None) for k, o in list(term.SESSIONS.items())}
+    for n in rows:
+        if n.get('Sid') and n.get('TaskId') and by_sid.get(str(n['Sid'])) is None: by_sid[str(n['Sid'])] = n['TaskId']
+    memo, UNKNOWN = {}, -1
     def strange(t):
+        if t == UNKNOWN: return True
         if t not in memo:
             try: memo[t] = origin.of_task(store, t)[0] == 'stranger'
             except Exception: memo[t] = True
         return memo[t]
     def task_of(n):
-        t = n.get('TaskId') or (by_sid.get(str(n['Sid'])) if n.get('Sid') else None)
-        return int(t) if str(t or '').isdigit() else None
+        t = n.get('TaskId') or (by_sid.get(str(n['Sid']), UNKNOWN) if n.get('Sid') else None)
+        return t if t == UNKNOWN else int(t) if str(t or '').isdigit() else None
     return [n for n in rows if (t := task_of(n)) is None or t == for_tid or not strange(t)]
 
 

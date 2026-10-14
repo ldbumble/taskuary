@@ -110,3 +110,12 @@ def test_a_taskless_note_is_judged_by_the_session_that_wrote_it(wall, monkeypatc
     said = _bodies(bb.live_notes(s, CWD))
     assert 'taskless from the stranger' not in said and 'taskless from the owner' in said
     assert 'taskless from the stranger' in _bodies(bb.live_notes(s, CWD, for_tid=st))
+
+def test_a_taskless_note_from_an_ended_session_is_left_out_for_sessions(wall, monkeypatch):
+    "Its session is gone, so nothing says it was not a stranger's: fail closed for sessions, the owner's Board still shows it."
+    s, st, ow = wall
+    bb.post(s, 'taskless from a session that ended', 'note', 'coder', CWD, None, sid='run-gone')
+    assert 'taskless from a session that ended' not in _bodies(bb.history(s, CWD, strangers=False))
+    assert 'taskless from a session that ended' in _bodies(bb.history(s, CWD))
+    bb.post(s, 'the owner, from the Board', 'note', 'you', CWD, None)                       # no session: the owner's own
+    assert 'the owner, from the Board' in _bodies(bb.history(s, CWD, strangers=False))

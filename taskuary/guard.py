@@ -125,6 +125,7 @@ AGENT_WRITES = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    (r'POST', r'^/api/launch-key$', "a launch key opens a page that carries the owner token (launchkey.py, R29)"),
     (r'POST', r'^/api/tasks/\d+/trust$', "raising a task's origin is the owner's decision (origin.raise_to) - never a session's"),
     (r'POST', r'^/api/cloudfix/setup$', 'it commits a workflow to the repository - only ever the owner pressing Set up (cloudfix.install)'),
     (r'POST|PATCH|DELETE', r'^/api/operations(/[^/]+(/(execute|preview))?)?$',
@@ -226,6 +227,7 @@ _STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent
 _STRANGER_TASK_HOOK = re.compile(r'^/api/hooks/claude/(floor|permit)$')
 _STRANGER_FILE = re.compile(r'^/api/(attachments|task-artifacts)/(\d+)$')
 STRANGER_WHY = "a session working a stranger's task reaches its own task and nothing else"
+STRANGER_TASK_READS = ('history', 'worker', 'proof', 'work', 'diff', 'record', 'waitroom')   # each answers for this task only
 
 def stranger_denied(method: str, path: str, query, tid: int, owner_of) -> str:
     """'' when a stranger's session on `tid` may call this, else why not. `owner_of(kind, id)` answers which task an
@@ -233,8 +235,10 @@ def stranger_denied(method: str, path: str, query, tid: int, owner_of) -> str:
     m, path = (method or '').upper(), path or ''
     if why := _hit(_DENIED, m, path): return why
     if m in READS:
-        # its own task and what hangs under it - by plain segments only, so no '..' or encoding walks to a neighbour
-        if re.fullmatch(rf'/api/tasks/{int(tid)}(/[A-Za-z0-9_-]+)*', path): return ''
+        # its own task and the parts of it a session reads - named, so a new route is refused until someone decides it.
+        # Not /merge-candidates (other tasks' titles), /repos (checkouts on this machine), /steps (child tasks),
+        # /split/suggest (a model call on a GET) or /assistant (the install's brains).
+        if re.fullmatch(rf'/api/tasks/{int(tid)}(/({"|".join(STRANGER_TASK_READS)}))?', path): return ''
         if f := _STRANGER_FILE.match(path):
             return '' if owner_of('attachment' if f[1] == 'attachments' else 'artifact', int(f[2])) == int(tid) else STRANGER_WHY
         return STRANGER_WHY

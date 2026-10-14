@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import TaskHubPage from "./TaskHubPage.jsx";
 import { startTracking } from "./demoTrack";
+import { needsLink, UNLINKED_LINE } from "./unlinked.js";
 
 // A page left open across a rebuild asks for chunk names that no longer exist ("Failed to fetch
 // dynamically imported module .../HubView-<old hash>.js", the owner, 2026-09-23, mid-walk). Vite
@@ -53,6 +54,9 @@ class Boundary extends React.Component {
   }
 }
 
-createRoot(document.getElementById("root")).render(<Boundary><TaskHubPage /></Boundary>);
+const unlinked = needsLink(document, typeof localStorage === "undefined" ? null : localStorage);
+createRoot(document.getElementById("root")).render(unlinked
+  ? <div style={{ margin: "80px auto", maxWidth: 560, fontFamily: "'IBM Plex Sans', 'Segoe UI', sans-serif", fontSize: 14, color: "#5e685f" }}>{UNLINKED_LINE}</div>
+  : <Boundary><TaskHubPage /></Boundary>);
 
 startTracking();   // the static demo only, and only on taskuary.com

@@ -390,7 +390,7 @@ class AiSetupBody(BaseModel):
 _web_root = Path(__file__).parent / 'web'
 
 
-def _index_response(index_file: Path):
+def _index_response(index_file: Path, seed: bool = False):
     try:
         html = index_file.read_text(encoding='utf-8')
     except FileNotFoundError:
@@ -403,7 +403,7 @@ def _index_response(index_file: Path):
         return HTMLResponse(html, status_code=503, headers={
             'Cache-Control': 'no-store, must-revalidate', 'Retry-After': '1',
             'X-Content-Type-Options': 'nosniff'})
-    return HTMLResponse(_seed_token(html), headers={
+    return HTMLResponse(_seed_token(html, seed), headers={
         'Cache-Control': 'no-store, must-revalidate',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'same-origin',
@@ -414,26 +414,41 @@ def _index_response(index_file: Path):
         'X-Frame-Options': 'DENY'})
 
 
-def _seed_token(html: str) -> str:
-    """The page the SERVER hands out carries the owner token. That is what makes a mandatory token
-    cost the owner nothing: no other site can read this HTML (it is same-origin, and a name we do
-    not answer to never gets it - token_gate checks Host first), and the app has its credential
-    before the bundle's first fetch. A tab opened before the upgrade 401s until it is reloaded,
-    which is the whole of the migration (audit 2026-09-02, F03)."""
+def _seed_token(html: str, seed: bool = False) -> str:
+    """The page the SERVER hands out carries the owner token - but only when `seed`: the page was opened with a
+    one-time launch key (launchkey.py, R29). That is what makes a mandatory token cost the owner nothing: no other
+    site can read this HTML (same-origin, and token_gate checks Host first), and the app has its credential before
+    the bundle's first fetch. Unkeyed, any process on this machine could read it - a restricted session's shell, its
+    agent browser - so an unkeyed page carries none, and says so (taskuary-unlinked) for a tab that has none stored.
+    The key leaves the address bar either way: a reload must not look like a second use."""
     tok = cfg['server'].get('token')
     if not tok or '</head>' not in html: return html
-    seed = f'<script>try{{localStorage.setItem("taskuary_token",{json.dumps(tok)})}}catch(e){{}}</script>'
-    return html.replace('</head>', seed + '</head>', 1)
+    strip = 'try{var u=new URL(location.href);if(u.searchParams.has("k")){u.searchParams.delete("k");history.replaceState(history.state,"",u)}}catch(e){}'
+    head = (f'<script>try{{localStorage.setItem("taskuary_token",{json.dumps(tok)})}}catch(e){{}}{strip}</script>' if seed
+            else f'<meta name="taskuary-unlinked" content="1"><script>{strip}</script>')
+    return html.replace('</head>', head + '</head>', 1)
 
 
 @app.get('/', response_class=HTMLResponse)
-def index():
+def index(k: str = ''):
     """The one file that must NEVER be cached. Every asset under /assets carries a content hash
     in its name, so those can be held forever - but index.html is what NAMES them, and a cached
     copy points a fresh install at a bundle that is no longer there (or worse, one that is). An
     old index.html is how a fixed crash keeps crashing: the fix shipped, the browser kept asking
     for yesterday's JS, and the stack trace named a file the repo had already replaced."""
-    return _index_response(_web_root / 'index.html')
+    from . import launchkey
+    return _index_response(_web_root / 'index.html', seed=launchkey.redeem(k) if k else False)
+
+
+@app.post('/api/launch-key')
+def launch_key(request: Request):
+    """A one-time key for `/?k=` (launchkey.py): the CLI asks the running instance for one to open the owner's browser
+    with, and `taskuary --link` prints one. The owner's alone - an agent or a stranger's session holding one could
+    read the owner token out of the page."""
+    from . import launchkey
+    if guard.scope_of(cfg['server'], request.headers) != guard.OWNER: raise HTTPException(403, "a launch key is the owner's")
+    return {'key': launchkey.mint()}
+
 
 _assets = _web_root / 'assets'
 from fastapi.staticfiles import StaticFiles

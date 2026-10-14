@@ -249,10 +249,12 @@ class DoorTests(unittest.TestCase):
         self.assertEqual(guard.scope_of({'token': 'o', 'agent_token': 'a'}, {}), guard.ANON)
 
     def test_f03_the_page_the_server_hands_out_carries_the_token(self):
-        r = c.get('/')
+        from taskuary import launchkey
+        r = c.get(f'/?k={launchkey.mint()}')          # ...to a window Taskuary opened itself, with a one-time key (R29)
         self.assertEqual(r.status_code, 200)
         self.assertIn(server.cfg['server']['token'], r.text)
         self.assertIn('localStorage.setItem("taskuary_token"', r.text)
+        self.assertNotIn(server.cfg['server']['token'], c.get('/').text)
 
     def test_f16_a_hook_still_reaches_us_with_the_agents_token(self):
         """The hook is a curl from inside the checkout: no Origin, and the agent token in a header."""

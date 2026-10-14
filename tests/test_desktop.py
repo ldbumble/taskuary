@@ -23,7 +23,9 @@ class DesktopTests(unittest.TestCase):
             self.assertTrue(server.started)
             html = _get(f'{url}/')
             self.assertIn('Taskuary', html)
-            self.assertIn('localStorage.setItem("taskuary_token"', html)   # ...and the page carries it
+            self.assertNotIn('localStorage.setItem("taskuary_token"', html)    # unkeyed, the page carries no token (R29)
+            from taskuary import launchkey
+            self.assertIn('localStorage.setItem("taskuary_token"', _get(launchkey.link(url)))   # ...a window we opened does
             api = _get(f'{url}/api/report-types')
             self.assertIn('mssql', api)
             conns = _get(f'{url}/api/connectors')

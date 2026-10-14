@@ -320,12 +320,14 @@ def main():
         server, _ = headless()
         wait_for_exit(server)
         return 0 if stop_server(server) != 'timeout' else 1
+    # every window and browser this opens carries a one-time key: the page seeds the owner token only for one (R29)
+    from taskuary import launchkey
     try:
         import webview
     except Exception:                # no pywebview at all -> the browser, as before
         filed()
         server, url = headless()
-        webbrowser.open(url); wait_for_exit(server)
+        webbrowser.open(launchkey.link(url)); wait_for_exit(server)
         return 0 if stop_server(server) != 'timeout' else 1
 
     # The window opens FIRST and says what is happening, then the app boots behind it. Importing
@@ -334,7 +336,9 @@ def main():
     # ...and if one is already up, this window is a VIEW of it, not a second copy of the app.
     running = already_serving()
     held, booted = {}, threading.Event()
-    window = webview.create_window('Taskuary', url=running or None, html=None if running else SPLASH,
+    # a view of another process's server: that server mints the key, asked with the owner token this install keeps
+    view = launchkey.remote_link(running, config.load()['server'].get('token') or '') if running else None
+    window = webview.create_window('Taskuary', url=view, html=None if running else SPLASH,
                                    width=1280, height=840, min_size=(900, 600))
     if running:
         print(f'Taskuary is already running at {running} - opening that one.')
@@ -350,7 +354,7 @@ def main():
         except Exception:
             filed(); window.load_html(STALLED); return
         finally: booted.set()
-        if serving(url): window.load_url(url)
+        if serving(url): window.load_url(launchkey.link(url))
         else: window.load_html(STALLED)
 
     try:
@@ -360,7 +364,7 @@ def main():
         if 'server' not in held:
             try: held['server'], url = boot()
             except Exception: filed(); raise
-            webbrowser.open(url); wait_for_exit(held['server'])
+            webbrowser.open(launchkey.link(url)); wait_for_exit(held['server'])
     # A window CLOSED during the boot is new - there was no window to close before this. Give the
     # boot its moment to hand the server over, or its lifespan never gets told to stop and the
     # tasks it owns stay in_progress until the next launch repairs them.

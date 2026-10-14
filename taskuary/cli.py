@@ -1,7 +1,7 @@
 """`taskuary` - start the local server and open the app. Everything lives in ~/.taskuary."""
 import argparse, socket, threading, webbrowser
 import uvicorn
-from . import __version__, config
+from . import __version__, config, launchkey
 try: import tomllib
 except ImportError: import tomli as tomllib  # py3.10
 
@@ -60,12 +60,17 @@ def open_when_ready(url: str, wait, open_it=None):
     wait(url)
     (open_it or webbrowser.open)(url)
 
+def _open_keyed(url):
+    "The browser this process's own server opens, with a one-time key so the page carries the owner token (launchkey, R29)."
+    webbrowser.open(launchkey.link(url))
+
 
 def main():
     ap = argparse.ArgumentParser(prog='taskuary', description='Your work, already underway - a personal AI assistant for your job.')
     ap.add_argument('--host', help='override [server].host (0.0.0.0 to listen on all interfaces)')
     ap.add_argument('--port', type=_port, help='override [server].port')
     ap.add_argument('--no-browser', action='store_true', help="don't open a browser tab when the server starts")
+    ap.add_argument('--link', action='store_true', help='print a one-time address that opens the running app signed in, for a browser you open yourself')
     ap.add_argument('--debug', action='store_true', help='verbose console logging (requests, report runs, errors)')
     ap.add_argument('--version', action='version', version=f'taskuary {__version__}')
     # "what is actually in the prompt?" had no answer short of reading the code that builds it,
@@ -396,11 +401,15 @@ def main():
         sys.exit(1)
     host, port = args.host or cfg['server']['host'], args.port or cfg['server']['port']
     url = public_url(host, port)
+    if args.link:
+        if _busy(host, port) and _is_taskuary(url): print(launchkey.remote_link(url, cfg['server'].get('token') or ''))
+        else: print(f'Taskuary is not running at {url} - start it with `taskuary`, then ask again.')
+        return
     if _busy(host, port):
         if _is_taskuary(url):
-            # don't crash into 'address already in use' - reuse the running instance
+            # don't crash into 'address already in use' - reuse the running instance, signed in with a key it hands us
             print(f'Taskuary is already running at {url} - opening it.')
-            if not args.no_browser: webbrowser.open(url)
+            if not args.no_browser: webbrowser.open(launchkey.remote_link(url, cfg['server'].get('token') or ''))
             return
         from .desktop import free_port
         old, port = port, free_port(host)
@@ -412,7 +421,7 @@ def main():
     import os; os.environ['TASKUARY_PORT'] = str(port)
     if not args.no_browser:
         from .desktop import serving        # on the MAIN thread, before uvicorn starts importing
-        threading.Thread(target=open_when_ready, args=(url, serving), daemon=True).start()
+        threading.Thread(target=open_when_ready, args=(url, serving, _open_keyed), daemon=True).start()
     # what uvicorn.run does, on the server whose stop is bounded and lets every held permit go (desktop.Server, R26)
     from .desktop import Server, server_config
     srv = Server(server_config('taskuary.server:app', host, port))

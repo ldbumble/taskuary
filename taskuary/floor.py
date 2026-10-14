@@ -110,6 +110,88 @@ def _text_hit(text: str, own: list, prot: list, cwd: str = ''):
             return f'it names {tok}'
     return ''
 
+# ── TASKUARY'S OWN PACKAGE, IN-PROCESS (wave B, B1b) ─────────────────────────────────────────────────────────────────
+# Imported or run as a module it reads the home with this process's rights - config.toml's owner token, the mail - and
+# none of the paths above appears in the command. cli.py refuses the same in a session it recognises; this is for the one
+# that unset every marker Taskuary gave it, which is why naming those markers (or emptying the environment) is refused too.
+_PKG = re.compile(r'-m\s+taskuary\b|\b(?:from|import)\s+(?:[\w.]+\s*,\s*)*taskuary\b|(?:__import__|import_module)\s*\(\s*[\'"]taskuary\b', re.I)
+_MARKS = re.compile(r'taskuary_(?:task|sid|agent|cwd)|\benv\s+(?:-[a-z]*[iu]\b|--ignore-environment|--unset)', re.I)
+# cli.STRANGER_ACTS and the options that go with them (test_floor_wave_b keeps the two in step)
+TASKUARY_OK = frozenset({'--reply', '--reply-file', '--draft', '--draft-file', '--attach', '--item', '--done', '--note'})
+_TASKUARY_WITH = frozenset({'--slot', '--to', '--subject', '--result', '--overlap', '--settled', '--propose', '--no-reply', '--kind'})
+_TASKUARY_ASK = frozenset({'--help', '-h', '--version'})
+_SEG = re.compile(r'(?:&&|\|\||[;|&\n]|\$\(|`)+')
+_WORD = re.compile(r'"[^"]*"|\'[^\']*\'|\S+')
+
+def _words(seg: str) -> list:
+    "A segment's words, unquoted, with leading VAR=value assignments and `sudo` dropped."
+    ws = [w[1:-1] if w[:1] in '"\'' and w[-1:] == w[:1] and len(w) > 1 else w for w in _WORD.findall(seg)]
+    while ws and (re.fullmatch(r'[A-Za-z_]\w*=.*', ws[0]) or ws[0].lower() in ('sudo', 'command', 'exec', 'nohup')): ws.pop(0)
+    return ws
+
+def _prog(w: str) -> str: return re.sub(r'(\.exe|\.cmd|\.bat|\.ps1|-script\.pyw?)$', '', _cf(w).rsplit('/', 1)[-1])
+
+def _taskuary_hit(text: str) -> str:
+    if m := _PKG.search(text): return f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process"
+    if m := _MARKS.search(text): return f"it changes the session's own environment ({m[0].strip()})"
+    for seg in _SEG.split(text):
+        ws = _words(seg)
+        if not ws: continue
+        p = _prog(ws[0])
+        if p == 'taskuary-desktop': return 'it starts the Taskuary app'
+        if p != 'taskuary': continue
+        flags = [w.split('=', 1)[0].lower() for w in ws[1:] if w.startswith('-') and w != '-']
+        bad = [f for f in flags if f not in TASKUARY_OK | _TASKUARY_WITH | _TASKUARY_ASK]
+        if bad or not any(f in TASKUARY_OK | _TASKUARY_ASK for f in flags):
+            return f"`{' '.join(['taskuary', *(bad or ws[1:])])}` is not one of the agent commands a stranger's session runs"
+    return ''
+
+
+# ── WHAT A LATER SESSION READS AS CONFIGURATION OR RUNS (wave B, B3) ────────────────────────────────────────────────
+# Written by a stranger's session, each is an instruction or a hook that the OWNER's next session - full permissions -
+# loads without asking: a CLI's settings, hooks, agents, commands and skills, its user instructions, a repository's git
+# hooks and config, and the project files a CLI reads from the checkout. The repository's own CLAUDE.md / AGENTS.md stay
+# editable: changing them is ordinary work on that repository, and a reviewer reads them as the repository's, not the owner's.
+_CONF = re.compile(r'(^|/)(\.claude(/|$)|\.claude\.json$|\.mcp\.json$|\.git/(hooks(/|$)|config$)|\.codex/(config\.toml|hooks\.json|agents\.md)$'
+                   r'|\.copilot(/|$)|\.gemini/settings\.json$)')
+_WRITE_TOOLS = ('Write', 'Edit', 'MultiEdit', 'NotebookEdit')
+_ALL_ARGS = {'tee', 'tee-object', 'set-content', 'sc', 'add-content', 'ac', 'out-file', 'new-item', 'ni', 'mkdir', 'md', 'touch', 'dd', 'truncate'}
+_LAST_ARG = {'cp', 'copy', 'copy-item', 'cpi', 'mv', 'move', 'move-item', 'mi', 'ln', 'install', 'rsync', 'scp', 'robocopy', 'xcopy'}
+_IN_PLACE = {'sed', 'perl', 'ruby'}             # with -i
+_REDIR = re.compile(r'\d?\*?>{1,2}\|?\s*([^\s;&|<>]+)')
+
+def _conf_dirs() -> list:
+    "Where the CLIs are told to keep that configuration instead (CLAUDE_CONFIG_DIR and kin), as normalised roots."
+    return [_norm(os.environ[v], real=rl) for v in ('CLAUDE_CONFIG_DIR', 'COPILOT_HOME') if os.environ.get(v) for rl in (True, False)]
+
+def _is_conf(p: str) -> bool:
+    "`p` normalised and folded: one of the files above, or anything in a relocated CLI home."
+    return bool(_CONF.search(p)) or _under(p, _conf_dirs()) or bool(os.environ.get('CODEX_HOME')) and any(
+        p == _norm(os.path.join(os.environ['CODEX_HOME'], f), real=rl) for f in ('config.toml', 'hooks.json', 'AGENTS.md') for rl in (True, False))
+
+def _write_hit(text: str, cwd: str = '') -> str:
+    "Why a shell command writes into one of them, or ''. Its targets: a redirection, or what a writing command writes to."
+    h = _norm('~', real=False)
+    cur = _norm(cwd) if cwd else ''
+    def hit(tok):
+        t = _HOME_VAR.sub(h, tok)
+        q = _strip(os.path.expandvars(t))
+        forms = {_cf(q)} | ({_norm(q, cur, rl) for rl in (True, False)} if cur or os.path.isabs(q) else set())
+        return any(_is_conf(f) for f in forms)
+    for seg in _SEG.split(text):
+        targets = _REDIR.findall(seg)
+        ws = _words(_REDIR.sub(' ', seg))
+        if ws:
+            p, args = _prog(ws[0]), ws[1:]
+            plain = [a for a in args if not a.startswith('-') or a == '-']
+            if p in _CD and plain: cur = _norm(plain[0], cur) if cur or os.path.isabs(plain[0]) else cur
+            elif p in _ALL_ARGS: targets += plain + [a[3:] for a in args if a.lower().startswith('of=')]
+            elif p in _LAST_ARG: targets += plain[-1:] + [args[i + 1] for i, a in enumerate(args[:-1]) if a.lower() in ('-destination', '-t', '--target-directory')]
+            elif p in _IN_PLACE and any(re.fullmatch(r'-\w*i\S*|--in-place\S*', a) for a in args): targets += plain
+        for t in targets:
+            if hit(t): return f'it writes {t}, which a later session of the owner reads as configuration or runs'
+    return ''
+
 def check(payload: dict, tid: int, store=None) -> dict:
     "{} when the floor has nothing against this call, else a PreToolUse deny."
     inp, cwd, tool = payload.get('tool_input') or {}, str(payload.get('cwd') or ''), str(payload.get('tool_name') or '')
@@ -120,6 +202,8 @@ def check(payload: dict, tid: int, store=None) -> dict:
         if raw.startswith('//'): return _deny(f'{inp[k]} is a network path')
         for p in _forms(inp[k], cwd):
             if _under(p, prot) and not _under(p, own): return _deny(f'{inp[k]} is a protected file')
+            if tool in _WRITE_TOOLS and _is_conf(p): return _deny(f'{inp[k]} is read as configuration, or run, by a later session of the owner')
+    if why := _taskuary_hit(str(inp.get('command') or '')) or _write_hit(str(inp.get('command') or ''), cwd): return _deny(why)
     if tool in ('Grep', 'Glob'):    # these walk a tree: a root ABOVE a protected folder reaches it just as well
         sr = {_cf(os.path.normcase(os.path.abspath(o))) for o in ((inp.get('path') and _forms(inp['path'], cwd)) or ([cwd] if cwd else []))}
         for s in sr:

@@ -185,13 +185,74 @@ def _env_wipe(ws: list) -> str:
 
 def _snip(s: str) -> str: return ' '.join(s.split()).casefold()
 
+def _line(text: str, m) -> str:
+    "The whole line(s) a match sits on, normalised: the key a pattern hit is counted by, so its target is part of it (R38)."
+    a, b = text.rfind('\n', 0, m.start()) + 1, text.find('\n', m.end())
+    return _snip(text[a:] if b < 0 else text[a:b])
+
+# The runners that run a project's program - `uv run X`, `npx X` - and the options of theirs that take a value: what they
+# run is the program, held to the same rules. An unknown option's next word is taken as the program, which fails closed.
+_RUN = {'uv': 'run', 'poetry': 'run', 'pdm': 'run', 'hatch': 'run', 'pipenv': 'run', 'conda': 'run', 'npm': ('exec', 'x'),
+        'pnpm': ('exec', 'dlx'), 'yarn': ('exec', 'dlx'), 'npx': None, 'pnpx': None, 'bunx': None}
+_RUN_VAL = frozenset({'--with', '-w', '--with-editable', '--with-requirements', '--python', '-p', '--package', '--extra', '--group',
+                      '--only-group', '--no-group', '--index', '--default-index', '--index-url', '-i', '--extra-index-url', '--find-links',
+                      '-f', '--directory', '--project', '--env-file', '--config-file', '--cache-dir', '--color', '--index-strategy',
+                      '--keyring-provider', '--resolution', '--prerelease', '--exclude-newer', '--link-mode', '--python-platform',
+                      '--refresh-package', '--reinstall-package', '--upgrade-package', '-P', '--config-setting', '-C', '--allow-insecure-host',
+                      '-n', '--name', '--prefix', '-e', '--env', '--call', '-c', '--shell', '--userconfig', '--workspace'})
+
+def _unwrap(ws: list) -> list:
+    "The words from the program a runner runs - through any number of runners - or `ws` as it is."
+    while ws and (p := _prog(ws[0])) in _RUN:
+        sub, i = _RUN[p], 1
+        if sub:
+            if len(ws) < 2 or ws[1].lower() not in ((sub,) if isinstance(sub, str) else sub): return ws
+            i = 2
+        while i < len(ws) and ws[i].startswith('-'):
+            if ws[i] == '--': i += 1; break
+            i += 2 if ws[i] in _RUN_VAL else 1
+        if i >= len(ws): return ws
+        ws = ws[i:]
+    return ws
+
+# PowerShell started from another language - `pwsh -c '...'` in a .sh, ['pwsh','-c','...'] in a .py - is PowerShell: its
+# command is held to the PowerShell rules, and an encoded one, which no rule can read, is refused outright.
+_PWSH = re.compile(r'(?<![\w-])(?:pwsh|powershell)(?:\.exe)?(?![\w-])', re.I)
+_PS_OPT = re.compile(r'''(?:^|(?<=[\s"',\[(]))[-/](\w+)(?=[\s"',:\])]|$)''')
+
+def _pwsh_region(text: str, at: int) -> str:
+    "From `at` to the end of its statement: lines are joined while a bracket or a quote is open, or the line goes on."
+    end, n = at, 0
+    while n < 50:
+        b = text.find('\n', end); b = len(text) if b < 0 else b
+        r = text[at:b]; n += 1
+        open_ = sum(r.count(c) for c in '([{') > sum(r.count(c) for c in ')]}') or r.count('"') % 2 or r.count("'") % 2
+        if b >= len(text) or not (open_ or r.rstrip()[-1:] in ('\\', '`', '^', ',')): return r
+        end = b + 1
+    return text[at:end]
+
+def _pwsh(text: str) -> list:
+    out = []
+    for m in _PWSH.finditer(text):
+        r = _pwsh_region(text, m.end())
+        for o in _PS_OPT.finditer(r):
+            f = o[1].lower()
+            if 'file'.startswith(f): break           # what follows is the script's own arguments
+            if f in ('e', 'ec') or len(f) > 1 and 'encodedcommand'.startswith(f):
+                out.append((f"it runs an encoded PowerShell command ({m[0]} -{o[1]}), which no rule can read", _snip(m[0] + r))); break
+            if 'command'.startswith(f):
+                out += [(f'it runs PowerShell that {why[3:]}', _snip(m[0] + r)) for why, _ in _keyed(r[o.end():], True, True)]; break
+    return out
+
 def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
-    """Every (reason, what it matched) a command - or, `script`, the text of a file that will be run (`ps`: a PowerShell
-    one) - is refused for, in the order they are checked. The match is part of the key, so an edit that keeps a reason but
-    changes its target (`env -i make` into `env -i taskuary`) is a new hit."""
-    out = [(f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", _snip(m[0])) for m in _PKG.finditer(text)]
-    out += [(f"it changes the session's own environment ({m[0].strip()})", _snip(m[0]))
+    """Every (reason, where) a command - or, `script`, the text of a file that will be run (`ps`: a PowerShell one) - is
+    refused for, in the order they are checked. `where` is the hit's normalised line (a segment's, for what is judged per
+    segment), so an edit that keeps a reason but changes its target - `env -i make` into `env -i taskuary`, `Test-Path
+    Env:CI` into `rd Env:*` - is a new hit, and a reindent is not."""
+    out = [(f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process", _line(text, m)) for m in _PKG.finditer(text)]
+    out += [(f"it changes the session's own environment ({m[0].strip()})", _line(text, m))
             for m in ((_PS_MARKS if ps else _SCRIPT_MARKS) if script else _MARKS).finditer(text)]
+    out += _pwsh(text)
     for seg in _SEG.split(text):
         raw, k = [_uq(w) for w in _WORD.findall(seg)], _snip(seg)
         if raw and _prog(raw[0]) != 'git' and (m := _PKG_ANY.search(seg)):
@@ -200,10 +261,11 @@ def _keyed(text: str, script: bool = False, ps: bool = False) -> list:
         ws = _words(seg)
         if not ws: continue
         p = _prog(ws[0])
-        if p == 'taskuary-desktop': out.append(('it starts the Taskuary app', k))
         # an installer's runner fetches and runs a package outside every check below
         runner = p in ('pipx', 'uvx') or p == 'uv' and re.search(r'\stool\s+run\s', seg + ' ', re.I)
         if runner and any(re.match(r'taskuary\b', _prog(w)) for w in ws[1:]): out.append((f"`{seg.strip()}` runs Taskuary outside the agent commands", k))
+        ws = _unwrap(ws); p = _prog(ws[0])
+        if p == 'taskuary-desktop': out.append(('it starts the Taskuary app', k))
         if p != 'taskuary': continue
         flags = [w.split('=', 1)[0].lower() for w in ws[1:] if w.startswith('-') and w != '-']
         bad = [f for f in flags if f not in TASKUARY_OK | _TASKUARY_WITH | _TASKUARY_ASK]

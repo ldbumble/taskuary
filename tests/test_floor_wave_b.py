@@ -265,3 +265,55 @@ def test_uv_tool_run_is_refused(tmp_path):
     for t in SHELLS: assert denied(call(t, command='uv tool run taskuary --prompts')), t
     assert denied(call('Write', file_path=str(tmp_path / 'x.sh'), content='#!/bin/sh\nuv tool run taskuary --prompts\n'))
     for t in SHELLS: assert call(t, command='uv tool run ruff check .') == {}, t
+
+
+# ── follow-up (R38): a hit is keyed on its line; runners are unwrapped; PowerShell inside other files is PowerShell ────
+@pytest.mark.parametrize('before,old,new', [
+    ('Test-Path Env:CI\nWrite-Output hi\n', 'Test-Path Env:CI', 'rd Env:*'),
+    ('Remove-Item Env:FOO\nWrite-Output hi\n', 'Remove-Item Env:FOO', 'Remove-Item Env:TASKUARY_SID'),
+    ('[Environment]::SetEnvironmentVariable("A","1")\n', 'SetEnvironmentVariable("A","1")', 'SetEnvironmentVariable("TASKUARY_SID",$null)')])
+def test_an_edit_that_retargets_a_powershell_hit_is_refused(before, old, new, tmp_path):
+    f = tmp_path / 'x.ps1'; f.write_text(before)
+    assert denied(call('Edit', file_path=str(f), old_string=old, new_string=new)), new
+    assert denied(call('Write', file_path=str(f), content=before.replace(old, new))), new
+
+def test_a_reindent_or_an_edit_elsewhere_in_a_powershell_file_is_written(tmp_path):
+    f = tmp_path / 'x.ps1'; f.write_text('if ($ci) {\nTest-Path Env:CI\n}\nWrite-Output hi\n')
+    assert call('Edit', file_path=str(f), old_string='Test-Path Env:CI', new_string='    Test-Path  Env:CI') == {}
+    assert call('Edit', file_path=str(f), old_string='Write-Output hi', new_string='Write-Output bye') == {}
+
+RUNNERS = ['uv run taskuary --prompts', 'uv run --with taskuary taskuary --prompts', 'poetry run taskuary --prompts', 'npx taskuary --prompts',
+           'pdm run taskuary', 'hatch run taskuary', 'pipenv run taskuary', 'uv run -- taskuary --link', 'npx -y taskuary --demo',
+           'uv run --python 3.12 taskuary --prompts', 'npx --package taskuary taskuary --board', 'uv run poetry run taskuary --prompts']
+
+@pytest.mark.parametrize('cmd', RUNNERS)
+def test_a_runner_s_program_is_held_to_the_taskuary_rules(cmd, tmp_path):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+    assert denied(call('Write', file_path=str(tmp_path / 'x.sh'), content=f'#!/bin/sh\n{cmd}\n')), cmd
+    assert denied(call('Write', file_path=str(tmp_path / 'package.json'), content='{"scripts": {"x": "%s"}}' % cmd)), cmd
+
+@pytest.mark.parametrize('cmd', ['uv run pytest', 'npx vitest', 'poetry run pytest -q', 'uv run --with taskuary pytest', 'pdm run lint',
+                                 'uv run taskuary --reply hi', 'npx taskuary --help'])
+def test_a_runner_s_ordinary_program_passes(cmd, tmp_path):
+    for t in SHELLS: assert call(t, command=cmd) == {}, (t, cmd)
+    assert call('Write', file_path=str(tmp_path / 'x.sh'), content=f'#!/bin/sh\n{cmd}\n') == {}, cmd
+
+@pytest.mark.parametrize('name,content', [
+    ('x.sh', "#!/bin/sh\npwsh -c 'rd Env:*'\n"), ('x.py', "import subprocess\nsubprocess.run(['pwsh','-c','rd Env:*'])\n"),
+    ('x.cmd', 'powershell -c "dir Env:* | Remove-Item"\n'), ('x.sh', '#!/bin/sh\npwsh -NoProfile -Command "Remove-Item Env:$n"\n'),
+    ('x.py', "import subprocess\nsubprocess.run([\n    'pwsh',\n    '-Command',\n    'rd Env:*',\n])\n"),
+    ('x.sh', '#!/bin/sh\npwsh -EncodedCommand ZABpAHIA\n'), ('x.py', "subprocess.run(['powershell.exe', '-enc', 'ZABpAHIA'])\n"),
+    ('x.js', "execSync('pwsh -e ZABpAHIA')\n")])
+def test_powershell_inside_another_language_is_judged_as_powershell(name, content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / name), content=content)), (name, content)
+
+@pytest.mark.parametrize('cmd', ['pwsh -EncodedCommand ZABpAHIA', 'powershell -enc ZABpAHIA', 'pwsh -NoProfile -ec ZABpAHIA'])
+def test_an_encoded_powershell_command_is_refused(cmd):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+
+@pytest.mark.parametrize('name,content', [
+    ('x.sh', "#!/bin/sh\npwsh -c 'Write-Output $env:PATH'\n"), ('x.sh', '#!/bin/sh\npwsh -NoProfile -File build.ps1 -Environment prod\n'),
+    ('x.py', "subprocess.run(['pwsh', '-c', 'Get-Date'])\nconfig = {'env': 'prod'}\n")])
+def test_ordinary_powershell_inside_another_language_is_written(name, content, tmp_path):
+    assert call('Write', file_path=str(tmp_path / name), content=content) == {}, (name, content)
+    for t in SHELLS: assert call(t, command='pwsh -NoProfile -File build.ps1 -Environment prod') == {}, t

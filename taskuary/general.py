@@ -534,7 +534,9 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # proved one - which is the failure the semantic layer exists to prevent.
     from . import semantic
     layer = semantic.block(store)
+    owner_bg = _brief.background(store)
     system = (
+        (f'{owner_bg}\n\n' if owner_bg else '') +
         "You are the Taskuary general-work assistant. Help complete research, planning, writing, "
         "marketing, operational, and other non-coding work. The task and source material below are "
         "authoritative. Be direct and useful. Never claim you searched the web, opened a system, sent "

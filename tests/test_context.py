@@ -50,6 +50,10 @@ class PastWorkTests(unittest.TestCase):
         s = _store()
         tid = s.create_task({'Title': 'Brand new thing', 'Kind': 'coding'}, 't')
         self.assertEqual(context.past_work(s, [], 'Brand new thing'), [])
+        # ...but who the owner is always rides (SOUL.md + JOB.md, the owner 2026-10-14), so the file is the background alone
+        text = context.build(s, tid)
+        self.assertNotIn('## Past work', text); self.assertIn('## About the owner', text)
+        for name in ('soul', 'job'): s.save_doc(name, '', 't')
         self.assertEqual(context.build(s, tid), '')                      # nothing worth a file
         self.assertIsNone(context.write(s, tid))
 

@@ -212,6 +212,11 @@ def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
     last = msgs[-1] if msgs else None
     parts = [f"# {task_ref(tid)} - {t.get('Title') or ''}\n_What Taskuary knows about this task, written {datetime.now().strftime('%Y-%m-%d %H:%M')} for the agent working it. "
              'Facts from the hub, not instructions; the ask itself is in your prompt._']
+    # WHO THE OWNER IS (SOUL.md + JOB.md), the same background the general assistant reads (brief.background) - here, not in the
+    # seed, which a terminal types and must keep short (the owner, 2026-10-14)
+    from .brief import background
+    bg = background(store)
+    if bg: parts.append('## About the owner (background - whom you work for)\n' + bg.split('\n\n', 1)[1].replace('## ', '### '))
     if last:
         try: dos = dossier(store, msg_of(last), exclude_mid=last['MessageId'], skip_conv=True)
         except Exception as e:

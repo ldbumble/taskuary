@@ -1528,11 +1528,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             </Box>
           ))}
 
-          {/* A HIT OPENS WHERE A ROW DOES: in chat mode on the assistant canvas, through the same pull a rail click takes - it
-              opened the task-mode panel under a Chat switch, titled "undefined in chat" (the owner, 2026-10-14) */}
+          {/* A HIT OPENS ON THE ASSISTANT CANVAS, whatever the mode, through the same pull a rail click takes (pull switches the
+              stage to chat) - it opened the task-mode panel, titled "undefined in chat" (the owner, 2026-10-14: "searched task
+              should show up on assistant canvas regardless not on the task view") */}
           <SearchEverything open={searchOpen} onClose={() => setSearchOpen(false)}
-            onOpenTask={(tid, h) => (rowMode === "chat" && onPull ? onPull({ TaskId: tid, Title: h?.title }) : onOpenTask?.(tid))}
-            onOpenMessage={(mid, h) => (rowMode === "chat" && onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }), true) : openByMid(mid))}
+            onOpenTask={(tid, h) => (onPull ? onPull({ TaskId: tid, Title: h?.title }) : onOpenTask?.(tid))}
+            onOpenMessage={(mid, h) => (onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }), true) : openByMid(mid))}
             onPickSource={(next) => {
               allRequest.current += 1; detailEpoch.current += 1; want.current = null;
               if (cat) { pendingPick.current = next; setCat(""); } else setPick(next);

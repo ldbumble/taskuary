@@ -12,10 +12,10 @@ test("the search bar is on the top line, and the rail no longer draws one", () =
   assert.match(read("FeedView.jsx"), /window\.addEventListener\(OPEN_SEARCH, o\)/);
 });
 
-test("in chat mode a hit goes on the canvas through the rail's own pull", () => {
+test("a hit goes on the canvas through the rail's own pull, whatever the mode", () => {
   const f = read("FeedView.jsx");
-  assert.match(f, /onOpenTask=\{\(tid, h\) => \(rowMode === "chat" && onPull \? onPull\(\{ TaskId: tid, Title: h\?\.title \}\) : onOpenTask\?\.\(tid\)\)\}/);
-  assert.match(f, /onOpenMessage=\{\(mid, h\) => \(rowMode === "chat" && onPull \? \(onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}\), true\) : openByMid\(mid\)\)\}/);
+  assert.match(f, /onOpenTask=\{\(tid, h\) => \(onPull \? onPull\(\{ TaskId: tid, Title: h\?\.title \}\) : onOpenTask\?\.\(tid\)\)\}/);
+  assert.match(f, /onOpenMessage=\{\(mid, h\) => \(onPull \? \(onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}\), true\) : openByMid\(mid\)\)\}/);
 });
 
 test("a row with no message of its own is keyed by its task, never msg:undefined", () => {

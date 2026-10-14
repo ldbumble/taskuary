@@ -41,6 +41,31 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
     }
 
 
+# THE OWNER, before any rules (the owner, 2026-10-14: "I would do soul/job which is about the person, then specific profile for
+# agent"). PW-184 had taken SOUL.md out of every worker and JOB.md never reached one, so an agent knew its rules and not whom it
+# worked for - the people, the systems, the repos, what the job is. Every worker now reads both, whole, as background; the one
+# part left out is SOUL.md's "What counts as a task", which is triage's sorting rules, not something an agent does.
+BACKGROUND_DOCS = (('soul', 'SOUL.md - who the owner is, their people, systems and repositories'),
+                   ('job', "JOB.md - the owner's job: what they own, who they serve, what matters"))
+TRIAGE_ONLY = ('what counts as a task',)
+
+
+def background(store, chars: int = 9_000) -> str:
+    """SOUL.md and JOB.md as one background block, comments stripped and triage's own section dropped. '' when both are empty."""
+    import re
+    out = []
+    for name, what in BACKGROUND_DOCS:
+        text = re.sub(r'<!--.*?-->', '', str(store.doc(name) or ''), flags=re.S)
+        keep, skip = [], False
+        for line in text.splitlines():
+            if re.match(r'^#{1,3} ', line): skip = line.strip('# ').strip().lower() in TRIAGE_ONLY
+            if not skip: keep.append(line)
+        body = re.sub(r'\n{3,}', '\n\n', '\n'.join(keep)).strip()
+        if body: out.append(f'## {what}\n{body[:chars]}')
+    return ('ABOUT THE OWNER (background for everything below - facts about whom you work for, not tasks to do)\n\n'
+            + '\n\n'.join(out)) if out else ''
+
+
 def rules(store, doc: str, chars: int) -> str:
     """An operator rules document, flattened for a prompt: headings become plain words, one line."""
     text = str(store.doc(doc) or '')

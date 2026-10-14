@@ -271,6 +271,11 @@ def wall_text(store, cwd: str, limit: int = 8) -> str:
 # tax ("LLMs Get Lost in Multi-Turn Conversation", arXiv:2505.06120 - unreliability +112%). An
 # agent reads its peers where reading is free: `briefing()` in the seed below, `wall_text()` beside
 # it, and `taskuary --board` whenever it wants them fresh. Do not reintroduce a peer broadcast.
+def _stranger(store, p) -> bool:
+    "A peer on a stranger's task is named by its ref only: its title, summary and notes are the stranger's words, and this paragraph rides into full-permission prompts."
+    from . import origin
+    return bool(p.get('tid')) and origin.of_task(store, p['tid'])[0] == 'stranger'
+
 def briefing(store, cwd, exclude_tid=None, assess_for: int = None) -> str:
     """The OTHER AGENTS paragraph of a new agent's prompt (PW-172/174): the facts - which peers are
     in this checkout, who they are, what each is doing, which files it has touched so far, what its
@@ -283,9 +288,10 @@ def briefing(store, cwd, exclude_tid=None, assess_for: int = None) -> str:
     for n in live_notes(store, cwd, 40):
         if n.get('TaskId') and int(n['TaskId']) in {p['tid'] for p in ps} and n['TaskId'] not in said:
             said[n['TaskId']] = f"[{n['Kind']}] {n['Body'][:160]}"
-    who = ' | '.join(f"{p['ref']} \"{p['title'][:80]}\" ({p['agent']}) - about: {str((store.get_task(p['tid']) or {}).get('Summary') or '')[:160] or 'no summary'}"
-                     f" - files it has modified so far: {', '.join(os.path.basename(x) for x in p['files'][:10]) or 'none yet'}"
-                     + (f" - it said: {said[p['tid']]}" if p.get('tid') in said else '') for p in ps)
+    who = ' | '.join((f"a stranger's task ({p['ref']}) ({p['agent']})" if _stranger(store, p) else
+                      f"{p['ref']} \"{p['title'][:80]}\" ({p['agent']}) - about: {str((store.get_task(p['tid']) or {}).get('Summary') or '')[:160] or 'no summary'}")
+                     + f" - files it has modified so far: {', '.join(os.path.basename(x) for x in p['files'][:10]) or 'none yet'}"
+                     + (f" - it said: {said[p['tid']]}" if p.get('tid') in said and not _stranger(store, p) else '') for p in ps)
     out = ('OTHER AGENTS are working in this same checkout RIGHT NOW: ' + who + '. They were here '
            'first and have control of their files: never edit, revert, stash or commit them, and '
            'never use git add -A / git commit -a - stage and commit ONLY files you yourself changed '
@@ -317,7 +323,7 @@ def likely_overlap(store, tid: int, ps: list) -> tuple:
     try:
         llm = build_llm(store)
         if not llm: return None, ''
-        running = '\n'.join(f"- {p['ref']} \"{p['title']}\" - files so far: "
+        running = '\n'.join(f"- {p['ref']} \"{'a task of a stranger' if _stranger(store, p) else p['title']}\" - files so far: "
                             + (', '.join(p['files'][:15]) or 'none yet') for p in ps)
         out = llm(OVERLAP_SYSTEM, f"New task: \"{t.get('Title') or ''}\" - {str(t.get('Summary') or '')[:1500]}\n\n"
                                   f'Running in the same checkout:\n{running}', max_tokens=200)

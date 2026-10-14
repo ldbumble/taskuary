@@ -180,7 +180,7 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
                                 'Deliver': deliver})
         store.hold_reviews(tid, 'held while an agent finds out - the message is written from what it finds')
         try:
-            ses = term.start_on_task(store, tid, instruction=f'Find out what is needed to send this message to {to_text}: {about}', actor=actor)
+            ses = term.start_on_task(store, tid, instruction=f'Find out what is needed to send this message to {to_text}: {about}', actor=actor, instruction_theirs=True)
         except Exception as e:
             logger.warning(f'outbox could not start an agent on {task_ref(tid)}: {e}')
             store.add_comment(tid, 'router', 'agent', f'Could not start the agent ({str(e)[:200]}) - start it from the task.')

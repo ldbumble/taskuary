@@ -1363,11 +1363,13 @@ class SeedCompletenessTests(unittest.TestCase):
         self.assertIn('40,000 characters', seed)
         self.assertIn('Ask the owner for the rest', seed)
 
+    @_owner
     def test_the_whole_prompt_stays_inside_a_command_line(self):
         """It travels as one argv element now; Windows refuses past 32767 without a word."""
         s, tid = self._task('z' * 200000)
         self.assertLessEqual(len(terminal.seed_text(s, tid)), terminal.SEED_CEILING + 500)
 
+    @_owner
     def test_the_rules_survive_the_trim_and_the_ask_is_what_gives(self):
         """An agent that loses "work only in this repository" is more dangerous than one that
         loses the tail of a paragraph."""

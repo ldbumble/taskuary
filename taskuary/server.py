@@ -3867,7 +3867,10 @@ def answer_to_agent(tid: int, body: dict):
     answered the very question the agent is waiting on. The 'ask' mode's one click."""
     m = store.get_message(int((body or {}).get('message_id') or 0))
     if not m or m.get('TaskId') != tid: raise HTTPException(404, 'that message is not on this task')
-    from . import terminal
+    from . import terminal, origin
+    # a full-permission session is the one a stranger's words must never be typed into (its reviewer is the bypass)
+    if origin.of_message(store, m)[0] == 'stranger' and terminal.mode_of_task(tid) != 'auto':
+        raise HTTPException(409, "this session runs with full permissions - start it again and it will run in auto mode, then hand it the stranger's message")
     if not terminal.say_to_task(store, tid, m, ACTOR):
         raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
     return {'ok': True}

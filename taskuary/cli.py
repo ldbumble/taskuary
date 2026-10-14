@@ -1,9 +1,11 @@
 """`taskuary` - start the local server and open the app. Everything lives in ~/.taskuary."""
-import argparse, socket, threading, webbrowser
+import argparse, os, socket, subprocess, threading, webbrowser
 import uvicorn
 from . import __version__, config, launchkey
 try: import tomllib
 except ImportError: import tomli as tomllib  # py3.10
+try: import winreg as _winreg           # here, not in open_when_ready's thread, which must import nothing
+except ImportError: _winreg = None
 
 
 def _session_headers(srv: dict) -> dict:
@@ -60,11 +62,34 @@ def open_when_ready(url: str, wait, open_it=None):
     wait(url)
     (open_it or webbrowser.open)(url)
 
+_UC = r'Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice'
+
+def _http_browser():
+    """The registered http(s) browser's open command (Windows), or None. The file must go to THE BROWSER: handed to the
+    shell, a .html opens in whatever owns that extension - an editor, on a developer's machine - and the app never opens."""
+    if os.name != 'nt' or _winreg is None: return None
+    try:
+        with _winreg.OpenKey(_winreg.HKEY_CURRENT_USER, _UC) as k: prog = _winreg.QueryValueEx(k, 'ProgId')[0]
+        with _winreg.OpenKey(_winreg.HKEY_CLASSES_ROOT, rf'{prog}\shell\open\command') as k: cmd = _winreg.QueryValueEx(k, '')[0]
+    except OSError: return None
+    return cmd if '%1' in str(cmd or '') else None
+
+def _with_target(cmd: str, path: str) -> str:
+    "The open command with the file in its %1 - quoted, unless the command quotes it or takes the rest as one argument."
+    if '"%1"' in cmd: return cmd.replace('"%1"', f'"{path}"')
+    return cmd.replace('%1', path if '--single-argument' in cmd else f'"{path}"')
+
 def _open_private(url):
     """Open `url` in the browser - through an owner-only file when it carries a launch key, so the key is never on the
-    browser's command line (launchkey.via_file). Residual: the file is readable by the owner's own account until it is
-    spent, expired or cleared - which a stranger's session, kept out of Taskuary's home by the floor, cannot reach."""
-    webbrowser.open(launchkey.via_file(url, config.home() / 'launch') if '?k=' in url else url)
+    browser's command line (launchkey.via_file), handed to the registered http browser itself.
+
+    Residual risks: the file is readable by the owner's own account until it is spent, expired or cleared (a stranger's
+    session is kept out of Taskuary's home by the floor). Where no browser can be named - off Windows, or a registry that
+    says nothing usable - the keyed address goes to webbrowser.open as before, and sits on that command line for the
+    seconds until the page spends it."""
+    cmd = _http_browser() if '?k=' in url else None
+    if not cmd: return webbrowser.open(url)
+    subprocess.Popen(_with_target(cmd, str(launchkey.via_file(url, config.home() / 'launch'))))
 
 def _open_keyed(url):
     "The browser this process's own server opens, with a one-time key so the page carries the owner token (launchkey, R29)."

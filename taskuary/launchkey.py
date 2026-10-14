@@ -35,8 +35,8 @@ def in_session() -> bool:
 
 def link(url: str) -> str: return f"{url.rstrip('/')}/?k={mint()}"
 
-def via_file(url: str, folder) -> str:
-    """A file:// address of a page that goes on to `url` - for a keyed `url` handed to a browser process. Its command line
+def via_file(url: str, folder) -> pathlib.Path:
+    """An owner-only file, a page that goes on to `url` - for a keyed `url` handed to a browser process. Its command line
     is in any local process's reach (the process list), so it carries the path of this file instead, and the file sits in
     `folder` (Taskuary's home, which the floor keeps a stranger's session out of), owner-only. Files older than TTL go
     first: by then their key is spent or expired, and the CLI that wrote one has usually exited."""
@@ -50,7 +50,7 @@ def via_file(url: str, folder) -> str:
     with os.fdopen(fd, 'w', encoding='utf-8') as w:
         w.write(f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url={html.escape(url)}">'
                 f'<title>Taskuary</title><script>location.replace({json.dumps(url)})</script>')
-    return f.as_uri()
+    return f
 
 def remote_link(url: str, token: str) -> str:
     "A keyed address from ANOTHER process's server (the instance already running), or the plain one if it gives none."

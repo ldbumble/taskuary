@@ -112,7 +112,8 @@ const speak = (text) => {
 // the pile's key for a Timeline row, so any row on the rail can be pulled into the chat - the same
 // key the pipe itself carries, so the server puts the same item on the table either way
 export const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `review:${r.ReviewId}`
-  : r.AgentWaiting && r.TaskId ? `agent:${r.TaskId}` : r.Channel === "report" ? `report:${r.MessageId}` : `msg:${r.MessageId}`;
+  : r.AgentWaiting && r.TaskId ? `agent:${r.TaskId}` : !r.MessageId && r.TaskId ? `task:${r.TaskId}`   // a search hit on a task: never msg:undefined
+  : r.Channel === "report" ? `report:${r.MessageId}` : `msg:${r.MessageId}`;
 
 // ── the pipe: the top of the rail ────────────────────────────────────────────────────────────
 // An assistant that has just woken up says hello like one (the owner, 2026-09-04: "it should be

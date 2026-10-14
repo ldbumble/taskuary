@@ -233,6 +233,24 @@ def strip_signoff(text: str) -> str:
     return '\n'.join(lines).strip()
 
 
+def replies_block(store, task_id: int) -> str:
+    """What has actually gone back on this task, and what came in since - FACTS, beside an agent's account of its work. The
+    assistant ended a turn with "the short reply to them is still waiting for your approval"; nothing was waiting (the last
+    reply had gone the day before, and two people had written since asking for more), and the writer, reading only the agent's
+    word, decided nothing needed to go back - three closes in a row (the owner, 2026-10-14)."""
+    sent = store._one("SELECT DecidedAt, COALESCE(FinalText, DraftText) AS Text FROM review WHERE TaskId=? AND Kind<>'action' "
+                      "AND Status IN ('approved','edited','sent') ORDER BY DecidedAt DESC LIMIT 1", (task_id,))
+    waiting = store._one("SELECT COUNT(*) AS n FROM review WHERE TaskId=? AND Kind<>'action' AND Status IN ('pending','held') "
+                         "AND COALESCE(DraftText,'')<>''", (task_id,)) or {}
+    since = (sent or {}).get('DecidedAt') or ''
+    came = [m for m in store.list_messages(task_id) if m.get('Direction') != 'out' and m.get('Status') not in ('context', 'skipped')
+            and str(m.get('CreatedAt') or m.get('SentAt') or '') > since] if since else []
+    lines = [f"the last reply went out {since}: {' '.join(str(sent.get('Text') or '').split())[:240]}" if sent else 'no reply has gone out on this task yet',
+             f"{waiting.get('n') or 0} drafted reply waiting for the owner's approval right now"]
+    if came: lines.append('written since that reply, by: ' + ', '.join(dict.fromkeys(str(m.get('FromName') or m.get('FromEmail')) for m in came)))
+    return '\n\n--- REPLIES ON THIS TASK (facts from the hub - they outrank anything above about what was or was not sent)\n' + '\n'.join(f'- {x}' for x in lines)
+
+
 def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None, seen: dict = None) -> str:
     """The reply this task needs, as text. Uses the owner's own brain (the AI connector, or
     whichever brain `triage_ai` names), the standing memory notes, and the thread itself.
@@ -291,6 +309,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
         seen['saw'], seen['revision'] = store.last_inbound_on_task(task_id), operations.message_revision(store, task_id)
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
+    user += replies_block(store, task_id)
     if nudge: user += f'\n\n--- WHAT THE OWNER WANTS THIS REPLY TO SAY (it outranks everything above)\n{nudge}'
     from . import calendar as cal
     calendar = cal.context_for(store)     # "Tuesday at 1 works" only if Tuesday at 1 is free

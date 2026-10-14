@@ -101,3 +101,28 @@ class AdvisorReadsTheStoryTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ClosedConversationTests(unittest.TestCase):
+    """A closed task's conversation is read, not typed into; and a close says only what is true of the reply (2026-10-14)."""
+    def test_a_message_to_a_closed_task_is_refused_until_it_is_reopened(self):
+        s, tid = reopened()
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.start_session') as start:
+            c = TestClient(server.app)
+            for path in ('messages', 'stream'):
+                r = c.post(f'/api/tasks/{tid}/assistant/{path}', json={'text': 'one more thing'})
+                self.assertEqual((r.status_code, r.json()['detail']), (409, server.CLOSED_CHAT), path)
+        start.assert_not_called()
+
+    def test_the_writer_is_told_what_went_back_and_who_wrote_since(self):
+        s, tid = reopened()
+        s.cx.execute("INSERT INTO review (TaskId, Kind, DraftText, Status, CreatedAt) VALUES (?, 'draft_reply', ?, 'pending', ?)",
+                     (tid, 'No ready-made connector; we would build one.', '2026-10-13 15:00:00'))
+        rid = s.cx.execute('SELECT MAX(ReviewId) FROM review').fetchone()[0]
+        s.cx.execute("UPDATE review SET Status='approved', DecidedAt='2026-10-13 15:04:45' WHERE ReviewId=?", (rid,)); s.cx.commit()
+        from taskuary.responder import replies_block
+        block = replies_block(s, tid)
+        self.assertIn('the last reply went out 2026-10-13 15:04:45: No ready-made connector', block)
+        self.assertIn("0 drafted reply waiting for the owner's approval", block)
+        self.assertIn('written since that reply, by: Gail Moreno, Paula Vance', block)

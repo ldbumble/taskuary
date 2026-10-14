@@ -1452,9 +1452,21 @@ def assistant_session(task_id: int, body: AssistantSessionBody = None):
     except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
     return _assistant_payload(task_id, session)
 
+CLOSED_CHAT = 'This task is closed. Reopen it, then continue the session, to pick the conversation back up.'
+
+def _refuse_closed_chat(task_id: int):
+    """A CLOSED task's conversation is read-only. Typing into it started a live session on a done task: the pane said
+    "assistant is waiting on you" over a task that read done, and the bar offered only Reopen (the owner, 2026-10-14: "we need
+    to have general agent closed until i reopen and then continue session"). Reopen, then Continue session, picks it up. The
+    dock - the assistant that runs Taskuary - is never a task you close, so it is never refused."""
+    from . import general
+    t = store.get_task(task_id) or {}
+    if t.get('Status') in ('done', 'dropped') and not general.is_dock(t): raise HTTPException(409, CLOSED_CHAT)
+
 @app.post('/api/tasks/{task_id}/assistant/messages')
 def assistant_message(task_id: int, body: AssistantMessageBody):
     from . import general
+    _refuse_closed_chat(task_id)
     try:
         _refresh_chat_context(task_id=task_id)
         session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
@@ -1562,6 +1574,7 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
     files its reply on the task.
     """
     from . import general
+    _refuse_closed_chat(task_id)              # before the stream opens: a plain 409 the composer can say
     loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
 
     def put(event):

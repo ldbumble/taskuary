@@ -21,7 +21,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
-import SearchEverything, { SearchBar } from "./SearchEverything.jsx";
+import SearchEverything, { OPEN_SEARCH } from "./SearchEverything.jsx";
 import { fadeBand } from "./timelineFade.js";
 import { syncFace, syncPhaseLabel } from "./syncTiming.js";
 import { observeSync } from "./syncObserver.js";
@@ -803,7 +803,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   useEffect(() => {
     if (!active) return undefined;
     const k = (e) => { if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); } };
-    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+    const o = () => setSearchOpen(true);                 // the bar on the top line (TaskHubPage)
+    window.addEventListener("keydown", k); window.addEventListener(OPEN_SEARCH, o);
+    return () => { window.removeEventListener("keydown", k); window.removeEventListener(OPEN_SEARCH, o); };
   }, [active]);
 
   // (Re)fetch from the top - span covers everything already on screen so the 30s
@@ -1526,9 +1528,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             </Box>
           ))}
 
-          <SearchBar onOpen={() => setSearchOpen(true)} />
-          <SearchEverything open={searchOpen} onClose={() => setSearchOpen(false)} onOpenTask={onOpenTask}
-            onOpenMessage={(mid) => openByMid(mid)}
+          {/* A HIT OPENS WHERE A ROW DOES: in chat mode on the assistant canvas, through the same pull a rail click takes - it
+              opened the task-mode panel under a Chat switch, titled "undefined in chat" (the owner, 2026-10-14) */}
+          <SearchEverything open={searchOpen} onClose={() => setSearchOpen(false)}
+            onOpenTask={(tid, h) => (rowMode === "chat" && onPull ? onPull({ TaskId: tid, Title: h?.title }) : onOpenTask?.(tid))}
+            onOpenMessage={(mid, h) => (rowMode === "chat" && onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }), true) : openByMid(mid))}
             onPickSource={(next) => {
               allRequest.current += 1; detailEpoch.current += 1; want.current = null;
               if (cat) { pendingPick.current = next; setCat(""); } else setPick(next);

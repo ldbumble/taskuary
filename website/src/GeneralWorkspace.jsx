@@ -471,6 +471,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   // ONE PLACE says what it is doing. Once its steps stream into the thread above, the band repeated the newest of them word for word
   // beneath (the owner, 2026-10-14: "no need while it's working to tell you what it's doing in 2 places") - so it keeps only the
   // dots that say it is alive. The band is for the wait with nothing on screen yet, where an API brain looked frozen (2026-09-07).
+  const closedChat = !dock && ["done", "dropped"].includes(String(task?.Status || ""));
   const atWork = dock || work?.steps?.length ? <Thinking provider={dock ? provider : name} />
     : <AgentBand name={name} provider={provider} work={work} since={since} />;
   return (
@@ -533,6 +534,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                 ))}
               </div>
             )}
+            {/* A CLOSED task's conversation is read, not typed into: a message started a live session on a done task, which
+                then read "waiting on you" under a bar offering only Reopen (the owner, 2026-10-14). The server refuses it too. */}
+            {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
+              This task is closed. Reopen it, then continue the session, to pick the conversation back up.</div> : <>
             <ComposerPrimitive.Root className="tq-aui-composer">
               <IconButton size="small" onClick={onAttach} title="Attach an image" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
@@ -554,7 +559,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                 onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
               <ComposerPrimitive.Send className="tq-aui-send" aria-label="Send"><SendIcon fontSize="small" /></ComposerPrimitive.Send>
             </ComposerPrimitive.Root>
-            <div className="tq-aui-hint">Enter sends · Shift+Enter adds a line · paste or attach an image</div>
+            <div className="tq-aui-hint">Enter sends · Shift+Enter adds a line · paste or attach an image</div></>}
           </div>
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>

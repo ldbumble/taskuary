@@ -23,6 +23,7 @@ import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
 import AssistantView, { StageMode } from "./AssistantView.jsx";
+import { SearchBar, openSearch } from "./SearchEverything.jsx";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
@@ -392,7 +393,12 @@ export default function TaskHubPage() {
             {tab === "Board" ? <><TaskuaryMark size={16} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}
           </Box>
           {tab === "Assistant" && <Box sx={{ ml: { xs: 0.25, md: 1 } }}><StageMode mode={stageMode} onMode={setStageMode} game={asstGame} onGame={pickAsstGame} /></Box>}
-          <Box sx={{ flex: 1 }} />
+          {/* SEARCH, on the top line (the owner, 2026-10-14) - from the Board it goes to the Assistant, whose rail owns the hits */}
+          <Box sx={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0, px: { xs: 0, md: 2 } }}>
+            <Box sx={{ width: "100%", maxWidth: 420, display: { xs: "none", sm: "block" } }}>
+              <SearchBar onOpen={() => { if (tab !== "Assistant") { go("Assistant"); setTimeout(openSearch, 60); } else openSearch(); }} />
+            </Box>
+          </Box>
           {/* on the RIGHT, with the other transient chrome. On the left it grew the brand cluster
               until it slid UNDER the tab strip, which is absolutely centred on the window and so
               yields to nothing - the banner sat on top of "Timeline". */}

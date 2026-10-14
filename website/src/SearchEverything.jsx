@@ -47,7 +47,10 @@ const Kbd = ({ children }) => (
     border: `1px solid ${BORDER}`, borderBottomWidth: 2, bgcolor: PANEL, lineHeight: 1.4 }}>{children}</Box>
 );
 
-// The bar at the top of the rail: it looks like a box and opens the real one.
+// The bar on the TOP LINE of the app (the owner, 2026-10-14: "it should be on top line not on top of the work rail"): it looks
+// like a box and opens the real one, wherever the dialog is mounted (FeedView listens for OPEN_SEARCH).
+export const OPEN_SEARCH = "tq-search-open";
+export const openSearch = () => window.dispatchEvent(new Event(OPEN_SEARCH));
 export function SearchBar({ onOpen }) {
   return (
     <Box component="button" type="button" onClick={onOpen} data-tq-search-open="true" aria-label="Search everything (Ctrl+K)"
@@ -124,9 +127,9 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
   const pick = (h) => {
     if (!h) return;
     onClose();
-    if (h.type === "task") onOpenTask?.(h.tid);
+    if (h.type === "task") onOpenTask?.(h.tid, h);
     else if (h.type === "source") onPickSource?.(h.pick);
-    else if (!onOpenMessage?.(h.mid) && h.tid) onOpenTask?.(h.tid);
+    else if (!onOpenMessage?.(h.mid, h) && h.tid) onOpenTask?.(h.tid, h);
   };
   const key = (e) => {
     const n = shown.flat.length;

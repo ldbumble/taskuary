@@ -435,7 +435,10 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
             if close:
                 from . import selfclose; selfclose.unclaim(store, tid, actor)
         store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
-                          + (' The reply to whoever asked is drafted for you to approve.' if fin.get('drafting')
+                          # the draft is only ASKED FOR here; its writer runs after this line and may find nothing needs to go back.
+                          # "is drafted for you to approve" was said over three closes that drafted nothing (the owner, 2026-10-14)
+                          + (' The reply to whoever asked is being written - it waits for your approval, or the task says why none is needed.'
+                             if fin.get('drafting')
                              # say what the task IS: a proposal left for the owner keeps it waiting (finish), not done
                              else ' The task waits for your answer to what the agent proposed.' if close and (store.get_task(tid) or {}).get('Status') == 'waiting'
                              else ' Marked the task done.' if close else ''))

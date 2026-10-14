@@ -76,7 +76,8 @@ def note(store, title: str, body: str = '', when=None, actor: str = 'owner') -> 
     if not title: raise ValueError('a note with no words is not a note')
     at = _stamp(when)
     tid = store.create_task({'Title': title, 'Summary': str(body or '').strip(), 'Kind': KIND,
-                             'Status': 'open', 'Priority': 'normal', 'Source': CHANNEL}, actor)
+                             'Status': 'open', 'Priority': 'normal', 'Source': CHANNEL,
+                             'OriginBase': 'owner'}, actor)
     mid = store.add_message({'TaskId': tid, 'ExternalId': f'own:note:{tid}', 'ConversationId': f'own:{tid}',
                              'Channel': CHANNEL, 'SourceName': SOURCE, 'Subject': title,
                              'FromName': 'You', 'SentAt': at, 'BodyText': str(body or '').strip(),

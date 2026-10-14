@@ -673,7 +673,7 @@ def read_hand_task(task_id: int, background: BackgroundTasks, body: ReadAskBody 
 def create_task(body: TaskBody):
     if not body.Title: raise HTTPException(422, 'Title is required')
     # made by the owner on the page: an ask from the desktop once an agent works it (asks.py)
-    tid = store.create_task({**{k: v for k, v in body.model_dump().items() if v is not None}, 'AskedVia': 'desktop'}, ACTOR)
+    tid = store.create_task({**{k: v for k, v in body.model_dump().items() if v is not None}, 'AskedVia': 'desktop', 'OriginBase': 'owner'}, ACTOR)
     # A task created by the owner is their durable TODO. Agent runs may come and go without
     # silently completing it; only routed/triaged work is eligible for automatic completion.
     from . import selfclose
@@ -1293,6 +1293,16 @@ def worker_release(task_id: int):
     return {'released': ws.release(task_id)}
 
 
+@app.post('/api/tasks/{task_id}/trust')
+def task_trust(task_id: int):
+    """The owner vouches for everything on this task so far (origin.raise_to). Not on guard.AGENT_WRITES, so a session
+    cannot vouch for itself; a stranger who writes afterwards lowers it again."""
+    from . import origin
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    origin.raise_to(store, task_id, 'trusted', ACTOR)
+    o, why = origin.of_task(store, task_id)
+    return {'origin': o, 'why': why}
+
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
@@ -1301,7 +1311,7 @@ def task_detail(task_id: int):
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
-    from . import concierge
+    from . import concierge, origin
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send & close, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo = {}
@@ -1312,6 +1322,7 @@ def task_detail(task_id: int):
     batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
     fixable = not (batch_rows and _batch.locked(store, task_id)) or _cloudfix.enabled(store)
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
+            'origin': dict(zip(('origin', 'why'), origin.of_task(store, task_id))),       # who's words are on it (origin.py)
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
             'messages': [_readable(x) for x in d.get('messages') or []],
@@ -3638,6 +3649,8 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
     if not store.task_has_tag(task_id, HOLD_TAG): raise HTTPException(422, 'this task is not being held')
     store.tag_task(task_id, HOLD_TAG, on=False, actor=ACTOR)
     store.add_comment(task_id, ACTOR, 'human', 'Released to the agent - you vouched for this sender.')
+    m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
+    if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'released by the owner')
     store.audit('task', task_id, 'release', ACTOR)
     from . import general, ingest as _ing
     if general.handles(store.get_task(task_id)):

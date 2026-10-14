@@ -65,3 +65,26 @@ def test_reading_the_origin_does_not_touch_the_task_s_update_stamp():
     _mail(s, t, 'someone@vendor.example'); was = s.get_task(t)
     origin.of_task(s, t); now = s.get_task(t)
     assert (now['UpdatedAt'], now['UpdatedBy']) == (was['UpdatedAt'], was['UpdatedBy']) and now['Origin'] == 'stranger'
+
+def test_an_owner_promoted_advisor_idea_is_a_stranger_s_until_the_owner_says_otherwise():
+    s = _store(); t = s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': 'assistant'}, 'owner')
+    assert origin.of_task(s, t)[0] == 'stranger'
+    origin.raise_to(s, t, 'trusted', 'owner'); assert origin.of_task(s, t)[0] == 'trusted'
+
+def test_raise_to_only_raises_to_trusted_or_owner():
+    import pytest
+    s = _store(); t = s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': 'email'}, 'router')
+    with pytest.raises(ValueError): origin.raise_to(s, t, 'stranger', 'owner')
+    with pytest.raises(ValueError): origin.raise_to(s, t, 'root', 'owner')
+
+def test_a_stranger_writing_after_raise_to_owner_lowers_it_again():
+    s = _store(); t = s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': 'email'}, 'router')
+    _mail(s, t, 'someone@vendor.example')
+    origin.raise_to(s, t, 'owner', 'owner'); assert origin.of_task(s, t)[0] == 'owner'
+    _mail(s, t, 'other@vendor.example'); assert origin.of_task(s, t)[0] == 'stranger'
+
+def test_a_chat_line_is_trusted_unless_the_owner_turned_chat_trust_off():
+    s = _store(); t = s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': 'teams'}, 'router')
+    s.add_message({'TaskId': t, 'Channel': 'teams', 'SourceName': 'room', 'FromName': 'Erin Blake', 'BodyText': 'y', 'Status': 'routed'})
+    assert origin.of_task(s, t)[0] == 'trusted'
+    s.set_setting('trust_non_email', '0', 't'); assert origin.of_task(s, t)[0] == 'stranger'

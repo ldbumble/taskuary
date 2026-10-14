@@ -191,7 +191,8 @@ class Term:
     """One live pty session. The reader thread fans output out to every attached socket
     and keeps a scrollback so reopening the tab shows the session as it stands."""
 
-    def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None, cli=''):
+    def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None, cli='', mode='full'):
+        self.mode = mode                                  # 'full' or 'auto': how the CLI was started (a stranger's task never runs full)
         self.sid = uuid.uuid4().hex[:12]
         self.argv, self.cwd, self.label, self.task_id, self.agent = argv, cwd, label, task_id, agent
         self.cli = cli                                    # what RUNS this, named by the profile - never argv[0]'s wrapper
@@ -2153,6 +2154,8 @@ def asking_lines(sid: str, n: int = 4) -> list:
     lines = [l.rstrip() for l in snap['lines'] if l.strip() and not _TUI_FURNITURE.search(l) and not _CHROME.search(l)]
     return lines[-max(1, n):]
 
+
+def mode_of_task(tid) -> str: return next((t.mode for t in list(SESSIONS.values()) if t.alive and t.task_id == tid), '')
 
 def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
     """Type an inbound answer INTO the task's live session. The agent asked a question, the

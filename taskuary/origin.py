@@ -29,6 +29,8 @@ def of_task(store, tid: int) -> tuple:
     "(origin, why) for a task, refreshing the card's cache."
     t = store.get_task(tid) or {}
     o, why = t.get('OriginBase') or 'trusted', 'you made it' if t.get('OriginBase') == 'owner' else 'no stranger wrote on it'
+    # an idea the Advisor or a report wrote carries what it read; promoting it to a task is not the owner vouching for it
+    if not t.get('OriginBase') and t.get('Source') in ('assistant', 'report'): o, why = 'stranger', f"written by Taskuary's {t['Source']} from what it read"
     through = int(t.get('TrustedThrough') or 0)
     for m in store.list_messages(tid):
         if m['MessageId'] <= through: continue
@@ -40,7 +42,8 @@ def of_task(store, tid: int) -> tuple:
 
 def raise_to(store, tid: int, to: str, actor: str):
     "The owner's say-so: everything on the task so far counts as `to`. A later message is judged on its own."
+    if to not in ('trusted', 'owner'): raise ValueError(f'cannot raise a task to {to!r}')
     last = max((m['MessageId'] for m in store.list_messages(tid)), default=0)
-    store.update_task(tid, {'TrustedThrough': last, **({'OriginBase': 'owner'} if to == 'owner' else {})}, actor)
+    store.update_task(tid, {'TrustedThrough': last, 'OriginBase': 'owner' if 'owner' in (to, (store.get_task(tid) or {}).get('OriginBase')) else to}, actor)
     store.audit('task', tid, 'origin_raised', actor, detail={'to': to, 'through': last})
     of_task(store, tid)

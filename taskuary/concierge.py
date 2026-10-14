@@ -2127,7 +2127,7 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     # leading verb off it, and "Add Erin to payroll" became "Erin to payroll" (the owner, 2026-10-11: no word lists)
     title = _title_cut(title) or _title_cut(' '.join(text.split()))
     from . import browserview
-    tid = store.create_task({'Title': title[:1].upper() + title[1:], 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal',
+    tid = store.create_task({'Title': title[:1].upper() + title[1:], 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal', 'OriginBase': 'owner',
                              # a CODING hand-off is the owner's own job, not a Taskuary set-up: marked
                              # assistant:setup it read as "Taskuary's own work" and opened in Taskuary's
                              # checkout, whatever it was about (the owner, 2026-09-24: an issue in another repository)

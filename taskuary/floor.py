@@ -114,8 +114,12 @@ def _text_hit(text: str, own: list, prot: list, cwd: str = ''):
 # Imported or run as a module it reads the home with this process's rights - config.toml's owner token, the mail - and
 # none of the paths above appears in the command. cli.py refuses the same in a session it recognises; this is for the one
 # that unset every marker Taskuary gave it, which is why naming those markers (or emptying the environment) is refused too.
-_PKG = re.compile(r'-m\s+taskuary\b|\b(?:from|import)\s+(?:[\w.]+\s*,\s*)*taskuary\b|(?:__import__|import_module)\s*\(\s*[\'"]taskuary\b', re.I)
-_MARKS = re.compile(r'taskuary_(?:task|sid|agent|cwd)|\benv\s+(?:-[a-z]*[iu]\b|--ignore-environment|--unset)', re.I)
+_PKG = re.compile(r'-m\s*["\']?taskuary\b|\b(?:from|import)\s+(?:[\w.]+\s*,\s*)*taskuary\b|(?:__import__|import_module)\s*\(\s*[\'"]taskuary\b', re.I)
+# ...any TASKUARY_ variable by name, glob or indirection (${!TASKUARY_*}, Env:TASKUARY_*), and the whole environment at once:
+# env -i/-u, a PowerShell Env: drive with no one name after it (Remove-Item Env:*, Get-ChildItem Env: | ...), compgen -e,
+# [Environment]::SetEnvironmentVariable. Env:PATH and $HOME stay ordinary, and so does a path segment like /taskuary_tmp.
+_MARKS = re.compile(r'(?<![\w/\\.~-])taskuary_|\benv\s+(?:-[a-z]*[iu]\b|--ignore-environment|--unset)|\benv:(?![a-z_])|\bcompgen\s+-\w*e'
+                    r'|setenvironmentvariable', re.I)
 # cli.STRANGER_ACTS and the options that go with them (test_floor_wave_b keeps the two in step)
 TASKUARY_OK = frozenset({'--reply', '--reply-file', '--draft', '--draft-file', '--attach', '--item', '--done', '--note'})
 _TASKUARY_WITH = frozenset({'--slot', '--to', '--subject', '--result', '--overlap', '--settled', '--propose', '--no-reply', '--kind'})
@@ -212,9 +216,9 @@ def check(payload: dict, tid: int, store=None) -> dict:
         for p in _forms(inp[k], cwd):
             if _under(p, prot) and not _under(p, own): return _deny(f'{inp[k]} is a protected file')
             if tool in _WRITE_TOOLS and _is_conf(p): return _deny(f'{inp[k]} is read as configuration, or run, by a later session of the owner')
-    if tool in _WRITE_TOOLS:    # a script that imports Taskuary, written now and run by a command that names nothing
-        said = ' '.join(str(o) for o in (inp.get('content'), inp.get('new_string'), inp.get('new_source'), *[e.get('new_string') for e in inp.get('edits') or [] if isinstance(e, dict)]) if o)
-        if m := _PKG.search(said): return _deny(f"it writes code that runs Taskuary's own package ({m[0].strip()})")
+    if tool in _WRITE_TOOLS:    # a script written now and run by a command that names nothing: judged as the command it will be
+        said = '\n'.join(str(o) for o in (inp.get('content'), inp.get('new_string'), inp.get('new_source'), *[e.get('new_string') for e in inp.get('edits') or [] if isinstance(e, dict)]) if o)
+        if why := _taskuary_hit(said): return _deny(f'it writes a script that, run, would be refused: {why}')
     if why := _taskuary_hit(str(inp.get('command') or '')) or _write_hit(str(inp.get('command') or ''), cwd): return _deny(why)
     if tool in ('Grep', 'Glob'):    # these walk a tree: a root ABOVE a protected folder reaches it just as well
         sr = {_cf(os.path.normcase(os.path.abspath(o))) for o in ((inp.get('path') and _forms(inp['path'], cwd)) or ([cwd] if cwd else []))}

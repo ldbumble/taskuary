@@ -3,7 +3,6 @@ of the owner's reads as configuration or runs as a hook (B3). Name matching, by 
 import os, pytest
 from taskuary import floor
 
-H = os.path.expanduser('~')
 def call(tool, cwd='', **inp): return floor.check({'tool_name': tool, 'cwd': cwd, 'tool_input': inp}, 7)
 def denied(r): return r.get('hookSpecificOutput', {}).get('permissionDecision') == 'deny'
 SHELLS = ('Bash', 'PowerShell')
@@ -51,6 +50,20 @@ def test_git_config_writes_are_refused(cmd, repo):
                                  'git config --show-origin --list', 'git -c core.pager=cat log'])
 def test_git_config_reads_pass(cmd, repo):
     for t in SHELLS: assert call(t, repo, command=cmd) == {}, (t, cmd)
+
+@pytest.mark.parametrize('cmd', ['python -mtaskuary --prompts', 'python -m "taskuary" --prompts', "python -m'taskuary.cli'",
+                                 'unset ${!TASKUARY_*}', 'Get-ChildItem Env:TASKUARY_* | Remove-Item', 'Get-ChildItem Env: | Remove-Item',
+                                 'Remove-Item Env:*', 'export TASKUARY_TOKEN=', 'for v in $(compgen -e); do unset $v; done',
+                                 '[Environment]::SetEnvironmentVariable("X", $null)', 'echo $TASKUARY_HOME'])
+def test_plain_forms_without_markers_are_refused_too(cmd):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+
+def test_a_script_that_unsets_the_markers_and_runs_taskuary_is_refused_at_the_write(tmp_path):
+    f = str(tmp_path / 'x.sh')
+    assert denied(call('Write', file_path=f, content='#!/bin/sh\nunset TASKUARY_TASK TASKUARY_SID\ntaskuary --prompts\n'))
+    assert denied(call('Write', file_path=f, content='#!/bin/sh\ntaskuary --link\n'))
+    assert denied(call('Edit', file_path=f, old_string='a', new_string='env -i taskuary --note x'))
+    assert call('Write', file_path=f, content='#!/bin/sh\ntaskuary --reply "done"\npytest -q\n') == {}
 
 def test_the_floor_lets_through_exactly_what_the_cli_runs_for_a_stranger():
     from taskuary import cli

@@ -108,3 +108,13 @@ def test_a_stale_token_is_told_how_to_get_in_not_to_reload():
     r = TestClient(server.app).get('/api/settings', headers={'X-Taskuary-Token': 'a-token-from-before'})
     assert r.status_code == 401 and r.json()['code'] == 'unauthorized'
     assert 'taskuary --link' in r.json()['detail'] and 'reload' not in r.json()['detail']
+
+def test_a_registered_browser_that_will_not_start_falls_back(monkeypatch):
+    "A stale registry entry - the browser uninstalled - must not leave the owner with no window."
+    opened = []
+    monkeypatch.setattr(cli, '_http_browser', lambda: BROWSER)
+    def gone(cmd, **kw): raise FileNotFoundError(2, 'no such file', 'C:\Browsers\web.exe')
+    monkeypatch.setattr(cli.subprocess, 'Popen', gone)
+    monkeypatch.setattr(cli.webbrowser, 'open', opened.append)
+    cli._open_private('http://127.0.0.1:9/?k=abc')
+    assert opened == ['http://127.0.0.1:9/?k=abc']

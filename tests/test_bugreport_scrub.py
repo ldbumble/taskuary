@@ -126,7 +126,7 @@ class SlipThroughTests(unittest.TestCase):
         self.assertIn('github.com/ldbumble/taskuary/issues/3', self.S('github.com/ldbumble/taskuary/issues/3'))
 
     def test_hosts_ipv6_and_shares(self):
-        for t, gone in [('imap.payworth.xq:993 refused', 'payworth'), ('via smtp.northwind.zz', 'northwind'),
+        for t, gone in [('imap.payworth.xq:993 refused', 'payworth'), ('via smtp.northwind.corp', 'northwind'),
                         ('[2a02:1210:5c4b:9f00::12]:51234', '2a02'), ('peer fe80::1c2b:3dff:fe4e:5f6a', 'fe80'),
                         ('open \\\\fileserver01\\finance\\payroll.xlsx', 'fileserver01')]:
             self.assertNotIn(gone, self.S(t).lower(), t)
@@ -146,6 +146,56 @@ class SlipThroughTests(unittest.TestCase):
     def test_secret_shaped_connector_keys(self):
         self.s.save_connector({'Type': 'jira', 'Name': 'x', 'Active': 1, 'ConfigJson': json.dumps({'api_token': 'plainvalue77'})}, 'test')
         self.assertNotIn('plainvalue77', self.S('sent plainvalue77'))
+
+
+class RoundTwoTests(unittest.TestCase):
+    """A second review: layered encodings, a home folder with a space, GitHub's other hosts, and stack traces that
+    the any-suffix host rule had started to eat."""
+    def setUp(self):
+        self.s = seeded()
+        for n, v in [('_machine', ['Jordan Smith', 'JS-DESK']), ('_home_dirs', ['C:\\Users\\Jordan Smith'])]:
+            p = mock.patch.object(bugreport, n, return_value=v); p.start(); self.addCleanup(p.stop)
+    def S(self, t): return bugreport.scrub(t, self.s)
+
+    def test_layered_encodings(self):
+        for t in ['Erin%2520Blake', 'Renew%2520the%2520Payworth%2520contract', 'Erin%252520Blake', 'erin%2540northwind.example',
+                  'Erin\\\\u0020Blake', 'Erin&#32;Blake', 'Erin\u200bBlake', 'Erin\u00a0Blake']:
+            out = self.S(t)
+            for w in ('erin', 'payworth', 'blake'): self.assertNotIn(w, out.lower(), t)
+
+    def test_the_machines_own_home_goes_whole(self):
+        self.assertEqual("Permission denied: '~'", self.S("Permission denied: 'C:\\Users\\Jordan Smith'"))
+        self.assertEqual('~ said hi', self.S('C:\\Users\\Jordan Smith said hi'))
+        self.assertEqual('~/x', self.S('/c/Users/Jordan Smith/x'))
+        self.assertEqual("open '~'", self.S("open 'C:\\Users\\Pat Lee'"))          # anyone's folder, closed by a quote
+
+    def test_githubs_other_hosts(self):
+        for t in ['api.github.com/repos/northwind/internal-billing', 'gist.github.com/northwind/abc',
+                  'https://raw.githubusercontent.com/northwind/internal-billing/main/x', 'https://github.com/ldbumble/taskuary-private/x']:
+            out = self.S(t)
+            self.assertNotIn('northwind', out, t); self.assertNotIn('private', out, t)
+        for keep in ['https://github.com/LDBUMBLE/taskuary.git', 'api.github.com/repos/ldbumble/taskuary/issues']:
+            self.assertIn(keep, self.S(keep), keep)
+
+    def test_stack_traces_survive(self):
+        for keep in ['sqlalchemy.exc.OperationalError', 'requests.exceptions.ConnectionError', 'at HTMLButtonElement.onClick (x)',
+                     'at t.render', 'floor.check(cmd)', 'Object.keys', 'Promise.all', 'props.task.title', 'cfg.store',
+                     'assets/index-BH9t30KP.js:10:5', 'taskuary.ingest:9', 'File server.py:12']:
+            self.assertIn(keep, self.S(keep), keep)
+        for t, gone in [('imap.payworth.xq:993', 'payworth'), ('smtp.northwind.corp', 'northwind'), ('fileserver01.corp', 'fileserver01'),
+                        ('files.northwind.example', 'northwind'), ('host=build7.lab', 'build7'), ('user@build7.lab', 'build7')]:
+            self.assertNotIn(gone, self.S(t), t)
+
+    def test_loopback_v6_stays(self):
+        self.assertEqual('[::1]:7787', self.S('[::1]:7787'))
+
+    def test_catalogue_words_are_not_accounts(self):
+        self.s.save_connector({'Type': 'jira', 'Name': 'jira', 'Active': 1}, 'test')
+        self.assertIn('connectors: imap, jira', self.S('connectors: imap, jira'))
+
+    def test_a_host_goes_whole_before_store_strings(self):
+        self.s.save_connector({'Type': 'imap', 'Name': 'ledgerline', 'Active': 1}, 'test')
+        self.assertEqual('see [removed]', self.S('see northwind.ledgerline.example'))
 
 
 class SmallTests(unittest.TestCase):

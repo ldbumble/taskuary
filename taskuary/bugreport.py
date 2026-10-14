@@ -5,7 +5,7 @@ gathered by code - where, the error, versions, the log around it, action names -
 that might reach for a task title, and every string is scrubbed before the person sees the draft.
 Nothing leaves from here: the popup shows the text and the person presses Submit on GitHub.
 """
-import hashlib, json, os, platform, posixpath, re, sys
+import hashlib, html, json, os, platform, posixpath, re, sys
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote
@@ -125,38 +125,64 @@ class Unsafe(Exception):
     """The scrub could not finish, so nothing is offered: a half-scrubbed report is worse than none."""
 
 
-# a user name runs to the next separator, spaces and all ("C:\Users\Jordan Smith\AppData"); with no separator after it, to a space
-_UNAME = r'(?:[^\\/\s"\'<>:|]+(?: [^\\/\s"\'<>:|]+)*(?=[\\/])|[^\\/\s"\'<>:|]+)'
+# a user name runs to the next separator, spaces and all ("C:\Users\Jordan Smith\AppData"); a quote closes it too
+# ("'C:\Users\Pat Lee'"); with neither after it, it runs to a space
+_UNAME = r'(?:[^\\/\s"\'<>:|]+(?: [^\\/\s"\'<>:|]+)*(?=[\\/])|[^\\/"\'<>:|\r\n]{1,64}(?=["\'])|[^\\/\s"\'<>:|]+)'
 _WIN_HOME = re.compile(r'(?i)\b[a-z]:[\\/]+users[\\/]+' + _UNAME)
 _NIX_HOME = re.compile(r'(?<![\w~.])(?:/mnt/[a-z]|/[a-z])?/(?:home|Users)/' + _UNAME)      # Linux, macOS, Git Bash, WSL
 _EMAIL = re.compile(r'[\w.+%-]+@[\w-]+(?:\.[\w-]+)+')
 _URL = re.compile(r'\b[a-z][a-z0-9+.-]*://[^\s<>"\'`)\[\]]+', re.I)      # `[` too: a `[removed]` ends a URL
+_GH_HOST = r'(?:[\w-]+\.)*github(?:usercontent)?\.com'
 # before the email rule: `git@github.com:org/repo` is a repo, and the email rule would leave `org/repo` behind
-_GH = re.compile(r'(?<![\w.-])github\.com[:/]+[\w.-]+/[\w.-]+[^\s<>"\'`)\[\]]*', re.I)
+_GH = re.compile(r'(?<![\w.-])(' + _GH_HOST + r')[:/]+([\w.-]+/[\w.-]+[^\s<>"\'`)\[\]]*)', re.I)
 _IP = re.compile(r'(?<![\w.])(\d{1,3})\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\w]|\.\d)')
 _IP6 = re.compile(r'\[[0-9a-f:]*:[0-9a-f:]*\](?::\d+)?|(?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\w:])', re.I)
 _UNC = re.compile(r'(?<![\w\\~])\\\\[^\\\s]+\\[^\\\s]+')
-_HOST = re.compile(r'(?<![\w@.-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,})(?![\w-]|\.\w)', re.I)
-# a dotted word ending like a file or a module is code, not a machine - `index-x.js`, `README.md`, `taskuary.server:12`
+_HOST = re.compile(r'(?<![\w@.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+([A-Za-z][A-Za-z0-9-]*)(?![\w-]|\.\w)')
+# what makes a dotted word a machine by where it sits: a port, an @, a // or \\ before it, or a word that says so
+_HOST_AFTER = re.compile(r':\d+')
+_HOST_BEFORE = re.compile(r'(?:@|//|\\\\|(?i:\b(?:host|server|smtp|imap)\s*[=:]?\s*))$')
+# ...and by its shape alone only when it ends like an address does: `t.render`, `cfg.store` and `Promise.all` are code
+_TLDS = set('com net org io dev app ai co me info biz edu gov mil int uk de fr ch nl be at se no dk fi es it pt ie pl cz ru ua il in '
+            'jp cn kr au nz ca us mx br ar za sg hk tw local lan internal corp home intranet example test invalid health cloud '
+            'tech online site xyz email'.split())
+# a dotted word ending like a file, or starting like a package, is code - `index-x.js:10`, `taskuary.server:12`
 _CODE_SUFFIX = set('js py css json ts tsx jsx mjs cjs log md toml yml yaml txt html htm exe dll so cfg ini lock map server pyc pyd '
                    'pdf png jpg jpeg gif svg ico csv xlsx xls docx doc pptx zip gz tar whl sh ps1 bat cmd db sqlite xml env tmp bak '
                    'wasm woff woff2 ttf vue scss less sql jsonl ipynb mp4 webm wav mp3 sock pid conf'.split())
 _CODE_HEAD = set('taskuary self this window document os sys json re e err error console math np pd asyncio uvicorn starlette '
-                 'fastapi sqlite3 http urllib pathlib subprocess threading react node'.split())
+                 'fastapi sqlalchemy requests urllib3 sqlite3 http urllib pathlib subprocess threading react node'.split())
 _SAFE_HOSTS = {'localhost', 'github.com', 'taskuary.com', 'pypi.org'}
 # never a private string, whatever the store says: the report would lose its own address
-_SAFE_WORDS = {'taskuary', 'ldbumble', OWN_REPO, 'github', 'github.com', 'taskuary.com', 'localhost', 'the owner'}
+_SAFE_WORDS = {'taskuary', 'ldbumble', OWN_REPO, 'github', 'github.com', 'taskuary.com', 'localhost', 'the owner', REMOVED}
 # a login this generic names no one, and taking it out would eat the word wherever it appears
 _GENERIC_LOGINS = {'user', 'users', 'admin', 'administrator', 'root', 'owner', 'default', 'public', 'guest', 'runner', 'localhost', 'home'}
 _ACCOUNT_KEY = re.compile(r'user|mail|account|login|address|tenant|host|server|owner|org|repo|domain|site|workspace|team|'
                           r'project|name|url|from|path|folder|dir|cwd|token|secret|password|key', re.I)
 _SEP = re.compile(r'[_-]')
-_ESC = re.compile(r'\\u([0-9a-fA-F]{4})|\\x([0-9a-fA-F]{2})')
+_ESC = re.compile(r'\\+u([0-9a-fA-F]{4})|\\+x([0-9a-fA-F]{2})')         # `\\u0020`: an escape inside an escaped string
+_INVISIBLE = re.compile('[\u200b-\u200d\u2060\ufeff]')
+
+
+def _home_dirs() -> list: return [str(_fact(Path.home, ''))]
+
+
+def _own_homes(text) -> str:
+    """This machine's home folder in every spelling a log or a shell gives it, before the generic rule: the generic rule
+    cannot know that "C:\\Users\\Jordan Smith said" ends at "Smith", and this one can."""
+    forms = set()
+    for h in (h for h in _home_dirs() if len(h) > 3):
+        fwd = h.replace('\\', '/')
+        forms |= {h, fwd, h.replace('\\', '\\\\')}
+        if re.match(r'[A-Za-z]:/', fwd): forms |= {f'/{fwd[0].lower()}{fwd[2:]}', f'/mnt/{fwd[0].lower()}{fwd[2:]}'}
+    for f in sorted(forms, key=len, reverse=True):
+        text = re.sub(re.escape(f) + r'(?![^\\/\s"\'<>:|])', '~', text, flags=re.I)
+    return text
 
 
 def to_home(text) -> str:
     """A user folder becomes `~`: the rest of the path says where it broke, the folder says who."""
-    return _NIX_HOME.sub('~', _WIN_HOME.sub('~', str(text or '')))
+    return _NIX_HOME.sub('~', _WIN_HOME.sub('~', _own_homes(str(text or ''))))
 
 
 def _safe_host(h) -> bool:
@@ -164,13 +190,20 @@ def _safe_host(h) -> bool:
     return h in _SAFE_HOSTS or any(h.endswith('.' + s) for s in _SAFE_HOSTS)
 
 
+def _own_repo_path(host, path) -> bool:
+    """Is this GitHub path ldbumble/taskuary - after `..`, any case, `.git`, and the API's `/repos` prefix?"""
+    p = posixpath.normpath('/' + path.lower().lstrip('/'))
+    if host.lower().startswith('api.'): p = re.sub(r'^/repos(?=/)', '', p)
+    return bool(re.match(rf'/{OWN_REPO}(?:\.git)?(?:/|$)', p))
+
+
 def _keep_url(u) -> bool:
     m = re.match(r'[^:]+://([^/:?#]+)(?::\d+)?([^?#]*)', u)
     if not m: return False
-    host, path = m.group(1).lower(), posixpath.normpath('/' + m.group(2).lower().lstrip('/'))    # `/ldbumble/taskuary/../../x` is x
+    host, path = m.group(1).lower(), m.group(2)
     if host in ('localhost', '127.0.0.1', '[::1]') or host.startswith('127.'): return True
     if host in ('taskuary.com', 'www.taskuary.com') or host.endswith('.taskuary.com'): return True
-    return host == 'github.com' and (path + '/').startswith(f'/{OWN_REPO}/')
+    return bool(re.fullmatch(_GH_HOST, host)) and _own_repo_path(host, path)
 
 
 def _url(m):
@@ -179,25 +212,42 @@ def _url(m):
     return re.sub(r'\?[^#]*', '', u) if _keep_url(u) else REMOVED
 
 
-def _gh(m):
-    p = posixpath.normpath('/' + re.split(r'[:/]+', m.group(0), 1)[1].lstrip('/')).lower()
-    return m.group(0) if (p + '/').startswith(f'/{OWN_REPO}/') or p == f'/{OWN_REPO}.git' else REMOVED
+def _gh(m): return m.group(0) if _own_repo_path(m.group(1), m.group(2)) else REMOVED
 
 
 def _ip6(m):
     t = m.group(0)
-    return REMOVED if ('::' in t or t.count(':') >= 3) and re.search(r'[0-9a-f]{3,4}', t, re.I) and t.strip('[]') != '::1' else t
+    bare = re.sub(r'^\[(.*)\](?::\d+)?$', r'\1', t)
+    return REMOVED if ('::' in bare or bare.count(':') >= 3) and re.search(r'[0-9a-f]{3,4}', bare, re.I) and bare != '::1' else t
 
 
 def _host(m):
-    t = m.group(0); low = t.lower()
-    return t if m.group(1).lower() in _CODE_SUFFIX or low.split('.')[0] in _CODE_HEAD or _safe_host(low) else REMOVED
+    t, last = m.group(0), m.group(1)
+    if _safe_host(t) or t.split('.')[0].lower() in _CODE_HEAD or last.lower() in _CODE_SUFFIX: return t
+    if last != last.lower() and last != last.upper(): return t                          # `HTMLButtonElement.onClick`
+    s, e = m.span()
+    before, after = m.string[max(0, s - 12):s], m.string[e:e + 8]
+    if _HOST_AFTER.match(after) or _HOST_BEFORE.search(before): return REMOVED
+    if after.startswith('(') or t != t.lower(): return t
+    return REMOVED if last in _TLDS else t
 
 
 def _unescape(t) -> str:
-    """The text as a person reads it: `%20`, `\\u0040` and `+` between letters are how a name hides in a URL or a log."""
-    t = _ESC.sub(lambda m: c if (c := chr(int(m.group(1) or m.group(2), 16))).isprintable() else m.group(0), t)
-    return re.sub(r'(?<=[^\W\d_]{2})\+(?=[^\W\d_]{2})', ' ', unquote(t))
+    """The text as a person reads it: `%20`, `%2520`, `\\u0040`, `&#32;` and `+` between letters are how a name hides
+    in a URL or a log - decoded until nothing changes, because one layer of decoding uncovers the next."""
+    for _ in range(5):
+        u = unquote(html.unescape(_ESC.sub(lambda m: c if (c := chr(int(m.group(1) or m.group(2), 16))).isprintable() else m.group(0), t)))
+        if u == t: break
+        t = u
+    t = _INVISIBLE.sub(' ', t)                     # a space: "Erin<ZWSP>Blake" reads as two words.replace('\u00a0', ' ')
+    return re.sub(r'(?<=[^\W\d_]{2})\+(?=[^\W\d_]{2})', ' ', t)
+
+
+def _rules(t) -> str:
+    """Everything matched by shape: repos, URLs, addresses, IPs, shares and hosts."""
+    t = _URL.sub(_url, _GH.sub(_gh, t))
+    t = _IP6.sub(_ip6, _IP.sub(_ip, _EMAIL.sub(REMOVED, t)))
+    return _HOST.sub(_host, _UNC.sub(REMOVED, t))
 
 
 def _ip(m): return m.group(0) if m.group(1) in ('0', '127') else REMOVED      # 0.x.y.z is a version number, not a peer
@@ -259,6 +309,11 @@ def _add_person(out: dict, s):
     else: _add_name(out, s)
 
 
+def _catalogue() -> set:
+    from . import connectorcatalog
+    return {str(w).lower() for c in connectorcatalog.cards() for w in [c.get('type'), c.get('title'), *(c.get('match') or [])] if w}
+
+
 def _machine() -> list:
     """This computer's own names: the login, the host, the home folder - in a path outside the Users folder, or a log line."""
     import getpass, socket
@@ -281,10 +336,12 @@ def private_strings(store) -> list:
     for k in ('owner', 'owner_first', 'owner_email'): _add(out, o.get(k))
     for a in senders.own_addresses(store): _add(out, a)
     for s in store.list_sources(active_only=False): _add(out, s.get('Address'))
+    # a connector named after its own kind ("jira") is the catalogue talking, and the env line says the same word
+    cat = _fact(_catalogue, set()) | {str(c.get('Type') or '').lower() for c in store.list_connectors()}
     for c in store.list_connectors():
-        _add(out, c.get('Name'))
-        for k, v in _strings(_json(c.get('ConfigJson'))):
-            if _ACCOUNT_KEY.search(k): _add(out, v); _add(out, to_home(v))
+        vals = [c.get('Name')] + [v for k, v in _strings(_json(c.get('ConfigJson'))) if _ACCOUNT_KEY.search(k)]
+        for v in vals:
+            if str(v or '').strip().lower() not in cat: _add(out, v); _add(out, to_home(v))
     for r in terminal.known_repos(store, agent='coder'):
         if str(r).lower() != OWN_REPO: _add(out, r)
     for a in store.list_agents(active_only=False):
@@ -295,6 +352,9 @@ def private_strings(store) -> list:
             if str(p).lower() != OWN_REPO: _add(out, p); _add(out, to_home(p))
     for m in _machine():
         if m.lower() not in _GENERIC_LOGINS: _add(out, m)
+    # a subject that holds an address meets the text after the address rule took it out: match it in that form too
+    for k in [k for k in out if '@' in k or '://' in k]:
+        if (r := _rules(k)).strip() != REMOVED: _add(out, r)
     return list(out)                      # lower-cased, as the match reads them; _clean orders the hits
 
 
@@ -313,10 +373,10 @@ def _pattern(h) -> str:
 
 def _clean(text, cands) -> str:
     from . import redact
-    # URLs first while their queries are still encoded, then again once decoding can have made new ones
+    # URLs first while their queries are still encoded; then every shape rule once decoding is done, and only then
+    # the store's strings - a host goes whole, not as `acmecorp.[removed].com`
     out = _URL.sub(_url, _GH.sub(_gh, to_home(redact.scrub(text))))
-    out = to_home(_unescape(out))
-    out = _URL.sub(_url, _GH.sub(_gh, out))
+    out = _rules(to_home(_unescape(out)))
     # every hit's spans, merged: one alternation would let "X Y" win over an overlapping "Y Z" and leave "Z" behind
     spans = sorted(m.span() for h in _present(cands, out) for m in re.finditer(_pattern(h), out, re.I))
     merged = []
@@ -324,8 +384,7 @@ def _clean(text, cands) -> str:
         if merged and a <= merged[-1][1]: merged[-1][1] = max(merged[-1][1], b)
         else: merged.append([a, b])
     for a, b in reversed(merged): out = out[:a] + REMOVED + out[b:]
-    out = _IP6.sub(_ip6, _IP.sub(_ip, _EMAIL.sub(REMOVED, out)))
-    return _HOST.sub(_host, _UNC.sub(REMOVED, out))
+    return out
 
 
 def scrub(text: str, store, known: list = None) -> str:

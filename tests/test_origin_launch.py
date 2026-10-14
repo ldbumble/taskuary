@@ -1,6 +1,7 @@
 import json, pytest
 from taskuary import clis, origin
 from taskuary.store import MemoryStore
+_real = origin._claude_version   # the autouse fixture patches it out; the cache test needs the real one
 
 @pytest.fixture(autouse=True)
 def _claude(monkeypatch):
@@ -52,7 +53,7 @@ def test_the_hook_commands_carry_both_secrets_the_task_and_fail_on_http_errors()
 
 def test_claude_version_caches_only_a_success(monkeypatch):
     import subprocess
-    monkeypatch.undo(); monkeypatch.setattr(origin, '_ver', [])
+    monkeypatch.setattr(origin, '_claude_version', _real); monkeypatch.setattr(origin, '_ver', [])
     outs = iter([OSError('busy'), subprocess.CompletedProcess([], 0, stdout='2.1.300 (Claude Code)'), AssertionError('cached')])
     def run(*a, **k):
         o = next(outs)

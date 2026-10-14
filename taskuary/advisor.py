@@ -127,6 +127,20 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         if st.get('said'): lines.append('THE AGENT LAST SAID: ' + ' '.join(str(st['said']).split())[:600])
         asks = [r.get('text') for r in st.get('requests') or [] if r.get('text')]
         if asks: lines.append('THE AGENT IS ASKING: ' + ' | '.join(' '.join(str(q).split())[:200] for q in asks[:3]))
+        # THE WHOLE STORY of a task that came back: the agent finished, the reply went, then new mail reopened it. Read from the card
+        # alone ("paused ... ready to resume") it advised Continue for a reason that was not true, and never said what the new mail
+        # wanted (the owner, 2026-10-14: "the advisor should just realize what's going on ... as long as it has full context")
+        from . import continuity
+        at = continuity.last_agent_turn(store, int(target_id))
+        mail = continuity.mail_since(store, int(target_id), at) if at else []
+        if mail:
+            lines.append(f"NEW SINCE THE AGENT'S LAST TURN ({at}) - its saved conversation is from BEFORE these; Continue session hands "
+                         "them to it first:\n" + '\n'.join(f"- {m.get('FromName') or m.get('FromEmail')} ({m.get('CreatedAt')}): {m.get('Subject') or ''}"
+                                                             f" - {' '.join(str(m.get('BodyText') or '').split())[:500]}" for m in mail[-3:]))
+        t = store.get_task(int(target_id)) or {}
+        try: todo = [c.get('text') for c in json.loads(t.get('Checklist') or '[]') if isinstance(c, dict) and not c.get('done') and c.get('text')]
+        except ValueError: todo = []
+        if todo: lines.append('STILL TO DO ON THE TASK: ' + ' | '.join(' '.join(str(x).split())[:160] for x in todo[:6]))
     lrn = injectable(store.doc('learned') or '')
     if lrn.strip(): lines.append('LEARNED (the owner, from their own verdicts):\n' + lrn[:2000])
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]

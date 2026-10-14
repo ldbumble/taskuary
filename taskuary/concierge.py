@@ -972,6 +972,11 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
                 else 'nothing has to happen - tell me to ignore this sender, or move on' if item.get('tid')     # it IS a task
                 else 'nothing has to happen - make it a task, tell me to ignore this sender, or move on')
         return f"{frm}. Since then: {done}. From you: {need}."
+    if item['kind'] == 'agent' and item.get('paused') and item.get('why'):
+        # a SAVED conversation, nobody running: "assistant is waiting on you - answer it below" over a task reopened by new mail
+        # sent the owner looking for a question no agent had asked (the owner, 2026-10-14) - its own sentence says what is true
+        why = str(item['why'])
+        return f"{item.get('ref') or item['title']}: {why[:1].upper() + why[1:]}."
     if item['kind'] == 'agent':
         # ONE sentence per state (lanes.json): the item's `why` when the run said what it needs, else the
         # screen's question. A stall has nothing to answer - saying "answer it below" over a rate limit

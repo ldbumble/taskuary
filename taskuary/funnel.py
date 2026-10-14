@@ -741,9 +741,13 @@ def paused_conversation(store, item: dict) -> dict:
     replies = [c for c in store.list_comments(tid) if c.get('ActorType') == 'assistant_agent']
     if not replies: return item
     last = str(replies[-1].get('Body') or '').strip()
+    # what is TRUE of it: a conversation that finished and was saved, often reopened by mail that came after it - never "paused when
+    # Taskuary stopped", which a reopened ask read as and the Advisor repeated as its reason to Continue (the owner, 2026-10-14)
+    from .continuity import since_line, mail_since
     return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'paused': True,
                    'agent': 'assistant', 'mode': 'assistant', 'tail': [last[:600]] if last else [],
-                   'why': 'this conversation paused when Taskuary stopped; its saved context is ready to resume'}
+                   'news': bool(mail_since(store, tid)),
+                   'why': since_line(store, tid, 'the assistant') or 'its saved conversation can pick up where it left off'}
 
 
 def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:

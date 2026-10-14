@@ -56,3 +56,63 @@ RESUME_PROMPT = (
     'approval, restate that one question and wait; do not invent the answer or treat Resume as approval '
     'to send, publish, or execute a pending action. If the result is ready, point the owner to it for review.'
 )
+
+
+# ── what came in after the agent's last turn ─────────────────────────────────────────────────────────────────────────
+# A task an agent finished can be REOPENED by a new mail on its thread (ingest._reopen). Its saved conversation is still
+# there, so the rail drew it as a paused agent - "this conversation paused when Taskuary stopped" - and the Advisor said
+# Continue, while Continue itself only said "pick up where work stopped": the agent woke at "reply sent, task closed",
+# never told that two people had since written asking for something new (the owner, 2026-10-14, a reopened ask). One
+# reading of it, for the card, the walk's line, the Advisor and the Continue prompt.
+
+def last_agent_turn(store, tid) -> str:
+    """When the agent last spoke on this task: its newest reply or report, or the saved conversation's own stamp."""
+    said = [c['CreatedAt'] for c in store.list_comments(tid) if c.get('CreatedAt') and (c.get('ActorType') == 'assistant_agent'
+            or str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE')))]
+    saved = (store.saved_session(tid) or {}).get('UpdatedAt')
+    return max([s for s in [*said, saved] if s] or [''])
+
+
+def mail_since(store, tid, at: str = None) -> list:
+    """The mail that reached this task's thread after the agent's last turn - by when it reached US (CreatedAt): one sent
+    earlier but read in later is still news to an agent that never saw it. Our own replies and filed context are not."""
+    at = last_agent_turn(store, tid) if at is None else at
+    if not at: return []
+    return store._rows("SELECT * FROM message WHERE TaskId=? AND CreatedAt>? AND IFNULL(Direction,'in')<>'out' "
+                       "AND Status NOT IN ('context','history','skipped') AND IFNULL(Channel,'')<>'report' "
+                       'ORDER BY CreatedAt, MessageId', (tid, at))
+
+
+def _day(at: str) -> str:
+    from datetime import datetime
+    try: d = datetime.strptime(str(at)[:16], '%Y-%m-%d %H:%M')
+    except ValueError: return str(at)[:10]
+    return d.strftime('%b ') + str(d.day)
+
+
+def who_wrote(mail: list) -> str:
+    names = list(dict.fromkeys(str(m.get('FromName') or m.get('FromEmail') or 'someone').strip() for m in mail))
+    return names[0] if len(names) == 1 else ', '.join(names[:-1]) + ' and ' + names[-1]
+
+
+def since_line(store, tid, agent: str = 'the agent') -> str:
+    """The card's one sentence for a saved conversation: whose it is, from when, and - when the thread moved after it - that
+    it is from BEFORE that mail. '' with no saved turn to speak of."""
+    at = last_agent_turn(store, tid)
+    if not at: return ''
+    mail = mail_since(store, tid, at)
+    if not mail: return f"{agent}'s conversation from {_day(at)} is saved; it can pick up where it left off"
+    return f"{who_wrote(mail)} wrote again after {agent}'s conversation of {_day(at)} - continue it and it reads the new mail first"
+
+
+def news_block(store, tid) -> str:
+    """What a Continue tells the agent before anything else, when the thread moved after its last turn. '' when it did not."""
+    at = last_agent_turn(store, tid)
+    mail = mail_since(store, tid, at) if at else []
+    if not mail: return ''
+    def one(m):
+        body = ' '.join(str(m.get('BodyText') or '').split())[:1500]
+        return f"- {m.get('FromName') or ''} <{m.get('FromEmail') or ''}> at {m.get('SentAt') or m.get('CreatedAt')}: {m.get('Subject') or ''}\n  {body}"
+    return (f"NEW SINCE YOUR LAST TURN ({at}): {len(mail)} message{'s' if len(mail) != 1 else ''} came in on this task's thread after "
+            "the conversation you remember - it is from BEFORE them, and the task was reopened because of them. Read them first; "
+            "what they ask is the work now, not what you finished last time.\n" + '\n'.join(one(m) for m in mail[-5:]))

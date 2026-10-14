@@ -491,8 +491,8 @@
 
 /* the composer */
 .tq-compose { padding: 2px 20px 8px; background: #fffdfb; box-shadow: 0 -14px 14px -6px #fffdfb; position: relative; }   /* no rule above it: the row and the box float, a soft fade keeps scrolled content from showing through */
-/* THE DOCK (canvas I2): one border, three bands - the suggestion tinted on top, the row under a hairline, the box its floor */
-.tq-dock { width: min(1000px, 100%); margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d5d0c7; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #39352d0d; }
+/* THE DOCK (canvas I2): one border, three bands, as wide as the card above it (the owner: "the prompt box full width") - the suggestion tinted on top, the row under a hairline, the box its floor */
+.tq-dock { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d5d0c7; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #39352d0d; }
 .tq-dock .tq-next { margin: 0; padding: 9px 16px; justify-content: flex-start; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-next .tq-next-why { margin-left: auto; }
 .tq-dock .tq-arow { width: 100%; margin: 0; padding: 10px 12px 12px; box-sizing: border-box; border-bottom: 1px solid #ece7de; }

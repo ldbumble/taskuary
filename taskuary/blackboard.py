@@ -127,30 +127,34 @@ def is_live(note: dict, sids: set, tids: set) -> bool:
 def without_strangers(store, rows: list, for_tid=None) -> list:
     """The notes minus those written on a stranger-origin task - except on that task itself (wave B). What its agent wrote
     is the stranger's words carried on, and every other surface here rides into a session that runs with full permissions.
-    Kept in the database, and in the owner's history. Fail closed: a task whose origin cannot be read counts as a stranger's."""
-    from . import origin
-    memo = {}
+    Kept in the database, and on the owner's own Board. Fail closed: a task whose origin cannot be read counts as a stranger's.
+    A note with no task is judged by the task of the session that wrote it (its Sid), when that session is still known."""
+    from . import origin, terminal as term
+    memo, by_sid = {}, {str(getattr(o, 'sid', k)): getattr(o, 'task_id', None) for k, o in list(term.SESSIONS.items())}
     def strange(t):
         if t not in memo:
             try: memo[t] = origin.of_task(store, t)[0] == 'stranger'
             except Exception: memo[t] = True
         return memo[t]
-    return [n for n in rows if not n.get('TaskId') or int(n['TaskId']) == for_tid or not strange(int(n['TaskId']))]
+    def task_of(n):
+        t = n.get('TaskId') or (by_sid.get(str(n['Sid'])) if n.get('Sid') else None)
+        return int(t) if str(t or '').isdigit() else None
+    return [n for n in rows if (t := task_of(n)) is None or t == for_tid or not strange(t)]
 
 
-def live_notes(store, cwd: str = None, limit: int = 60, for_tid=None) -> list:
+def live_notes(store, cwd: str = None, limit: int = 60, for_tid=None, strangers: bool = False) -> list:
     """THE one live selection (PW-179): what every surface - the Board's live handoff, a new agent's seed,
     the assistant's prompt, `taskuary --board` - reads. Notes from sessions alive now, plus the owner's
     guidance; nothing from a session that ended, however recent, and no fallback to history. A stranger's
-    task's notes only for `for_tid`, that task's own reader (without_strangers)."""
+    task's notes only for `for_tid`, that task's own reader, or `strangers` - the owner's own screen (without_strangers)."""
     sids, tids = _live_ids(store)
-    rows = store.notes(norm(cwd) if cwd else None, max(int(limit) * 5, 300))
-    return without_strangers(store, [n for n in rows if is_live(n, sids, tids)], for_tid)[:int(limit)]
+    rows = [n for n in store.notes(norm(cwd) if cwd else None, max(int(limit) * 5, 300)) if is_live(n, sids, tids)]
+    return (rows if strangers else without_strangers(store, rows, for_tid))[:int(limit)]
 
 
-def live_wall(store, cwd: str = '', limit: int = 60) -> list:
-    """The Board's Live handoff: the live selection for a checkout, or for everything."""
-    return live_notes(store, cwd or None, limit)
+def live_wall(store, cwd: str = '', limit: int = 60, strangers: bool = False) -> list:
+    """The Board's Live handoff: the live selection for a checkout, or for everything. `strangers` for the owner's own Board."""
+    return live_notes(store, cwd or None, limit, strangers=strangers)
 
 
 def history(store, cwd: str = None, limit: int = 200, strangers: bool = True) -> list:

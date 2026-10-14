@@ -3164,11 +3164,11 @@ class NoteBody(BaseModel):
 
 @app.get('/api/board/notes')
 def board_notes(request: Request, cwd: str = '', limit: int = 60, all: bool = False):
-    """Live handoffs by default; durable note history when ``all`` is requested - a stranger's task's notes in it for
-    the owner only, since a session reads this into its own context (blackboard.without_strangers)."""
+    """Live handoffs by default; durable note history when ``all`` is requested - a stranger's task's notes in either for
+    the owner's own screen only, since a session reads this into its own context (blackboard.without_strangers)."""
     owner = guard.scope_of(cfg['server'], request.headers) == guard.OWNER
     rows = (blackboard.history(store, cwd or None, limit, strangers=owner) if all
-            else blackboard.live_wall(store, cwd, limit))
+            else blackboard.live_wall(store, cwd, limit, strangers=owner))
     # `owner`: the name a note the owner wrote may carry - the wall used to hardcode one (2026-10-11)
     return {'data': rows, 'owner': store.owner()['owner'],
             'kinds': list(blackboard.KINDS), 'summary_kind': blackboard.SUMMARY}

@@ -57,7 +57,7 @@
 <div class="entry on">
       <a class="page" href="./security" aria-current="page">Security</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Security's sections"></button>
-      <div class="secs"><a class="sec" href="#the-risk-is-the-text-not-the-network" data-sec="the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="#what-taskuary-does-today" data-sec="what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="#what-it-does-not-do-yet" data-sec="what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="#what-you-can-set-today" data-sec="what-you-can-set-today">What you can set today</a><a class="sec" href="#what-comes-next" data-sec="what-comes-next">What comes next</a></div>
+      <div class="secs"><a class="sec" href="#the-risk-is-the-text-not-the-network" data-sec="the-risk-is-the-text-not-the-network">The risk is the text, not the network</a><a class="sec" href="#what-taskuary-does-today" data-sec="what-taskuary-does-today">What Taskuary does today</a><a class="sec" href="#a-strangers-task-runs-in-auto-mode" data-sec="a-strangers-task-runs-in-auto-mode">A stranger's task runs in auto mode</a><a class="sec" href="#what-it-does-not-do-yet" data-sec="what-it-does-not-do-yet">What it does not do yet</a><a class="sec" href="#what-you-can-set-today" data-sec="what-you-can-set-today">What you can set today</a><a class="sec" href="#what-comes-next" data-sec="what-comes-next">What comes next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./assistant">Assistant buttons</a>
@@ -156,12 +156,35 @@ formatted text. A picture in that text could be a request carrying your data to 
 serves it, so the app loads pictures only from itself and shows any other picture as a link.</p>
 <p><strong>Credentials are scrubbed from prompts.</strong> A key or password pasted into a message is replaced before
 the text reaches any AI provider. The stored message keeps it, because it is your mail.</p>
+<h2 id="a-strangers-task-runs-in-auto-mode">A stranger&#39;s task runs in auto mode<a class="anchor" href="#a-strangers-task-runs-in-auto-mode" aria-label="Link to this section">#</a></h2>
+<p>Every task knows <strong>where its words came from</strong>: you, a trusted sender, or a stranger. The least trusted
+text on it decides, and a stranger who writes on your colleague&#39;s thread makes it a stranger&#39;s task.
+Advisor ideas and reports count as a stranger&#39;s too, since they carry what they read. Only you raise a
+task: <strong>Trust this task</strong> on its card. Pressing Start does not.</p>
+<p>A stranger&#39;s task runs differently from yours:</p>
+<ul>
+<li><strong>Its CLI runs in its own auto mode</strong>, not with permissions bypassed. Claude Code&#39;s reviewer approves
+or blocks each action. A CLI with no built-in reviewer does not run a stranger&#39;s task at all, and the
+task says so.</li>
+<li><strong>A fixed floor sits under it.</strong> Whatever the reviewer decides, the session cannot read or use
+Taskuary&#39;s own data folder, your SSH keys, cloud logins or the CLIs&#39; sign-ins, and cannot call
+Taskuary&#39;s own address. Nobody approves anything here; it is a refusal list checked in code.</li>
+<li><strong>Their words are a file, not the prompt.</strong> The agent&#39;s first prompt holds only Taskuary&#39;s own words
+and points at a file labelled as a stranger&#39;s. The reviewer reads the prompt as your intent, so a
+stranger&#39;s &quot;run this script&quot; never reaches it as yours.</li>
+<li><strong>It runs with less of your environment.</strong> Cloud keys and GitHub tokens are not passed to it.</li>
+<li><strong>You answer when the reviewer will not.</strong> The request shows on the card with Allow and Deny, and the
+agent waits for you. Allow covers that one call.</li>
+<li><strong>A stranger&#39;s words are never typed into a session started with full permissions.</strong> It waits for
+the next start, in auto mode.</li>
+</ul>
+<p>Your own tasks and trusted senders&#39; tasks run exactly as before.</p>
 <h2 id="what-it-does-not-do-yet">What it does not do yet<a class="anchor" href="#what-it-does-not-do-yet" aria-label="Link to this section">#</a></h2>
 <p>These are honest limits.</p>
 <ul>
-<li><strong>Agents run as you.</strong> A coding or general agent launched with full permissions can read the files
-your user account can read and use the logins it has. That includes Taskuary&#39;s own data folder.
-Inside that session, the agent token is a guard rail, not a wall.</li>
+<li><strong>Your own agents run as you.</strong> A task of yours or a trusted sender&#39;s launches with full
+permissions. It can read the files your user account can read and use the logins it has, including
+Taskuary&#39;s own data folder.</li>
 <li><strong>The sender&#39;s address is taken at its word.</strong> Taskuary does not yet check whether an email really
 came from the domain it claims (DKIM/DMARC). A forged address belonging to a colleague passes the
 sender rule.</li>
@@ -183,14 +206,13 @@ you would not let run commands on your machine.</li>
 Taskuary knows how to turn off.</li>
 <li><strong>Leave Hand answers to the working agent on Ask.</strong> On Auto, a reply from the task&#39;s sender is typed
 straight into a running agent.</li>
-<li><strong>Read a stranger&#39;s task before you press Start.</strong> Look at what it asks, not only at who sent it.</li>
+<li><strong>Read a stranger&#39;s task before you press Trust this task.</strong> Trusting it gives it your permissions.</li>
+<li><strong>Run a stranger&#39;s work on Claude Code 2.1.295 or later.</strong> Older versions are refused it.</li>
 </ul>
 <h2 id="what-comes-next">What comes next<a class="anchor" href="#what-comes-next" aria-label="Link to this section">#</a></h2>
-<p>The next step is to tag every task with <strong>where its text came from</strong>: you, a verified sender, or a
-stranger. Then each task gets authority to match. Work that carries a stranger&#39;s words will run in its
-CLI&#39;s normal approval mode instead of with permissions bypassed. Taskuary answers each approval request
-itself. It allows a request that fits the task, refuses one that reaches for credentials or an
-unknown server, and asks you when it cannot tell. Sender verification (DKIM/DMARC) follows.</p>
+<p>Sender verification (DKIM/DMARC), so a forged colleague&#39;s address stops counting as trusted; chat
+groups trusted per person rather than per room; and Hub and wall notes from a stranger&#39;s session kept
+apart until you have seen them.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./tasks-and-agents"><span>Previous</span>Tasks and agents</a><a class="pn next" href="./assistant"><span>Next</span>Assistant buttons</a></nav>

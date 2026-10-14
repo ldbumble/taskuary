@@ -114,12 +114,21 @@ def _text_hit(text: str, own: list, prot: list, cwd: str = ''):
 # Imported or run as a module it reads the home with this process's rights - config.toml's owner token, the mail - and
 # none of the paths above appears in the command. cli.py refuses the same in a session it recognises; this is for the one
 # that unset every marker Taskuary gave it, which is why naming those markers (or emptying the environment) is refused too.
-_PKG = re.compile(r'-m\s*["\']?taskuary\b|\b(?:from|import)\s+(?:[\w.]+\s*,\s*)*taskuary\b|(?:__import__|import_module)\s*\(\s*[\'"]taskuary\b', re.I)
-# ...any TASKUARY_ variable by name, glob or indirection (${!TASKUARY_*}, Env:TASKUARY_*), and the whole environment at once:
-# env -i/-u, a PowerShell Env: drive with no one name after it (Remove-Item Env:*, Get-ChildItem Env: | ...), compgen -e,
-# [Environment]::SetEnvironmentVariable. Env:PATH and $HOME stay ordinary, and so does a path segment like /taskuary_tmp.
-_MARKS = re.compile(r'(?<![\w/\\.~-])taskuary_|\benv\s+(?:-[a-z]*[iu]\b|--ignore-environment|--unset)|\benv:(?![a-z_])|\bcompgen\s+-\w*e'
-                    r'|setenvironmentvariable', re.I)
+# `-m taskuary` counts only after a python (git commit -m "Taskuary fix" is a message); the imports are Python's own
+# lowercase keywords, so "data from Taskuary" in prose is not one.
+_PKG = re.compile(r'(?i:(?:^|[\s;&|(/\\"\'])(?:python[\d.]*w?|py)(?:\.exe)?["\']?(?:\s+-[^\s-]\S*)*?\s+-m\s*["\']?taskuary\b)'
+                  r'|\b(?:from|import)\s+(?:[\w.]+\s*,\s*)*taskuary\b|(?:__import__|import_module)\s*\(\s*[\'"]taskuary\b')
+# ...the environment emptied or rewritten, whatever names it does not say: a PowerShell Env: drive removed or listed
+# whole, compgen -e, SetEnvironmentVariable, Start-Process -UseNewEnvironment (env and exec are parsed in _env_wipe).
+_WIPE = (r'\b(?:remove-item|ri|del|rm|erase|clear-item|cli|get-childitem|gci|ls|dir)\s+(?:-\w+\s+)*env:|\bcompgen\s+-\w*e'
+         r'|setenvironmentvariable|-usenewenvironment')
+# A command line: any TASKUARY_ variable by name, glob or indirection (${!TASKUARY_*}, Env:TASKUARY_*) - a path segment
+# like /taskuary_tmp is not one.
+_MARKS = re.compile(r'(?<![\w/\\.~-])taskuary_|' + _WIPE, re.I)
+# A script's text: code may READ a TASKUARY_ variable; what is refused is unsetting, removing or overwriting one.
+_SCRIPT_MARKS = re.compile(r'\bunset\s[^\n;|&]*\btaskuary_|^\s*(?:export\s+|set\s+"?)?taskuary_\w*\s*=|\$env:taskuary_\w*\s*='
+                           r'|environ\.pop\s*\(\s*[\'"]taskuary_|\bdel\s+os\.environ\s*\[\s*[\'"]taskuary_'
+                           r'|environ\s*\[\s*[\'"]taskuary_\w*[\'"]\s*\]\s*=(?!=)|' + _WIPE, re.I | re.M)
 # cli.STRANGER_ACTS and the options that go with them (test_floor_wave_b keeps the two in step)
 TASKUARY_OK = frozenset({'--reply', '--reply-file', '--draft', '--draft-file', '--attach', '--item', '--done', '--note'})
 _TASKUARY_WITH = frozenset({'--slot', '--to', '--subject', '--result', '--overlap', '--settled', '--propose', '--no-reply', '--kind'})
@@ -135,10 +144,31 @@ def _words(seg: str) -> list:
 
 def _prog(w: str) -> str: return re.sub(r'(\.exe|\.cmd|\.bat|\.ps1|-script\.pyw?)$', '', _cf(w).rsplit('/', 1)[-1])
 
-def _taskuary_hit(text: str) -> str:
+_ENV_VAL = ('-C', '-S', '-u', '-P', '--chdir', '--split-string', '--unset')    # env's options that take a value
+
+def _env_wipe(ws: list) -> str:
+    "`env` with -, -i or --ignore-environment among ITS options (any order, clustered), or -u of a TASKUARY_ name; `exec -c`."
+    if not ws: return ''
+    p = _prog(ws[0])
+    if p == 'exec' and any(re.fullmatch(r'-[a-z]*c[a-z]*', w) for w in ws[1:] if w.startswith('-')): return 'exec -c'
+    if p != 'env': return ''
+    i = 1
+    while i < len(ws) and ws[i].startswith('-'):
+        o, val = ws[i].split('=', 1) if '=' in ws[i] else (ws[i], None)
+        if o in ('-', '--ignore-environment', '-i') or re.fullmatch(r'-[a-z0]*i[a-z0]*', o) and not o.startswith('--'): return f'env {ws[i]}'
+        named = val if val is not None else ws[i + 1] if o in ('-u', '--unset') and i + 1 < len(ws) else o[2:] if re.fullmatch(r'-u\S+', o) else ''
+        if o.startswith(('-u', '--unset')) and named.lower().startswith('taskuary_'): return f'env {o} {named}'
+        i += 2 if o in _ENV_VAL and val is None and not re.fullmatch(r'-[CSuP]\S+', o) else 1
+    return ''
+
+def _taskuary_hit(text: str, script: bool = False) -> str:
+    "Why a command - or, `script`, the text of a file that will be run - is refused, or ''."
     if m := _PKG.search(text): return f"it runs Taskuary's own package ({m[0].strip()}), which reads the owner's data in-process"
-    if m := _MARKS.search(text): return f"it changes the session's own environment ({m[0].strip()})"
+    if m := (_SCRIPT_MARKS if script else _MARKS).search(text): return f"it changes the session's own environment ({m[0].strip()})"
     for seg in _SEG.split(text):
+        raw = [w[1:-1] if w[:1] in '"\'' and w[-1:] == w[:1] and len(w) > 1 else w for w in _WORD.findall(seg)]
+        while raw and (re.fullmatch(r'[A-Za-z_]\w*=.*', raw[0]) or raw[0].lower() in ('sudo', 'command', 'nohup')): raw.pop(0)
+        if why := _env_wipe(raw): return f"it empties the session's own environment ({why})"
         ws = _words(seg)
         if not ws: continue
         p = _prog(ws[0])
@@ -149,6 +179,15 @@ def _taskuary_hit(text: str) -> str:
         if bad or not any(f in TASKUARY_OK | _TASKUARY_ASK for f in flags):
             return f"`{' '.join(['taskuary', *(bad or ws[1:])])}` is not one of the agent commands a stranger's session runs"
     return ''
+
+# What a session runs without naming it: a script. Other files - docs, YAML, JSON, TOML - are read, not run.
+_SCRIPT_EXT = ('.sh', '.bash', '.zsh', '.ps1', '.psm1', '.bat', '.cmd', '.py', '.js', '.mjs', '.cjs', '.rb', '.pl')
+
+def _is_script(path: str, content: str = '') -> bool:
+    if str(path or '').lower().endswith(_SCRIPT_EXT) or str(content or '').startswith('#!'): return True
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f: return f.read(2) == '#!'
+    except OSError: return False
 
 
 # ── WHAT A LATER SESSION READS AS CONFIGURATION OR RUNS (wave B, B3) ────────────────────────────────────────────────
@@ -218,7 +257,9 @@ def check(payload: dict, tid: int, store=None) -> dict:
             if tool in _WRITE_TOOLS and _is_conf(p): return _deny(f'{inp[k]} is read as configuration, or run, by a later session of the owner')
     if tool in _WRITE_TOOLS:    # a script written now and run by a command that names nothing: judged as the command it will be
         said = '\n'.join(str(o) for o in (inp.get('content'), inp.get('new_string'), inp.get('new_source'), *[e.get('new_string') for e in inp.get('edits') or [] if isinstance(e, dict)]) if o)
-        if why := _taskuary_hit(said): return _deny(f'it writes a script that, run, would be refused: {why}')
+        f = next((str(inp[k]) for k in _FILE_KEYS if inp.get(k)), '')
+        if _is_script(f if os.path.isabs(f) or not cwd else os.path.join(cwd, f), inp.get('content') or '') and (why := _taskuary_hit(said, script=True)):
+            return _deny(f'it writes a script that, run, would be refused: {why}')
     if why := _taskuary_hit(str(inp.get('command') or '')) or _write_hit(str(inp.get('command') or ''), cwd): return _deny(why)
     if tool in ('Grep', 'Glob'):    # these walk a tree: a root ABOVE a protected folder reaches it just as well
         sr = {_cf(os.path.normcase(os.path.abspath(o))) for o in ((inp.get('path') and _forms(inp['path'], cwd)) or ([cwd] if cwd else []))}

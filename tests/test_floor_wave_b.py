@@ -112,3 +112,44 @@ def test_the_repository_s_own_instructions_and_code_stay_editable(repo):
         for tool in ('Write', 'Edit'): assert call(tool, repo, file_path=os.path.join(repo, p)) == {}, p
     for p in ('.git/config', '.claude/settings.local.json', '.mcp.json', '.git/hooks/pre-commit'):
         assert call('Read', repo, file_path=os.path.join(repo, p)) == {}, p              # reads are unchanged
+
+
+# ── round 2: the environment emptied by any option order; written content judged only where it will run ──────────────
+@pytest.mark.parametrize('cmd', ['env - taskuary --note x', 'env -v -i taskuary --note x', 'env --chdir=/ -i taskuary --note x',
+                                 'env -vi taskuary --note x', 'env -C / --ignore-environment taskuary --note x', 'env -u TASKUARY_SID taskuary --note x',
+                                 'env --unset=TASKUARY_TASK taskuary --note x', 'exec -c taskuary --note x', 'exec -cl taskuary --note x',
+                                 'Start-Process taskuary -ArgumentList "--note x" -UseNewEnvironment',
+                                 '[Environment]::SetEnvironmentVariable("TASKUARY_SID", $null)', 'Remove-Item Env:FOO', 'Remove-Item -Path Env:*'])
+def test_every_way_of_emptying_the_environment_is_refused(cmd):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+
+@pytest.mark.parametrize('cmd', ['env', 'printenv PATH', 'env FOO=1 npm test', 'env -C dir npm test', 'env -u FOO npm test',
+                                 'git commit -m "Taskuary fix"', 'git commit -m "data from Taskuary, import Taskuary docs"',
+                                 'grep -rn "env:" .github', 'echo $env:PATH'])
+def test_ordinary_environment_and_commit_commands_pass(cmd):
+    for t in SHELLS: assert call(t, command=cmd) == {}, (t, cmd)
+
+@pytest.mark.parametrize('name,content', [
+    ('.github/workflows/ci.yml', 'jobs:\n  test:\n    env:\n      NODE_ENV: test\n    steps:\n      - run: taskuary --demo\n'),
+    ('.eslintrc.js', 'module.exports = { env: { node: true } }\n'),
+    ('README.md', 'taskuary --demo opens a demo\n\nRun `taskuary --link` for a link.\n'),
+    ('docs/setup.txt', 'taskuary --prompts\nunset TASKUARY_TASK\n'),
+    ('app/config.py', 'import os\ntask = os.environ["TASKUARY_TASK"]\nprint("taskuary --demo")\n'),
+    ('conf.toml', 'cmd = "python -m taskuary"\n'), ('notes.json', '{"run": "env -i taskuary --note x"}')])
+def test_ordinary_files_that_mention_taskuary_are_written(name, content, tmp_path):
+    assert call('Write', file_path=str(tmp_path / name), content=content) == {}, name
+
+@pytest.mark.parametrize('name,content', [
+    ('x.sh', 'unset TASKUARY_TASK TASKUARY_SID\ntaskuary --note "x"\n'), ('x.ps1', 'Remove-Item Env:TASKUARY_*\ntaskuary --note x\n'),
+    ('x.py', 'from taskuary.config import _read\n'), ('x.py', 'import os\nos.environ.pop("TASKUARY_TASK")\n'),
+    ('x.py', 'import os\ndel os.environ["TASKUARY_SID"]\n'), ('x.bat', 'set TASKUARY_TASK=\ntaskuary --note x\n'),
+    ('x.sh', 'taskuary --prompts\n'), ('x.cmd', 'python -m taskuary --prompts\n'), ('run', '#!/bin/sh\nenv -i taskuary --note x\n')])
+# (a command a program builds in a string - execSync("env - taskuary ...") - is auto mode's: a string is not a command position)
+def test_a_script_that_would_be_refused_when_run_is_refused_at_the_write(name, content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / name), content=content)), name
+
+def test_an_edit_to_an_extensionless_script_is_judged_by_its_shebang(tmp_path):
+    f = tmp_path / 'run'; f.write_text('#!/bin/sh\necho hi\n')
+    assert denied(call('Edit', file_path=str(f), old_string='echo hi', new_string='taskuary --prompts'))
+    g = tmp_path / 'notes'; g.write_text('plain words\n')
+    assert call('Edit', file_path=str(g), old_string='plain', new_string='taskuary --prompts') == {}

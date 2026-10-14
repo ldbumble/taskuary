@@ -1034,7 +1034,8 @@ export function DayCards({ groups, onSection }) {
 // No meetings: the waiting side alone; nothing waiting: the meetings alone; neither: nothing.
 const atLocal = (s) => new Date(String(s).replace(" ", "T")).getTime();
 const firstNames = (who = []) => who.slice(0, 2).map((w) => String(w).split(/[ @]/)[0]).join(", ") + (who.length > 2 ? ` +${who.length - 2}` : "");
-export function DayOpener({ groups = [], onSection, top = null }) {
+// `loading`: the launch is still reading the mail, so the counts are not the day's yet - they say so instead of growing under you
+export function DayOpener({ groups = [], onSection, top = null, loading = false }) {
   const today = useCalendarToday();
   const [, tick] = useState(0);
   useEffect(() => { const id = setInterval(() => tick((v) => v + 1), 60000); return () => clearInterval(id); }, []);
@@ -1073,10 +1074,10 @@ export function DayOpener({ groups = [], onSection, top = null }) {
       )}
       {!!groups.length && (
         <div className="tq-day-wait">
-          <div className="tq-day-h">Waiting · {total}</div>
+          <div className="tq-day-h">Waiting · {loading ? "counting…" : total}</div>
           {groups.map((g) => (
             <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
-              <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{g.n ?? g.rows.length}</b>
+              <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>
             </button>
           ))}
         </div>

@@ -151,6 +151,38 @@ class BriefVoiceTests(unittest.TestCase):
                          'the digest never shows on the work rail')
 
 
+class OpeningCardLoadsTests(unittest.TestCase):
+    """The owner, 2026-10-14: the opening card goes up on load, the counts and the digest in loading mode until they are in."""
+    def setUp(self):
+        from taskuary import welcome
+        welcome._CATCHUP.clear(); welcome._STARTUP.clear()
+    tearDown = setUp
+
+    def test_the_digest_says_it_is_being_written_until_the_launch_has_written_it(self):
+        from taskuary import since, welcome
+        from tests.digest_fixture import add_digest
+        s = MemoryStore(); src = add_digest(s)
+        with mock.patch.object(welcome.threading, 'Timer'): welcome.catch_up_began()
+        d = since.summary(s)
+        self.assertTrue(d['reading'], 'the mail is still being read')
+        self.assertTrue(d['digest']['writing'], 'owed on this launch, so it is coming - not "not written yet"')
+        reports._RUNNING.add(src['SourceId'])
+        try: welcome._CATCHUP.clear(); welcome.startup_reports_done(); self.assertTrue(since.digest(s)['writing'], 'running now')
+        finally: reports._RUNNING.discard(src['SourceId'])
+        reports.run_report_source(s, src, llm=lambda system, user, **kw: '- Two meetings today.')
+        d = since.summary(s)
+        self.assertFalse(d['reading'])
+        self.assertEqual((d['digest']['writing'], d['digest']['today']), (False, True))
+        self.assertIn('Two meetings today', d['digest']['text'])
+
+    def test_with_the_launch_done_and_the_slot_ahead_nothing_is_said_to_be_writing(self):
+        from taskuary import since
+        from tests.digest_fixture import add_digest
+        s = MemoryStore(); add_digest(s)
+        with mock.patch.object(reports, 'is_due', return_value=False):
+            self.assertFalse(since.digest(s)['writing'])
+
+
 class BriefMemoryTests(unittest.TestCase):
     def test_an_applicable_standing_verdict_governs_the_digest(self):
         s = _store()

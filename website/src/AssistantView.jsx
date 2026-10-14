@@ -120,7 +120,7 @@ export const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `re
 // WHAT ALREADY HAPPENED, under the tiles that say what waits (the row-bot comparison, 2026-10-07): the mail read and filed,
 // the reports that ran, the agents that finished, and what was learned this week - counted on the server, no model, so the
 // opening screen never waits on one. Nothing to say says nothing.
-function SinceBlock({ onOpen }) {
+function SinceBlock({ onOpen, onReading }) {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(false);
   const [writing, setWriting] = useState("");
@@ -129,6 +129,14 @@ function SinceBlock({ onOpen }) {
   // read once on mount, it kept the counts from before the startup catch-up had read a message (B5, 2026-10-11)
   useEffect(() => onLive(["arrive"], () => { read().catch(() => {}); }), [read]);
   const o = d?.overnight || {}, cards = d?.cards || [], dg = d?.digest || {};
+  // LOADING, NOT MISSING (the owner, 2026-10-14: "put the digest right away on load and the numbers ... in loading mode"): while
+  // the launch still reads the mail or writes the digest, the card says so and reads again until both are in
+  const pending = !d || d.reading || dg.writing;
+  useEffect(() => { onReading?.(!d || !!d.reading); }, [d, onReading]);
+  useEffect(() => { if (!d || !pending) return undefined; const id = setTimeout(() => read().catch(() => {}), 4000); return () => clearTimeout(id); }, [d, pending, read]);
+  // ...and TODAY'S DIGEST IS OPEN on the screen the day opens on - once, so Fold it stays folded
+  const shownFor = useRef(null);
+  useEffect(() => { if (dg.today && dg.text && shownFor.current !== dg.at) { shownFor.current = dg.at; setOpen(true); } }, [dg.today, dg.text, dg.at]);
   // "Write a fresh one" runs the report now (about twenty seconds) and the folded line follows it until the new one is in
   const fresh = async () => {
     if (!dg.source_id || writing.startsWith("Writing")) return;
@@ -146,10 +154,11 @@ function SinceBlock({ onOpen }) {
   const counts = [[o.mail, "came in"], [o.reports, o.reports === 1 ? "report ran" : "reports ran"],
     [o.sessions, o.sessions === 1 ? "agent finished" : "agents finished"], [o.closed, o.closed === 1 ? "task closed" : "tasks closed"]]
     .filter(([n]) => n).map(([n, w]) => `${n} ${w}`).join(" · ");
-  if (!counts && !cards.length && !dg.at && !d?.learned?.line) return null;
+  if (!pending && !counts && !cards.length && !dg.at && !d?.learned?.line) return null;
+  const spin = (words) => <span role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CircularProgress size={12} thickness={5} sx={{ color: "#827356" }} />{words}</span>;
   return (
     <div className="tq-since" data-tq-since="">
-      <div className="tq-since-head"><span className="tq-day-h" style={{ margin: 0 }}>{o.heading || "Since last night"}</span>{counts && <span>{counts}</span>}</div>
+      <div className="tq-since-head"><span className="tq-day-h" style={{ margin: 0 }}>{o.heading || "Since last night"}</span>{!d || d.reading ? spin("Reading what came in…") : counts && <span>{counts}</span>}</div>
       {!!cards.length && <div className="tq-since-cards">
         {cards.map((c, i) => (
           <button key={c.key || c.link || i} type="button" className={`tq-since-card ${c.kind}`} data-tq-since-card={c.key || c.link}
@@ -164,14 +173,17 @@ function SinceBlock({ onOpen }) {
         <span title={d.learned.latest ? `Latest: ${d.learned.latest}` : undefined}>{d.learned.line}</span>
         <button type="button" className="tq-linkish" onClick={() => { window.location.hash = "settings=docs&doc=learned&view=changes"; }}>See what changed</button>
       </div>}
-      {dg.source_id && <div className="tq-since-digest" data-tq-digest="">
+      {dg.source_id && dg.writing && !writing && <div className="tq-since-digest" data-tq-digest="" data-tq-digest-writing="">
+        <span className="tag">MORNING DIGEST</span>{spin("Writing today's digest…")}
+      </div>}
+      {dg.source_id && !(dg.writing && !writing) && <div className="tq-since-digest" data-tq-digest="">
         <span className="tag">MORNING DIGEST</span>
         {dg.at ? <span>written {agoText(dg.at)}</span> : <span>not written yet today</span>}
         {dg.at && <button type="button" className="tq-linkish" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? "Fold it ▴" : "See the full digest ▾"}</button>}
         <span className="sep">|</span>
         {/* while it writes, the button IS the status - a spinner, not the button beside a second line saying the same (2026-10-13) */}
         {writing.startsWith("Writing")
-          ? <span role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CircularProgress size={12} thickness={5} sx={{ color: "#827356" }} />{writing}</span>
+          ? spin(writing)
           : <button type="button" className="tq-linkish" onClick={fresh}>Write a fresh one</button>}
         {writing && !writing.startsWith("Writing") && <span>{writing}</span>}
       </div>}
@@ -1140,7 +1152,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const arrive = (leaving = false) => {
       if (!leaving && Date.now() - last < 60_000) return;
       if (!leaving) last = Date.now();
-      api.post("/api/concierge/arrive", { leaving }).then(({ data }) => { if (data?.said) readChat().catch(() => {}); }).catch(() => {});
+      api.post("/api/concierge/arrive", { leaving }).then(({ data }) => { if (data?.said || data?.drawn) readChat().catch(() => {}); }).catch(() => {});
     };
     const back = () => { if (document.visibilityState !== "hidden") arrive(false); };
     const away = () => arrive(true);
@@ -1170,6 +1182,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // moment they are sent - it used to wait for the 30 s tick (the owner, 2026-09-24: "it takes 20 seconds from when
   // message is responded to in whatsapp to show up on the assistant")
   const [phoneBusy, setPhoneBusy] = useState(false);
+  const [mailReading, setMailReading] = useState(false);       // the launch still reading the mail (SinceBlock): the counts wait
   useEffect(() => onLive(["chat-changed"], (ev) => {
     setPhoneBusy(!!ev?.thinking);
     readChat().catch(() => { /* the tick reads again */ });
@@ -1921,7 +1934,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
           digest, on the screen the day opens on (2026-09-23) */}
       <DayOpener groups={items.length ? summarize(railPile?.items || items).groups : []} onSection={walkSection}
-        top={<SinceBlock onOpen={(k) => pull(k, null)} />} />
+        loading={mailReading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
       {!items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
       {/* greyed with no reason read as broken: say why, and where the rows are */}
       {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">

@@ -7373,7 +7373,8 @@ def catch_up_on_startup():
         try: _poll_reports(hours, what=f'catching up on {hours:.0f}h closed' if hours else 'syncing')   # fits the sidebar's one sync line
         finally: welcome.catch_up_ended()      # the held greeting is said now, with the mail in
         # ...and the reports that were due take their own pass, on their own lock
-        report_pass(startup=True)
+        try: report_pass(startup=True)
+        finally: welcome.startup_reports_done()      # the opening card stops saying the digest is being written
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by
         # the pass above like every other one. Consolidate what the verdicts taught next,
         # on the same once-a-day rhythm.

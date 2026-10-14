@@ -4111,6 +4111,9 @@ class SQLiteStore:
             self.cx.commit(); self._writes += 1
             return cur.lastrowid
     def list_comments(self, task_id): return self._rows('SELECT * FROM comment WHERE TaskId=? ORDER BY CommentId', (task_id,))
+    def set_comment_body(self, comment_id, body):
+        """Rewrite one turn where it stands: the day's opener is drawn at once and filled when the mail is in (welcome.arrive)."""
+        self._exec('UPDATE comment SET Body=? WHERE CommentId=?', (body, comment_id))
 
     # audit chain
     def audit(self, et, eid, action, actor, actor_type='human', detail=None, run_id=None):

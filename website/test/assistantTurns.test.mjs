@@ -82,3 +82,14 @@ test("a card put down on the page stays down when the server's copy of its turn 
   assert.equal(merged[0].done, true);
   assert.equal(merged[0].commentId, 1301);
 });
+
+test("the day's opener filled in its place is redrawn where it stands, not skipped by id", () => {
+  const local = [{ id: 7, role: "assistant", text: "Good morning.", card: { kind: "brief", reading: true } },
+    { id: "u1", commentId: 8, role: "user", text: "Walk me through my tasks" }];
+  const { messages, added } = mergeDurableTurns(local, [
+    { id: 7, role: "assistant", text: "Good morning. Three came in.", card: { kind: "brief", away: "Overnight: 3 came in." } },
+    { id: 8, role: "user", text: "Walk me through my tasks" }]);
+  assert.deepEqual(messages.map((m) => m.id), [7, "u1"]);
+  assert.equal(messages[0].card.away, "Overnight: 3 came in.");
+  assert.equal(added.length, 0);
+});

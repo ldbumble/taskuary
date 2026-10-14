@@ -94,17 +94,24 @@ def digest(store) -> dict:
     """The newest Morning digest, whole, and when it was written - shown folded on the opening screen, opened in place; `source_id`
     is what "Write a fresh one" reruns (reports.run_one through /api/reports/{sid}/rerun)."""
     import json
-    src = next((r for r in store._rows("SELECT SourceId, ConfigJson FROM source WHERE Channel='report' AND Active=1")
-                if (lambda c: c.get('type') == 'digest' or 'digest' in {x.get('type') for x in c.get('sources') or []})(
-                    (lambda t: json.loads(t) if t else {})(r.get('ConfigJson') or ''))), None)
+    from . import reports, welcome
+    cfg_of = lambda r: (lambda t: json.loads(t) if t else {})(r.get('ConfigJson') or '')
+    src = next((r for r in store._rows("SELECT SourceId, ConfigJson, LastPolledAt FROM source WHERE Channel='report' AND Active=1")
+                if (lambda c: c.get('type') == 'digest' or 'digest' in {x.get('type') for x in c.get('sources') or []})(cfg_of(r))), None)
     if not src: return {}
     run = next((r for r in store.report_runs(src['SourceId'], 5) if not r.get('failed') and r.get('messageId')), None)
-    if not run: return {'source_id': src['SourceId'], 'at': None, 'text': ''}
+    # BEING WRITTEN: running now, or owed a run the launch's own pass is about to make - the opening card says so and waits
+    # for it, instead of showing yesterday's or "not written yet" for the minute after launch (the owner, 2026-10-14)
+    today = bool(run and str(run.get('at') or '')[:10] == datetime.now().strftime('%Y-%m-%d'))
+    writing = src['SourceId'] in reports._RUNNING or (not today and reports.is_due(cfg_of(src), src.get('LastPolledAt'), welcome.startup_reports_pending()))
+    if not run: return {'source_id': src['SourceId'], 'at': None, 'text': '', 'writing': writing}
     m = store.get_message(run['messageId']) or {}
     # the brief, not the evidence the model was handed under it (reports.RAW_MARK): a failed run's evidence IS its body
-    from .reports import RAW_MARK
-    return {'source_id': src['SourceId'], 'at': run.get('at'), 'text': str(m.get('BodyText') or '').split(RAW_MARK)[0].strip()}
+    return {'source_id': src['SourceId'], 'at': run.get('at'), 'today': today, 'writing': writing,
+            'text': str(m.get('BodyText') or '').split(reports.RAW_MARK)[0].strip()}
 
 
 def summary(store, now: datetime = None) -> dict:
-    return {'overnight': overnight(store, now), 'learned': learned(store, now), 'cards': cards(store, now), 'digest': digest(store)}
+    from .welcome import mail_reading
+    return {'overnight': overnight(store, now), 'learned': learned(store, now), 'cards': cards(store, now), 'digest': digest(store),
+            'reading': mail_reading()}

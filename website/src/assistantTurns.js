@@ -17,7 +17,13 @@ export function mergeDurableTurns(local = [], durable = []) {
   const claimed = new Set();
   const added = [];
   for (const turn of durable || []) {
-    if (ids.has(turn.id)) continue;
+    if (ids.has(turn.id)) {
+      // ...except the day's opener, which the server draws at once and fills in its place when the mail is in (welcome.arrive):
+      // skipped by id, its counts stayed "reading" until a reload
+      const at = turn.card?.kind === "brief" ? messages.findIndex((m) => m.id === turn.id || m.commentId === turn.id) : -1;
+      if (at >= 0 && JSON.stringify(messages[at].card) !== JSON.stringify(turn.card)) messages[at] = { ...messages[at], text: turn.text, card: turn.card };
+      continue;
+    }
     const at = messages.findIndex((candidate, i) => !claimed.has(i) && optimistic(candidate) && sameTurn(candidate, turn));
     if (at >= 0) {
       // KEEP THE BUBBLE'S OWN ID. AssistantView keys the chat by it, so swapping it for the comment

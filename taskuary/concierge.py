@@ -1154,6 +1154,11 @@ def record(store, tid: int, role: str, text: str, card: dict = None, phone: bool
     return add(tid, actor, actor_type, body)
 
 
+def rewrite(store, cid: int, text: str, card: dict = None):
+    """An assistant turn said again in its own place - the day's opener, drawn before the mail was in (welcome.arrive)."""
+    store.set_comment_body(cid, redact(text).strip() + (f"\n\n{MARK}{json.dumps(card, default=str)} -->" if card else ''))
+
+
 # The global walkthrough has its own durable dock conversation, but the part about a real task must
 # also remain with that task. These distinct types keep it out of a general agent's working context
 # while making it available to the Timeline's "Assistant discussion" tab.

@@ -226,17 +226,24 @@ def _spend(store, now: datetime, prev: datetime = None):
 # On a Monday the greeting fired while the catch-up was still reading the weekend (91 s on the owner's box), said "Over the
 # weekend: nothing new came in", spent itself, and was never corrected (B4, 2026-10-11). In memory on purpose: a crash mid
 # catch-up must not leave a greeting held into the next launch.
-_CATCHUP, _HELD = {}, {}
+_CATCHUP, _HELD, _STARTUP = {}, {}, {}
 
 def catch_up_began(now: datetime = None):
-    """The startup catch-up started reading. A greeting asked for meanwhile is held, not spent; past CATCHUP_WAIT the page is
+    """The startup catch-up started reading. A greeting asked for meanwhile is drawn, not spent; past CATCHUP_WAIT the page is
     woken anyway, to say honestly that it is still reading."""
-    _CATCHUP['at'] = now or datetime.now()
+    _CATCHUP['at'] = _STARTUP['reports'] = now or datetime.now()
     t = threading.Timer(CATCHUP_WAIT + 1, _wake); t.daemon = True; t.start()
 
 def catch_up_ended():
     """The mail is in and judged: wake the page, so a held greeting is said with the real counts."""
     _CATCHUP.clear(); _wake()
+
+def startup_reports_done(): _STARTUP.clear()
+def startup_reports_pending() -> bool:
+    "The launch's own report pass (the on-start Morning digest among them) has not finished yet."
+    return bool(_STARTUP)
+
+def mail_reading() -> bool: return bool(_CATCHUP)
 
 def _wake():
     from . import live
@@ -257,20 +264,29 @@ def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = Fa
     if leaving or not (new_day or back) or remote_assistant.handoff(store):
         store.set_setting(SEEN_KEY, _stamp(now), 'assistant'); return {'said': ''}
     reading = _reading(now)
+    tid = general.dock_task(store, actor)[0]['TaskId']
     if reading == 'wait':
-        _HELD.setdefault('prev', prev); return {'said': '', 'pending': True}
+        # DRAWN NOW, FILLED LATER: held whole, the opener came in a minute and a half after launch - UNDER the walk the owner had
+        # started meanwhile, the Morning digest with it (the owner, 2026-10-14: "why can't you put the digest right away on load
+        # and the numbers ... in loading mode"). The card goes up at once, marked reading; the counts rewrite it in its place.
+        _HELD.setdefault('prev', prev)
+        if 'cid' in _HELD: return {'said': '', 'pending': True}
+        _HELD['cid'] = concierge.record(store, tid, 'assistant', f"{greeting(now)}.", {'key': 'brief', 'kind': 'brief', 'lane': 'report',
+                                                                                          'title': 'Today', 'reading': True})
+        return {'said': '', 'pending': True, 'drawn': True}
     from . import funnel
     try: items = funnel.pile(store).get('items') or []
     except Exception as e:
         logger.warning(f'welcome: no pile - {e}'); items = []
     say = opening(store, now, prev, items, new_day=new_day, back=back, reading=bool(reading))
     away = ' '.join(away_lines(store, now, prev, items, back, bool(reading)))
+    cid = _HELD.get('cid')
     _spend(store, now, prev)
-    tid = general.dock_task(store, actor)[0]['TaskId']
     chips = concierge.walk_chips(len(items))
-    concierge.record(store, tid, 'assistant', say, {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(items),
-                                                     'mail': sum(1 for i in items if i.get('kind') in funnel.MAIL_KINDS), 'chips': chips,
-                                                     'away': away})
+    card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(items),
+            'mail': sum(1 for i in items if i.get('kind') in funnel.MAIL_KINDS), 'chips': chips, 'away': away}
+    if cid: concierge.rewrite(store, cid, say, card)
+    else: concierge.record(store, tid, 'assistant', say, card)
     return {'said': say, 'chips': chips}
 
 def phone_lead(store, now: datetime = None) -> str:

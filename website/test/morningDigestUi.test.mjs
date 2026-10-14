@@ -34,11 +34,22 @@ test("Settings has no empty Agents destination and profile links go straight to 
 // under it - the digest used to wait in Reports and was stale by the time the walk reached it
 test("the opening card carries what changed and the digest, folded, on its top", () => {
   const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
-  assert.match(view, /top=\{<SinceBlock onOpen=\{\(k\) => pull\(k, null\)\} \/>\}/);
+  assert.match(view, /top=\{<SinceBlock onOpen=\{\(k\) => pull\(k, null\)\} onReading=\{setMailReading\} \/>\}/);
   assert.match(view, /See the full digest ▾/);
   assert.match(view, /api\.post\(`\/api\/reports\/\$\{dg\.source_id\}\/rerun`\)/, "Write a fresh one runs the digest now");
   assert.match(view, /<DigestText text=\{dg\.text\} sourceId=\{dg\.source_id\} \/>/);
-  assert.match(cards, /export function DayOpener\(\{ groups = \[\], onSection, top = null \}\)/);
+  assert.match(cards, /export function DayOpener\(\{ groups = \[\], onSection, top = null, loading = false \}\)/);
+});
+
+// the owner, 2026-10-14: "put the digest right away on load and the numbers ... in loading mode - same for morning digest until it shows up"
+test("the opening card loads in place: counts and the digest say they are coming, and today's digest opens itself", () => {
+  const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx"), turns = read("assistantTurns.js");
+  assert.match(view, /spin\("Reading what came in…"\)/);
+  assert.match(view, /spin\("Writing today's digest…"\)/);
+  assert.match(view, /if \(dg\.today && dg\.text && shownFor\.current !== dg\.at\)/, "today's digest is open, once");
+  assert.match(view, /data\?\.said \|\| data\?\.drawn/, "an opener drawn mid catch-up is read at once");
+  assert.match(cards, /loading \? "counting…" : total/);
+  assert.match(turns, /turn\.card\?\.kind === "brief"/, "the opener filled in its place is redrawn, not skipped by id");
 });
 
 test("what was learned is its own line on the opening card, never a card that loses its slot", () => {

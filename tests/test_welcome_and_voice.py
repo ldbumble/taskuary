@@ -339,21 +339,28 @@ class CatchUpTests(unittest.TestCase):
         with mock.patch.object(funnel, 'pile', return_value={'items': items}):
             return welcome.arrive(s, now, **kw)
 
-    def test_a_greeting_asked_for_mid_catch_up_is_held_then_said_with_the_real_counts(self):
+    def test_a_greeting_asked_for_mid_catch_up_is_drawn_at_once_then_filled_in_its_place(self):
         s = store(); now = datetime(2026, 10, 5, 8, 0)                                  # a Monday
         s.set_setting(welcome.SEEN_KEY, stamp(datetime(2026, 10, 2, 17, 0)), 't')      # Friday evening
         with mock.patch.object(welcome.threading, 'Timer'): welcome.catch_up_began(now)
         out = self.arrive(s, now, [])
-        self.assertEqual((out['said'], out.get('pending')), ('', True))
+        self.assertEqual((out['said'], out.get('pending'), out.get('drawn')), ('', True, True))
         self.assertNotEqual(s.get_setting(welcome.GREETED_KEY), '2026-10-05', 'a held greeting is not spent')
+        tid = general.dock_task(s, 'owner')[0]['TaskId']
+        self.assertTrue(concierge.history(s, tid)[-1]['card']['reading'], 'the opener is up at once, marked reading')
+        self.assertNotIn('drawn', self.arrive(s, now + timedelta(seconds=10), []), 'drawn once')
+        concierge.record(s, tid, 'user', 'Walk me through my tasks')                    # the owner starts walking meanwhile
         self.arrive(s, now + timedelta(seconds=20), leaving=True)                     # a blur meanwhile cannot shrink the gap
         for n in range(3): mail(s, 'Erin Blake', 'erin@northwind.example', f'Weekend {n}', stamp(datetime(2026, 10, 3, 9 + n)))
         with mock.patch('taskuary.live.emit') as emit: welcome.catch_up_ended()
         emit.assert_called_once_with('arrive')
         said = self.arrive(s, now + timedelta(minutes=2))['said']
         self.assertIn('Over the weekend: 3 came in', said)
-        card = concierge.history(s, general.dock_task(s, 'owner')[0]['TaskId'])[-1]['card']
+        turns = concierge.history(s, tid)
+        self.assertEqual([(t.get('card') or {}).get('kind') for t in turns], ['brief', None], 'filled where it stood - above the walk')
+        card = turns[0]['card']
         self.assertTrue(card['away'].startswith('Over the weekend: 3 came in'), 'the opening card draws the gap')
+        self.assertNotIn('reading', card)
         self.assertEqual(self.arrive(s, now + timedelta(minutes=9))['said'], '')        # and then it is spent
 
     def test_a_catch_up_that_outlives_the_wait_is_said_honestly(self):

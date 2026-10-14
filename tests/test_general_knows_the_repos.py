@@ -26,3 +26,30 @@ class ReposBlockTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class StrangerGetsNoBackgroundTests(unittest.TestCase):
+    """Who the owner is - SOUL.md, JOB.md, the repos and their paths - is what a planted line in a stranger's mail would ask the
+    agent to repeat back. A stranger's task reads none of it; the owner's own task reads all of it."""
+    def _store(self, origin):
+        s = MemoryStore()
+        s.save_doc('job', '## The job\n- Runs month-end close for the finance team.', 't')
+        s.save_doc('soul', '## Repo map\n- **northwind/ledger**: the finance backend\n', 't')
+        s.upsert_agent('coder', 'cli', 'claude', json.dumps({'cwd_map': {'northwind/ledger': 'C:/src/ledger'}}))
+        tid = s.create_task({'Title': 'Look at this invoice', 'Kind': 'general', 'Status': 'open'}, 'o')
+        s.cx.execute('UPDATE task SET OriginBase=? WHERE TaskId=?', (origin, tid)); s.cx.commit()
+        return s, tid
+
+    def test_a_strangers_task_reads_none_of_it(self):
+        from taskuary import context
+        s, tid = self._store('stranger')
+        system = general._prompt(s, tid)[0]
+        for private in ('month-end close', 'C:/src/ledger', 'ABOUT THE OWNER'): self.assertNotIn(private, system, private)
+        self.assertNotIn('month-end close', context.build(s, tid))
+
+    def test_the_owners_own_task_reads_all_of_it(self):
+        from taskuary import context
+        s, tid = self._store('owner')
+        system = general._prompt(s, tid)[0]
+        for known in ('month-end close', 'C:/src/ledger', 'ABOUT THE OWNER'): self.assertIn(known, system, known)
+        self.assertIn('month-end close', context.build(s, tid))

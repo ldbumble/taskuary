@@ -534,7 +534,11 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # proved one - which is the failure the semantic layer exists to prevent.
     from . import semantic
     layer = semantic.block(store)
-    owner_bg = _brief.background(store)
+    # ...but not on a STRANGER's task: their words drive it, and who the owner is - their people, systems, repos - is exactly
+    # what a planted line would ask the assistant to repeat back (origin.py's stranger rules keep the same distance)
+    from . import origin as _origin
+    outsider = _origin.of_task(store, tid)[0] == 'stranger'
+    owner_bg = '' if outsider else _brief.background(store)
     system = (
         (f'{owner_bg}\n\n' if owner_bg else '') +
         "You are the Taskuary general-work assistant. Help complete research, planning, writing, "
@@ -553,7 +557,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )
-    repos = repos_block(store)
+    repos = '' if outsider else repos_block(store)
     if repos: system += f'\n\n{repos}'
     # The role triage named owns the INSTRUCTIONS for general work - which is what stops it being
     # "only a label on the task". Which brain runs them is a separate question, answered from

@@ -14,6 +14,7 @@ _CREDS = ('.ssh', '.aws', '.azure', '.config/gh', '.config/gcloud', '.config/hub
 _FILE_KEYS = ('file_path', 'notebook_path', 'path')
 _TEXT_KEYS = ('command', 'url', 'pattern', 'glob')
 _HOME_VAR = re.compile(r'\$\{?(?:env:)?(?:home|userprofile)\}?|%userprofile%|(?<![\w~])~(?=/|$|\s)', re.I)
+_CD = ('cd', 'chdir', 'pushd', 'set-location', 'sl')
 _SPLIT = re.compile(r'[\s;&|()<>,=`]+')
 
 def _cf(s) -> str: return str(s).replace('\\', '/').casefold()   # always fold: APFS and NTFS are case-insensitive, and on Linux folding only refuses more
@@ -66,14 +67,21 @@ def _port() -> str:
     from . import config
     return str(config.load()['server'].get('port') or 7787)
 
-def _text_hit(text: str, own: list, prot: list):
+def _text_hit(text: str, own: list, prot: list, cwd: str = ''):
     "Why a command/url/glob is refused, or ''. Checked token by token so an own file's name cannot launder a neighbour's."
     h = _norm('~', real=False)
     t = _HOME_VAR.sub(h, text); t = _cf(os.path.expandvars(t)).replace('"', '').replace("'", '')   # expand BEFORE folding, quotes are not part of a path
     if re.search(':' + _port() + r'(?!\d)', t):   # any host that reaches it - 127.1, a LAN name, [::ffff:127.0.0.1] - is still this port
         return "that is Taskuary's own address"
+    cur, prev, nxt = _norm(cwd) if cwd else '', '', ''     # where a relative token points: the session's folder, moved by the last `cd` before it
     for tok in filter(None, _SPLIT.split(t)):
-        n = posixpath.normpath(tok); a = re.sub(r'^/(?=[a-z]:/)', '', n)   # "/c:/x" as bash on Windows writes it
+        cur, nxt = nxt or cur, ''                # a cd takes effect AFTER its own argument is checked against the old folder
+        if prev in _CD and not tok.startswith('-'):
+            d = posixpath.normpath(tok); d = d if re.match(r'([a-z]:)?/', d) or not cur else posixpath.normpath(posixpath.join(cur, d))
+            nxt = d if re.match(r'([a-z]:)?/', d) else ''
+        prev = tok
+        rel = cur and '://' not in tok and not re.match(r'(/|[a-z]:/)', tok) and ('/' in tok or tok.startswith('..'))
+        n = posixpath.normpath(posixpath.join(cur, tok) if rel else tok); a = re.sub(r'^/(?=[a-z]:/)', '', n)   # "/c:/x" as bash on Windows writes it
         if _under(a, own): continue
         if _under(a, prot) or _above(a, prot) and re.match(r'([a-z]:)?/', a) or any(re.search(r'(^|/)' + re.escape(s) + r'(/|$)', n) for s in _names()):
             return f'it names {tok}'
@@ -93,5 +101,5 @@ def check(payload: dict, tid: int, store=None) -> dict:
         sr = {_cf(os.path.normcase(os.path.abspath(o))) for o in ((inp.get('path') and _forms(inp['path'], cwd)) or ([cwd] if cwd else []))}
         for s in sr:
             if _above(s, prot): return _deny(f'searching from {inp.get("path") or cwd} would reach a protected folder')
-    if why := _text_hit(' '.join(str(inp.get(k) or '') for k in _TEXT_KEYS), own, prot): return _deny(why)
+    if why := _text_hit(' '.join(str(inp.get(k) or '') for k in _TEXT_KEYS), own, prot, cwd): return _deny(why)
     return {}

@@ -70,3 +70,18 @@ def test_a_variable_that_expands_elsewhere_cannot_hide_the_literal_path(hm, monk
     monkeypatch.setenv('FLOORV', 'x/y/z')   # literal: <home>/.taskuary_t/config.toml; expanded: <home>/x/y/.taskuary_t/config.toml
     assert denied(chk('Read', file_path=f'{hm.parent}/%FLOORV%/../{hm.name}/config.toml'))
     assert denied(chk('Read', file_path=f'{hm.parent}/$FLOORV/../{hm.name}/config.toml'))
+
+def test_a_relative_path_in_a_command_is_the_session_s_not_the_server_s(hm):
+    cwd = str(hm / 'scratch' / 'TQ-0007')
+    for c in ('cat ../../config.toml', 'type ..\..\config.toml', 'cat ./../../config.toml', 'cat ../../context/TQ-0008.stranger.md'):
+        assert denied(chk('Bash', cwd=cwd, command=c)), c
+    assert denied(chk('PowerShell', cwd=cwd, command='Get-Content ..\..\config.toml'))
+    assert not denied(chk('Bash', cwd=cwd, command='cat ./notes.md')) and not denied(chk('Bash', cwd=cwd, command='python -m pytest -q tests/x.py'))
+    assert not denied(chk('Bash', cwd=cwd, command='curl -s https://vendor.example/a/b'))
+
+def test_a_cd_earlier_in_the_command_moves_the_base(hm, tmp_path):
+    own = hm / 'scratch' / 'TQ-0007'
+    for c in (f'cd {own} && type ..\..\config.toml', f'pushd {sl(own)}; cat ../../config.toml', f'Set-Location {own}; gc ..\..\config.toml', f'sl "{own}"; gc ../../config.toml'):
+        assert denied(chk('PowerShell', cwd=str(tmp_path), command=c)), c
+    assert not denied(chk('Bash', cwd=str(tmp_path), command=f'cd {sl(own)} && cat ./notes.md'))
+    assert denied(chk('Bash', cwd=str(tmp_path), command=f'cd {sl(tmp_path)} && cd {sl(own)} && cat ../../config.toml'))   # the last cd before the token

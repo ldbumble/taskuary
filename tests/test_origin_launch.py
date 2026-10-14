@@ -42,3 +42,21 @@ def test_the_session_file_carries_both_hooks_fail_closed_and_the_theme():
     assert '/api/hooks/claude/permit' in perm['command'] and perm['onFailure'] == 'block' and perm['timeout'] == 604800
     assert f'task={t}' in pre['command'] and d['theme'] == 'dark' and d['autoMode']['environment']
     assert 'has not authorised running' in ' '.join(d['autoMode']['environment']) and origin.SETTINGS_HOOKS_MERGE
+
+def test_the_hook_commands_carry_both_secrets_the_task_and_fail_on_http_errors():
+    from taskuary import guard
+    s = MemoryStore(); t = _stranger(s)
+    d = json.load(open(origin.session_settings(s, t), encoding='utf-8'))
+    for c in (d['hooks']['PreToolUse'][0]['hooks'][0]['command'], d['hooks']['PermissionRequest'][0]['hooks'][0]['command']):
+        assert 'X-Taskuary-Token' in c and guard.TASK_HDR in c and f'?task={t}' in c and ' -f ' in c
+
+def test_claude_version_caches_only_a_success(monkeypatch):
+    import subprocess
+    monkeypatch.undo(); monkeypatch.setattr(origin, '_ver', [])
+    outs = iter([OSError('busy'), subprocess.CompletedProcess([], 0, stdout='2.1.300 (Claude Code)'), AssertionError('cached')])
+    def run(*a, **k):
+        o = next(outs)
+        if isinstance(o, BaseException): raise o
+        return o
+    monkeypatch.setattr(origin.subprocess, 'run', run)
+    assert origin._claude_version() == () and origin._claude_version() == (2, 1, 300) and origin._claude_version() == (2, 1, 300)

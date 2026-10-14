@@ -110,6 +110,7 @@ DENIED = (
 AGENT_WRITES = (
     (r'POST', r'^/api/hooks/[a-z]+$', 'a CLI hook reporting its own session (hooks.command)'),
     (r'POST', r'^/api/hooks/claude/ask$', 'the ask hook - it shows the question; the owner answers it'),
+    (r'POST', r'^/api/hooks/claude/(floor|permit)$', "a stranger's session asking the floor, or the owner, before a tool call"),
     (r'POST', r'^/api/agent/(reply|done|draft|item)$',
      "`taskuary --reply/--done/--draft/--item` on the session's OWN task (owns_task); nothing leaves"),
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),
@@ -124,6 +125,7 @@ AGENT_WRITES = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    (r'POST', r'^/api/tasks/\d+/trust$', "raising a task's origin is the owner's decision (origin.raise_to) - never a session's"),
     (r'POST', r'^/api/cloudfix/setup$', 'it commits a workflow to the repository - only ever the owner pressing Set up (cloudfix.install)'),
     (r'POST|PATCH|DELETE', r'^/api/operations(/[^/]+(/(execute|preview))?)?$',
      'a proposal runs approvals, settings and hand-offs - confirming one is the owner, whatever its kind'),

@@ -57,13 +57,16 @@ PERMIT_TIMEOUT = 604800          # the owner answers when they answer: no Taskua
 
 class Refusal(Exception): pass
 
-@functools.lru_cache(maxsize=1)
+_ver = []   # a one-item cache of a SUCCESSFUL parse only: a transient failure must be retried, not remembered as "too old"
+
 def _claude_version() -> tuple:
-    "Cached: launch_mode runs on every start and `claude --version` takes about a second."
+    "Cached on success: launch_mode runs on every start and `claude --version` takes about a second."
+    if _ver: return _ver[0]
     try: out = subprocess.run(['claude', '--version'], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError): return ()
     m = re.search(r'(\d+)\.(\d+)\.(\d+)', out or '')
-    return tuple(int(x) for x in m.groups()) if m else ()
+    if m: _ver.append(tuple(int(x) for x in m.groups()))
+    return _ver[0] if _ver else ()
 
 def launch_mode(store, tid, cli: str) -> str:
     "'full' (today's launch, untouched) or 'auto' (the CLI's reviewer); raises Refusal when a stranger's task cannot run safely."

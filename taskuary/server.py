@@ -3431,6 +3431,15 @@ def cli_hook_ask(payload: dict):
         logger.debug(f'ask hook ignored: {e}'); return {}
 
 
+@app.post('/api/hooks/claude/floor')
+def cli_hook_floor(payload: dict, task: int, request: Request):
+    """A stranger's session asks, before every tool call, whether the floor allows it (floor.check). An error here is a
+    non-2xx, and the hook's onFailure: block refuses the call - this door fails closed. Only the session's OWN task asks."""
+    from . import floor
+    _own_task_only(request, task)
+    return floor.check(payload if isinstance(payload, dict) else {}, task, store)
+
+
 # A hook writes the store, and run on the loop it froze every pane, socket and screencast whenever another thread held
 # the store's lock (P16, measured: p99 45-60 ms, max 2 s, and a hook past curl's 3 s was dropped). So it runs off the
 # loop - on ONE worker, in arrival order, exactly as the loop used to serialise them: a PermissionRequest and the

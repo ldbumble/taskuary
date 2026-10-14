@@ -21,6 +21,8 @@
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px}
   .card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
   .card b{display:block;font-size:24px;line-height:1.2}
+  .card.hero{grid-column:1/-1}
+  .card.hero b{font-size:34px}
   .card span{color:var(--dim);font-size:12px}
   h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:26px 0 8px}
   table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
@@ -103,10 +105,15 @@ function loadStats(){
     (d.kinds || []).forEach(function(k){ kinds[k.Kind] = k.n; });
     var stayed = (d.depth || []).filter(function(x){ return x.bucket !== '1 (bounced)'; })
                                 .reduce(function(a, b){ return a + b.sessions; }, 0);
+    // the number the page exists for: Taskuary.exe clicks on the landing page (index.html counts them as cta/download)
+    var downloads = (d.what || []).filter(function(x){ return x.Kind === 'cta' && x.What === 'download'; })
+                                  .reduce(function(a, b){ return a + b.n; }, 0);
     var html = '<div class="cards">'
+      + '<div class="card hero"><b>' + downloads + '</b><span>downloads · pressed Download for Taskuary.exe'
+      + (sessions ? ' · ' + Math.round(100 * downloads / sessions) + '% of sessions' : '') + '</span></div>'
       + '<div class="card"><b>' + sessions + '</b><span>sessions</span></div>'
       + '<div class="card"><b>' + events + '</b><span>things done</span></div>'
-      + '<div class="card"><b>' + (kinds.cta || 0) + '</b><span>pressed a button on the landing page</span></div>'
+      + '<div class="card"><b>' + (kinds.cta || 0) + '</b><span>pressed any button on the landing page</span></div>'
       + '<div class="card"><b>' + stayed + '</b><span>did more than arrive</span></div></div>';
     html += '<h2>Sessions per day</h2>' + (line(visits) || '<div class="msg">Not enough days yet.</div>');
     var dmax = Math.max.apply(null, (d.depth || []).map(function(x){ return x.sessions; }).concat([1]));

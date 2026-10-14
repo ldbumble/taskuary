@@ -60,13 +60,39 @@ serves it, so the app loads pictures only from itself and shows any other pictur
 **Credentials are scrubbed from prompts.** A key or password pasted into a message is replaced before
 the text reaches any AI provider. The stored message keeps it, because it is your mail.
 
+## A stranger's task runs in auto mode
+
+Every task knows **where its words came from**: you, a trusted sender, or a stranger. The least trusted
+text on it decides, and a stranger who writes on your colleague's thread makes it a stranger's task.
+Advisor ideas and reports count as a stranger's too, since they carry what they read. Only you raise a
+task: **Trust this task** on its card. Pressing Start does not.
+
+A stranger's task runs differently from yours:
+
+- **Its CLI runs in its own auto mode**, not with permissions bypassed. Claude Code's reviewer approves
+  or blocks each action. A CLI with no built-in reviewer does not run a stranger's task at all, and the
+  task says so.
+- **A fixed floor sits under it.** Whatever the reviewer decides, the session cannot read or use
+  Taskuary's own data folder, your SSH keys, cloud logins or the CLIs' sign-ins, and cannot call
+  Taskuary's own address. Nobody approves anything here; it is a refusal list checked in code.
+- **Their words are a file, not the prompt.** The agent's first prompt holds only Taskuary's own words
+  and points at a file labelled as a stranger's. The reviewer reads the prompt as your intent, so a
+  stranger's "run this script" never reaches it as yours.
+- **It runs with less of your environment.** Cloud keys and GitHub tokens are not passed to it.
+- **You answer when the reviewer will not.** The request shows on the card with Allow and Deny, and the
+  agent waits for you. Allow covers that one call.
+- **A stranger's words are never typed into a session started with full permissions.** It waits for
+  the next start, in auto mode.
+
+Your own tasks and trusted senders' tasks run exactly as before.
+
 ## What it does not do yet
 
 These are honest limits.
 
-- **Agents run as you.** A coding or general agent launched with full permissions can read the files
-  your user account can read and use the logins it has. That includes Taskuary's own data folder.
-  Inside that session, the agent token is a guard rail, not a wall.
+- **Your own agents run as you.** A task of yours or a trusted sender's launches with full
+  permissions. It can read the files your user account can read and use the logins it has, including
+  Taskuary's own data folder.
 - **The sender's address is taken at its word.** Taskuary does not yet check whether an email really
   came from the domain it claims (DKIM/DMARC). A forged address belonging to a colleague passes the
   sender rule.
@@ -88,12 +114,11 @@ These are honest limits.
   Taskuary knows how to turn off.
 - **Leave Hand answers to the working agent on Ask.** On Auto, a reply from the task's sender is typed
   straight into a running agent.
-- **Read a stranger's task before you press Start.** Look at what it asks, not only at who sent it.
+- **Read a stranger's task before you press Trust this task.** Trusting it gives it your permissions.
+- **Run a stranger's work on Claude Code 2.1.295 or later.** Older versions are refused it.
 
 ## What comes next
 
-The next step is to tag every task with **where its text came from**: you, a verified sender, or a
-stranger. Then each task gets authority to match. Work that carries a stranger's words will run in its
-CLI's normal approval mode instead of with permissions bypassed. Taskuary answers each approval request
-itself. It allows a request that fits the task, refuses one that reaches for credentials or an
-unknown server, and asks you when it cannot tell. Sender verification (DKIM/DMARC) follows.
+Sender verification (DKIM/DMARC), so a forged colleague's address stops counting as trusted; chat
+groups trusted per person rather than per room; and Hub and wall notes from a stranger's session kept
+apart until you have seen them.

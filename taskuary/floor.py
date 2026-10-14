@@ -169,6 +169,14 @@ def _is_conf(p: str) -> bool:
     return bool(_CONF.search(p)) or _under(p, _conf_dirs()) or bool(os.environ.get('CODEX_HOME')) and any(
         p == _norm(os.path.join(os.environ['CODEX_HOME'], f), real=rl) for f in ('config.toml', 'hooks.json', 'AGENTS.md') for rl in (True, False))
 
+def _git_config_write(args: list) -> bool:
+    "`git [-C dir] [-c k=v] config ...` that is not a read: it writes .git/config (or ~/.gitconfig) without naming either."
+    i = 0
+    while i < len(args) and args[i].startswith('-'): i += 2 if args[i] in ('-C', '-c') else 1
+    if i >= len(args) or args[i].lower() != 'config': return False
+    rest = args[i + 1:]
+    return not any(a.startswith('--get') or a in ('--list', '-l') for a in rest) and (rest[:1] or [''])[0] not in ('get', 'list')
+
 def _write_hit(text: str, cwd: str = '') -> str:
     "Why a shell command writes into one of them, or ''. Its targets: a redirection, or what a writing command writes to."
     h = _norm('~', real=False)
@@ -188,6 +196,7 @@ def _write_hit(text: str, cwd: str = '') -> str:
             elif p in _ALL_ARGS: targets += plain + [a[3:] for a in args if a.lower().startswith('of=')]
             elif p in _LAST_ARG: targets += plain[-1:] + [args[i + 1] for i, a in enumerate(args[:-1]) if a.lower() in ('-destination', '-t', '--target-directory')]
             elif p in _IN_PLACE and any(re.fullmatch(r'-\w*i\S*|--in-place\S*', a) for a in args): targets += plain
+            elif p == 'git' and _git_config_write(args): return "it changes git's configuration, which runs in the owner's next git command (core.hooksPath and kin)"
         for t in targets:
             if hit(t): return f'it writes {t}, which a later session of the owner reads as configuration or runs'
     return ''
@@ -203,6 +212,9 @@ def check(payload: dict, tid: int, store=None) -> dict:
         for p in _forms(inp[k], cwd):
             if _under(p, prot) and not _under(p, own): return _deny(f'{inp[k]} is a protected file')
             if tool in _WRITE_TOOLS and _is_conf(p): return _deny(f'{inp[k]} is read as configuration, or run, by a later session of the owner')
+    if tool in _WRITE_TOOLS:    # a script that imports Taskuary, written now and run by a command that names nothing
+        said = ' '.join(str(o) for o in (inp.get('content'), inp.get('new_string'), inp.get('new_source'), *[e.get('new_string') for e in inp.get('edits') or [] if isinstance(e, dict)]) if o)
+        if m := _PKG.search(said): return _deny(f"it writes code that runs Taskuary's own package ({m[0].strip()})")
     if why := _taskuary_hit(str(inp.get('command') or '')) or _write_hit(str(inp.get('command') or ''), cwd): return _deny(why)
     if tool in ('Grep', 'Glob'):    # these walk a tree: a root ABOVE a protected folder reaches it just as well
         sr = {_cf(os.path.normcase(os.path.abspath(o))) for o in ((inp.get('path') and _forms(inp['path'], cwd)) or ([cwd] if cwd else []))}

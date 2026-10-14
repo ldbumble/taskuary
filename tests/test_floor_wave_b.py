@@ -34,6 +34,24 @@ def test_taskuary_in_process_or_outside_the_agent_commands_is_refused(cmd):
 def test_the_agent_commands_and_ordinary_work_pass(cmd):
     for t in SHELLS: assert call(t, command=cmd) == {}, (t, cmd)
 
+def test_a_script_written_to_import_taskuary_is_refused_at_the_write(tmp_path):
+    "Else `python x.py` runs it, and the command names nothing."
+    f = str(tmp_path / 'x.py')
+    assert denied(call('Write', file_path=f, content='from taskuary.config import _read\nprint(_read())'))
+    assert denied(call('Edit', file_path=f, old_string='pass', new_string='import taskuary'))
+    assert denied(call('MultiEdit', file_path=f, edits=[{'old_string': 'a', 'new_string': '__import__("taskuary")'}]))
+    assert call('Write', file_path=f, content='import json\nprint("taskuary is a word here")') == {}
+
+@pytest.mark.parametrize('cmd', ['git config core.hooksPath /tmp/h', 'git config --global core.sshCommand "sh x"', 'git -C repo config core.fsmonitor x',
+                                 'git config --add include.path ../x', 'git config --unset core.hooksPath'])
+def test_git_config_writes_are_refused(cmd, repo):
+    for t in SHELLS: assert denied(call(t, repo, command=cmd)), (t, cmd)
+
+@pytest.mark.parametrize('cmd', ['git config --get user.email', 'git config --list', 'git config -l', 'git config --get-regexp remote',
+                                 'git config --show-origin --list', 'git -c core.pager=cat log'])
+def test_git_config_reads_pass(cmd, repo):
+    for t in SHELLS: assert call(t, repo, command=cmd) == {}, (t, cmd)
+
 def test_the_floor_lets_through_exactly_what_the_cli_runs_for_a_stranger():
     from taskuary import cli
     assert floor.TASKUARY_OK == {cli._flag(a) for a in cli.STRANGER_ACTS}

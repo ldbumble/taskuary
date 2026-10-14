@@ -343,6 +343,7 @@ def _events(t, p: dict) -> None:
                 g = _group(p)
                 for i, (text, choices) in enumerate(_questions(p), 1):
                     ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i), text=text, choices=choices, source='hook')
+            elif getattr(t, 'mode', 'full') == 'auto': pass     # a stranger's session: the permit door (permit) owns this card
             else:
                 # the decision point itself, with the tool and what it wants to do - not a sentence about it
                 text = _describe(str(p.get('tool_name') or 'a tool'), p.get('tool_input'))
@@ -559,10 +560,16 @@ def permit(payload: dict, tid: int, wait: float = None, store=None) -> dict:
     what = redact.scrub(str(inp.get('command') or inp.get('url') or inp.get('file_path') or inp))[:600]
     g = ws.group_key(f'permit:{tid}:{sid}:{time.time_ns()}')        # a new group per call, so one Allow can never cover the next
     rid = ws.question_id(g, 1)
-    ws.record(store, tid, sid, 'approval_needed', request_id=rid, text=f"The agent wants to use {payload.get('tool_name') or 'a tool'}: {what}",
-              choices=['Allow', 'Deny'], source='hook')
+    # the hold BEFORE the card: an answer that lands between the two would find nothing to release and the wait would never end
     ws.hold(tid, sid, g, [rid])
+    try: ws.record(store, tid, sid, 'approval_needed', request_id=rid, text=f"The agent wants to use {payload.get('tool_name') or 'a tool'}: {what}",
+                   choices=['Allow', 'Deny'], source='hook')
+    except Exception:
+        with ws._HELD_LOCK: ws.HELD.pop(g, None)          # a failed card must not leak a hold nobody can release
+        raise
     got = ws.wait_held(g, wait)
+    # released: the card must not stay open, and a late answer must not be typed into whatever pane has the task now
+    if got is None: ws.record(store, tid, sid, 'answered', request_id=rid, text='the session ended before you answered', source='hook')
     ok = bool(got) and str(got.get(rid) or '').strip().lower() == 'allow'
     dec = {'behavior': 'allow'} if ok else {'behavior': 'deny', 'message': 'the owner did not allow it' if got else 'the session ended before the owner answered'}
     return {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': dec}}

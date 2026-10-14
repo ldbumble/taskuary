@@ -3440,15 +3440,6 @@ def cli_hook_floor(payload: dict, task: int, request: Request):
     return floor.check(payload if isinstance(payload, dict) else {}, task, store)
 
 
-@app.post('/api/hooks/claude/permit')
-def cli_hook_permit(payload: dict, task: int, request: Request):
-    """Held on a worker thread until the owner answers (hooks.permit). Only the session's OWN task asks. Any error is a
-    non-2xx, which the hook's onFailure: block turns into a refusal - never an allow."""
-    from . import hooks
-    _own_task_only(request, task)
-    return hooks.permit(payload if isinstance(payload, dict) else {}, task, store=store)
-
-
 # A hook writes the store, and run on the loop it froze every pane, socket and screencast whenever another thread held
 # the store's lock (P16, measured: p99 45-60 ms, max 2 s, and a hook past curl's 3 s was dropped). So it runs off the
 # loop - on ONE worker, in arrival order, exactly as the loop used to serialise them: a PermissionRequest and the
@@ -3456,6 +3447,20 @@ def cli_hook_permit(payload: dict, task: int, request: Request):
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 _HOOK_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix='cli-hook')
+
+
+# A permit can wait days for the owner, so it gets its OWN threads: on anyio's shared pool of 40, forty waiting strangers
+# would starve every other sync route.
+_PERMIT_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix='permit')
+
+@app.post('/api/hooks/claude/permit')
+async def cli_hook_permit(payload: dict, task: int, request: Request):
+    """Held on its own thread until the owner answers (hooks.permit). Only the session's OWN task asks. Any error is a
+    non-2xx, which the hook's onFailure: block turns into a refusal - never an allow."""
+    from . import hooks
+    _own_task_only(request, task)
+    return await asyncio.get_running_loop().run_in_executor(
+        _PERMIT_POOL, partial(hooks.permit, payload if isinstance(payload, dict) else {}, task, store=store))
 
 async def _hook_off_loop(f, *args, **kw):
     """Run f on the hook worker. Shielded: a curl that hangs up must not cancel a hook still queued - on the loop it ran

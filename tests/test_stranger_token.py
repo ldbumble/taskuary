@@ -52,7 +52,8 @@ def test_the_stranger_table():
     assert not d('POST', '/api/hooks/claude/floor', {'task': '7'}) and not d('POST', '/api/hooks/claude/permit', {'task': '7'})
     assert d('POST', '/api/hooks/claude/floor', {'task': '8'}) and d('POST', '/api/hooks/claude/permit', {})
     assert not d('POST', '/api/hooks/claude') and not d('POST', '/api/agent/reply') and not d('POST', '/api/agent/done')
-    for p in ('/api/board/notes', '/api/hub', '/api/tools/run', '/api/reports/3/rerun', '/api/hooks/claude/ask', '/api/tasks/7/trust',
+    assert not d('POST', '/api/board/notes') and d('POST', '/api/board/notes/3/read')   # a note, pinned to its own task (wave B)
+    for p in ('/api/hub', '/api/tools/run', '/api/reports/3/rerun', '/api/hooks/claude/ask', '/api/tasks/7/trust',
               '/api/reviews/3/decide', '/api/tasks/7/comments', '/api/terminals'):
         assert d('POST', p), p
     of = lambda k, a: {('attachment', 5): 7, ('attachment', 6): 8, ('artifact', 9): 7}.get((k, a))
@@ -85,7 +86,7 @@ def test_a_stranger_token_uses_its_own_task_s_doors(monkeypatch):
     assert c.post('/api/agent/reply', json={'task_id': t, 'text': 'hi'}, headers=ST(t)).json() == {'ok': True, 'tid': t}
     assert c.post('/api/agent/reply', json={'task_id': other, 'text': 'hi'}, headers=ST(t)).status_code == 403
     assert c.post('/api/hooks/claude', json={}, headers=ST(t)).status_code == 200
-    for p in ('/api/board/notes', '/api/hub', '/api/tools/run', f'/api/tasks/{t}/comments'):
+    for p in ('/api/hub', '/api/tools/run', f'/api/tasks/{t}/comments'):
         assert c.post(p, json={'body': 'x', 'title': 'x'}, headers=ST(t)).status_code == 403, p
 
 def test_a_permit_takes_the_stranger_token_for_its_own_task(monkeypatch):

@@ -65,6 +65,54 @@ def _open_keyed(url):
     webbrowser.open(launchkey.link(url))
 
 
+# ── INSIDE AN AGENT'S SESSION (wave B, B1) ──────────────────────────────────────────────────────────────────────────
+# This process runs with the session's own rights, and every in-process road reads Taskuary's home: --prompts prints the
+# owner's documents and mail, --link mints the owner's key, and config.load() falls back to config.toml's OWNER token the
+# moment a session unsets its own. So a session runs the agent commands it is told to use and nothing else - and a
+# stranger's runs only the ones that go over HTTP with its own task-bound token, where the server's STRANGER scope decides.
+AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'done', 'note', 'board', 'learned', 'upvote', 'downvote', 'comment')
+STRANGER_ACTS = AGENT_ACTS[:8]                      # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
+OWNER_ACTS = ('prompts', 'reroute_held', 'backfill_asks', 'evalset', 'demo', 'link')
+NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
+            "session never borrows it. Restart the session from its task.")
+def _flag(a): return '--' + a.replace('_', '-')
+
+def _stranger_task(tid: int) -> bool:
+    "Fail closed: a task whose origin cannot be read counts as a stranger's."
+    try:
+        from . import origin
+        from .store import SQLiteStore
+        return origin.of_task(SQLiteStore(config.db_path()), tid)[0] == 'stranger'
+    except Exception: return True
+
+def session() -> tuple:
+    """(is this an agent's session, the stranger's task it works or None). Any one marker Taskuary put in the environment
+    makes it a session (launchkey.in_session); a stranger token, or a stranger-origin TASKUARY_TASK, makes it a stranger's.
+    The CLI's own markers (CLAUDECODE and kin) are not used: the owner's own Claude Code in a terminal sets them too."""
+    import os
+    if m := launchkey.STRANGER_TOKEN.fullmatch(os.environ.get('TASKUARY_TOKEN') or ''): return True, int(m[1])
+    if not launchkey.in_session(): return False, None
+    tid = os.environ.get('TASKUARY_TASK') or ''
+    return True, (int(tid) if tid.isdigit() and _stranger_task(int(tid)) else None)
+
+def _acts(args) -> list:
+    return [a for a in AGENT_ACTS if (getattr(args, a) is not None if a in ('reply', 'draft', 'done') else bool(getattr(args, a)))]
+
+def _refuse_outside(args, stranger):
+    "SystemExit unless every command asked for is one this session may run - and at least one is (bare `taskuary` starts the app)."
+    acts, ok = _acts(args), STRANGER_ACTS if stranger is not None else AGENT_ACTS
+    bad = [_flag(f) for f in OWNER_ACTS if getattr(args, f) not in (None, False)] + [_flag(a) for a in acts if a not in ok]
+    if acts and not bad: return
+    whose = "an agent session on a stranger's task, which reaches only its own task" if stranger is not None else 'an agent session'
+    raise SystemExit(f"taskuary: {', '.join(bad) or 'starting or opening the app'} refused - this is {whose}. It runs "
+                     f"{', '.join(map(_flag, ok))}; the rest is the owner's to run.")
+
+def _session_srv() -> dict:
+    "Where the server is, and the SESSION's own token - config.toml's is the owner's, and a session that unset its own must not borrow it."
+    import os
+    return {**(config._read().get('server') or {}), **config._env_server(), 'token': os.environ.get('TASKUARY_TOKEN') or ''}
+
+
 def main():
     ap = argparse.ArgumentParser(prog='taskuary', description='Your work, already underway - a personal AI assistant for your job.')
     ap.add_argument('--host', help='override [server].host (0.0.0.0 to listen on all interfaces)')
@@ -169,6 +217,8 @@ def main():
     ap.add_argument('--settled', action='store_true', help='with --item: nothing is left for the owner to do on it')
     ap.add_argument('--propose', default='', choices=['', 'merge', 'close', 'changes'], help='with --item: what should happen to it')
     args = ap.parse_args()
+    agent, stranger = session()
+    if agent: _refuse_outside(args, stranger)
     if args.demo:
         import os, tempfile
         from . import demo
@@ -199,7 +249,8 @@ def main():
         for a in args.attach:
             try: files.append({'name': os.path.basename(a), 'data': base64.b64encode(open(a, 'rb').read()).decode()})
             except OSError as e: print(f'not saved: cannot read {a}: {e.strerror or e}'); return
-        srv = config.load()['server']
+        srv = _session_srv() if agent else config.load()['server']
+        if agent and not srv['token']: print(NO_TOKEN); return
         host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
         base = f"http://{host}:{srv.get('port') or 7787}"
         hdr = _session_headers(srv)
@@ -224,7 +275,8 @@ def main():
         tid = os.environ.get('TASKUARY_TASK')
         if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no batch to report on'); return
         if not args.result.strip(): print('nothing reported - say what you found with --result'); return
-        srv = config.load()['server']
+        srv = _session_srv() if agent else config.load()['server']
+        if agent and not srv['token']: print(NO_TOKEN); return
         host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
         base = f"http://{host}:{srv.get('port') or 7787}"
         try:
@@ -246,7 +298,8 @@ def main():
         if not str(tid).isdigit():
             print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to finish')
             return
-        srv = config.load()['server']
+        srv = _session_srv() if agent else config.load()['server']
+        if agent and not srv['token']: print(NO_TOKEN); return
         host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
         base = f"http://{host}:{srv.get('port') or 7787}"
         hdr = _session_headers(srv)
@@ -266,6 +319,25 @@ def main():
                   'the task and they have been told; stay at the prompt in case they have more.')
         else:
             print(f"not closed: {out.get('why') or out.get('detail') or r.text[:200]}")
+        return
+    if args.note and stranger is not None:
+        # a stranger's note: through the board door, which pins it to the token's own task (B2 keeps it off the others' seeds)
+        import os, sys, requests
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        srv = _session_srv()
+        if not srv['token']: print(NO_TOKEN); return
+        host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
+        base = f"http://{host}:{srv.get('port') or 7787}"
+        try:
+            r = requests.post(f'{base}/api/board/notes', timeout=30, headers={'X-Taskuary-Token': srv['token']},
+                              json={'body': args.note, 'kind': args.kind, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent',
+                                    'cwd': os.environ.get('TASKUARY_CWD') or os.getcwd()})
+            out = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
+        except Exception as e:
+            print(f'could not reach Taskuary at {base}: {e}'); return
+        print(f"posted to the wall as {out.get('Agent')} [{out.get('Kind')}]" if r.status_code == 200 and out.get('Kind')
+              else f"not posted: {out.get('detail') or r.text[:200]}")
         return
     if args.board or args.note or args.learned or args.upvote or args.downvote or args.comment:
         import os, sys
@@ -313,12 +385,12 @@ def main():
             # an empty registry of its own, so reading SQLite here would mislabel active SID notes
             # as dead. Ask the same endpoint as the Board, with this session's scoped token.
             import requests
-            srv = config.load()['server']
+            srv = _session_srv() if agent else config.load()['server']
             base = os.environ.get('TASKUARY_API') or os.environ.get('TASKUARY_URL')
             if not base:
                 host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
                 base = f"http://{host}:{srv.get('port') or 7787}"
-            token = os.environ.get('TASKUARY_TOKEN') or srv.get('token') or ''
+            token = srv['token'] if agent else os.environ.get('TASKUARY_TOKEN') or srv.get('token') or ''
             try:
                 response = requests.get(f'{base.rstrip("/")}/api/board/notes', timeout=5,
                                         headers={'X-Taskuary-Token': token} if token else {},

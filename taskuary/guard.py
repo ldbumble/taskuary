@@ -222,9 +222,10 @@ def stranger_tid(server: dict, presented) -> int | None:
     return tid if token_matches(presented, stranger_token(server, tid)) else None
 
 # Writes a stranger's session is handed - its session-file hooks, the user-scope event hook, and `taskuary --reply/--done/
-# --draft/--item`, whose task id owns_task checks in the handler. Not the wall, the Hub, the data tools or a report rerun:
-# each of those reaches past its own task.
-_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item)$'))
+# --draft/--item`, whose task id owns_task checks in the handler - and `taskuary --note`, whose note the board door pins to
+# the token's own task, so it never reaches another session's seed (blackboard.live_notes, wave B). Not the Hub, the data
+# tools or a report rerun: each of those reaches past its own task.
+_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item)$'), re.compile(r'^/api/board/notes$'))
 _STRANGER_TASK_HOOK = re.compile(r'^/api/hooks/claude/(floor|permit)$')
 _STRANGER_FILE = re.compile(r'^/api/(attachments|task-artifacts)/(\d+)$')
 STRANGER_WHY = "a session working a stranger's task reaches its own task and nothing else"

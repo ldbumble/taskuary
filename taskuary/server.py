@@ -3171,10 +3171,13 @@ def board_notes(cwd: str = '', limit: int = 60, all: bool = False):
             'kinds': list(blackboard.KINDS), 'summary_kind': blackboard.SUMMARY}
 
 @app.post('/api/board/notes')
-def board_post(body: NoteBody):
+def board_post(body: NoteBody, request: Request):
+    # a stranger's session speaks for its own task, whatever its body says: that task is what keeps the note off every
+    # other session's seed (blackboard.live_notes)
+    tid = guard.stranger_tid(cfg['server'], request.headers.get('X-Taskuary-Token'))
     try:
         return blackboard.post(store, body.body, body.kind, body.agent or ACTOR, body.cwd or '',
-                               body.task_id, body.files or '')
+                               body.task_id if tid is None else tid, body.files or '')
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.post('/api/board/notes/{note_id}/read')

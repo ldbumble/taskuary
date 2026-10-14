@@ -6,7 +6,7 @@ seeded only for `/?k=<key>`, a key minted here - by the desktop and the CLI in-p
 POST /api/launch-key - used once, within TTL seconds. A tab already holding the token in localStorage needs none.
 
 Stdlib only, imported before uvicorn starts: cli.open_when_ready's thread must import nothing (its docstring says why)."""
-import http.client, json, secrets, threading, time, urllib.parse
+import http.client, json, os, re, secrets, threading, time, urllib.parse
 
 TTL = 120
 _KEYS, _LOCK = {}, threading.Lock()
@@ -24,10 +24,22 @@ def redeem(k) -> bool:
     with _LOCK: exp = _KEYS.pop(str(k or ''), None)
     return bool(exp and exp > time.monotonic())
 
+# An agent's session, by what Taskuary put in its environment (terminal.session_env): any ONE marker is enough, because a
+# session that unsets its token keeps the rest - and with none of them config.toml is the owner's, read in-process.
+# guard.stranger_token's shape, matched here without guard: this module imports nothing of ours.
+MARKERS = ('TASKUARY_TASK', 'TASKUARY_SID', 'TASKUARY_AGENT', 'TASKUARY_TASK_TOKEN')
+STRANGER_TOKEN = re.compile(r's1\.(\d{1,12})\.[0-9a-f]{32}')
+
+def in_session() -> bool:
+    return any(os.environ.get(k) for k in MARKERS) or bool(STRANGER_TOKEN.fullmatch(os.environ.get('TASKUARY_TOKEN') or ''))
+
 def link(url: str) -> str: return f"{url.rstrip('/')}/?k={mint()}"
 
 def remote_link(url: str, token: str) -> str:
-    "A keyed address from ANOTHER process's server (the instance already running), or the plain one if it gives none."
+    """A keyed address from ANOTHER process's server (the instance already running), or the plain one if it gives none.
+    Never for a session: a key is the owner token for whoever opens it first (R29), and config.toml's token is in reach
+    of any process the session starts."""
+    if in_session(): return url
     u = urllib.parse.urlsplit(url)
     try:
         conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=5)

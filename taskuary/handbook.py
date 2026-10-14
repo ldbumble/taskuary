@@ -98,6 +98,17 @@ def entries_for_writer(store, limit: int = 60) -> str:
     return '\n'.join(f"#{r['LoreId']} [{r['Topic']}] {r['Title']}" for r in rows)
 
 
+STRANGER_WHY = ("this session works a stranger's task, and the Hub is handed to every later agent as company fact - "
+                "what a stranger's words led to is not that")
+
+def from_stranger(store, task_id) -> bool:
+    "Did this entry come out of a stranger-origin task? Fail closed: a task whose origin cannot be read counts as one."
+    if task_id in (None, '', 0): return False
+    try:
+        from . import origin
+        return origin.of_task(store, int(task_id))[0] == 'stranger'
+    except Exception: return True
+
 def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto', author: str = 'agent',
          task_id=None, cwd: str = '', repo: str = '', clip: bool = False, why_earned: str = '', same_as=None) -> dict:
     """One entry. Everything but the title is optional: an agent that knows only what it wants to
@@ -108,7 +119,11 @@ def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto'
     `merged: True` then, and the new wording lands as a comment when it adds anything. `clip`
     shortens instead of refusing - for the on-close road, where nobody is there to retry.
 
-    `same_as` is the writer's own answer to "is this entry N said again?" - honoured when N is a live entry."""
+    `same_as` is the writer's own answer to "is this entry N said again?" - honoured when N is a live entry.
+
+    Every road into the Hub ends here - the API, `--learned`, the on-close learner, the assistant's envelope - so this is
+    where an entry from a stranger's task is refused (wave B), before it can be filed OR counted as agreeing."""
+    if from_stranger(store, task_id): raise ValueError(STRANGER_WHY)
     title = ' '.join(str(title or '').split())
     body = ' '.join(str(body or '').split())
     if not title: raise ValueError('a Hub entry needs a title - one line saying what is true')
@@ -228,6 +243,7 @@ def learn_from_session(store, task_id: int, transcript: str, agent: str = 'coder
     entry is a bonus, and a session that finished must still close if this fails."""
     from .llm import build_llm
     if not str(transcript or '').strip(): return []
+    if from_stranger(store, task_id): return []          # post() would refuse each entry; nor is the model asked to write them
     try:
         llm = llm or build_llm(store)
         if not llm: return []
@@ -287,6 +303,7 @@ def assistant_entries(reply: str) -> tuple[str, list]:
 def publish_assistant_entries(store, task_id: int, reply: str, author: str = 'assistant') -> str:
     """Publish valid Assistant envelopes and return only the owner-visible response text."""
     clean, entries = assistant_entries(reply)
+    if from_stranger(store, task_id): return clean      # the envelope still comes out of what the owner sees
     for e in entries:
         post(store, e['title'], e.get('body') or '', e.get('topic') or '', e.get('kind') or 'new_idea',
              author, task_id, clip=True, why_earned=e.get('why_earned') or '', same_as=e.get('same_as'))

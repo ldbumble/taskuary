@@ -1580,7 +1580,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # It rides even when nobody else is running: the last session's "ready to push, tests green"
     # is exactly what the next one needs, and by then that session is gone.
     if cwd:
-        said = bb.wall_text(store, cwd)
+        said = bb.wall_text(store, cwd, for_tid=tid)     # another task's stranger notes never; this task's own, yes
         if said: parts.append(said)
     # the owner's own words stay in the prompt (the reviewer should read them as the owner's); text a caller built from a message does not
     if instruction and instruction.strip():

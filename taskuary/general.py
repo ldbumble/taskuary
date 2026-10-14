@@ -634,7 +634,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # the chat is an agent too, so it is on the wall - the HOUSE lane, the notes with no
     # checkout behind them, which is where it and the owner leave things for everybody
     from . import blackboard as bb, selfclose
-    wall = bb.chat_text(store)
+    wall = bb.chat_text(store, for_tid=tid)
     # ...and how this task ENDS. Only where an ending means something: a task somebody wrote in
     # about has an answer owed, and closing it drafts that answer. A task the owner opened to
     # think out loud in has nobody waiting, so it stays open until they say otherwise.

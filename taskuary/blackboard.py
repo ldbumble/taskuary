@@ -124,13 +124,28 @@ def is_live(note: dict, sids: set, tids: set) -> bool:
     return bool(note.get('TaskId')) and int(note['TaskId']) in tids
 
 
-def live_notes(store, cwd: str = None, limit: int = 60) -> list:
+def without_strangers(store, rows: list, for_tid=None) -> list:
+    """The notes minus those written on a stranger-origin task - except on that task itself (wave B). What its agent wrote
+    is the stranger's words carried on, and every other surface here rides into a session that runs with full permissions.
+    Kept in the database, and in the owner's history. Fail closed: a task whose origin cannot be read counts as a stranger's."""
+    from . import origin
+    memo = {}
+    def strange(t):
+        if t not in memo:
+            try: memo[t] = origin.of_task(store, t)[0] == 'stranger'
+            except Exception: memo[t] = True
+        return memo[t]
+    return [n for n in rows if not n.get('TaskId') or int(n['TaskId']) == for_tid or not strange(int(n['TaskId']))]
+
+
+def live_notes(store, cwd: str = None, limit: int = 60, for_tid=None) -> list:
     """THE one live selection (PW-179): what every surface - the Board's live handoff, a new agent's seed,
     the assistant's prompt, `taskuary --board` - reads. Notes from sessions alive now, plus the owner's
-    guidance; nothing from a session that ended, however recent, and no fallback to history."""
+    guidance; nothing from a session that ended, however recent, and no fallback to history. A stranger's
+    task's notes only for `for_tid`, that task's own reader (without_strangers)."""
     sids, tids = _live_ids(store)
     rows = store.notes(norm(cwd) if cwd else None, max(int(limit) * 5, 300))
-    return [n for n in rows if is_live(n, sids, tids)][:int(limit)]
+    return without_strangers(store, [n for n in rows if is_live(n, sids, tids)], for_tid)[:int(limit)]
 
 
 def live_wall(store, cwd: str = '', limit: int = 60) -> list:
@@ -138,26 +153,27 @@ def live_wall(store, cwd: str = '', limit: int = 60) -> list:
     return live_notes(store, cwd or None, limit)
 
 
-def history(store, cwd: str = None, limit: int = 200) -> list:
+def history(store, cwd: str = None, limit: int = 200, strangers: bool = True) -> list:
     """Every note, rolled or not, each marked live or historical - an ended run's words are kept and
-    shown as history, never as current file ownership (PW-180)."""
+    shown as history, never as current file ownership (PW-180). `strangers=False` for any reader but the owner."""
     sids, tids = _live_ids(store)
-    return [{**n, 'live': is_live(n, sids, tids)} for n in store.notes(norm(cwd) if cwd else None, limit, rolled=True)]
+    rows = store.notes(norm(cwd) if cwd else None, limit, rolled=True)
+    return [{**n, 'live': is_live(n, sids, tids)} for n in (rows if strangers else without_strangers(store, rows))]
 
 
-def house_wall(store, limit: int = 8) -> list:
+def house_wall(store, limit: int = 8, for_tid=None) -> list:
     """The lane with no checkout in it: what the assistant chat and the owner leave for everyone -
     the owner's guidance always, an agent's note while its session lives."""
-    return [n for n in live_notes(store, None, 200) if not str(n.get('Cwd') or '').strip()][:limit]
+    return [n for n in live_notes(store, None, 200, for_tid) if not str(n.get('Cwd') or '').strip()][:limit]
 
 
-def chat_text(store, limit: int = 6) -> str:
+def chat_text(store, limit: int = 6, for_tid=None) -> str:
     """The wall paragraph for the assistant chat: the live house lane, and how to add to it.
 
     The chat is an agent too - it researches, it reads systems, it finds the thing the next
     session would spend an hour rediscovering. Leaving it out of the wall meant the only agents
     talking to each other were the ones in a checkout."""
-    rows = house_wall(store, limit)
+    rows = house_wall(store, limit, for_tid)
     if not rows: return ''
     lines = ' // '.join(f"[{r['Kind']}] {r['Agent']} ({_ago(r['CreatedAt'])}): {r['Body']}" for r in reversed(rows))
     return ('THE WALL - notes the other agents and the owner left for everyone, newest last. '
@@ -246,14 +262,14 @@ HOW_TO_POST = ('Post your own with `taskuary --note "..."` (--kind working|note|
                '`--kind ready` before you push.')
 
 
-def wall_text(store, cwd: str, limit: int = 8) -> str:
+def wall_text(store, cwd: str, limit: int = 8, for_tid=None) -> str:
     """The wall, for the seed prompt: a POINTER, not a transcript - and LIVE notes only (PW-176).
 
     A seed is typed into a TUI on one line, and the whole document does not belong there - the
     newest note plus the command that shows the rest is what makes an agent go and read it.
     Nothing at all when no live session has said anything: an ended session's words are history,
     and a paragraph that says "no notes" is tokens spent to say nothing."""
-    rows = live_notes(store, cwd, limit)
+    rows = live_notes(store, cwd, limit, for_tid)
     if not rows: return ''
     top = rows[0]
     said = (f'THE WALL: {len(rows)} live note(s) from agents in this checkout right now - read them '

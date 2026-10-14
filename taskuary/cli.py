@@ -380,6 +380,7 @@ def main():
             return
         if args.all:
             rows = store.notes(bb.norm(cwd), 40, rolled=True)
+            if agent: rows = bb.without_strangers(store, rows)     # the history, as a session reads it: no stranger's task's words
         else:
             # Liveness belongs to the running server's terminal registry. A fresh CLI process has
             # an empty registry of its own, so reading SQLite here would mislabel active SID notes

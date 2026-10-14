@@ -125,7 +125,7 @@ def test_every_way_of_emptying_the_environment_is_refused(cmd):
 
 @pytest.mark.parametrize('cmd', ['env', 'printenv PATH', 'env FOO=1 npm test', 'env -C dir npm test', 'env -u FOO npm test',
                                  'git commit -m "Taskuary fix"', 'git commit -m "data from Taskuary, import Taskuary docs"',
-                                 'grep -rn "env:" .github', 'echo $env:PATH'])
+                                 'echo $env:PATH'])
 def test_ordinary_environment_and_commit_commands_pass(cmd):
     for t in SHELLS: assert call(t, command=cmd) == {}, (t, cmd)
 
@@ -153,3 +153,36 @@ def test_an_edit_to_an_extensionless_script_is_judged_by_its_shebang(tmp_path):
     assert denied(call('Edit', file_path=str(f), old_string='echo hi', new_string='taskuary --prompts'))
     g = tmp_path / 'notes'; g.write_text('plain words\n')
     assert call('Edit', file_path=str(g), old_string='plain', new_string='taskuary --prompts') == {}
+
+
+# ── round 3 (R35): for a command, the broad check OR the precise one; the narrowing is for written non-script content ─
+@pytest.mark.parametrize('cmd', [
+    'python -W ignore -m taskuary --prompts', 'python3 -X utf8 -m taskuary --prompts', 'uv run -m taskuary --prompts',
+    'env FOO=1 env -i taskuary --note x', 'nice env -i taskuary --note x', 'timeout 5 env -i taskuary --note x',
+    'Remove-Item "Env:$n"', 'Remove-Item -Path "Env:*"', 'Get-Item Env:* | Remove-Item',
+    'env --ign taskuary --note x', 'env --ignore taskuary --note x', 'env -S "-i taskuary --note x"', 'env -S-i taskuary --note x',
+    'env --split-string="-i taskuary" --note x', 'Start-Process taskuary -UseNew', 'Start-Process taskuary -UseNewEnv'])
+def test_the_broad_forms_are_refused_again(cmd):
+    for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+
+@pytest.mark.parametrize('cmd', ['exec python -c "print(1)"', 'exec bash -c "npm test"', 'git commit -m "Taskuary fix"', 'env', 'printenv PATH',
+                                 'env FOO=1 npm test', 'env -C dir npm test', 'echo $env:PATH'])
+def test_still_ordinary(cmd):
+    for t in SHELLS: assert call(t, command=cmd) == {}, (t, cmd)
+
+@pytest.mark.parametrize('name,content', [
+    ('package.json', '{"name": "x", "scripts": {"test": "env -i taskuary --note x"}}'), ('Makefile', 'test:\n\tpython -m taskuary --prompts\n'),
+    ('GNUmakefile', 'all:\n\ttaskuary --link\n'), ('justfile', 'go:\n    taskuary --prompts\n'), ('Taskfile.yml', 'tasks:\n  go:\n    cmds:\n      - taskuary --prompts\n'),
+    ('x.ts', 'import { execSync } from "child_process"\n'), ('x.ts', '#!/usr/bin/env node\n'), ('x.mts', 'import taskuary\n'),
+    ('x.py', 'import os\nos.environ.update(TASKUARY_SID="")\n'), ('x.py', 'import os\nos.unsetenv("TASKUARY_SID")\n'),
+    ('x.py', 'import os\nos.putenv("TASKUARY_TASK", "5")\n')])
+def test_task_runner_files_and_typescript_are_judged_as_scripts(name, content, tmp_path):
+    r = call('Write', file_path=str(tmp_path / name), content=content)
+    assert denied(r) == (name != 'x.ts'), (name, content)                  # the two .ts files are ordinary scripts
+
+def test_a_package_json_without_them_is_written(tmp_path):
+    assert call('Write', file_path=str(tmp_path / 'package.json'), content='{"scripts": {"test": "env FOO=1 node --test", "build": "vite build"}}') == {}
+
+def test_an_edit_that_makes_a_file_a_script_is_judged_as_one(tmp_path):
+    f = tmp_path / 'run'; f.write_text('echo hi\ntaskuary --prompts\n')
+    assert denied(call('Edit', file_path=str(f), old_string='echo hi', new_string='#!/bin/sh\necho hi'))

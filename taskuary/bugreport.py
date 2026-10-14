@@ -264,3 +264,40 @@ def scrub(text: str, store, known: list = None) -> str:
     `known` is `private_strings(store)`, for a caller scrubbing many strings against one lookup. Fails closed."""
     try: return _clean(text, private_strings(store) if known is None else known)
     except Exception as e: raise Unsafe(SAFE_MSG) from e
+
+
+# ── draft ────────────────────────────────────────────────────────────────────────────────────
+NO_ERROR = 'Something is wrong'
+SYSTEM = ('You write a bug report for a public GitHub tracker from the facts given and nothing else. Answer JSON: '
+          '"title" - a GitHub issue title, under 80 characters; "explanation" - two or three plain sentences: what '
+          'the person was doing, what happened, what they expected. Use only these facts: never guess or invent '
+          'names, people, companies or details, and leave [removed] parts out rather than filling them in.')
+WANT = {'type': 'object', 'properties': {'title': {'type': 'string'}, 'explanation': {'type': 'string'}},
+        'required': ['title', 'explanation']}
+
+
+def _ask(store, brain, f) -> dict:
+    """The model's title and explanation, or {} - a draft without them is still a report."""
+    from . import llm as ai
+    try:
+        brain = brain or ai.build_llm(store, gear='light')
+        if not brain: return {}
+        user = '\n'.join([f"Where: {f['where'] or 'unknown'}", f"Recent actions: {', '.join(f['actions']) or 'none'}",
+                          f"Error:\n{f['error'] or 'none reported'}", f"Environment: {f['env']}", f"Log lines:\n{f['log'][-3000:]}"])
+        d = ai.ask_json(brain, SYSTEM, user, want=WANT, max_tokens=300).data
+        return d if isinstance(d, dict) else {}
+    except Exception: return {}
+
+
+def draft(store, client: dict, llm=None) -> dict:
+    """The report the popup shows: {title, explanation, where, error, env, log, actions, fingerprint}, every string
+    scrubbed. The model is handed the scrubbed facts only, and its answer is scrubbed again. Raises Unsafe."""
+    raw = collect(store, client)
+    try: known = private_strings(store)
+    except Exception as e: raise Unsafe(SAFE_MSG) from e
+    S = lambda t: scrub(t, store, known)
+    f = {**{k: S(v) for k, v in raw.items() if k != 'actions'}, 'actions': [S(a) for a in raw['actions']]}
+    d = _ask(store, llm, f)
+    first = next((l.strip() for l in f['error'].splitlines() if l.strip()), '') or NO_ERROR
+    title = _norm(S(_norm(d.get('title'))))[:80] or first[:80]
+    return {'title': title, 'explanation': S(str(d.get('explanation') or '').strip()), **f}

@@ -248,6 +248,8 @@ def test_a_resumed_session_is_told_what_arrived_since_its_last_run_and_where_the
     store._exec("INSERT INTO transcript (TaskId, Sid, Agent, Text, CreatedAt) VALUES (?, 's1', 'coder', 'did the work', '2026-09-24 14:57:40')", (tid,))
     later = store.add_message({'TaskId': tid, 'ExternalId': 'w2', 'Channel': 'whatsapp', 'ConversationId': 'wa:gabi',
                                'FromName': 'Gabi', 'SentAt': '2026-09-24 15:00:47', 'BodyText': 'It says AI not set up but it is', 'Status': 'routed'})
+    # when each REACHED the thread (context.is_new): a moment after it was sent, as ingest stamps it
+    store._exec("UPDATE message SET CreatedAt=datetime(SentAt, '+20 seconds') WHERE TaskId=?", (tid,))
     shot = tmp_path / 'shot.jpg'; shot.write_bytes(b'jpg')
     store.add_attachment({'MessageId': later, 'Name': 'shot.jpg', 'ContentType': 'image/jpeg', 'Path': str(shot), 'Size': 3})
     with mock.patch.dict(os.environ, {'TASKUARY_HOME': str(tmp_path)}):

@@ -19,7 +19,7 @@ from loguru import logger
 from .store import task_ref
 
 PAST = 5                 # closed tasks worth carrying
-THREAD_CHARS = 6000      # the whole thread, most recent last, capped
+THREAD_CHARS = 15000     # the whole thread, newest first, capped - never what is new since the last run. A file, not the seed: no tty limit
 REPORT_CHARS = 1500
 
 
@@ -233,18 +233,32 @@ def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
     if pbs: parts.append(pbs)
     allm = store.list_messages(tid)
     if len(allm) > 1:
-        thread, used = [], 0
-        for m in allm:
+        # NEWEST FIRST, and what came after the agent's last run is never the part cut. Oldest-first under the cap kept the three
+        # first mails of an eight-mail thread and dropped the five after them - the very ones a reopened task is about - while the
+        # resume seed told the agent "3 new messages, read them in this file" (the owner, 2026-10-14: "do they see the new messages
+        # and full context?"). The same line as resume_seed: reached us after the last run began.
+        since = str((store.last_transcript(tid) or {}).get('CreatedAt') or '')
+        thread, used, left = [], 0, 0
+        for m in sorted(allm, key=lambda m: (str(m.get('CreatedAt') or m.get('SentAt') or ''), m['MessageId']), reverse=True):
+            new = bool(since) and is_new(m, since)
             who = 'THE OWNER' if m.get('Status') == 'context' else (m.get('FromName') or m.get('FromEmail') or '?')
             body = _short(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=1500)[0], 1500)
-            line = f"--- {who} · {m.get('SentAt')} · {m.get('Channel')}\n{body}"
+            line = f"--- {'[NEW since your last run] ' if new else ''}{who} · {m.get('SentAt')} · {m.get('Channel')}\n{body}"
             # ...with what came ATTACHED: a screenshot is often the whole message ("this is what I got")
             atts = [a for a in (store.list_attachments(m['MessageId']) or []) if a.get('Path')]
             if atts: line += '\n' + '\n'.join(f"  [attachment: {a.get('Name') or 'file'} ({a.get('ContentType') or '?'}) - {a['Path']}]" for a in atts)
-            if used + len(line) > THREAD_CHARS: break
+            if used + len(line) > THREAD_CHARS and not new: left += 1; continue
             thread.append(line); used += len(line)
-        parts.append(f'## The whole thread ({len(allm)} messages, oldest first)\n' + '\n\n'.join(thread))
+        parts.append(f'## The whole thread ({len(allm)} messages, newest first'
+                     + (f'; {left} older not shown' if left else '') + ')\n' + '\n\n'.join(thread))
     return '\n\n'.join(parts) if len(parts) > 1 else ''
+
+
+def is_new(m: dict, since: str) -> bool:
+    """Did this message reach the thread after `since` (the agent's last run began)? An inbound line by when it reached US: one
+    sent earlier but read in later is still news to an agent that never saw it. Our own sends and filed context are not news."""
+    return (m.get('Status') != 'context' and m.get('Direction') != 'out'
+            and str(m.get('CreatedAt') or m.get('SentAt') or '') > since)
 
 
 def write(store, tid: int, msgs: list = None, repo: str = None):

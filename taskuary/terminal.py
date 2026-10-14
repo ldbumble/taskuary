@@ -755,8 +755,7 @@ def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
         try:
             from . import context as ctx
             since = str((store.last_transcript(tid) or {}).get('CreatedAt') or '')
-            new = [m for m in store.list_messages(tid) if m.get('Status') != 'context' and m.get('Direction') != 'out'
-                   and str(m.get('SentAt') or '') > since] if since else []
+            new = [m for m in store.list_messages(tid) if ctx.is_new(m, since)] if since else []     # the file marks the same ones
             cpath = ctx.write(store, tid)
             if new and cpath:
                 n = len(new)

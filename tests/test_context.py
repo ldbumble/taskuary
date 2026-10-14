@@ -86,3 +86,29 @@ class FileTests(unittest.TestCase):
         self.assertIsNone(context.write(s, tid))
         seed = terminal.seed_text(s, tid)
         self.assertNotIn('CONTEXT FILE', seed); self.assertIn('everything known about it is above. ', seed)
+
+
+class NewestFirstTests(unittest.TestCase):
+    """A reopened coding task's context file kept the thread's FIRST mails and cut the ones after them - the very ones it was
+    reopened for - while the resume seed said "3 new messages, read them in this file" (the owner, 2026-10-14)."""
+    def test_a_long_thread_keeps_what_came_after_the_last_run_and_marks_it(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Budget tab still missing', 'Kind': 'coding'}, 't')
+        def mail(n, sent, reached):
+            mid = s.add_message({'TaskId': tid, 'ExternalId': f'b{n}', 'ConversationId': 'cb', 'Channel': 'email', 'Subject': 'Budget tab',
+                                 'FromName': f'Sender {n}', 'FromEmail': f's{n}@northwind.example', 'SentAt': sent,
+                                 'BodyText': f'Mail {n}. ' + 'detail ' * 200, 'Status': 'routed'})
+            s.cx.execute('UPDATE message SET CreatedAt=? WHERE MessageId=?', (reached, mid))
+        for n in range(1, 13): mail(n, f'2026-10-{n:02d} 09:00:00', f'2026-10-{n:02d} 09:05:00')
+        s.add_transcript(tid, 'sid-1', 'worked it', agent='coder', ext_id='ext-1')
+        s.cx.execute("UPDATE transcript SET CreatedAt='2026-10-10 12:00:00' WHERE TaskId=?", (tid,))
+        mail(13, '2026-10-09 18:00:00', '2026-10-13 08:00:00')                 # sent before the run, read in after it: still news
+        s.cx.commit()
+        text = context.build(s, tid)
+        self.assertIn('newest first;', text); self.assertIn('older not shown', text)
+        order = [int(n) for n in __import__('re').findall(r'^--- (?:\[NEW since your last run\] )?Sender (\d+) ·', text, __import__('re').M)]
+        self.assertEqual(order[:4], [13, 12, 11, 10], 'newest first, by when it reached the thread')
+        self.assertNotIn(1, order, 'the oldest are what the cap drops')
+        for n in (11, 12, 13): self.assertIn(f'--- [NEW since your last run] Sender {n} ·', text)
+        self.assertNotIn('[NEW since your last run] Sender 10 ·', text)
+        self.assertIn('NEW SINCE YOUR LAST RUN: 3 messages', terminal.resume_seed('', s, tid), 'the seed counts the ones the file marks')

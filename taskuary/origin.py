@@ -26,14 +26,20 @@ def of_message(store, row: dict) -> tuple:
                             exclude_mid=row.get('MessageId'))
     return ('trusted' if ok else 'stranger'), why
 
+# concierge.setup_task's refs: a walkthrough, a coding hand-off, an agent job - each the owner's own sentence. An Advisor
+# idea ('assistant:idea:<n>') and a playbook built from a past mail carry what was read, and are not here.
+OWNER_REFS = ('assistant:setup', 'assistant:handoff', 'assistant:agent')
+
 def of_task(store, tid: int) -> tuple:
     "(origin, why) for a task, refreshing the card's cache."
     t = store.get_task(tid) or {}
     o, why = t.get('OriginBase') or 'trusted', 'you made it' if t.get('OriginBase') == 'owner' else 'no stranger wrote on it'
     # an idea the Advisor or a report wrote carries what it read; promoting it to a task is not the owner vouching for it
-    # ...except the owner's own guide chat (general.is_dock), which is assistant-sourced too: its base is the owner's
+    # ...except the owner's own guide chat (general.is_dock) and what the owner asked the assistant to set up or hand off
+    # (concierge.setup_task) - assistant-sourced too, and made before OriginBase was stored: their base is the owner's (R15)
     from .general import is_dock
     if not t.get('OriginBase') and is_dock(t): o, why = 'owner', 'your own guide chat'
+    elif not t.get('OriginBase') and t.get('SourceRef') in OWNER_REFS: o, why = 'owner', 'you asked the assistant for it'
     elif not t.get('OriginBase') and t.get('Source') in ('assistant', 'report'): o, why = 'stranger', f"written by Taskuary's {t['Source']} from what it read"
     through = int(t.get('TrustedThrough') or 0)
     for m in store.list_messages(tid):
@@ -63,19 +69,22 @@ class RefusedForStranger(ValueError): "A launch road's Refusal, as the ValueErro
 
 def refused(e: Refusal) -> RefusedForStranger: return RefusedForStranger(str(e))
 
-_ver = []   # a one-item cache of a SUCCESSFUL parse only: a transient failure must be retried, not remembered as "too old"
+_ver = {}   # resolved command -> version, SUCCESSFUL parses only: a transient failure must be retried, not remembered as "too old"
 
 def _claude_version(cmd: str = 'claude') -> tuple:
-    "Cached on success: launch_mode runs on every start and `claude --version` takes about a second."
-    if _ver: return _ver[0]
+    """Cached on success, per binary: launch_mode runs on every start and `claude --version` takes about a second - and two
+    profiles may launch two different claudes, so one's version must not answer for the other's."""
     # through the launch's own resolver: a bare 'claude' never finds npm's claude.cmd on Windows (CreateProcess adds only
     # .exe), and every stranger task was refused as "too old" beside a 2.1.299 that launched fine (task 10 live check)
     from .agents import _resolve_cmd
-    try: out = subprocess.run([*_resolve_cmd(cmd or 'claude'), '--version'], capture_output=True, text=True, timeout=20).stdout
+    try: argv = tuple(_resolve_cmd(cmd or 'claude'))
+    except OSError: return ()
+    if argv in _ver: return _ver[argv]
+    try: out = subprocess.run([*argv, '--version'], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError): return ()
     m = re.search(r'(\d+)\.(\d+)\.(\d+)', out or '')
-    if m: _ver.append(tuple(int(x) for x in m.groups()))
-    return _ver[0] if _ver else ()
+    if m: _ver[argv] = tuple(int(x) for x in m.groups())
+    return _ver.get(argv, ())
 
 def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     """'full' (today's launch, untouched) or 'auto' (the CLI's reviewer); raises Refusal when a stranger's task cannot run safely.
@@ -114,9 +123,9 @@ def _hook(path: str, tid: int, timeout: int) -> dict:
     from . import config, guard, hooks
     srv = config.load()['server']
     curl = 'curl.exe' if os.name == 'nt' else 'curl'
-    # the agent token plus the per-task proof: the same pair a session's `taskuary --note` presents (guard.owns_task)
+    # the session's own token, bound to this task (R28): the shared agent token never sits in a stranger's session file
     cmd = (f'{curl} -s -f -m {timeout} -X POST "{hooks.base_url()}{path}?task={tid}" -H "Content-Type: application/json" '
-           f'-H "X-Taskuary-Token: {srv.get("agent_token") or ""}" -H "{guard.TASK_HDR}: {guard.task_proof(srv, tid)}" --data-binary @-')
+           f'-H "X-Taskuary-Token: {guard.stranger_token(srv, tid)}" --data-binary @-')
     return {'type': 'command', 'command': cmd, 'timeout': timeout, 'onFailure': 'block'}
 
 def session_settings(store, tid: int, theme: str = '') -> str:

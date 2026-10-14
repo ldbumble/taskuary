@@ -44,16 +44,17 @@ def test_the_session_file_carries_both_hooks_fail_closed_and_the_theme():
     assert f'task={t}' in pre['command'] and d['theme'] == 'dark' and d['autoMode']['environment']
     assert 'has not authorised running' in ' '.join(d['autoMode']['environment']) and origin.SETTINGS_HOOKS_MERGE
 
-def test_the_hook_commands_carry_both_secrets_the_task_and_fail_on_http_errors():
-    from taskuary import guard
-    s = MemoryStore(); t = _stranger(s)
+def test_the_hook_commands_carry_the_task_s_own_token_the_task_and_fail_on_http_errors():
+    from taskuary import guard, config
+    s = MemoryStore(); t = _stranger(s); srv = config.load()['server']
     d = json.load(open(origin.session_settings(s, t), encoding='utf-8'))
     for c in (d['hooks']['PreToolUse'][0]['hooks'][0]['command'], d['hooks']['PermissionRequest'][0]['hooks'][0]['command']):
-        assert 'X-Taskuary-Token' in c and guard.TASK_HDR in c and f'?task={t}' in c and ' -f ' in c
+        assert f'X-Taskuary-Token: {guard.stranger_token(srv, t)}' in c and f'?task={t}' in c and ' -f ' in c
+        assert srv['agent_token'] not in c and guard.TASK_HDR not in c     # never the shared token (R28)
 
 def test_claude_version_caches_only_a_success(monkeypatch):
     import subprocess
-    monkeypatch.setattr(origin, '_claude_version', _real); monkeypatch.setattr(origin, '_ver', [])
+    monkeypatch.setattr(origin, '_claude_version', _real); monkeypatch.setattr(origin, '_ver', {})
     outs = iter([OSError('busy'), subprocess.CompletedProcess([], 0, stdout='2.1.300 (Claude Code)'), AssertionError('cached')])
     def run(*a, **k):
         o = next(outs)

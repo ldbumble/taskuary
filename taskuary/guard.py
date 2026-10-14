@@ -46,7 +46,7 @@ from loguru import logger
 
 AGENT_ENV = 'TASKUARY_TOKEN'          # what a session carries; the CLI reads it for --note/--done
 TASK_ENV, TASK_HDR = 'TASKUARY_TASK_TOKEN', 'X-Taskuary-Task-Token'   # ...and the proof of WHICH task it is on
-OWNER, AGENT, ANON = 'owner', 'agent', 'anon'
+OWNER, AGENT, ANON, STRANGER = 'owner', 'agent', 'anon', 'stranger'
 
 # ── THE DENY LIST ───────────────────────────────────────────────────────────────────────
 # (method regex, path regex, why). Matched against the request before routing. Add to it when
@@ -191,9 +191,55 @@ def task_proof(server: dict, tid) -> str:
 
 
 def owns_task(server: dict, headers, tid) -> bool:
-    """The owner owns every task; an agent only the one its session was started on."""
-    if scope_of(server, headers) != AGENT: return True
+    """The owner owns every task; an agent only the one its session was started on; a stranger's session only the one
+    its token names."""
+    sc = scope_of(server, headers)
+    if sc == STRANGER: return stranger_tid(server, headers.get('X-Taskuary-Token')) == int(tid)
+    if sc != AGENT: return True
     return token_matches(headers.get(TASK_HDR), task_proof(server, tid))
+
+
+# ── A STRANGER'S SESSION (R28) ──────────────────────────────────────────────────────────────────────────────────────
+# The agent token is one secret every session shares, and agent scope READS every route - the feed, every message, the
+# connectors. A session driven by a stranger's words must not hold it: its floor checks the command text, not what the
+# environment hands a child process. So it carries a token bound to its task instead, and that token reads its own task
+# and uses its own task's doors, nothing more. Keyed like task_proof, but under its own label, so neither can be made
+# from the other.
+_STRANGER_TOK = re.compile(r's1\.(\d{1,12})\.[0-9a-f]{32}')
+
+def stranger_token(server: dict, tid) -> str:
+    "What a stranger-origin session carries as TASKUARY_TOKEN. '' with no agent token - then there is no secret to key it."
+    k = str(server.get('agent_token') or '')
+    return f's1.{int(tid)}.' + hmac.new(k.encode(), f'stranger:{int(tid)}'.encode(), hashlib.sha256).hexdigest()[:32] if k else ''
+
+def stranger_tid(server: dict, presented) -> int | None:
+    "The task a presented stranger token is bound to, or None. Constant-time, through token_matches."
+    m = _STRANGER_TOK.fullmatch(str(presented or ''))
+    if not m: return None
+    tid = int(m[1])
+    return tid if token_matches(presented, stranger_token(server, tid)) else None
+
+# Writes a stranger's session is handed - its session-file hooks, the user-scope event hook, and `taskuary --reply/--done/
+# --draft/--item`, whose task id owns_task checks in the handler. Not the wall, the Hub, the data tools or a report rerun:
+# each of those reaches past its own task.
+_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item)$'))
+_STRANGER_TASK_HOOK = re.compile(r'^/api/hooks/claude/(floor|permit)$')
+_STRANGER_FILE = re.compile(r'^/api/(attachments|task-artifacts)/(\d+)$')
+STRANGER_WHY = "a session working a stranger's task reaches its own task and nothing else"
+
+def stranger_denied(method: str, path: str, query, tid: int, owner_of) -> str:
+    """'' when a stranger's session on `tid` may call this, else why not. `owner_of(kind, id)` answers which task an
+    attachment ('attachment') or a session artifact ('artifact') belongs to - the one store question the table needs."""
+    m, path = (method or '').upper(), path or ''
+    if why := _hit(_DENIED, m, path): return why
+    if m in READS:
+        # its own task and what hangs under it - by plain segments only, so no '..' or encoding walks to a neighbour
+        if re.fullmatch(rf'/api/tasks/{int(tid)}(/[A-Za-z0-9_-]+)*', path): return ''
+        if f := _STRANGER_FILE.match(path):
+            return '' if owner_of('attachment' if f[1] == 'attachments' else 'artifact', int(f[2])) == int(tid) else STRANGER_WHY
+        return STRANGER_WHY
+    if _STRANGER_TASK_HOOK.match(path): return '' if str((query or {}).get('task') or '') == str(int(tid)) else STRANGER_WHY
+    return '' if any(p.match(path) for p in _STRANGER_WRITES) else STRANGER_WHY
 
 
 def token_matches(got, *want) -> bool:
@@ -215,6 +261,7 @@ def scope_of(cfg: dict, headers) -> str:
     docstring on what that does and does not buy."""
     tok = str(headers.get('X-Taskuary-Token') or '')
     if token_matches(tok, cfg.get('agent_token')): return AGENT
+    if stranger_tid(cfg, tok) is not None: return STRANGER   # before the open no-token case: a stranger is never the owner
     owner = str(cfg.get('token') or '')
     if not owner: return OWNER                     # no token configured: the old, open behaviour
     return OWNER if token_matches(tok, owner) else ANON

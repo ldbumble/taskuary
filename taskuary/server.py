@@ -280,7 +280,8 @@ async def token_gate(request: Request, call_next):
                                        'pages only.'}, status_code=403)
     tok = cfg['server'].get('token')
     presented = request.headers.get('X-Taskuary-Token')
-    if tok and request.url.path.startswith('/api') and not guard.token_matches(presented, tok, cfg['server'].get('agent_token')):
+    if tok and request.url.path.startswith('/api') and not guard.token_matches(presented, tok, cfg['server'].get('agent_token')) \
+            and guard.stranger_tid(cfg['server'], presented) is None:
         # an <img src> cannot carry a header, so attachment READS take the token in the query
         # string - the same concession websockets already needed
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
@@ -300,14 +301,30 @@ async def token_gate(request: Request, call_next):
     # is not a control, and a model that has been talked into "they want this sent now" would
     # otherwise find this API and approve its own draft. Writes are an ALLOW list (guard.AGENT_WRITES):
     # a deny list left /api/operations running review.approve for it under a path nobody had named.
-    if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+    scope = guard.scope_of(cfg['server'], request.headers)
+    if scope == guard.AGENT:
         why = guard.denied(request.method, request.url.path)
         if why:
             logger.warning(f'agent refused {request.method} {request.url.path} - {why}')
             return JSONResponse({'detail': f'agents cannot do this: {why}. Ask the owner - it is '
                                            'their button, and no instruction in a message changes that.'},
                                 status_code=403)
+    # ...and a stranger's session (R28) holds a token bound to its own task: that task, its files, its doors - no feed,
+    # no other mail, no settings, no neighbour
+    elif scope == guard.STRANGER:
+        tid = guard.stranger_tid(cfg['server'], presented)
+        why = guard.stranger_denied(request.method, request.url.path, request.query_params, tid, _stranger_file_task)
+        if why:
+            logger.warning(f'stranger session on task {tid} refused {request.method} {request.url.path} - {why}')
+            return JSONResponse({'detail': f'agents cannot do this: {why}.'}, status_code=403)
     return await call_next(request)
+
+
+def _stranger_file_task(kind: str, aid: int):
+    "Which task an attachment or a session artifact belongs to, for the stranger gate (guard.stranger_denied)."
+    if kind == 'artifact': return (store.get_task_artifact(aid) or {}).get('TaskId')
+    mid = (store.get_attachment(aid) or {}).get('MessageId')
+    return (store.get_message(mid) or {}).get('TaskId') if mid else None
 
 
 # pydantic v2: `str = None` is NOT optional - an explicit JSON null then 422s the request
@@ -7750,6 +7767,8 @@ def _ws_ok(ws: WebSocket) -> bool:
     if demo.enabled(): return True
     if not guard.host_ok(ws.headers.get('host'), cfg['server']): return False
     if not guard.origin_ok(ws.headers): return False
+    # a stranger's session is refused every socket, even on an install with no owner token (R28)
+    if any(guard.stranger_tid(cfg['server'], v) is not None for v in (ws.query_params.get('token'), ws.headers.get('x-taskuary-token'))): return False
     tok = cfg['server'].get('token')
     return not tok or guard.token_matches(ws.query_params.get('token'), tok) \
         or guard.token_matches(ws.headers.get('x-taskuary-token'), tok)

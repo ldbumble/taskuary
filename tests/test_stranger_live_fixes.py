@@ -33,7 +33,7 @@ def _pane(s, t, tmp_path, **kw):
 
 # ── L1: the version is read through the same resolver the launch uses ─────────────────────────────────────────────
 def test_the_version_check_runs_the_resolved_executable_not_a_bare_name(monkeypatch):
-    monkeypatch.setattr(origin, '_claude_version', _real_version); monkeypatch.setattr(origin, '_ver', [])
+    monkeypatch.setattr(origin, '_claude_version', _real_version); monkeypatch.setattr(origin, '_ver', {})
     seen = []
     monkeypatch.setattr(agents, '_resolve_cmd', lambda name: seen.append(name) or ['C:/npm/node_modules/claude-code/bin/claude.exe'])
     monkeypatch.setattr(origin.subprocess, 'run', lambda argv, **k: seen.append(argv) or subprocess.CompletedProcess(argv, 0, stdout='2.1.300 (Claude Code)'))
@@ -41,10 +41,10 @@ def test_the_version_check_runs_the_resolved_executable_not_a_bare_name(monkeypa
     assert seen == ['C:/tools/claude.cmd', ['C:/npm/node_modules/claude-code/bin/claude.exe', '--version']]
 
 def test_a_claude_that_is_not_installed_reads_as_no_version_and_is_not_cached(monkeypatch):
-    monkeypatch.setattr(origin, '_claude_version', _real_version); monkeypatch.setattr(origin, '_ver', [])
+    monkeypatch.setattr(origin, '_claude_version', _real_version); monkeypatch.setattr(origin, '_ver', {})
     def gone(name): raise FileNotFoundError(name)
     monkeypatch.setattr(agents, '_resolve_cmd', gone)
-    assert origin._claude_version() == () and origin._ver == []
+    assert origin._claude_version() == () and origin._ver == {}
 
 def test_launch_mode_hands_the_profile_s_own_command_to_the_check(monkeypatch, tmp_path):
     got = []; monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': got.append(cmd) or (2, 1, 300))

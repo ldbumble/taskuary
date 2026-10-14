@@ -98,6 +98,8 @@ STRICT_ENV = ('PATH', 'PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC
               # how the CLI signs in and which cloud serves it - the Bedrock/Vertex SELECTORS, never the cloud's own keys
               'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'AWS_REGION',
               'ANTHROPIC_VERTEX_PROJECT_ID', 'CLOUD_ML_REGION',
+              # where Taskuary is, so `taskuary --reply/--done` inside the session reaches THIS server - never its token
+              'TASKUARY_HOME', 'TASKUARY_HOST', 'TASKUARY_PORT',
               'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'XDG_RUNTIME_DIR',                                  # Unix
               'PSMODULEPATH', 'COMPUTERNAME', 'USERDOMAIN', 'PUBLIC', 'ALLUSERSPROFILE')                # Windows
 
@@ -120,7 +122,7 @@ def clean_env(extra: dict = None, strict: bool = False) -> dict:
     return env
 
 
-def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None) -> dict:
+def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None, stranger: bool = False) -> dict:
     """What a CLI needs to know about ITSELF. `taskuary --note "..."` inside an agent's terminal
     should not have to be told which agent or which task it is - the session already knows, so
     it says so in the environment."""
@@ -141,6 +143,16 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None) -
     if tok: out[guard.AGENT_ENV] = tok
     # the token is shared by every session; this says which task is THIS one's (guard.owns_task)
     if tok and str(task_id or '').isdigit(): out[guard.TASK_ENV] = guard.task_proof(srv, task_id)
+    return stranger_env(out, task_id, srv) if stranger else out
+
+
+def stranger_env(env: dict, task_id, srv: dict = None) -> dict:
+    """A stranger's session never holds the shared agent token (R28): its TASKUARY_TOKEN is one bound to its own task
+    (guard.stranger_token), which reads that task and uses its doors only. The task proof goes too - the token is the proof."""
+    from . import config, guard
+    out = {k: v for k, v in (env or {}).items() if k not in (guard.AGENT_ENV, guard.TASK_ENV)}
+    tok = guard.stranger_token(srv or config.load()['server'], task_id) if str(task_id or '').isdigit() else ''
+    if tok: out[guard.AGENT_ENV] = tok
     return out
 
 
@@ -252,7 +264,7 @@ class Term:
         # no arguments to know which agent, task and checkout it is speaking for
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(
             argv, cwd, rows, cols, {**terminal_host_env(argv, self.sid), **_bv.env(self.sid),
-                                    **session_env(agent or label, task_id, cwd, sid=self.sid)}, mode == 'auto')
+                                    **session_env(agent or label, task_id, cwd, sid=self.sid, stranger=mode == 'auto')}, mode == 'auto')
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
         # used to reach keep() before the caller had handed the session anywhere to file itself

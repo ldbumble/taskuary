@@ -167,6 +167,9 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         elif stranger_mode == 'look': prof['args'] = clis.readonly_args(c, args)
         if stranger_mode in ('auto', 'look'):
             prof['strict_env'], prof['cwd'] = True, sd
+            # ...and its token is bound to this task, never the shared one a caller's session env carried (R28)
+            from . import terminal
+            extra_env = terminal.stranger_env({**terminal.session_env(agent_name, task_id), **(extra_env or {})}, task_id)
             # a conversation is kept in the folder it ran in: one from before the move cannot be picked up from here
             if resume and resume != store.get_setting(f'stranger_sid:{task_id}'): resume = None
     if not no_hands: prof.setdefault('acp_ok', True)

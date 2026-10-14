@@ -451,6 +451,50 @@ def launch_key(request: Request):
     return {'key': launchkey.mint()}
 
 
+MAX_BUG_BODY = 200_000       # the scrub matches every private string against every field: a client does not get to make it chew megabytes
+
+
+def _owner_only(request: Request, why):
+    if guard.scope_of(cfg['server'], request.headers) != guard.OWNER: raise HTTPException(403, why)
+
+
+@app.post('/api/bug-report/draft')
+async def bug_report_draft(request: Request):
+    """The scrubbed draft behind "Report this bug". Whatever goes wrong drafting it, the person gets the one sentence -
+    never a traceback and never a field that skipped the scrub."""
+    from . import bugreport
+    _owner_only(request, "a bug report is the owner's")
+    raw = await request.body()
+    if len(raw) > MAX_BUG_BODY: raise HTTPException(413, 'that report is too large')
+    try:
+        client = json.loads(raw or b'{}')
+        return bugreport.draft(store, client if isinstance(client, dict) else {})
+    except Exception as e:
+        logger.warning(f'bug report draft refused: {type(e).__name__}')
+        raise HTTPException(422, bugreport.SAFE_MSG)
+
+
+class OpenUrl(BaseModel):
+    url: str = ''
+
+
+def _new_issue_url(u) -> bool:
+    from urllib.parse import urlsplit
+    try: p = urlsplit(u); port = p.port
+    except ValueError: return False
+    return (p.scheme, p.hostname, port, p.username, p.password, p.path) == ('https', 'github.com', None, None, None, '/ldbumble/taskuary/issues/new')
+
+
+@app.post('/api/open-url')
+def open_url(body: OpenUrl, request: Request):
+    """Opens the tracker's new-issue page on this desktop (the app has no browser of its own). Only that page."""
+    import webbrowser
+    _owner_only(request, "opening a page is the owner's")
+    if not _new_issue_url(body.url): raise HTTPException(400, 'only the new-issue page can be opened')
+    threading.Thread(target=webbrowser.open, args=(body.url,), daemon=True).start()
+    return {'opened': True}
+
+
 _assets = _web_root / 'assets'
 from fastapi.staticfiles import StaticFiles
 app.mount('/assets', StaticFiles(directory=str(_assets), check_dir=False), name='assets')

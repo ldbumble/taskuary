@@ -207,14 +207,15 @@ _HEREDOC = re.compile(r'''<<-?\s*(["']?)(\w+)\1''')
 # An argv list in code - ['taskuary', '--prompts'], spawn('taskuary', [...]) - is the command it runs: its words from
 # `taskuary` on are held to the command rule. A one-word list (packages=['taskuary']) is argv only where a spawn call takes it.
 _ARGV = re.compile(r'''(?:\[|[(,](?=\s*["'][^"'\n]*["']\s*,))\s*(["'])((?:[^"'\n]*[/\\])?taskuary(?:\.exe|-desktop)?)\1''', re.I)
-_SPAWN = r'(?:subprocess\.\w+|Popen|check_call|check_output|call|run|os\.exec\w*|os\.spawn\w*|spawn\w*|exec\w*|execa\w*|Command)\s*\(\s*'
+_SPAWN = r'(?:subprocess\.\w+|Popen|check_call|check_output|call|run|os\.exec\w*|os\.spawn\w*|spawn\w*|exec\w*|execa\w*|(?-i:Command))\s*\(\s*'
 _SPAWN_AT = re.compile(_SPAWN + r'$')
 _STR = re.compile(r'''"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)\'''')     # char classes, not a lookahead per character
 # ...and a string a shell runs - os.system('taskuary --prompts'), execSync(...), subprocess.run('...', shell=True)
 _SHELL_CALL = re.compile(r'''(?<![\w.])(?:os\.system|os\.popen|subprocess\.\w+|(?:child_process\.|cp\.)?exec(?:Sync)?)\s*\(\s*[fbru]?(["'`])((?:\\.|(?!\1)[^\\\n])*)\1''')
 
-# ...and a spawn call's one string argument: spawn('taskuary'), execa('taskuary-desktop')
-_SPAWN1 = re.compile(r'(?<![\w.])' + _SPAWN + r'''(["'`])((?:[^"'`\n]*[/\\])?taskuary(?:\.exe|-desktop)?)\1''', re.I)
+# ...and a spawn call's one string argument: spawn('taskuary'), execa('taskuary-desktop'), child_process.spawn('taskuary') -
+# a module's method too (program.command('taskuary') names a CLI's subcommand: Command counts in the Rust type's case only)
+_SPAWN1 = re.compile(r'(?<!\w)' + _SPAWN + r'''(["'`])((?:[^"'`\n]*[/\\])?taskuary(?:\.exe|-desktop)?)\1''', re.I)
 _TOK = re.compile(r'''"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|[()\[\]{}]''')
 # every rule a launch's text is judged by needs one of these words: taskuary (the program, the package, a TASKUARY_ name),
 # env (env -i, Env:, environ, SetEnvironmentVariable), compgen, -UseNew*, exec -c
@@ -288,14 +289,15 @@ def _shells(text: str) -> list:
                 if f in ('e', 'ec') or len(f) > 1 and 'encodedcommand'.startswith(f):
                     out.append((f"it runs an encoded PowerShell command ({m[0]} {o[0]}), which no rule can read", _line(text, m))); break
                 if o[1] == '-' and ('file'.startswith(f) or 'command'.startswith(f)): break
-        if (e, bool(m[1])) in seen: continue
         r = text[m.end():e]
         if not m[1] and not _INLINE.search(r): continue
-        seen.add((e, bool(m[1]))); spent += len(r)
-        if spent > _BUDGET: return out + [('it starts more inline shells than the floor reads in one call', 'budget')]
         if h := _HEREDOC.search(r):       # the heredoc's body is what the shell reads
             d = re.search(r'\n[ \t]*' + re.escape(h[2]) + r'[ \t]*(?:\n|$)', text[e:])
             r += text[e:e + d.start()] if d else text[e:]
+        # keyed by where its text ends AFTER the heredoc: a later launch in the same statement may read a different one
+        if (key := (e, m.end() + len(r), bool(m[1]))) in seen: continue
+        seen.add(key); spent += len(r)
+        if spent > _BUDGET: return out + [('it starts more inline shells than the floor reads in one call', 'budget')]
         if not _ANY_RULE.search(r): continue
         k, rq = _snip(m[0] + r), re.sub(r'''["'`]''', ' ', r)
         if t := _TQ.search(rq): out.append((f'it starts a shell ({m[0]}) that runs {t[0]}', k))
@@ -444,6 +446,14 @@ def _write_hit(text: str, cwd: str = '') -> str:
             if hit(t): return f'it writes {t}, which a later session of the owner reads as configuration or runs'
     return ''
 
+def _added(old: str, new: str) -> str:
+    "The lines of `new` that `old` does not have, counted: a second copy of a line is added."
+    c, out = Counter(old.splitlines()), []
+    for l in new.splitlines():
+        if c[l] > 0: c[l] -= 1
+        else: out.append(l)
+    return '\n'.join(out)
+
 def check(payload: dict, tid: int, store=None) -> dict:
     "{} when the floor has nothing against this call, else a PreToolUse deny."
     inp, cwd, tool = payload.get('tool_input') or {}, str(payload.get('cwd') or ''), str(payload.get('tool_name') or '')
@@ -463,8 +473,13 @@ def check(payload: dict, tid: int, store=None) -> dict:
         # refused only for what this call ADDS (R36): an edit beside a `taskuary --demo` target already there is ordinary work.
         # Counted, so a second copy is new; a file that only now becomes a script brings everything in it.
         if _is_script(f, body):
-            was = Counter(_keyed(_runner_text(f, old), True, _is_ps(f, old)) if _is_script(f, old) else [])
-            if new := list((Counter(_keyed(_runner_text(f, body), True, _is_ps(f, body))) - was).elements()):
+            ow, ps = _is_script(f, old), _is_ps(f, body)
+            was, now = Counter(_keyed(_runner_text(f, old), True, _is_ps(f, old)) if ow else []), Counter(_keyed(_runner_text(f, body), True, ps))
+            new = [h for h in (now - was).elements() if h[1] != 'budget' or not ow]
+            # past the budget a side was not read to its end, and its 'budget' key would cancel the other's: what this call
+            # adds - the edit's new text, a Write's added lines - is judged on its own, by every rule
+            if ow and any(k == 'budget' for _, k in was | now): new += _keyed(_runner_text(f, _added(old, body) if 'content' in inp else said), True, ps)
+            if new:
                 return _deny(f'it writes a script that, run, would be refused: {new[0][0]}')
     if why := _taskuary_hit(str(inp.get('command') or '')) or _write_hit(str(inp.get('command') or ''), cwd): return _deny(why)
     if tool in ('Grep', 'Glob'):    # these walk a tree: a root ABOVE a protected folder reaches it just as well

@@ -428,3 +428,40 @@ def test_a_search_that_names_a_marker_passes(cmd):
                                  'grep -rn TASKUARY_TOKEN .'])
 def test_a_search_does_not_launder_an_expansion_or_a_wipe(cmd):
     for t in SHELLS: assert denied(call(t, command=cmd)), (t, cmd)
+
+
+# ── follow-up fix round 4: past the work budget an edit is judged on what it adds; module-qualified spawns ───────────
+_BIG = 'x = (\n' + ("    'bash -c " + 'a' * 70000 + "',\n") * 35 + ')\n'       # 2.45M characters of inline shells: past the budget
+_BUNDLES = sorted((__import__('pathlib').Path(floor.__file__).parent / 'web' / 'assets').glob('index-*.js'))
+
+def _edit(f, old, add):
+    f.write_text(old, encoding='utf-8', newline='')
+    return call('Edit', file_path=str(f), old_string=old[-20:], new_string=old[-20:] + add)
+
+@pytest.mark.parametrize('add', ["\nsubprocess.run(['bash','-c','taskuary --prompts'])\n", "\nsubprocess.run(['pwsh','-c','rd Env:*'])\n"])
+def test_an_edit_to_a_file_past_the_budget_is_judged_on_what_it_adds(add, tmp_path):
+    assert denied(_edit(tmp_path / 'x.py', _BIG, add)), add
+    assert denied(call('Write', file_path=str(tmp_path / 'x.py'), content=_BIG + add)), add
+
+def test_an_ordinary_edit_to_a_file_past_the_budget_is_written(tmp_path):
+    assert _edit(tmp_path / 'x.py', _BIG, '\ny = 1\n') == {}
+    assert call('Write', file_path=str(tmp_path / 'x.py'), content=_BIG + '\ny = 1\n') == {}
+
+@pytest.mark.skipif(not _BUNDLES, reason='no built bundle')
+def test_an_edit_to_the_built_bundle_is_judged_on_what_it_adds(tmp_path):
+    old = _BUNDLES[-1].read_text(encoding='utf-8')
+    assert denied(_edit(tmp_path / 'index.js', old, "\nspawnSync('bash',['-c','taskuary --prompts'])\n"))
+    assert _edit(tmp_path / 'index.js', old, '\nconst y = 1;\n') == {}
+
+@pytest.mark.parametrize('content', ["child_process.spawn('taskuary')\n", "cp.spawnSync('taskuary-desktop')\n", "require('child_process').spawn('taskuary')\n",
+                                     "childProcess.execFileSync('taskuary-desktop')\n", "cp.execFile('taskuary')\n", "cp.spawn('taskuary', [])\n"])
+def test_a_module_qualified_spawn_of_taskuary_is_refused(content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / 'x.js'), content=content)), content
+
+def test_a_cli_command_named_taskuary_is_written(tmp_path):
+    assert call('Write', file_path=str(tmp_path / 'x.js'), content="program.command('taskuary')\n") == {}
+
+def test_a_later_launch_with_its_own_heredoc_is_judged(tmp_path):
+    "Two launches in one statement end their regions at one place, but each reads on to its own heredoc's end."
+    body = "pwsh -c 'echo' <<A && pwsh -c \"$(cat)\" <<B\nok\nA\nrd Env:*\nB\n"
+    assert denied(call('Write', file_path=str(tmp_path / 'x.sh'), content=body))

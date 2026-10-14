@@ -5399,9 +5399,20 @@ def ms_poll(cid: int, body: dict):
     cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name'],
            **({'granted_scope': t['scope']} if t.get('scope') else {})}      # what was granted, for the send probe (PW-143)
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
-    if who['account'] and not any(s['Channel'] == 'email' and (s['Address'] or '').lower() == who['account'].lower()
-                                  for s in store.list_sources(active_only=False)):
+    had = next((s for s in store.list_sources(active_only=False) if s['Channel'] == 'email'
+                and (s['Address'] or '').lower() == (who['account'] or '').lower()), None) if who['account'] else None
+    if who['account'] and not had:
         store.save_source({'Channel': 'email', 'Address': who['account'], 'ConnectorId': cid, 'Active': 1}, ACTOR)
+    # ...and one that exists but was SWITCHED OFF comes back on: signing in is asking for this mailbox to be read, and a stale
+    # inactive row left it unread while the card said signed in (setup trace, 2026-10-14)
+    elif had and not had.get('Active'):
+        store.save_source({**had, 'Active': 1, 'ConnectorId': cid}, ACTOR)
+    # WHO YOU ARE, from the account you just signed in with - one step less for a first-time owner, never over a name they set
+    if who.get('name') or who.get('account'):
+        mine = store.owner() or {}
+        if not mine.get('owner') or mine.get('owner') == 'the owner':
+            try: put_owner(OwnerBody(name=who.get('name') or who['account'].split('@')[0], email=who.get('account') or None))
+            except Exception as e: logger.debug(f'ms signin: the owner was not named from the account - {e}')
     store.audit('connector', cid, 'ms_signin', ACTOR, detail={'account': who['account']})
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
@@ -5986,12 +5997,30 @@ def setup_adopt_brain(body: SetupAdoptBrainBody):
     tests landing together can race - and the loser's only cost is that the other valid CLI won."""
     from . import setup as setup_mod
     worker = next((o['value'] for o in hub_agents.cli_agent_options(store) if o['cli'] == body.cli), '')
+    # ...or the CONNECTION itself: a fresh install's profiles all run claude, so a Codex-only owner's passing test wrote
+    # nothing - triage read "no AI connector" over every mail while the card said Codex worked (a first-run log, 2026-10-14).
+    # `cli:<connection>` resolves through agents.agent_row like a profile does.
+    if not worker and dict(hub_agents.connection_brains(store)).get(body.cli): worker = body.cli
     current = str(store.get_setting('triage_ai') or '')
-    adopted = bool(worker) and not current
+    adopted = bool(worker) and not current            # a brain the owner picked is theirs - never stomped by a Test
     if adopted:
         store.set_setting('triage_ai', f'cli:{worker}', ACTOR)
-        store.audit('setting', 0, 'setup_adopt_brain', ACTOR, detail={'cli': body.cli, 'agent': worker})
+        store.audit('setting', 0, 'setup_adopt_brain', ACTOR, detail={'cli': body.cli, 'agent': worker, 'replaced': current or None})
+        brain_arrived()
     return {'ok': True, 'adopted': adopted, **setup_mod.state(store)}
+
+
+def brain_arrived():
+    """A brain is ready for the first time: what waited for one is judged NOW, whatever its age, and the mail is read.
+    The automatic sweep only reaches a day of mail and runs after a full pass, so a user who connected email before the AI
+    looked at a pile of "awaiting AI triage" rows that nothing came back for (a first-run log, 2026-10-14)."""
+    def go():
+        from . import ingest as ingest_mod
+        try: ingest_mod.retry_failed_triage(store, _llm(store), limit=300, hours=0, tries=0)
+        except Exception as e: logger.warning(f'setup: the waiting mail could not be judged yet - {e}')
+        try: _poll_reports(what='syncing')
+        except Exception as e: logger.warning(f'setup: the first sync did not run - {e}')
+    threading.Thread(target=go, daemon=True, name='brain-arrived').start()
 
 class WalkBody(BaseModel): at: int
 

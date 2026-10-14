@@ -782,6 +782,13 @@ def default_pick(store) -> str:
     pick = f"cli:{row['value']}" if row else f'cli:{key}' if conn else ''
     if pick and (row['ready'] if row else runs_here(conn)): return pick
     if pick and saved and store.setting_writer('default_brain') != 'migration': return pick
+    # ...any OTHER connected CLI that runs here: the default key is claude, and an install with only Codex (or Gemini) read
+    # "no brain" over a CLI that worked - every mail awaited triage (a first-run log, 2026-10-14)
+    # ...but never in place of a default the OWNER named: theirs is taken at its word, connected or not
+    chosen = bool(saved) and store.setting_writer('default_brain') != 'migration'
+    other = '' if chosen else (next((f"cli:{o['value']}" for o in cli_agent_options(store) if o.get('ready')), '')
+                               or next((f'cli:{k}' for k, c in connection_brains(store) if runs_here(c)), ''))
+    if other: return other
     c = ready_connector(store)
     return f"connector:{c['ConnectorId']}" if c else ''
 

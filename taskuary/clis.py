@@ -114,7 +114,10 @@ READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '', '--d
 # A STRANGER'S TASK runs in the CLI's own reviewer mode instead of its bypass (spec 2026-10-14). A CLI enters this
 # table only after a live probe shows its reviewer engaging in the argv Taskuary builds; absent means "refuse
 # stranger work". --strict-mcp-config with no --mcp-config: the owner's MCP servers (mail, a database) do not load.
-AUTO = {'claude': (('--dangerously-skip-permissions',), ('--permission-mode', 'auto', '--strict-mcp-config'))}
+# Each entry: (flags dropped, flags dropped WITH their value, flags added once). Every spelling of a mode goes - a
+# profile's own `--permission-mode bypassPermissions` beside ours would leave the CLI to pick one.
+AUTO = {'claude': (('--dangerously-skip-permissions', '--allow-dangerously-skip-permissions'), ('--permission-mode',),
+                   ('--permission-mode', 'auto', '--strict-mcp-config'))}
 
 # A report is allowed to LOOK, but not to act. That is deliberately different from the mail
 # classifier above, which gets no tools at all because the text it classifies is untrusted input.
@@ -149,8 +152,12 @@ def _base(cmd: str) -> str:
 
 def auto_args(cmd: str, args: list) -> list:
     "`args` with the bypass swapped for the CLI's own reviewer mode (a stranger's task)."
-    drop, add = AUTO[_base(cmd)]
-    return [a for a in args if a not in drop] + list(add)
+    drop, valued, add = AUTO[_base(cmd)]
+    out, it = [], iter(args)
+    for a in it:
+        if a in valued: next(it, None)
+        elif a not in drop and not str(a).startswith(tuple(f'{v}=' for v in valued)): out.append(a)
+    return out + list(add)
 
 
 def readonly_args(cmd: str, args: list) -> list:

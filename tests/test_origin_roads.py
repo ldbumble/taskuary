@@ -1,14 +1,15 @@
 """Every launch road asks where the task's words came from (spec 2026-10-14): a stranger's task runs in the CLI's own
 auto mode with a trimmed environment, or is refused; the owner's and trusted work launch exactly as before."""
-import json, os, inspect, tempfile, threading, pytest
+import json, os, tempfile, threading, pytest
 from pathlib import Path
 from unittest import mock
 from taskuary import terminal, origin, llm, agents, general, floor, workerstate as ws, hooks, ingest, blackboard
 from taskuary.store import MemoryStore
 
 @pytest.fixture(autouse=True)
-def _claude(monkeypatch):
+def _claude(monkeypatch, tmp_path):
     monkeypatch.setattr(origin, '_claude_version', lambda: (2, 1, 299))   # nothing here may launch a real claude
+    (tmp_path / 'temp').mkdir(); monkeypatch.setattr(tempfile, 'gettempdir', lambda: str(tmp_path / 'temp'))   # strangers' folders stay in the test's own
 
 def _stranger(s):
     t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
@@ -96,8 +97,24 @@ def test_a_pane_s_pty_takes_the_strict_env_from_its_mode():
             with mock.patch.object(terminal.subprocess, 'Popen'), mock.patch.object(terminal.os, 'close'):
                 terminal._UnixPty(['x'], '.', 10, 10, {}, True); terminal._UnixPty(['x'], '.', 10, 10, {})
     assert seen == [True, False]
-    # conftest guards Term.__init__ (no unreviewed pty), so the wiring is read from the source
-    assert "mode == 'auto'" in inspect.getsource(terminal.Term)
+
+class _Pty:
+    "A pty that records how it was made and ends at once - Term's own wiring, no child process."
+    made = []
+    def __init__(self, argv, cwd, rows, cols, env=None, strict=False): _Pty.made.append(strict)
+    def read(self): return ''
+    def alive(self): return False
+    def write(self, s): pass
+    def resize(self, r, c): pass
+    def kill(self): pass
+
+def test_a_term_s_mode_decides_its_pty_s_env(tmp_path):
+    import sys
+    argv = [sys.executable, str(Path(__file__).parent / 'fake_tui.py')]   # the conftest-reviewed fake: nothing unreviewed may reach a pty
+    _Pty.made.clear()
+    with mock.patch.object(terminal, '_WinPty' if os.name == 'nt' else '_UnixPty', _Pty), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        terminal.Term(argv, str(tmp_path), 't', mode='auto'); terminal.Term(argv, str(tmp_path), 't')
+    assert _Pty.made == [True, False]
 
 def test_a_headless_run_trims_its_env_only_when_the_profile_says_so(monkeypatch):
     monkeypatch.setenv('GH_TOKEN', 'y'); monkeypatch.setenv('ANTHROPIC_API_KEY', 'z')
@@ -152,15 +169,110 @@ def test_a_general_agent_s_turn_names_its_task():
     s = _store(); t = s.create_task({'Title': 'x', 'Kind': 'general', 'Source': 'email'}, 'router')
     assert _general_build(s, t)['task_id'] == t
 
-def test_the_owner_s_guide_chat_is_not_a_stranger_s_task():
+def test_the_owner_s_guide_chat_is_the_owner_s():
     s = _store(); d, _ = general.dock_task(s)
-    assert origin.of_task(s, d['TaskId'])[0] == 'stranger'          # an assistant-sourced task, by the origin rules...
-    assert _general_build(s, d['TaskId']).get('task_id') is None    # ...but the dock is the owner's own chat, so it launches as before
+    assert origin.of_task(s, d['TaskId'])[0] == 'owner'             # assistant-sourced, but the owner's own chat (R15)
+    assert _general_build(s, d['TaskId'])['task_id'] == d['TaskId']  # every road names the task; the origin answers for the dock
+    s.add_message({'TaskId': d['TaskId'], 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'})
+    assert origin.of_task(s, d['TaskId'])[0] == 'stranger'          # a stranger's message on it still lowers it
+
+def _headless_research(s, t):
+    brain = llm.make_cli_llm(s, 'coder', research=True, task_id=t)
+    with mock.patch.object(agents, 'run_cli', return_value=('ok', 'sid', '')) as run: brain('', 'hi')
+    return run.call_args.args[0]
+
+def test_a_stranger_s_research_run_gets_no_tools_a_trimmed_env_and_its_own_folder():
+    s = _store(); t = _stranger(s)
+    p = _headless_research(s, t); a = p['args']
+    assert a[a.index('--tools') + 1] == '' and a[a.index('--disallowedTools') + 1] == 'mcp__*' and 'WebFetch' not in ' '.join(a)
+    assert p['strict_env'] is True and Path(p['cwd']) == origin.stranger_path(t)
+
+def test_an_owner_s_research_run_is_unchanged():
+    s = _store(); t = _owner(s)
+    p = _headless_research(s, t)
+    assert p == _headless_research(s, None) and 'WebFetch' in ' '.join(p['args']) and not p.get('strict_env')
+
+def test_a_stranger_s_run_does_not_resume_a_conversation_from_another_folder():
+    s = _store(); t = _stranger(s)
+    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t, resume='owner-sid')
+    with mock.patch.object(agents, 'run_cli', return_value=('ok', 'new-sid', '')) as run: brain('', 'hi')
+    assert run.call_args.kwargs.get('resume') is None
+    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t, resume='new-sid')      # its own, from that folder, continues
+    with mock.patch.object(agents, 'run_cli', return_value=('ok', 'new-sid', '')) as run: brain('', 'hi')
+    assert run.call_args.kwargs.get('resume') == 'new-sid'
+
+def test_an_owner_s_run_resumes_as_before():
+    s = _store(); t = _owner(s)
+    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t, resume='owner-sid')
+    with mock.patch.object(agents, 'run_cli', return_value=('ok', 'owner-sid', '')) as run: brain('', 'hi')
+    assert run.call_args.kwargs.get('resume') == 'owner-sid' and not s.get_setting(f'stranger_sid:{t}')   # and nothing written for it
+
+def test_only_the_stranger_refusal_skips_a_backup_brain():
+    assert issubclass(origin.RefusedForStranger, ValueError)
+    s = _store(); s.upsert_agent('g', 'coding', 'cli', json.dumps({'cmd': 'gemini'})); t = _stranger(s); s.set_setting('triage_backup_ai', 'cli:g', 'owner')
+    real = llm.make_cli_llm
+    def boom(store, name, *a, **k):
+        if name == 'g': raise ValueError('a broken profile')
+        return real(store, name, *a, **k)
+    with mock.patch.object(llm, 'make_cli_llm', side_effect=boom), pytest.raises(ValueError, match='a broken profile'):
+        llm.build_llm(s, pick='cli:coder', cli_tools=True, task_id=t)
+
+
+# ── the stranger's folder cannot be planted ──────────────────────────────────────────────────────────────────────
+def _link(src, dst):
+    if os.name == 'nt': import _winapi; _winapi.CreateJunction(str(src), str(dst))   # what another account could plant, no privilege needed
+    else: os.symlink(src, dst)
+
+def test_a_planted_link_for_the_task_s_folder_refuses_the_launch(tmp_path):
+    s = _store(); t = _stranger(s)
+    target = tmp_path / 'secret'; target.mkdir(); origin.stranger_path(t).parent.mkdir(parents=True, exist_ok=True)
+    _link(target, origin.stranger_path(t))
+    with pytest.raises(ValueError, match='folder'): llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t)
+    with pytest.raises(origin.Refusal): origin.stranger_dir(t)
+    assert not any(o == floor._norm(target, real=True) or o.startswith(floor._norm(target, real=True) + '/') for o in floor._own(t, s))
+
+def test_the_floor_s_own_list_creates_nothing():
+    floor._own(4242)
+    assert not origin.stranger_path(4242).exists()
+
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX modes')
+def test_the_strangers_root_is_private():
+    origin.stranger_dir(7)
+    assert (origin.stranger_path(7).parent.stat().st_mode & 0o077) == 0
+
+def test_auto_args_drop_every_bypass_spelling():
+    from taskuary import clis
+    for extra in (['--dangerously-skip-permissions'], ['--allow-dangerously-skip-permissions'], ['--permission-mode', 'bypassPermissions'],
+                  ['--permission-mode=bypassPermissions'], ['--permission-mode', 'acceptEdits']):
+        a = clis.auto_args('claude', ['-p', *extra, '--output-format', 'stream-json'])
+        assert a.count('--permission-mode') == 1 and a[a.index('--permission-mode') + 1] == 'auto', extra
+        assert not any('dangerously' in x or x.startswith('--permission-mode=') or x in ('bypassPermissions', 'acceptEdits') for x in a), extra
+        assert a[:3] == ['-p', '--output-format', 'stream-json']
+
+def test_the_strict_env_keeps_what_a_cli_signs_in_and_runs_with(monkeypatch):
+    keep = ('ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'AWS_REGION', 'TMPDIR', 'PSMODULEPATH')
+    for k in keep: monkeypatch.setenv(k, 'v')
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'k')
+    up = lambda e: {k.upper(): v for k, v in e.items()}
+    headless = up(agents.spawn_env({'strict_env': True}))
+    assert all(headless.get(k) == 'v' for k in keep) and 'AWS_ACCESS_KEY_ID' not in headless
+    pane, owner = up(terminal.clean_env(strict=True)), up(terminal.clean_env())
+    assert 'AWS_ACCESS_KEY_ID' not in pane and all(pane.get(k) == 'v' for k in ('ANTHROPIC_AUTH_TOKEN', 'AWS_REGION', 'TMPDIR', 'PSMODULEPATH'))
+    # a pane strips CLAUDE_CODE* for everyone (a fresh session, _DIRTY): the strict list never gives a stranger more than the owner gets
+    assert all((k in pane) == (k in owner) for k in keep)
+
+def test_the_pane_takes_the_theme_from_any_settings_spelling_and_keeps_one(tmp_path):
+    s = _store(); t = _stranger(s)
+    f = tmp_path / 'theme.json'; f.write_text('{"theme": "dark"}', encoding='utf-8'); g = tmp_path / 'other.json'; g.write_text('{}', encoding='utf-8')
+    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': [f'--settings={g}', '--settings', str(f)]}))
+    argv, _ = _pane(s, t, tmp_path)
+    assert argv.count('--settings') == 1 and not any(str(x).startswith('--settings=') for x in argv)
+    assert json.loads(Path(argv[argv.index('--settings') + 1]).read_text(encoding='utf-8')).get('theme') == 'dark'
 
 
 # ── the floor follows the folder ─────────────────────────────────────────────────────────────────────────────────
 def test_the_stranger_folder_passes_the_floor_and_another_task_s_does_not():
-    mine, theirs = origin.stranger_dir(7), origin.stranger_dir(8)
+    mine, theirs = origin.stranger_path(7), origin.stranger_path(8)
     assert floor.check({'tool_name': 'Read', 'tool_input': {'file_path': str(mine / 'notes.md')}}, 7) == {}
     assert floor.check({'tool_name': 'Bash', 'cwd': str(mine), 'tool_input': {'command': 'cat ./notes.md'}}, 7) == {}
     r = floor.check({'tool_name': 'Read', 'tool_input': {'file_path': str(theirs / 'notes.md')}}, 7)
@@ -202,3 +314,14 @@ def test_closing_the_app_releases_its_permits_and_leaves_a_fresh_pool():
         assert ws.HELD['grp-close']['released'] and ws.HELD['grp-close']['event'].is_set()
         assert server._PERMIT_POOL is not old and old._shutdown and server._PERMIT_POOL.submit(lambda: 1).result(5) == 1
     finally: ws.HELD.pop('grp-close', None)
+
+@pytest.mark.skipif(os.name != 'nt', reason='8.3 names')
+def test_the_folder_passes_in_its_long_name_when_temp_is_a_short_one(monkeypatch, tmp_path):
+    import ctypes
+    long_ = tmp_path / 'temp' / 'a-long-folder-name'; long_.mkdir()
+    buf = ctypes.create_unicode_buffer(600); ctypes.windll.kernel32.GetShortPathNameW(str(long_), buf, 600)
+    if not buf.value or buf.value.lower() == str(long_).lower(): pytest.skip('no 8.3 names on this volume')
+    monkeypatch.setattr(tempfile, 'gettempdir', lambda: buf.value)          # TEMP as Windows often sets it
+    d = origin.stranger_dir(7)
+    for p in (d / 'notes.md', Path(os.path.realpath(d)) / 'notes.md'):
+        assert floor.check({'tool_name': 'Read', 'tool_input': {'file_path': str(p)}}, 7) == {}, p

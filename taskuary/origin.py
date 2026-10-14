@@ -31,7 +31,10 @@ def of_task(store, tid: int) -> tuple:
     t = store.get_task(tid) or {}
     o, why = t.get('OriginBase') or 'trusted', 'you made it' if t.get('OriginBase') == 'owner' else 'no stranger wrote on it'
     # an idea the Advisor or a report wrote carries what it read; promoting it to a task is not the owner vouching for it
-    if not t.get('OriginBase') and t.get('Source') in ('assistant', 'report'): o, why = 'stranger', f"written by Taskuary's {t['Source']} from what it read"
+    # ...except the owner's own guide chat (general.is_dock), which is assistant-sourced too: its base is the owner's
+    from .general import is_dock
+    if not t.get('OriginBase') and is_dock(t): o, why = 'owner', 'your own guide chat'
+    elif not t.get('OriginBase') and t.get('Source') in ('assistant', 'report'): o, why = 'stranger', f"written by Taskuary's {t['Source']} from what it read"
     through = int(t.get('TrustedThrough') or 0)
     for m in store.list_messages(tid):
         if m['MessageId'] <= through: continue
@@ -56,6 +59,9 @@ MIN_CLAUDE = (2, 1, 295)         # hooks' onFailure: "block"
 PERMIT_TIMEOUT = 604800          # the owner answers when they answer: no Taskuary-side timeout, the hook's own is 7 days
 
 class Refusal(Exception): pass
+class RefusedForStranger(ValueError): "A launch road's Refusal, as the ValueError its callers already show on the task."
+
+def refused(e: Refusal) -> RefusedForStranger: return RefusedForStranger(str(e))
 
 _ver = []   # a one-item cache of a SUCCESSFUL parse only: a transient failure must be retried, not remembered as "too old"
 
@@ -79,12 +85,25 @@ def launch_mode(store, tid, cli: str) -> str:
         raise Refusal("a stranger's task needs Claude Code 2.1.295 or later (its hooks must refuse when Taskuary cannot answer)")
     return 'auto'
 
-def stranger_dir(tid: int):
-    "A stranger's headless and general work runs here: OUTSIDE Taskuary's home, so its own folder never sits inside what the floor protects."
+def stranger_path(tid: int):
+    "Where a stranger's headless and general work runs: OUTSIDE Taskuary's home, so its folder never sits inside what the floor protects. No filesystem."
     import tempfile
     from pathlib import Path
     from .store import task_ref
-    d = Path(tempfile.gettempdir()) / 'taskuary-stranger' / task_ref(tid); d.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.gettempdir()) / 'taskuary-stranger' / task_ref(tid)
+
+def _planted(p) -> bool:
+    "A link or junction where our folder should be, or (POSIX) a folder someone else made: the shared temp is everyone's."
+    if os.path.islink(p) or os.path.normcase(os.path.realpath(p)) != os.path.normcase(os.path.join(os.path.realpath(p.parent), p.name)): return True
+    return hasattr(os, 'getuid') and os.stat(p).st_uid != os.getuid()
+
+def stranger_dir(tid: int):
+    "stranger_path, made private and checked at launch: raises Refusal when another account could have planted it."
+    d = stranger_path(tid)
+    for p in (d.parent, d):
+        try: p.mkdir(mode=0o700)
+        except FileExistsError: pass
+        if _planted(p): raise Refusal(f"the stranger's working folder {p} is a link or is not this account's, so the task cannot start there")
     return d
 
 def _hook(path: str, tid: int, timeout: int) -> dict:

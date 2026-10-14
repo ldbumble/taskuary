@@ -127,6 +127,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # `read_only` is explicit for scheduled reports: a folder tells the agent where it may READ,
     # not whether it may write. None preserves the older caller contract where a cwd meant hands.
     no_hands = read_only if read_only is not None else not (cwd or cli_tools)
+    raw_args = prof.get('args')          # the profile's own, before any road below restricts them
     if not no_hands and cwd: prof['cwd'] = cwd
     elif not no_hands and cli_tools:
         # An owner-requested setup walkthrough needs the CLI's browser tool, but it still has no
@@ -145,17 +146,28 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # The ACP road is for the general agent's tool-using runs only. `no_hands` is exactly the
     # classifier - triage and the drafter, one verdict with every tool off - and it keeps argv.
     # WHO WROTE THE TASK decides the flags (origin.py), here as in a pane: a stranger's run has the CLI's own reviewer, its
-    # session hooks, a trimmed environment and a folder outside Taskuary's home - or it does not run. No hands, no question.
-    if not no_hands and task_id:
+    # session hooks, a trimmed environment and a folder outside Taskuary's home - or it does not run.
+    stranger_mode = ''
+    if task_id:
         from . import origin, clis
-        try: mode = origin.launch_mode(store, task_id, hub_agents.cli_of(prof, agent_name))
-        except origin.Refusal as e: raise ValueError(str(e))
-        if mode == 'auto':
-            from .clis import preset_args
-            c = prof.get('cmd', 'claude')
-            prof['args'] = clis.auto_args(c, list(prof.get('args') or preset_args(c) or ['-p'])) + ['--settings', origin.session_settings(store, task_id)]
-            prof['strict_env'], prof['cwd'] = True, str(origin.stranger_dir(task_id))
+        try:
+            if not no_hands: stranger_mode = origin.launch_mode(store, task_id, hub_agents.cli_of(prof, agent_name))
+            # ...and a run that would LOOK (research: Read, WebFetch) gets no tools at all: the floor is a hook, and a
+            # headless look has none, so a stranger's mail could read a key and fetch it out
+            elif research and origin.of_task(store, task_id)[0] == 'stranger':
+                stranger_mode = 'look'
+            if stranger_mode in ('auto', 'look'): sd = str(origin.stranger_dir(task_id))
+        except origin.Refusal as e: raise origin.refused(e)
+        from .clis import preset_args
+        c = prof.get('cmd', 'claude'); args = list(raw_args or preset_args(c) or ['-p'])
+        if stranger_mode == 'auto':
+            prof['args'] = clis.auto_args(c, args) + ['--settings', origin.session_settings(store, task_id)]
             prof['acp_ok'] = False      # the reviewer rides argv; ACP's own permission answer allows everything
+        elif stranger_mode == 'look': prof['args'] = clis.readonly_args(c, args)
+        if stranger_mode in ('auto', 'look'):
+            prof['strict_env'], prof['cwd'] = True, sd
+            # a conversation is kept in the folder it ran in: one from before the move cannot be picked up from here
+            if resume and resume != store.get_setting(f'stranger_sid:{task_id}'): resume = None
     if not no_hands: prof.setdefault('acp_ok', True)
     if extra_args:
         from .clis import preset_args
@@ -218,6 +230,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
                                   resume=resume, **kwargs)
         # what the caller needs to CONTINUE this conversation instead of starting another one
         llm.session_id = sid or resume
+        if stranger_mode in ('auto', 'look') and sid: store.set_setting(f'stranger_sid:{task_id}', sid, 'router')   # born in the stranger's folder
         return out
     llm.session_id = resume
     # said out loud, not merely absent: a brain that CANNOT carry a schema is the one whose answer
@@ -323,6 +336,8 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         if identity not in identities:
             picks.append(candidate); identities.add(identity)
 
+    from . import origin as origin_mod
+
     def one(candidate, first=False):
         # the conversation - its resume id and its live process - belongs to the FIRST brain only; a failover
         # brain starts its own
@@ -333,8 +348,8 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                                     resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
                                     research=research, gear=gear, keep=chosen_keep, task_id=task_id)
             # a BACKUP that cannot run a stranger's task is no backup for it; the first brain's refusal is the answer
-            except ValueError:
-                if first or not task_id: raise
+            except origin_mod.RefusedForStranger:
+                if first: raise
                 return None
         want = candidate[10:] if candidate.startswith('connector:') else None
         want_id = int(want) if want and want.isdigit() else None

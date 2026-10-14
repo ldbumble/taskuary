@@ -1033,9 +1033,8 @@ class GeneralSession:
                               cancel=cancel, resume=self.cli_sid or None, research=not hands, fallback_user=user,
                               # the task's CLI stays open between messages instead of starting again (clipool)
                               keep=f'general:{self.task_id}',
-                              # whose words the task carries decides how its CLI launches (origin.py); the guide is the
-                              # owner's own chat, which reads like an Advisor idea to the origin rules but is not one
-                              task_id=None if is_dock(self.store.get_task(self.task_id)) else self.task_id)
+                              # whose words the task carries decides how its CLI launches (origin.py)
+                              task_id=self.task_id)
             # the NAME always rides (so a browser this session opens is one the pane can find); the
             # shell and the browser brief ride only for a task that asked for a browser
             if browser_env: build_args.update(extra_env=browser_env)
@@ -1085,7 +1084,7 @@ class GeneralSession:
                 system = f'{system}\n\n{_sc.ASK_LINE}'
                 if systems: system = f'{system}\n\n{systems}'
                 build_args = dict(pick=self.pick, model=self.model or None,
-                                  trace=visible, cancel=cancel, task_id=None if is_dock(self.store.get_task(self.task_id)) else self.task_id)
+                                  trace=visible, cancel=cancel, task_id=self.task_id)
                 if browser_tools or hands:
                     build_args.update(cli_tools=True, extra_env=browser_env)
                 build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'

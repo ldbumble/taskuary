@@ -94,7 +94,12 @@ STRICT_ENV = ('PATH', 'PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC
               'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'TEMP', 'TMP',
               'USERNAME', 'LANG', 'TERM', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'OS', 'CODEX_HOME',
               'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE',
-              'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDE_CONFIG_DIR')
+              'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDE_CONFIG_DIR',
+              # how the CLI signs in and which cloud serves it - the Bedrock/Vertex SELECTORS, never the cloud's own keys
+              'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'AWS_REGION',
+              'ANTHROPIC_VERTEX_PROJECT_ID', 'CLOUD_ML_REGION',
+              'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'XDG_RUNTIME_DIR',                                  # Unix
+              'PSMODULEPATH', 'COMPUTERNAME', 'USERDOMAIN', 'PUBLIC', 'ALLUSERSPROFILE')                # Windows
 
 def strict_ok(k: str) -> bool: return k.upper() in STRICT_ENV or k.upper().startswith('LC_')
 
@@ -839,6 +844,21 @@ def claude_theme_args(store, own: str = None) -> list:
     return ['--settings', str(f)]
 
 
+def _take_settings(argv: list) -> tuple:
+    "(argv without any --settings, the pane theme one of them carried): Claude takes one settings file, and a stranger's is the session's."
+    out, files, it = [], [], iter(argv)
+    for a in it:
+        if a == '--settings': files.append(next(it, ''))
+        elif str(a).startswith('--settings='): files.append(str(a).split('=', 1)[1])
+        else: out.append(a)
+    theme = ''
+    for f in files:
+        try:
+            with open(f, encoding='utf-8') as fh: theme = theme or str(json.load(fh).get('theme') or '')
+        except (OSError, ValueError, AttributeError): pass      # inline JSON, a missing file: no theme to carry
+    return out, theme
+
+
 def _codex_hook_trust(argv: list) -> list:
     """Codex runs a user-scope hook only once it is trusted inside its TUI, which a pane never is; the flag
     is what makes hooks.py's events arrive (2026-09-20). A profile saved before the flag existed - the
@@ -1031,12 +1051,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         # floor and the owner's answer as hooks, or not at all; the owner's and trusted work launch as they always did.
         # The danger lock above still wins: a dangerous batch stays read-only, never auto on top of it.
         try: mode = _origin.launch_mode(store, task_id, cli_named(profile, argv))
-        except _origin.Refusal as e: raise ValueError(str(e))
+        except _origin.Refusal as e: raise _origin.refused(e)
         if mode == 'auto' and not locked:
-            i = argv.index('--settings') if '--settings' in argv else -1
-            try: theme = str(json.load(open(argv[i + 1], encoding='utf-8')).get('theme') or '') if 0 <= i < len(argv) - 1 else ''
-            except (OSError, ValueError, AttributeError): theme = ''
-            if i >= 0: argv = argv[:i] + argv[i + 2:]      # one --settings: the session's own file carries the theme
+            argv, theme = _take_settings(argv)          # one --settings: the session's own file carries the theme
             argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--settings', _origin.session_settings(store, task_id, theme)]
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents

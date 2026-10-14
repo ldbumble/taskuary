@@ -38,9 +38,11 @@ export const useSetup = (tick) => {
 /* Gone once the four are done; the optional walk remains available afterwards.
    Assistant header is always there and covers more than this ever did. */
 export const SetupChip = ({ state, onOpen }) => {
-  if (!state || state.complete) return null;
-  const left = state.total - state.done;
-  const pct = state.total ? (state.done / state.total) * 100 : 0;
+  // the first run's two steps when the server says them (firstrun.py), the old checklist's otherwise
+  const two = state && state.first_left != null;
+  if (!state || (two ? state.first_left === 0 : state.complete)) return null;
+  const left = two ? state.first_left : state.total - state.done;
+  const pct = two ? ((2 - state.first_left) / 2) * 100 : state.total ? (state.done / state.total) * 100 : 0;
   return (
     <Tooltip title={state.dismissed ? "Setting up — put away, click to reopen" : "Finish setting Taskuary up"}>
       <Box onClick={onOpen}
@@ -60,7 +62,7 @@ export const SetupChip = ({ state, onOpen }) => {
           <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: ROLES.done.solid }} />
         </Box>
         <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "#55697a" }}>
-          {left} left
+          {two ? `Set up · ${left} step${left === 1 ? "" : "s"}` : `${left} left`}
         </Typography>
       </Box>
     </Tooltip>

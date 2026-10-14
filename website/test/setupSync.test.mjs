@@ -43,8 +43,10 @@ test("a genuine first result carries the review sample to the panel", async () =
 // THE CHECKLIST OPENS ITSELF ON A FIRST RUN, whatever was already found. It used to wait for done === 0, and a machine
 // with a coding CLI on its PATH has "Connect one AI" ticked before anyone looks - so a fresh install never saw it
 // (the owner, 2026-10-06: "first time you load app this should pop up automatically"). Put away still means put away.
-test("the setup checklist opens on load while required steps are left, unless it was put away", () => {
+// ...replaced (the owner, 2026-10-14: "Remove the popup things just use the assistant canvas"): nothing opens itself over the app;
+// the setup is the canvas's own welcome until its walk starts (FirstRun.jsx, firstRun.test.mjs)
+test("setup never opens a dialog over the app on load - the canvas carries it", () => {
   const page = readFileSync(fileURLToPath(new URL("../src/TaskHubPage.jsx", import.meta.url)), "utf8");
-  assert.doesNotMatch(page, /if \(setup\.done === 0\) setSetupOpen\(true\);/);
-  assert.match(page, /if \(DEMO \|\| demo \|\| greeted \|\| !setup \|\| setup\.complete \|\| setup\.dismissed\) return;\s*setSetupOpen\(true\);/);
+  assert.doesNotMatch(page, /setSetupOpen\(true\)/);
+  assert.doesNotMatch(page, /<SetupPanel/);
 });

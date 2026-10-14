@@ -66,3 +66,19 @@ class SignInNamesTheOwnerTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ChatGptSignInTests(unittest.TestCase):
+    """The first-run log's other road: a ChatGPT sign-in that worked, then "Pick it as a brain under Settings" - the drop."""
+    def test_a_chatgpt_sign_in_with_no_brain_chosen_becomes_the_brain_and_judges_what_waited(self):
+        s = MemoryStore()
+        cid = s.save_connector({'Type': 'chatgpt', 'Name': 'ChatGPT', 'Active': 0}, 't')
+        t = {'client_id': 'c', 'host_id': 'h', 'email': 'alex@northwind.example', 'name': 'Alex Doyle', 'sub': 's', 'scope': 'x',
+             'refresh_token': 'r'}
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_chatgpt_card', return_value=({}, {})), \
+             mock.patch('taskuary.chatgptauth.poll', return_value=t), mock.patch.object(server, 'brain_arrived') as arrived:
+            out = TestClient(server.app).post(f'/api/connectors/{cid}/chatgpt/poll', json={'flow': 'f'}).json()
+            self.assertTrue(out['adopted']); self.assertEqual(s.get_setting('triage_ai'), f'connector:{cid}'); arrived.assert_called_once()
+            s.set_setting('triage_ai', 'cli:coder', 'owner')
+            again = TestClient(server.app).post(f'/api/connectors/{cid}/chatgpt/poll', json={'flow': 'f'}).json()
+        self.assertFalse(again['adopted']); self.assertEqual(s.get_setting('triage_ai'), 'cli:coder', "the owner's choice stays")

@@ -16,7 +16,7 @@ import { track } from "./demoTrack";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
 import BoardView from "./BoardView.jsx";
 import { canvasRequestFromHash } from "./canvasLinks.js";
-import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
+import { SetupChip, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
 import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
@@ -225,8 +225,7 @@ export default function TaskHubPage() {
   const [tick, setTick] = useState(0);
   // the counter, and the panel it opens
   const [setup, reloadSetup] = useSetup(tick);
-  const [setupOpen, setSetupOpen] = useState(false);
-  const [greeted, setGreeted] = useState(false);
+  useEffect(() => { window.addEventListener("tq-setup-changed", reloadSetup); return () => window.removeEventListener("tq-setup-changed", reloadSetup); }, [reloadSetup]);
   // the agent raised its hand: sound + desktop notification + a toast with the way to it.
   // The toast queues immediately; settings are read only for sound/desktop delivery. Making the
   // visible notification wait on that request made it appear at arbitrary times on a busy server.
@@ -254,19 +253,9 @@ export default function TaskHubPage() {
     })();
   }, []);
   useHandRaise(onRaise);
-  // it opens itself on load while required steps are left: somebody who has just installed this should not have to find
-  // the checklist. It used to wait for done === 0, and a coding CLI already on the PATH ticks "Connect one AI" before
-  // anyone looks, so a fresh install never saw it (the owner, 2026-10-06). Once put away it never opens itself.
-  useEffect(() => {
-    if (DEMO || demo || greeted || !setup || setup.complete || setup.dismissed) return;
-    setSetupOpen(true);
-    setGreeted(true);
-  }, [setup, greeted, demo]);
-  const dismissSetup = async (d) => {
-    await api.post("/api/setup/dismiss", { dismissed: d });
-    reloadSetup();
-    if (d) setSetupOpen(false);
-  };
+  // SETUP IS THE ASSISTANT CANVAS (the owner, 2026-10-14: "Remove the popup things just use the assistant canvas"): the
+  // chip takes you there, where FirstRun draws the two steps. No dialog opens itself over the app any more.
+  const openSetup = () => { go("Assistant"); setTimeout(() => window.dispatchEvent(new Event("tq-first-run")), 60); };
 
   // Leaving a tab and coming back used to land you at the TOP of it. Nothing scrolled the
   // page: the tall tab unmounted, the document shrank to the short one, and the browser
@@ -403,7 +392,7 @@ export default function TaskHubPage() {
               until it slid UNDER the tab strip, which is absolutely centred on the window and so
               yields to nothing - the banner sat on top of "Timeline". */}
           <StaleBuild />
-          {!DEMO && !demo && <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />}
+          {!DEMO && !demo && <SetupChip state={setup} onOpen={openSetup} />}
           <Tooltip title="Support — report a problem or attach screenshots on GitHub">
             <IconButton component="a" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"
               size="small" aria-label="Taskuary support and issue reporting">
@@ -420,12 +409,6 @@ export default function TaskHubPage() {
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
         </Box>
-
-        {!DEMO && !demo && (
-          <SetupPanel open={setupOpen} state={setup} onClose={() => { setSetupOpen(false); reloadSetup(); }}
-            onDismiss={dismissSetup} onRefresh={reloadSetup}
-            onGo={(where) => { setSetupOpen(false); go(where); }} />
-        )}
 
         {/* tighter side padding than top/bottom: the horizontal margin is dead space on a wide
             window, and every tab inside already caps its own content width where it wants to */}

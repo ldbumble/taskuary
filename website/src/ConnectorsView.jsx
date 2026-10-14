@@ -3403,7 +3403,8 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
         }
         if (data.status === "pending") { setTimeout(tick, 2000); return; }
         setFlow(null);
-        if (data.status === "ok") { setState("ok"); setDetail(`Signed in as ${data.name || data.account}. Pick it as a brain under Settings → Triage & agents.`); reload(); }
+        if (data.status === "ok") { setState("ok"); setDetail(data.adopted ? `Signed in as ${data.name || data.account} - it now sorts your mail.`
+          : `Signed in as ${data.name || data.account}. Your mail keeps the AI you chose; pick this one under Settings → Triage & agents to switch.`); reload(); }
         else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); }
       } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
     };
@@ -3449,7 +3450,8 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
   );
 };
 
-const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
+// shared with the first-run card on the canvas (FirstRun.jsx) - one Microsoft sign-in, wherever it is drawn
+export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
   const [flow, setFlow] = useState(null);      // {flow, user_code, verification_uri, interval}
   const [state, setState] = useState("");      // "" | ok | error
   const [detail, setDetail] = useState("");
@@ -3501,9 +3503,11 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
+      {/* the first-run card says it for someone who has never heard of a tenant (FirstRun.jsx) */}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-        Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
-        work and personal (Outlook.com) accounts both work. Teams chat reading still needs the tenant app.
+        {plain ? "Press the button, then type the code it shows on Microsoft's page and sign in as usual. This page finishes by itself."
+          : <>Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
+        work and personal (Outlook.com) accounts both work. Teams chat reading still needs the tenant app.</>}
       </Typography>
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>

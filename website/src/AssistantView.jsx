@@ -51,6 +51,7 @@ import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import DigestText from "./DigestText.jsx";
+import FirstRun from "./FirstRun.jsx";
 import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
@@ -198,7 +199,7 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, settingUp = false }) {
   const items = pile?.items || [];
   // A full account can return dozens of canonical rows together. Painting that entire stack in
   // one React commit leaves the rail blank until the browser has laid out every card. On the
@@ -364,6 +365,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent }) {
       ) : (
         <div className="tq-pile-empty" role="status"><CircularProgress size={18} /><b>Loading timeline</b>Reading what arrived and what still needs you.</div>
       )
+      ) : !drawn.length && settingUp ? (
+        // a first run has nothing here because nothing is CONNECTED yet - "All done" read as finished (fresh-install shot, 2026-10-14)
+        <div className="tq-pile-empty" data-tq-pile-setup=""><b>Your mail shows up here</b>Finish the two setup steps on the right, and what comes in is sorted into this list.</div>
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : bands.map(({ level, items: rows }) => {
@@ -1183,7 +1187,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // moment they are sent - it used to wait for the 30 s tick (the owner, 2026-09-24: "it takes 20 seconds from when
   // message is responded to in whatsapp to show up on the assistant")
   const [phoneBusy, setPhoneBusy] = useState(false);
-  const [mailReading, setMailReading] = useState(false);       // the launch still reading the mail (SinceBlock): the counts wait
+  const [mailReading, setMailReading] = useState(false);
+  // set up when the page opened? then the canvas IS the setup until its walk starts (FirstRun.jsx); never in the demo
+  const [firstRun, setFirstRun] = useState(false);
+  useEffect(() => {
+    if (DEMO) return;
+    api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.step !== "done") setFirstRun(true); }).catch(() => {});
+    const show = () => setFirstRun(true);                       // the top bar's setup chip asks for it
+    window.addEventListener("tq-first-run", show); return () => window.removeEventListener("tq-first-run", show);
+  }, []);       // the launch still reading the mail (SinceBlock): the counts wait
   useEffect(() => onLive(["chat-changed"], (ev) => {
     setPhoneBusy(!!ev?.thinking);
     readChat().catch(() => { /* the tick reads again */ });
@@ -1922,7 +1934,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
 
   // THE DAY'S OPENER, one drawing: the empty chat's welcome, and the "Today" card the chat records when the owner sits down
   // (welcome.arrive) - that card drew a row list of its own, which was not the opener (the owner, 2026-10-08)
-  const welcome = (m = null) => (
+  const welcome = (m = null) => firstRun ? (
+    // FIRST RUN (the owner, 2026-10-14: "first time you login the setup ... on the assistant canvas"): two steps in place of
+    // the day, until the walk starts. The popup checklist is gone; this is the one road.
+    <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
+    <div className="tq-welcome"><FirstRun onChanged={() => loadPile(true)} onWalk={() => { setFirstRun(false); start(null); }} /></div></div>
+  ) : (
     <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
     <div className="tq-welcome">
       {/* TASKUARY SPEAKING, the way every line of the chat is: the mark is the speaker's avatar in
@@ -2248,7 +2265,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
-      top={({ openByMid, openByItem }) => <Pile pile={railPile} current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
+      top={({ openByMid, openByItem }) => <Pile pile={railPile} settingUp={firstRun} current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
         onSection={walkSection} onCurrent={() => setRailOpen(false)} />}

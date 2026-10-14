@@ -5333,7 +5333,13 @@ def chatgpt_poll(cid: int, body: dict):
            'sub': t['sub'], 'granted_scope': t['scope']}
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
     store.audit('connector', cid, 'chatgpt_signin', ACTOR, detail={'account': t['email']})
-    return {'status': 'ok', 'account': t['email'], 'name': t['name']}
+    # ...and with no brain chosen, the one just signed in IS the brain, now - "Pick it as a brain under Settings" sent a
+    # first-time owner off to a page they had never seen, and the mail sat untriaged meanwhile (a first-run log, 2026-10-14)
+    adopted = not str(store.get_setting('triage_ai') or '').strip()
+    if adopted:
+        store.set_setting('triage_ai', f'connector:{cid}', ACTOR)
+        brain_arrived()
+    return {'status': 'ok', 'account': t['email'], 'name': t['name'], 'adopted': adopted}
 
 @app.post('/api/connectors/{cid}/chatgpt/cancel')
 def chatgpt_cancel(cid: int, body: dict):
@@ -5943,8 +5949,10 @@ def cli_setup(body: CliSetupBody):
 def setup_state():
     """What still stands between this install and a working funnel, read off real state - so a
     step un-does itself if the connection behind it is removed."""
-    from . import setup as setup_mod
-    return setup_mod.state(store)
+    from . import setup as setup_mod, firstrun
+    # ...and the TWO steps the first run is (firstrun.py): the top bar's chip counts these, not the old four-row checklist
+    step = firstrun.state(store)['step']
+    return {**setup_mod.state(store), 'first_left': {'ai': 2, 'email': 1}.get(step, 0), 'first_step': step}
 
 @app.post('/api/setup/dismiss')
 def setup_dismiss(body: SetupBody):
@@ -6008,6 +6016,45 @@ def setup_adopt_brain(body: SetupAdoptBrainBody):
         store.audit('setting', 0, 'setup_adopt_brain', ACTOR, detail={'cli': body.cli, 'agent': worker, 'replaced': current or None})
         brain_arrived()
     return {'ok': True, 'adopted': adopted, **setup_mod.state(store)}
+
+
+# ── first run: two steps on the assistant canvas (firstrun.py, FirstRun.jsx) ─────────────────────────────────────────────
+class FirstRunAiBody(BaseModel): name: str
+class FirstRunKeyBody(BaseModel): type: str; key: str
+class FirstRunMailBody(BaseModel): type: str; address: str; password: str; host: str = ''
+
+@app.get('/api/setup/first-run')
+def first_run_state():
+    """Where the first run stands - pick your AI, connect your email, reading - and the one line saying what to do next."""
+    from . import firstrun
+    return firstrun.state(store)
+
+@app.post('/api/setup/first-run/ai')
+def first_run_ai(body: FirstRunAiBody):
+    """A CLI card was clicked: connected, tested and made the brain in one press - or the answer names the one fix."""
+    from . import firstrun
+    out = firstrun.choose_cli(store, cfg, body.name)
+    if out.get('ok'): brain_arrived()
+    return {**out, **firstrun.state(store)}
+
+@app.post('/api/setup/first-run/key')
+def first_run_key(body: FirstRunKeyBody):
+    from . import firstrun
+    out = firstrun.choose_key(store, body.type, body.key)
+    if out.get('ok'): brain_arrived()
+    return {**out, **firstrun.state(store)}
+
+@app.post('/api/setup/first-run/mail')
+def first_run_mail(body: FirstRunMailBody):
+    """Gmail or any IMAP mailbox, switched on and read at once - Microsoft 365 signs in through /ms/signin instead."""
+    from . import firstrun
+    out = firstrun.connect_mail(store, body.type, body.address, body.password, body.host)
+    if out.get('ok'):
+        from .docsync import sync_connections
+        try: sync_connections(store, ACTOR)
+        except Exception as e: logger.debug(f'first run: connections doc not refreshed - {e}')
+        threading.Thread(target=_poll_reports, kwargs={'what': 'syncing'}, daemon=True).start()
+    return {**out, **firstrun.state(store)}
 
 
 def brain_arrived():

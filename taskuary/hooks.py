@@ -549,6 +549,25 @@ def ask(payload: dict, wait: float = None) -> dict:
                                    'permissionDecisionReason': 'answered by the owner in Taskuary', 'updatedInput': inp}}
 
 
+def permit(payload: dict, tid: int, wait: float = None, store=None) -> dict:
+    """A stranger's session whose reviewer will not decide: the request is the owner's, and the agent HOLDS until they
+    answer Allow or Deny - no timeout here, the hook's own 7 days is the outer edge. Released (the session ended) is a
+    refusal, and so is any answer but Allow. Allow is this ONE call; it grants nothing further."""
+    from . import workerstate as ws, redact
+    sid, inp = str(payload.get('session_id') or ''), payload.get('tool_input')
+    inp = inp if isinstance(inp, dict) else {}
+    what = redact.scrub(str(inp.get('command') or inp.get('url') or inp.get('file_path') or inp))[:600]
+    g = ws.group_key(f'permit:{tid}:{sid}:{time.time_ns()}')        # a new group per call, so one Allow can never cover the next
+    rid = ws.question_id(g, 1)
+    ws.record(store, tid, sid, 'approval_needed', request_id=rid, text=f"The agent wants to use {payload.get('tool_name') or 'a tool'}: {what}",
+              choices=['Allow', 'Deny'], source='hook')
+    ws.hold(tid, sid, g, [rid])
+    got = ws.wait_held(g, wait)
+    ok = bool(got) and str(got.get(rid) or '').strip().lower() == 'allow'
+    dec = {'behavior': 'allow'} if ok else {'behavior': 'deny', 'message': 'the owner did not allow it' if got else 'the session ended before the owner answered'}
+    return {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': dec}}
+
+
 # ── Codex's spool: the hook appends, we tail ─────────────────────────────────────────────────────
 BOM16 = b'\xff\xfe'
 

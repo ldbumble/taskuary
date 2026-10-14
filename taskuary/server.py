@@ -3440,6 +3440,15 @@ def cli_hook_floor(payload: dict, task: int, request: Request):
     return floor.check(payload if isinstance(payload, dict) else {}, task, store)
 
 
+@app.post('/api/hooks/claude/permit')
+def cli_hook_permit(payload: dict, task: int, request: Request):
+    """Held on a worker thread until the owner answers (hooks.permit). Only the session's OWN task asks. Any error is a
+    non-2xx, which the hook's onFailure: block turns into a refusal - never an allow."""
+    from . import hooks
+    _own_task_only(request, task)
+    return hooks.permit(payload if isinstance(payload, dict) else {}, task, store=store)
+
+
 # A hook writes the store, and run on the loop it froze every pane, socket and screencast whenever another thread held
 # the store's lock (P16, measured: p99 45-60 ms, max 2 s, and a hook past curl's 3 s was dropped). So it runs off the
 # loop - on ONE worker, in arrival order, exactly as the loop used to serialise them: a PermissionRequest and the

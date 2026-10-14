@@ -474,7 +474,13 @@ class Term:
         self.keep()                                       # before the bytes go, not after
         self.alive, self.ended = False, time.time()
         self.pty.kill()
+        self.release_asks()
         self._emit(None)
+    def release_asks(self):
+        """Asks held for this task (a stranger's permit, an AskUserQuestion) let go once the process is gone: a dead session is refused, not waited on."""
+        if self.task_id:
+            from . import workerstate as ws
+            ws.release(self.task_id)
     def idle(self) -> float:
         """Seconds since this session last printed anything. An agent that has gone quiet is
         not working - it is waiting at its own prompt, which means it is waiting on YOU."""

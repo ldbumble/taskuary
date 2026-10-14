@@ -554,6 +554,10 @@ DEFAULT_PROFILES = {
     'coordinator': {'kind': 'coordination', 'purpose': 'meetings, chasing people, scheduling and follow-ups'},
     'marketer':   {'kind': 'marketing', 'purpose': 'copy, positioning and campaigns - drafts, never sends'},
     'trader':     {'kind': 'markets', 'purpose': 'markets and positions - proposes, never places an order'},
+    # the GENERAL assistant's own profile, like CODER.md for coding (the owner, 2026-10-14): general work triage gives no other
+    # role runs on ASSISTANT.md - it ran on AGENT.md alone, the one worker with no profile of its own
+    'assistant':  {'kind': 'general', 'purpose': 'general work no other profile owns - writing, planning, follow-ups, looking '
+                                                 'things up in our connections'},
 }
 
 

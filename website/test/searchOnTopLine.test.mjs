@@ -25,3 +25,13 @@ test("a row with no message of its own is keyed by its task, never msg:undefined
   assert.equal(keyForRow({ MessageId: 7, TaskId: 3 }), "msg:7");
   assert.equal(keyForRow({ MessageId: 9, Channel: "report" }), "report:9");
 });
+
+// the owner, 2026-10-14: "agent.md is just the start of the profiles ... show [it] that you can hover over to see full text on top
+// of every profile"
+test("every profile shows what an agent reads before it, with AGENT.md whole on hover", () => {
+  const d = read("DocsView.jsx");
+  assert.match(d, /\{isProf\(docName\) && <SharedRulesChip \/>\}/);
+  assert.match(d, /Every task reads: SOUL\.md \+ JOB\.md →/);
+  assert.match(d, /api\.get\("\/api\/doc\/agent"\)/);
+  assert.match(d, /<Chip size="small" label="AGENT\.md · shared rules"/);
+});

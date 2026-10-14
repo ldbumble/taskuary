@@ -2,7 +2,7 @@
 // open beside it - these six are read against each other, so hiding five behind a landing
 // grid cost a round trip every time you wanted to compare two.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, TextField, Tooltip, Typography } from "@mui/material";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
@@ -110,6 +110,26 @@ const PERSON_BLURB = "What the outcome ledger says about them, compiled at refle
 // document is the `doc` row named after the agent row, so `coder` is CODER.md and lives in BOTH:
 // one row, so editing it here or under Operator documents is the same edit.
 const isProf = (n) => n.startsWith("prof:");
+// WHAT AN AGENT READS, in order, on top of every profile: who the owner is, the rules every agent shares, then this profile.
+// AGENT.md is one document - hover to read it whole; it is edited under Operator documents, never copied in here.
+function SharedRulesChip() {
+  const [text, setText] = useState("");
+  useEffect(() => { let live = true; api.get("/api/doc/agent").then(({ data }) => live && setText(data.rendered || data.content || "")).catch(() => {}); return () => { live = false; }; }, []);
+  const step = { fontSize: 11.5, color: FAINT };
+  return (
+    <Box data-tq-layers="" sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", pt: 0.75 }}>
+      <Typography component="span" sx={step}>Every task reads: SOUL.md + JOB.md →</Typography>
+      <Tooltip placement="bottom-start" enterDelay={150}
+        componentsProps={{ tooltip: { sx: { maxWidth: 620, maxHeight: 440, overflow: "auto", bgcolor: "#fffdfb", color: INK,
+          border: "1px solid #e1dcd5", boxShadow: "0 6px 24px rgba(30,40,30,.14)", p: 1.5 } } }}
+        title={<Box component="pre" sx={{ m: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 12, lineHeight: 1.5 }}>{text || "AGENT.md is empty."}</Box>}>
+        <Chip size="small" label="AGENT.md · shared rules" data-tq-agent-rules=""
+          sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: "#eef1ec", border: "1px solid #d9e0d6", cursor: "help" }} />
+      </Tooltip>
+      <Typography component="span" sx={step}>→ this profile</Typography>
+    </Box>
+  );
+}
 const profName = (n) => n.slice(5);
 const PROF_BLURB = "Instructions for the workers listed under this profile, added to AGENT.md for each task. Define how they work and what they deliver. Workers using different CLIs can share these instructions. Blank the document to restore its starter version.";
 // A row is a rules DOCUMENT, and several agents can share one (every coding worker shares `coder`) -
@@ -615,6 +635,10 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           <Box sx={{ flex: 1, minWidth: 0, flexBasis: { xs: "100%", md: "auto" } }}>
             <Typography noWrap sx={{ ...mono, color: INK, fontWeight: 600, fontSize: 17 }}>{meta.label}</Typography>
             <Typography variant="body2" sx={{ color: FAINT, pt: 0.75 }}>{meta.blurb}</Typography>
+            {/* THE LAYERS, said on every profile (the owner, 2026-10-14: "agent.md is just the start of the profiles ... show [it]
+                that you can hover over to see full text on top of every profile"): SOUL/JOB, then AGENT.md, then this. One AGENT.md,
+                edited under Operator documents - the chip only shows it. */}
+            {isProf(docName) && <SharedRulesChip />}
             {/* WHO RUNS ON THIS, and whether triage is actually offered them. It used to sit on the
                 profile's card in the shelf; the rail lists documents by name, so the fact that a
                 document governs `coder, codex` has to travel with the document itself. */}

@@ -562,7 +562,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # The role triage named owns the INSTRUCTIONS for general work - which is what stops it being
     # "only a label on the task". Which brain runs them is a separate question, answered from
     # settings: the two no longer travel together (the 2026-09-16 spec).
-    role = assigned_role(store, task)
+    # ...and general work triage gave NO role is the assistant's own (ASSISTANT.md) - never a worker with no profile at all
+    role = assigned_role(store, task) or ('' if dock or not store.get_agent('assistant') else 'assistant')
     if role:
         from .agents import ensure_profile_document
         doc = ensure_profile_document(store, role)

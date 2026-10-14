@@ -38,9 +38,10 @@ class TheRosterTests(unittest.TestCase):
         for name in hub_agents.DEFAULT_PROFILES:
             self.assertGreater(len(s.get_doc(name) or ''), 200, name)
 
-    def test_the_shipped_profiles_are_the_five_the_owner_chose(self):
+    def test_the_shipped_profiles_are_the_ones_the_owner_chose(self):
+        # ...and the general assistant's own, like CODER.md for coding (the owner, 2026-10-14)
         self.assertEqual(set(hub_agents.DEFAULT_PROFILES),
-                         {'researcher', 'analyst', 'coordinator', 'marketer', 'trader'})
+                         {'researcher', 'analyst', 'coordinator', 'marketer', 'trader', 'assistant'})
         for name, prof in hub_agents.DEFAULT_PROFILES.items():
             self.assertNotEqual(prof['kind'], 'coding', f'{name} must not be a coding profile')
             self.assertTrue(prof['purpose'].strip(), f'{name} needs a purpose for the roster')

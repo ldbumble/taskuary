@@ -1184,7 +1184,7 @@ class SQLiteStore:
                 line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
                 self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
             for name in ('soul', 'job', 'agent', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel',
-                         'researcher', 'analyst', 'coordinator', 'marketer', 'trader'):
+                         'researcher', 'analyst', 'coordinator', 'marketer', 'trader', 'assistant'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     txt = f.read_text(encoding='utf-8')

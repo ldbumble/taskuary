@@ -704,7 +704,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'treg_search': _lazy('treg', 'run_treg_search'),
             'treg_call': _lazy('treg', 'run_treg_call'),
             # LinkedIn: read who you are, and the one WRITE. Registered like QuickBooks' bill -
-            # it exists so it can be PROPOSED, because the card ships at read.
+            # it exists so it can be PROPOSED on a card narrowed to read; at the default FULL scope it runs.
             'bluesky_me': _lazy('social', 'run_bluesky_me'),
             'bluesky_timeline': _lazy('social', 'run_bluesky_timeline'),
             'bluesky_post': _lazy('social', 'run_bluesky_post'),
@@ -714,13 +714,13 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'linkedin_me': _lazy('linkedin', 'run_linkedin_me'),
             'linkedin_post': _lazy('linkedin', 'run_linkedin_post'),
             # Robinhood over its hosted MCP: the manifest, the reads, and the one write.
-            # The write is registered like QuickBooks' bill - it exists so it can be PROPOSED.
+            # The write is registered like QuickBooks' bill - PROPOSED on a card narrowed to read, run at FULL.
             'robinhood_tools': _lazy('robinhood', 'run_robinhood_tools'),
             'robinhood_read': _lazy('robinhood', 'run_robinhood_read'),
             'robinhood_order': _lazy('robinhood', 'run_robinhood_order'),
             'intacct': run_intacct, 'intacct_fields': run_intacct_fields,
             # ...and the two WRITES: generic by object, like the reads. Gated by the card's scope
-            # (it ships at read), so an agent proposes them and the owner approves.
+            # - narrowed to read, an agent proposes them and the owner approves; at the default FULL scope they run.
             'intacct_create': run_intacct_create, 'intacct_update': run_intacct_update,
             # QuickBooks Online: three reads, and the first two WRITES a Corporate system has here -
             # a bill and a paid expense, gated by the card's scope (proposals below write)

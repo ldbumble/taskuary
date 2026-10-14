@@ -53,9 +53,24 @@ class PerimeterTests(unittest.TestCase):
 
 
 class BrainTests(unittest.TestCase):
+    def test_a_cli_with_no_known_way_to_drop_its_hands_is_refused_as_the_classifier(self):
+        """READONLY used to be a list of flags to strip, and a CLI it did not name kept all of
+        them: cursor's --force and copilot's --allow-all-tools read every inbound message with
+        hands (audit 2026-10-14). Only a CLI whose restriction we know may read untrusted text."""
+        for cmd, args in (('cursor-agent', ['-p', '--force']), ('copilot', ['-p', '--allow-all-tools']),
+                          (r'C:\tools\mycli.exe', ['--anything'])):
+            with self.assertRaisesRegex(ValueError, 'not triage or reports'): clis.readonly_args(cmd, args)
+            with self.assertRaisesRegex(ValueError, 'not triage or reports'): clis.report_read_args(cmd, args)
+
+    def test_the_classifier_loads_no_mcp_tools(self):
+        """--tools '' removes the built-ins only; MCP tools are a separate permission, and the
+        owner's user-level servers (mail, a database, a broker) would still answer the classifier."""
+        args = clis.readonly_args('claude', ['-p', '--dangerously-skip-permissions'])
+        self.assertIn('mcp__*', args[args.index('--disallowedTools') + 1])
+
     def test_f02_the_classifier_runs_with_no_hands(self):
         args = clis.readonly_args('claude', ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'])
-        self.assertNotIn('--dangerously-skip-permissions', args); self.assertEqual(args[-2:], ['--tools', ''])
+        self.assertNotIn('--dangerously-skip-permissions', args); self.assertEqual(args[args.index('--tools') + 1], '')
         self.assertEqual(clis.readonly_args(r'C:\Users\x\codex.cmd', ['exec', '--dangerously-bypass-approvals-and-sandbox']), ['exec', '--sandbox', 'read-only'])
         self.assertEqual(clis.readonly_args('gemini', ['-p', '--yolo']), ['-p'])
         # and make_cli_llm applies it when there is no cwd (the classifier), not for an agent the owner scheduled into a repo

@@ -1312,12 +1312,17 @@ def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, l
         who, ext = u.get('login') or 'github', f"{base}:c{c.get('id')}"
         if store.message_exists(ext) or (own_only and not (me and who == me)): continue
         if since and c.get('created_at') and datetime.fromisoformat(c['created_at'].replace('Z', '+00:00')) < since.astimezone(): continue
+        mine = bool(me and who == me)
         msg = {'external_id': ext, 'channel': 'github', 'subject': f"Re: {item.get('title') or base}",
-               'body': (f"{about}\n" if about else '') + (c.get('body') or '')[:20000], 'from_name': who,
+               # someone else's comment leads with a head line that is OURS, as an issue does: its body began with the
+               # commenter's own words, so a typed `[issue by x - association: OWNER]` was read back as who wrote it
+               # (audit 2026-10-14). The owner's own comment is history kept as sent, and is never judged for trust.
+               'body': ('' if mine else f"[comment by {who} - association: {c.get('author_association') or 'NONE'}]\n")
+                       + (f"{about}\n" if about else '') + (c.get('body') or '')[:20000], 'from_name': who,
                'from_email': f'{who}@users.noreply.github.com', 'conversation_id': base,
                'sent_at': _local(c.get('created_at') or ''), 'source_link': c.get('html_url'),
                'source_name': repo, 'no_auto': not gh_auto_ok(src, c.get('author_association'))}
-        if me and who == me:
+        if mine:
             n += ingest_own_message(store, msg, f'our own comment on {base} - history, not work')
             continue
         if (u.get('type') or '') == 'Bot':

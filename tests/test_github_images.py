@@ -50,6 +50,20 @@ class BodyImagesTests(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertIn('user-attachments', get.call_args.args[0])
 
+    def test_the_host_is_read_from_the_url_not_found_somewhere_in_it(self):
+        """The request carries the owner's GitHub token. A URL that merely CONTAINS an attachment
+        path - in its query, its path, a userinfo, a lookalike host - is a stranger's server
+        collecting that token, and no model is asked first."""
+        for url in ('https://evil.example/?github.com/user-attachments/a',
+                    'https://evil.example/github.com/user-attachments/a',
+                    'https://github.com@evil.example/user-attachments/a',
+                    'https://github.com.evil.example/user-attachments/a',
+                    'https://evilraw.githubusercontent.com/x/y.png',
+                    'http://github.com/user-attachments/assets/a'):
+            with mock.patch.object(github.requests, 'get', return_value=self._resp()) as get:
+                self.assertEqual(github.body_images('tok', f'![x]({url})'), [], url)
+            get.assert_not_called()
+
     def test_what_is_not_a_picture_is_left_alone(self):
         cases = [('image/svg+xml', 'no provider takes SVG as image input'),
                  ('text/html', 'a login page where a picture was expected'),

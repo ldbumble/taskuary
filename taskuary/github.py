@@ -98,8 +98,19 @@ def learn(tok, repo, err):
 # following an arbitrary URL out of it is an SSRF with extra steps.
 _IMG_MD = re.compile(r'!\[[^\]]*\]\((https?://[^\s)]+)\)')
 _IMG_TAG = re.compile(r'<img\b[^>]*?\bsrc\s*=\s*["\']([^"\']+)["\']', re.I)
-_IMG_HOSTS = ('github.com/user-attachments/', 'user-images.githubusercontent.com/',
-              'private-user-images.githubusercontent.com/', 'raw.githubusercontent.com/')
+# Matched on the PARSED url - host exact, https only - because the fetch carries the owner's token:
+# a url that only contains one of these somewhere (`evil.example/?github.com/user-attachments/`)
+# handed that token to whoever served it (audit 2026-10-14).
+_IMG_HOSTS = {'github.com': '/user-attachments/', 'user-images.githubusercontent.com': '/',
+              'private-user-images.githubusercontent.com': '/', 'raw.githubusercontent.com': '/'}
+
+
+def _gh_image(url: str) -> bool:
+    from urllib.parse import urlsplit
+    try: u = urlsplit(url)
+    except ValueError: return False
+    pre = _IMG_HOSTS.get((u.hostname or '').lower())
+    return u.scheme == 'https' and not u.username and pre is not None and u.path.startswith(pre)
 
 
 def body_images(tok, body: str, cap: int = 4, max_bytes: int = 5_000_000) -> list:
@@ -116,7 +127,7 @@ def body_images(tok, body: str, cap: int = 4, max_bytes: int = 5_000_000) -> lis
     for rx in (_IMG_MD, _IMG_TAG):
         for url in rx.findall(body or ''):
             if len(out) >= cap: return out
-            if url in seen or not any(h in url for h in _IMG_HOSTS): continue
+            if url in seen or not _gh_image(url): continue
             seen.add(url)
             try:
                 r = requests.get(url, headers={'Authorization': f'Bearer {tok}'} if tok else {},

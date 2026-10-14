@@ -62,9 +62,9 @@ class AssistantToolsTests(unittest.TestCase):
         with mock.patch('taskuary.agents.run_cli', side_effect=run_cli):
             llm.make_cli_llm(store, 'my-claude')('SYS', 'USER')
         args = seen['profile']['args']
-        self.assertEqual(args[:3], ['-p', '--tools', ''])
+        self.assertEqual(args[:5], ['-p', '--tools', '', '--disallowedTools', 'mcp__*'])
         # its instructions ride as the system prompt (a file), which adds no tool of any kind (2026-09-24)
-        self.assertEqual(args[3:4], ['--system-prompt-file']); self.assertEqual(len(args), 5)
+        self.assertEqual(args[5:6], ['--system-prompt-file']); self.assertEqual(len(args), 7)
 
 
 class AssistantProviderTests(unittest.TestCase):

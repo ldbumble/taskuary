@@ -35,7 +35,6 @@ HEAD = 40                 # how many of the queue the rerank call sees
 RERANK_EVERY = 60         # seconds between rerank calls - arrivals in between ride on the floor
 PIN, LATER = 1.0, 0.05    # what the owner's two buttons set
 _TEAM = ('OWNER', 'MEMBER', 'COLLABORATOR')
-_ASSOC = re.compile(r'association: ([A-Z_]+)\]', re.I)
 _TYPES = {'email': ('outlook', 'gmail', 'imap')}   # channel -> the connector types behind it
 HEAD_JUDGED = 4           # how many of the ranked pool are TRIAGED at once - the rest wait, in order
 HEAD_RANGE = (1, 20)
@@ -144,8 +143,8 @@ def floor(store, task: dict, msg_row: dict = None, mine=()) -> tuple:
                                       'source_name': m.get('SourceName')}, mine)
         if th.get('others_replied'): v -= 0.2; why.append('colleague replied')
     if m.get('Channel') == 'github':
-        a = _ASSOC.search(str(m.get('BodyText') or '')[:200])
-        assoc = (a.group(1) if a else 'NONE').upper()
+        from .batch import association
+        assoc = association(m.get('BodyText'))
         if assoc in _TEAM: v += 0.15; why.append('team member')
         elif assoc == 'CONTRIBUTOR': v += 0.05; why.append('contributor')
         else: v -= 0.2; why.append('stranger')
@@ -226,8 +225,8 @@ def _arrival_line(r: dict) -> str:
     who = r.get('FromName') or r.get('FromEmail') or ''
     bits = [f"m{r['MessageId']}", str(r.get('Subject') or '(no subject)')[:110], f"{who} \u00b7 {r.get('Channel') or ''}"]
     if r.get('Channel') == 'github':
-        a = _ASSOC.search(str(r.get('BodyText') or '')[:200])
-        bits.append(f"author: {(a.group(1) if a else 'NONE').lower()}")
+        from .batch import association
+        bits.append(f"author: {association(r.get('BodyText')).lower()}")
     return ' | '.join(bits)
 
 

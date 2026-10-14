@@ -410,6 +410,15 @@ class OneBatchTests(unittest.TestCase):
             seed = batch.seed(self.s, a, 'northwind/portal')
         self.assertLess(seed.index('SECURITY FIRST'), seed.index('WORTH merging'))
 
+    def test_the_seed_judges_safety_before_it_runs_anything(self):
+        """Building a stranger's branch RUNS their code - a test file, a postinstall hook. The permission to build
+        used to come first and the security read after it, so the order an agent followed was run, then judge."""
+        a = batch.create(self.s, 'github', 'northwind/portal', [self.s.get_message(pr(self.s, 'northwind/portal', 1, 0.5))])
+        with mock.patch.object(batch, '_diff', return_value=('', '')):
+            seed = batch.seed(self.s, a, 'northwind/portal')
+        self.assertLess(seed.index('SECURITY FIRST'), seed.index('build it and run its tests'))
+        self.assertIn('prompt injection', seed)
+
 
 class DangerTests(unittest.TestCase):
     """A stranger's item the triage calls dangerous ranks last, is warned about, and batches apart read-only (the owner,

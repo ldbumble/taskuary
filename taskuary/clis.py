@@ -96,7 +96,8 @@ def tools() -> list:
 # bypass flags come OFF and its tools with them: the message it reads IS the prompt, and a sentence
 # in it saying "run this" must find nothing to run (audit 2026-09-02). Per CLI: (flags to drop,
 # flags to add). Gemini's default approval mode refuses tool calls headlessly, so dropping suffices.
-READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '')),
+# MCP tools are a separate permission from --tools, so the owner's user-level servers are denied by name.
+READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '', '--disallowedTools', 'mcp__*')),
             'codex': (('--dangerously-bypass-approvals-and-sandbox', '--full-auto'), ('--sandbox', 'read-only')),
             'gemini': (('--yolo',), ()),
             # Do not inherit a user's hooks, MCP servers or auto-approval rules for mail.
@@ -144,21 +145,22 @@ def _base(cmd: str) -> str:
 def readonly_args(cmd: str, args: list) -> list:
     """`args` with the permission bypass removed and the CLI's own no-tools flags added."""
     _require_restricted_mode(cmd)
-    drop, add = READONLY.get(_base(cmd), ((), ()))
+    drop, add = READONLY[_base(cmd)]
     return [a for a in args if a not in drop] + list(add)
 
 
 def report_read_args(cmd: str, args: list) -> list:
     """CLI arguments for retrieving report data without command, edit, write, or MCP access."""
     _require_restricted_mode(cmd)
-    drop, add = REPORT_READ.get(_base(cmd), ((), ()))
+    drop, add = REPORT_READ[_base(cmd)]
     return [a for a in args if a not in drop] + list(add)
 
 
 def _require_restricted_mode(cmd: str):
-    # These CLIs inherit project/user tools and approval rules. Until we have a verified
-    # per-run restriction, incoming mail must never launch their coding permissions.
-    if _base(cmd) in ('opencode', 'kimi'):
+    # An ALLOW list: a CLI with no verified per-run restriction keeps whatever its args grant
+    # (cursor's --force, copilot's --allow-all-tools, any custom command), so it may not read
+    # incoming mail at all. A .get() default of "strip nothing" was how they slipped through.
+    if _base(cmd) not in READONLY:
         raise ValueError(f'{_base(cmd)} is supported for task execution, not triage or reports. '
                          'Choose Qwen Code, Ollama, or an API provider for that role.')
 

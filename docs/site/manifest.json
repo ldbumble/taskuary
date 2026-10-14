@@ -28,6 +28,12 @@
       "desc": "A task, the agent work on it and the reply to the sender are three separate lives."
     },
     {
+      "slug": "security",
+      "file": "security.md",
+      "title": "Security",
+      "desc": "Prompt injection: what reading other people's words lets them try, what Taskuary does about it, and what to set."
+    },
+    {
       "slug": "assistant",
       "file": "assistant.md",
       "title": "Assistant buttons",

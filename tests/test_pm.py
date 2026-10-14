@@ -60,6 +60,12 @@ class SourceRulesTests(unittest.TestCase):
         self.assertEqual(source_rules(s, pr), PR_RULES)
         self.assertEqual(source_rules(s, self.msg('github', '[issue by someone - association: OWNER]\nIt broke')), ISSUE_RULES)
 
+    def test_a_pull_request_is_judged_for_safety_before_any_of_it_runs(self):
+        """The single-PR rules said check out, read, run the tests - running a stranger's tests runs their code - and never
+        named prompt injection: words in the PR, its comments or its code addressed to the agent reading it."""
+        self.assertIn('prompt injection', PR_RULES)
+        self.assertLess(PR_RULES.index('SAFETY FIRST'), PR_RULES.index('run the tests'))
+
     def test_github_card_prompt_overrides(self):
         s = MemoryStore()
         c = s.get_connector_by_type('github')

@@ -66,10 +66,11 @@ ACTIONS = {
     # these at a read-only account and the ladder holds even if everything above it fails.
     'postgresql': 'read', 'mysql': 'read', 'clickhouse': 'read', 'snowflake': 'read', 'bigquery': 'read',
     # treg: the catalogue is free to read; CALLING spends money and can reach a publish or an
-    # order, so it is a write on a card that ships at read - every call is a proposal.
+    # order, so it is a write: at a card's read scope every call is a proposal. Cards start at FULL below, so that
+    # holds only where the owner narrowed the card.
     'treg_tools': 'read', 'treg_search': 'read', 'treg_call': 'write',
     # LinkedIn: reading who you are is a read; putting words on your feed under your name
-    # is a write, and the card ships at read, so a post is always a proposal you approve.
+    # is a write - a proposal you approve only on a card narrowed to read (cards start at FULL below).
     'linkedin_me': 'read', 'linkedin_post': 'write',
     'bluesky_me': 'read', 'bluesky_timeline': 'read', 'bluesky_post': 'write',
     'mastodon_me': 'read', 'mastodon_timeline': 'read', 'mastodon_post': 'write',
@@ -121,7 +122,8 @@ ACTIONS = {
 # reach (the owner, 2026-10-05: "default should be permission of agents are the same as cli tools full permissions. you can
 # limit if you want"). The owner narrows a connection on its card or under Settings -> Agent permissions; the read-first
 # per-type table this replaced was a guess at caution nobody had asked for. Mail from an unknown sender never starts an
-# agent at all (ingest.auto_start_ok), so these permissions ride on work the owner or a trusted sender began.
+# agent by itself (ingest.auto_start_ok) - but that gate reads the From header and trusts chat channels, so it is not a
+# perimeter: these permissions also reach a spoofed sender's work (audit 2026-10-14).
 FULL = 'admin'
 DEFAULT_SCOPE = {}                     # no per-type exceptions; kept as the /api/scopes shape
 

@@ -41,6 +41,10 @@ notes below are what follows from it.
 - **Agents act with your permissions.** A CLI agent configured with an auto-approve flag
   will edit files, run commands, and push to repos without asking. Scope its PAT and
   working directories to what you actually want it to touch.
+- **The text Taskuary reads is written by other people, and some of it is written for the
+  AI** (prompt injection). Triage runs with no tools, strangers do not start agents, and
+  nothing is sent without your approval. An agent that is running still acts as you. See
+  [Security](https://taskuary.com/docs/security) for what is and is not covered.
 - **AI triage sends message content to whichever AI you connect** (an API provider, or
   your local CLI agent). Nothing leaves the machine until you connect one.
 

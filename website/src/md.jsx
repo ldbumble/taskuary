@@ -45,6 +45,10 @@ const sx = {
   "& > :first-of-type": { mt: 0 }, "& > :last-child": { mb: 0 },
 };
 
+// A picture in markdown is never fetched: the text came from a model or a stranger, and loading it is a
+// request to whatever server they named (the page's CSP refuses it too). It stays a link the owner can choose to open.
+const Img = ({ src, alt }) => <A href={src}>{`[image${alt ? `: ${alt}` : ""}]`}</A>;
+
 const keepRefs = (kids) => React.Children.map(kids, (k) => typeof k !== "string" ? k
   : refParts(k).map((p, i) => i % 2 ? <span key={i} className="ref">{p}</span> : p));
 const Td = ({ children, node, ...rest }) => <td {...rest}>{keepRefs(children)}</td>;
@@ -52,7 +56,7 @@ const Td = ({ children, node, ...rest }) => <td {...rest}>{keepRefs(children)}</
 export const Md = ({ text }) => (
   <Box sx={sx}>
     <ReactMarkdown remarkPlugins={[remarkGfm]}
-      components={{ a: A, td: Td, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
+      components={{ a: A, img: Img, td: Td, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
       {String(text || "")}
     </ReactMarkdown>
   </Box>

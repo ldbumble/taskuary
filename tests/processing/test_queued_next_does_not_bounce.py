@@ -49,7 +49,9 @@ def test_a_queued_task_shown_once_is_not_offered_again(db):
         first = funnel.next_item(db)
         assert first is not None
         assert first['lane'] == 'queued', first['lane']
-        db.set_funnel_state(first['key'], 'surfaced')       # what showing it in the chat records
+        # what NEXT records (concierge.move_on): put down, not merely shown - a shown row under On you is walked in its place
+        # (the owner, 2026-10-14), so only the put-down mark is what keeps Next from bouncing back to it
+        funnel.settle(db, first['key'], 'surfaced', 'owner', read=True, put_down=True)
         funnel.invalidate()
         again = funnel.next_item(db)
     assert again is not None, 'the walk went silent with other work waiting'

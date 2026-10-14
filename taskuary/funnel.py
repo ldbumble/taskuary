@@ -1559,6 +1559,14 @@ def on_you(item: dict) -> bool:
     return item.get('lane') in ON_YOU
 
 
+def leads(item: dict) -> bool:
+    """May the walk take this row before the rest? Waiting on the owner, unread - or simply drawn under Urgent or On you. A shown
+    row whose lane on_you does not name (a saved coder session the owner had just closed) sat FIRST under On you on the rail while
+    the walk went past it to the next unread one (the owner, 2026-10-14: "the first task was skipped"): the rail and the walk are
+    one order, so what the rail puts on you is walked in its place."""
+    return on_you(item) or not item.get('surfaced') or level_of(item) in ('urgent', 'task')
+
+
 def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
               exclude: str = None, items: list | None = None) -> dict | None:
     """What comes out of the mouth: the named item (read or not - the chat may return to it), or
@@ -1591,7 +1599,7 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
     # What is ON THE OWNER leads; after that, new arrivals; after those, a merely-shown row is walked
     # normally. Being put in the conversation never counted as the owner's decision, so it cannot make
     # an unread row unreachable - nor bury the one item that is actually waiting on them under fifty fyi.
-    return _present_one(store, next((i for i in ready if on_you(i) or not i.get('surfaced')), ready[0] if ready else None))
+    return _present_one(store, next((i for i in ready if leads(i)), ready[0] if ready else None))
 
 
 def batch_item(store, key: str) -> dict | None:

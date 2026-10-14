@@ -187,7 +187,7 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     ready = _eligible(items, scope, captured_now)
     # funnel.on_you first, then unread, then anything ready: the same order as the legacy walk, and
     # the reason a pending reply is not buried under an inbox of unread fyi.
-    first = next((item for item in ready if funnel.on_you(item) or not item.get("surfaced")),
+    first = next((item for item in ready if funnel.leads(item)),
                  ready[0] if ready else None)
     if first is not None and funnel.batchable(first):
         selected, member_keys = _batch(first, ready, funnel.fyi_batch_size(store))

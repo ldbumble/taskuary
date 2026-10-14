@@ -56,7 +56,8 @@ class PastWorkTests(unittest.TestCase):
 
 class FileTests(unittest.TestCase):
     def test_the_file_carries_history_past_work_and_thread_and_the_seed_points_at_it(self):
-        s = _store()
+        s = _store(); s.set_setting('owner_email', 'owner@vendor.com', 't')
+        # a colleague's mail is the owner's own domain; an unvouched sender would be a stranger's, whose words ride in a file (tests/test_origin_seed.py)
         a = _closed(s, 'Payroll import month wrong', DANA, 'Actions: routing.py now reads the payroll date.')
         tid = s.create_task({'Title': 'Payroll import wrong again', 'Kind': 'coding'}, 't')
         _mail(s, DANA, 'Payroll imports', 'March file landed in April.', days=9, conv='c1', status='filed')

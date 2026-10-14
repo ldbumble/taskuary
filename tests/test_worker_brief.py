@@ -25,6 +25,7 @@ MSG = {'external_id': 'e1', 'channel': 'email', 'from_email': 'dana@vendor.examp
 
 
 def make(s, kind='coding', checklist=('Fix the nightly export', 'Send Dana the August file')):
+    s.set_setting('owner_email', 'alex@vendor.example', 't')   # Dana writes from the owner's own domain; a stranger's words ride in a file, not the seed
     llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': kind, 'why': 'w', 'title': 'Fix the nightly export', 'summary': 'The export job fails nightly.',
                                       'checklist': list(checklist)})
     with mock.patch.object(ingest, '_spawn'):

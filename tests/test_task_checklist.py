@@ -242,7 +242,8 @@ class PreservationTests(unittest.TestCase):
 
 class SharedContextTests(unittest.TestCase):
     def test_the_worker_brief_carries_the_checklist_and_the_source_message(self):
-        s = MemoryStore()
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@vendor.example', 't')
+        # a colleague's mail is the owner's own domain; an unvouched sender would be a stranger's, whose words ride in a file (tests/test_origin_seed.py)
         with mock.patch.object(ingest, '_spawn'):
             tid = ingest.ingest_message(s, dict(MSG), llm=verdict(kind='coding'))['task_id']
         text = terminal.seed_text(s, tid)

@@ -96,10 +96,11 @@ class BrainTests(unittest.TestCase):
         # dropped because of the English it is written in
 
     def test_f07_the_question_survives_the_context_budget(self):
-        s = MemoryStore()
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
+    # a colleague's mail is the owner's own domain; an unvouched sender would be a stranger's, whose words ride in a file (tests/test_origin_seed.py)
         tid = s.create_task({'Title': 'Summarise the thread', 'Kind': 'general', 'Status': 'open'}, 'owner')
         for i in range(12):
-            s.add_message({'ExternalId': f'm{i}', 'TaskId': tid, 'Channel': 'email', 'FromName': f'Sender {i}', 'Subject': 'thread',
+            s.add_message({'ExternalId': f'm{i}', 'TaskId': tid, 'Channel': 'email', 'FromName': f'Sender {i}', 'FromEmail': f'sender{i}@northwind.example', 'Subject': 'thread',
                            'BodyText': f'mail {i} ' + ('lorem ' * 600), 'SentAt': f'2026-09-01 0{i % 9}:00:00'})
         s.add_comment(tid, 'owner', general.USER_TYPE, 'What is the one thing they are all asking for?')
         _system, user = general._prompt(s, tid)

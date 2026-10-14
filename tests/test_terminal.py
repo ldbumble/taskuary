@@ -805,6 +805,9 @@ class TerminalTests(unittest.TestCase):
         server.store._exec('DELETE FROM memory')
         server.store._exec('DELETE FROM metric')
         self.addCleanup(lambda: [server.store.save_doc(n, v or '', 'test') for n, v in saved.items()])
+        # the sender is a colleague on the owner's domain: an unvouched one is a stranger's, whose seed is longer and points at a file
+        was = server.store.get_setting('owner_email'); server.store.set_setting('owner_email', 'alex@northwind.example', 'test')
+        self.addCleanup(lambda: server.store.set_setting('owner_email', was or '', 'test'))
         tid = c.post('/api/tasks', json={'Title': 'payroll adjustments post to the wrong month',
                                          'Kind': 'coding'}).json()['taskId']
         server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:E2E', 'Channel': 'email',

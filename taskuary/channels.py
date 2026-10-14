@@ -1124,14 +1124,15 @@ def _cloud_explicit(store, channel) -> bool:
 TQ_ISSUE = re.compile(r'^\[TQ-\d+\]')        # issues the coder itself opened - never ingest those back; TQ-10000 has five digits
 
 
-def gh_modes(src: dict, file_only: bool) -> tuple:
+def gh_modes(src: dict, file_only: bool, roles: set | None = None) -> tuple:
     """(issues_mode, prs_mode) for a repo. An EXPLICIT picker beats the connector's role -
     'issues: tasks' means tasks even on a tool-only card; unconfigured kinds follow the role,
     and PRs default off. One place, because the poller needs the same answer as the ingest
     to know whether this source was even looked at."""
     try: modes = json.loads(src.get('ConfigJson') or '{}')
     except ValueError: modes = {}
-    default_mode = 'feed' if file_only else 'tasks'
+    default_mode = ('tasks' if 'trigger' in roles else 'feed' if 'feed' in roles else 'off') \
+                   if roles is not None else ('feed' if file_only else 'tasks')
     return (modes.get('issues') or default_mode, modes.get('prs') or 'off')
 
 
@@ -1326,7 +1327,7 @@ def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, l
     return n
 
 
-def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=False) -> int:
+def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=False, roles=None) -> int:
     """GitHub as an INBOUND channel: new issues - and, per repo, pull requests - land on the
     Timeline and go through the same triage as mail. What each KIND does is the source's own
     call (ConfigJson {"issues": "tasks|feed|replies|off", "prs": ...}), because an open-source repo
@@ -1336,7 +1337,7 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
     picker (gh_auto_ok): off by default, or the team / contributors / anyone. Issues Taskuary
     opened for its own tasks are skipped, otherwise the coder would file work against itself."""
     repo = src['Address']
-    issues_mode, prs_mode = gh_modes(src, file_only)
+    issues_mode, prs_mode = gh_modes(src, file_only, roles)
     if issues_mode == 'off' and prs_mode == 'off': return 0
     n = 0
     from . import github
@@ -1414,11 +1415,10 @@ def _repo_error(e) -> str:
     return text[:160]
 
 
-def _gh_explicit(store) -> bool:
-    """Any repo whose issues/PRs picker is set to something live - that IS the trigger intent,
-    whatever the connector card's role says."""
+def _gh_explicit(store, connector_id) -> bool:
+    """A live picker on THIS card carries trigger intent, whatever its role says."""
     for s in store.list_sources():
-        if s['Channel'] != 'github': continue
+        if s['Channel'] != 'github' or s.get('ConnectorId') != connector_id: continue
         try: m = json.loads(s.get('ConfigJson') or '{}')
         except ValueError: m = {}
         if {'tasks', 'feed', 'replies'} & {m.get('issues'), m.get('prs')}: return True
@@ -1551,7 +1551,7 @@ def _poll_jobs(store, only=None):
         from . import remote_assistant
         phone_guide = remote_assistant.polls(store, c)      # the card carries the Assistant chat: read it regardless
         if (not roles & {'trigger', 'feed'} and not phone_guide
-                and not (c['Type'] == 'github' and _gh_explicit(store))
+                and not (c['Type'] == 'github' and _gh_explicit(store, c['ConnectorId']))
                 and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue
         jobs.append((c, 'trigger' not in roles))
     return jobs
@@ -1717,15 +1717,18 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
             elif c['Type'] == 'teams':
                 n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it)
             elif c['Type'] == 'github':
+                from .store import roles_of
+                if s.get('ConnectorId') != c['ConnectorId']: continue
+                roles = roles_of(c)
                 # a repo with BOTH kinds off was not read, so its watermark must not
                 # move: advancing it would step over the issues sitting there, and
                 # switching the repo on later would only ever see what came next
-                if set(gh_modes(s, file_only)) == {'off'}: continue
+                if set(gh_modes(s, file_only, roles)) == {'off'}: continue
                 # ONE dead repo must not blind the others. A renamed or deleted repo answers 404 for
                 # ever, and with no guard of its own that error escaped the whole source loop: every
                 # repo listed after it went unpolled, on every cycle, saying nothing. The mail branch
                 # above has had this guard for as long as it has had folders that can fail.
-                try: n += ingest_github_issues(store, s, tok, since, llm, file_only)
+                try: n += ingest_github_issues(store, s, tok, since, llm, file_only, roles)
                 except Exception as e:
                     errors.append(f"{s['Address']}: {_repo_error(e)}")
                     logger.warning(f"github: {s['Address']} could not be read ({e})")

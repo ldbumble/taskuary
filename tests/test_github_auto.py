@@ -61,7 +61,7 @@ class ADeadRepoDoesNotBlindTheOthersTests(unittest.TestCase):
                            'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps({'issues': 'work'})}, 't')
         polled = []
 
-        def issues(store, src, tok, since, llm, file_only):
+        def issues(store, src, tok, since, llm, file_only, roles=None):
             polled.append(src['Address'])
             if src['Address'].endswith('GoneForever'):
                 raise RuntimeError('404 Client Error: Not Found for url: .../GoneForever/issues')

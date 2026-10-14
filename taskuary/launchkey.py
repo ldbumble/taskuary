@@ -25,7 +25,7 @@ def redeem(k) -> bool:
     return bool(exp and exp > time.monotonic())
 
 # An agent's session, by what Taskuary put in its environment (terminal.session_env): any ONE marker is enough, because a
-# session that unsets its token keeps the rest - and with none of them config.toml is the owner's, read in-process.
+# session that unsets its token keeps the rest (cli.session decides whose session it is).
 # guard.stranger_token's shape, matched here without guard: this module imports nothing of ours.
 MARKERS = ('TASKUARY_TASK', 'TASKUARY_SID', 'TASKUARY_AGENT', 'TASKUARY_TASK_TOKEN')
 STRANGER_TOKEN = re.compile(r's1\.(\d{1,12})\.[0-9a-f]{32}')
@@ -53,10 +53,7 @@ def via_file(url: str, folder) -> str:
     return f.as_uri()
 
 def remote_link(url: str, token: str) -> str:
-    """A keyed address from ANOTHER process's server (the instance already running), or the plain one if it gives none.
-    Never for a session: a key is the owner token for whoever opens it first (R29), and config.toml's token is in reach
-    of any process the session starts."""
-    if in_session(): return url
+    "A keyed address from ANOTHER process's server (the instance already running), or the plain one if it gives none."
     u = urllib.parse.urlsplit(url)
     try:
         conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=5)

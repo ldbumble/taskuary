@@ -32,6 +32,7 @@ import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 import { AI_SHELF } from "./aiShelf.js";
+import { cliCardOf } from "./cliCard.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -1357,7 +1358,7 @@ export const ConnCard = ({ c }) => {
         <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
         {connState(c) === "on" && !c.plain && (
           <Box component="span" data-tq-conn-pill sx={{ flexShrink: 0, px: 0.75, py: 0.1, borderRadius: 99, fontSize: 10, fontWeight: 600,
-            lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>{c.channel === "cli" ? "Installed" : "Connected"}</Box>
+            lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>Connected</Box>
         )}
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: connDot(c), flexShrink: 0 }} />
       </Box>
@@ -1586,6 +1587,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const [open, setOpen] = useState(null);   // {kind:'channel',id} | {kind:'rtype',rtype,SourceId?} | {kind:'agents'}
   const [syncing, setSyncing] = useState(false);
   const [err, setErr] = useState("");
+  const [clis, setClis] = useState(null);   // the CLIs (/api/cli/connections): what the AI CLI agents card says it is (cliCard.js)
 
   const load = useCallback(async () => {
     try {
@@ -1594,6 +1596,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load connectors"); }
   }, []);
   useEffect(() => { load(); api.get("/api/mssql/drivers").then(({ data }) => setDrivers(data.data || [])).catch(() => {}); }, [load]);
+  // ...read again whenever a card closes: connecting or disconnecting a CLI happens on its panel
+  useEffect(() => { if (!open) api.get("/api/cli/connections").then(({ data }) => setClis(data.data || [])).catch(() => {}); }, [open]);
 
   const reports = sources.filter((x) => x.Channel === "report");
   const syncNow = async () => {
@@ -1680,7 +1684,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const groups = [
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → Triage & agents",
-        channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }) },
+        channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }),
+        ...cliCardOf(clis) },
       ...channelCards(AI_SHELF),
       ...catalogCards("AI — agents & models"),
     ]},

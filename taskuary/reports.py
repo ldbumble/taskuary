@@ -1754,10 +1754,10 @@ LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'alert': 'never'}
 # ...except the Assistant: a voice that checks in every half hour, and "every run" from a voice is
 # noise (the owner, 2026-09-20: "only show up when the assistant has an idea that matters, not always").
 ASSISTANT_WHEN = ('it has an idea that matters: something I would act on or need to know today, '
-                  'not a status note or a restatement of what is already on my Timeline')
+                  'not a status note or a restatement of what is already in front of me')
 # What each line is, in the words the judge is given. `alert` is whichever live channel the owner
 # picked, as often email as WhatsApp; what makes it an alert is that it skips Review.
-LINE_SAYS = {'timeline': "post it on the owner's timeline as news to read",
+LINE_SAYS = {'timeline': "show it under Reports on the owner's work rail as news to read",
              'alert': "reach the owner right away, on whichever channel they chose",
              'send': 'send the report out to the people it is addressed to'}
 JUDGE_TOKENS = 60                 # four bare yes/nos
@@ -1797,7 +1797,7 @@ def rule_words(r: dict) -> str:
             'contains': f'it mentions "{text}"', 'missing': f'it never mentions "{text}"'}.get(str(r.get('rule') or '').lower(), '')
 
 
-LINE_NAMES = {'timeline': 'Timeline', 'alert': 'alert', 'send': 'sent out'}
+LINE_NAMES = {'timeline': 'Reports', 'alert': 'alert', 'send': 'sent out'}
 
 
 def route_words(cfg: dict) -> str:
@@ -1814,7 +1814,7 @@ def run_lands(cfg: dict) -> str:
     where = {'always': 'Its result shows under Reports when it is done',
              'ai': 'Its result shows under Reports only if the AI judges it worth your time; otherwise only its run history keeps it',
              'rule': f'Its result shows under Reports only when {w}; otherwise only its run history keeps it',
-             'never': 'It is set to post nothing on the Timeline - the run is kept in its history on the Reports page'}[how]
+             'never': 'It is set to post nothing under Reports - the run is kept in its history on the Reports page'}[how]
     return f'{where}. If it fails, the bell says why.'
 
 

@@ -447,11 +447,19 @@ def test_run_now_says_where_the_run_will_show_by_its_own_route():
     assert says().startswith('Its result shows under Reports when it is done')
     assert 'only if the AI judges' in says(timeline={'how': 'ai', 'when': 'an invoice is overdue'})
     assert 'only when anything came back' in says(timeline={'how': 'rule', 'rule': 'something_came_back'})
-    assert 'post nothing on the Timeline' in says(timeline={'how': 'never'})
+    assert 'post nothing under Reports' in says(timeline={'how': 'never'})
     assert all(s.endswith('If it fails, the bell says why.') for s in (says(), says(timeline={'how': 'never'})))
     # ...and Run now hands it back, so the page and the chat say it rather than a promise of their own
     sid = server.store.save_source({'Channel': 'report', 'Address': 'quiet one', 'Active': 1, 'Owner': 'test',
                                     'ConfigJson': json.dumps({'type': 'mssql', 'title': 'Quiet one', 'route': {'timeline': {'how': 'never'}}})}, 'test')
     with mock.patch.object(server, '_spawn_rerun', lambda fn: None):
         out = c.post(f'/api/reports/{sid}/rerun').json()
-    assert out['queued'] and 'post nothing on the Timeline' in out['lands']
+    assert out['queued'] and 'post nothing under Reports' in out['lands']
+
+
+def test_the_route_is_named_for_where_runs_show_now():
+    """The Timeline tab went (2026-10-15); a run the `timeline` line keeps shows under the rail's Reports band, so every
+    word the owner reads says Reports. The stored key stays `timeline` - renaming it would orphan every saved card."""
+    cfg = {'type': 'mssql', 'route': {'timeline': {'how': 'never'}}}
+    words = reports.route_words(cfg) + reports.run_lands(cfg) + reports.LINE_SAYS['timeline'] + reports.ASSISTANT_WHEN
+    assert 'Reports: never' in reports.route_words(cfg) and 'timeline' not in words.lower()

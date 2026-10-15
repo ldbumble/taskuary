@@ -81,7 +81,7 @@ test("the Timeline can only be silenced when the run has somewhere else to go", 
 test("see the prompt shows the prompt, word for word as the server builds it", () => {
   // A paraphrase of the real prompt would be worse than showing nothing. These strings are
   // reports.LINE_SAYS and the line reports.judge_prompt writes.
-  assert.match(source, /timeline: "post it on the owner's timeline as news to read"/);
+  assert.match(source, /timeline: "show it under Reports on the owner's work rail as news to read"/);
   // the work line is gone (the owner, 2026-09-28): whether a run is work is triage's call on every run
   assert.ok(!source.includes("put it on the owner's work rail"));
   assert.match(source, /\$\{l\.toUpperCase\(\)\}: yes\|no .* but only if: \$\{lineOf\(c, l\)\.when\.trim\(\)\}/);

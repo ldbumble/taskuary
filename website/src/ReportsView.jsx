@@ -283,7 +283,7 @@ const RULES = [
 export const ROUTE_LINES = ["timeline", "alert", "send"];
 const ROUTE_HOW = ["always", "ai", "rule", "never"];
 const LINE_DEFAULT = { timeline: "always", send: "always", alert: "never" };
-export const ASSISTANT_WHEN = "it has an idea that matters: something I would act on or need to know today, not a status note or a restatement of what is already on my Timeline";
+export const ASSISTANT_WHEN = "it has an idea that matters: something I would act on or need to know today, not a status note or a restatement of what is already in front of me";
 const lineOf = (c, line) => c?.route?.[line]
   || (c?.type === "assistant" && line === "timeline" ? { how: "ai", when: ASSISTANT_WHEN } : { how: LINE_DEFAULT[line] });
 export const fullRoute = (c) => Object.fromEntries(ROUTE_LINES.map((l) => [l, lineOf(c, l)]));
@@ -297,7 +297,7 @@ export const LINE_SAYS = {
 // ...and what the model is literally asked, word for word as reports.LINE_SAYS and judge_prompt
 // build it: a rule you cannot read is a rule you cannot trust.
 const PROMPT_SAYS = {
-  timeline: "post it on the owner's timeline as news to read",
+  timeline: "show it under Reports on the owner's work rail as news to read",
   alert: "reach the owner right away, on whichever channel they chose",
   send: "send the report out to the people it is addressed to",
 };

@@ -53,7 +53,7 @@ SLOTS = [
     # somebody else produced. They were one setting while both were chat models; they are two now
     # because a decision model can do the second job and not the first.
     {'key': 'judge_ai', 'label': 'Where runs go', 'pick': 'judge', 'gear': 'light',
-     'desc': 'Decides whether a finished report lands on your Timeline, your work rail, reaches you '
+     'desc': 'Decides whether a finished report shows under Reports, lands on your work rail, reaches you '
              'right away, or goes out - against the sentences you wrote on its card.',
      'why': 'Four yes/nos about a result somebody else wrote. It does not need to be able to talk, '
             'so a decision model belongs here and nowhere else.'},

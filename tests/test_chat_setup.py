@@ -54,7 +54,7 @@ class ReportSetupTests(unittest.TestCase):
         out = say(s, 'set up a report of open tasks by kind every Monday at 8', composer())
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['label'], p['params']['title'], p['params']['runs'], p['params']['reaches_you']),
-                         ('report.create', 'Create the report', 'Open tasks by kind', 'cron 0 8 * * 1', 'Timeline: every run; alert: never'))
+                         ('report.create', 'Create the report', 'Open tasks by kind', 'cron 0 8 * * 1', 'Reports: every run; alert: never'))
         self.assertEqual(p['params']['config'], REPORT)
         self.assertIn('Nothing is saved', out['say']); self.assertIn('Counts open tasks by kind', out['say'])
         # the builder's order, not a config dump: the prompt first, then the settings, one labelled line each

@@ -1,10 +1,11 @@
 // A CHAT READS AS A CHAT (the owner, 2026-10-15: "it should be my chat, their chat, like a chat history. this is unreadable ...
 // same for teams"). A WhatsApp or Teams task stacked each message as its own block - a name and a time, then the words or an
 // audio player - newest first, with the owner's own replies drawn apart, so a conversation read as a pile of unrelated notes.
-// Here it is the thread itself: oldest at the top, the newest at the bottom where the eye lands, theirs on the left and yours
-// on the right, one name over each run of messages, a day line between days, and what they sent - a voice note, a photo -
-// inside the bubble it came in.
-import React, { useEffect, useRef } from "react";
+// Here it is the thread itself: NEWEST AT THE TOP, as every message list in the app reads (the owner, 2026-10-14, and again
+// 2026-10-15: "i thought all messages are newest first on top, same as in email - make sure it's consistent"), theirs on the
+// left and yours on the right, one name over each run of messages, a day line over each day, and what they sent - a voice
+// note, a photo - inside the bubble it came in.
+import React from "react";
 import { Box, Typography } from "@mui/material";
 import { Attachments } from "./Attachments.jsx";
 import { cleanText, tsMs } from "./ui.jsx";
@@ -42,12 +43,10 @@ const dayLabel = (at) => {
 const timeOf = (at) => { const d = new Date(tsMs(at)); return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }); };
 
 export default function ChatThread({ messages = [], maxHeight = 460 }) {
-  const list = [...messages].sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt));
-  const box = useRef(null);
-  // the newest is what you came for: the thread opens scrolled to it
-  useEffect(() => { const el = box.current; if (el) el.scrollTop = el.scrollHeight; }, [list.length]);
+  // newest first, like the rest of the app: the box opens at its top, which is the latest line
+  const list = [...messages].sort((a, b) => tsMs(b.SentAt) - tsMs(a.SentAt));
   return (
-    <Box ref={box} data-tq-chat-thread="" sx={{ mt: 0.85, maxWidth: 900, maxHeight, overflowY: "auto", px: 1, py: 1,
+    <Box data-tq-chat-thread="" sx={{ mt: 0.85, maxHeight, overflowY: "auto", px: 1, py: 1,
       border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#f6f3ee", display: "flex", flexDirection: "column", gap: 0.35 }}>
       {list.map((m, i) => {
         const me = mine(m), prev = list[i - 1];
@@ -63,7 +62,7 @@ export default function ChatThread({ messages = [], maxHeight = 460 }) {
               mt: newRun && !newDay ? 0.6 : 0 }}>
               {newRun && !me && <Typography sx={{ fontSize: 10.5, fontWeight: 600, color: DIM, ml: 1, mb: 0.15 }}>
                 {m.FromName || m.FromEmail || m.Channel}</Typography>}
-              <Box sx={{ maxWidth: "78%", minWidth: 0, px: 1.2, py: 0.7, borderRadius: 2,
+              <Box sx={{ maxWidth: { xs: "88%", md: "min(70%, 640px)" }, minWidth: 0, px: 1.2, py: 0.7, borderRadius: 2,
                 borderTopLeftRadius: !me && newRun ? 4 : undefined, borderTopRightRadius: me && newRun ? 4 : undefined,
                 bgcolor: me ? "#dfe9df" : "#fff", border: `1px solid ${me ? "#cddccd" : BORDER}` }}>
                 {words && <Typography variant="body2" sx={{ color: INK, lineHeight: 1.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>

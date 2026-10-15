@@ -35,3 +35,11 @@ test("the task card draws the thread for a chat, and the old stack for everythin
   assert.match(page, /detail\?\.repeats\?\.line && !chatTask/);
   assert.match(src, /flexDirection: "column", alignItems: me \? "flex-end" : "flex-start"/);   // yours right, theirs left
 });
+
+test("newest first, as every message list reads - and the thread stands over the draft in Close out", () => {
+  assert.match(src, /const list = \[\.\.\.messages\]\.sort\(\(a, b\) => tsMs\(b\.SentAt\) - tsMs\(a\.SentAt\)\);/);
+  assert.doesNotMatch(src, /scrollTop = el\.scrollHeight/);
+  assert.doesNotMatch(src, /maxWidth: 900/);                                  // as wide as the task section
+  assert.match(src, /maxWidth: \{ xs: "88%", md: "min\(70%, 640px\)" \}/);      // a bubble stays readable
+  assert.match(page, /\{chatTask && <Box sx=\{\{ mb: 1\.2 \}\}>[\s\S]{0,160}<ChatThread messages=\{taskMessages\} maxHeight=\{240\} \/>/);
+});

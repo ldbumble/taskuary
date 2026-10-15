@@ -1843,6 +1843,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : null} />
                   {stage === "reply" && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      {/* THE CONVERSATION OVER THE DRAFT (the owner, 2026-10-15: "add it to close out too"): a chat task with a reply ready
+                          opens here, and the thread it answers was folded away in step 1 - the one thing needed to judge the draft */}
+                      {chatTask && <Box sx={{ mb: 1.2 }}>
+                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>The conversation</Typography>
+                        <ChatThread messages={taskMessages} maxHeight={240} />
+                      </Box>}
                       {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
                       <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
                         onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />

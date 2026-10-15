@@ -884,9 +884,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           {/* A HIT OPENS ON THE ASSISTANT CANVAS, whatever the mode, through the same pull a rail click takes (pull switches the
               stage to chat) - it opened the task-mode panel, titled "undefined in chat" (the owner, 2026-10-14: "searched task
               should show up on assistant canvas regardless not on the task view") */}
+          {/* ...and QUIET: a pick is not something the owner said, so no "Tell me about ..." bubble rides in above the task
+              (the owner, 2026-10-15: "why does the gray thing show up when clicking on searched task. Just show the task") */}
           <SearchEverything open={searchOpen} onClose={() => setSearchOpen(false)}
-            onOpenTask={(tid, h) => (onPull ? onPull({ TaskId: tid, Title: h?.title }) : onOpenTask?.(tid))}
-            onOpenMessage={(mid, h) => (onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }), true) : openByMid(mid))}
+            onOpenTask={(tid, h) => (onPull ? onPull({ TaskId: tid, Title: h?.title }, { quiet: true }) : onOpenTask?.(tid))}
+            onOpenMessage={(mid, h) => (onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }, { quiet: true }), true) : openByMid(mid))}
             onPickSource={(next) => {
               loadRequest.current += 1; detailEpoch.current += 1; want.current = null;
               if (cat) { pendingPick.current = next; setCat(""); } else setPick(next);

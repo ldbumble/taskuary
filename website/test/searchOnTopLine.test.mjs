@@ -14,8 +14,9 @@ test("the search bar is on the top line, and the rail no longer draws one", () =
 
 test("a hit goes on the canvas through the rail's own pull, whatever the mode", () => {
   const f = read("FeedView.jsx");
-  assert.match(f, /onOpenTask=\{\(tid, h\) => \(onPull \? onPull\(\{ TaskId: tid, Title: h\?\.title \}\) : onOpenTask\?\.\(tid\)\)\}/);
-  assert.match(f, /onOpenMessage=\{\(mid, h\) => \(onPull \? \(onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}\), true\) : openByMid\(mid\)\)\}/);
+  // ...quietly: a pick puts the task on the canvas without a "Tell me about" line (searchPickQuiet.test.mjs)
+  assert.match(f, /onOpenTask=\{\(tid, h\) => \(onPull \? onPull\(\{ TaskId: tid, Title: h\?\.title \}, \{ quiet: true \}\) : onOpenTask\?\.\(tid\)\)\}/);
+  assert.match(f, /onOpenMessage=\{\(mid, h\) => \(onPull \? \(onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}, \{ quiet: true \}\), true\) : openByMid\(mid\)\)\}/);
 });
 
 test("a row with no message of its own is keyed by its task, never msg:undefined", () => {

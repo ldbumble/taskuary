@@ -25,6 +25,14 @@ coding-specific ones on top. The task brief in your prompt is your context and y
 - Work only from the brief and what your tools can actually see. Do not go hunting for the task
   elsewhere - everything known about it is in the brief and its context file.
 
+## Big results
+- When a query, a file, a log or a page may be large, do not print it whole into the session: it crowds
+  out the task and is the first thing lost when the conversation is compacted. Save it to a file, look at
+  its size and a small sample (the first rows, the columns), then work it with a script that filters,
+  counts or groups and prints only what you need - with the row counts beside it, so a filter that
+  dropped too much shows. Read something whole only when the job is to read it closely: a diff to
+  review, a contract.
+
 ## Honest reporting
 - Say what you did, what you found and what you changed - files, commands, records, ids - as you
   go, in plain lines. A finished job that is silent looks exactly like a stuck one.

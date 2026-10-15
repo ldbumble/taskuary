@@ -526,7 +526,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # SOUL.md stays with triage (PW-184); the worker reads AGENT.md - the rules both kinds share, with the
     # approval boundaries SOUL.md used to carry - and, because this work is writing, the assistant's voice
     from . import brief as _brief
-    agent_rules = _cut(_brief.rules(store, 'agent', 4_000), 4_000)
+    from .terminal import with_fence_rule
+    agent_rules = with_fence_rule(_cut(_brief.rules(store, 'agent', 4_000), 4_000))      # ...and the standing rules an older copy lacks
     from . import counsel as _counsel
     counsel = _counsel.check_budget(store, 'counsel', _counsel.for_worker(store))   # the voice, whole (PW-258)
     # What is CERTIFIED about the company's own systems. Without it the assistant writes a

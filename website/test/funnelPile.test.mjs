@@ -211,7 +211,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(view, /include_surfaced: true/); // a read row is not presented again by Next
   assert.doesNotMatch(view, /i\.surfaced && !i\.current \? "shown"/);                              // unread never looks processed
   assert.match(view, /stage=\{stageMode === "chat" \? chat : placeholder\} rowMode=\{stageMode\}/);   // the two ways to use the stage
-  assert.match(view, /onPull=\{\(r\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
+  assert.match(view, /onPull=\{\(r, o\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
   assert.match(view, /window\.location\.hash = `msg=\$\{mid\}`/);   // "on the Timeline" pins the row over the chat
   assert.doesNotMatch(view, /turn\(\{ mode: "open" \}\)/);   // the day never writes itself: the welcome is the door
   // words are interpreted, never dispatched (PW-121..125): the two immediate exceptions (Next, a reply

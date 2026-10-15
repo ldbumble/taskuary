@@ -212,3 +212,14 @@ def test_the_answer_road_keeps_its_422_when_no_session_is_live():
     t = _task(server.store, 'someone@vendor.example'); mid = server.store.list_messages(t)[0]['MessageId']
     with mock.patch.object(terminal, 'mode_of_task', return_value=''), mock.patch.object(terminal, 'say_to_task', return_value=False):
         assert TestClient(server.app).post(f'/api/tasks/{t}/answer', json={'message_id': mid}).status_code == 422
+
+
+def test_every_worker_is_told_to_keep_big_results_out_of_the_session():
+    """The owner, 2026-10-15: save a big result to a file and sample it, rather than print it into the context."""
+    from taskuary import brief, general
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
+    assert 'Big results' in brief.rules(s, 'agent', 99_999)                                # the shipped AGENT.md says it
+    s.save_doc('agent', 'Be careful.', 't')                                                # an owner's copy from before it
+    assert terminal.with_fence_rule('Be careful.').count('Big results') == 1
+    assert terminal.with_fence_rule(terminal.with_fence_rule('Be careful.')) == terminal.with_fence_rule('Be careful.')
+    assert terminal.with_fence_rule('') == ''                                              # no document, no block

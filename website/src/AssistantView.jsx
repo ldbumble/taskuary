@@ -2289,7 +2289,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
         onSection={walkSection} onCurrent={() => setRailOpen(false)} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
-      onPull={(r) => pull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)}
+      onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} />
     </>
   );

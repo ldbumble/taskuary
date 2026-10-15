@@ -67,7 +67,7 @@ class VertexTests(unittest.TestCase):
         seen = self.ask({'project': 'acme-ai'})
         self.assertEqual(seen['url'], 'https://aiplatform.googleapis.com/v1/projects/acme-ai/locations/global/endpoints/openapi/chat/completions')
         self.assertEqual(seen['headers'], {'x-goog-api-key': 'AQ.key'})
-        self.assertEqual(seen['model'], 'google/gemini-2.5-flash')
+        self.assertEqual(seen['model'], 'google/gemini-3.8-flash')
 
     def test_a_region_has_its_own_host_and_a_bare_model_is_googles(self):
         seen = self.ask({'project': 'acme-ai', 'location': 'us-central1', 'model': 'gemini-2.5-pro'})

@@ -73,12 +73,22 @@ def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
 # needs room - and on a reasoning model a small budget is spent thinking and the visible
 # answer comes back EMPTY, which is how reports ended up filing raw data with no summary.
 MAX_TOKENS = 400
+# the newest Flash on Google's Agent Platform: 2.5 Flash retires there on 2026-10-20 (the owner, 2026-10-15: "use the latest flash")
+VERTEX_DEFAULT = 'gemini-3.8-flash'
+# AN ANSWER CUT OFF BY THE LIMIT IS ASKED AGAIN WITH ROOM. A thinking model (Gemini 2.5+, the reasoning GPTs) spends its token budget
+# thinking before it writes, so a 400-token triage came back with no message at all - read as a refused format, then as an error with
+# no reason, and a connected Vertex AI sorted no mail (2026-10-15). Once more with this much room; empty after that says so.
+ROOM = 8000
+
+
+class _Empty(Exception):
+    """A 200 with no answer in it - why, in the provider's own word (finish_reason)."""
 
 
 # The model a CLI runs its light jobs on when nobody named one - triage, drafts, summaries - and the Assistant's, one
 # tier up: on haiku it broke its own contract in the 2026-09-24 chat audit ("I don't have the lookup tools"), sonnet held.
-LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': 'gemini-2.5-flash'}
-ASSISTANT_DEFAULT = {'claude': 'sonnet', 'codex': 'effort:medium', 'gemini': 'gemini-2.5-flash'}
+LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': VERTEX_DEFAULT}       # the newest Flash, as Vertex's
+ASSISTANT_DEFAULT = {'claude': 'sonnet', 'codex': 'effort:medium', 'gemini': VERTEX_DEFAULT}
 # ...and its EFFORT when the pick names none: a turn is a short answer, and sonnet's own default is high - a plain
 # "next" on the phone waited on a model thinking hard about nothing (the owner, 2026-09-25: "change assistant to
 # effort level of low so it goes faster"). Codex's is already in ASSISTANT_DEFAULT as its gear.
@@ -617,7 +627,7 @@ def make_llm(t, cfg: dict, key: str):
         loc = (cfg.get('location') or 'global').strip()
         host = 'aiplatform.googleapis.com' if loc == 'global' else f'{loc}-aiplatform.googleapis.com'
         urls = [f"https://{host}/v1/projects/{cfg['project'].strip()}/locations/{loc}/endpoints/openapi/chat/completions"]
-        model = (cfg.get('model') or 'gemini-2.5-flash').strip()
+        model = (cfg.get('model') or VERTEX_DEFAULT).strip()
         headers, model = {'x-goog-api-key': key}, model if '/' in model else f'google/{model}'
     elif t == 'azure_openai':
         ep = (cfg.get('endpoint') or '').rstrip('/')
@@ -654,7 +664,11 @@ def make_llm(t, cfg: dict, key: str):
                             **({'model': model} if model else {}), **({'response_format': fmt} if fmt else {})}
                     # a local model may spend its first call loading weights off disk - give it room
                     r = post_retrying(url, headers, body, 180 if t == 'ollama' else 60)
-                    if r.status_code == 200: return r.json()['choices'][0]['message']['content']
+                    if r.status_code == 200:
+                        ch = (r.json().get('choices') or [{}])[0]
+                        said = ((ch.get('message') or {}).get('content') or '')
+                        if str(said).strip(): return said
+                        raise _Empty(ch.get('finish_reason') or 'none given')
                     last = r
                     if r.status_code == 404: break                      # wrong surface -> next url
                     if r.status_code == 400 and fmt: return None        # cannot carry a schema -> ask without one
@@ -666,10 +680,20 @@ def make_llm(t, cfg: dict, key: str):
         # a strict schema is obeyed even when the prose contract in the prompt says something
         # narrower (verified against gpt-5.4, TQ-0665). An old model or a route that cannot carry
         # it answers 400, and then the prompt is all there is - which is where we were before.
-        for fmt in ([{'type': 'json_schema', 'json_schema': {**want, 'strict': True}}] if want else []) + [None]:
-            out = once(fmt)
-            if out is not None: return out
-        raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
+        def ask():
+            for fmt in ([{'type': 'json_schema', 'json_schema': {**want, 'strict': True}}] if want else []) + [None]:
+                out = once(fmt)
+                if out is not None: return out
+            raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
+        try: return ask()
+        except _Empty as e:
+            if str(e) != 'length' or max_tokens >= ROOM:
+                raise RuntimeError(f'{t} sent back no answer (finish_reason {e}) - model {model}') from None
+        max_tokens = ROOM
+        try: return ask()
+        except _Empty as e:
+            raise RuntimeError(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
+                               f'model {model}; pick a non-thinking model on its card') from None
     llm.takes_want = True
     llm.takes_web = t in ('openai', 'azure_openai')
     return llm

@@ -1049,6 +1049,17 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # Kimi's current CLI does not read its prompt from stdin. --prompt is print mode
     # and requires a value; keep it out of the profile shared with the interactive pane.
     if family == 'kimi': cmd += ['--prompt', prompt]
+    # GEMINI'S -p TAKES A VALUE now (0.62: "Not enough arguments following: p") and appends it to stdin, so an empty one keeps the
+    # prompt on stdin; DEVIN's print mode reads no stdin ("needs a prompt") and takes a file. Both read as "needs you to sign in"
+    # on a real first run (2026-10-15).
+    if family == 'gemini' and '-p' in cmd and (cmd.index('-p') == len(cmd) - 1 or str(cmd[cmd.index('-p') + 1]).startswith('-')):
+        cmd.insert(cmd.index('-p') + 1, '')
+    prompt_file = None
+    if family == 'devin' and '--prompt-file' not in cmd:
+        import tempfile
+        fd, prompt_file = tempfile.mkstemp(prefix='tq-devin-', suffix='.txt')
+        with os.fdopen(fd, 'w', encoding='utf-8') as f: f.write(prompt)
+        cmd += ['--prompt-file', prompt_file]
     cwd = profile.get('cwd')
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     trace('prompt', 'prompt_sent_to_agent', prompt)
@@ -1085,7 +1096,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # emitting output can deadlock both pipes otherwise
     def _feed():
         try:
-            if family != 'kimi': p.stdin.write(prompt)
+            if family != 'kimi' and not prompt_file: p.stdin.write(prompt)
             p.stdin.close()
         except Exception: pass
     threading.Thread(target=_feed, daemon=True).start()
@@ -1181,6 +1192,9 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     finally:
         killer.cancel()
         with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(p)
+        if prompt_file:                                  # the prompt can carry mail: never left in the temp folder
+            try: os.remove(prompt_file)
+            except OSError: pass
     err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
     if p.returncode != 0:
         if cancel is not None and cancel.is_set(): raise RuntimeError('cancelled')

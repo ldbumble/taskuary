@@ -56,6 +56,18 @@ FIELDS = {
 # under it, 5,998 characters of it (the owner, 2026-09-14). Answering for a reply as well costs a
 # title and two sentences on a call already being made, and it is the same question the model has
 # just answered for itself in `why`. The checklist stays the task's: what a reply owes is the reply.
+# room for the verdict: the default 400 cut a thinking model off before it wrote a word (llm.ROOM, 2026-10-15)
+TRIAGE_TOKENS = 2000
+
+
+def takes_tokens(fn) -> bool:
+    """Whether this brain takes a max_tokens - every real one does; a wrapper says so (ingest._guarded.takes_tokens)."""
+    t = getattr(fn, 'takes_tokens', None)
+    if t is not None: return bool(t)
+    import inspect
+    try: ps = inspect.signature(fn).parameters
+    except (TypeError, ValueError): return False
+    return 'max_tokens' in ps or any(p.kind == p.VAR_KEYWORD for p in ps.values())
 _AT_ORG = re.compile(r'\s+at\s+[^,<>@]+$', re.I)
 
 
@@ -646,7 +658,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
             answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps)),
-                              need=('title', 'summary'), **({'images': images} if images else {}))
+                              need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
+                              **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
             if j is None: raise ValueError(answer.error or 'the response was not JSON')
             if j.get('intent') in ('task', 'reply_only', 'fyi'):

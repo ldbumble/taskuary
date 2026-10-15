@@ -481,6 +481,8 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     # plain function, could not tell that an enforceable schema would be honoured, and sent none -
     # verified on the wire, which is the only place that answers it (TQ-0665).
     _guarded.takes_want = getattr(llm, 'takes_want', None)
+    from .triage import takes_tokens
+    _guarded.takes_tokens = takes_tokens(llm)                 # ...and whether it takes a length, so triage's room reaches it
     from .learn import injectable
     notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
                                        f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
@@ -831,6 +833,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     store.set_setting('triage_last_error_at', _now(), 'system')   # the bell ages a failure out by this
                     logger.warning(f"ingest: AI triage failed - {fail['err']}")
                     return {'status': 'error', 'task_id': None, 'message_id': mid}
+                if store.get_setting('triage_last_unusable'): store.set_setting('triage_last_unusable', '', 'system')
                 if cfg.get('triage_last_error'):                       # it answered: the brain is back
                     store.set_setting('triage_last_error', '', 'system')
                     # ...and FROM WHICH ROUTE: the retry sweep counts a row's tries after it, so a day the brain failed for
@@ -846,6 +849,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                     'AI triage returned an answer it could not read as a verdict - unclassified, '
                                     'not assumed to be work; retry available' + _notes_note(), [], 'triage',
                                     raw_output=intent.get('raw_output'), parse_error=intent.get('parse_error'))
+                    # ...and said where setup reads a failing brain: every mail of a first run came back unusable and the screen said
+                    # "Sorting 18 emails..." for good (2026-10-15). Its OWN setting - triage_last_error means the brain is down, and the
+                    # retry sweep keeps trying through an outage; an unreadable answer is about this mail, and the sweep may give it up
+                    store.set_setting('triage_last_unusable', f"its answers could not be read as a verdict ({str(intent.get('parse_error') or 'not JSON')[:140]})", 'system')
                     logger.warning(f"ingest: unusable AI verdict - {msg.get('subject') or ''}")
                     return {'status': 'error', 'task_id': None, 'message_id': mid}
         else:

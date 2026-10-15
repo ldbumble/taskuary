@@ -21,7 +21,7 @@ except ImportError:
 # all in the picker while /model on the same machine said otherwise (the owner, 2026-09-18).
 STATIC = {'claude': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''}
                      for m in ('opus', 'sonnet', 'haiku')],
-          'gemini': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''} for m in ('gemini-2.5-pro', 'gemini-2.5-flash')],
+          'gemini': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''} for m in ('gemini-3.8-flash', 'gemini-2.5-pro', 'gemini-2.5-flash')],
           # Verified against Qwen Code 0.23.4's QWEN_OAUTH_MODELS. API-provider
           # configurations replace this alias with their own model ids below.
           'qwen': [{'id': 'coder-model', 'label': 'Qwen OAuth coding model',

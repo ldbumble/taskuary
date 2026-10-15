@@ -39,198 +39,25 @@ Keep roughly within the lengths noted; they're what the layout holds without ref
 
 ---
 
-## 1 · Hero (the first screen, over the animation)
+## The copy as it stands (2026-10-15 - "Your work manager" voice)
 
-**1a — Small label above the headline** *(one or two words)*
-- Now: `Taskuary`
-- Keep.
+Short, plain, one idea per line. Two lines from the mockup this voice came from were left out on purpose: **"HIPAA
+Certified"** (there is no official HIPAA certification and Taskuary has had no compliance audit - a public claim we
+cannot back) and **"Free in beta, limited time"** (the site says MIT licensed, free, no subscription; "limited time"
+contradicts it). Put either back only with that settled.
 
-**1b — Headline** *(≤ 40 characters; the last few words print in the accent colour)*
-- Now: `Your work, already underway.` (decided 2026-10-04)
-- Keep. `Nothing falls through the cracks.` was dropped: a competitor already uses it.
-
-**1c — Scroll cue** *(≤ 20 characters)*
-- Now: `find the door`
-- Keep.
-
----
-
-## 2 · Opening pitch (first block after the hero)
-
-**2a — Small label** *(≤ 45 characters)*
-- Now: `everything in → one funnel → agents + you`
-- Suggested: `it arrives → it gets sorted → it gets done`
-
-**2b — Headline** *(≤ 30 characters)*
-- Now: `Your work, already underway.` — the same as 1b, so the pitch never splits
-- Keep.
-
-**2c — Paragraph** *(≤ 300 characters; the first sentence prints bold)*
-- Now: `A personal AI assistant for your job. Mail, chats and tickets become tasks, the agents you already use (Claude Code, Codex, Gemini) do the work, and nothing goes out until you approve.`
-- Earlier suggestion: `Everything anyone asks of you, in one list, already started. Mail, chats,
-  tickets and reports arrive in one place. It works out which ones are actually yours, gets
-  the work underway, and waits for you to say yes. Nothing sends without you, and nothing
-  leaves your computer.`
-
-**2d — Buttons and the line under them**
-- Now: `Try it now` / `no install, no sign-up — the real app over invented work, running in
-  your browser` / `Download for Windows` / `View source` /
-  `Free and open source (MIT) · runs on your machine · no subscription` /
-  `Compared with hosted assistants like Fyxer: no account, no monthly fee, and the work goes to agents you already use.` (the README says the same, at more length)
-- Suggested: change only the first button's caption to `See it working` if "Try it now"
-  reads as a trial sign-up. The rest is doing its job.
-
----
-
-## 3 · The three steps
-
-**3a — Step one** *(heading ≤ 40 chars, body ≤ 180)*
-- Now: `01 · IN` / `Everything lands on one timeline` /
-  `Outlook and IMAP mail, Teams, Slack, Telegram, WhatsApp, GitHub issues, Jira, and the
-  reports you schedule — one rail, in the order it arrived.`
-- Suggested: `01 · IT ARRIVES` / `Everything lands in one place` /
-  `Email, Teams, Slack, WhatsApp, Telegram, tickets from Jira or GitHub, and the reports you
-  asked for — one list, in the order it came in.`
-
-**3b — Step two**
-- Now: `02 · FUNNEL` / `Triage says what is real work` /
-  `It reads the thread, not just the message: who was addressed, whether a colleague already
-  answered, what you ruled before. A question becomes a drafted reply; work becomes a task.`
-- Suggested: `02 · IT GETS SORTED` / `It works out what's actually yours` /
-  `It reads the whole thread, not just the last message — who was asked, whether someone
-  already answered, what you decided last time. A question gets a draft reply written. Real
-  work becomes a task.`
-
-**3c — Step three**
-- Now: `03 · AGENTS + YOU` / `Your agents do it, you approve` /
-  `Claude Code, Codex or Gemini open a live session on the task in your own checkout. Replies
-  wait in a review queue. Nothing sends without you.`
-- Suggested: `03 · IT GETS DONE` / `The work gets done. You say yes.` /
-  `The task is picked up and worked on while you're elsewhere. Everything it produces —
-  every reply, every change — waits in one queue for your approval. Nothing goes out on its
-  own.`
-
----
-
-## 4 · "What it does"
-
-**4a — Small label**
-- Now: `what it does` — keep.
-
-**4b — Section headline** *(≤ 110 characters; one phrase can be italic)*
-- Now: `Work arrives as messages. Work is tasks. You were the translation layer.`
-- Suggested: `You spend your day turning other people's messages into your own to-do list.
-  That's the part this does.`
-
-**4c — Paragraph under it** *(≤ 160 characters)*
-- Now: `Taskuary is that layer — local-first, with your judgement written down where the
-  machine can read it.`
-- Suggested: `Taskuary does that translating, on your own machine, using the judgement calls
-  you've already made.`
-
-**4d–4i — The six cards** *(heading ≤ 40 chars, body ≤ 200)*
-
-| # | Heading now | Suggested heading |
+| # | Slot | Now |
 |---|---|---|
-| 4d | A review queue, not an autopilot | Nothing goes out without you |
-| 4e | The Studio | See what's being worked on, right now |
-| 4f | Reports you ask for in English | Ask for a report like you'd ask a person |
-| 4g | It learns from your verdicts | Tell it once, it remembers |
-| 4h | Your coding CLI, not ours | It uses the tools you already pay for |
-| 4i | Local-first, by construction | Your data never leaves your computer |
+| 1a | Headline | `Your work manager.` / accent line `Locally. Securely. In control.` |
+| 1b | Under it | `Mail, chats and tickets become one list, in the right order. Taskuary drafts the replies, your AI agents do the work, and nothing goes out without your yes.` |
+| 1c | Button / line under | `Download today` / `Windows · or pip install taskuary on macOS and Linux · try it in your browser` |
+| 1d | Four promises | `Runs on your computer` - Your data stays with you. · `Private by design` - No account. No cloud. · `Free and open source` - No subscription. · `Minutes to set up` - Download and start working. |
+| 2 | Three steps | `01 · IT ARRIVES` Everything in one place - Email, Teams, Slack, WhatsApp, tickets and reports - one list, in the order it came in. · `02 · IT GETS SORTED` Only what's yours - It reads the whole thread, drafts the answers, and turns real work into tasks. · `03 · IT GETS DONE` You say yes - Agents do the work while you're elsewhere. Nothing goes out until you approve. |
+| 3 | What it does | `Your work, in the right order.` / One list for everything people ask of you - sorted, started, and waiting on your yes. |
+| 3a-f | Six cards | Nothing goes out without you · Watch the work happen · Reports in plain English · Tell it once · Uses the AI you have · Your data stays home - one line each |
+| 4 | Download | `Download today.` / One app, three ways to install. Everything stays in one folder on your computer. New to it? Start here. |
+| 5 | Open source | `Built in the open.` / MIT licensed, and running its author's own inbox every day. |
+| 6 | Bottom strip | `it arrives → it gets sorted → it gets done` |
+| - | Tab title / previews | `Taskuary — your work manager. Locally. Securely. In control.` · search: `Your work manager: mail, chats and tickets in one list, in the right order - worked, and waiting for your yes. Runs on your computer. Free.` |
 
-Card bodies as they stand — rewrite any that lean on jargon:
-
-- **4d** `Every reply and every outbound report is drafted for you first. One loud colour on
-  the whole screen, spent only on what is waiting on you.`
-  → *Suggested:* `Every reply and every report is written up for you to look at first. One
-  colour is used on the entire site, and only ever for the things waiting on you.`
-- **4e** `An isometric floor where each desk is an agent. Watch the live terminal on its
-  screen, see the files it has touched, fly to a desk when it raises a hand.`
-  → *Suggested:* `A floor plan where every desk is a piece of work in progress. Look over
-  its shoulder while it runs, see what it changed, go straight there when it needs you.`
-- **4f** `"Every Monday, vendors with unpaid invoices over 30 days, to me and Dana." SQL
-  Server, Postgres, Sage Intacct, AWS, Azure, a REST endpoint — charted, attached, on the
-  timeline.` → keep; the quoted example is the strongest sentence on the page.
-- **4g** `"Not our task." "Priya handles AR." "Resident refunds are somebody else's." Each
-  one becomes a rule that decides next time — on the thread, the topic, or the sender.`
-  → keep.
-- **4h** `Agents run as real sessions of the tools you already pay for — Claude Code, Codex,
-  Gemini — in your repos, with a blackboard so two agents in one checkout do not collide.`
-  → *Suggested:* `It drives Claude Code, Codex or Gemini — the tools you already have — on
-  your own files, and keeps two of them from tripping over each other.`
-- **4i** `A SQLite file in your home directory. Write-only credentials. No account, no cloud,
-  no telemetry. Bind to localhost or run it in Docker on your own box.`
-  → *Suggested:* `Everything sits in one file on your own machine. No account to make, no
-  cloud, nothing reported back to anyone.`
-
----
-
-## 5 · Download
-
-**5a — Small label / headline**
-- Now: `download` / `Runs where you work.` — keep.
-
-**5b — Line under the headline** *(≤ 140 characters)*
-- Now: `One app, three ways in. It stores everything in ~/.taskuary and opens at
-  localhost:7787.`
-- Suggested: `One app, three ways to install it. Everything stays in a single folder on your
-  machine.`
-
-**5c — The three option cards** — `Taskuary.exe`, `pip`, `Docker`. These are install
-instructions for people who already know which one they want; leave them technical.
-
----
-
-## 6 · Open source
-
-**6a — Small label / headline**
-- Now: `open source` / `MIT licensed. Built in the open, in daily use.` — keep.
-
-**6b — Line under it** *(≤ 160 characters)*
-- Now: `Taskuary runs the author's own inbox. Issues get answered; pull requests get
-  reviewed by the same agents it ships.`
-- Suggested: `It runs the author's own inbox every day. The bug reports and code changes on
-  this project get handled by the thing itself.`
-
-**6c — "Where it is"** *(≤ 260 characters)*
-- Now: `Early — v0.3 and moving fast. The funnel, the review queue, the agent sessions and
-  the reports pipeline are real; the edges are still being knocked off, and breaking changes
-  are possible before 1.0.`
-- Suggested: `Early — v0.3, and moving fast. The sorting, the approval queue, the work
-  sessions and the reports all genuinely work; the rough edges are still being smoothed, and
-  things may change before version 1.0.`
-
-**6d — The three bullets under it**
-- Now: `Python 3.10+ · FastAPI · SQLite — one process, one file` / `730+ tests, run on
-  Windows, macOS and Linux on every push` / `A triage dataset built from your own verdicts,
-  so accuracy is a number, not a feeling`
-- These speak to developers deciding whether to trust the code. Worth keeping as-is, but the
-  third one could be `Its sorting is scored against your own past decisions, so "is it any
-  good" has an actual number.`
-
-**6e — "Get involved"** *(≤ 160 characters)*
-- Now: `Star it so others find it. Open an issue for what is wrong. The contributing guide
-  is short.` — keep.
-
----
-
-## 7 · The strip at the very bottom
-
-- Now: `everything in → one funnel → agents + you`
-- Should match slot 2a exactly, whatever that becomes.
-
----
-
-## Also worth deciding
-
-Three things live outside this page and should say the same thing as slot 1b once it's
-settled, or the pitch splits in two:
-
-- **The browser tab title**, and the title on the link preview that shows when the site is
-  pasted into WhatsApp or Slack — both currently `Taskuary — your work, already underway`.
-- **The link-preview blurb** — currently
-  `A personal AI assistant for your job. Open source, runs on your machine.`
-- **The Google search description** — currently `A personal AI assistant for your job: your agents do the work, you approve what goes out. Free, open source, runs on your machine.` (aim for under 160 characters — Google cuts it off.)
-- **The headline on the GitHub page** (`README.md`) — currently
-  `Your work, already underway.`, i.e. the same as slot 1b.
+The README's own headline on GitHub still reads `Your work, already underway.` - change it to match when you settle this.

@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Taskuary — your work, already underway</title>
-<meta name="description" content="A personal AI assistant for your job: your agents do the work, you approve what goes out. Free, open source, runs on your machine.">
+<title>Taskuary — your work manager. Locally. Securely. In control.</title>
+<meta name="description" content="Your work manager: mail, chats and tickets in one list, in the right order - worked, and waiting for your yes. Runs on your computer. Free.">
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta property="og:title" content="Taskuary — your work, already underway">
-<meta property="og:description" content="A personal AI assistant for your job. Open source, runs on your machine.">
+<meta property="og:title" content="Taskuary — your work manager">
+<meta property="og:description" content="Locally. Securely. In control. Free and open source.">
 <meta property="og:image" content="https://taskuary.com/og.png">
 <meta property="og:url" content="https://taskuary.com/">
 <meta property="og:type" content="website">
@@ -78,6 +78,14 @@
   .fine{color:var(--faint);font-size:13px}
   .fine a{color:var(--faint);text-decoration:underline;text-decoration-color:var(--bd)}
 
+  /* THE FOUR PROMISES, under the hero: one line each, an icon, nothing to read twice */
+  .pillars{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:34px auto 0;max-width:1040px;text-align:left}
+  .pillars > div{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;min-width:0}
+  .pillars .ic{flex:none;width:36px;height:36px;border-radius:10px;background:var(--panel2);display:flex;align-items:center;justify-content:center;color:var(--accent)}
+  .pillars .ic svg{width:19px;height:19px}
+  .pillars b{display:block;font-size:14.5px;letter-spacing:-.01em}
+  .pillars span{display:block;color:var(--faint);font-size:13px;line-height:1.35}
+
   /* flow strip */
   .flow{margin:40px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--bd);border-radius:12px;background:var(--panel);overflow:hidden}
   .flow > div{padding:22px 24px;border-left:1px solid var(--bd);position:relative}
@@ -141,6 +149,7 @@
     .flow > div:first-child{border-top:0}
     .flow .arrow{display:none}
     .grid,.dl,.oss{grid-template-columns:1fr}
+    .pillars{grid-template-columns:1fr 1fr}
     section{padding-top:64px}
   }
   @media (max-width:520px){
@@ -148,6 +157,7 @@
     nav .links{gap:8px;min-width:0}
     nav .links a:not(.btn){display:none}
     nav .btn.sm{padding:7px 10px}
+    .pillars{grid-template-columns:1fr}
   }
 </style>
 </head>
@@ -172,16 +182,22 @@
   <!-- One headline, one download, the star beneath it, then the product itself. The nav is only
        the top things (the owner, 2026-10-11: "this is looking busy ... star should not be on top"). -->
   <div class="wrap intro">
-    <h1>Your work, <span class="accent">already underway.</span></h1>
-    <p class="sub">Taskuary turns your mail and messages into tasks, has your AI agents do the work, and waits for
-      your approval before anything goes out. Free, open source, runs on your machine.</p>
+    <h1>Your work manager.<br><span class="accent">Locally. Securely. In control.</span></h1>
+    <p class="sub">Mail, chats and tickets become one list, in the right order. Taskuary drafts the replies, your AI agents do
+      the work, and nothing goes out without your yes.</p>
     <div class="get">
       <a class="btn primary big" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-        Download for Windows</a>
+        Download today</a>
       <a class="starchip" href="https://github.com/ldbumble/taskuary"
          title="Star Taskuary on GitHub - it is how other people find it"><span class="star">★</span> Star on GitHub <span class="n" id="starnav"></span></a>
-      <div class="fine">or <a href="#download">pip install taskuary</a> on macOS and Linux · <a href="/demo/">try one task in your browser</a></div>
+      <div class="fine">Windows · or <a href="#download">pip install taskuary</a> on macOS and Linux · <a href="/demo/">try it in your browser</a></div>
+    </div>
+    <div class="pillars">
+      <div><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><div><b>Runs on your computer</b><span>Your data stays with you.</span></div></div>
+      <div><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/></svg></div><div><b>Private by design</b><span>No account. No cloud.</span></div></div>
+      <div><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.8 5.8 21 7 14 2 9.3 9 8.5z"/></svg></div><div><b>Free and open source</b><span>No subscription.</span></div></div>
+      <div><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><b>Minutes to set up</b><span>Download and start working.</span></div></div>
     </div>
   </div>
   <div class="wrap shot">
@@ -190,9 +206,9 @@
   </div>
   <div class="wrap after" id="how">
     <div class="flow">
-      <div><div class="n">01 · IN</div><h3>Everything lands on one timeline</h3><p>Outlook and IMAP mail, Teams, Slack, Telegram, WhatsApp, GitHub issues, Jira, and the reports you schedule — one rail, in the order it arrived.</p><span class="arrow">→</span></div>
-      <div><div class="n">02 · FUNNEL</div><h3>Triage says what is real work</h3><p>It reads the thread, not just the message: who was addressed, whether a colleague already answered, what you ruled before. A question becomes a drafted reply; work becomes a task.</p><span class="arrow">→</span></div>
-      <div><div class="n">03 · AGENTS + YOU</div><h3>Your agents do it, you approve</h3><p>Claude Code, Codex or Gemini open a live session on the task in your own checkout. Replies wait in a review queue. Nothing sends without you.</p></div>
+      <div><div class="n">01 · IT ARRIVES</div><h3>Everything in one place</h3><p>Email, Teams, Slack, WhatsApp, tickets and reports — one list, in the order it came in.</p><span class="arrow">→</span></div>
+      <div><div class="n">02 · IT GETS SORTED</div><h3>Only what's yours</h3><p>It reads the whole thread, drafts the answers, and turns real work into tasks.</p><span class="arrow">→</span></div>
+      <div><div class="n">03 · IT GETS DONE</div><h3>You say yes</h3><p>Agents do the work while you're elsewhere. Nothing goes out until you approve.</p></div>
     </div>
   </div>
 </header>
@@ -201,33 +217,33 @@
   <div class="wrap">
     <div class="head">
       <div class="eyebrow">what it does</div>
-      <h2>Work arrives as messages. Work <em>is</em> tasks. You were the translation layer.</h2>
-      <p class="lead">Taskuary is that layer — local-first, with your judgement written down where the machine can read it. Unlike hosted assistants such as Fyxer: no account, no monthly fee, and the work goes to agents you already use.</p>
+      <h2>Your work, in the right order.</h2>
+      <p class="lead">One list for everything people ask of you — sorted, started, and waiting on your yes.</p>
     </div>
     <div class="grid">
       <div class="card you">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
-        <h3>A review queue, not an autopilot</h3><p>Every reply and every outbound report is drafted for you first. One loud colour on the whole screen, spent only on what is waiting on you.</p>
+        <h3>Nothing goes out without you</h3><p>Every reply and report is drafted for you to approve first.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/></svg></div>
-        <h3>The Studio</h3><p>An isometric floor where each desk is an agent. Watch the live terminal on its screen, see the files it has touched, fly to a desk when it raises a hand.</p>
+        <h3>Watch the work happen</h3><p>See each agent work live, and step in the moment it needs you.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg></div>
-        <h3>Reports you ask for in English</h3><p>"Every Monday, vendors with unpaid invoices over 30 days, to me and Dana." SQL Server, Postgres, Sage Intacct, AWS, Azure, a REST endpoint — charted, attached, on the timeline.</p>
+        <h3>Reports in plain English</h3><p>"Every Monday, unpaid invoices over 30 days, to me and Dana." Charted and delivered.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></div>
-        <h3>It learns from your verdicts</h3><p>"Not our task." "Priya handles AR." "Resident refunds are somebody else's." Each one becomes a rule that decides next time — on the thread, the topic, or the sender.</p>
+        <h3>Tell it once</h3><p>"Not our task." "Priya handles AR." It remembers, and decides that way next time.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg></div>
-        <h3>Your coding CLI, not ours</h3><p>Agents run as real sessions of the tools you already pay for — Claude Code, Codex, Gemini — in your repos, with a blackboard so two agents in one checkout do not collide.</p>
+        <h3>Uses the AI you have</h3><p>Claude Code, Codex or Gemini — the tools you already pay for, on your own files.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-        <h3>Local-first, by construction</h3><p>A SQLite file in your home directory. Write-only credentials. No account, no cloud, no telemetry. Bind to localhost or run it in Docker on your own box.</p>
+        <h3>Your data stays home</h3><p>One file on your computer. No account, no cloud, nothing sent back.</p>
       </div>
     </div>
     <div class="logos">
@@ -240,14 +256,14 @@
   <div class="wrap">
     <div class="head">
       <div class="eyebrow">download</div>
-      <h2>Runs where you work.</h2>
-      <p class="lead">One app, three ways in. It stores everything in <span class="mono">~/.taskuary</span> and opens at <span class="mono">localhost:7787</span>. The <a href="/docs/">documentation</a> covers the first run, what to connect, and what each piece does.</p>
+      <h2>Download today.</h2>
+      <p class="lead">One app, three ways to install. Everything stays in one folder on your computer. New to it? <a href="/docs/">Start here</a>.</p>
     </div>
     <div class="dl">
       <div class="card">
         <div class="os">Windows 10 / 11</div>
         <h3>Taskuary.exe</h3>
-        <p>A single file — no Python, no installer. Double-click, it opens as a desktop window. The interactive agent terminal uses ConPTY, so it feels like the CLI you know.</p>
+        <p>One file — no Python, no installer. Double-click and it opens.</p>
         <a class="btn primary" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
           Download Taskuary.exe</a>
@@ -257,7 +273,7 @@
       <div class="card">
         <div class="os">macOS · Linux · Windows</div>
         <h3>pip</h3>
-        <p>Python 3.10 or newer. The desktop extra wraps it in a native window; without it, it opens in your browser.</p>
+        <p>Python 3.10 or newer. Add the desktop extra for a native window.</p>
         <div class="code"><button type="button" class="cp" onclick="copyCode(this)">copy</button>pip install taskuary
 taskuary
 <span class="c"># or a desktop window:</span>
@@ -266,7 +282,7 @@ pip install "taskuary[desktop]"</div>
       <div class="card">
         <div class="os">Any box</div>
         <h3>Docker</h3>
-        <p>For a home server or a machine that should not have Python on it. Persists across restarts; set a token to expose it beyond localhost.</p>
+        <p>For a home server. Keeps running across restarts.</p>
         <div class="code"><button type="button" class="cp" onclick="copyCode(this)">copy</button>git clone https://github.com/ldbumble/taskuary
 cd taskuary
 docker compose up -d</div>
@@ -279,22 +295,21 @@ docker compose up -d</div>
   <div class="wrap">
     <div class="head">
       <div class="eyebrow">open source</div>
-      <h2>MIT licensed. Built in the open, in daily use.</h2>
-      <p class="lead">Taskuary runs the author's own inbox. Issues get answered; pull requests get reviewed by the same agents it ships.</p>
+      <h2>Built in the open.</h2>
+      <p class="lead">MIT licensed, and running its author's own inbox every day.</p>
     </div>
     <div class="oss">
       <div class="card">
         <h3>Where it is</h3>
-        <p>Early — <span class="mono" id="verwhere">v0.3</span> and moving fast. The funnel, the review queue, the agent sessions and the reports pipeline are real; the edges are still being knocked off, and breaking changes are possible before 1.0.</p>
+        <p>Early — <span class="mono" id="verwhere">v0.3</span> and moving fast. The core works; expect rough edges before 1.0.</p>
         <ul>
-          <li>Python 3.10+ · FastAPI · SQLite — one process, one file</li>
-          <li>730+ tests, run on Windows, macOS and Linux on every push</li>
-          <li>A triage dataset built from your own verdicts, so accuracy is a number, not a feeling</li>
+          <li>Python · FastAPI · SQLite — one process, one file</li>
+          <li>7,000+ tests on Windows, macOS and Linux, every push</li>
         </ul>
       </div>
       <div class="card">
         <h3>Get involved</h3>
-        <p>Star it so others find it. Open an issue for what is wrong. The contributing guide is short.</p>
+        <p>Star it so others find it. Open an issue if something is off.</p>
         <div class="stars">
           <a class="btn primary sm" href="https://github.com/ldbumble/taskuary"><span class="star">★</span> Star on GitHub <span class="n" id="starcard"></span></a>
           <a class="btn ghost sm" href="/demo/">Try the demo</a>
@@ -315,37 +330,11 @@ docker compose up -d</div>
     <a href="https://github.com/ldbumble/taskuary/issues/new/choose">Support</a>
     <a href="https://github.com/ldbumble/taskuary/blob/master/LICENSE">MIT License</a>
     <a href="https://github.com/ldbumble/taskuary/blob/master/SECURITY.md">Security</a>
-    <span class="right mono">everything in → one funnel → agents + you</span>
+    <span class="right mono">it arrives → it gets sorted → it gets done</span>
   </div>
 </footer>
 
 <script>
-  /* First-party, anonymous visit + CTA counts. The id is kept only for this browser tab so the
-     stats page can connect "clicked demo" to "opened demo" after navigation. */
-  (function(){
-    var sid;
-    try {
-      sid = sessionStorage.getItem('tq_demo_sid');
-      if (!sid) { sid = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('tq_demo_sid', sid); }
-    } catch(e) { sid = Math.random().toString(36).slice(2) + Date.now().toString(36); }
-    var send = function(kind, what){
-      try {
-        var body = JSON.stringify({ sid: sid, page: location.pathname, ref: document.referrer.split('/').slice(0,3).join('/'),
-          mobile: matchMedia('(max-width: 900px)').matches, events: [{ kind: kind, what: what, n: 0 }] });
-        if (navigator.sendBeacon) navigator.sendBeacon('/api/ev', new Blob([body], {type:'application/json'}));
-      } catch(e){}
-    };
-    send('open', 'landing');
-    document.addEventListener('click', function(e){
-      var a = e.target.closest && e.target.closest('a[href]');
-      if (!a) return;
-      var h = a.getAttribute('href') || '';
-      if (h.indexOf('/demo') === 0) send('cta', 'demo');
-      else if (h.indexOf('Taskuary.exe') > -1) send('cta', 'download');
-      else if (h.indexOf('github.com') > -1) send('cta', 'source');
-    });
-  })();
-
   // a code block copies its COMMANDS: the button's own label and the # comment lines stay out
   function copyCode(btn){
     var lines = [];
@@ -407,7 +396,8 @@ docker compose up -d</div>
      Anything else outbound is counted under its own host, so a link nobody thought to measure
      is still measured. Kinds match functions/api/ev.js - `cta` was already allowed there. */
   (function(){
-    var ENDPOINT = '/api/ev', KEY = 'tq_site_sid';
+    /* ONE id for the tab, the demo's own (website/src/demoTrack.js): the landing page and the demo it opens are one visit */
+    var ENDPOINT = '/api/ev', KEY = 'tq_demo_sid';
     if (!/(^|\.)taskuary\.com$/.test(location.hostname)) return;   /* a fork or a local copy counts nothing */
 
     var sid = (function(){

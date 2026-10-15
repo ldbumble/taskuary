@@ -70,5 +70,5 @@ test("the stats page draws no sign-in and reads the counts as it opens", async (
   const fs = await import("node:fs");
   const page = fs.readFileSync(new URL("../../site/stats.html", import.meta.url), "utf8");
   assert.doesNotMatch(page, /stats-auth|password|Sign in|loginForm/i);
-  assert.match(page, /\nloadStats\(\);\n<\/script>/);
+  assert.match(page, /\nload\(30\);\n<\/script>/);                 // the dashboard reads the last 30 days as it opens
 });

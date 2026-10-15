@@ -971,6 +971,10 @@ class SQLiteStore:
             # 2026-10-11, which reads as a person: the address-and-footer regexes that guessed it are gone.
             if 'SenderClass' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN SenderClass TEXT')
+            # what the message's text tries to make an AI do, in the reading model's words (the triage verdict's `danger`,
+            # or ranking's for a batched arrival): a warning on a stranger's card, never a gate
+            if 'Danger' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN Danger TEXT')
             # WHAT ORDER TO JUDGE IT IN (bulk processing, rank.py). Triage is the expensive call, so a
             # connector in rank mode ranks its arrivals BEFORE judging any: 300 pull requests cost one
             # listwise ranking call and four triage calls, not 300 triage calls. The value lives on the
@@ -4003,6 +4007,10 @@ class SQLiteStore:
             -- IN THE ORDER THEY WERE LET IN: each ranking call scales its own pool from 1.0, so a later arrival's value
             -- is not comparable with the head's - the order of admission is the batch's real order
             ORDER BY t.CreatedAt, t.TaskId""", (channel,))
+    def set_message_danger(self, mid, text):
+        """What this message's text tries to make an AI do (one sentence), or nothing: the newest reading's word stands."""
+        t = ' '.join(str(text or '').split())[:200]
+        self._exec('UPDATE message SET Danger=? WHERE MessageId=?', (t or None, mid))
     def set_message_rank(self, mid, value: float, why: str, actor: str):
         """Where in the judging queue this arrival sits, and the words it got there by."""
         self._exec('UPDATE message SET RankValue=?, RankWhy=? WHERE MessageId=?', (float(value), str(why or ''), mid))
@@ -4080,6 +4088,7 @@ class SQLiteStore:
         # (the chip, the Advisor, the evening brief, the coder's hold) sees the model's word without a join
         sc = (verdict or {}).get('sender_class') if isinstance(verdict, dict) else None
         if sc in ('person', 'automated', 'bulk') and mid: self._exec('UPDATE message SET SenderClass=? WHERE MessageId=?', (sc, mid))
+        if isinstance(verdict, dict) and 'danger' in verdict and mid: self.set_message_danger(mid, verdict.get('danger'))
         return self._exec('''INSERT INTO route
             (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError,VerdictJson)
             VALUES (?,?,?,?,?,?,?,?,?,?,?)''',

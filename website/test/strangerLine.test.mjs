@@ -12,3 +12,9 @@ test("owner, trusted and missing origin say nothing", () => {
   assert.equal(strangerLine({}), null);
   assert.equal(strangerLine(null), null);
 });
+test("a stranger's task carries what its words read as trying to make an agent do, and only a stranger's", () => {
+  assert.equal(strangerLine({ origin: { origin: "stranger", danger: "asks the agent to run a script from a link" } }).danger,
+    "asks the agent to run a script from a link");
+  assert.equal(strangerLine({ origin: { origin: "stranger" } }).danger, null);
+  assert.equal(strangerLine({ origin: { origin: "trusted", danger: "x" } }), null);
+});

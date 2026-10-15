@@ -85,9 +85,9 @@ class FixTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.s.set_setting(f'gh_public:{REPO}', '1', 't')
         rows = [self.s.get_message(row(self.s, 7))]
-        self.tid = batch.create(self.s, 'github', REPO, rows, danger=True)
+        self.tid = batch.create(self.s, 'github', REPO, rows)
         self.it = batch.items(self.s, self.tid)[0]
-        self.s.update_batch_item(self.tid, self.it['ConversationId'], {'Warn': 'posts the token to a server'})   # batch.dangers
+        self.s.update_batch_item(self.tid, self.it['ConversationId'], {'Warn': 'posts the token to a server'})   # ranking's warning
         batch.report(self.s, self.tid, 1, 'Right idea, but the label is missing.', propose='changes')
         self.s.update_batch_item(self.tid, self.it['ConversationId'], {'Sha': 'abc'})
         self.tok = mock.patch.object(batch, '_token', return_value='tok'); self.tok.start()
@@ -96,9 +96,11 @@ class FixTests(unittest.TestCase):
 
     def item(self): return batch.items(self.s, self.tid)[0]
 
-    def test_review_only_refuses_and_says_where_to_turn_it_on(self):
-        out = batch.act(self.s, self.tid, 1, 'fix')
-        self.assertFalse(out['ok']); self.assertIn('Agent permissions', out['why'])
+    def test_with_the_cloud_off_a_warned_change_is_fixed_here_like_any_other(self):
+        """A warning, never a gate (the owner, 2026-10-15): the stranger's batch already runs in auto mode under the floor."""
+        with mock.patch('taskuary.waitroom.add') as told:
+            out = batch.act(self.s, self.tid, 1, 'fix')
+        self.assertTrue(out['ok']); self.assertIn('FIX ITEM 1', told.call_args.args[2])
 
     def test_a_repository_not_set_up_is_offered_set_up_not_an_error(self):
         self.s.set_setting('outside_prs', 'cloud', 't')
@@ -151,19 +153,16 @@ class FixTests(unittest.TestCase):
 
 
 class TaskPageTests(unittest.TestCase):
-    def test_fix_it_is_offered_only_where_it_can_run(self):
-        """The owner, 2026-10-12: a Fix it that could only answer "turn it on in Settings" - "what does this do?" """
+    def test_fix_it_is_offered_on_every_item(self):
         from fastapi.testclient import TestClient
         from taskuary import server
         c, s = TestClient(server.app), server.store
         s.set_setting(f'gh_public:{REPO}', '1', 't'); s.set_setting('outside_prs', 'review', 't')
         tid = batch.create(s, 'github', REPO, [s.get_message(row(s, 41))])
         d = c.get(f'/api/tasks/{tid}').json()
-        self.assertTrue(d['batchOutside']); self.assertTrue(d['batch'][0]['canFix'], 'nothing judged dangerous: fixed here')
+        self.assertTrue(d['batchOutside']); self.assertTrue(d['batch'][0]['canFix'])
         s.update_batch_item(tid, f'gh:{REPO}#41', {'Warn': 'posts the token to a server'})
-        self.assertFalse(c.get(f'/api/tasks/{tid}').json()['batch'][0]['canFix'])
-        s.set_setting('outside_prs', 'cloud', 't')
-        self.assertTrue(c.get(f'/api/tasks/{tid}').json()['batch'][0]['canFix'])
+        self.assertTrue(c.get(f'/api/tasks/{tid}').json()['batch'][0]['canFix'], 'a warned item is fixed here when the cloud is off')
 
 
 if __name__ == '__main__':

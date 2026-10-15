@@ -1065,31 +1065,17 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # said where it belonged - the wrong sentence, and the one the owner cannot act on.
     argv = agent_argv(profile, model) if agent else default_shell()
     if agent and cli_named(profile, argv) == 'claude' and '--settings' not in argv: argv = [*argv, *claude_theme_args(store)]
-    # a DANGEROUS batch is reviewed read-only, whoever opened the session (batch.read_only_argv); every other batch
-    # is an ordinary session
     mode = 'full'
     if agent and task_id:
-        from . import batch as _batch, origin as _origin, clis as _clis
-        # ...only while it holds an item the triage judged dangerous (batch.locked)
-        locked = _batch.is_batch(store, task_id) and _batch.locked(store, task_id)
+        from . import origin as _origin, clis as _clis
         # WHO WROTE THE TASK decides the flags (origin.py): a stranger's task runs in the CLI's own auto mode with the
         # floor and the owner's answer as hooks, or not at all; the owner's and trusted work launch as they always did.
-        # The danger lock below still wins: a dangerous batch stays read-only, never auto on top of it.
         try:
             mode = _origin.launch_mode(store, task_id, cli_named(profile, argv), str(profile.get('cmd') or ''))
             # its stranger file sits in its own folder outside the checkout (R25): added, so reading it never asks
             sd = str(_origin.stranger_dir(task_id)) if mode == 'auto' else ''
         except _origin.Refusal as e: raise _origin.refused(e)
-        if locked:
-            from .config import home
-            theme = ''
-            if mode == 'auto': argv, theme = _take_settings(argv)
-            # --add-dir takes several folders: the stranger's joins the context one
-            argv = _batch.read_only_argv(cli_named(profile, argv), list(argv), str(home() / 'context')) + ([sd] if sd else [])
-            # ...and read-only is not the floor: Read is free under it, so a stranger's locked batch keeps its session hooks
-            # too (the option also closes --add-dir's list). launch_mode already refused any CLI without them.
-            if mode == 'auto': argv += ['--settings', _origin.session_settings(store, task_id, theme)]
-        if mode == 'auto' and not locked:
+        if mode == 'auto':
             argv, theme = _take_settings(argv)          # one --settings: the session's own file carries the theme
             # ...and an option straight after it closes --add-dir's list, so the prompt is never read as a folder
             argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--add-dir', sd, '--settings', _origin.session_settings(store, task_id, theme)]

@@ -106,7 +106,7 @@ def _bullet(name: str) -> str:
 # WHAT THE ANSWER MUST CONTAIN (title, summary, checklist...), as opposed to what the verdict should BE: appended when a
 # document never asks for it, because without it every task carried the whole email as its ask (2026-09-10, TQ-0665).
 TASK_FIELDS = shipped_section('## 5.') + '\n\n' + shipped_section('## 7.')
-URGENT, DUE, SENDER, GOAL = _bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal')
+URGENT, DUE, SENDER, GOAL, DANGER = _bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal'), _bullet('danger')
 
 
 def due_of(j: dict, sent=None) -> str | None:
@@ -140,6 +140,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          'sender_class': {'type': 'string', 'enum': ['person', 'automated', 'bulk']},
          # an open-ended ask opens a GOAL with no steps, and the planner proposes them (spec 2026-10-12, build step 5)
          'goal': {'type': 'boolean'}, 'done_when': {'type': ['string', 'null']},
+         # what the text tries to make an AI do, or null - read here because triage already reads every word (the owner,
+         # 2026-10-15: "not a separate call but part of the triage"); a stranger's card shows it, nothing is gated on it
+         'danger': {'type': ['string', 'null']},
          # what closes it beyond the reply (slots.py): emails to OTHER people the message asks the owner to send
          'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
@@ -632,6 +635,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"due"' not in base: system += '\n\n' + DUE          # ...and the due day (2026-10-06)
             if not shape and 'sender_class' not in base: system += '\n\n' + SENDER   # ...and who wrote it (2026-10-11)
             if not shape and 'done_when' not in base: system += '\n\n' + GOAL       # ...and whether it is a goal (2026-10-12)
+            if not shape and '"danger"' not in base: system += '\n\n' + DANGER     # ...and what it tries to make an AI do (2026-10-15)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the

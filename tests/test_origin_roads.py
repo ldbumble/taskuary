@@ -75,13 +75,13 @@ def test_an_owner_task_on_that_cli_still_starts(tmp_path):
     _, kw = _pane(s, t, tmp_path, agent='g')
     assert kw.get('mode', 'full') == 'full'
 
-def test_a_dangerous_stranger_batch_stays_read_only(tmp_path):
+def test_a_stranger_batch_runs_in_auto_mode_like_any_stranger_s_task(tmp_path):
+    "A batch an item was judged dangerous in is warned, not locked (the owner, 2026-10-15): auto mode and the floor, as for every stranger."
     from taskuary import batch
     s = _store(); t = _stranger(s)
-    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch.object(batch, 'locked', return_value=True):
+    with mock.patch.object(batch, 'is_batch', return_value=True):
         argv, kw = _pane(s, t, tmp_path)
-    assert argv[argv.index('--permission-mode') + 1] == 'dontAsk' and 'auto' not in argv and '--dangerously-skip-permissions' not in argv
-    assert kw['mode'] == 'auto'
+    assert argv[argv.index('--permission-mode') + 1] == 'auto' and '--dangerously-skip-permissions' not in argv and kw['mode'] == 'auto'
 
 
 # ── the environment ──────────────────────────────────────────────────────────────────────────────────────────────

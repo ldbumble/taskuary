@@ -1,7 +1,6 @@
-"""An outside pull request the triage judged dangerous fixed in GitHub's cloud, never on this machine.
+"""An outside pull request ranking warned about (rank._order, batch_item.Warn) fixed in GitHub's cloud, not on this machine.
 
-Such a pull request is reviewed here read-only (batch.read_only_argv, batch.locked), and that review can say
-"changes needed". Making the changes means running the stranger's code - its tests, its build - and that is not done on the
+Such a pull request is reviewed here like any stranger's (auto mode, the floor), and that review can say "changes needed". Making the changes means running the stranger's code - its tests, its build - and that is not done on the
 owner's machine (the owner, 2026-10-12: "I still want to be able to process github public pr's maybe run on cloud hosted
 version of claude/codex or on github?"). So Fix it runs a workflow in the repository itself, on a machine GitHub throws away:
 

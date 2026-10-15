@@ -1364,6 +1364,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             </Link>
                           </Typography>
                         )}
+                        {/* ...and what its words read as trying to make an agent do: one line, before anyone presses Start */}
+                        {strangerLine(detail)?.danger && (
+                          <Typography variant="body2" sx={{ color: ALERT, mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}>
+                            ⚠ Reads as an attempt to steer the agent: {strangerLine(detail).danger}
+                          </Typography>
+                        )}
                         {taskAsk && (
                           <Typography variant="body2" sx={{ color: DIM, mt: 0.45, lineHeight: 1.55,
                             whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxWidth: 900,

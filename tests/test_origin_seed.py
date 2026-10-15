@@ -50,7 +50,7 @@ def test_a_stranger_batch_keeps_its_titles_out_of_the_seed():
     from taskuary import ingest, rank
     with mock.patch.object(ingest, 'ingest_message', side_effect=lambda st, m, **k: st.place_message(m['_mid'], None, 'filed')), \
          mock.patch.object(batch, '_next'), mock.patch.object(rank, 'rank_pending', return_value=0): ingest.drain(s)
-    t = s.open_batch(batch.source_ref('github', 'northwind/portal', False)); assert batch.outside(s, t)
+    t = s.open_batch(batch.source_ref('github', 'northwind/portal')); assert batch.outside(s, t)
     with mock.patch.object(batch, '_diff', return_value=('', '')):
         seed = terminal.seed_text(s, t)
     assert 'install.sh' not in seed and '.stranger.md' in seed and 'ITEMS: 2' in seed

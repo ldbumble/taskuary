@@ -50,10 +50,10 @@ export default function BatchItems({ taskId, items = [], onChanged, bare = false
                   {i.State === "ended" ? i.EndedWhy : i.Result}</Typography>)}
               {i.Overlap && isOpen(i) && (
                 <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.2 }}>Overlaps: {i.Overlap}</Typography>)}
-              {/* a stranger's item the triage judged dangerous (batch.dangers): ranked last, batched apart, reviewed read-only */}
+              {/* a stranger's item ranking judged dangerous (rank._order): ranked last and warned, in the same batch */}
               {i.Warn && (
                 <Typography variant="caption" sx={{ color: ALERT_INK, fontWeight: 600, display: "block", mt: 0.2 }}>
-                  ⚠ Judged dangerous: {i.Warn}. Reviewed read-only, apart from the rest.</Typography>)}
+                  ⚠ Judged dangerous: {i.Warn}. Ranked last; read it before anything runs.</Typography>)}
               {fixLine(i) && (
                 <Typography variant="caption" sx={{ color: i.Fix === "failed" ? ALERT_INK : DIM, display: "block", mt: 0.2 }}>
                   {fixLine(i)}{i.FixLink && i.Fix === "failed" ? <> <Link href={i.FixLink} target="_blank" rel="noreferrer">Its run on GitHub</Link></> : null}
@@ -92,11 +92,6 @@ export default function BatchItems({ taskId, items = [], onChanged, bare = false
               sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5, color: INK, borderColor: BORDER }}>Not now</Button>
           </Box>
         </Box>)}
-      {/* a dangerous item's changes are made only in GitHub's cloud, and that is off: said once, quietly, instead of a button that refuses */}
-      {items.some((i) => i.canFix === false && i.Propose === "changes" && isOpen(i)) && (
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.6 }}>
-          A change the triage judged dangerous never runs on this machine; it is fixed only in GitHub's cloud. To have that done
-          for you, turn on Settings → Agent permissions → Outside pull requests → fix in GitHub's cloud.</Typography>)}
       {err && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block", mt: 0.5 }}>{err}</Typography>}
       <Confirm open={!!ask} title={ask ? `Merge ${ask.i.Title}?` : ""} confirmLabel="Merge on GitHub"
         text="It merges the version the agent reviewed. If anything was pushed to it since, GitHub refuses and nothing is merged."

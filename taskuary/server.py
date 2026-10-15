@@ -1399,12 +1399,13 @@ def task_detail(task_id: int):
     memo = {}
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
-    from . import batch as _batch, cloudfix as _cloudfix
+    from . import batch as _batch
     batch_rows = store.batch_items(task_id)
     batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
-    fixable = not (batch_rows and _batch.locked(store, task_id)) or _cloudfix.enabled(store)
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
-            'origin': dict(zip(('origin', 'why'), origin.of_task(store, task_id))),       # who's words are on it (origin.py)
+            'origin': {**dict(zip(('origin', 'why'), origin.of_task(store, task_id))),     # who's words are on it (origin.py)
+                       # ...and what one of them tries to make an AI do, as triage or ranking read it (message.Danger)
+                       'danger': next((m['Danger'] for m in store.list_messages(task_id) if m.get('Danger')), None)},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
             'messages': [_readable(x) for x in d.get('messages') or []],
@@ -1424,9 +1425,9 @@ def task_detail(task_id: int):
             # ...and what ended it upstream (a merge, a close): Close out says that instead of an empty reply nobody is owed
             'ended': _ended_line(task_id, d.get('comments')),
             # ...and a BATCH's items, in ranked order, each with what the agent found and where it stands (batch.py)
-            # (Warn: why the triage judged it dangerous - that batch is read-only; batch.dangers)
+            # (Warn: what ranking judged its text tries to make an agent do - a warning on the row, rank._order)
             'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose', 'Fix', 'FixLink', 'Warn')}
-                      | {'reviewed': bool(i.get('Sha')), 'canFix': fixable} for i in batch_rows] or None,
+                      | {'reviewed': bool(i.get('Sha')), 'canFix': True} for i in batch_rows] or None,
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}

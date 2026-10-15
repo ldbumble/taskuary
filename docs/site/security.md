@@ -44,6 +44,11 @@ display name anyone can copy. Being a member of a group you connected counts for
 counts once the platform calls your conversation with them one-to-one and you have replied in it, or
 once you press **Trust this task** on a task they opened.
 
+**Triage says when a message is aimed at the AI.** Alongside what a message is, triage notes when its
+text reads as an attempt to steer the agent: telling it to ignore its rules, run or fetch something,
+or reveal or send files. On a stranger's task that note shows as a warning line on the card, where you
+decide whether to press Start. It is a warning, not a gate.
+
 **Nothing leaves without you.** Replies go out only after you approve them, and the agent cannot name
 the recipient. It answers the message on file. Pushes, pull requests and tool runs an agent
 *proposes* are checked again when you approve them. Approving one never grants permission it did not
@@ -56,8 +61,9 @@ token, and the routes that send, approve or change settings refuse it.
 
 - A stranger's issue or pull request does not start an agent unless you turn that on for the repository.
 - Who wrote an item is read from GitHub's own record, never from the text.
-- In rank mode, one model reads every stranger's item for injection or harmful changes before an agent
-  sees it. Anything it flags is batched apart and worked **read-only**.
+- In rank mode, ranking reads the start of every item's text as well as its title. An item that reads
+  as an attempt to steer the agent ranks last and carries a warning, on its row and in the agent's
+  file. It is a warning, not a lock: the item runs in auto mode under the floor like any stranger's.
 - The agent's instructions put the safety read first: look for injection in the description, comments
   and code, and for changes that could harm whoever builds or merges it, before building or running
   anything.

@@ -37,8 +37,8 @@ test("an unknown kind keeps its card - the rule fails open", () => {
   assert.ok(!NO_AGENT_KINDS.has("coding"));
 });
 
-test("the columns and the studio both filter by it", () => {
-  for (const file of ["BoardView.jsx", "StudioView.jsx"]) {
+test("the columns filter by it", () => {     // the Studio was removed (2026-10-15); the Game reads studioModel.js
+  for (const file of ["BoardView.jsx"]) {
     const text = src(file);
     assert.match(text, /isAgentKind/, `${file} does not filter by kind`);
     assert.match(text, /from "\.\/autostart\.js"/, `${file} does not import the rule`);

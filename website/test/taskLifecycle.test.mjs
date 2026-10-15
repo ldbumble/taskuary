@@ -46,7 +46,7 @@ test("terminal output never triggers whole-task HTTP refreshes", () => {
   const source = taskSource();
   assert.match(source, /pollWhileActive\(active, \(\) => loadDetail\(selected\), 3000\)/);
   assert.doesNotMatch(source, /onLive\([^\n]*run-tail[^\n]*loadDetail/);
-  for (const file of ["ui.jsx", "FeedView.jsx", "BoardView.jsx", "WallView.jsx", "StudioView.jsx"]) {
+  for (const file of ["ui.jsx", "FeedView.jsx", "BoardView.jsx", "WallView.jsx", "AssistantGame.jsx"]) {
     const view = readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), "utf8");
     assert.doesNotMatch(view, /onLive\([^\n]*run-tail/, `${file} must not turn terminal bytes into HTTP`);
   }

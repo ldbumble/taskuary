@@ -26,6 +26,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { runOperation } from "./taskOps.js";
+import { ClosingCard, completeTask, writeUpSession } from "./closeAgent.jsx";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { outcomeOf } from "./dispatchOutcome.js";
@@ -582,7 +583,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // PUT DOWN AT THE PRESS (the owner, 2026-10-01: "you hit mark done it closes ... why does it take an extra second or 2?"): the
     // walk folds the task now and the close runs behind the "…"; a close that fails hands it back with the reason
     onLeave?.();
-    const close = () => runOperation(api, "task.complete", selected, note ? { note } : {});   // the shared road (PW-215)
+    const close = () => completeTask(api, selected, note);   // the shared road (PW-215), the Wall's Close agent too (closeAgent.jsx)
     try { await (onFinish ? onFinish(status, close) : close()); }
     catch (e) { const msg = e?.response?.data?.detail || e?.message || "Failed to finish task"; setErr(msg); onStay?.(msg); loadTasks(); return msg; }
     finally { setFinishing(false); }
@@ -635,7 +636,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     onLeave?.();
     if (canWrap) {
       setWrapping("done"); setErr("");
-      try { await api.post(`/api/tasks/${id}/wrap`, { close: false, no_reply: true }); } catch { /* the close still stops it */ }
+      await writeUpSession(api, id);            // a write-up that fails still closes (closeAgent.jsx)
       if (stale(id)) return;
       setTerm(null);
     }
@@ -1753,20 +1754,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (
-                  <Box sx={{ ...card, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf" }}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <CircularProgress size={15} />
-                      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>
-                        {wrapping === "stop" ? "Stopping this session…" : wrapping === "done" ? "Writing up this session, then marking it done…" : "Writing up this session…"}
-                      </Typography>
-                    </Box>
-                    <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>
-                      {wrapping === "stop" ? "The session is ending. The task and reply are not changed."
-                        : wrapping === "done" ? "Reading the transcript and saving what this session did. The task closes when that is filed."
-                        : "Reading the transcript and writing up what this session did. The task and reply remain separate — this takes a few seconds."}
-                    </Typography>
-                    <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />
-                  </Box>
+                  <ClosingCard mode={wrapping} />
                 ) : workspaceMode === "live" && peek ? (
                   /* the session, folded to one line while the task behind it is being read */
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.8, borderRadius: 1.5,

@@ -15,5 +15,4 @@ test("an accepted Devin prompt says it is waiting for the first response instead
   // its first work object.
   assert.match(read("BoardView.jsx"), /run\.work \|\| run\.promptPending/);
   assert.match(read("WallView.jsx"), /statusWork \|\| waiting \|\| l\?\.promptPending \|\| s\.promptPending/);
-  assert.match(read("StudioView.jsx"), /liveRow\?\.work \|\| liveRow\?\.promptPending/);
 });

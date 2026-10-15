@@ -24,7 +24,7 @@ import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
-import { SearchBar, openSearch } from "./SearchEverything.jsx";
+import { SEARCH_PICKED, SearchBar, openSearch } from "./SearchEverything.jsx";
 import BugReportDialog from "./BugReportDialog.jsx";
 import { REPORT_EVENT, bellError, openBugReport } from "./bugReportOpen.js";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
@@ -331,6 +331,22 @@ export default function TaskHubPage() {
   });
   const [stageMode, setStageMode] = useState("chat");   // what a click on a sidebar row does (chat | task)
   const pickAsstGame = (on) => { setAsstGame(on); try { localStorage.setItem("taskuary.assistantMode", on ? "game" : "chat"); } catch { /* private window */ } };
+  // SEARCH FROM ANY VIEW (the owner, 2026-10-15: "search doesn't work in game or in board, it reroutes you to the chat"): the
+  // dialog opens over the Board or the Game where you are; a PICK is what brings Chat up, since that is where it is drawn.
+  // Ctrl+K works there too - Chat's own rail listens for it only while Chat is on screen.
+  const toChat = useRef(null);
+  toChat.current = () => { pickAsstGame(false); setStageMode("chat"); go("Assistant"); };
+  useEffect(() => {
+    const picked = () => toChat.current?.();
+    window.addEventListener(SEARCH_PICKED, picked);
+    return () => window.removeEventListener(SEARCH_PICKED, picked);
+  }, []);
+  useEffect(() => {
+    if (tab === "Assistant" && !asstGame) return undefined;
+    const k = (e) => { if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") { e.preventDefault(); openSearch(); } };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [tab, asstGame]);
   // ...and the Board, which can hold a live session too: mounted once opened, hidden after. The
   // Assistant is the normal landing tab, but a deep link does not boot it until it is opened.
   useEffect(() => { if (tab === "Board") setEverBoard(true); }, [tab]);
@@ -411,7 +427,7 @@ export default function TaskHubPage() {
           {/* SEARCH, on the top line (the owner, 2026-10-14) - from the Board it goes to the Assistant, whose rail owns the hits */}
           <Box sx={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0, px: { xs: 0, md: 2 } }}>
             <Box sx={{ width: "100%", maxWidth: 420, display: { xs: "none", sm: "block" } }}>
-              <SearchBar onOpen={() => { if (tab !== "Assistant") { go("Assistant"); setTimeout(openSearch, 60); } else openSearch(); }} />
+              <SearchBar onOpen={openSearch} />
             </Box>
           </Box>
           {/* on the RIGHT, with the other transient chrome. On the left it grew the brand cluster

@@ -1,0 +1,40 @@
+// Close agent on the Wall is the task page's Mark done on a live session - the same code, not a copy (the owner, 2026-10-15).
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import test from "node:test";
+
+const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
+
+test("both closes run the shared write-up and the shared task.complete", () => {
+  const page = read("TaskPage.jsx"), wall = read("WallView.jsx"), mod = read("closeAgent.jsx");
+  assert.match(mod, /api\.post\(`\/api\/tasks\/\$\{tid\}\/wrap`, \{ close: false, no_reply: true \}\)/);
+  assert.match(mod, /runOperation\(api, "task\.complete", tid/);
+  assert.match(page, /const close = \(\) => completeTask\(api, selected, note\);/);
+  assert.match(page, /await writeUpSession\(api, id\);/);
+  assert.doesNotMatch(page, /\/api\/tasks\/\$\{id\}\/wrap`, \{ close: false, no_reply: true \}/);    // no second copy
+  assert.match(wall, /const wrote = await closeAgentWork\(api, s\.taskId\);/);
+});
+
+test("the Wall pane has Close agent, confirms like the task page, and is covered while it closes", () => {
+  const wall = read("WallView.jsx");
+  assert.match(wall, />Close agent<\/Button>/);
+  assert.match(wall, /title="Stop the agent and mark done\?"/);
+  assert.match(wall, /\{wrapBusy && <ClosingCover mode="done" \/>\}/);
+  assert.match(read("closeAgent.jsx"), /position: "absolute", inset: 0, zIndex: 5/);       // nothing under it takes a key or a click
+  assert.match(read("TaskPage.jsx"), /<ClosingCard mode=\{wrapping\} \/>/);                 // the same card on the task page
+});
+
+test("the Studio is gone from the Board; the Game keeps its model", () => {
+  assert.ok(!fs.existsSync(new URL("../src/StudioView.jsx", import.meta.url)));
+  assert.ok(!fs.existsSync(new URL("../src/StudioScene.jsx", import.meta.url)));
+  assert.doesNotMatch(read("BoardView.jsx"), /StudioView|k: "studio"/);
+  assert.match(read("AssistantGame.jsx"), /from "\.\/studioModel\.js"/);
+});
+
+test("search opens over Board and Game; a pick brings Chat up", () => {
+  const page = read("TaskHubPage.jsx"), feed = read("FeedView.jsx");
+  assert.match(page, /<SearchBar onOpen=\{openSearch\} \/>/);
+  assert.match(page, /window\.addEventListener\(SEARCH_PICKED, picked\)/);
+  assert.match(feed, /window\.addEventListener\(OPEN_SEARCH, o\);\n    return \(\) => window\.removeEventListener\(OPEN_SEARCH, o\);\n  \}, \[\]\);/);
+  assert.match(feed, /onOpenTask=\{\(tid, h\) => \{ searchPicked\(\);/);
+});

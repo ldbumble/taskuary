@@ -51,6 +51,9 @@ const Kbd = ({ children }) => (
 // like a box and opens the real one, wherever the dialog is mounted (FeedView listens for OPEN_SEARCH).
 export const OPEN_SEARCH = "tq-search-open";
 export const openSearch = () => window.dispatchEvent(new Event(OPEN_SEARCH));
+// a hit was picked: the page around the search (TaskHubPage) brings Chat up, which is where a pick is drawn
+export const SEARCH_PICKED = "tq-search-picked";
+export const searchPicked = () => window.dispatchEvent(new Event(SEARCH_PICKED));
 export function SearchBar({ onOpen }) {
   return (
     <Box component="button" type="button" onClick={onOpen} data-tq-search-open="true" aria-label="Search everything (Ctrl+K)"

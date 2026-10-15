@@ -140,7 +140,7 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
   const task = read("TaskPage.jsx"), remind = read("RemindMe.jsx"), view = read("AssistantView.jsx");
   const finish = task.slice(task.indexOf("const finish = async"), task.indexOf("const reminded ="));
-  assert.ok(finish.indexOf("onLeave?.()") < finish.indexOf("runOperation"), "the close is asked for after the task is put down");
+  assert.ok(finish.indexOf("onLeave?.()") < finish.indexOf("completeTask("), "the close is asked for after the task is put down");
   assert.match(finish, /onStay\?\.\(msg\)/);
   assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("api.post"), "the reminder too");
   assert.match(remind, /if \(leaving\) onStay\?\.\(msg\)/);
@@ -148,7 +148,7 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   // ...and off the RAIL at the press as well, a live session's Mark done included: it waited on an 18-second write-up
   // first, sitting under For later the whole time (the owner, 2026-10-01: "it first went to Later ... did not disappear")
   const stop = task.slice(task.indexOf("const stopAndFinish = async"), task.indexOf("const markDoneHint"));
-  assert.ok(stop.indexOf("onLeave?.()") > -1 && stop.indexOf("onLeave?.()") < stop.indexOf("/wrap"), "put down before the write-up");
+  assert.ok(stop.indexOf("onLeave?.()") > -1 && stop.indexOf("onLeave?.()") < stop.indexOf("writeUpSession("), "put down before the write-up");
   assert.match(view, /onLeave=\{\(\) => canvas\.putDown\(c\.key, c\.tid\)\}/);
   assert.match(view, /items: asPressed\(pile\.items, \{ leaving: leavingTid/, "the rail drops it (funnelPile.asPressed)");
   assert.match(view, /!pile\.items\.some\(\(i\) => i\.tid === leavingTid\)\) setLeavingTid\(null\)/, "until the server's pile has let it go - a reopened task is never hidden");

@@ -9,6 +9,8 @@ import { Alert, Box, Button, CircularProgress, IconButton, Tooltip, Typography }
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CloseIcon from "@mui/icons-material/Close";
+import DoneAllIcon from "@mui/icons-material/DoneAll";
+import { ClosingCover, closeAgentWork } from "./closeAgent.jsx";
 import api from "./api";
 import { onLive } from "./live.js";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ROLES, mono } from "./theme.jsx";
@@ -124,7 +126,27 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
     window.addEventListener("pointercancel", finish);
   };
   useEffect(() => () => drag.current?.cleanup?.(), []);
-  // no "Wrap up task" on the Wall: the task page's Mark done ends a task (the owner, 2026-09-24: "remove it")
+  // CLOSE AGENT (the owner, 2026-10-15: "add a close agent button on top which should do the same exact thing and save down the
+  // agent's last work"). It is the task page's Mark done on a live session, run through the same code (closeAgent.jsx): the
+  // session's write-up is saved with the task, then the task closes. The pane is held, covered, until that is done.
+  const [ending, setEnding] = useState(null);       // the pane whose Close agent waits for its confirmation
+  const closeAgent = async () => {
+    const s = ending; setEnding(null);
+    if (!s) return;
+    const mark = (on) => { const w = { ...wrappingRef.current }; if (on) w[s.sid] = true; else delete w[s.sid]; wrappingRef.current = w; setWrapping(w); };
+    mark(true); setWrapErrors((e) => { const n = { ...e }; delete n[s.sid]; return n; }); setWrapNotice("");
+    try {
+      const wrote = await closeAgentWork(api, s.taskId);
+      const t = tasks[s.taskId] || {};
+      const report = typeof wrote?.report === "string" ? wrote.report : "";
+      setWrapDone({ tid: s.taskId, ref: t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`, drafting: false,
+        line: report.replace(/^CODER REPORT\s*/, "").split("\n").map((x) => x.trim()).find(Boolean)?.replace(/[.\s]+$/, "") || "" });   // the notice adds its own full stop
+      setSessions((ss) => (ss || []).filter((x) => x.sid !== s.sid));
+      setOrder((o) => o.filter((sid) => sid !== s.sid));
+    } catch (e) {
+      setWrapErrors((w) => ({ ...w, [s.sid]: e?.response?.data?.detail || e?.message || "the task did not close" }));
+    } finally { mark(false); load(); }
+  };
   const closeSession = async () => {
     if (!closing?.sid) return;
     await api.delete(`/api/terminals/${closing.sid}`);
@@ -196,7 +218,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
             const who = s.mode === "assistant" ? agentName(t) : (s.agent || cliName(s.cli || "agent"));
             return (
               <Box key={s.sid} data-wall-pane={s.sid}
-                sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,
+                sx={{ ...pane0, position: "relative", display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,
                   borderColor: wrapBusy ? ROLES.working.bd : waiting ? ROLES.you.bd : BORDER,
                   opacity: dragging === s.sid ? 0.62 : 1, transform: dragging === s.sid ? "scale(.995)" : "none",
                   boxShadow: dragging === s.sid ? "0 7px 20px rgba(30,50,38,.16)" : pane0.boxShadow,
@@ -217,6 +239,9 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                     <Typography sx={{ ...mono, fontSize: 11, fontWeight: 600, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`}</Typography>
                     <Typography noWrap title={t.Title || s.cwd}
                       sx={{ fontSize: 12, fontWeight: 600, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
+                    <Button size="small" variant="outlined" disabled={wrapBusy} onClick={() => setEnding(s)}
+                      startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />} title="Save what the agent did with the task, then close the task - the task page's Mark done"
+                      sx={{ height: 24, fontSize: 11.5, px: 1, flexShrink: 0, whiteSpace: "nowrap" }}>Close agent</Button>
                     <Tooltip title="Open the full task page"><IconButton aria-label="Open full task" size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
                     <Tooltip title="Close session — stop the agent; keep the task and transcript"><span><IconButton aria-label="Close session" size="small" disabled={wrapBusy} onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></span></Tooltip>
                   </Box>
@@ -244,6 +269,8 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                     )}
                   </Box>
                 </Box>
+                {/* closing: the task page's card over the whole pane, so nothing in it can be typed into until it is done */}
+                {wrapBusy && <ClosingCover mode="done" />}
                 {/* the session itself fills the middle */}
                 <Box sx={{ flex: 1, minHeight: 0, p: 0.75, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                   {s.mode === "assistant"
@@ -267,6 +294,9 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
           })}
         </Box>
       )}
+      <Confirm open={!!ending} title="Stop the agent and mark done?"
+        text="Close agent ends the session - what it did so far is written up and saved with the task, then the task closes."
+        confirmLabel="Stop it and mark done" onClose={() => setEnding(null)} onConfirm={closeAgent} />
       <Confirm open={!!closing} title="Close this session?" confirmLabel="Close session"
         text={`This stops ${closing?.agent || cliName(closing?.cli || "the agent")} now and removes its pane from the wall. The task stays open, and the session transcript stays with it.`}
         onClose={() => setClosing(null)} onConfirm={closeSession} />

@@ -125,7 +125,8 @@ test("the rail says a task's state once, and puts its title first", () => {
 });
 
 test("complete, reopen, coding start and stop run the shared operations road, never a second path", () => {
-  assert.match(tasks, /runOperation\(api, "task\.complete", selected[,)]/);   // a close with a note rides the same road
+  assert.match(tasks, /const close = \(\) => completeTask\(api, selected, note\);/);   // a close with a note rides the same road
+  assert.match(fs.readFileSync(new URL("../src/closeAgent.jsx", import.meta.url), "utf8"), /runOperation\(api, "task\.complete", tid/);
   assert.match(tasks, /runOperation\(api, "task\.reopen", selected\)/);
   assert.match(tasks, /runOperation\(api, "dispatch\.prepare", id, \{ kind: "coding"/);
   // there is no stop in this view any more, so there is no second path to guard - a session ends by
@@ -191,9 +192,10 @@ test("Mark done on a live session ends it the way Save and end session does", ()
   assert.ok(tasks.includes("onConfirm={stopAndFinish}"), "the confirm takes the write-up road");
   const at = tasks.indexOf("const stopAndFinish = async");
   const body = tasks.slice(at, tasks.indexOf("\n  };", at));
-  assert.ok(body.indexOf('setWrapping("done")') < body.indexOf("/wrap"), "the terminal gives way before the request");
-  assert.ok(body.includes("no_reply: true"), "the close dismisses drafts, so none is written");
-  assert.ok(body.indexOf("/wrap") < body.indexOf('finish("done")'), "the result is filed before the task closes");
+  assert.ok(body.indexOf('setWrapping("done")') < body.indexOf("writeUpSession("), "the terminal gives way before the request");
+  assert.match(fs.readFileSync(new URL("../src/closeAgent.jsx", import.meta.url), "utf8"), /no_reply: true/,
+    "the close dismisses drafts, so none is written (the shared write-up, closeAgent.jsx)");
+  assert.ok(body.indexOf("writeUpSession(") < body.indexOf('finish("done")'), "the result is filed before the task closes");
 });
 
 // RUN ANOTHER AGENT (the owner, 2026-10-05: "don't see run another agent under more? it should be not in more"): it was behind

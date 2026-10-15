@@ -20,7 +20,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
-import SearchEverything, { OPEN_SEARCH } from "./SearchEverything.jsx";
+import SearchEverything, { OPEN_SEARCH, searchPicked } from "./SearchEverything.jsx";
 import { fadeBand } from "./timelineFade.js";
 import { syncFace, syncPhaseLabel } from "./syncTiming.js";
 import { observeSync } from "./syncObserver.js";
@@ -393,10 +393,16 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   useEffect(() => {
     if (!active) return undefined;
     const k = (e) => { if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); } };
-    const o = () => setSearchOpen(true);                 // the bar on the top line (TaskHubPage)
-    window.addEventListener("keydown", k); window.addEventListener(OPEN_SEARCH, o);
-    return () => { window.removeEventListener("keydown", k); window.removeEventListener(OPEN_SEARCH, o); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
   }, [active]);
+  // ...and the bar on the top line opens it from ANY view: the dialog floats over the Board or the Game, and only a pick
+  // brings Chat up (searchPicked). It used to switch to Chat first, so searching from the Board left it (2026-10-15)
+  useEffect(() => {
+    const o = () => setSearchOpen(true);
+    window.addEventListener(OPEN_SEARCH, o);
+    return () => window.removeEventListener(OPEN_SEARCH, o);
+  }, []);
 
   // (Re)fetch from the top - span covers everything already on screen so the 30s
   // refresh never shrinks the list under the user.
@@ -887,9 +893,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           {/* ...and QUIET: a pick is not something the owner said, so no "Tell me about ..." bubble rides in above the task
               (the owner, 2026-10-15: "why does the gray thing show up when clicking on searched task. Just show the task") */}
           <SearchEverything open={searchOpen} onClose={() => setSearchOpen(false)}
-            onOpenTask={(tid, h) => (onPull ? onPull({ TaskId: tid, Title: h?.title }, { quiet: true }) : onOpenTask?.(tid))}
-            onOpenMessage={(mid, h) => (onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }, { quiet: true }), true) : openByMid(mid))}
+            onOpenTask={(tid, h) => { searchPicked(); return onPull ? onPull({ TaskId: tid, Title: h?.title }, { quiet: true }) : onOpenTask?.(tid); }}
+            onOpenMessage={(mid, h) => { searchPicked(); return onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }, { quiet: true }), true) : openByMid(mid); }}
             onPickSource={(next) => {
+              searchPicked();
               loadRequest.current += 1; detailEpoch.current += 1; want.current = null;
               if (cat) { pendingPick.current = next; setCat(""); } else setPick(next);
             }} />

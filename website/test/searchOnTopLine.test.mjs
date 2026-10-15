@@ -7,7 +7,7 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 // the owner, 2026-10-14: "It should on top line not on top of the work rail ... when you click on task it should open on the
 // assistant canvas ... also task showed up without the number?"
 test("the search bar is on the top line, and the rail no longer draws one", () => {
-  assert.match(read("TaskHubPage.jsx"), /<SearchBar onOpen=\{\(\) => \{ if \(tab !== "Assistant"\) \{ go\("Assistant"\); setTimeout\(openSearch, 60\); \} else openSearch\(\); \}\} \/>/);
+  assert.match(read("TaskHubPage.jsx"), /<SearchBar onOpen=\{openSearch\} \/>/);
   assert.doesNotMatch(read("FeedView.jsx"), /<SearchBar /);
   assert.match(read("FeedView.jsx"), /window\.addEventListener\(OPEN_SEARCH, o\)/);
 });
@@ -15,8 +15,8 @@ test("the search bar is on the top line, and the rail no longer draws one", () =
 test("a hit goes on the canvas through the rail's own pull, whatever the mode", () => {
   const f = read("FeedView.jsx");
   // ...quietly: a pick puts the task on the canvas without a "Tell me about" line (searchPickQuiet.test.mjs)
-  assert.match(f, /onOpenTask=\{\(tid, h\) => \(onPull \? onPull\(\{ TaskId: tid, Title: h\?\.title \}, \{ quiet: true \}\) : onOpenTask\?\.\(tid\)\)\}/);
-  assert.match(f, /onOpenMessage=\{\(mid, h\) => \(onPull \? \(onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}, \{ quiet: true \}\), true\) : openByMid\(mid\)\)\}/);
+  assert.match(f, /onOpenTask=\{\(tid, h\) => \{ searchPicked\(\); return onPull \? onPull\(\{ TaskId: tid, Title: h\?\.title \}, \{ quiet: true \}\) : onOpenTask\?\.\(tid\); \}\}/);
+  assert.match(f, /onOpenMessage=\{\(mid, h\) => \{ searchPicked\(\); return onPull \? \(onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}, \{ quiet: true \}\), true\) : openByMid\(mid\); \}\}/);
 });
 
 test("a row with no message of its own is keyed by its task, never msg:undefined", () => {

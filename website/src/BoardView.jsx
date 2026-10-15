@@ -9,8 +9,6 @@ import {
   DialogTitle, MenuItem, Select, Switch, TextField, Tooltip, Typography,
 } from "@mui/material";
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
-import ViewInArIcon from "@mui/icons-material/ViewInAr";
-import StudioView from "./StudioView.jsx";
 import WallView from "./WallView.jsx";
 import GridViewIcon from "@mui/icons-material/GridView";
 import ForumIcon from "@mui/icons-material/Forum";
@@ -258,7 +256,7 @@ const COLS = [
 export default function BoardView({ onOpenTask, onOpenReports, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
-  const [view, setView] = useState("columns");   // columns | studio | wall - three looks at one board
+  const [view, setView] = useState("columns");   // columns | wall - the Studio's office is the Game's now (2026-10-15)
   const [boardTick, setBoardTick] = useState(0); // bumped when a session starts here: the active board view reloads at once
   const [newOpen, setNewOpen] = useState(false);
   const [noteFor, setNoteFor] = useState(null);   // the task whose handover note is open
@@ -318,7 +316,6 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
         <Box role="tablist" aria-label="Board view"
           sx={{ display: "flex", gap: 0.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2, p: "3px" }}>
           {[{ k: "columns", label: "Columns", icon: <ViewKanbanIcon sx={{ fontSize: 14 }} /> },
-            { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> },
             { k: "wall", label: "Wall", icon: <GridViewIcon sx={{ fontSize: 14 }} /> },
             { k: "notes", label: "Live handoffs", icon: <ForumIcon sx={{ fontSize: 14 }} /> }].map((o) => (
               <Box key={o.k} role="tab" tabIndex={0} aria-selected={view === o.k}
@@ -366,7 +363,6 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
 
       {/* what the agents are telling EACH OTHER - the half of the board git cannot show */}
       {view === "notes" && <AgentWall onOpenTask={onOpenTask} refresh={boardTick} active={active} />}
-      {view === "studio" && <StudioView onOpenTask={onOpenTask} refresh={boardTick} active={active} />}
       {view === "wall" && <WallView onOpenTask={onOpenTask} onOpenReports={onOpenReports} refresh={boardTick} active={active} />}
 
       <Box sx={{ display: view === "columns" ? "grid" : "none", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(5, minmax(0, 1fr))" }, gap: 1.5, alignItems: "start" }}>

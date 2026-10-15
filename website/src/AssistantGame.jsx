@@ -2,7 +2,7 @@
 // walk around. Every figure is a real task, message, fyi or Hub file, and every real move (send, hand
 // off, unblock, follow up) scores. Walk with WASD/arrows, E to talk to whoever you are next to, 1-5
 // to jump to a room, Esc back out. It is a third way to use the Assistant tab (Chat | Task | Game),
-// not a Board view - the Studio stays the Board's floor.
+// not a Board view - and the Board's own Studio is gone into it (2026-10-15).
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Box, CircularProgress, Slider, Typography, useMediaQuery } from "@mui/material";
 

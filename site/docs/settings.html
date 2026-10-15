@@ -346,11 +346,11 @@ is what you see if those cards cannot load.</li>
 <h3 id="who-may-start-a-worker-without-you">Who may start a worker without you<a class="anchor" href="#who-may-start-a-worker-without-you" aria-label="Link to this section">#</a></h3>
 <p><code>trust_own_domain</code> · type: flags · default: <code>1</code></p>
 <p>An inbound message can open a task AND start the agent on it unattended. These are the three rules that allow it; a sender matching none of them still gets triaged and lands on the Board, and only the unattended start waits for your click.</p>
-<p>One control over: <strong>your own domains</strong> (<code>trust_own_domain</code>), <strong>people you have written to</strong> (<code>trust_sent_history</code>), <strong>chat channels</strong> (<code>trust_non_email</code>)</p>
+<p>One control over: <strong>your own domains</strong> (<code>trust_own_domain</code>), <strong>people you have written to</strong> (<code>trust_sent_history</code>), <strong>people you talk with in chats</strong> (<code>trust_non_email</code>)</p>
 <p>Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.</p>
 <p>your own domains — every connected mailbox&#39;s domain and the owner address.</p>
 <p>people you have written to — checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail is never evidence: a stranger&#39;s second message is still a stranger&#39;s. A lookup that fails is not proof either way, so the task says so and waits.</p>
-<p>chat channels — Teams, Slack, Telegram, WhatsApp, iMessage, Discord.</p>
+<p>people you talk with in chats — someone you have answered in a one-to-one chat, or vouched for by releasing or trusting their task. A group chat is not a room of people you trust. Taskuary sees your own lines in Teams, WhatsApp and iMessage; in Slack, Telegram, Discord and the chat servers it cannot, so there trust comes only from vouching.</p>
 <p>Turn all three off and nothing ever starts by itself; every task waits on the Board for you. Turning them off does not stop triage, drafting or filing - only the unattended start.</p>
 <h3 id="write-the-agent-a-context-file">Write the agent a context file<a class="anchor" href="#write-the-agent-a-context-file" aria-label="Link to this section">#</a></h3>
 <p><code>coder_context_file</code> · type: switch · default: on</p>

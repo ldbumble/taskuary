@@ -55,21 +55,33 @@ SPLASH = """<!doctype html>
   .b { text-align:center }
   .t { font-size:15px; font-weight:600; letter-spacing:.01em }
   .s { margin-top:6px; opacity:.6 }
-  .d { margin-top:18px; display:flex; gap:5px; justify-content:center }
-  .d i { width:5px; height:5px; border-radius:50%; background:currentColor; opacity:.25;
-         animation:p 1.4s ease-in-out infinite }
-  .d i:nth-child(2){animation-delay:.2s} .d i:nth-child(3){animation-delay:.4s}
-  @keyframes p { 0%,80%,100%{opacity:.2} 40%{opacity:.7} }
+  .r { margin:18px auto 0; width:26px; height:26px; border-radius:50%; border:3px solid rgba(128,128,128,.22);
+       border-top-color:#55697a; animation:spin .9s linear infinite }
+  .e { margin-top:8px; font-size:12px; opacity:.5; font-variant-numeric:tabular-nums }
+  @keyframes spin { to { transform:rotate(360deg) } }
 </style>
 <div class="b">
   <div class="t">Taskuary is starting up</div>
-  <div class="s">Reading your work - this takes a few seconds.</div>
-  <div class="d"><i></i><i></i><i></i></div>
-</div>"""
+  <div class="s">Loading your work - the first start can take a minute.</div>
+  <div class="r"></div><div class="e" id="e">0s</div>
+</div>
+<script>var t0=Date.now();setInterval(function(){var e=document.getElementById('e');if(e)e.textContent=Math.round((Date.now()-t0)/1000)+'s'},1000)</script>"""
 
 STALLED = (SPLASH.replace('Taskuary is starting up', 'Taskuary could not start')
-                 .replace('Reading your work - this takes a few seconds.',
-                          'The window is here but the server never answered. See desktop-error.log next to your data.'))
+                 .replace('Loading your work - the first start can take a minute.',
+                          'The window is here but the server never answered. See desktop-error.log next to your data.')
+                 .replace('<div class="r"></div><div class="e" id="e">0s</div>', ''))
+
+
+def splash(text: str = None):
+    """The exe's own splash (taskuary.spec: Splash), up before the bundle unpacked: say what is happening on it, or close it once
+    the window is up. Nothing at all when this is not the packaged exe."""
+    try: import pyi_splash
+    except ImportError: return
+    try:
+        if text: pyi_splash.update_text(text)
+        else: pyi_splash.close()
+    except Exception: pass
 
 
 # CLOSING IS QUITTING: the server stops with the window, and there is no tray to keep watching (the owner has not chosen
@@ -81,8 +93,8 @@ GOODBYE_SECS = 3.0
 def goodbye_html(text: str) -> str:
     import html
     return (SPLASH.replace('Taskuary is starting up', 'Taskuary is closing')
-                  .replace('Reading your work - this takes a few seconds.', html.escape(text))
-                  .replace('<div class="d"><i></i><i></i><i></i></div>', ''))
+                  .replace('Loading your work - the first start can take a minute.', html.escape(text))
+                  .replace('<div class="r"></div><div class="e" id="e">0s</div>', ''))
 
 
 def _server_store():
@@ -301,6 +313,7 @@ def wait_for_exit(server, poll: float = 1.0):
 
 
 def main():
+    splash('Starting Taskuary...')
     from taskuary import __version__, config
     argv = sys.argv[1:]
     from taskuary.logs import setup as setup_logs
@@ -325,6 +338,7 @@ def main():
         return server, url
 
     if '--server-only' in argv:      # CI smoke tests, or run as a service
+        splash()
         server, _ = headless()
         wait_for_exit(server)
         return 0 if stop_server(server) != 'timeout' else 1
@@ -333,7 +347,7 @@ def main():
     try:
         import webview
     except Exception:                # no pywebview at all -> the browser, as before
-        filed()
+        filed(); splash()
         server, url = headless()
         webbrowser.open(launchkey.link(url)); wait_for_exit(server)
         return 0 if stop_server(server) != 'timeout' else 1
@@ -348,6 +362,9 @@ def main():
     view = launchkey.remote_link(running, config.load()['server'].get('token') or '') if running else None
     window = webview.create_window('Taskuary', url=view, html=None if running else SPLASH,
                                    width=1280, height=840, min_size=(900, 600))
+    # the window is up: the exe's splash hands over to it (and its own spinner and seconds take the wait from here)
+    try: window.events.shown += lambda: splash()
+    except Exception: pass
     if running:
         print(f'Taskuary is already running at {running} - opening that one.')
         webview.start()
@@ -358,6 +375,7 @@ def main():
     except Exception as e: logger.debug(f'closing: no goodbye on this pywebview - {e}')
 
     def opened():
+        splash()                     # in case `shown` never fired on this pywebview
         try: held['server'], url = boot()
         except Exception:
             filed(); window.load_html(STALLED); return

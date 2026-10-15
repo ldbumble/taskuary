@@ -53,5 +53,11 @@ a = Analysis(['taskuary/desktop.py'],
                             'websockets', 'uvicorn.protocols.websockets.websockets_impl', 'pyte', *hidden],
              excludes=['tkinter', 'matplotlib', 'PIL'])
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, a.binaries, a.datas, name='Taskuary', console=False, upx=False,
+# UP THE INSTANT IT IS DOUBLE-CLICKED (the owner, 2026-10-15: "when you hit taskuary.exe it should startup right away instant, if
+# you need to load just do the ... screen like waiting to startup"): a one-file exe unpacks its whole bundle before any of our code
+# runs, and nothing was on screen for that. The bootloader shows this image first; desktop.py says what it is doing on it and
+# closes it the moment the window is up.
+# no text line: the bootloader writes every file it unpacks there (botocore/data/...json.gz), which read as noise
+splash = Splash('assets/splash.png', binaries=a.binaries, datas=a.datas, minify_script=True, always_on_top=False)
+exe = EXE(pyz, a.scripts, splash, splash.binaries, a.binaries, a.datas, name='Taskuary', console=False, upx=False,
           icon='assets/taskuary.ico')

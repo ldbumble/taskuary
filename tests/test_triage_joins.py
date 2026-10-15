@@ -205,3 +205,26 @@ class RetitleTests(unittest.TestCase):
         first = mail(s, 'c', brain('task', title='The first ask'), conv='c2', channel='whatsapp')
         mail(s, 'd', brain('fyi', same_as=first['task_id'], title='Thanks'), conv='c2', channel='whatsapp')
         self.assertEqual(s.get_task(first['task_id'])['Title'], 'The first ask')     # an fyi adds nothing to rename for
+
+
+class EmailThreadRetitleTests(unittest.TestCase):
+    """The owner, 2026-10-15: a CFO's new ask ("can you export and send the status to the VPOs") arrived on the thread of a task
+    closed two days before; it was judged a task and reopened that task - under its old title, so it read as the finished thread
+    and was closed again unseen. An email thread stays one task, and the task says what is asked NOW."""
+    def test_a_new_ask_on_a_closed_tasks_thread_reopens_it_under_the_new_title(self):
+        s = MemoryStore()
+        first = mail(s, 'a', brain('task', title='Advise on the missing budget facilities'), conv='t1', subject='Missing Budget')
+        tid = first['task_id']
+        s.update_task(tid, {'Status': 'done'}, 't')
+        mail(s, 'b', brain('task', title='Export the budget status and send it to the VPOs'), conv='t1', subject='RE: Missing Budget',
+             body='Can you export and send the status to the VPOs.')
+        t = s.get_task(tid)
+        self.assertEqual((t['Status'], t['Title']), ('open', 'Export the budget status and send it to the VPOs'))
+        self.assertTrue(any('Now about: Export the budget status and send it to the VPOs (was: Advise on the missing budget facilities)'
+                            in (c.get('Body') or '') for c in s.list_comments(tid)))
+
+    def test_a_thanks_on_the_thread_keeps_the_title(self):
+        s = MemoryStore()
+        tid = mail(s, 'a', brain('task', title='Advise on the missing budget facilities'), conv='t1', subject='Missing Budget')['task_id']
+        mail(s, 'b', brain('fyi', title='Erin says thanks'), conv='t1', subject='RE: Missing Budget', body='Thanks!')
+        self.assertEqual(s.get_task(tid)['Title'], 'Advise on the missing budget facilities')

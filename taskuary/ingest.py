@@ -750,6 +750,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         if r.get('reopen'): _reopen(store, tid, msg, actor)
+        # ...and the task says what is asked NOW (the owner, 2026-10-15): an email thread stays one task, but a new ask on it - a
+        # CFO's "export and send the status" on a thread closed two days before - reopened it under the old title, read as the
+        # finished thread, and was closed again unseen. _retitle keeps the old title in a note; an owner-written task keeps its own.
+        if (follow or {}).get('intent') in ('task', 'reply_only') and not follow.get('degraded'):
+            _retitle(store, store.get_task(tid) or {}, msg, follow, actor)
         if pol['action'] == 'escalate': _escalate(store, tid, pol, actor)
         elif (follow or {}).get('urgent'): _mark_urgent(store, tid, follow, actor)
         if (follow or {}).get('due'): remind.set_due(store, tid, follow['due'], actor)

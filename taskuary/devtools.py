@@ -230,10 +230,23 @@ def test_discord(store, c) -> str:
             '(right-click a channel → Copy Channel ID, with Developer Mode on)')
 
 
+_DM = {}
+def is_dm(channel: str, room: str, kind) -> bool:
+    """Did the PLATFORM call this room one-to-one - `kind()` reads the room's own type. senders trusts a chat sender the
+    owner has talked with alone (store.talked_one_to_one), and only this mark says alone: who has spoken proves nothing.
+    A room's type never changes, so it is asked once; a read that fails says no, and is asked again next poll."""
+    if (channel, room) not in _DM:
+        try: _DM[channel, room] = bool(kind())
+        except Exception as e: logger.debug(f'{channel} {room}: room type unread ({e})'); return False
+    return _DM[channel, room]
+
+
 def poll_discord(store, c, src, since, llm=None, file_only=False) -> int:
     """Per-source, like Slack: each watched channel id is one source."""
     from .ingest import ingest_message
     msgs = _discord(c, 'get', f"/channels/{src['Address']}/messages", params={'limit': CAP})
+    # type 1 is a DM with the bot (discord.com/developers/docs/resources/channel#channel-object-channel-types)
+    dm = is_dm('discord', src['Address'], lambda: _discord(c, 'get', f"/channels/{src['Address']}").get('type') == 1)
     n = 0
     for m in reversed(msgs if isinstance(msgs, list) else []):
         if (m.get('author') or {}).get('bot'): continue
@@ -246,7 +259,7 @@ def poll_discord(store, c, src, since, llm=None, file_only=False) -> int:
             'from_name': who.get('global_name') or who.get('username') or 'Discord',
             'from_email': f"discord:{who['id']}" if who.get('id') else None,     # a display name anyone can copy is not who they are
             'conversation_id': f"discord:{src['Address']}", 'sent_at': at,
-            'source_name': src['Address']}, llm=llm)
+            'source_name': src['Address'], **({'mail_meta': {'dm': True}} if dm else {})}, llm=llm)
         n += out['status'] != 'duplicate'
     return n
 

@@ -27,7 +27,7 @@ from urllib.parse import quote
 import requests
 
 from .pm import CAP, _cfg, _seed_source, _stamp
-from .devtools import _die, _new
+from .devtools import _die, _new, is_dm
 
 TIMEOUT = 30
 
@@ -38,7 +38,7 @@ def _base(c, fallback='') -> str:
     return (_cfg(c).get('base_url') or fallback).strip().rstrip('/')
 
 
-def _ingest(store, src, channel, ext, body, who, at, llm, file_only, uid=None) -> int:
+def _ingest(store, src, channel, ext, body, who, at, llm, file_only, uid=None, dm=False) -> int:
     """One message onto the Timeline, through the same triage as mail. Returns 1 unless it was
     already here - a poll that re-reads its own window is normal, not an error."""
     from .ingest import ingest_message
@@ -46,7 +46,7 @@ def _ingest(store, src, channel, ext, body, who, at, llm, file_only, uid=None) -
         'external_id': f'{channel}:{ext}', 'channel': channel, 'subject': None, 'body': body,
         # uid: the platform's stable user id - the key trust is remembered by (senders.chat_key); a name is only shown
         'from_name': who or channel.title(), 'from_email': uid, 'conversation_id': f"{channel}:{src['Address']}",
-        'sent_at': at, 'source_name': src['Address']}, llm=llm)
+        'sent_at': at, 'source_name': src['Address'], **({'mail_meta': {'dm': True}} if dm else {})}, llm=llm)
     return out['status'] != 'duplicate'
 
 
@@ -77,13 +77,15 @@ def poll_mattermost(store, c, src, since, llm=None, file_only=False) -> int:
                 params={'since': int(since.timestamp() * 1000), 'per_page': CAP})
     order = (posts or {}).get('order') or []
     rows = (posts or {}).get('posts') or {}
+    # 'D' is a direct channel (Mattermost's channel types O, P, D, G - G is a group of several)
+    dm = is_dm('mattermost', src['Address'], lambda: (_mm(c, 'get', f"/channels/{src['Address']}") or {}).get('type') == 'D')
     n = 0
     for pid in reversed(order):
         m = rows.get(pid) or {}
         if m.get('type') or not (m.get('message') or '').strip(): continue   # typed posts are joins/leaves
         who = (m.get('props') or {}).get('override_username') or m.get('user_id') or 'Mattermost'
         at = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime((m.get('create_at') or 0) / 1000))
-        n += _ingest(store, src, 'mattermost', pid, m['message'], who, at, llm, file_only, uid=f"mm:{m['user_id']}" if m.get('user_id') else None)
+        n += _ingest(store, src, 'mattermost', pid, m['message'], who, at, llm, file_only, uid=f"mm:{m['user_id']}" if m.get('user_id') else None, dm=dm)
     return n
 
 
@@ -116,6 +118,7 @@ def test_rocketchat(store, c) -> str:
 
 
 def poll_rocketchat(store, c, src, since, llm=None, file_only=False) -> int:
+    "No one-to-one mark: channels.history reads public rooms only (a DM is /im.history), so no room polled here is one."
     hist = _rc(c, 'get', '/channels.history',
                params={'roomId': src['Address'], 'oldest': since.astimezone().isoformat(), 'count': CAP})
     n = 0
@@ -227,6 +230,8 @@ def test_google_chat(store, c) -> str:
 
 def poll_google_chat(store, c, src, since, llm=None, file_only=False) -> int:
     space = src['Address'] if str(src['Address']).startswith('spaces/') else f"spaces/{src['Address']}"
+    # spaceType DIRECT_MESSAGE (the older `type` said DM); a GROUP_CHAT of three is not one-to-one
+    dm = is_dm('google_chat', space, lambda: (lambda s: s.get('spaceType') == 'DIRECT_MESSAGE' or s.get('type') == 'DM')(_gc(store, c, 'get', f'/{space}') or {}))
     res = _gc(store, c, 'get', f'/{space}/messages',
               params={'pageSize': CAP, 'orderBy': 'createTime desc',
                       'filter': f'createTime > "{since.astimezone().isoformat()}"'})
@@ -236,7 +241,7 @@ def poll_google_chat(store, c, src, since, llm=None, file_only=False) -> int:
         who = (m.get('sender') or {}).get('displayName') or 'Google Chat'
         u = (m.get('sender') or {}).get('name')                 # users/<id>
         n += _ingest(store, src, 'google_chat', m['name'], m['text'], who,
-                     _stamp(m.get('createTime')), llm, file_only, uid=f'gchat:{u}' if u else None)
+                     _stamp(m.get('createTime')), llm, file_only, uid=f'gchat:{u}' if u else None, dm=dm)
     return n
 
 

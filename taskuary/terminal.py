@@ -1650,6 +1650,13 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from .agents import profile_document
     rules_doc = profile_document(store, prof)
     if rules: parts.append(f"{'CODING RULES' if rules_doc == 'coder' else 'RULES'} ({rules_doc.upper()}.md): {no_emails(rules)}")
+    # the rules are the owner's document, written for every session; a stranger's runs fewer commands (cli.STRANGER_ACTS),
+    # and told to read the wall first, its first step was a refusal (live check 2026-10-14)
+    if stranger:
+        from .cli import AGENT_ACTS, STRANGER_ACTS
+        no = ', '.join(f"--{a.replace('_', '-')}" for a in AGENT_ACTS if a not in STRANGER_ACTS)
+        parts.append(f'THIS SESSION: a stranger\'s task runs none of taskuary {no} - skip what the rules say about them; '
+                     '--note still posts to this task\'s own wall.')
     # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
     # operative rule set here - CODER.md's "work only in the repository" is the wrong first rule for a
     # bill, so the playbook says so out loud; the closing-out and wall rules still stand

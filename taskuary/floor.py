@@ -63,15 +63,13 @@ def _names() -> list:
 def _own(tid: int, store=None) -> list:
     """This task's own files: its working folder (origin.stranger_dir) - its stranger file lives there (R25) - and the
     attachments of ITS messages - not another task's."""
-    from .store import task_ref
     from .origin import stranger_path
-    ref = task_ref(tid)
     fs = [a['Path'] for m in (store.list_messages(tid) if store else []) for a in store.list_attachments(m['MessageId']) if a.get('Path')]
     # the working folder sits in the shared temp, where someone else could plant a link: only its own NAME is let in,
     # never what that name resolves to (origin.stranger_dir refuses a planted one at launch). The system temp folder itself
     # is resolved - TEMP is often a short 8.3 name and the CLI writes the long one - but nothing below it is.
     import tempfile
-    sd = [_norm(stranger_path(tid), real=False), _cf(os.path.normcase(os.path.join(os.path.realpath(tempfile.gettempdir()), 'taskuary-stranger', ref)))]
+    sd = [_norm(stranger_path(tid), real=False), _cf(os.path.normcase(os.path.join(os.path.realpath(tempfile.gettempdir()), 'taskuary-stranger', stranger_path(tid).name)))]
     return list(dict.fromkeys([_norm(f, real=rl) for f in fs for rl in (True, False)] + sd))
 
 def _under(p, roots): return any(p == r or p.startswith(r.rstrip('/') + '/') for r in roots)

@@ -59,6 +59,8 @@ const Steps = ({ s }) => {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.2 }}>
       {!!s.plan?.length && <Box><Typography sx={head}>Its plan</Typography><Step s={{ k: "plan", items: s.plan }} /></Box>}
+      {!!s.refused?.length && <Box><Typography sx={head}>Refused by the floor</Typography>
+        {s.refused.map((r, i) => <Typography key={i} sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{r.text}</Typography>)}</Box>}
       {!!steps.length && <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6, maxHeight: 640, overflow: "auto", pr: 0.5 }}>
         {steps.map((x, i) => <Step key={i} s={x} />)}
       </Box>}

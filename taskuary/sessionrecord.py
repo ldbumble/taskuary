@@ -338,7 +338,14 @@ def record(store, tid: int) -> dict:
         p = session_artifacts.confined(a.get('Path'))
         if p and (s := _nearest(sessions, a.get('CreatedAt'))):
             s['answer'] = re.sub(r'^# .*\n+', '', p.read_text(encoding='utf-8'), count=1).strip()
+    # what the floor refused a stranger's session (floor.py): the agent carries on, so the worker state never shows it -
+    # without this the owner saw a refusal only if the pane was open when it happened
+    refused = {}
+    for e in store.worker_events(int(tid)):
+        if e['Kind'] == 'floor_denied': refused.setdefault(str(e['Sid']), []).append({'text': e['Text'] or '', 'at': _when(e['CreatedAt'])})
+    ext = {r.get('Sid'): r.get('ExtId') for r in rows}     # a headless run's events carry the CLI's id (hooks.run_sid)
     for s in sessions:
+        if (got := refused.get(str(s['sid'])) or refused.get(str(ext.get(s['sid']) or ''))): s['refused'] = got
         rep = s.get('report') or {}
         said = next((x['text'] for x in reversed(s['steps']) if x['k'] == 'said'), '')
         # THE RESULT IS ONE THING, the fullest account the session left, shown once: the answer it saved, else its last

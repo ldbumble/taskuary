@@ -1392,9 +1392,13 @@ def is_ack(store, m: dict) -> bool:
 
 def is_ours(m: dict) -> bool:
     """A line WE sent: the owner's own reply, wherever they typed it (channels.ingest_own_message
-    stores those as `context`), or one Taskuary sent itself."""
+    stores those as `context`), or one Taskuary sent itself.
+
+    'You' as a NAME is only ours on the owner's own channel (ownwork), where code writes it: a chat sender may call
+    themselves 'You', and their words would read as the owner's on the timeline and in every prompt."""
+    from .ownwork import CHANNEL
     return (m.get('Status') == 'context' or m.get('Direction') == 'out'
-            or str(m.get('FromName') or '').strip().lower() == 'you')
+            or (m.get('Channel') == CHANNEL and str(m.get('FromName') or '').strip().lower() == 'you'))
 
 
 def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):

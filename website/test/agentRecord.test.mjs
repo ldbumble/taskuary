@@ -98,3 +98,9 @@ test("over a conversation the card holds only the working behind its answers", (
   const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
   assert.match(page, /inChat=\{workspaceMode === "general"\}/);
 });
+
+test("what the floor refused a stranger's session is behind More, named on it", () => {
+  const s = { result: "Done.", refused: [{ text: "Read: refused", at: "2026-10-15 09:00" }] };
+  assert.equal(hasMore(s), true);
+  assert.deepEqual(moreParts(s), ["1 refusal"]);
+});

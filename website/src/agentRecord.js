@@ -52,7 +52,7 @@ export const recordFacts = (s) => {
 };
 
 // is there anything behind "Every step" that the card does not already show?
-export const hasMore = (s) => !!(recordSteps(s).some((x) => x.k !== "result") || s?.plan?.length);
+export const hasMore = (s) => !!(recordSteps(s).some((x) => x.k !== "result") || s?.plan?.length || s?.refused?.length);
 
 // WHAT THE ONE "MORE" HOLDS, named on the button: everything past what happened - its last message in full, the files, the
 // run's timeline, what ended it since, every step, earlier sessions. One control, so nothing is drawn twice and nothing is
@@ -61,7 +61,7 @@ export const moreParts = (s, { draft = "", timeline = [], since = null, earlier 
   const steps = recordSteps(s).filter((x) => x.k !== "result").length, files = s?.files?.length || 0;
   return [cardParts(s, draft).message && "its last message", files && plural(files, "file"), timeline?.length && "the timeline",
     since?.text && "since then", (steps || s?.plan?.length) && (s?.source === "conversation" ? "its working" : plural(steps, "step")),
-    earlier && plural(earlier, "earlier session")].filter(Boolean);
+    s?.refused?.length && plural(s.refused.length, "refusal"), earlier && plural(earlier, "earlier session")].filter(Boolean);
 };
 
 // the state line over the record: the story's sentence, else - nothing being left to do - what ended it upstream, which is

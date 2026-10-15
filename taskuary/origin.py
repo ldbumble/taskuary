@@ -104,11 +104,14 @@ def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     return 'auto'
 
 def stranger_path(tid: int):
-    "Where a stranger's headless and general work runs: OUTSIDE Taskuary's home, so its folder never sits inside what the floor protects. No filesystem."
-    import tempfile
+    """Where a stranger's headless and general work runs: OUTSIDE Taskuary's home, so its folder never sits inside what the floor
+    protects. No filesystem. The name carries the home: two homes on one account each have a TQ-0001, and they are not one task."""
+    import hashlib, tempfile
     from pathlib import Path
+    from .config import home
     from .store import task_ref
-    return Path(tempfile.gettempdir()) / 'taskuary-stranger' / task_ref(tid)
+    tag = hashlib.sha256(os.path.normcase(os.path.realpath(home())).encode()).hexdigest()[:8]
+    return Path(tempfile.gettempdir()) / 'taskuary-stranger' / f'{task_ref(tid)}-{tag}'
 
 def _planted(p) -> bool:
     "A link or junction where our folder should be, or (POSIX) a folder someone else made: the shared temp is everyone's."

@@ -47,10 +47,10 @@ test("ChatGPT is a browser sign-in on its own card, then tested and made the AI 
   assert.match(fr, /Finish signing in to ChatGPT in your browser/);
 });
 
-test("past the AI step it can be changed: the AI is named with Change, and Keep goes back", () => {
+test("past the AI step it can be changed: Back reaches it, the line names the AI, and a working new one moves on", () => {
   // the owner, 2026-10-15: "do you not have the option to go back and change the ai method. meaning no back button?"
-  assert.match(fr, /Your AI: \{st\.brain\.name\}/);
-  assert.match(fr, />Change</);
-  assert.match(fr, /Keep \$\{st\.brain\.name\}/);
-  assert.match(fr, /const q = redo \|\| /);
+  assert.match(fr, /Your AI is \$\{st\.brain\?\.name \|\| "set"\}\. Click another to switch, or press Next\./);
+  assert.match(fr, /back: \{ label: "Back"/); assert.match(fr, /next: \{ label: "Next"/);
+  assert.match(fr, /if \(view === "ai" && newAi\) go\("mail"\)/);
+  assert.match(fr, /const q = view \|\| frontierOf\(st\);/);
 });

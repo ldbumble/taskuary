@@ -8,7 +8,12 @@ import { DIM, FAINT, INK } from "./theme.jsx";
 import { stepsOf } from "./setupSteps.js";
 
 export default function SetupSteps() {
-  const [st, setSt] = useState(null);
+  const [st, setSt] = useState(null), [shown, setShown] = useState(() => window.__tqSetupShown || "");
+  useEffect(() => {
+    const on = (e) => setShown(e.detail || "");
+    window.addEventListener("tq-setup-shown", on);
+    return () => window.removeEventListener("tq-setup-shown", on);
+  }, []);
   useEffect(() => {
     let on = true;
     const read = () => api.get("/api/setup/first-run").then(({ data }) => on && setSt(data)).catch(() => {});
@@ -21,7 +26,7 @@ export default function SetupSteps() {
     <Box data-tq-setup-steps="" sx={{ pt: 1.5, px: 0.5 }}>
       <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: FAINT, textTransform: "uppercase", mb: 1, px: 1 }}>
         Setting up Taskuary</Typography>
-      {stepsOf(st).map((r, i) => (
+      {stepsOf(st, shown).map((r, i) => (
         <Box key={r.key} component="button" type="button" onClick={() => go(r.key)} data-tq-setup-step={r.key}
           sx={{ display: "flex", alignItems: "flex-start", gap: 1.1, width: "100%", textAlign: "left", border: 0, cursor: "pointer",
             fontFamily: "inherit", borderRadius: "8px", px: 1, py: 0.9, bgcolor: r.current ? "#e4e9ee" : "transparent",

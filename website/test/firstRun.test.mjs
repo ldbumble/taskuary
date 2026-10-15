@@ -21,7 +21,7 @@ test("setup is the assistant canvas: no dialog opens itself, the chip goes to th
 // using the advisor ... like what ai do you have? what email do you have? any other connection you would like to setup"
 test("three questions on the Advisor's line, each answered on the Connections page's own cards", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
-  assert.match(fr, /<Ask text=\{said \|\| err \|\| \(redo[\s\S]{0,480}: st\.next\)\} \/>/, "the question is said on top, by the server");
+  assert.match(fr, /<Ask text=\{said \|\| err \|\| \{[\s\S]{0,900}other: st\.ai_error \? st\.next/, "the question is said on top, one per step");
   assert.match(fr, /className="tq-next"/, "in the Advisor's own line, not a box of our own");
   assert.match(fr, /import \{ CardGrid, ChannelDetail, ConnCard, connCardOf \} from "\.\/ConnectorsView\.jsx";/);
   assert.match(cv, /export const ConnCard = /); assert.match(cv, /export const connCardOf = /);
@@ -90,6 +90,6 @@ test("Set up Taskuary opens the two cards, open on both steps, and only a fresh 
   assert.match(view, /if \(!DEMO\) \{ setMsgs\(\(m\) => \[\.\.\.m, \{ id: `f\$\{Date\.now\(\)\}`, role: "assistant", card: \{ key: "firstrun", kind: "firstrun"/);
   assert.match(view, /firstrun: <FirstRun revisit onChanged=\{actions\.reload\} onWalk=\{\(\) => actions\.start\(null\)\} \/>/);
   assert.match(view, /data\?\.step && data\.dismissed === false\) setFirstRun\(true\)/, "setup stays the canvas until it is finished; a finished install opens on its day");
-  assert.match(read("FirstRun.jsx"), /const shelf = \(k, cards, more\) => \(reopened \|\| q === k\) &&/);   // reopened: revisit, or Setup pressed after Finish
+  assert.match(read("FirstRun.jsx"), /const shelf = \(k, cards, more\) => q === k &&/);   // one step on the canvas; Back and Next move between them
   assert.match(view, /c\?\.kind === "firstrun" \? "firstrun"/, "the card is routed to FirstRun, not drawn as an empty message");
 });

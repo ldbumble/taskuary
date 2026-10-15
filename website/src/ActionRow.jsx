@@ -87,7 +87,7 @@ export default function ActionRow({ inline = false, advised = null }) {
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row="">
       <div className="tq-arow-verbs">
         {next && <div className="tq-cl" role="group" aria-label="Move on">
-          <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" title={next.title || undefined} disabled={next.disabled}
+          <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}
             onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button></div></div>}
         {clustersOf(row).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}
       </div>

@@ -27,19 +27,55 @@ test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, 
 
 test("Finish setup and Walk me through my tasks are row verbs, and both finish setup on the server", () => {
   const fr = read("FirstRun.jsx");
-  assert.match(fr, /useVerbs\("setup", \[/);
-  assert.match(fr, /id: "setup:walk", label: "Walk me through my tasks"/);
-  assert.match(fr, /id: "setup:finish", label: reopened \? "Back to my day" : "Finish setup"/);
+  assert.match(fr, /useVerbs\("setup", nav\.map\(/);
+  assert.match(fr, /walk: \{ label: "Walk me through my tasks"/);
+  assert.match(fr, /finish: \{ label: reopened \? "Back to my day" : "Finish setup"/);
   assert.match(fr, /api\.post\("\/api\/setup\/first-run\/finish"\)/);
   assert.doesNotMatch(fr, /<Button variant="contained" disableElevation disabled=\{st\.step !== "done"\} onClick=\{onWalk\}>/, "no button of its own on the canvas");
 });
 
 test("a step on the rail takes the canvas back to it", () => {
   assert.match(read("SetupSteps.jsx"), /new CustomEvent\("tq-setup-go", \{ detail: key \}\)/);
-  assert.match(read("FirstRun.jsx"), /window\.addEventListener\("tq-setup-go", go\)/);
+  assert.match(read("FirstRun.jsx"), /window\.addEventListener\("tq-setup-go", on\)/);
 });
 
 test("the top bar keeps Setup after setup is done, and it opens the setup canvas", () => {
   assert.match(read("SetupWizard.jsx"), /data-tq-setup-open=""/);
   assert.match(read("AssistantView.jsx"), /setupRef\.current = \(\) => setFirstRun\(true\);/);
+});
+
+// "i went back to change the ai but could not go forward again to my email without clicking the sidebar ... while it's loading the
+// email it shows it's up to survey step on left sidebar ... when does it allow you to turn off setup mode? it should be after
+// email/ai/survey rest is optional" (the owner, 2026-10-15)
+test("the rail marks the step on the canvas, not the first one unfinished", async () => {
+  const { stepsOf } = await import("../src/setupSteps.js");
+  const st = { step: "reading", about_done: false, brain: { name: "Google Vertex AI" } };
+  assert.equal(stepsOf(st, "mail").find((r) => r.current).key, "mail");
+  assert.equal(stepsOf(st).find((r) => r.current).key, "about");
+});
+
+test("Finish is open once AI, email and About your work are done - the rest is optional - and says so until then", async () => {
+  const { stepsOf, navMoves } = await import("../src/setupSteps.js");
+  const fin = (st) => stepsOf(st).find((r) => r.key === "finish").sub;
+  assert.match(fin({ step: "reading", about_done: false }), /after AI, email and About your work/);
+  assert.match(fin({ step: "reading", about_done: true }), /ready/);
+  assert.equal(navMoves({ step: "reading", about_done: true }, "other").find((m) => m.id === "finish").disabled, false);
+  assert.equal(navMoves({ step: "reading", about_done: false }, "other").find((m) => m.id === "finish").disabled, true);
+});
+
+test("every step has Back and Next; Next waits for the step to be done; the last step is Walk and Finish", async () => {
+  const { navMoves, frontierOf, nextOf, prevOf } = await import("../src/setupSteps.js");
+  const ids = (st, v, r) => navMoves(st, v, r).map((m) => m.id + (m.disabled ? "-" : ""));
+  assert.deepEqual(ids({ step: "ai" }, "ai"), ["next-"]);
+  assert.deepEqual(ids({ step: "email" }, "ai"), ["next"]);
+  assert.deepEqual(ids({ step: "email" }, "mail"), ["back", "next-"]);
+  assert.deepEqual(ids({ step: "reading", about_done: false }, "mail"), ["back", "next"]);
+  assert.deepEqual(ids({ step: "reading", about_done: false }, "about"), ["back", "next-"]);
+  assert.deepEqual(ids({ step: "reading", about_done: true }, "other"), ["back", "walk-", "finish"]);
+  assert.deepEqual(ids({ step: "done", about_done: true }, "other"), ["back", "walk", "finish"]);
+  assert.deepEqual(ids({ step: "reading", about_done: false }, "other"), ["back", "walk-", "finish-"]);
+  assert.deepEqual(ids({ step: "done", about_done: true, dismissed: true }, "mail", true), ["back", "next", "finish"]);
+  assert.equal(frontierOf({ step: "email" }), "mail"); assert.equal(frontierOf({ step: "reading", about_done: false }), "about");
+  assert.equal(frontierOf({ step: "done", about_done: true }), "other");
+  assert.equal(nextOf("mail"), "about"); assert.equal(prevOf("about"), "mail"); assert.equal(prevOf("ai"), "ai");
 });

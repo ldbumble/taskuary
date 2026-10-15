@@ -1486,6 +1486,11 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen:
         raw = str(m.get('BodyText') or '')
         clean, _cut = sender_body(raw, m.get('OwnText'), budget=EXCHANGE_BUDGET, known=known)
         body = ' '.join(clean.split())
+        # a picture with no words said WHICH picture, not "(no text - see the attachment)": the writer and triage, reading the
+        # thread later, could not tell one was sent at all (2026-10-15: "send me the image you mean", to someone who had)
+        if body in ('(no text - see the attachment)', '(no text - see the attachments)'):
+            names = [str(a.get('Name') or 'a file') for a in store.list_attachments(m['MessageId'])]
+            body = f"(sent {', '.join(names[:4])}{' and more' if len(names) > 4 else ''})" if names else body
         known |= known_lines((strip_boilerplate(raw),))
         if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}"); kept.append(strip_boilerplate(raw))
     dropped = 0

@@ -251,6 +251,14 @@ def replies_block(store, task_id: int) -> str:
     return '\n\n--- REPLIES ON THIS TASK (facts from the hub - they outrank anything above about what was or was not sent)\n' + '\n'.join(f'- {x}' for x in lines)
 
 
+def _ask(llm, system, user, max_tokens, images=None):
+    """The writer's call, with the thread's pictures when there are any. A brain that takes no images (a CLI that reads text
+    only) is asked without them rather than failing the draft - the line in the prompt still says they were sent."""
+    if images:
+        try: return llm(system, user, max_tokens=max_tokens, images=images)
+        except TypeError: pass
+    return llm(system, user, max_tokens=max_tokens)
+
 def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None, seen: dict = None) -> str:
     """The reply this task needs, as text. Uses the owner's own brain (the AI connector, or
     whichever brain `triage_ai` names), the standing memory notes, and the thread itself.
@@ -308,6 +316,13 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
         from . import operations
         seen['saw'], seen['revision'] = store.last_inbound_on_task(task_id), operations.message_revision(store, task_id)
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
+    # THE PICTURES THEY SENT, seen (the owner, 2026-10-15: "is it not seeing the full message? the image is there higher up the
+    # chat"). Triage saw them on arrival; the writer, later, read the thread as text, where a picture is "(sent ad.jpg)" - and
+    # drafted "send me the image you mean" to someone who had. The newest ones on the task ride with the call, as triage's do.
+    from .llm import readable_images
+    images = readable_images(store, [m['MessageId'] for m in reversed(msgs)])
+    if images: user += (f'\n\n--- THE PICTURES THEY SENT on this thread ({len(images)}, newest first) are attached: look at them, '
+                        'answer about what they show, and never ask for one they already sent.')
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     user += replies_block(store, task_id)
     if nudge: user += f'\n\n--- WHAT THE OWNER WANTS THIS REPLY TO SAY (it outranks everything above)\n{nudge}'
@@ -318,7 +333,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if calendar:   # said on the task, so the Review row can be trusted on what the draft knew
         store.add_comment(task_id, 'responder', 'agent', 'Checked your calendar before drafting'
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
-    out = (llm(system, user, max_tokens=COMPLETE_REPLY_TOKENS if resolution else REPLY_TOKENS) or '').strip()
+    out = (_ask(llm, system, user, COMPLETE_REPLY_TOKENS if resolution else REPLY_TOKENS, images) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     # THE WRITER SAID NOTHING GOES BACK - with its NO_REPLY token, and only that. A sign-off word list used to decide that
     # "Thanks,\nAlex" was nothing and put the draft down, when a thank-you can be the whole real reply (the owner,
@@ -456,7 +471,11 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     # the owner's words on what to say: "ask whether the office reopens Tuesday" reached this road and was dropped, so the
     # draft answered the FYI instead ("Noted on Monday's closure", 2026-10-06)
     if instruction: user += '\n\n--- ' + instruction
-    out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
+    # ...and the picture on THIS message, seen - the same as draft_reply's thread pictures
+    from .llm import readable_images
+    images = readable_images(store, [m['MessageId']]) if m.get('MessageId') else []
+    if images: user += f"\n\n--- The picture{'s' if len(images) > 1 else ''} they sent with it {'are' if len(images) > 1 else 'is'} attached: look at {'them' if len(images) > 1 else 'it'}."
+    out = (_ask(llm, system, user, REPLY_TOKENS, images) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     out = (strip_signoff(out) or out) if chat else with_signature(out, signature_for(store))
     if not chat and not store.review_envelope(review_id):

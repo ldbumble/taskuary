@@ -266,7 +266,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
   const next = async (item) => {
     const read = knowOnly(item);
     const ok = await play(read ? "read" : "next", read ? item.key : null,
-      () => api.post("/api/funnel/settle", { key: item.key, verb: "surfaced", read: true }));
+      () => api.post("/api/funnel/settle", { key: item.key, verb: "surfaced", read: true, put_down: true }));
     if (ok == null) return;
     passedRef.current = new Set([...passedRef.current, item.key]);
     setPassed(passedRef.current);
@@ -703,7 +703,7 @@ function CoffeeSpace({ items, onSettle, ...room }) {
   const drain = async () => {
     for (const i of items) {
       if (knowOnly(i)) await onSettle(i, "done", "read");
-      else await room.play("next", i.key, () => api.post("/api/funnel/settle", { key: i.key, verb: "surfaced", read: true }));
+      else await room.play("next", i.key, () => api.post("/api/funnel/settle", { key: i.key, verb: "surfaced", read: true, put_down: true }));
     }
   };
   const broken = items.filter((i) => !knowOnly(i)).length;

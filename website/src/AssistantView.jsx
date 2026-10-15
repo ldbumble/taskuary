@@ -671,6 +671,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   // THE TASK VIEW ON THE TABLE (the canvas redesign, 2026-09-29): the Tasks tab's own view, not a walk card
   // ...folded to its title line by its X, or while a browse card is open below it (the mockup's Browse board)
   const foldedNow = !!canvas && live && !!m.card && (foldsAs(canvas.folded, m.card.key) || !!canvas.browsing);
+  // a broken connection on the table is drawn like the task view beside it - its own frame, no avatar (the owner, 2026-10-15)
+  const bare = live && c?.kind === "connection" && !foldedNow;
   if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
@@ -698,8 +700,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       {/* the item on the table takes the canvas's whole width, whatever card it wears (the owner, 2026-09-29) */}
       {/* ...a PROPOSAL is not the item: it is a line of the chat, and full width beside narrow lines read as a glitch (the owner,
           2026-10-08: "why are some wide and some narrow?") */}
-      <div className={passed ? "tq-msg tq-step" : live && card && kind !== "proposal" ? "tq-msg tq-live-card" : "tq-msg"}>
-        {!passed && <div className="avatar"><AssistantMark /></div>}
+      <div className={passed ? "tq-msg tq-step" : live && card && kind !== "proposal" ? `tq-msg tq-live-card${bare ? " tq-bare" : ""}` : "tq-msg"}>
+        {!passed && !bare && <div className="avatar"><AssistantMark /></div>}
         <div className="body">
           {/* NOT OVER A LIVE CARD: the card's lead says who wants what, and the sentence above it said
               the same thing first (the owner, 2026-09-23: "remove the text above the card - it's duplicate").

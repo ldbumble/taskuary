@@ -256,8 +256,9 @@ class WhatsAppTests(unittest.TestCase):
         with mock.patch.object(messengers.requests, 'get', side_effect=messengers.requests.ConnectionError('refused')), \
              self.assertRaises(RuntimeError) as e:
             messengers.wa_test(s, c)
-        self.assertIn('npm install', str(e.exception))
-        self.assertIn('bridge.mjs', str(e.exception))
+        # ...and the instruction is the button, not a shell line (the owner, 2026-10-15: "where is the button to restart it")
+        self.assertIn('Restart bridge', str(e.exception))
+        self.assertNotIn('npm install', str(e.exception))
 
     def test_replies_post_to_the_bridge(self):
         s, _ = self._store()

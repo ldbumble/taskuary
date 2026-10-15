@@ -164,6 +164,15 @@ def filter_policy(store, connector_id: int) -> dict:
     return {'allDirect': any(str(s['Address']).strip() == '*' for s in srcs), 'jids': sorted(exact)}
 
 
+def managed(c: dict) -> bool:
+    """Is this WhatsApp card's bridge the one Taskuary runs on this machine? A non-default bridge URL is owner-managed:
+    nothing here starts it, and no button offers to."""
+    try: cfg = json.loads((c or {}).get('ConfigJson') or '{}')
+    except ValueError: cfg = {}
+    raw = str(cfg.get('bridge_url') or '').strip().rstrip('/')
+    return raw in {'', f'http://127.0.0.1:{port()}', f'http://localhost:{port()}'}
+
+
 def start_configured(store) -> dict:
     """Start the managed bridge on app startup when WhatsApp is enabled.
 
@@ -173,11 +182,7 @@ def start_configured(store) -> dict:
     """
     c = next((x for x in store.connectors_by_type('whatsapp') if x.get('Active')), None)
     if not c: return {'started': False, 'reason': 'WhatsApp is off'}
-    try: cfg = json.loads(c.get('ConfigJson') or '{}')
-    except ValueError: cfg = {}
-    raw = str(cfg.get('bridge_url') or '').strip().rstrip('/')
-    managed = {'', f'http://127.0.0.1:{port()}', f'http://localhost:{port()}'}
-    if raw not in managed:
+    if not managed(c):
         return {'started': False, 'reason': 'external bridge URL', 'connectorId': c['ConnectorId']}
     if _listening() and stale():
         # an update landed while the detached bridge kept running: adopt it and the new code never runs

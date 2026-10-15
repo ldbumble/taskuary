@@ -887,18 +887,24 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const doc = useFetched(card.tid ? `/api/tasks/${card.tid}` : null, card.presentation_revision);
   const shut = useClose(card, onDone);
   const [back, setBack] = useState(null);
+  const [said, setSaid] = useState(card.why || "");     // a broken connection's error, as its last check said it
+  const [note, setNote] = useState("");
   if (card.kind === "connection") {
     // THE FIX ON THE CARD, not a trip to Connections (the row-bot comparison, 2026-10-07): most of these are a server that was down
     // for a while, and Check again is the whole repair. A Microsoft sign-out is not - that one needs the sign-in, so it leads.
     const cid = String(card.key || "").split(":")[1], signin = /signed you out/i.test(card.title || "");
     const openIt = () => { window.location.hash = `connector=${card.channel}`; onNavigate?.("Connections"); };
+    const at = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    // THE ERROR IS SAID ONCE (the owner, 2026-10-15): a failed check said it again under the card, word for word. A check that
+    // gets the same answer says when it looked; a different answer takes the error's place
     const check = async () => {
       setBusy("check"); setErr("");
       try {
         const { data } = await api.post(`/api/connectors/${cid}/test`);
         if (data?.ok) onDone?.(`${card.who || "The connection"} answers again - that row is gone.`);
         else {
-          setErr(`Still not answering: ${data?.detail || "no reason given"}`);
+          if (data?.detail) setSaid(data.detail);
+          setNote(`Checked at ${at()} - still not answering.`);
           // ...and the error you are reading NOW is the one you have seen: a changed error counts as new (its sig), so without
           // this the very next Next brought the same card straight back under its new words
           await api.post("/api/funnel/settle", { key: card.key, verb: "surfaced", read: true }).catch(() => {});
@@ -906,18 +912,50 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
       } catch (e) { setErr(errText(e)); }
       setBusy("");
     };
+    // RESTART FROM THE CARD (the owner, 2026-10-15: "where is the button to restart it from the page itself?"): a bridge this
+    // machine runs (card.restart, funnel.broken_connections) is restarted by the same verb as its Connections card - it installs
+    // what is missing and starts it detached (wabridge.py) - then checked, so the row clears the moment it answers
+    const restart = async () => {
+      setBusy("restart"); setErr(""); setNote("Restarting the bridge…");
+      try {
+        await api.post(`/api/connectors/${cid}/wa/bridge/restart`);
+        for (let i = 0; i < 200; i++) {               // npm install of its dependency is minutes on a slow line, the first time
+          await new Promise((r) => setTimeout(r, 1500));
+          const { data } = await api.get(`/api/connectors/${cid}/wa/status`).catch(() => ({ data: null }));
+          const phase = data?.manager?.phase;
+          if (phase === "installing") setNote("Installing the bridge's dependency - a few minutes the first time…");
+          if (phase === "failed") { setBusy(""); setNote(""); setErr(`The bridge did not start: ${data.manager.detail || "no reason given"}`); return; }
+          if (data?.bridge || phase === "running") break;
+        }
+      } catch (e) { setBusy(""); setNote(""); setErr(errText(e)); return; }
+      setBusy("");
+      await check();
+    };
     return (
-      <CardShell card={card} kicker="a connection stopped answering" title={card.title} err={err}>
-        {card.why && <div className="tq-card-excerpt">{card.why}</div>}
-        {/* Check again IS the walk's own "Test it" chip, answered on the card at once - so the chip steps aside (the phone keeps it) */}
-        <Foot covers={["test_connection"]} verb={signin
-          ? <Button size="small" variant="contained" disableElevation sx={primary} onClick={openIt}>Sign in again</Button>
-          : <>{cid && <Button size="small" variant="contained" disableElevation sx={primary} disabled={!!busy} onClick={check}>
-                {busy === "check" ? "Checking…" : "Check again"}</Button>}
-              <Button size="small" variant="outlined" sx={quiet} onClick={openIt}>Open the connection</Button></>}
-          then={signin ? <><b>Sign in again</b> opens its card; once you are signed in this clears by itself.</>
-            : <><b>Check again</b> tests it now - if it answers, this row clears. <b>Open the connection</b> when it needs a new password or key.</>} />
-      </CardShell>
+      <div className="tq-conn" data-tq-conn={card.key}>
+        <div className="tq-conn-head">
+          <SourceMark item={card} size={15} />
+          <b>{card.title}</b>
+          <span className="tq-conn-pill">{signin ? "signed out" : "not answering"}</span>
+          {card.when && <em>{agoText(card.when)}</em>}
+        </div>
+        <div className="tq-conn-body">
+          {said && <><div className="tq-conn-label">What it said</div><div className="tq-conn-said">{said}</div></>}
+          {signin && <div className="tq-conn-note">Once you are signed in again this clears by itself.</div>}
+          {note && <div className="tq-conn-note">{note}</div>}
+          {err && <div className="tq-conn-note bad">{err}</div>}
+          {/* Check again IS the walk's own "Test it" chip, answered on the card at once - so the chip steps aside (the phone keeps it) */}
+          <Foot covers={["test_connection"]} verb={signin
+            ? <Button size="small" variant="contained" disableElevation sx={primary} onClick={openIt}>Sign in again</Button>
+            : <>{cid && <Button size="small" variant="contained" disableElevation sx={primary} disabled={!!busy} onClick={check}
+                  title="Test it now - if it answers, this row clears">{busy === "check" ? "Checking…" : "Check again"}</Button>}
+                {cid && card.restart && <Button size="small" variant="outlined" sx={quiet} disabled={!!busy} onClick={restart}
+                  title="Stop the bridge if it is stuck and start it again on this machine - you stay paired">
+                  {busy === "restart" ? "Restarting…" : "Restart bridge"}</Button>}
+                <Button size="small" variant="outlined" sx={quiet} onClick={openIt}
+                  title="Its card on Connections - for a new password, key or setting">Open the connection</Button></>} />
+        </div>
+      </div>
     );
   }
   const own = card.kind === "todo" || card.channel === "own";

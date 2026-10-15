@@ -651,7 +651,9 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
         # walk - not waiting in Passed - until the error CHANGES (its sig), which is a new failure
         # ...and that holds for the rail's read-inclusive pile too, or Passed keeps it on screen (2026-09-23:
         # "still see linkedin error. can't get rid of it")
-        if st.get('Status') == 'surfaced' and not (st.get('Note') and st['Note'] != card.get('sig')): continue
+        # ...but SHOWN is not walked past: the card on the table writes a bare shown mark, and the error left the rail while
+        # it was being read (the owner, 2026-10-15) - only Next's put-down (its Until) dismisses it, as with every other row
+        if st.get('Status') == 'surfaced' and st.get('Until') and not (st.get('Note') and st['Note'] != card.get('sig')): continue
         cards.append(card)
     cards = funnel._order(cards)
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,

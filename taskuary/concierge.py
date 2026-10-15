@@ -2173,6 +2173,8 @@ def card_for(item: dict) -> dict:
                                        # the agent's own question and the answers it offered: what a chat numbers, and
                                        # the request an answer is bound to (funnel.from_agents, workerstate PW-228)
                                        'choices', 'request_id', 'request_kind', 'closeout', 'rides',
+                                       # a broken connection whose bridge runs on this machine: the card offers to restart it
+                                       'restart',
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused', 'closed',
                                        'brief_today')}
 

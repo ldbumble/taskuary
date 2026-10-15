@@ -196,10 +196,13 @@ def broken_connections(store) -> list:
             out.append(_item(f'conn:{c["ConnectorId"]}', 'connection', 'broken', title, channel=kind, who=label, why=why,
                              sig=_short(err, 120), when=full.get('LastSyncAt') or '', since=full.get('LastSyncAt') or ''))
             continue
+        # a bridge this machine runs is restarted from the card, not from a shell (the owner, 2026-10-15)
+        from . import wabridge
+        restart = kind == 'whatsapp' and wabridge.managed(full)
         out.append(_item(f'conn:{c["ConnectorId"]}', 'connection', 'broken',
                          f'{label} stopped answering', channel=kind,
                          who=label, why=_short(err, 220), sig=_short(err, 120),   # a NEW error is news again
-                         when=full.get('LastSyncAt') or '', since=full.get('LastSyncAt') or ''))
+                         when=full.get('LastSyncAt') or '', since=full.get('LastSyncAt') or '', **({'restart': True} if restart else {})))
     return out
 
 
@@ -1083,7 +1086,10 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                 if i.get('sig') and st.get('Note') and st['Note'] != i['sig']:
                     out.append(i); continue
                 # a broken connection walked past is dismissed, not Passed - until its error changes (above)
-                if i.get('kind') == 'connection': continue
+                # ...by Next (its put-down Until), not by being shown: on the table it stays on the rail (2026-10-15)
+                if i.get('kind') == 'connection':
+                    if st.get('Until'): continue
+                    out.append(i); continue
                 # Read is gone from the ordinary queue. Only unresolved work that is still on the
                 # owner (a draft/approval or an agent question) remains addressable and marked.
                 # ...and open work walked past waits in For later until the quiet hours bring it back (2026-09-29)

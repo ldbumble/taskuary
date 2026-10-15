@@ -208,7 +208,7 @@ class ErrorDismissTests(unittest.TestCase):
         s.touch_connector(c['ConnectorId'], 'northwind/ledger: 404 Not Found')
         key = f"conn:{c['ConnectorId']}"
         self.assertTrue([i for i in rail(s) if i['key'] == key])
-        funnel.settle(s, key, 'surfaced', 'owner', read=True); funnel.invalidate()
+        funnel.settle(s, key, 'surfaced', 'owner', read=True, put_down=True); funnel.invalidate()     # Next's mark: shown alone keeps it
         self.assertFalse([i for i in rail(s) if i['key'] == key], 'Next dismisses it')
         s.touch_connector(c['ConnectorId'], 'northwind/ledger: 401 Bad credentials'); funnel.invalidate()
         self.assertTrue([i for i in rail(s) if i['key'] == key], 'a different error is news again')

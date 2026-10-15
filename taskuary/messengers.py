@@ -228,8 +228,10 @@ def _wa(c, path, body=None):
         r = requests.post(f'{url}{path}', json=body, timeout=20, headers=hdr) if body is not None \
             else requests.get(f'{url}{path}', timeout=20, headers=hdr)
     except requests.ConnectionError:
-        raise RuntimeError(f'the WhatsApp bridge is not running at {url} - start it: '
-                           f'cd taskuary/whatsapp && npm install && node bridge.mjs')
+        # a button, not a shell line: the card's Restart bridge installs what is missing and starts it detached (wabridge.py)
+        from .wabridge import managed
+        raise RuntimeError(f'the WhatsApp bridge is not running at {url}'
+                           + (' - Restart bridge starts it' if managed(c) else ' - start it where it runs'))
     if r.status_code >= 300: raise RuntimeError(f'bridge {path} failed ({r.status_code}): {r.text[:200]}')
     return r.json()
 

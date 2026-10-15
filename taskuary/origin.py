@@ -22,10 +22,12 @@ def of_message(store, row: dict) -> tuple:
         from .batch import outside_row
         return ('stranger', 'a public repository, by someone without write access') if outside_row(store, row) \
             else ('trusted', 'a member of the repository')
-    # the whole person, so a chat sender is judged as one (senders._chat_known); their own line is never the owner's talk
+    # the whole person, so a chat sender is judged as one (senders._chat_known); their own line is never the owner's talk.
+    # MailMetaJson carries the mail's sender-verification verdict (mailauth), so a forged From is never trusted on read
     ok, why = senders.known(store, {'channel': ch, 'from_email': row.get('FromEmail'), 'from_name': row.get('FromName'),
                                     'source_name': row.get('SourceName'), 'conversation_id': row.get('ConversationId'),
-                                    'direction': row.get('Direction'), 'status': row.get('Status')}, exclude_mid=row.get('MessageId'))
+                                    'direction': row.get('Direction'), 'status': row.get('Status'),
+                                    'MailMetaJson': row.get('MailMetaJson')}, exclude_mid=row.get('MessageId'))
     return ('trusted' if ok else 'stranger'), why
 
 # concierge.setup_task's refs: a walkthrough, a coding hand-off, an agent job - each the owner's own sentence. An Advisor

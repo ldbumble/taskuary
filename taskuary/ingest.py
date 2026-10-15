@@ -2008,7 +2008,9 @@ def _fields(msg, task_id):
             # the mailbox's own answer for where their words end, stored beside the whole body it
             # was cut from - the panel keeps showing the real mail (channels._own)
             'OwnText': msg.get('own_text') or None,
-            'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None,
+            # the From verification (mailauth.verdict) rides beside the folder and flag, so a read can still refuse a forgery
+            'MailMetaJson': json.dumps(meta) if (meta := {**(msg.get('mail_meta') or {}),
+                                                          **({'auth': msg['auth']} if msg.get('auth') in ('pass', 'fail') else {})}) else None,
             # what the mail's own headers say sent it (categories.header_class) - the verdict overwrites it (store.add_route)
             'SenderClass': msg.get('sender_class') if msg.get('sender_class') in ('automated', 'bulk') else None,
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)

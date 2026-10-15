@@ -43,6 +43,16 @@ def own_addresses(store) -> set:
     return {x for x in xs if '@' in x}
 
 
+def auth(msg: dict) -> str:
+    "The From verification ingest recorded (mailauth.verdict): on the msg dict, its mail_meta, or a row's MailMetaJson."
+    if msg.get('auth'): return msg['auth']
+    meta = msg.get('mail_meta')
+    if not isinstance(meta, dict):
+        try: meta = json.loads(msg.get('MailMetaJson') or 'null')
+        except (TypeError, ValueError): meta = None
+    return (meta.get('auth') if isinstance(meta, dict) else None) or 'none'
+
+
 def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
     """(may this sender start a worker unattended, why). Three rules, each a Settings switch (PW-079
     to PW-081): a chat person the owner talks with (or a workspace item); the owner's own domains; and
@@ -63,6 +73,8 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
                (False, 'a chat sender - chat channels are not trusted for unattended starts (Settings)')
     addr = (msg.get('from_email') or '').strip().lower()
     if not addr or '@' not in addr: return False, 'no sender address'
+    # before any rule that reads the address: a forged From would otherwise borrow a colleague's trust, or the owner's own
+    if auth(msg) == 'fail': return False, f'{addr} failed sender verification (DMARC/DKIM) - the From address may be forged'
     if addr in own_addresses(store): return True, 'your own address'
     # a public mail domain is everybody's: an owner on gmail.com made every stranger there 'your own domain'
     if _domain(addr) in own_domains(store) - PUBLIC_MAIL:

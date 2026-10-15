@@ -464,8 +464,10 @@ def _header_marks(m: dict) -> dict:
     """What a Graph message's own headers say: an auto-reply (never triaged) and who sent it before a model has read it."""
     from .autoreply import from_headers, headers
     from .categories import header_class
-    h = headers(m)
-    return {**({'auto_reply': True} if from_headers(h) else {}), **({'sender_class': header_class(h)} if header_class(h) else {})}
+    from .mailauth import verdict
+    h, v = headers(m), verdict((m or {}).get('internetMessageHeaders'))
+    return {**({'auto_reply': True} if from_headers(h) else {}), **({'sender_class': header_class(h)} if header_class(h) else {}),
+            **({'auth': v} if v != 'none' else {})}
 
 
 # Graph's bodyPreview is capped at 255 chars - reading it FIRST truncated every stored mail,

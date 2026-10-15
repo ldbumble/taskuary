@@ -15,15 +15,14 @@ import WallView from "./WallView.jsx";
 import GridViewIcon from "@mui/icons-material/GridView";
 import ForumIcon from "@mui/icons-material/Forum";
 import AddIcon from "@mui/icons-material/Add";
-import AttachFileIcon from "@mui/icons-material/AttachFile";
 import api from "./api";
 import AgentWall from "./AgentWall.jsx";
-import { NO_REPO, planTask } from "./newTask.js";
+import NewSheet from "./NewSheet.jsx";
 import { agentName, saidFromTail } from "./agentWork.js";
 import { isAgentKind, isGeneralKind } from "./autostart.js";
 import { onLive } from "./live.js";
 import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark, assignedAgent } from "./ui.jsx";
+import { ChannelIcon, ActionChip, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent, WorkPane, TaskuaryMark, assignedAgent } from "./ui.jsx";
 import { AGENT } from "./taskLifecycle.js";
 import QueuedStart from "./QueuedStart.jsx";
 import { LANE_META, KIND_META } from "./funnelPile.js";
@@ -259,7 +258,6 @@ const COLS = [
 export default function BoardView({ onOpenTask, onOpenReports, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
-  const [creating, setCreating] = useState(false), [newErr, setNewErr] = useState("");
   const [view, setView] = useState("columns");   // columns | studio | wall - three looks at one board
   const [boardTick, setBoardTick] = useState(0); // bumped when a session starts here: the active board view reloads at once
   const [newOpen, setNewOpen] = useState(false);
@@ -272,15 +270,8 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
     if (!feedTask || !(tasks || []).some((t) => t.TaskId === feedTask)) setFeedTask(liveIds.length === 1 ? liveIds[0] : (liveIds[0] || null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedOpen]);
-  const [repos, setRepos] = useState([]);
   const { agents, models, cmds, kinds, brains, brainList, brainModels } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
-  // how = does an agent start on it now, or does it just get filed. There is no third
-  // option: work always happens in a session you can watch and talk to.
-  // a session started from this box is one the owner means to sit in: the server marks the task as
-  // theirs to end the moment the terminal opens (selfclose.claim), so no judge and no --done ends it
-  const [nt, setNt] = useState({ Title: "", Summary: "", how: "live", repo: "", agent: "coder", model: "", browser: false });
-  const shots = usePromptImages();      // screenshots on the new task's prompt, same as the Wall's queue box
 
   const load = useCallback(async () => {
     // the floor shows work a SESSION runs: a reply is drafted by the model triage uses and never
@@ -306,61 +297,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
     tick(); const id = setInterval(tick, 3000);
     return () => clearInterval(id);
   }, [active, load]);
-  useEffect(() => {
-    if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0], model: "" }));
-  }, [agents, nt.agent]);
-  useEffect(() => {
-    // repo choices = the GitHub sources the connector discovered
-    api.get("/api/sources").then(({ data }) => {
-      const gh = (data.data || []).filter((s) => s.Channel === "github" && s.Active).map((s) => s.Address);
-      setRepos(gh);
-      const def = data.default_repo && gh.includes(data.default_repo) ? data.default_repo : gh[0];
-      // no repositories discovered: the box says General rather than sitting blank, because
-      // that IS the only thing it can be on a machine with no checkout connected
-      setNt((cur) => ({ ...cur, repo: def || NO_REPO }));
-    }).catch(() => {});
-  }, []);
 
-  // one reading of the repository box (newTask.js): who works it, and what the two fields
-  // under it should say about that
-  const plan = planTask(nt.repo, nt.how, nt.browser, nt.how === "terminal");
-  const noRepo = !plan.repo;                    // which of the two "live" readings the box offers
-  const create = async () => {
-    const { repo, kind, chat, tags } = plan;
-    // the refusal is said IN the dialog - the page's alert sits behind it - and one press makes one task
-    let data;
-    setCreating(true); setNewErr("");
-    try { ({ data } = await api.post("/api/tasks", { Title: nt.Title, Summary: nt.Summary || null, Kind: kind, Tags: tags })); }
-    catch (e) { setNewErr(`The task wasn't made - ${e?.response?.data?.detail || "Taskuary didn't answer"}. What you typed is still here; try Create again.`); return; }
-    finally { setCreating(false); }
-    // The images can only be stored against a task, so they upload now and the prompt gains the
-    // sentence that names them - the seed reads Summary, so this has to land before the session.
-    try {
-      const ref = await shots.upload(data.taskId);
-      if (ref) await api.patch(`/api/tasks/${data.taskId}`, { Summary: [nt.Summary || "", ref].filter(Boolean).join("\n\n") });
-    } catch (e) { setErr(e?.response?.data?.detail || "Task created, but the images could not be attached"); }
-    shots.clear();
-    setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "" }));
-    // The details field IS the prompt - it gets typed into the session. A CODING task born on
-    // the Board stays on the Board: start its terminal here, whichever board view is showing.
-    if (plan.start && chat) {
-      // the chat IS the page for a general task, and it lives on the Tasks tab - open it there
-      // with the prompt as the first thing said
-      onOpenTask(data.taskId, { start: true });
-      return;
-    }
-    if (plan.start) {
-      try {
-        await api.post("/api/terminals", { agent: nt.agent, brain: nt.brain || null, model: nt.model || null, task_id: data.taskId, repo, seed: true });
-        setBoardTick((n) => n + 1);
-      } catch (e) {
-        // The task was created successfully, so keep it visible on the Board and explain only
-        // the part that failed instead of navigating away and silently retrying elsewhere.
-        setErr(e?.response?.data?.detail || "Task created, but the agent could not be started");
-      }
-    }
-    load();
-  };
 
   if (!tasks) return <CircularProgress size={22} sx={{ m: 4 }} />;
   return (
@@ -554,90 +491,10 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
         })}
       </Box>
 
-      {/* ── start a task for the agent ─────────────────────────────────── */}
-      <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>New task for the agent</DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "8px !important" }}>
-          <TextField label="Task name — how it reads on the board" value={nt.Title}
-            onChange={(e) => setNt({ ...nt, Title: e.target.value })} />
-          <Box>
-            <TextField fullWidth label="Prompt — what you want the agent to do" multiline minRows={4} maxRows={12} value={nt.Summary}
-              placeholder="Exactly what to do, where to look, what done means. This text is sent to the agent as its instruction. Paste a screenshot to send it along."
-              onChange={(e) => setNt({ ...nt, Summary: e.target.value })} onPaste={shots.onPaste} />
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
-              <Button size="small" component="label" startIcon={<AttachFileIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 10.5, color: DIM }}>
-                attach images
-                <input hidden multiple type="file" accept="image/*"
-                  onChange={(e) => { shots.add(e.target.files); e.target.value = ""; }} />
-              </Button>
-              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>or paste one straight into the prompt</Typography>
-            </Box>
-            <PromptThumbs imgs={shots.imgs} onDrop={shots.drop} />
-          </Box>
-          <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-              Repository — the issue lands here and the agent works in this context
-            </Typography>
-            <Select fullWidth size="small" value={nt.repo} onChange={(e) => setNt({ ...nt, repo: e.target.value })}>
-              {/* the choice here decides WHO works it: a repository means a CLI in that checkout,
-                  General means the assistant's chat. Everything below this box follows from it. */}
-              {repos.map((r) => <MenuItem key={r} value={r} sx={{ fontSize: 12.5 }}>{r}</MenuItem>)}
-              <MenuItem value={NO_REPO} sx={{ fontSize: 12.5 }}>General — no repository, just a question to answer</MenuItem>
-            </Select>
-          </Box>
-          {/* a general question is answered by an AI connector, not a CLI - unless the owner
-              asked for a terminal below, in which case the CLI is exactly what matters */}
-          <Box sx={{ display: plan.chat ? "none" : "block" }}>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-              Which CLI works it — and which model that CLI runs
-            </Typography>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={nt.brain || nt.agent} model={nt.model}
-                brains={brainList} brainModels={brainModels} brain={nt.brain || ""}
-                onBrain={(b) => setNt({ ...nt, brain: b, model: "" })}
-                onAgent={(a) => setNt({ ...nt, agent: a, model: "" })} onModel={(m) => setNt({ ...nt, model: m })} />
-            </Box>
-            {agents.length < 2 && (
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                Add more CLIs under Connections → AI CLI agents to choose between them here.
-              </Typography>
-            )}
-          </Box>
-          <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-              How it gets worked — one agent, one way
-            </Typography>
-            <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}
-              renderValue={(v) => v === "file" ? "Just file it" : v === "terminal" ? `Start ${nt.brain || nt.agent} in a terminal`
-                : noRepo ? "Ask the assistant" : `Start ${nt.brain || nt.agent} on it`}>
-              <MenuItem value="live" sx={{ fontSize: 12.5 }}>{noRepo
-                ? "Ask the assistant — opens the chat on the Tasks tab with your prompt as the first message"
-                : `Start ${nt.brain || nt.agent} on it — stays on the board with the prompt typed in`}</MenuItem>
-              {/* a question you would rather work in a CLI: the old behaviour, now asked for */}
-              {noRepo && <MenuItem value="terminal" sx={{ fontSize: 12.5 }}>
-                Start {nt.brain || nt.agent} in a terminal instead — no repository, its own folder
-              </MenuItem>}
-              <MenuItem value="file" sx={{ fontSize: 12.5 }}>Just file it — nobody starts working yet</MenuItem>
-            </Select>
-            {/* a portal with no API, a page behind a login: the session opens a browser with it,
-                you watch it beside the terminal, and you type the password yourself */}
-            <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
-              <Switch size="small" checked={!!nt.browser} onChange={(e) => setNt({ ...nt, browser: e.target.checked })} />
-              <Typography variant="caption" sx={{ color: nt.browser ? INK : DIM }}>
-                It needs a browser — one opens with the session, watched beside it, and you type any password
-              </Typography>
-            </Box>
-            {/* A terminal you start here is yours to end: the server marks the task the moment it opens
-                (selfclose.claim) - no switch to forget. */}
-          </Box>
-          {newErr && <Alert severity="error" onClose={() => setNewErr("")} sx={{ mt: 1 }}>{newErr}</Alert>}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => { setNewOpen(false); setNewErr(""); }}>Cancel</Button>
-          <Button variant="contained" disableElevation disabled={!nt.Title.trim() || creating} onClick={create}
-            startIcon={creating ? <CircularProgress size={13} /> : null}>{creating ? "Creating…" : "Create"}</Button>
-        </DialogActions>
-      </Dialog>
+      {/* ── start a task for the agent: New's own "Give an agent a job" (the owner, 2026-10-15: "look like a coding or general
+          agent - same as in new button") - a live session in a checkout, or a general agent, one form app-wide ── */}
+      <NewSheet open={newOpen} onClose={() => setNewOpen(false)} initialKind="agent"
+        onDone={() => { setBoardTick((n) => n + 1); load(); }} />
 
       <NoteDialog open={!!noteFor} task={noteFor} onClose={() => setNoteFor(null)} />
     </Box>

@@ -268,10 +268,11 @@ export async function clickNav(page, label) {
   if (sidebar || label === "Board" || label === "Assistant" || label === "Timeline") {
     const done = await page.evaluate((key, want) => {
       const visible = (el) => el && el.getBoundingClientRect().width > 0;
+      // ONE SWITCH, three views (2026-10-15): Board is its own button on it, and Chat is the way back
       const sw = document.querySelector("[data-tq-view-switch]");
-      const onBoard = sw?.getAttribute("data-tq-view-switch") === "assistant";
-      if (want === "Board") { if (!onBoard) sw?.click(); return !!sw; }
-      if (onBoard) sw.click();                               // back to the Assistant first
+      const onBoard = sw?.getAttribute("data-tq-view-switch") === "board";
+      if (want === "Board") { if (!onBoard) document.querySelector('[data-tq-view="board"]')?.click(); return !!sw; }
+      if (sw?.getAttribute("data-tq-view-switch") !== "chat") document.querySelector('[data-tq-view="chat"]')?.click();   // back to the Assistant first
       if (!key) return true;
       const nav = document.querySelector(`[data-tq-nav="${key}"]`);
       if (!visible(nav)) document.querySelector('[aria-label="Your work"]')?.click();   // a phone keeps it in the drawer

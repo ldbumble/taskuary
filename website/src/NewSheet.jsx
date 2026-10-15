@@ -127,8 +127,8 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 
 // `inline`: the card the sidebar's New button posts into the conversation (the canvas redesign) - the same tabs and fields,
 // drawn in the conversation's own width instead of a dialog over the page. Without it the dialog stays for any other door.
-export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false }) {
-  const [kind, setKind] = useState("send");
+export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send" }) {
+  const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, for the repository picker (see NewRepo)
   const repoPick = useRef(null);  // what the picker says to use, read on submit
   const [busy, setBusy] = useState(false);
@@ -163,7 +163,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // a goal (spec 2026-10-12): what done looks like is the words above; by when, who is involved, and whether the AI plans the steps
   const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(true);
 
-  useEffect(() => { if (!open) return; setErr(""); setOk(""); }, [open]);
+  useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
   useEffect(() => {
     if (agents.length && !agents.includes(agent)) { setAgent(agents[0]); setModel(""); }
   }, [agents, agent]);
@@ -251,7 +251,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const shell = inline
     ? { "data-tq-new": "", onKeyDown: (e) => { if (e.key === "Escape") close(); },
         sx: { border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden", scrollMarginTop: "8px" } }
-    : { open: !!open, onClose: close, fullWidth: true, maxWidth: "sm", "data-tq-keep": true };
+    : { open: !!open, onClose: close, fullWidth: true, maxWidth: "md", "data-tq-keep": true };   // md: six tabs fit on one line
   if (inline && !open) return null;
   return (
     <Shell {...shell}>

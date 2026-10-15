@@ -547,16 +547,6 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
 }
 // the ways to use the stage - lives in the page's top bar (TaskHubPage), since it decides what the sidebar's rows do.
 // Game swaps the whole tab for the office (AssistantGame.jsx): the same pile, walked instead of talked through.
-export const StageMode = ({ mode, onMode, game = false, onGame }) => {
-  const pick = (m) => () => { onMode(m); if (game) onGame(false); };
-  return (
-    <div className="tq-stage-mode" title="What a click on a row does">
-      <button type="button" className={!game && mode === "chat" ? "on" : ""} onClick={pick("chat")} title="Rows go to the conversation - Taskuary walks you through them">Chat</button>
-      <button type="button" className={!game && mode === "task" ? "on" : ""} onClick={pick("task")} title="Rows open here on their own - the message, the triage, the agent's work, the draft">Task</button>
-      {onGame && <button type="button" className={game ? "on" : ""} onClick={() => onGame(true)} title="The same items as an office you walk around - people in the lobby, fyi's in the coffee room, points for every move">Game</button>}
-    </div>
-  );
-};
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
 // THE WORDS LIVE IN THE ROW BY THE PROMPT, never as buttons under a chat line (the owner, 2026-10-06: "no button in line ever

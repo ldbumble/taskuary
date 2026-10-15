@@ -10,6 +10,7 @@ import { holdLive, onLive } from "./live.js";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import GridViewIcon from "@mui/icons-material/GridViewOutlined";
+import SportsEsportsIcon from "@mui/icons-material/SportsEsportsOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import api from "./api";
 import { track } from "./demoTrack";
@@ -22,7 +23,7 @@ import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
-import AssistantView, { StageMode } from "./AssistantView.jsx";
+import AssistantView from "./AssistantView.jsx";
 import { SearchBar, openSearch } from "./SearchEverything.jsx";
 import BugReportDialog from "./BugReportDialog.jsx";
 import { REPORT_EVENT, bellError, openBugReport } from "./bugReportOpen.js";
@@ -214,6 +215,31 @@ function ServerVersion() {
   );
 }
 
+const SWITCH_VIEWS = [
+  { k: "chat", label: "Chat", icon: (on) => <TaskuaryMark size={17} sx={{ borderRadius: 1, ...(on ? { boxShadow: "0 0 0 1.5px #fff" } : {}) }} />,
+    title: "The Assistant - it walks you through what is waiting, one item at a time" },
+  { k: "board", label: "Board", icon: () => <GridViewIcon sx={{ fontSize: 18 }} />, title: "Every agent and its session, full screen" },
+  { k: "game", label: "Game", icon: () => <SportsEsportsIcon sx={{ fontSize: 19 }} />,
+    title: "The same items as an office you walk around - people in the lobby, fyi's in the coffee room" },
+];
+export const ViewSwitch = ({ view, onView }) => (
+  <Box role="tablist" aria-label="View" data-tq-view-switch={view}
+    sx={{ display: "flex", gap: 0.4, p: 0.4, ml: { xs: 0.25, md: 1 }, borderRadius: 99, bgcolor: "#efe9df", border: "1px solid #ddd5c8", flexShrink: 0 }}>
+    {SWITCH_VIEWS.map((v) => {
+      const on = view === v.k;
+      return (
+        <Box key={v.k} component="button" type="button" role="tab" aria-selected={on} data-tq-view={v.k} title={v.title}
+          onClick={() => onView(v.k)}
+          sx={{ display: "flex", alignItems: "center", gap: 0.8, height: 34, px: { xs: 1.1, md: 1.8 }, borderRadius: 99, border: 0, cursor: "pointer",
+            fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", color: on ? "#fff" : INK,
+            background: on ? BRAND.solid : "transparent", "&:hover": on ? {} : { bgcolor: "#fff" } }}>
+          {v.icon(on)}<Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>{v.label}</Box>
+        </Box>
+      );
+    })}
+  </Box>
+);
+
 export default function TaskHubPage() {
   // Honor a deep link on the first render. Starting every reload on Assistant meant its hidden
   // conversation, feed and funnel all fetched before #task=356 (or a report) was allowed to load.
@@ -377,18 +403,11 @@ export default function TaskHubPage() {
           <ServerVersion />
           <DemoBadge demo={demo} />
 
-          {/* ONE SWITCH (the canvas redesign): the Board is the one full-screen view - agents and their wall - and the way
-              back from it is the same place. Everything else is in the Assistant's sidebar and canvas. */}
-          <Box component="button" type="button" data-tq-view-switch={tab === "Board" ? "assistant" : "board"}
-            onClick={() => go(tab === "Board" ? "Assistant" : "Board")}
-            title={tab === "Board" ? "Back to the Assistant" : "The Board - every agent and its session, full screen"}
-            sx={{ display: "flex", alignItems: "center", gap: 0.75, height: 30, px: 1.4, ml: { xs: 0.25, md: 1 }, borderRadius: 99, cursor: "pointer",
-              fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
-              color: tab === "Board" ? "#fff" : INK, background: tab === "Board" ? BRAND.solid : PANEL,
-              border: `1px solid ${tab === "Board" ? "transparent" : "#d8d1c5"}`, "&:hover": { borderColor: tab === "Board" ? "transparent" : BRAND.solid } }}>
-            {tab === "Board" ? <><TaskuaryMark size={16} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}
-          </Box>
-          {tab === "Assistant" && <Box sx={{ ml: { xs: 0.25, md: 1 } }}><StageMode mode={stageMode} onMode={setStageMode} game={asstGame} onGame={pickAsstGame} /></Box>}
+          {/* ONE SWITCH, THREE VIEWS (the owner, 2026-10-15: "Chat which is the regular workflow, then Board, then Game ... make
+              it a little bigger so they are more obvious"). The Board button beside a Chat | Task | Game switch was two controls
+              for one question, and Task - rows opening on their own - is what a click in Chat already does. */}
+          <ViewSwitch view={tab === "Board" ? "board" : asstGame ? "game" : "chat"}
+            onView={(v) => { if (v === "board") { go("Board"); return; } pickAsstGame(v === "game"); setStageMode("chat"); go("Assistant"); }} />
           {/* SEARCH, on the top line (the owner, 2026-10-14) - from the Board it goes to the Assistant, whose rail owns the hits */}
           <Box sx={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0, px: { xs: 0, md: 2 } }}>
             <Box sx={{ width: "100%", maxWidth: 420, display: { xs: "none", sm: "block" } }}>

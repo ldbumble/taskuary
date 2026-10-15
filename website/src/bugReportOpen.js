@@ -8,6 +8,9 @@ export const openBugReport = (error = null) => window.dispatchEvent(new CustomEv
 export const shownError = (text) => ({ message: String(text || ""), withLast: true });
 export const bellError = (p) => ({ message: [p.title, p.detail].filter(Boolean).join("\n"), screen: p.where || "Bell",
   route: p.key ? `problem ${p.key}` : "", at: p.since || "" });
+// ...and a connection Check again could not fix: the server's words too, so the client's last failure is not mixed in
+export const connError = (card, said) => ({ message: [card.title, said].filter(Boolean).join("\n"), screen: "Connection card",
+  route: card.channel ? `connector ${card.channel}` : "", at: card.when || "" });
 
 export function draftRequest(snap, e) {
   if (!e) return snap;

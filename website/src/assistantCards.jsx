@@ -37,6 +37,7 @@ import { gistOf, refOf, summarize, stateOf, whoOf } from "./walkSummary.js";
 import { closeoutOf, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { READY } from "./taskLifecycle.js";
+import { connError, openBugReport } from "./bugReportOpen.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -889,6 +890,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const [back, setBack] = useState(null);
   const [said, setSaid] = useState(card.why || "");     // a broken connection's error, as its last check said it
   const [note, setNote] = useState("");
+  const [stuck, setStuck] = useState(false);          // Check again, or the restart, did not fix it
   if (card.kind === "connection") {
     // THE FIX ON THE CARD, not a trip to Connections (the row-bot comparison, 2026-10-07): most of these are a server that was down
     // for a while, and Check again is the whole repair. A Microsoft sign-out is not - that one needs the sign-in, so it leads.
@@ -904,7 +906,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         if (data?.ok) onDone?.(`${card.who || "The connection"} answers again - that row is gone.`);
         else {
           if (data?.detail) setSaid(data.detail);
-          setNote(`Checked at ${at()} - still not answering.`);
+          setNote(`Checked at ${at()} - still not answering.`); setStuck(true);
           // ...and the error you are reading NOW is the one you have seen: a changed error counts as new (its sig), so without
           // this the very next Next brought the same card straight back under its new words
           await api.post("/api/funnel/settle", { key: card.key, verb: "surfaced", read: true }).catch(() => {});
@@ -924,10 +926,10 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           const { data } = await api.get(`/api/connectors/${cid}/wa/status`).catch(() => ({ data: null }));
           const phase = data?.manager?.phase;
           if (phase === "installing") setNote("Installing the bridge's dependency - a few minutes the first time…");
-          if (phase === "failed") { setBusy(""); setNote(""); setErr(`The bridge did not start: ${data.manager.detail || "no reason given"}`); return; }
+          if (phase === "failed") { setBusy(""); setNote(""); setStuck(true); setErr(`The bridge did not start: ${data.manager.detail || "no reason given"}`); return; }
           if (data?.bridge || phase === "running") break;
         }
-      } catch (e) { setBusy(""); setNote(""); setErr(errText(e)); return; }
+      } catch (e) { setBusy(""); setNote(""); setStuck(true); setErr(errText(e)); return; }
       setBusy("");
       await check();
     };
@@ -953,7 +955,11 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
                   title="Stop the bridge if it is stuck and start it again on this machine - you stay paired">
                   {busy === "restart" ? "Restarting…" : "Restart bridge"}</Button>}
                 <Button size="small" variant="outlined" sx={quiet} onClick={openIt}
-                  title="Its card on Connections - for a new password, key or setting">Open the connection</Button></>} />
+                  title="Its card on Connections - for a new password, key or setting">Open the connection</Button>
+                {/* WHAT A CHECK CANNOT FIX IS OURS TO HEAR ABOUT (the owner, 2026-10-15: "if not solvable i thought we added button create
+                    issue in github"): once Check again or the restart has failed here, the same scrubbed, previewed popup every error offers */}
+                {stuck && <Button size="small" variant="outlined" sx={quiet} onClick={() => openBugReport(connError(card, said))}
+                  title="Draft a GitHub issue from this error - you see and edit everything before it opens">Report this bug</Button>}</>} />
         </div>
       </div>
     );

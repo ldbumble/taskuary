@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bellError, draftRequest, howToOpen, rawError, shownError } from "../src/bugReportOpen.js";
+import { bellError, connError, draftRequest, howToOpen, rawError, shownError } from "../src/bugReportOpen.js";
 import { mask } from "../src/shot.js";
 import { mergeDurableTurns } from "../src/assistantTurns.js";
 
@@ -45,4 +45,9 @@ test("a browser with no ClipboardItem refuses the screenshot as a rejection, nev
   const { copyShot } = await import("../src/shot.js");
   let p; assert.doesNotThrow(() => { p = copyShot(Promise.resolve(null)); });
   await assert.rejects(p);
+});
+
+test("a connection Check again could not fix is reported as itself: its title, what it said, which connection, no stale client failure", () => {
+  const r = draftRequest(snap, connError({ key: "conn:109", channel: "chatgpt", title: "ChatGPT stopped answering", when: "2026-10-15T11:00:00Z" }, "ChatGPT plan call failed (400)"));
+  assert.deepEqual(r, { ...snap, screen: "Connection card", error: "ChatGPT stopped answering\nChatGPT plan call failed (400)", stack: "", route: "connector chatgpt", at: "2026-10-15T11:00:00Z" });
 });

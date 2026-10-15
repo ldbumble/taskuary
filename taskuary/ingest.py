@@ -1182,6 +1182,20 @@ def _mark_urgent(store, tid, verdict: dict, actor: str):
     store.add_comment(tid, actor, 'agent', f"Marked urgent - triage: {verdict.get('why') or 'this cannot wait'}")
 
 
+def _retitle(store, t: dict, msg: dict, intent: dict, actor: str) -> bool:
+    """THE TASK SAYS WHAT IS ASKED NOW (the owner, 2026-10-15: "it's still task about come over but now it's about something
+    else"). A chat keeps joining one task as the conversation moves on, and its title and summary stayed the FIRST message's
+    - "Gabi asks to come over today" over an hour of talk about an ad. A real ask joined here carries triage's own title and
+    summary for it, and the task takes them; the old title is kept in a note. Only a task this same channel made: a task the
+    owner wrote, a goal, a workflow run or a report keeps the name it was given."""
+    title, summary = ' '.join(str(intent.get('title') or '').split())[:120], ' '.join(str(intent.get('summary') or '').split())
+    if not title or title == t.get('Title') or str(t.get('Source') or '') != str(msg.get('channel') or ''): return False
+    if 'goal' in str(t.get('Tags') or '').split(): return False
+    store.update_task(t['TaskId'], {'Title': title, **({'Summary': summary} if summary else {})}, actor)
+    store.add_comment(t['TaskId'], actor, 'agent', f"Now about: {title} (was: {t.get('Title') or 'untitled'})")
+    return True
+
+
 def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note: str = '') -> dict:
     """The arrival IS a task that exists (same_as, or the exact repeat): it joins that one. Filed on it when it
     adds nothing that needs the owner; otherwise on it, a closed one reopened, a question drafted, new asks added."""
@@ -1201,6 +1215,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
                     + (' and reopened' if closed else '') + f" - {intent.get('why') or ''}" + notes_note, [], 'triage',
                     verdict=_stored_verdict(intent))
     store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same ask, kept here")
+    _retitle(store, t, msg, intent, actor)
     if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage')
     if intent.get('outputs'):
         from . import slots

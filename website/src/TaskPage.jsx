@@ -46,6 +46,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
+import ChatThread, { isChatTask } from "./ChatThread.jsx";
 import { ChannelIcon, MicButton, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
@@ -741,6 +742,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // attaches the later ones to the same task. The panel showed the FIRST and nothing else, so a
   // task whose answer arrived in message three read as an unanswered question (owner, 2026-09-02).
   const inbound = storedMessages.filter((m) => m.Status !== "context" && m.Direction !== "out");
+  // a WhatsApp, Teams or Slack task is a conversation: drawn as one (ChatThread), yours beside theirs - never a batch
+  const chatTask = !detail?.batch && isChatTask(taskMessages);
   const alsoSaid = inbound.filter((m) => m.MessageId !== inbound[0]?.MessageId
                                       && cleanText(m.BodyText) && cleanText(m.BodyText) !== taskAsk);
   const completionIsManual = ownerControlsCompletion(t);
@@ -1351,7 +1354,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <Typography sx={{ ...label, display: "block", mb: 0.25 }}>What needs doing</Typography>
                         {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task;
                             the card says so once - how many, and what they need now (concierge.repeats, counted by code) */}
-                        {detail?.repeats?.line && (
+                        {/* ...not on a chat: the thread below shows every message, so "wrote twelve times" says nothing more */}
+                        {detail?.repeats?.line && !chatTask && (
                           <Typography variant="body2" sx={{ color: INK, mt: 0.45, lineHeight: 1.55, maxWidth: 900, overflowWrap: "anywhere" }}>
                             {detail.repeats.line}
                           </Typography>
@@ -1386,7 +1390,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         )}
                         {/* ...and what they SENT with it - the photo or screenshot is often the whole ask, and it was only ever inside
                             the folded history (the owner, 2026-09-30: "don't see the image on the task incoming message") */}
-                        {inbound[0]?.MessageId && <Box sx={{ mt: 0.6, maxWidth: 900 }}>
+                        {inbound[0]?.MessageId && !chatTask && <Box sx={{ mt: 0.6, maxWidth: 900 }}>
                           <Attachments messageId={inbound[0].MessageId} canFetch={inbound[0].Channel === "email" && mentionsPicture(inbound[0].BodyText)} dense /></Box>}
                         {/* the checklist triage drew from the ask (PW-075): boxes are progress on the list,
                             never task completion - closing the task stays the owner's separate decision.
@@ -1423,7 +1427,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             person continuing rather than as separate business */}
                         {/* ...never on a batch: its other messages are its OTHER ITEMS, not the same person continuing */}
                         {/* ...NEWEST FIRST, as the task reads elsewhere (the owner, 2026-10-14) */}
-                        {!detail?.batch && newestFirst(alsoSaid).map((m) => (
+                        {chatTask && <ChatThread messages={taskMessages} />}
+                        {!detail?.batch && !chatTask && newestFirst(alsoSaid).map((m) => (
                           <Box key={m.MessageId} sx={{ mt: 0.6, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
                             <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
                               {m.FromName || m.FromEmail || m.Channel}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}

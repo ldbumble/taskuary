@@ -181,3 +181,27 @@ class LaterStepFailedTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RetitleTests(unittest.TestCase):
+    """The owner, 2026-10-15: a chat kept joining one task and its title stayed the first message's ("asks to come over today")
+    after the talk moved on. A real ask joined to the task brings triage's title and summary for it."""
+    def test_a_new_ask_joined_to_a_chat_task_renames_it_and_keeps_the_old_name_in_a_note(self):
+        s = MemoryStore()
+        first = mail(s, 'a', brain('task', title='Erin asks to come over today'), conv='c1', channel='whatsapp')
+        tid = first['task_id']
+        mail(s, 'b', brain('task', same_as=tid, title='Erin asks whether to reuse the ad wording'), conv='c1', channel='whatsapp',
+             body='Can we borrow their wording?')
+        t = s.get_task(tid)
+        self.assertEqual(t['Title'], 'Erin asks whether to reuse the ad wording')
+        self.assertTrue(any('Now about: Erin asks whether to reuse the ad wording (was: Erin asks to come over today)' in (c.get('Body') or '')
+                            for c in s.list_comments(tid)))
+
+    def test_a_task_the_owner_wrote_and_a_mere_fyi_keep_their_title(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'My own job', 'Summary': 'mine', 'Kind': 'task', 'Source': 'manual'}, 'owner')
+        mail(s, 'b', brain('task', same_as=tid, title='Something else'), conv='c9', channel='whatsapp')
+        self.assertEqual(s.get_task(tid)['Title'], 'My own job')                    # not made by this channel
+        first = mail(s, 'c', brain('task', title='The first ask'), conv='c2', channel='whatsapp')
+        mail(s, 'd', brain('fyi', same_as=first['task_id'], title='Thanks'), conv='c2', channel='whatsapp')
+        self.assertEqual(s.get_task(first['task_id'])['Title'], 'The first ask')     # an fyi adds nothing to rename for

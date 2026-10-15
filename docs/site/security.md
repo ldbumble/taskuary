@@ -21,6 +21,8 @@ There are three places that text goes:
   injected instruction can do harm.
 - **A reply or an action** leaves the machine. Every one of those waits for you.
 
+![The path a message from someone you don't trust takes](img/stranger-path.svg "Both paths end at the same gate: nothing leaves without you. A stranger's task gets the CLI's reviewer and a floor checked in code on the way there.")
+
 ## What Taskuary does today
 
 **Triage only gives a decision.** The model that reads incoming messages runs with every tool off.
@@ -42,7 +44,12 @@ all is judged by the rules above.
 **Chat is trusted per person, not per room.** A sender is known by the platform's own id, never a
 display name anyone can copy. Being a member of a group you connected counts for nothing. Someone
 counts once the platform calls your conversation with them one-to-one and you have replied in it, or
-once you press **Trust this task** on a task they opened.
+once you press **Trust this task** on a task they opened. Slack, Teams, Telegram, WhatsApp, iMessage,
+Mattermost, Google Chat and Discord say which conversations are one-to-one. Rocket.Chat is read from
+public rooms only, so there a sender counts only once you vouch for them.
+
+**A name is not an identity.** Your own lines are recognised by how Taskuary stored them, never by a
+display name. A chat sender who calls themselves "You" is still a stranger.
 
 **Triage says when a message is aimed at the AI.** Alongside what a message is, triage notes when its
 text reads as an attempt to steer the agent: telling it to ignore its rules, run or fetch something,
@@ -55,7 +62,9 @@ the recipient. It answers the message on file. Pushes, pull requests and tool ru
 already have.
 
 **Agents have less authority than you in Taskuary's own interface.** Each session runs with its own
-token, and the routes that send, approve or change settings refuse it.
+token, and the routes that send, approve or change settings refuse it. The app page does not carry
+your own token either: Taskuary opens your browser with a one-time key, `taskuary --link` makes a new
+one, and a stranger's session cannot run it.
 
 **Public GitHub repositories get extra care.**
 
@@ -96,6 +105,11 @@ A stranger's task runs differently from yours:
   stranger's "run this script" never reaches it as yours.
 - **It runs with less of your environment.** Cloud keys and GitHub tokens are not passed to it. Its
   token reads only its own task, it cannot write to the Hub, and its wall notes stay on its own task.
+- **Its folder is its own.** A stranger's work runs in a folder outside Taskuary's data folder, named
+  for that task and that data folder, so a second Taskuary on the same account never shares it. A
+  folder someone else planted there, as a link or under another account, stops the start.
+- **Its instructions fit what it may do.** The rules every session reads tell an agent to check the
+  wall and the Hub. A stranger's session is told up front that those commands are not its to run.
 - **What the floor refused is on the record.** Each refusal shows under the session's steps on the
   task's Agent work card, whether or not the pane was open.
 - **You answer when the reviewer will not.** The request shows on the card with Allow and Deny, and the

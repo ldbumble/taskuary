@@ -124,6 +124,7 @@ its decision.</li>
 injected instruction can do harm.</li>
 <li><strong>A reply or an action</strong> leaves the machine. Every one of those waits for you.</li>
 </ul>
+<p><figure><img src="img/stranger-path.svg" alt="The path a message from someone you don't trust takes" loading="lazy"><figcaption>Both paths end at the same gate: nothing leaves without you. A stranger's task gets the CLI's reviewer and a floor checked in code on the way there.</figcaption></figure></p>
 <h2 id="what-taskuary-does-today">What Taskuary does today<a class="anchor" href="#what-taskuary-does-today" aria-label="Link to this section">#</a></h2>
 <p><strong>Triage only gives a decision.</strong> The model that reads incoming messages runs with every tool off.
 An API provider is called with no tools. A CLI agent is launched with its permission bypass removed
@@ -141,7 +142,11 @@ all is judged by the rules above.</p>
 <p><strong>Chat is trusted per person, not per room.</strong> A sender is known by the platform&#39;s own id, never a
 display name anyone can copy. Being a member of a group you connected counts for nothing. Someone
 counts once the platform calls your conversation with them one-to-one and you have replied in it, or
-once you press <strong>Trust this task</strong> on a task they opened.</p>
+once you press <strong>Trust this task</strong> on a task they opened. Slack, Teams, Telegram, WhatsApp, iMessage,
+Mattermost, Google Chat and Discord say which conversations are one-to-one. Rocket.Chat is read from
+public rooms only, so there a sender counts only once you vouch for them.</p>
+<p><strong>A name is not an identity.</strong> Your own lines are recognised by how Taskuary stored them, never by a
+display name. A chat sender who calls themselves &quot;You&quot; is still a stranger.</p>
 <p><strong>Triage says when a message is aimed at the AI.</strong> Alongside what a message is, triage notes when its
 text reads as an attempt to steer the agent: telling it to ignore its rules, run or fetch something,
 or reveal or send files. On a stranger&#39;s task that note shows as a warning line on the card, where you
@@ -151,7 +156,9 @@ the recipient. It answers the message on file. Pushes, pull requests and tool ru
 <em>proposes</em> are checked again when you approve them. Approving one never grants permission it did not
 already have.</p>
 <p><strong>Agents have less authority than you in Taskuary&#39;s own interface.</strong> Each session runs with its own
-token, and the routes that send, approve or change settings refuse it.</p>
+token, and the routes that send, approve or change settings refuse it. The app page does not carry
+your own token either: Taskuary opens your browser with a one-time key, <code>taskuary --link</code> makes a new
+one, and a stranger&#39;s session cannot run it.</p>
 <p><strong>Public GitHub repositories get extra care.</strong></p>
 <ul>
 <li>A stranger&#39;s issue or pull request does not start an agent unless you turn that on for the repository.</li>
@@ -187,6 +194,11 @@ and points at a file labelled as a stranger&#39;s. The reviewer reads the prompt
 stranger&#39;s &quot;run this script&quot; never reaches it as yours.</li>
 <li><strong>It runs with less of your environment.</strong> Cloud keys and GitHub tokens are not passed to it. Its
 token reads only its own task, it cannot write to the Hub, and its wall notes stay on its own task.</li>
+<li><strong>Its folder is its own.</strong> A stranger&#39;s work runs in a folder outside Taskuary&#39;s data folder, named
+for that task and that data folder, so a second Taskuary on the same account never shares it. A
+folder someone else planted there, as a link or under another account, stops the start.</li>
+<li><strong>Its instructions fit what it may do.</strong> The rules every session reads tell an agent to check the
+wall and the Hub. A stranger&#39;s session is told up front that those commands are not its to run.</li>
 <li><strong>What the floor refused is on the record.</strong> Each refusal shows under the session&#39;s steps on the
 task&#39;s Agent work card, whether or not the pane was open.</li>
 <li><strong>You answer when the reviewer will not.</strong> The request shows on the card with Allow and Deny, and the

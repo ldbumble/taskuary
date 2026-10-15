@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" style="background:#fff" viewBox="0 0 960 900" role="img" aria-label="A message is triaged with no tools, then its sender is checked. Your own and trusted senders' tasks may start by themselves with full permissions. A stranger's task waits for your Start, then runs in the CLI's auto mode under a code-enforced floor and the CLI's own reviewer, and asks you on the card when the reviewer is unsure. On both paths, anything that leaves the machine waits for your approval.">
+      <style>.box { fill: #ffffff; stroke: #d5dae0; stroke-width: 1.2; } .box.t { fill: #e6f1ef; stroke: #2f6f6a; } .box.w { fill: #f8eedf; stroke: #9a5a12; } .box.h { fill: #f8eedf; stroke: #8a3646; stroke-width: 1.8; } .box.out { fill: #ffffff; stroke: #1b2129; stroke-width: 1.6; } .ttl { fill: #1b2129; font: 600 14px system-ui, "Segoe UI", sans-serif; } .sub { fill: #5b6572; font: 400 11.5px system-ui, "Segoe UI", sans-serif; } .code { fill: #5b6572; font: 400 11px ui-monospace, Consolas, monospace; } .lbl { fill: #1b2129; font: 500 11.5px ui-monospace, Consolas, monospace; } .lbl.t { fill: #2f6f6a; } .lbl.w { fill: #9a5a12; } .ar { stroke: #5b6572; stroke-width: 1.4; fill: none; } .ar.t { stroke: #2f6f6a; stroke-width: 2; } .ar.w { stroke: #9a5a12; stroke-width: 2; } .ar.d { stroke-dasharray: 4 4; } .head { fill: #5b6572; } .head.t { fill: #2f6f6a; } .head.w { fill: #9a5a12; }</style><defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head t" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head w" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+
+      <!-- sources -->
+      <rect class="box" x="200" y="16" width="160" height="52" rx="8"/>
+      <text class="ttl" x="280" y="38" text-anchor="middle">Email</text>
+      <text class="code" x="280" y="56" text-anchor="middle">From + Authentication-Results</text>
+      <rect class="box" x="400" y="16" width="160" height="52" rx="8"/>
+      <text class="ttl" x="480" y="38" text-anchor="middle">Chat</text>
+      <text class="code" x="480" y="56" text-anchor="middle">platform user id</text>
+      <rect class="box" x="600" y="16" width="160" height="52" rx="8"/>
+      <text class="ttl" x="680" y="38" text-anchor="middle">GitHub</text>
+      <text class="code" x="680" y="56" text-anchor="middle">issue · PR · comment</text>
+      <line class="ar" x1="280" y1="68" x2="330" y2="110" marker-end="url(#a)"/>
+      <line class="ar" x1="480" y1="68" x2="480" y2="110" marker-end="url(#a)"/>
+      <line class="ar" x1="680" y1="68" x2="630" y2="110" marker-end="url(#a)"/>
+
+      <!-- triage -->
+      <rect class="box" x="250" y="112" width="460" height="60" rx="8"/>
+      <text class="ttl" x="480" y="136" text-anchor="middle">Triage reads it</text>
+      <text class="sub" x="480" y="156" text-anchor="middle">Every tool off: it can only return a decision, and it notes text aimed at the AI.</text>
+      <line class="ar" x1="480" y1="172" x2="480" y2="202" marker-end="url(#a)"/>
+      <text class="lbl" x="490" y="192">kind · summary · danger</text>
+
+      <!-- who wrote it -->
+      <rect class="box" x="210" y="204" width="540" height="112" rx="8"/>
+      <text class="ttl" x="480" y="228" text-anchor="middle">Who wrote it?</text>
+      <text class="sub" x="234" y="254">Email</text>
+      <text class="sub" x="300" y="254">your domain · you wrote to them before · a DMARC fail is never trusted</text>
+      <text class="sub" x="234" y="276">Chat</text>
+      <text class="sub" x="300" y="276">you · someone you talked with one-to-one · someone you vouched for</text>
+      <text class="sub" x="234" y="298">GitHub</text>
+      <text class="sub" x="300" y="298">role from GitHub's own record, never the text · strangers off by default</text>
+      <line class="ar" x1="480" y1="316" x2="480" y2="344" marker-end="url(#a)"/>
+
+      <!-- worst wins -->
+      <rect class="box" x="290" y="346" width="380" height="50" rx="8"/>
+      <text class="ttl" x="480" y="368" text-anchor="middle">The task's origin: the least trusted line wins</text>
+      <text class="sub" x="480" y="386" text-anchor="middle">One stranger on a colleague's thread makes it a stranger's task</text>
+
+      <!-- branch -->
+      <path class="ar t" d="M330 396 L330 416 L240 416 L240 446" marker-end="url(#at)"/>
+      <text class="lbl t" x="254" y="436">you · trusted</text>
+      <path class="ar w" d="M630 396 L630 416 L720 416 L720 446" marker-end="url(#aw)"/>
+      <text class="lbl w" x="638" y="436">stranger</text>
+
+      <!-- trusted lane -->
+      <rect class="box t" x="90" y="448" width="300" height="56" rx="8"/>
+      <text class="ttl" x="240" y="472" text-anchor="middle">May start by itself</text>
+      <text class="sub" x="240" y="491" text-anchor="middle">when auto-start is on for that kind of work</text>
+      <line class="ar t" x1="240" y1="504" x2="240" y2="534" marker-end="url(#at)"/>
+      <rect class="box t" x="90" y="536" width="300" height="56" rx="8"/>
+      <text class="ttl" x="240" y="560" text-anchor="middle">Runs with full permissions</text>
+      <text class="sub" x="240" y="579" text-anchor="middle">your agent runs as you</text>
+      <path class="ar t" d="M240 592 L240 820" marker-end="url(#at)"/>
+
+      <!-- stranger lane -->
+      <rect class="box w" x="570" y="448" width="300" height="56" rx="8"/>
+      <text class="ttl" x="720" y="472" text-anchor="middle">Waits for your Start</text>
+      <text class="sub" x="720" y="491" text-anchor="middle">its card warns if triage read it as aimed at the AI</text>
+      <line class="ar w" x1="720" y1="504" x2="720" y2="534" marker-end="url(#aw)"/>
+      <rect class="box w" x="570" y="536" width="300" height="56" rx="8"/>
+      <text class="ttl" x="720" y="560" text-anchor="middle">CLI in its own auto mode</text>
+      <text class="sub" x="720" y="579" text-anchor="middle">a CLI with no reviewer is refused · trimmed env, own token</text>
+      <line class="ar w" x1="720" y1="592" x2="720" y2="622" marker-end="url(#aw)"/>
+      <text class="lbl w" x="730" y="612">each tool call</text>
+      <rect class="box h" x="570" y="624" width="300" height="56" rx="8"/>
+      <text class="ttl" x="720" y="648" text-anchor="middle">The floor, checked in code</text>
+      <text class="sub" x="720" y="667" text-anchor="middle">Taskuary's data, keys, logins, its own address: refused</text>
+      <line class="ar w" x1="720" y1="680" x2="720" y2="710" marker-end="url(#aw)"/>
+      <rect class="box w" x="570" y="712" width="300" height="56" rx="8"/>
+      <text class="ttl" x="720" y="736" text-anchor="middle">The CLI's reviewer</text>
+      <text class="sub" x="720" y="755" text-anchor="middle">approves or blocks the call</text>
+      <path class="ar w" d="M720 768 L720 820" marker-end="url(#aw)"/>
+
+      <!-- side: refusal goes on the record; unsure goes to the card -->
+      <path class="ar d" d="M570 652 L512 652" marker-end="url(#a)"/>
+      <rect class="box" x="402" y="626" width="108" height="52" rx="6"/>
+      <text class="sub" x="456" y="648" text-anchor="middle">refusal kept on</text>
+      <text class="sub" x="456" y="664" text-anchor="middle">the work card</text>
+      <path class="ar d" d="M570 740 L512 740" marker-end="url(#a)"/>
+      <text class="lbl" x="518" y="733">unsure</text>
+      <rect class="box" x="402" y="712" width="108" height="56" rx="6"/>
+      <text class="sub" x="456" y="734" text-anchor="middle">card asks you:</text>
+      <text class="sub" x="456" y="750" text-anchor="middle">Allow · Deny</text>
+
+      <!-- egress -->
+      <rect class="box out" x="90" y="822" width="780" height="62" rx="8"/>
+      <text class="ttl" x="480" y="847" text-anchor="middle">Anything that leaves the machine waits for you</text>
+      <text class="sub" x="480" y="867" text-anchor="middle">Replies, pushes, pull requests and tool runs are approved by you. The reply goes to the message on file; an agent cannot name a recipient.</text>
+    </svg>

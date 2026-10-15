@@ -40,3 +40,9 @@ test("an error receipt keeps its status when the server's copy of the turn arriv
     [{ id: 77, role: "assistant", text: "That step didn't load." }]);
   assert.equal(messages[0].status, "error"); assert.equal(messages[0].commentId, 77);
 });
+
+test("a browser with no ClipboardItem refuses the screenshot as a rejection, never a throw", async () => {
+  const { copyShot } = await import("../src/shot.js");
+  let p; assert.doesNotThrow(() => { p = copyShot(Promise.resolve(null)); });
+  await assert.rejects(p);
+});

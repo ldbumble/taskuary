@@ -40,5 +40,6 @@ export async function capture(root = document.getElementById("root")) {
   return await new Promise((ok, no) => cv.toBlob((x) => (x ? ok(x) : no(new Error("the screenshot could not be drawn"))), "image/png"));
 }
 
-// a Promise inside the ClipboardItem keeps the press's user activation alive while the picture draws
-export const copyShot = (p) => navigator.clipboard.write([new window.ClipboardItem({ "image/png": p })]);
+// a Promise inside the ClipboardItem keeps the press's user activation alive while the picture draws; always a promise,
+// so a browser without ClipboardItem lands in the caller's .catch instead of throwing past it
+export const copyShot = (p) => Promise.resolve().then(() => navigator.clipboard.write([new window.ClipboardItem({ "image/png": p })]));

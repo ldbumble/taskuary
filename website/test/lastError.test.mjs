@@ -52,3 +52,9 @@ test("the popup's own calls are neither the last error nor an action", () => {
   recordAction("POST", "/api/bug-report/draft"); recordAction("POST", "/api/open-url");
   assert.equal(last().message, "real one"); assert.deepEqual(snapshot("x").actions, []);
 });
+
+test("a request the page cancelled is not an error", () => {
+  record(new Error("real one"));
+  record({ message: "canceled", code: "ERR_CANCELED", name: "CanceledError", config: { url: "/api/tasks" } });
+  assert.equal(last().message, "real one");
+});

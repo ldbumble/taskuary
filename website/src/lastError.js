@@ -22,7 +22,7 @@ export function recordAction(method, url) {
 
 export function record(e) {
   const url = e?.config?.url;
-  if (SELF.test(String(url || ""))) return;
+  if (SELF.test(String(url || "")) || e?.code === "ERR_CANCELED") return;     // a cancelled request is the page moving on
   const status = e?.response?.status, d = e?.response?.data?.detail;
   let message = typeof e === "string" ? e : e?.message || String(e);
   if (d) message += ` (${status ? status + ": " : ""}${typeof d === "string" ? d : jsonOr(d)})`;

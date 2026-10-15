@@ -34,7 +34,7 @@ OPENAI_COMPATIBLE = {
     'together':   ('https://api.together.xyz/v1', 'meta-llama/Llama-3.3-70B-Instruct-Turbo'),
     'cerebras':   ('https://api.cerebras.ai/v1', 'llama-3.3-70b'),
     'xai':        ('https://api.x.ai/v1', 'grok-2-latest'),
-    'gemini':     ('https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-2.0-flash'),
+    'gemini':     ('https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-3.8-flash'),
     'cohere':     ('https://api.cohere.ai/compatibility/v1', 'command-r-plus'),
     'deepseek':   ('https://api.deepseek.com/v1', 'deepseek-chat'),
     'perplexity': ('https://api.perplexity.ai', 'sonar'),

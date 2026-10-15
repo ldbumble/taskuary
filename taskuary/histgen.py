@@ -284,7 +284,13 @@ def _addr(p): return ((p or {}).get('emailAddress') or {}).get('address') or ''
 
 
 def gen_job(store, llm, days):
-    """Both directions of the mailbox -> what the job is. Who writes in (and whether they are answered), who the
+    """Both directions of the mailbox -> what the job is (job_evidence), written as JOB.md's learned block."""
+    user, src, ev = job_evidence(store, days)
+    return llm(JOB_SYSTEM, user, max_tokens=GUIDE_TOKENS), src, ev
+
+
+def job_evidence(store, days):
+    """(the roll-ups as the model reads them, what was read, the evidence lines) - both directions of the mailbox. Who writes in (and whether they are answered), who the
     owner writes to, which subjects recur and on what rhythm, which threads the owner opens. STYLE reads the
     sent folder for the voice and TRIAGE pairs inbox with sent for what matters; this reads the same two for
     the shape of the work itself. Falls back to Taskuary's own record like the others."""
@@ -344,7 +350,7 @@ def gen_job(store, llm, days):
         ('SENDER DOMAINS (answered/total)', roll), ('RECURRING SUBJECTS (mails, weeks present, answered)', troll),
         ('THREADS THE OWNER STARTED (subject: times)', sroll)) if l)
     if soul: user += f"\n\nSOUL.md (the owner's own description of their work, systems and people):\n{soul}"
-    return llm(JOB_SYSTEM, user, max_tokens=GUIDE_TOKENS), src, ev
+    return user, src, ev
 
 
 VOCAB_NEW, VOCAB_NAMES, VOCAB_DOMAINS, VOCAB_SUBJECTS = 60, 120, 40, 150

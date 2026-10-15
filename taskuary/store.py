@@ -123,6 +123,28 @@ def email_from_soul(soul: str):
     mt = _SOUL_NAME.search(soul or '')
     return (mt.group('email') or '').strip() if mt else ''
 
+def set_owner(store, new: str, email=None, actor: str = 'owner') -> dict:
+    """Your name, in ONE place (server.put_owner, and setup's About your work). SOUL.md and CODER.md refer to the owner nine times
+    between them: every literal occurrence of the OLD name becomes a {{owner}} token, so the documents never drift again."""
+    was = store.owner()
+    changed = []
+    # 'the owner' is the fallback when no name is known, and real prose says those words - never retokenized
+    if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
+    for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
+        raw = store.get_doc(doc)
+        if not raw: continue
+        tokened = retoken_doc(raw, was['owner'], was['owner_email'])
+        # a drifted doc holds BOTH names - the one typed in and the template's John Smith - so the placeholder is swept too
+        tokened = retoken_doc(tokened, 'John Smith', 'john.smith@example.com')
+        if tokened != raw:
+            store.save_doc(doc, tokened, actor)
+            changed.append(doc)
+    store.set_setting('owner_name', new, actor)
+    if email is not None: store.set_setting('owner_email', str(email).strip(), actor)
+    store.audit('doc', 0, 'set_owner', actor, detail={'from': was['owner'], 'to': new, 'retokened': changed})
+    return {**store.owner(), 'retokened': changed}
+
+
 def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
     """Turn the literal name already written into a document into {{owner}}. Longest form
     first, so "John Smith" does not become "{{owner}} Smith" - and never a name that is

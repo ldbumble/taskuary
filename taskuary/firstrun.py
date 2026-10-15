@@ -90,7 +90,9 @@ def state(store) -> dict:
            'reading': (f"Sorting {sorting} email{'s' if sorting != 1 else ''} now. Any other connection you'd like to set up while it reads?"
                        if sorting else "Reading your mail now. Any other connection you'd like to set up while it reads?"),
            'done': "You're set up. Any other connection you'd like to set up? Click it below - or press Walk me through my tasks."}[step]
-    return {'step': step, 'brain': {'ready': brain['ready'], 'name': name, 'why': brain.get('why') or ''}, 'fix': fix,
+    # what is next, as the rail and the top bar's chip say it - from here, so the three never disagree (2026-10-15)
+    todo = {'ai': 'pick your AI', 'email': 'connect your email', 'reading': 'reading your mail', 'done': ''}[step]
+    return {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'why': brain.get('why') or ''}, 'fix': fix,
             'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'next': nxt}
 
 

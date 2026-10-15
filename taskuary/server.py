@@ -6009,9 +6009,10 @@ def setup_state():
     """What still stands between this install and a working funnel, read off real state - so a
     step un-does itself if the connection behind it is removed."""
     from . import setup as setup_mod, firstrun
-    # ...and the TWO steps the first run is (firstrun.py): the top bar's chip counts these, not the old four-row checklist
-    step = firstrun.state(store)['step']
-    return {**setup_mod.state(store), 'first_left': {'ai': 2, 'email': 1}.get(step, 0), 'first_step': step}
+    # ...and where the first run stands (firstrun.py): the top bar's chip says what is next from it, not the old checklist
+    first = firstrun.state(store)
+    step = first['step']
+    return {**setup_mod.state(store), 'first_left': {'ai': 2, 'email': 1}.get(step, 0), 'first_step': step, 'first_todo': first['todo']}
 
 @app.post('/api/setup/dismiss')
 def setup_dismiss(body: SetupBody):
@@ -6077,7 +6078,7 @@ def setup_adopt_brain(body: SetupAdoptBrainBody):
     return {'ok': True, 'adopted': adopted, **setup_mod.state(store)}
 
 
-# ── first run: two steps on the assistant canvas (firstrun.py, FirstRun.jsx) ─────────────────────────────────────────────
+# ── first run: three questions on the assistant canvas (firstrun.py, FirstRun.jsx) ──────────────────────────────────────
 class FirstRunAiBody(BaseModel): name: str
 class FirstRunKeyBody(BaseModel): type: str; key: str; cid: int | None = None; config: dict | None = None
 class FirstRunMailBody(BaseModel): type: str; address: str; password: str; host: str = ''

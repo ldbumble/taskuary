@@ -102,29 +102,30 @@ else.
 
 ## Your first run
 
-Open **Set up Taskuary** on the Assistant. The first four steps get you to one useful result:
+The first time it opens, the Assistant asks three questions. Each one is answered by clicking a
+card, and the cards are the same ones the [Connections](connections) page shows. The line at the
+top always says what to do next, and so do the Work list and the **Setup** chip in the top bar.
 
-1. **Say who you are.** Add the name that signs your drafts, and your email so Taskuary can
-   recognise your own messages. Detailed preferences can wait.
-2. **Connect one AI.** Use an API provider, Ollama, or a signed-in coding CLI you already pay
-   for. Test its connection. Keep the current model defaults to start; reviewing every model
-   assignment is optional.
-3. **Connect one work source.** Choose one mailbox, chat, or issue tracker in
-   [Connections](connections). Enable it as an input and test it. You do not need a mailbox if
-   your first source is a tracker such as GitHub.
-4. **Press Read first items.** This starts a real source read and shows its progress. Once items
-   arrive, open one of the first five recent results to check its verdict and any draft. Replies
-   still wait for your approval. If nothing arrives, the step explains how to check the source
-   scope or try a new incoming message.
+1. **What AI do you have?** Click the one you already pay for: Claude, ChatGPT, Gemini or
+   Copilot. Taskuary connects it, checks that it answers, and uses it to sort your mail. If it
+   is not installed, the click installs it. If it needs you to sign in once, the card says
+   **Needs sign-in** and **Set it up** opens the AI's own sign-in. **More AI** lists every other
+   AI on this computer and every API provider, for when you would rather paste a key.
+2. **What email do you have?** Microsoft 365 or Outlook is one sign-in, with nothing to type.
+   Gmail needs an App Password, which Google makes at
+   [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) once 2-Step
+   Verification is on. Any other mailbox takes its address, server and password.
+3. **Any other connection you'd like to set up?** While your mail is read, WhatsApp, Teams,
+   Slack and Telegram are offered, and **More connections** shows the rest. This one is optional:
+   press **Walk me through my tasks** when you are ready.
 
-The five items are a review sample, not an import limit: each source keeps its normal read scope
-and history settings. Starting with one source makes that first review easier. Setup does not
-overwrite an existing user's model or connection configuration.
+**Set up Taskuary** on the Assistant opens the same three questions again whenever you want to
+change the AI or the mailbox. Setup does not overwrite an existing user's model or connection
+configuration.
 
-After that first result, add another source, connect a coding CLI if you want code written, or
-add a report for numbers you check by hand. The optional **models and agents** step opens the
-existing settings whenever you want to adjust cost or use different models for different jobs.
-Reports and the Hub can wait until you have a workflow that needs them.
+After that, connect a coding CLI if you want code written, or add a report for numbers you check
+by hand. **Settings → Triage & agents** lets you use different models for different jobs. Reports
+and the Hub can wait until you have a workflow that needs them.
 
 Two reports exist from the start: the **End of day checkup** and the **Advisor**, which looks for
 useful follow-ups and patterns in your work. You can review or remove either in Reports. The

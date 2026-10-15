@@ -36,6 +36,25 @@ test("three questions on the Advisor's line, each answered on the Connections pa
   assert.doesNotMatch(fr, /<Dialog|<Popover|<Drawer/);
 });
 
+// the owner, 2026-10-15: plain words on the setup screen only - never "off · trigger + tool · 0/0 chat jids"
+test("on the setup screen the same cards say their state in plain words; Connections keeps its own", () => {
+  const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
+  assert.match(cv, /export const connCardOf = \(c, sources, go, plain = false\) =>/, "a mode of the shared card, not a copy");
+  assert.match(cv, /const connState = \(c\) => \(c\.state \|\|/, "a plain card carries its state, its words are not parsed");
+  for (const w of ["Not set up", "Connected", "Needs sign-in", "Not answering"]) assert.match(cv, new RegExp(`"${w}`), w);
+  assert.match(fr, /connCardOf\(c, sources, \(\) => setOpen[^\n]*, true\)/, "every connector card on the setup screen is plain");
+  assert.doesNotMatch(fr, /last test failed|not set up/, "the CLI cards use the same plain words");
+  assert.match(cv, /chanCard = \(c\) => connCardOf\(c, sources, \(\) => setOpen\(\{ kind: "connector", id: c\.ConnectorId \}\)\);/, "Connections is unchanged");
+});
+
+test("the rail and the top bar's chip say what is next from the first run's own state", () => {
+  const view = read("AssistantView.jsx"), chip = read("SetupWizard.jsx");
+  assert.match(view, /Setup: \{settingUp\}/);
+  assert.match(view, /setSetupTodo\(data\?\.todo/);
+  assert.match(chip, /`Setup: \$\{state\.first_todo\}`/);
+  assert.doesNotMatch(view + chip, /two setup steps|Set up · \$\{left\} step/);
+});
+
 test("the cards wear their logos: each CLI its maker's, Gemini its own", () => {
   const fr = read("FirstRun.jsx");
   assert.match(fr, /const CLI_LOGO = \{ claude: "anthropic", codex: "openai", gemini: "gemini", copilot: "github" \};/);

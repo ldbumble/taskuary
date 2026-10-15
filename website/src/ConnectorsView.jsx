@@ -1287,9 +1287,10 @@ const NL = String.fromCharCode(10);
 
 // A card per connection. The dot is read off the status line the card already carries -
 // "off", "not set up" and "connection failing" are the only three states worth a colour.
-const connState = (c) => (c.planned ? "planned" : c.guide ? "guide"
+// a plain card (connCardOf's `plain`) says its state outright; the catalogue's is read off its status line
+const connState = (c) => (c.state || (c.planned ? "planned" : c.guide ? "guide"
   : /failing|test failed/.test(c.desc) ? "failing"
-    : /^off|not set up|no key yet/.test(c.desc) ? "off" : "on");
+    : /^off|not set up|no key yet/.test(c.desc) ? "off" : "on"));
 const connDot = (c) => ({ planned: "#cfc9bf", guide: "#8b7c63", failing: "#6b2733", off: "#cfc9bf", on: "#55697a" })[connState(c)];
 // the whole card says its state, not just the 7px dot: a live connection wears the brand
 // border on a faintly tinted ground, a failing one the alert border, an unconfigured one
@@ -1353,7 +1354,7 @@ export const ConnCard = ({ c }) => {
             : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
         </Box>
         <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
-        {connState(c) === "on" && (
+        {connState(c) === "on" && !c.plain && (
           <Box component="span" data-tq-conn-pill sx={{ flexShrink: 0, px: 0.75, py: 0.1, borderRadius: 99, fontSize: 10, fontWeight: 600,
             lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>{c.channel === "cli" ? "Installed" : "Connected"}</Box>
         )}
@@ -1367,9 +1368,16 @@ export const ConnCard = ({ c }) => {
   );
 };
 
+// THE SAME CARD IN PLAIN WORDS (`plain`, the first run's questions): "off · trigger + tool · 0/0 chat jids" is the catalogue's
+// shorthand for someone who has set connections up before; a first-time owner gets the state itself (the owner, 2026-10-15)
+const SIGNED_OUT = /sign-in has lapsed|signed out|sign in again|expired/i;
+const plainState = (c, srcs) => (c.LastError ? (SIGNED_OUT.test(c.LastError) ? ["failing", "Needs sign-in"] : ["failing", "Not answering - click to fix it"])
+  : c.Active && (c.HasSecret || c.LastSyncAt || (srcs || []).some((s) => s.Active)) ? ["on", c.LastSyncAt ? `Connected · checked ${timeAgo(c.LastSyncAt)}` : "Connected"]
+  : ["off", "Not set up"]);
+
 // A connector's card as the catalogue draws it - its status line said one way, wherever the card is shown (the first run's
 // questions show these same cards: the owner, 2026-10-15, "Don't create new ui. keep the same as we have in connections")
-export const connCardOf = (c, sources, go) => {
+export const connCardOf = (c, sources, go, plain = false) => {
   const m = META[c.Type] || {};
   const srcs = m.channel && m.channel !== "ai"
     ? sources.filter((s) => s.ConnectorId === c.ConnectorId) : null;   // owned, never channel-shared
@@ -1382,9 +1390,10 @@ export const connCardOf = (c, sources, go) => {
         : ["ollama", "local_whisper"].includes(c.Type) ? " · local — no key needed"
         : c.Type === "stt_server" ? " · your server — key optional" : " · no key yet")
     + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
+  const [state, said] = plain ? plainState(c, srcs) : [undefined, status];
   // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
   // or Jira and Linear both wearing 'boards', tells you nothing about which is which
-  return { key: `c${c.ConnectorId}`, title: c.Name, desc: status,
+  return { key: `c${c.ConnectorId}`, title: c.Name, desc: said, state, plain,
     channel: hasLogo(c.Type) ? c.Type : (m.channel || c.Type),
     haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`, go };
 };

@@ -74,7 +74,7 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
     const id = setTimeout(reload, st.step === "reading" ? 3000 : 5000);
     return () => clearTimeout(id);
   }, [st, reload]);
-  // a step moved: the rail reloads, and the top bar's chip counts again (TaskHubPage listens) - it said "2 steps" after one
+  // a step moved: the rail reloads and says what is next, and so does the top bar's chip (TaskHubPage listens) - it went stale
   useEffect(() => {
     if (!st || st.step === was.current) return;
     if (was.current) { onChanged?.(); window.dispatchEvent(new Event("tq-setup-changed")); setOpen(null); }
@@ -111,16 +111,19 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
     <Typography sx={{ color: DIM }}>{err || "Getting set up…"}</Typography></Box>;
 
   const byType = (types) => types.flatMap((t) => conns.filter((c) => c.Type === t));
-  const card = (c, simple) => connCardOf(c, sources, () => setOpen((o) => (o?.id === c.ConnectorId ? null : { id: c.ConnectorId, simple })));
-  // the CLIs read as cards the catalogue would draw: the AI's name, its maker's logo, and a status line in the catalogue's words
+  // plain: the same card, its state in a first-time owner's words (connCardOf) - the Connections page keeps its own
+  const card = (c, simple) => connCardOf(c, sources, () => setOpen((o) => (o?.id === c.ConnectorId ? null : { id: c.ConnectorId, simple })), true);
+  // the CLIs read as cards the catalogue would draw: the AI's name, its maker's logo, and its state in the same plain words
   const fix = st.fix;
-  const cliCards = st.ais.map((ai) => ({
-    key: `cli-${ai.name}`, title: ai.title, channel: CLI_LOGO[ai.name] || "cli", go: busy ? undefined : () => pick(ai),
-    desc: busy === ai.name ? `${ai.sub} · checking…`
-      : fix?.name === ai.name ? `${ai.sub} · last test failed`
-      : st.step !== "ai" && st.brain.name === ai.title ? `on · ${ai.sub}`
-      : `${ai.sub} · not set up${ai.installed ? "" : " - click to install"}`,
-  }));
+  const stateOf = (ai) => (busy === ai.name ? ["on", "Checking it works…"]
+    : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - click to install" : "Not answering"]
+    : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Connected"]
+    : ["off", ai.installed ? "Not set up - on this computer" : "Not installed - click to install"]);
+  const cliCards = st.ais.map((ai) => {
+    const [state, words] = stateOf(ai);
+    return { key: `cli-${ai.name}`, title: ai.title, channel: CLI_LOGO[ai.name] || "cli", go: busy ? undefined : () => pick(ai),
+      state, plain: true, desc: `${words} · ${ai.sub}` };
+  });
   const ai = [...cliCards, ...byType(AI_TYPES).map((c) => card(c, true))];      // st.ais leads with the four most people pay for
   const mail = byType(MAIL_TYPES).map((c) => card(c, true));
   const other = byType(OTHER_TYPES).map((c) => card(c, false));

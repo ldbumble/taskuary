@@ -261,7 +261,7 @@ export default function TaskHubPage() {
   }, []);
   useHandRaise(onRaise);
   // SETUP IS THE ASSISTANT CANVAS (the owner, 2026-10-14: "Remove the popup things just use the assistant canvas"): the
-  // chip takes you there, where FirstRun draws the two steps. No dialog opens itself over the app any more.
+  // chip takes you there, where FirstRun asks its three questions. No dialog opens itself over the app any more.
   const openSetup = () => { go("Assistant"); setTimeout(() => window.dispatchEvent(new Event("tq-first-run")), 60); };
 
   // Leaving a tab and coming back used to land you at the TOP of it. Nothing scrolled the

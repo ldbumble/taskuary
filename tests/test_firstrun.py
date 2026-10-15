@@ -1,4 +1,4 @@
-"""First run in two steps on the assistant canvas (the owner, 2026-10-14: "Think about a idiot user who knows nothing about
+"""First run as three questions on the assistant canvas - what AI, what email, any other connection (the owner, 2026-10-14: "Think about a idiot user who knows nothing about
 nothing and he should setup this app in 2 steps ... it should never drop the user"). Each card does its whole step and
 every answer says what happened and the one thing to press next."""
 import json, unittest
@@ -148,8 +148,20 @@ class StateTests(unittest.TestCase):
             with mock.patch('taskuary.setup._ai', return_value={'ready': ready, 'Name': 'x', 'pick': ''}),                  mock.patch('taskuary.setup._inbound', return_value=inbound), mock.patch('taskuary.setup._first_items', return_value=items), detect():
                 return firstrun.state(s)
         self.assertIn('What AI do you have?', at(False, [], [])['next'])
+        # what is next, in the words the rail and the top bar's chip say - one source for all three
+        self.assertEqual(at(False, [], [])['todo'], 'pick your AI')
         done = at(True, ['Work mail'], [{'MessageId': 1}])
         self.assertIn('Any other connection', done['next']); self.assertIn('Walk me through my tasks', done['next'])
+        self.assertEqual(done['todo'], '')
+        s.set_setting('triage_ai', 'cli:codex', 'owner')
+        self.assertEqual(at(True, [], [])['todo'], 'connect your email')
+        self.assertEqual(at(True, ['Work mail'], [])['todo'], 'reading your mail')
+
+    def test_the_top_bar_chip_says_what_is_next_from_the_same_state(self):
+        s = MemoryStore()
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.firstrun.state', return_value={'step': 'email', 'todo': 'connect your email'}):
+            out = TestClient(server.app).get('/api/setup').json()
+        self.assertEqual((out['first_step'], out['first_todo'], out['first_left']), ('email', 'connect your email', 1))
 
     def test_no_report_asks_an_ai_nobody_picked_yet(self):
         """The shipped Advisor report ran at the first start on the signed-out claude a blank brain falls to, and the bell

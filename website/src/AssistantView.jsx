@@ -368,7 +368,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
       )
       ) : !drawn.length && settingUp ? (
         // a first run has nothing here because nothing is CONNECTED yet - "All done" read as finished (fresh-install shot, 2026-10-14)
-        <div className="tq-pile-empty" data-tq-pile-setup=""><b>Your mail shows up here</b>Finish the two setup steps on the right, and what comes in is sorted into this list.</div>
+        // ...and says what is next in the first run's own words (firstrun.state's `todo`), not a step count of its own (2026-10-15)
+        <div className="tq-pile-empty" data-tq-pile-setup=""><b>Your mail shows up here</b>Setup: {settingUp}. What comes in is then sorted into this list.</div>
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : bands.map(({ level, items: rows }) => {
@@ -1196,14 +1197,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [mailReading, setMailReading] = useState(false);
   // set up when the page opened? then the canvas IS the setup until its walk starts (FirstRun.jsx); never in the demo
-  const [firstRun, setFirstRun] = useState(false);
+  const [firstRun, setFirstRun] = useState(false), [setupTodo, setSetupTodo] = useState("");
   const setupRef = useRef(null);
   useEffect(() => {
     if (DEMO) return;
     // ...only an install with nothing sorted yet opens ON it: one already reading mail opens on its day, and the cards are a press away
     api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.step !== "done" && !data.sorted) setFirstRun(true); }).catch(() => {});
     const show = () => setupRef.current?.();                    // the top bar's setup chip asks for the cards
-    window.addEventListener("tq-first-run", show); return () => window.removeEventListener("tq-first-run", show);
+    // what is next, for the rail - read again whenever the first run moves a step (FirstRun fires tq-setup-changed)
+    const todo = () => api.get("/api/setup/first-run").then(({ data }) => setSetupTodo(data?.todo || "")).catch(() => {});
+    todo();
+    window.addEventListener("tq-first-run", show); window.addEventListener("tq-setup-changed", todo);
+    return () => { window.removeEventListener("tq-first-run", show); window.removeEventListener("tq-setup-changed", todo); };
   }, []);       // the launch still reading the mail (SinceBlock): the counts wait
   useEffect(() => onLive(["chat-changed"], (ev) => {
     setPhoneBusy(!!ev?.thinking);
@@ -1945,7 +1950,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // THE DAY'S OPENER, one drawing: the empty chat's welcome, and the "Today" card the chat records when the owner sits down
   // (welcome.arrive) - that card drew a row list of its own, which was not the opener (the owner, 2026-10-08)
   const welcome = (m = null) => firstRun ? (
-    // FIRST RUN (the owner, 2026-10-14: "first time you login the setup ... on the assistant canvas"): two steps in place of
+    // FIRST RUN (the owner, 2026-10-14: "first time you login the setup ... on the assistant canvas"): three questions in place of
     // the day, until the walk starts. The popup checklist is gone; this is the one road.
     <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
     <div className="tq-welcome"><FirstRun onChanged={() => loadPile(true)} onWalk={() => { setFirstRun(false); start(null); }} /></div></div>
@@ -2277,7 +2282,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
-      top={({ openByMid, openByItem }) => <Pile pile={railPile} settingUp={firstRun} current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
+      top={({ openByMid, openByItem }) => <Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""}current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
         onSection={walkSection} onCurrent={() => setRailOpen(false)} />}

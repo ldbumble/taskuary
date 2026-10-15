@@ -38,7 +38,8 @@ export const useSetup = (tick) => {
 /* Gone once the four are done; the optional walk remains available afterwards.
    Assistant header is always there and covers more than this ever did. */
 export const SetupChip = ({ state, onOpen }) => {
-  // the first run's two steps when the server says them (firstrun.py), the old checklist's otherwise
+  // the first run's own next step when the server says it (firstrun.py's `todo`), the old checklist's count otherwise - the chip
+  // read "Set up · 2 steps" beside three questions (2026-10-15)
   const two = state && state.first_left != null;
   if (!state || (two ? state.first_left === 0 : state.complete)) return null;
   const left = two ? state.first_left : state.total - state.done;
@@ -62,7 +63,7 @@ export const SetupChip = ({ state, onOpen }) => {
           <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: ROLES.done.solid }} />
         </Box>
         <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "#55697a" }}>
-          {two ? `Set up · ${left} step${left === 1 ? "" : "s"}` : `${left} left`}
+          {two ? (state.first_todo ? `Setup: ${state.first_todo}` : "Set up") : `${left} left`}
         </Typography>
       </Box>
     </Tooltip>

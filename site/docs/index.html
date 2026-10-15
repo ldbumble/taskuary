@@ -195,28 +195,29 @@ host programs, because both need a machine of their own.</p>
 <p>The compose file binds to localhost. Set <code>TASKUARY_TOKEN</code> before publishing the port anywhere
 else.</p>
 <h2 id="your-first-run">Your first run<a class="anchor" href="#your-first-run" aria-label="Link to this section">#</a></h2>
-<p>Open <strong>Set up Taskuary</strong> on the Assistant. The first four steps get you to one useful result:</p>
+<p>The first time it opens, the Assistant asks three questions. Each one is answered by clicking a
+card, and the cards are the same ones the <a href="connections">Connections</a> page shows. The line at the
+top always says what to do next, and so do the Work list and the <strong>Setup</strong> chip in the top bar.</p>
 <ol>
-<li><strong>Say who you are.</strong> Add the name that signs your drafts, and your email so Taskuary can
-recognise your own messages. Detailed preferences can wait.</li>
-<li><strong>Connect one AI.</strong> Use an API provider, Ollama, or a signed-in coding CLI you already pay
-for. Test its connection. Keep the current model defaults to start; reviewing every model
-assignment is optional.</li>
-<li><strong>Connect one work source.</strong> Choose one mailbox, chat, or issue tracker in
-<a href="connections">Connections</a>. Enable it as an input and test it. You do not need a mailbox if
-your first source is a tracker such as GitHub.</li>
-<li><strong>Press Read first items.</strong> This starts a real source read and shows its progress. Once items
-arrive, open one of the first five recent results to check its verdict and any draft. Replies
-still wait for your approval. If nothing arrives, the step explains how to check the source
-scope or try a new incoming message.</li>
+<li><strong>What AI do you have?</strong> Click the one you already pay for: Claude, ChatGPT, Gemini or
+Copilot. Taskuary connects it, checks that it answers, and uses it to sort your mail. If it
+is not installed, the click installs it. If it needs you to sign in once, the card says
+<strong>Needs sign-in</strong> and <strong>Set it up</strong> opens the AI&#39;s own sign-in. <strong>More AI</strong> lists every other
+AI on this computer and every API provider, for when you would rather paste a key.</li>
+<li><strong>What email do you have?</strong> Microsoft 365 or Outlook is one sign-in, with nothing to type.
+Gmail needs an App Password, which Google makes at
+<a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a> once 2-Step
+Verification is on. Any other mailbox takes its address, server and password.</li>
+<li><strong>Any other connection you&#39;d like to set up?</strong> While your mail is read, WhatsApp, Teams,
+Slack and Telegram are offered, and <strong>More connections</strong> shows the rest. This one is optional:
+press <strong>Walk me through my tasks</strong> when you are ready.</li>
 </ol>
-<p>The five items are a review sample, not an import limit: each source keeps its normal read scope
-and history settings. Starting with one source makes that first review easier. Setup does not
-overwrite an existing user&#39;s model or connection configuration.</p>
-<p>After that first result, add another source, connect a coding CLI if you want code written, or
-add a report for numbers you check by hand. The optional <strong>models and agents</strong> step opens the
-existing settings whenever you want to adjust cost or use different models for different jobs.
-Reports and the Hub can wait until you have a workflow that needs them.</p>
+<p><strong>Set up Taskuary</strong> on the Assistant opens the same three questions again whenever you want to
+change the AI or the mailbox. Setup does not overwrite an existing user&#39;s model or connection
+configuration.</p>
+<p>After that, connect a coding CLI if you want code written, or add a report for numbers you check
+by hand. <strong>Settings → Triage &amp; agents</strong> lets you use different models for different jobs. Reports
+and the Hub can wait until you have a workflow that needs them.</p>
 <p>Two reports exist from the start: the <strong>End of day checkup</strong> and the <strong>Advisor</strong>, which looks for
 useful follow-ups and patterns in your work. You can review or remove either in Reports. The
 Morning digest is available as an optional report.</p>

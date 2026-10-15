@@ -94,3 +94,9 @@ def test_the_builder_knows_taskuary_is_where_results_land_and_builds_a_clear_req
     assert 'Opening tasks or drafting IS doing work' in s
     assert 'A clear request is built' in s and 'never ask which' in s
     assert 'A clear request is built, not questioned' in compose.JUDGEMENT          # the report builder too
+
+
+def test_an_unclear_request_is_still_asked_about():
+    """The owner, 2026-10-15: "it's okay if workflow asks questions if it's not clear" - building a clear request must not
+    become guessing at an unclear one."""
+    assert 'when the request is unclear - what the job is, what it should produce, for whom' in compose.WORKFLOW_SYSTEM

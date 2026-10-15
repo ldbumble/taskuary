@@ -82,10 +82,10 @@ class WhatChangedTests(unittest.TestCase):
 
     def test_the_newest_digest_is_handed_whole_with_when_it_was_written_and_what_reruns_it(self):
         s = self.store()
-        self.assertEqual(since.digest(s), {'source_id': self.digest, 'at': None, 'text': '', 'writing': False})
+        self.assertEqual(since.digest(s), {'source_id': self.digest, 'at': None, 'text': '', 'writing': False, 'waiting': None})
         mid = s.add_message({'ExternalId': 'd1', 'Channel': 'report', 'Subject': 'Morning digest', 'BodyText': 'People want\n1. Erin wants the export.'})
         s.add_report_run(self.digest, {'at': '2026-10-08 08:00:45', 'type': 'digest', 'title': 'Morning digest', 'message_id': mid})
-        self.assertEqual(since.digest(s), {'source_id': self.digest, 'at': '2026-10-08 08:00:45', 'today': False, 'writing': False, 'text': 'People want\n1. Erin wants the export.'})
+        self.assertEqual(since.digest(s), {'source_id': self.digest, 'at': '2026-10-08 08:00:45', 'today': False, 'writing': False, 'waiting': None, 'text': 'People want\n1. Erin wants the export.'})
         self.assertNotIn('digest', [c.get('text', '').lower() for c in since.cards(s)], 'the digest is the line under the cards, not a card')
         # the evidence the model was handed rides under the brief; the folded digest is the brief alone
         from taskuary.reports import RAW_MARK

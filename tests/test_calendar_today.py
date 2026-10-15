@@ -85,3 +85,15 @@ class StartupTests(unittest.TestCase):
         self.assertFalse(reports.is_due({'on_startup': True, 'every_minutes': 180}, datetime.now().isoformat(sep=' ')))   # just ran, not startup
         self.assertFalse(reports.is_due({'on_startup': True}, '2026-08-21 09:00:00'))                           # startup-only stays startup-only
         self.assertTrue(reports.is_due({'on_startup': True}, None, startup=True))
+
+
+class NotConnectedTests(unittest.TestCase):
+    def test_no_calendar_card_says_so_and_a_calendar_turned_off_says_that(self):
+        """The opener says "no calendar connected" from `sources` - no meetings on a connected calendar is a real empty day (2026-10-15)."""
+        s = MemoryStore()
+        with mock.patch.dict(cal._TODAY, {'data': None}):
+            t = cal.today(s)
+        self.assertEqual((t['events'], t['sources']), ([], []))
+        s.set_setting('calendar_enabled', '0', 'owner')
+        with mock.patch.dict(cal._TODAY, {'data': None}):
+            self.assertTrue(cal.today(s)['off'])

@@ -45,7 +45,8 @@ test("the opening card carries what changed and the digest, folded, on its top",
 test("the opening card loads in place: counts and the digest say they are coming, and today's digest opens itself", () => {
   const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx"), turns = read("assistantTurns.js");
   assert.match(view, /spin\("Reading what came in…"\)/);
-  assert.match(view, /spin\("Writing today's digest…"\)/);
+  assert.match(view, /: "Writing today's digest…"\)\}/);
+  assert.match(view, /dg\.waiting \? `Not written yet - \$\{dg\.waiting\} email/, "queued by Finish, it says it waits on the mail");
   assert.match(view, /if \(dg\.today && dg\.text && shownFor\.current !== dg\.at\)/, "today's digest is open, once");
   assert.match(view, /data\?\.said \|\| data\?\.drawn/, "an opener drawn mid catch-up is read at once");
   assert.match(cards, /loading \? "counting…" : total/);
@@ -56,4 +57,12 @@ test("what was learned is its own line on the opening card, never a card that lo
   const view = read("AssistantView.jsx");
   assert.match(view, /\{d\?\.learned\?\.line && <div className="tq-since-digest" data-tq-learned="">/);
   assert.match(view, /settings=docs&doc=learned&view=changes/);
+});
+
+// the whole card from the first day (the owner, 2026-10-15: "say calendar missing if not available")
+test("the calendar side says none connected, unreadable or no meetings, with the way to connect one", () => {
+  const cards = read("assistantCards.jsx");
+  assert.match(cards, /Array\.isArray\(today\.sources\) && !today\.sources\.length \? "none"/);
+  assert.match(cards, /No calendar connected/);
+  assert.match(cards, /openAppLink\("#connections=Email"\)/);
 });

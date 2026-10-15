@@ -180,7 +180,9 @@ function SinceBlock({ onOpen, onReading }) {
         <button type="button" className="tq-linkish" onClick={() => { window.location.hash = "settings=docs&doc=learned&view=changes"; }}>See what changed</button>
       </div>}
       {dg.source_id && dg.writing && !writing && <div className="tq-since-digest" data-tq-digest="" data-tq-digest-writing="">
-        <span className="tag">MORNING DIGEST</span>{spin("Writing today's digest…")}
+        {/* queued by Finish setup (firstrun.first_digest): not written until the mail it reads is sorted - said so, with how many are left */}
+        <span className="tag">MORNING DIGEST</span>{spin(dg.waiting ? `Not written yet - ${dg.waiting} email${dg.waiting === 1 ? "" : "s"} still being sorted first`
+          : "Writing today's digest…")}
       </div>}
       {dg.source_id && !(dg.writing && !writing) && <div className="tq-since-digest" data-tq-digest="">
         <span className="tag">MORNING DIGEST</span>

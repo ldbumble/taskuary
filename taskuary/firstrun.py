@@ -437,3 +437,54 @@ def suggest_connections(store) -> dict:
                     f"{', '.join(dict.fromkeys(p['group'] for p in picks))} below."
                     + (f" ({', '.join(soon)} can't be connected yet - knowing you use {'it' if len(soon) == 1 else 'them'} still helps.)" if soon else ''),
             'picks': picks}
+
+
+# THE MORNING DIGEST ON THE FIRST DAY (the owner, 2026-10-15: "on first startup it should show the full card ... run morning digest -
+# say running in not yet processed"): a fresh install no longer gets the report (store.RETIRED_SEEDS, 2026-09-23), so the opener had
+# nothing to say about it. Finishing setup makes it - once: deleted later it stays deleted, the sentinel the old seed kept - and writes
+# the first one as soon as the mail is sorted; until then the opener says it waits for that (since.digest's `waiting`).
+DIGEST_SEEDED, DIGEST_WAIT = 'digest_report_seeded', 600       # seconds the first digest waits on the mail before it writes anyway
+_DIGEST_QUEUED = set()
+
+
+def ensure_digest(store):
+    """The Morning digest report's id - made here when this install never had one, None when its owner deleted it."""
+    from .digest import PROMPT
+    from .reports import is_digest
+    cfg = lambda s: (lambda t: json.loads(t) if t else {})(s.get('ConfigJson') or '')
+    sid = next((s['SourceId'] for s in store.list_sources() if s.get('Channel') == 'report' and is_digest(cfg(s))), None)
+    if sid or store.get_setting(DIGEST_SEEDED) is not None: return sid
+    # Owner 'template', as the seed wrote it: the prompt heal keeps an unedited prompt current (store.RETIRED_SEEDS names this row)
+    sid = store.save_source({'Channel': 'report', 'Address': 'Morning digest', 'Owner': 'template', 'Active': 1,
+                             'ConfigJson': json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 1, 'daily_at': '08:00',
+                                                       'on_startup': True, 'once_per_day': True, 'ai_prompt': PROMPT})}, 'template')
+    store.set_setting(DIGEST_SEEDED, '1', 'template')
+    return sid
+
+
+def first_digest(store, run, wait: float = DIGEST_WAIT, tick: float = 2.0):
+    """Finish setup: today's digest, written in the background once the mail is read and sorted. `run(src)` is the one road a
+    report runs on (server: reports.run_one); nothing is started when one was written today or the report was deleted."""
+    import time
+    from datetime import datetime
+    from . import welcome
+    sid = ensure_digest(store)
+    if not sid or sid in _DIGEST_QUEUED: return sid
+    last = next((r for r in store.report_runs(sid, 5) if not r.get('failed') and r.get('messageId')), None)
+    if last and str(last.get('at') or '')[:10] == datetime.now().strftime('%Y-%m-%d'): return sid
+    _DIGEST_QUEUED.add(sid)
+    def go():
+        try:
+            end = time.time() + wait
+            while time.time() < end and (welcome.mail_reading() or _sorting(store)): time.sleep(tick)
+            run(store.get_source(sid))
+        except Exception as e: logger.warning(f'setup: the first Morning digest did not run - {e}')
+        finally: _DIGEST_QUEUED.discard(sid)
+    threading.Thread(target=go, daemon=True).start()
+    return sid
+
+
+def digest_waiting(store, sid) -> int | None:
+    """Queued by Finish and not running yet: how many mails it waits on (0 = about to write); None when it is not queued."""
+    from . import reports
+    return _sorting(store) if sid in _DIGEST_QUEUED and sid not in reports._RUNNING else None

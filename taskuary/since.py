@@ -104,10 +104,14 @@ def digest(store) -> dict:
     # for it, instead of showing yesterday's or "not written yet" for the minute after launch (the owner, 2026-10-14)
     today = bool(run and str(run.get('at') or '')[:10] == datetime.now().strftime('%Y-%m-%d'))
     writing = src['SourceId'] in reports._RUNNING or (not today and reports.is_due(cfg_of(src), src.get('LastPolledAt'), welcome.startup_reports_pending()))
-    if not run: return {'source_id': src['SourceId'], 'at': None, 'text': '', 'writing': writing}
+    # ...or queued by Finish setup, waiting on the mail it will read (firstrun.first_digest): said as that, with how many are left
+    from .firstrun import digest_waiting
+    waiting = digest_waiting(store, src['SourceId'])
+    writing = writing or waiting is not None
+    if not run: return {'source_id': src['SourceId'], 'at': None, 'text': '', 'writing': writing, 'waiting': waiting}
     m = store.get_message(run['messageId']) or {}
     # the brief, not the evidence the model was handed under it (reports.RAW_MARK): a failed run's evidence IS its body
-    return {'source_id': src['SourceId'], 'at': run.get('at'), 'today': today, 'writing': writing,
+    return {'source_id': src['SourceId'], 'at': run.get('at'), 'today': today, 'writing': writing, 'waiting': waiting,
             'text': str(m.get('BodyText') or '').split(reports.RAW_MARK)[0].strip()}
 
 

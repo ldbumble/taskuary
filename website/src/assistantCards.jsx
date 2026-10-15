@@ -17,6 +17,7 @@ import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { openAppLink } from "./appLinks.js";
 import { Md, looksMd } from "./md.jsx";
 import { jsonRows } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
@@ -1088,7 +1089,13 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   // the now line sits between what is behind you and what is ahead - not above a day that has not started
   const nowAt = next === -1 ? (evs.length ? evs.length : -1) : next > 0 ? next : -1;
   const total = groups.reduce((n, g) => n + (g.n ?? g.rows.length), 0);
-  if (!all.length && !groups.length && !top) return null;
+  // THE WHOLE CARD FROM THE FIRST DAY (the owner, 2026-10-15: "on first startup it should show the full card - say calendar missing if
+  // not available"): the calendar side says what it is - none connected, unreadable, or a day with no meetings - instead of vanishing.
+  // `sources` is what calendar.today could reach; an answer from before it was sent says nothing, so the side stays as it was.
+  const cal = !today || today.off ? null : Array.isArray(today.sources) && !today.sources.length ? "none"
+    : !all.length && today.errors?.length ? "error" : !all.length && Array.isArray(today.sources) ? "empty" : null;
+  const agenda = !!all.length || !!cal, waits = !!groups.length || loading;
+  if (!agenda && !waits && !top) return null;
   const line = (e, i) => {
     const end = e.end ? atLocal(e.end) : atLocal(e.start) + 30 * 60000, past = end < now, live = !past && atLocal(e.start) <= now;
     return (
@@ -1102,7 +1109,16 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   return (
     <div className="tq-day-box">
     {top}
-    {(!!all.length || !!groups.length) && <div className={`tq-day${all.length && groups.length ? "" : " solo"}`}>
+    {(agenda || waits) && <div className={`tq-day${agenda && waits ? "" : " solo"}`}>
+      {!!cal && (
+        <div className="tq-day-agenda" data-tq-cal={cal}>
+          <div className="tq-day-h">Your day · {cal === "empty" ? "no meetings" : "calendar"}</div>
+          <div className="ev cal-note"><span className="s">{cal === "none" ? "No calendar connected - your Microsoft 365 or Gmail card reads it once it is allowed to."
+            : cal === "error" ? `Your calendar could not be read - ${String(today.errors[0]).slice(0, 140)}` : "Nothing on your calendar today."}</span></div>
+          {cal !== "empty" && <button type="button" className="tq-linkish cal-go" onClick={() => openAppLink("#connections=Email")}>
+            {cal === "none" ? "Connect a calendar" : "Open your mail card"}</button>}
+        </div>
+      )}
       {!!all.length && (
         <div className="tq-day-agenda">
           <div className="tq-day-h">Your day · {evs.length} meeting{evs.length === 1 ? "" : "s"}</div>
@@ -1116,9 +1132,10 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
           {nowAt === evs.length && <div className="ev now"><span className="t">now</span><i /></div>}
         </div>
       )}
-      {!!groups.length && (
+      {waits && (
         <div className="tq-day-wait">
           <div className="tq-day-h">Waiting · {loading ? "counting…" : total}</div>
+          {!groups.length && <div style={{ fontSize: 13, color: "#6e685f" }}>Your mail is still being read - what needs you shows up here.</div>}
           {groups.map((g) => (
             <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
               <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>

@@ -649,3 +649,7 @@
   .tq-chat-body { scroll-behavior: auto; }
   .tq-walk-progress i, .tq-day-card, .tq-day-row, .tq-chip { transition: none; }
 }
+/* the calendar side when it has no meetings to list: one quiet line and the way to connect one (DayOpener `cal`) */
+.tq-welcome .tq-day-agenda .ev.cal-note { grid-template-columns: minmax(0, 1fr); }
+.tq-welcome .tq-day-agenda .ev.cal-note .s { white-space: normal; }
+.tq-day-agenda .cal-go { align-self: flex-start; }

@@ -108,3 +108,34 @@ class SuggestConnectionsTests(unittest.TestCase):
         titles = [p['title'] for p in out['picks']]
         self.assertIn('Workday', titles); self.assertIn('Salesforce', titles)
         self.assertIn('Workday', out['line'])
+
+
+class FirstDigestTests(unittest.TestCase):
+    """Finishing setup writes the day's Morning digest once the mail is sorted, and the opener says it waits for that (the owner,
+    2026-10-15: "run morning digest - say running in not yet processed")."""
+    def test_finish_makes_the_report_once_and_a_deleted_one_stays_deleted(self):
+        s = MemoryStore()
+        sid = firstrun.ensure_digest(s)
+        self.assertEqual(json.loads(s.get_source(sid)['ConfigJson'])['type'], 'digest')
+        self.assertEqual(firstrun.ensure_digest(s), sid)                         # never a second one
+        s.save_source({'SourceId': sid, 'Active': 0}, 'owner')                     # the owner switched it off
+        self.assertIsNone(firstrun.ensure_digest(s))
+
+    def test_it_waits_on_the_sorting_then_writes_and_says_so_meanwhile(self):
+        from taskuary import since
+        s, ran, gate = MemoryStore(), [], {'n': 3}
+        with mock.patch.object(firstrun, '_sorting', side_effect=lambda st: gate['n']),              mock.patch('threading.Thread') as T:
+            sid = firstrun.first_digest(s, ran.append, wait=60, tick=0)
+            go = T.call_args.kwargs['target']
+            self.assertEqual(since.digest(s)['waiting'], 3); self.assertTrue(since.digest(s)['writing'])
+            with mock.patch('time.sleep', side_effect=lambda _: gate.update(n=0)): go()
+        self.assertEqual([r['SourceId'] for r in ran], [sid])
+        self.assertIsNone(firstrun.digest_waiting(s, sid))
+
+    def test_one_written_today_is_not_written_again(self):
+        from datetime import datetime
+        s = MemoryStore(); sid = firstrun.ensure_digest(s)
+        s.add_report_run(sid, {'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'message_id': 7, 'failed': False})
+        with mock.patch('threading.Thread') as T:
+            firstrun.first_digest(s, lambda src: None)
+        T.assert_not_called()

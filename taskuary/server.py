@@ -6139,8 +6139,11 @@ def first_run_suggest_connections():
 @app.post('/api/setup/first-run/finish')
 def first_run_finish():
     """Finish setup (or Walk me through my tasks): the canvas is the day from now on, until the top bar's Setup reopens it."""
-    from . import firstrun
+    from . import firstrun, reports
     firstrun.finish(store)
+    # ...and the opener's Morning digest is written now, once the mail is sorted - it says it waits, then that it writes
+    try: firstrun.first_digest(store, lambda src: reports.run_one(store, src, _llm(), trigger='manual'))
+    except Exception as e: logger.warning(f'setup: no first Morning digest - {e}')
     return firstrun.state(store)
 
 @app.post('/api/setup/first-run/connector')

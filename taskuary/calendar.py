@@ -270,10 +270,11 @@ def today(store) -> dict:
     d = now.strftime('%Y-%m-%d')
     if _TODAY['data'] and _TODAY['day'] == d and time.time() - _TODAY['at'] < UPCOMING_TTL: return _TODAY['data']
     if store.get_setting('calendar_enabled', '1') != '1':
-        return {'date': d, 'now': now.strftime('%H:%M'), 'events': [], 'tz': tz_name(tz), 'errors': []}
+        return {'date': d, 'now': now.strftime('%H:%M'), 'events': [], 'tz': tz_name(tz), 'errors': [], 'sources': [], 'off': True}
     ag = agenda(store, days=1, start=now.replace(hour=0, minute=0, second=0, microsecond=0))
     evs = [e for e in ag['events'] if e['start'][:10] == d]
-    data = {'date': d, 'now': now.strftime('%H:%M'), 'events': evs, 'tz': ag['tz'], 'errors': ag['errors']}
+    # `sources`: the calendars it could reach - none says "not connected" on the opener, where no meetings is a real empty day
+    data = {'date': d, 'now': now.strftime('%H:%M'), 'events': evs, 'tz': ag['tz'], 'errors': ag['errors'], 'sources': ag['sources']}
     _TODAY.update(at=time.time(), day=d, data=data)
     return data
 

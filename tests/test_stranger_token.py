@@ -223,29 +223,23 @@ def _pane(s, t, tmp_path):
         terminal.open_session(s, 'coder', task_id=t, cwd=str(tmp_path))
     return T.call_args.args[0]
 
-def test_a_locked_stranger_batch_runs_read_only_and_under_the_floor(tmp_path):
+def test_a_stranger_batch_runs_in_auto_mode_under_the_floor(tmp_path):
+    "No read-only lock any more (the owner, 2026-10-15): a stranger's batch is a stranger's task - auto mode, the floor, its folder."
     from taskuary import batch
     s = _store(); t, _ = _task(s)
-    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch.object(batch, 'locked', return_value=True), \
-            mock.patch('taskuary.config.load', return_value=server.cfg):
+    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch('taskuary.config.load', return_value=server.cfg):
         argv = _pane(s, t, tmp_path)
-    assert argv[argv.index('--permission-mode') + 1] == 'dontAsk' and argv.count('--settings') == 1
+    assert argv[argv.index('--permission-mode') + 1] == 'auto' and argv.count('--settings') == 1
     hooks_ = json.loads(Path(argv[argv.index('--settings') + 1]).read_text(encoding='utf-8'))['hooks']
     assert '/api/hooks/claude/floor' in hooks_['PreToolUse'][0]['hooks'][0]['command']
-    assert str(origin.stranger_dir(t)) in argv[argv.index('--add-dir') + 1:argv.index('--settings')]
+    assert str(origin.stranger_dir(t)) == argv[argv.index('--add-dir') + 1]
 
-def test_a_locked_owner_batch_is_read_only_as_before(tmp_path):
+def test_an_owner_batch_launches_as_any_owner_session(tmp_path):
     from taskuary import batch
     s = _store(); t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
-    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch.object(batch, 'locked', return_value=True):
+    with mock.patch.object(batch, 'is_batch', return_value=True):
         argv = _pane(s, t, tmp_path)
-    assert argv[argv.index('--permission-mode') + 1] == 'dontAsk' and not any('sessions' in str(a) and str(a).endswith('.json') for a in argv)
-
-def test_a_locked_stranger_batch_on_codex_is_refused(tmp_path):
-    from taskuary import batch
-    s = _store('codex'); t, _ = _task(s)
-    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch.object(batch, 'locked', return_value=True), pytest.raises(ValueError):
-        _pane(s, t, tmp_path)
+    assert '--permission-mode' not in argv and not any('sessions' in str(a) and str(a).endswith('.json') for a in argv)
 
 def test_a_live_conversation_restarts_when_its_environment_s_keys_change(monkeypatch):
     from taskuary import clipool

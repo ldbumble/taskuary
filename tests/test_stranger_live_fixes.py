@@ -84,13 +84,12 @@ def test_a_stranger_pane_adds_its_folder_and_an_option_closes_the_list(tmp_path)
 def test_an_owner_pane_has_no_added_folder(tmp_path):
     s = _store(); assert '--add-dir' not in _pane(s, _owner(s), tmp_path)
 
-def test_a_locked_stranger_batch_may_read_its_file_too(tmp_path):
+def test_a_stranger_batch_may_read_its_file_too(tmp_path):
     from taskuary import batch
     s = _store(); t = _stranger(s)
-    with mock.patch.object(batch, 'is_batch', return_value=True), mock.patch.object(batch, 'locked', return_value=True):
+    with mock.patch.object(batch, 'is_batch', return_value=True):
         argv = _pane(s, t, tmp_path)
-    dirs = argv[argv.index('--add-dir') + 1:]
-    assert str(origin.stranger_dir(t)) in dirs[:2] and _after(argv, '--permission-mode') == 'dontAsk'
+    assert str(origin.stranger_dir(t)) == _after(argv, '--add-dir') and _after(argv, '--permission-mode') == 'auto'
 
 def test_a_stranger_headless_run_adds_its_folder():
     s = _store(); t = _stranger(s)

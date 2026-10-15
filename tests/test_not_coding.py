@@ -66,6 +66,7 @@ class DispatchGateTests(unittest.TestCase):
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 'o')
         s.set_setting('intent_classify_enabled', classify, 'o')
+        s.remember_trust('teams', 'a@b.c', 'you vouched for them')        # a trusted sender: this is about the kind, not the gate
         from taskuary import general
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude'}]):
             out = ingest_message(s, {'external_id': 'x1', 'channel': 'teams', 'subject': subject,

@@ -243,6 +243,7 @@ def test_a_resumed_session_is_told_what_arrived_since_its_last_run_and_where_the
     was the one written when the task began. It is rewritten on resume - attachments listed with their paths -
     and the seed says how many messages are new."""
     store = MemoryStore(); tid = store.create_task({'Title': 'Update fails', 'Kind': 'coding', 'Status': 'open'}, 'o')
+    store.remember_trust('whatsapp', 'gabi', 'you vouched for them')     # a trusted sender: this is about the resume, not the floor
     first = store.add_message({'TaskId': tid, 'ExternalId': 'w1', 'Channel': 'whatsapp', 'ConversationId': 'wa:gabi',
                                'FromName': 'Gabi', 'SentAt': '2026-09-24 14:53:24', 'BodyText': 'When updating, this is what I got', 'Status': 'routed'})
     store._exec("INSERT INTO transcript (TaskId, Sid, Agent, Text, CreatedAt) VALUES (?, 's1', 'coder', 'did the work', '2026-09-24 14:57:40')", (tid,))

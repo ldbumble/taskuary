@@ -28,6 +28,7 @@ def store(replies_off=('teams',), auto_draft='1'):
     s.set_setting('auto_draft_enabled', auto_draft, 't')
     s.set_setting('coder_auto_enabled', '1', 't')
     s.upsert_agent('coder', 'coding', 'cli', '{}')
+    s.remember_trust('teams', 'dana@vendor.example', 'you vouched for them')   # a trusted sender: these are about drafting and kind
     return s
 
 

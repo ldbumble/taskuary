@@ -461,6 +461,21 @@ def test_a_module_qualified_spawn_of_taskuary_is_refused(content, tmp_path):
 def test_a_cli_command_named_taskuary_is_written(tmp_path):
     assert call('Write', file_path=str(tmp_path / 'x.js'), content="program.command('taskuary')\n") == {}
 
+def test_the_edit_that_crosses_the_budget_is_refused(tmp_path):
+    "Under the budget before, past it after: the floor stopped reading what this edit made, so it is refused."
+    under = ''.join(f"X{i} = \"bash -c {'y' * 70000}\"\n" for i in range(28))
+    assert denied(_edit(tmp_path / 'm.py', under, ''.join(f"X{i} = \"bash -c {'y' * 70000}\"\n" for i in (28, 29))))
+
+@pytest.mark.parametrize('content', ["re.exec('taskuary')\n", "app.run('taskuary')\n", "rpc.call('taskuary')\n", "cur.execute('taskuary')\n",
+                                     "reports.executor_for('taskuary')\n", "program.command('taskuary')\n"])
+def test_a_method_named_like_a_spawn_is_written(content, tmp_path):
+    assert call('Write', file_path=str(tmp_path / 'x.js'), content=content) == {}, content
+
+@pytest.mark.parametrize('content', ["child_process.fork('taskuary')\n", "cp.execSync('taskuary')\n", "execa.execaSync('taskuary-desktop')\n",
+                                     "subprocess.Popen('taskuary')\n", "Bun.spawn('taskuary')\n", "cp.exec('taskuary')\n"])
+def test_a_module_qualified_spawn_name_is_refused(content, tmp_path):
+    assert denied(call('Write', file_path=str(tmp_path / 'x.js'), content=content)), content
+
 def test_a_later_launch_with_its_own_heredoc_is_judged(tmp_path):
     "Two launches in one statement end their regions at one place, but each reads on to its own heredoc's end."
     body = "pwsh -c 'echo' <<A && pwsh -c \"$(cat)\" <<B\nok\nA\nrd Env:*\nB\n"

@@ -213,9 +213,11 @@ _STR = re.compile(r'''"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)\'''')     # cha
 # ...and a string a shell runs - os.system('taskuary --prompts'), execSync(...), subprocess.run('...', shell=True)
 _SHELL_CALL = re.compile(r'''(?<![\w.])(?:os\.system|os\.popen|subprocess\.\w+|(?:child_process\.|cp\.)?exec(?:Sync)?)\s*\(\s*[fbru]?(["'`])((?:\\.|(?!\1)[^\\\n])*)\1''')
 
-# ...and a spawn call's one string argument: spawn('taskuary'), execa('taskuary-desktop'), child_process.spawn('taskuary') -
-# a module's method too (program.command('taskuary') names a CLI's subcommand: Command counts in the Rust type's case only)
-_SPAWN1 = re.compile(r'(?<!\w)' + _SPAWN + r'''(["'`])((?:[^"'`\n]*[/\\])?taskuary(?:\.exe|-desktop)?)\1''', re.I)
+# ...and a spawn call's one string argument: spawn('taskuary'), execa('taskuary-desktop'), and a module's own spawn by its
+# exact name - child_process.spawn('taskuary'), Bun.spawn. Any other method is not one: app.run, cur.execute, regex.exec
+# (cp.exec is a shell string, _SHELL_CALL's), program.command('taskuary')
+_QSPAWN = r'(?<=\.)(?:spawn(?:Sync)?|execFile(?:Sync)?|execSync|execa(?:Sync)?|fork|Popen)\s*\(\s*'
+_SPAWN1 = re.compile(r'(?:(?<![\w.])' + _SPAWN + '|' + _QSPAWN + ')' + r'''(["'`])((?:[^"'`\n]*[/\\])?taskuary(?:\.exe|-desktop)?)\1''', re.I)
 _TOK = re.compile(r'''"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|[()\[\]{}]''')
 # every rule a launch's text is judged by needs one of these words: taskuary (the program, the package, a TASKUARY_ name),
 # env (env -i, Env:, environ, SetEnvironmentVariable), compgen, -UseNew*, exec -c
@@ -475,7 +477,8 @@ def check(payload: dict, tid: int, store=None) -> dict:
         if _is_script(f, body):
             ow, ps = _is_script(f, old), _is_ps(f, body)
             was, now = Counter(_keyed(_runner_text(f, old), True, _is_ps(f, old)) if ow else []), Counter(_keyed(_runner_text(f, body), True, ps))
-            new = [h for h in (now - was).elements() if h[1] != 'budget' or not ow]
+            # the file was already past the budget: its 'budget' is not this call's doing. The edit that CROSSES it is refused.
+            new = [h for h in (now - was).elements() if h[1] != 'budget' or not any(k == 'budget' for _, k in was)]
             # past the budget a side was not read to its end, and its 'budget' key would cancel the other's: what this call
             # adds - the edit's new text, a Write's added lines - is judged on its own, by every rule
             if ow and any(k == 'budget' for _, k in was | now): new += _keyed(_runner_text(f, _added(old, body) if 'content' in inp else said), True, ps)

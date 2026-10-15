@@ -52,6 +52,7 @@ import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import DigestText from "./DigestText.jsx";
+import { firstAppLink, openAppLink } from "./appLinks.js";
 import FirstRun from "./FirstRun.jsx";
 import SetupSteps from "./SetupSteps.jsx";
 import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
@@ -1427,6 +1428,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [],
                                 ...(prop ? { proposal: prop, card: { kind: "proposal", key: prop.key, title: prop.label, op: prop.id, tid: prop.tid, ref: prop.ref } } : {}) }]);
         say(data.say);
+        // THE PAGE IT NAMED, OPENED (appLinks.js): "set up Intacct" puts the Sage Intacct card beside the answer, not a sentence
+        // about where to find it. Only a fresh reply opens one - a reloaded history draws its links, it does not open them.
+        const page = data.open || firstAppLink(data.say);
+        if (page) openAppLink(page);
         if (prop?.auto) await runProposal(prop);                   // a plain verb on the item on the table: no button to press
         else if (!prop && data.decision) await decide(data.decision, data);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
       }

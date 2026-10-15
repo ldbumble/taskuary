@@ -1,0 +1,28 @@
+// The Assistant brings up the app's own screens (the owner, 2026-10-15: "help me set up the intacct api" should open the Sage
+// Intacct settings page; "if it needs to know setting for x, bring the settings view up").
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import test from "node:test";
+import { appLink, firstAppLink } from "../src/appLinks.js";
+
+const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
+
+test("our pages are app links; the web and unknown hashes are not", () => {
+  for (const h of ["#connector=intacct", "#cli-agents", "#settings=policies", "#report=new-agent", "#report=12", "#profiles"])
+    assert.equal(appLink(h), h, h);
+  for (const h of ["https://example.com", "#nothing-here", "", "#task=12"]) assert.equal(appLink(h), null, h);
+});
+
+test("a reply opens the page it names - else the one task it points at, never one of several", () => {
+  assert.equal(firstAppLink("Here it is: [Open the Sage Intacct connection](#connector=intacct). Fill in the sender ID."), "#connector=intacct");
+  assert.equal(firstAppLink("See [TQ-0012](#task=12) and the [settings](#settings=config)."), "#settings=config");
+  assert.equal(firstAppLink("That is [TQ-0012](#task=12)."), "#task=12");
+  assert.equal(firstAppLink("Both [TQ-0012](#task=12) and [TQ-0013](#task=13) are open."), null);
+  assert.equal(firstAppLink("Read [the docs](https://example.com/x)."), null);
+});
+
+test("the chat opens it on a fresh reply, and a link in the text opens it in place", () => {
+  assert.match(read("AssistantView.jsx"), /const page = data\.open \|\| firstAppLink\(data\.say\);\n\s*if \(page\) openAppLink\(page\);/);
+  assert.match(read("md.jsx"), /else if \(page\) \{ e\.preventDefault\(\); openAppLink\(page\); \}/);
+  assert.match(read("ChatThread.jsx"), /\{hasFiles && <Attachments messageId=\{m\.MessageId\} \/>\}/);    // pictures at reading size
+});

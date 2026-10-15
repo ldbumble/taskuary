@@ -1098,7 +1098,35 @@ def _system(store, llm=None) -> str:
     except Exception: repos = []
     where = (f"REPOSITORIES a coding job can open in - name one as `as` when the owner's words or the work point at it; name none when "
              f"unsure and the card asks them: {', '.join(repos[:40])}\n\n") if repos else ''
-    return f"{_counsel(store)}\n\n{who}{where}{contract.format(owner=_owner(store))}"
+    pages = pages_block(store) if DELIVERY.get() != PHONE else ''      # a phone has no canvas to open a page on
+    return f"{_counsel(store)}\n\n{who}{where}{pages}{contract.format(owner=_owner(store))}"
+
+
+def pages_block(store) -> str:
+    """THE APP'S OWN SCREENS, by the links the canvas opens (the owner, 2026-10-15: "if i ask the assistant to help me set up
+    the intacct api, does it just open the sage intacct settings page? it should ... pull into the chat any deterministic ui").
+    The chat opens the first such link in a fresh answer beside it (appLinks.js), and draws every one as a link."""
+    try: on = [c for c in store.list_connectors() if c.get('Active')]
+    except Exception: on = []
+    try: reports = [s for s in store.list_sources(active_only=False) if s.get('Channel') == 'report']
+    except Exception: reports = []
+    title = lambda s: (json.loads(s.get('ConfigJson') or '{}').get('title') if (s.get('ConfigJson') or '').startswith('{') else '') or s.get('Address') or 'report'
+    conns = ', '.join(f"{c.get('Name') or c['Type']} #connector={c['Type']}" for c in on[:30])
+    reps = ', '.join(f"{title(s)} #report={s['SourceId']}" for s in reports[:30])
+    # THE SPLIT (the owner, 2026-10-15: "if the agent asks you to do something do it, if it needs to know settings for x, bring
+    # the settings view up"): what the assistant can do, it does - its own calls; a page is for what the owner sees or sets
+    return ('APP PAGES - DO FIRST, SHOW SECOND: what the owner asks you to do and you can do, you do - with your own calls and '
+            'words, never a page sent instead. When they need to SEE or SET something themselves - the keys of a connection, a '
+            'setting, the form of a report - or want to look at it, end your answer with ONE markdown link to that screen, e.g. '
+            '[Open the Sage Intacct connection](#connector=intacct), and say in a line what to do there; a task is [TQ-0123](#task=123). '
+            'The screen opens beside your answer. Use only the addresses below; no link when no screen helps.\n'
+            f"- a connection: #connector=<its type>{' - connected now: ' + conns if conns else ''}; any other system by its type "
+            '(intacct, outlook, gmail, teams, slack, whatsapp, quickbooks, sharepoint, mssql, github, jira ...)\n'
+            '- the AI CLI agents (Claude Code, Codex): #cli-agents\n'
+            f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
+            '#report=new-agent; the workflows #report=workflows\n'
+            '- settings: #settings=config, #settings=policies, #settings=memory, #settings=docs (the operator documents), '
+            '#settings=updates, #settings=audit; agent profiles #profiles\n\n')
 
 
 def _urgent_line(pile_items: list, item: dict | None) -> str:
@@ -3003,7 +3031,17 @@ def _propose_connection(store, tid: int, ask: str, provider: str | None, item: d
         rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': ['Which system should I connect?']})
         return {'say': say_, 'options': [], 'decision': None}
     existing = store.get_connector_by_type(provider)
-    cid = int(existing['ConnectorId']) if existing and not existing.get('Active') else 0
+    # THE CARD ITSELF, OPENED (the owner, 2026-10-15: "help me set up the intacct api" should open the Sage Intacct settings page).
+    # Every system the app knows has its card already; it holds the form, its guide and Set up with AI, and a proposal to
+    # "create" it was a card about a card. The proposal below stays for a system with no card at all.
+    if existing:
+        name, link = existing.get('Name') or provider, f'#connector={provider}'
+        say_ = (f"Here is your {name} connection{' - it is on' if existing.get('Active') else ''}: [Open the {name} connection]({link}). "
+                'Fill in its fields and run Test, or press Set up with AI and it walks you through what it needs. A key or password '
+                'goes on the card, never in this chat.')
+        rec(say_)
+        return {'say': say_, 'options': [], 'decision': None, 'open': link}
+    cid = 0
     name = (existing or {}).get('Name') if cid else f"{provider.title()} (from the chat)"
     scope = scopes.default_scope(provider)
     params = {'type': provider, 'name': name, 'scope': scope, 'permissions': SCOPE_SAYS.get(scope, scope),

@@ -67,7 +67,9 @@ export default function ChatThread({ messages = [], maxHeight = 460 }) {
                 bgcolor: me ? "#dfe9df" : "#fff", border: `1px solid ${me ? "#cddccd" : BORDER}` }}>
                 {words && <Typography variant="body2" sx={{ color: INK, lineHeight: 1.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {words}</Typography>}
-                {hasFiles && <Attachments messageId={m.MessageId} dense />}
+                {/* full reading size, as wide as the bubble - the small one was a thumbnail you had to click to read
+                    (the owner, 2026-10-15: "images do look small in the chat") */}
+                {hasFiles && <Attachments messageId={m.MessageId} />}
                 <Typography sx={{ fontSize: 9.5, color: FAINT, textAlign: "right", mt: 0.25, lineHeight: 1 }}>
                   {voice ? "🎤 voice note, transcribed · " : ""}{timeOf(m.SentAt)}
                 </Typography>

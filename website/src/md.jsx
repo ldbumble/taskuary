@@ -8,14 +8,17 @@ import { Box } from "@mui/material";
 import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 
 import { looksMd, refParts } from "./mdText.js";
+import { appLink, openAppLink } from "./appLinks.js";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
 const A = ({ href, children }) => {
   const m = TASK_LINK.exec(href || "");
+  // ...and a page of the app itself (appLinks.js): opened on the canvas here, never a new browser tab
+  const page = m ? null : appLink(href);
   return (
-    <a href={href} target={m ? undefined : "_blank"} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
-      onClick={(e) => { if (m) { e.preventDefault(); window.location.hash = `task=${m[1]}`; } }}>
+    <a href={href} target={m || page ? undefined : "_blank"} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
+      onClick={(e) => { if (m) { e.preventDefault(); window.location.hash = `task=${m[1]}`; } else if (page) { e.preventDefault(); openAppLink(page); } }}>
       {m ? `open TQ-${String(m[1]).padStart(4, "0")} →` : children}
     </a>
   );

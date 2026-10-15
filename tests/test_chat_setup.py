@@ -160,8 +160,19 @@ class ConnectionSetupTests(unittest.TestCase):
         q = SQLiteStore(os.path.join(tempfile.mkdtemp(), 't.db')); cid = q.save_connector({'Type': 'jira', 'Name': 'Jira'}, 't')
         self.assertEqual(q.save_connector({'ConnectorId': cid}, 't'), cid)          # nothing to change is not a syntax error
 
+    def test_a_system_with_a_card_opens_the_card(self):
+        """The owner, 2026-10-15: "help me set up the intacct api" should open the Sage Intacct settings page - its form, its guide
+        and Set up with AI - not propose to create a card that exists."""
+        s = store()
+        before = s.get_connector_by_type('slack')
+        out = say(s, 'connect our Slack workspace', composer(sort={'kind': 'connection', 'provider': 'slack', 'why': 'a chat system'}))
+        self.assertEqual(out.get('open'), '#connector=slack'); self.assertIsNone(out.get('proposal'))
+        self.assertIn('](#connector=slack)', out['say']); self.assertIn('never in this chat', out['say'])
+        self.assertEqual(s.get_connector_by_type('slack'), before)                                          # nothing changed on it
+
     def test_a_connection_is_confirmed_with_its_authority_and_created_off_and_without_a_secret(self):
         s = store()
+        s._exec("DELETE FROM connector WHERE Type='slack'")           # a system with no card yet: the proposal is the road
         out = say(s, 'connect our Slack workspace', composer(sort={'kind': 'connection', 'provider': 'slack', 'why': 'a chat system'}))
         p = out['proposal']
         self.assertEqual((p['kind'], p['label'], p['params']['type'], p['params']['scope']), ('connection.create', 'Create the connection', 'slack', scopes.default_scope('slack')))
@@ -174,8 +185,8 @@ class ConnectionSetupTests(unittest.TestCase):
                          ('slack', False, None, 'authorization pending', f"#connector={o['connectorId']}"))
         dock = general.dock_task(s)[0]['TaskId']
         self.assertTrue(any('authorization pending' in (x.get('Body') or '') and 'stays off' in (x.get('Body') or '') for x in general.chat_rows(s, dock)))
-        again = say(s, 'connect our Slack workspace', composer(sort={'kind': 'connection', 'provider': 'slack'}))['proposal']
-        self.assertEqual(run(s, again).json()['outcome']['connectorId'], o['connectorId'])                    # the same card again, not a second one
+        again = say(s, 'connect our Slack workspace', composer(sort={'kind': 'connection', 'provider': 'slack'}))
+        self.assertEqual(again.get('open'), '#connector=slack')                 # the card it made is opened now, not a second one
         self.assertEqual(len(s.connectors_by_type('slack')), 1)
 
     def test_an_unnamed_system_is_asked_for_and_a_secret_typed_in_is_not_kept(self):
@@ -229,3 +240,14 @@ class ConnectionSetupTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AppPagesTests(unittest.TestCase):
+    """The Assistant is told the app's screens and the split (the owner, 2026-10-15): what it can do it does; what the owner
+    needs to see or set, it brings up - by the links the canvas opens."""
+    def test_the_desk_assistant_knows_the_pages_and_the_phone_does_not(self):
+        s = store()
+        desk = concierge._system(s)
+        self.assertIn('DO FIRST, SHOW SECOND', desk)
+        for link in ('#connector=intacct', '#cli-agents', '#report=new-agent', '#settings=policies', '#profiles'): self.assertIn(link, desk)
+        with concierge.delivering(concierge.PHONE): self.assertNotIn('APP PAGES', concierge._system(s))   # no canvas to open it on

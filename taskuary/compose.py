@@ -105,7 +105,9 @@ JUDGEMENT = (
     '- confidence "low" is a real answer. Say so in explain and the owner will check it.\n'
     '- Ask only what you can neither find out nor sensibly default. What the request already says, a repository it '
     'names, a time these rules default and an obvious search term (the product\'s own name) are not questions - '
-    'use them and say so in explain; the owner sees the report before it runs.\n')
+    'use them and say so in explain; the owner sees the report before it runs.\n'
+    '- A clear request is built, not questioned: never ask the owner to confirm what they already said, or to choose '
+    'between readings when one is plainly meant. They check the draft before anything is saved.\n')
 
 REPOS_RULE = ('- "repositories" are the owner\'s own code repositories: full name and what each is for. When the request names one '
               'by its short name ("taskuary", "ledger"), it means that one - write its full owner/name, never ask which.\n')
@@ -150,8 +152,14 @@ WORKFLOW_SYSTEM = (
     'into a Zoho draft, and leaves every send on the task for owner approval.\n'
     '- "agent": runs a configured CLI AI agent with write access, using a saved skill and/or prompt, '
     'then files its result. A job that only retrieves or summarizes data is a report, not a workflow.\n\n'
+    'TASKUARY IS WHERE RESULTS LAND. Each run is itself a task in Taskuary, and it may open tasks for people, write notes '
+    'and leave drafts - emails, messages, invoices - for the owner to approve, with no connection at all. Never ask which '
+    'connection opens a task or where a result should go. A connection is only for a system the work happens IN (Intacct '
+    'to read, a portal to drive). Opening tasks or drafting IS doing work: such a job is a workflow, never "really a report".\n\n'
     'Answer JSON only in one of two shapes:\n'
-    '  {"questions": ["..."]} when a necessary choice is missing; at most three short questions.\n'
+    '  {"questions": ["..."]} only when a choice you cannot sensibly default is missing (which Zoho customers, say); at most '
+    'three short questions. A clear request is built: what you chose - who runs it, the schedule, what it asks first - goes '
+    'in explain, never back to the owner as a question, and nothing they already said is asked again.\n'
     '  {"config": {...}, "explain": "<what it will do>", "confidence": "high|medium|low"}.\n\n'
     'RULES\n'
     '- Use only connector ids, customer ids, and agent names present in WORKFLOW OPTIONS. Never invent one.\n'
@@ -159,7 +167,9 @@ WORKFLOW_SYSTEM = (
     'a list of exact customer ids; the server replaces them with its trusted customer records. If the '
     'owner did not identify which customers, ask. Nothing ever sends automatically.\n'
     '- An agent workflow must change data or state, and needs type, title, agent, and prompt and/or skill. Use an exact configured '
-    'agent name. A skill is its slash-command name without requiring the leading slash. cwd and model '
+    'agent name: the profile whose job it is (an accounts-payable job is ap), else the general assistant - never ask which.\n'
+    '- "uses" carries every connection the request names that is in WORKFLOW OPTIONS - name Intacct and its id goes in.\n'
+    '- A skill is its slash-command name without requiring the leading slash. cwd and model '
     'are optional and must come from the owner, never be guessed.\n'
     '- Schedule with every_minutes, daily_at (HH:MM), or standard five-field cron. daily_at is EVERY day: a weekly, '
     'weekday or monthly ask is cron ("every Monday at 8" is "0 8 * * 1"), and explain must say the same schedule the '

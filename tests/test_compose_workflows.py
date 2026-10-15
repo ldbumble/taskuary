@@ -83,3 +83,14 @@ def test_the_definition_keeps_a_daily_time_and_names_its_connections():
                                                                               'access': 'write', 'daily_at': '07:30', 'uses': [c['ConnectorId']]})})
     assert d['schedule'] == {'daily_at': '07:30'}
     assert f"CONNECTIONS: {c.get('Name') or c['Type']} (connection {c['ConnectorId']})" in workflows.brief(d, 'manual', 'now')
+
+
+def test_the_builder_knows_taskuary_is_where_results_land_and_builds_a_clear_request():
+    """The owner, 2026-10-15: it asked which connection - Teams or Outlook - would "open the finance tasks", called a job that
+    opens tasks "really a report", and asked about things the request already said. "It does not have to ask us questions
+    if it's clear." """
+    s = compose.WORKFLOW_SYSTEM
+    assert 'TASKUARY IS WHERE RESULTS LAND' in s and 'Never ask which connection opens a task' in s
+    assert 'Opening tasks or drafting IS doing work' in s
+    assert 'A clear request is built' in s and 'never ask which' in s
+    assert 'A clear request is built, not questioned' in compose.JUDGEMENT          # the report builder too

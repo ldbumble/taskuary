@@ -58,8 +58,10 @@ export default function ChatThread({ messages = [], maxHeight = 460 }) {
           <React.Fragment key={m.MessageId}>
             {newDay && <Typography sx={{ alignSelf: "center", fontSize: 10.5, color: FAINT, bgcolor: "#ece6dc", px: 1, py: 0.2,
               borderRadius: 99, my: 0.6 }}>{dayLabel(m.SentAt)}</Typography>}
+            {/* the box keeps the task's width; the conversation is a centred column in it - theirs and yours a reading distance
+                apart, not the two edges of a wide window (the owner, 2026-10-15: "keep the width but center them in the chat") */}
             <Box data-tq-chat-msg={me ? "mine" : "theirs"} sx={{ display: "flex", flexDirection: "column", alignItems: me ? "flex-end" : "flex-start",
-              mt: newRun && !newDay ? 0.6 : 0 }}>
+              width: "100%", maxWidth: 760, alignSelf: "center", mt: newRun && !newDay ? 0.6 : 0 }}>
               {newRun && !me && <Typography sx={{ fontSize: 10.5, fontWeight: 600, color: DIM, ml: 1, mb: 0.15 }}>
                 {m.FromName || m.FromEmail || m.Channel}</Typography>}
               <Box sx={{ maxWidth: { xs: "88%", md: "min(70%, 640px)" }, minWidth: 0, px: 1.2, py: 0.7, borderRadius: 2,

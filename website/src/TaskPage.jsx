@@ -744,8 +744,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const inbound = storedMessages.filter((m) => m.Status !== "context" && m.Direction !== "out");
   // a WhatsApp, Teams or Slack task is a conversation: drawn as one (ChatThread), yours beside theirs - never a batch
   const chatTask = !detail?.batch && isChatTask(taskMessages);
-  const alsoSaid = inbound.filter((m) => m.MessageId !== inbound[0]?.MessageId
-                                      && cleanText(m.BodyText) && cleanText(m.BodyText) !== taskAsk);
+  // Close out's conversation for an email task: theirs and what you sent outside Taskuary, newest first (a chat has ChatThread)
+  const mailThread = chatTask || detail?.batch || !inbound.length ? []
+    : newestFirst([...inbound, ...sentOutside.map((m) => ({ ...m, mine: true }))]);
+  // ...every one of them, the first included: a triage summary over the task is a line ABOUT the first email, not the email - with it
+  // the first was in neither place, so a thread read newest first ended one short (2026-10-15). Only words already shown above go.
+  const alsoSaid = inbound.filter((m) => cleanText(m.BodyText) && cleanText(m.BodyText) !== taskAsk);
   const completionIsManual = ownerControlsCompletion(t);
   const interruptedTask = String(t?.Tags || "").split(/[\s,]+/).includes("interrupted");
   const taskState = taskPhase(t?.Status);
@@ -1390,7 +1394,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         )}
                         {/* ...and what they SENT with it - the photo or screenshot is often the whole ask, and it was only ever inside
                             the folded history (the owner, 2026-09-30: "don't see the image on the task incoming message") */}
-                        {inbound[0]?.MessageId && !chatTask && <Box sx={{ mt: 0.6, maxWidth: 900 }}>
+                        {inbound[0]?.MessageId && !chatTask && !alsoSaid.some((m) => m.MessageId === inbound[0].MessageId) && <Box sx={{ mt: 0.6, maxWidth: 900 }}>
                           <Attachments messageId={inbound[0].MessageId} canFetch={inbound[0].Channel === "email" && mentionsPicture(inbound[0].BodyText)} dense /></Box>}
                         {/* the checklist triage drew from the ask (PW-075): boxes are progress on the list,
                             never task completion - closing the task stays the owner's separate decision.
@@ -1849,6 +1853,23 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <Typography sx={{ ...label, display: "block", mb: 0.25 }}>The conversation</Typography>
                         <ChatThread messages={taskMessages} maxHeight={240} />
                       </Box>}
+                      {/* ...and an EMAIL task's too (the owner, 2026-10-15: "for email in both the task side and close out side"): what
+                          they wrote and what you sent outside Taskuary, newest first, one list - the draft answers the top of it */}
+                      {mailThread.length > 0 && <Box data-tq-mail-thread="" sx={{ mb: 1.2 }}>
+                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>The conversation</Typography>
+                        <Box sx={{ maxHeight: 240, overflowY: "auto", pr: 0.5 }}>
+                          {mailThread.map((m) => (
+                            <Box key={m.MessageId} data-tq-mail-msg="" sx={{ mt: 0.6, pl: 1, borderLeft: `2px solid ${m.mine ? "#cddccd" : BORDER}`, maxWidth: 900 }}>
+                              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
+                                {m.mine ? "Sent by you" : m.FromName || m.FromEmail || m.Channel}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap", overflowWrap: "anywhere",
+                                display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                                {cleanText(m.mine ? m.OwnText || m.BodyText : m.ReadText ?? m.BodyText)}</Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>}
                       {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
                       <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
                         onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
@@ -1903,7 +1924,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           )}
                           {/* the thread's own drawing - who and WHEN first, a rule on the left, newest first - not a grey box with its
                               date pushed off the right edge (the owner, 2026-10-14: "you need time and date when each one was sent") */}
-                          {newestFirst(sentOutside).map((m) => (
+                          {!chatTask && !mailThread.length && newestFirst(sentOutside).map((m) => (
                             <Box key={m.MessageId} sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
                               <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
                                 Sent by you{m.SourceName ? ` · ${m.SourceName}` : ""}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}

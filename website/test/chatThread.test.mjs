@@ -43,3 +43,16 @@ test("newest first, as every message list reads - and the thread stands over the
   assert.match(src, /maxWidth: \{ xs: "88%", md: "min\(70%, 640px\)" \}/);      // a bubble stays readable
   assert.match(page, /\{chatTask && <Box sx=\{\{ mb: 1\.2 \}\}>[\s\S]{0,160}<ChatThread messages=\{taskMessages\} maxHeight=\{240\} \/>/);
 });
+
+// (the owner, 2026-10-15: "keep the width but center them in the chat ... test all different examples of this with newest message first
+// and then for email in both the task side and close out side")
+test("the conversation is a centred column in a box that keeps the task's width", () => {
+  assert.match(src, /width: "100%", maxWidth: 760, alignSelf: "center"/);
+});
+
+test("an email task reads newest first on both sides: every email on the task, theirs and yours over the draft in Close out", () => {
+  assert.match(page, /const alsoSaid = inbound\.filter\(\(m\) => cleanText\(m\.BodyText\) && cleanText\(m\.BodyText\) !== taskAsk\);/);
+  assert.match(page, /newestFirst\(\[\.\.\.inbound, \.\.\.sentOutside\.map\(\(m\) => \(\{ \.\.\.m, mine: true \}\)\)\]\)/);
+  assert.match(page, /\{mailThread\.length > 0 && <Box data-tq-mail-thread=""/);
+  assert.match(page, /\{!chatTask && !mailThread\.length && newestFirst\(sentOutside\)/, "never the sent lines twice");
+});

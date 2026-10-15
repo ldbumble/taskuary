@@ -57,7 +57,7 @@ import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, Message
 import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, placed, railBack, sectionDone, sectionNext } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, placed, pulledRow, railBack, sectionDone, sectionNext } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
 import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
@@ -252,7 +252,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
   const have = new Set(visibleItems.map((i) => i.key));
   const onTable = batch ? (batch.items || []).filter((i) => i.key && !have.has(i.key)) : [];
   const drawn = [
-    ...(curKey && !known ? [{ ...current }] : []),
+    ...(curKey && !known ? [pulledRow(current)] : []),
     ...onTable,
     // the card on the table lends the row its words; WHERE the row sits is the rail's (placed) - its older lane drew a
     // working agent under Your task until the next chat read refreshed it (the owner, 2026-09-28)

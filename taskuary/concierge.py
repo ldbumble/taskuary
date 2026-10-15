@@ -200,6 +200,7 @@ ASSISTANT_DEFAULT = llm_mod.ASSISTANT_DEFAULT      # the Assistant's model when 
 LIVE_KEY = 'concierge'                  # clipool key prefix for the chat's live CLI process
 SID_KEY = 'concierge_cli_sid'          # the CLI's own conversation, resumed turn to turn (per dock task)
 CURRENT_KEY = 'assistant_current'      # what is on the table, per dock task - persisted, validated on restore (PW-162)
+CURRENT_CLOSED = 'assistant_current_closed'   # ...and whether its task was already done when it went up
 
 
 AI_KEY, MODEL_KEY = 'concierge_ai', 'concierge_model'   # this page's own choice - the old dock's assistant_ai stays the dock's and WhatsApp's
@@ -271,9 +272,12 @@ def _sid(store, tid: int) -> str: return str(store.get_setting(f'{SID_KEY}:{tid}
 def current_key(store, tid: int) -> str: return str(store.get_setting(f'{CURRENT_KEY}:{tid}') or '')
 
 
-def set_current(store, tid: int, key: str | None, actor: str = 'assistant'):
-    """The thing on the table, written down as it is put there (or taken away) - not inferred later."""
+def set_current(store, tid: int, key: str | None, actor: str = 'assistant', closed: bool = False):
+    """The thing on the table, written down as it is put there (or taken away) - not inferred later. `closed`: its task
+    was finished before it went up - looked up, not walked to - so restore_current does not take that as it being over."""
     if current_key(store, tid) != (key or ''): store.set_setting(f'{CURRENT_KEY}:{tid}', key or '', actor)
+    if str(store.get_setting(f'{CURRENT_CLOSED}:{tid}') or '') != ('1' if key and closed else ''):
+        store.set_setting(f'{CURRENT_CLOSED}:{tid}', '1' if key and closed else '', actor)
 
 
 def resume(store, actor: str = 'owner') -> dict:
@@ -300,7 +304,9 @@ def restore_current(store, tid: int) -> dict | None:
     # puts in the chat is read, and clearing on that would empty the table as soon as it was set.
     # ...except an agent's finished result, whose task is done by definition: the closed task IS what is being
     # shown, and wiping it emptied the table and the rail the moment it went up (the owner, 2026-09-24)
-    over = item and item.get('tid') and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
+    # ...and a task that was ALREADY done when it went up - pulled from search to look at - is what is being shown, not
+    # work that finished under it: clearing it emptied the table and the rail with its card still open (the owner, 2026-10-15)
+    over = item and item.get('tid') and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')         and not store.get_setting(f'{CURRENT_CLOSED}:{tid}')
     # a new line on its thread is being triaged: not on the table THIS moment, but still the one the owner is on - clearing
     # the key emptied the table for good the instant a reply arrived (2026-09-29 audit); it is back when triage lands
     if item and item.get('settling'): return None
@@ -2345,7 +2351,8 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # marks it read and leaves it waiting in Passed - move_on(), which the Next road calls on the way out,
         # settles nothing.
         funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=True)
-        set_current(store, tid, item['key'], actor)                          # on the table, written down (PW-162)
+        closed = bool(item.get('tid')) and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
+        set_current(store, tid, item['key'], actor, closed=closed)           # on the table, written down (PW-162)
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),
                        card_for(item) | {'chips': chips})
     return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': len(p['items']) - 1}

@@ -409,6 +409,10 @@ export const placed = (row, card) => {
   for (const k of PLACEMENT) { if (k in row) out[k] = row[k]; else delete out[k]; }
   return out;
 };
+// A TASK PULLED ONTO THE TABLE from outside the pile - search, a name in the chat - has no row to lend it a place, and its card
+// speaks through its newest message: a closed task under a GitHub notification was drawn in FYI (the owner, 2026-10-15). What
+// you opened is on you while it is open; a message with no task keeps its own lane.
+export const pulledRow = (card) => (card?.tid ? { ...card, lane: "yours", order_band: 2, put_down: false, deferred: false } : { ...card });
 // THE RAIL AS PRESSED: a press the server has not answered yet still moves its row (the put-down, ac051beb). `leaving`: the
 // task being closed or deleted leaves the rail; `continuing`: a task whose session was just continued is drawn under Agents
 // working - it stayed under On you for the two seconds until the next pile (press audit B23b, 2026-10-01).

@@ -118,6 +118,23 @@ class RestoreTests(unittest.TestCase):
         self.assertIsNone(concierge.restore_current(self.s, dock))
         self.assertEqual(concierge.current_key(self.s, dock), '')              # ...and it is not chosen again
 
+    def test_a_task_already_closed_when_it_was_pulled_stays_on_the_table(self):
+        """The case above is a task that closed WHILE it was on the table. A task looked up from search after it closed
+        is what the owner asked to see: the read-back cleared it at once, and it left the rail while its card was still
+        open (the owner, 2026-10-15)."""
+        from taskuary import ownwork
+        dock = general.dock_task(self.s)[0]['TaskId']
+        t = self.s.create_task({'Title': 'Review the docs cleanup', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        ownwork.ensure(self.s, t, ago(1), 'the assistant started here', 'owner')
+        settle = lambda: (self.s.reconcile_processing_membership(fixed_now=ago(0)), funnel.invalidate())
+        settle(); self.s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        key = next(i['key'] for i in funnel.build(self.s, keep_surfaced=True)['items'] if i.get('tid') == t)
+        self.s.update_task(t, {'Status': 'done'}, 'owner'); settle()
+        self.assertEqual(concierge.surface(self.s, key)['item']['key'], key)      # pulled from search, closed already
+        self.assertEqual((concierge.restore_current(self.s, dock) or {}).get('key'), key)
+        self.assertEqual(self.c.get('/api/concierge').json()['current']['key'], key)
+        self.assertEqual(concierge.current_key(self.s, dock), key)
+
     def test_being_shown_in_the_chat_does_not_take_it_off_the_table(self):
         """The guard is "over", never "read": an item the assistant puts in the chat IS read, and
         clearing Current on that would empty the table the moment it was set."""

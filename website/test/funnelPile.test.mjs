@@ -430,3 +430,12 @@ test('railAge: the future reads "in ..." and a server stamp with a space parses 
   assert.strictEqual(railAge(ahead(1440), now), 'in 1d');
   assert.strictEqual(railAge('2026-09-28 10:00:00', now), '2h');
 });
+
+test('a task pulled onto the table from outside the pile sits under On you, not where its last message would', async () => {
+  const { pulledRow } = await import("../src/funnelPile.js");
+  // a closed task looked up from search: its card speaks through a GitHub notification, so the server calls it fyi
+  const card = { key: 'processing:p1', kind: 'fyi', lane: 'fyi', order_band: 4, tid: 46, closed: true };
+  assert.equal(levelOf(pulledRow(card)), 'task');
+  // ...a message with no task behind it stays where its own lane puts it
+  assert.equal(levelOf(pulledRow({ key: 'msg:9', kind: 'fyi', lane: 'fyi', order_band: 4 })), 'fyi');
+});

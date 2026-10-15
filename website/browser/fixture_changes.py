@@ -19,10 +19,6 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/unread-activate',
         '/api/fixture/processing/unread-arrivals',
         '/api/fixture/processing/sync-phase',
-        '/api/fixture/processing/canonical-all',
-        '/api/fixture/processing/canonical-arrival',
-        '/api/fixture/processing/canonical-emit',
-        '/api/fixture/processing/canonical-review-move',
     })
 
     def fixture_refuse(method, path):
@@ -33,8 +29,6 @@ def install_processing_changes(app, store):
         return refuse(method, path)
 
     demo.refuse = fixture_refuse
-    from website.browser.fixture_canonical import install_canonical_changes
-    install_canonical_changes(app, store)
 
     sync_token = [None]
 

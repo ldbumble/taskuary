@@ -451,10 +451,10 @@ is what you see if those cards cannot load.</li>
 <p>How tall the soft fade is at the bottom edge of the Timeline viewport.</p>
 <p>Options: <code>off</code>, <code>gentle</code>, <code>normal</code>, <code>sharp</code></p>
 <p>Rows are never dimmed because they are old. A row only gets lighter while it passes through the bottom edge, then returns to full contrast as you scroll it upward. Gentle, normal, and sharp change the height of that band; off removes it. Purely visual - nothing is hidden or removed.</p>
-<h3 id="timeline-lookback-days">Timeline lookback (days)<a class="anchor" href="#timeline-lookback-days" aria-label="Link to this section">#</a></h3>
+<h3 id="work-rail-lookback-days">Work rail lookback (days)<a class="anchor" href="#work-rail-lookback-days" aria-label="Link to this section">#</a></h3>
 <p><code>feed_days</code> · type: number · default: <code>14</code></p>
-<p>How many days the Timeline shows. Display only — nothing is deleted.</p>
-<p>Purely the Timeline&#39;s window. Older messages stay in the database, in task histories, and in search.</p>
+<p>How many days back the Work rail reads. Display only — nothing is deleted.</p>
+<p>Purely the rail&#39;s window. Older messages stay in the database, in task histories, and in search.</p>
 <h2 id="routing-policies">Routing policies<a class="anchor" href="#routing-policies" aria-label="Link to this section">#</a></h2>
 <p>Rules evaluated <strong>before</strong> any AI touches a message; no model confidence overrides them.
 Precedence runs <code>ignore</code> → <code>escalate</code> → <code>auto_answer</code> → <code>draft</code> → <code>task_only</code>, and within one

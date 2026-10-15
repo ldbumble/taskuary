@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from taskuary import processing_all, server
 from taskuary.store import SQLiteStore
 
+from .fixtures import inventory
+
 
 NOW = '2026-09-06 12:00:00'
 
@@ -38,59 +40,18 @@ class _SnapshotStore:
         return copy.deepcopy(self.snapshot)
 
 
-def test_pages_are_compact_frozen_and_complete_across_507_roots_and_arrivals():
-    store = _SnapshotStore(_snapshot())
-    service = processing_all.AllInventory()
-    first = service.page(store, limit=100)
-    ids = [r['item_id'] for r in first['items']]
-    assert first['counts']['total'] == 507
-    assert 'FULL BODY SENTINEL' not in json.dumps(first)
-    assert 'BodyText' not in json.dumps(service._stores[store])
-    first['items'][0]['row']['Subject'] = 'caller mutation'
-    store.snapshot = _snapshot(508)
-    store.snapshot['snapshot_revision'] = 'snapshot-new'
-    cursor = first['next_cursor']
-    while cursor:
-        page = service.page(store, cursor=cursor, limit=100)
-        assert page['snapshot_revision'] == 'snapshot-original'
-        ids.extend(r['item_id'] for r in page['items'])
-        cursor = page['next_cursor']
-    assert ids == [f'item-{i:04}' for i in range(1, 508)]
-    assert store.captures == 1
-    fresh = service.page(store)
-    assert fresh['counts']['total'] == 508
-    assert fresh['items'][0]['row']['Subject'] == 'Item 1'
-
-
-def test_expiry_query_binding_tampering_and_store_isolation():
-    clock = [0.0]
-    service = processing_all.AllInventory(ttl=10, max_leases=1, clock=lambda: clock[0])
-    store = _SnapshotStore(_snapshot(3))
-    first = service.page(store, limit=1, channel='email')
-    for changes in ({'source': 'another'}, {'days': 15}, {'channel': 'own'}):
-        with pytest.raises(processing_all.AllError) as caught:
-            service.page(store, cursor=first['next_cursor'], **{'channel': 'email', **changes})
-        assert caught.value.status == 422
-    with pytest.raises(processing_all.AllError) as caught:
-        service.page(_SnapshotStore(_snapshot(3)), cursor=first['next_cursor'], channel='email')
-    assert caught.value.detail['code'] == 'processing_snapshot_expired'
-    clock[0] = 10
-    with pytest.raises(processing_all.AllError) as caught:
-        service.page(store, cursor=first['next_cursor'], channel='email')
-    assert caught.value.detail['code'] == 'processing_snapshot_expired'
-    for malformed in ('not-base64!', 'W10', 'e30'):
-        with pytest.raises(processing_all.AllError) as caught:
-            service.page(store, cursor=malformed)
-        assert caught.value.status == 422
+def test_compact_rows_carry_no_source_body():
+    page = inventory(_SnapshotStore(_snapshot(3)))
+    assert page['counts']['total'] == 3
+    assert 'FULL BODY SENTINEL' not in json.dumps(page)
 
 
 def test_unready_coverage_never_claims_empty_and_unknown_dates_are_not_silently_dropped():
     snapshot = _snapshot(2)
     snapshot['coverage']['processing_reconciliation']['pending'] = True
-    # The page no longer REFUSES - a conflicted census refuses forever, and every caller fell back
-    # to the legacy feed. It answers, and must never present as though the census were settled: the
+    # A reader allowed to degrade answers, and must never present as though the census were settled: the
     # manifest says what it could not group (test_degraded_instead_of_refusing.py).
-    page = processing_all.AllInventory().page(_SnapshotStore(snapshot))
+    page = inventory(_SnapshotStore(snapshot))
     assert page['coverage']['degraded']['reason'] == 'reconciling'
     assert page['coverage']['degraded']['missing'] == 0
     assert page['counts']['total'] == 2, 'it claims what it has, never an empty list'
@@ -100,7 +61,7 @@ def test_unready_coverage_never_claims_empty_and_unknown_dates_are_not_silently_
     assert caught.value.detail['code'] == 'processing_coverage_pending'
     snapshot['coverage']['processing_reconciliation']['pending'] = False
     snapshot['items'][0]['view']['messages'][0].update(SentAt='unknown', CreatedAt='unknown')
-    page = processing_all.AllInventory().page(_SnapshotStore(snapshot))
+    page = inventory(_SnapshotStore(snapshot))
     assert page['counts']['total'] == 2
     assert page['items'][-1]['item_id'] == 'item-0001'
     assert page['items'][-1]['activity_basis'] == 'unknown'
@@ -114,7 +75,7 @@ def _message(store, text, *, task=None, source='a@example.test', status='routed'
     return mid
 
 
-def test_real_all_filters_roots_by_matching_member_and_binds_draft_detail(tmp_path):
+def test_real_inventory_filters_roots_by_matching_member_and_binds_draft_detail(tmp_path):
     store = SQLiteStore(str(tmp_path / 'all.db'))
     try:
         tid = store.create_task({'Title': 'Shared work', 'Kind': 'reply', 'Status': 'open'}, 'fixture')
@@ -125,10 +86,9 @@ def test_real_all_filters_roots_by_matching_member_and_binds_draft_detail(tmp_pa
         store.add_review({'TaskId': tid, 'MessageId': latest, 'Kind': 'draft_reply',
                           'Status': 'pending', 'DraftText': 'DO NOT SEND SIBLING DRAFT'})
         store.reconcile_processing_membership(fixed_now=NOW)
-        service = processing_all.AllInventory()
-        all_page = service.page(store, fixed_now=NOW)
+        all_page = inventory(store, fixed_now=NOW)
         assert all_page['counts']['total'] == 1
-        selected = service.page(store, source='a@example.test', fixed_now=NOW)['items'][0]
+        selected = inventory(store, source='a@example.test', fixed_now=NOW)['items'][0]
         assert selected['item_id'] == all_page['items'][0]['item_id']
         assert selected['open_target'] == {'kind': 'message', 'id': older}
         assert selected['counts']['messages'] == 2
@@ -160,7 +120,7 @@ def test_real_generic_roots_hidden_history_tombstones_and_detail_gets_are_readon
         states = store.funnel_states()
         with mock.patch.object(server, 'store', store), mock.patch.object(server, '_processing_live', return_value=[]):
             client = TestClient(server.app)
-            page = client.get('/api/processing/all').json()
+            page = inventory(store, live_state=[])
             kinds = {item['open_target']['kind'] for item in page['items']}
             assert kinds == {'message', 'task', 'idea', 'review'}
             assert page['counts']['total'] == 4
@@ -184,6 +144,14 @@ def test_real_generic_roots_hidden_history_tombstones_and_detail_gets_are_readon
         store.cx.close()
 
 
+def test_the_paged_all_route_is_gone_with_the_timeline():
+    """The Timeline was its only reader (removed 2026-10-15); the detail route stays, the Work stage reads it."""
+    paths = {getattr(r, 'path', '') for r in server.app.routes}
+    assert '/api/processing/all' not in paths
+    assert '/api/processing/items/{item_id}/detail' in paths
+    assert not hasattr(processing_all, 'AllInventory')
+
+
 def test_detail_rejects_member_moved_to_another_task(tmp_path):
     store = SQLiteStore(str(tmp_path / 'move.db'))
     try:
@@ -191,7 +159,7 @@ def test_detail_rejects_member_moved_to_another_task(tmp_path):
         two = store.create_task({'Title': 'Second', 'Status': 'open'}, 'fixture')
         mid = _message(store, 'Moving member', task=one)
         store.reconcile_processing_membership(fixed_now=NOW)
-        initial = processing_all.AllInventory().page(store, fixed_now=NOW)
+        initial = inventory(store, fixed_now=NOW)
         item = next(row for row in initial['items'] if f'message:{mid}' in row['member_ids'])
         store._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (two, mid))
         store.reconcile_processing_membership(fixed_now=NOW)
@@ -202,69 +170,13 @@ def test_detail_rejects_member_moved_to_another_task(tmp_path):
         store.cx.close()
 
 
-def test_fixture_seeds_complete_real_census_and_frozen_arrival_without_notifications(tmp_path, monkeypatch):
-    import importlib.util
-    from pathlib import Path
-    from fastapi import FastAPI
-    from taskuary import calendar, live
-
-    monkeypatch.setenv('TASKUARY_DEMO', '1')
-    monkeypatch.setenv('TASKUARY_HOME', str(tmp_path))
-    # Fixture installs a deterministic calendar only in its owned process.
-    monkeypatch.setattr(calendar, 'today', calendar.today)
-    spec = importlib.util.spec_from_file_location('canonical_fixture_test',
-        Path(__file__).resolve().parents[2] / 'website/browser/fixture_canonical.py')
-    fixture = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(fixture)
-    store = SQLiteStore(str(tmp_path / 'census.db'))
-    try:
-        app = FastAPI()
-        fixture.install_canonical_changes(app, store)
-        client = TestClient(app)
-        with mock.patch.object(live, 'emit') as emit:
-            response = client.post('/api/fixture/processing/canonical-all', json={'count': 507})
-            assert response.status_code == 200, response.text
-            seeded = response.json()
-            assert seeded['total'] == 507
-            service = processing_all.AllInventory()
-            page = service.page(store, limit=100)
-            ids = [i['item_id'] for i in page['items']]
-            early = {seeded['grouped']['item_id'], seeded['ignored_item_id'], seeded['muted_item_id'],
-                     *(i['item_id'] for i in seeded['standalone'].values())}
-            assert early <= set(ids)
-            arrival = client.post('/api/fixture/processing/canonical-arrival', json={'emit': False}).json()
-            while page['next_cursor']:
-                page = service.page(store, limit=100, cursor=page['next_cursor'])
-                ids.extend(i['item_id'] for i in page['items'])
-            assert len(ids) == len(set(ids)) == 507
-            assert arrival['item_id'] not in ids
-            assert service.page(store)['counts']['total'] == 508
-            emit.assert_not_called()
-            assert client.post('/api/fixture/processing/canonical-emit').status_code == 200
-            emit.assert_called_once_with('feed-changed')
-            before = list(store.cx.iterdump())
-            assert client.post('/api/fixture/processing/canonical-review-move', json={'review_id': 1}).status_code == 422
-            assert list(store.cx.iterdump()) == before
-            moved = client.post('/api/fixture/processing/canonical-review-move', json={}).json()
-            rid = seeded['grouped']['selected_review_id']
-            newer = moved['interrupt']['latest']['MessageId']
-            assert store.get_review(rid)['MessageId'] == newer
-            exact = processing_all.item_detail(store, seeded['grouped']['item_id'], kind='message', local_id=newer)
-            assert any(review['ReviewId'] == rid for review in exact['detail']['reviews'])
-            older = processing_all.item_detail(store, seeded['grouped']['item_id'], kind='message',
-                                              local_id=seeded['grouped']['message_ids'][0])
-            assert all(review['ReviewId'] != rid for review in older['detail']['reviews'])
-    finally:
-        store.cx.close()
-
-
 def test_standalone_review_detail_preserves_owner_final_text(tmp_path):
     store = SQLiteStore(str(tmp_path / 'final-review.db'))
     try:
         rid = store.add_review({'Kind': 'draft_reply', 'Status': 'edited',
                                 'DraftText': 'Superseded machine draft', 'FinalText': 'Exact owner final wording'})
         store.reconcile_processing_membership()
-        item = processing_all.AllInventory().page(store)['items'][0]
+        item = inventory(store)['items'][0]
         detail = processing_all.item_detail(store, item['item_id'], kind='review', local_id=rid)
         assert detail['detail']['body'] == 'Exact owner final wording'
         assert 'Superseded machine draft' not in json.dumps(detail)

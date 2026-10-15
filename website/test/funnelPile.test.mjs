@@ -166,8 +166,8 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(view, /openByItem\?\.\(pid, target\)/);
   assert.match(read("FeedView.jsx"), /const openByItem = \(itemId, target\) =>/);
   const feedSource = read("FeedView.jsx");
-  assert.match(feedSource, /view === "unread" && top && !unreadInventory/); // wait for canonical Unread; do not race it with legacy feed reads
-  assert.match(feedSource, /\{!top && <FunnelBar/); // Assistant's pile replaces the legacy funnel query
+  assert.match(feedSource, /if \(top && !unreadInventory\) return;/); // wait for canonical Work; do not race it with legacy feed reads
+  assert.doesNotMatch(feedSource, /FunnelBar/); // the Assistant's pile replaced the legacy funnel query
   assert.match(view, /const visibleItems = items\.slice\(0, revealed\)/); // first load paints incrementally
   assert.match(view, /requestAnimationFrame\(addBatch\)/);              // progressive batches do not impose one frame per row
   assert.match(view, /count \+ 24/);                                     // large accounts finish promptly
@@ -243,22 +243,15 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has
   assert.doesNotMatch(cardsSrc(), /Just what came in/);    // no mail-only walk: a set is the model's to name (2026-09-25)
   assert.match(view, /Walk me through my tasks/);
-  // the Timeline: an fyi filed on a thread's task does not wear the task's state, and no stray 0 under a verdict
-  assert.match(read("FeedView.jsx"), /r\.TaskId && r\.MsgStatus !== "filed" && <LifecycleChip kind="task"/);
+  // the stage: no stray 0 under a verdict
   assert.match(read("FeedView.jsx"), /\{!!\(verdict\.existing_task_id \|\| \(verdict\.related_message_ids/);
   assert.match(cardsSrc(), /All read, next/);             // a handful of fyi's goes in one click
   assert.match(read("TaskPage.jsx"), /<TerminalPane sid=\{term\.sid\}/);   // a stopped agent's own screen: its task view on the canvas
   assert.doesNotMatch(view, /left: side, right: side/);    // no taper: every row is a Timeline row's width
   assert.doesNotMatch(view, /<Drawer/);                    // no reader drawer: reading happens in the card
   const css = read("assistantView.css");
-  // The work rail's gutter carries an AGE, not a clock, so it needs less width than the dated
-  // Timeline's - the two rails are separate views now and their gutters say different things.
+  // The work rail's gutter carries an AGE, not a clock
   assert.match(css, /\.tq-pile-row \{[^}]*grid-template-columns: 44px 14px minmax\(0, 1fr\)/);
-  assert.match(read("FeedView.jsx"), /const GUTTER = 66;/);   // ...and the dated Timeline keeps its own
-  // ...but they are set in ONE type: the Timeline's clock reads at the rail's size and weight,
-  // and its dot is the SOURCE, the same answer the logo beside it gives (the owner, 2026-09-17).
-  assert.match(read("FeedView.jsx"), /const gutterTime = \{ font: "600 11px 'IBM Plex Sans'/);
-  assert.match(read("FeedView.jsx"), /const dotOf = \(r\) => channelColor\(r\?\.Channel \|\| "email"\);/);
   assert.doesNotMatch(css, /tq-pipe-/);                    // the funnel's CSS is gone with it
   // Still no "The pipe · N" banner over the whole rail (the owner, 2026-09-03). The per-CATEGORY
   // heading that freezes as you scroll is a different thing, and it is what replaced the dock's
@@ -270,20 +263,16 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(css, /\.tq-pile-head \{[^}]*position: sticky/);
   assert.match(view, /One more and you're clear/);    // ...the count is the encouragement, at the bottom, from fifteen
   const feed = read("FeedView.jsx");
-  assert.match(feed, /useState\(top \? "unread" : ""\)/);   // the Assistant rail opens on unread
-  assert.match(feed, /view === "unread" \? \(typeof top/);     // ranked pipe, not historical rows
-  // PW107 supersedes only the third Needs me surface with exactly All + Unread. The existing
-  // All/detail and Unread/chat assertions follow the interaction helper where that logic moved.
-  assert.match(feed, /feedViews\(!!top\)/);
-  assert.match(feed, /const visibleStage = interaction\.showChatStage \? stage : null/);
-  assert.match(feed, /const chatMode = interaction\.pullRowIntoChat/);
+  // the rail is the ranked pipe and nothing else - the Timeline's historical rows are gone (2026-10-15)
+  assert.match(feed, /\{typeof top === "function" \? top\(\{ openByMid, openByItem \}\) : top\}/);
+  assert.match(feed, /const chatMode = rowMode === "chat" && !!onPull/);
   assert.match(feed, /\) : visibleStage \|\| \(/);                    // no selection shows the review placeholder, not chat history
-  assert.match(feed, /label: "Assistant discussion"/);               // task-bound walkthrough turns remain readable in All
+  assert.match(feed, /label: "Assistant discussion"/);               // task-bound walkthrough turns remain readable on the stage
   assert.match(feed, /"concierge_user", "concierge_assistant"/);      // distinct from an agent's own working conversation
   assert.match(feed, /tab === "discussion"/);
   assert.match(view, /for \(const pending of deferredChat\.current\) clearTimeout\(pending\)/); // one transition cannot queue two Next turns
   assert.match(view, /deferredChat\.current\.clear\(\);\s*const epoch = chatEpoch\.current/);
-  assert.match(feed, /if \(narrow \|\| chatMode\) return;/);   // a chat is not a preview pane: no hover-open in chat mode
+  assert.doesNotMatch(feed, /hoverSelect/);   // nothing opens on hover: the Timeline's rows were the only ones that did
   assert.match(feed, /addEventListener\("hashchange", openHash\)/);   // a card's #msg= opens the row while the rail is already up
   const cards = read("assistantCards.jsx");
   // the two "not ours" doors the owner asked for: one that teaches memory, one that does not
@@ -373,13 +362,6 @@ test("the waving agent is the one lane sized to be seen", () => {
                    Object.entries(LANE_META).filter(([, m]) => m.role === "you").map(([k]) => k).sort());
   // still the owner's own level, not a new one
   assert.equal(attentionBand({ lane: "blocked" }), attentionBand({ lane: "approve" }));
-});
-
-test("a loud lane wears its mark and its bigger pill", () => {
-  const feed = read("FeedView.jsx");
-  assert.match(feed, /className=\{`tq-pile-tag\$\{m\.loud \? " loud" : ""\}`\}/);
-  assert.match(feed, /\{m\.loud && m\.mark \? `\$\{m\.mark\} ` : ""\}\{m\.word\}/);
-  assert.match(read("assistantView.css"), /\.tq-pile-tag\.loud \{[^}]*font-size: 11px/);
 });
 
 // THE TASKS RAIL AND THE WORK RAIL SAY THE SAME THING. The rail used to paint everything that was

@@ -1,4 +1,4 @@
-"""Real-store lifecycle gates for the canonical All consumer."""
+"""Real-store lifecycle gates for canonical item detail."""
 import asyncio
 import copy
 import json
@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 
 from taskuary import processing_all, server
 from taskuary.store import SQLiteStore
+
+from .fixtures import inventory
 
 
 NOW = '2026-09-06 12:00:00'
@@ -25,7 +27,7 @@ def _message(store, text, *, task=None, body=None):
 
 
 def _item_for_member(store, member_id, *, live_state=None):
-    page = processing_all.AllInventory().page(store, fixed_now=NOW, live_state=live_state)
+    page = inventory(store, fixed_now=NOW, live_state=live_state)
     return next(row for row in page['items'] if member_id in row['member_ids'])
 
 
@@ -289,8 +291,7 @@ def test_nullable_review_kind_and_note_time_match_legacy_display_semantics(tmp_p
         store.reconcile_processing_membership(fixed_now=NOW)
 
         legacy = {row['MessageId']: row for row in store.feed(days=36500, live_state=[])}
-        page = processing_all.AllInventory().page(
-            store, fixed_now=NOW, days=36500, live_state=[])
+        page = inventory(store, fixed_now=NOW, days=36500, live_state=[])
         canonical = {}
         for mid in (reply_mid, note_mid):
             item = next(row for row in page['items'] if f'message:{mid}' in row['member_ids'])

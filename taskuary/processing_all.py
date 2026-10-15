@@ -1,21 +1,18 @@
-"""Canonical All presentation and bounded, frozen HTTP pagination.
+"""Canonical item presentation: the compact rows the Work pile reads, and one item's whole detail.
 
 This module does not allocate membership or infer canonical read/action state. The
 explicit membership reconciler owns writes; an incomplete census cannot be exposed
-as a successfully empty All. Only compact presentation rows survive in a lease.
+as a successfully empty inventory. (Its paged All view - the Timeline's /api/processing/all -
+was removed with the Timeline, 2026-10-15.)
 """
-from collections import OrderedDict
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 import asyncio
-import base64
 import copy
 import hashlib
 import json
 import threading
 import time
-import uuid
-import weakref
 from loguru import logger
 
 from .categories import category_of, team_domains_of
@@ -127,7 +124,6 @@ def row_lane(row: dict) -> str:
     return {1: 'time', 3: 'report', 4: 'fyi', 5: 'working'}[band]
 
 
-SCHEMA = 'taskuary.processing.all.v1'
 MEMBERSHIP_RULES = 'skipped-or-autoreply-without-task-ungrouped-2'   # bump when reconcile_membership groups entities differently -
 # reconcile returns already_current while nothing is dirty, so a RULE change leaves a graph nothing marks stale until this moves
 PRESENTATION_VERSION = 1
@@ -492,72 +488,6 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
                             'today_promo': sum(r['category'] == 'promo' for r in today),
                             'today_ignored': sum(r['status'] == 'ignored' for r in today)}
 
-
-class AllInventory:
-    def __init__(self, *, ttl=120, max_leases=8, clock=time.monotonic):
-        self.ttl, self.max_leases, self.clock = ttl, max_leases, clock
-        self._stores = weakref.WeakKeyDictionary()
-        self._lock = threading.RLock()
-
-    def page(self, store, *, channel=None, source=None, days=14, limit=100, cursor=None,
-             fixed_now=None, live_state=None):
-        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
-            raise AllError('processing_query_invalid', 'Page size must be between 1 and 500', 422)
-        query = normalize_query(channel, source, days)
-        query_revision = _digest(query)
-        wait_settled(store)
-        position, lease_id = 0, None
-        if cursor is not None:
-            try:
-                if not isinstance(cursor, str) or len(cursor) > 2048:
-                    raise ValueError()
-                payload = json.loads(base64.urlsafe_b64decode(cursor + '=' * (-len(cursor) % 4)))
-                if set(payload) != {'lease', 'position', 'query', 'anchor'}:
-                    raise ValueError()
-                lease_id, position = payload['lease'], payload['position']
-                if (not isinstance(lease_id, str) or isinstance(position, bool)
-                        or not isinstance(position, int) or position <= 0 or payload['query'] != query_revision):
-                    raise ValueError()
-            except (ValueError, TypeError, UnicodeError, json.JSONDecodeError):
-                raise AllError('processing_query_invalid', 'Invalid page cursor or changed query', 422) from None
-        if lease_id is None:
-            snapshot = store.processing_inventory_snapshot(
-                fixed_now=fixed_now or datetime.now().isoformat(), live_state=live_state,
-                display_only=True, history_days=query['days'])
-            rows, coverage, counts = compact_inventory(snapshot, query, degraded_ok=True)
-            lease_id = uuid.uuid4().hex
-            lease = {'created': self.clock(), 'query': query_revision, 'items': rows,
-                     'snapshot_revision': snapshot['snapshot_revision'], 'coverage': coverage, 'counts': counts}
-        with self._lock:
-            leases = self._stores.setdefault(store, OrderedDict())
-            for key in list(leases):
-                if self.clock() - leases[key]['created'] >= self.ttl:
-                    del leases[key]
-            if cursor is None:
-                leases[lease_id] = lease
-                while len(leases) > self.max_leases:
-                    leases.popitem(last=False)
-            else:
-                lease = leases.get(lease_id)
-                if lease is None:
-                    raise AllError('processing_snapshot_expired', 'This page snapshot expired; refresh All')
-                if (lease['query'] != query_revision or position >= len(lease['items'])
-                        or payload['anchor'] != lease['items'][position - 1]['item_id']):
-                    raise AllError('processing_query_invalid', 'Invalid page cursor', 422)
-                leases.move_to_end(lease_id)
-            end = min(position + limit, len(lease['items']))
-            next_cursor = None
-            if end < len(lease['items']):
-                next_cursor = base64.urlsafe_b64encode(_json({
-                    'lease': lease_id, 'position': end, 'query': query_revision,
-                    'anchor': lease['items'][end - 1]['item_id']}).encode()).decode().rstrip('=')
-            return copy.deepcopy({'schema_version': SCHEMA, 'snapshot_revision': lease['snapshot_revision'],
-                                  'lease': lease_id, 'next_cursor': next_cursor,
-                                  'counts': {**lease['counts'], 'returned': end - position},
-                                  'coverage': lease['coverage'], 'items': lease['items'][position:end]})
-
-
-inventory = AllInventory()
 
 
 class MembershipWorker:

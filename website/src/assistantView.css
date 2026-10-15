@@ -135,9 +135,6 @@
 /* the lane's own mark, at the size it is READ at rather than the size the loud pill shouts at */
 .tq-pile-word i { font-style: normal; font-size: 11px; line-height: 1; margin-right: 4px; filter: saturate(.9); }
 .tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
-/* the waving agent and the draft waiting for a yes: the two lanes where work has STOPPED until the
-   owner answers, and the only rows left carrying colour of their own */
-.tq-pile-tag.loud { padding: 1px 9px; font-size: 11px; line-height: 17px; font-weight: 600; letter-spacing: .005em; }
 /* the current one opens up: the second line says why it is here */
 .tq-pile-row .sub { font-size: 11.5px; line-height: 1.5; padding: 2px 0 0 25px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-pile-empty { padding: 56px 24px 24px; text-align: center; color: #6e685f; font-size: 11.5px; line-height: 1.5; }

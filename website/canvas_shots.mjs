@@ -36,7 +36,7 @@ const tab = async (page, name) => {
 };
 // the first step that works - `a() || b()` on promises is always the first promise
 const first = async (...fs) => { for (const f of fs) if (await f()) return true; return false; };
-const openRail = (page) => click(page, '[aria-label="Open the sidebar"], [data-tq-rail-toggle], [aria-label="The Timeline"]');
+const openRail = (page) => click(page, '[aria-label="Open the sidebar"], [data-tq-rail-toggle], [aria-label="Your work"]');
 
 // SCENES: [name, async (page, w) => truthy to shoot, and whether the step must be client-only]
 const SCENES = [

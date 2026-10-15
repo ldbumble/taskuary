@@ -274,7 +274,7 @@ export async function clickNav(page, label) {
       if (onBoard) sw.click();                               // back to the Assistant first
       if (!key) return true;
       const nav = document.querySelector(`[data-tq-nav="${key}"]`);
-      if (!visible(nav)) document.querySelector('[aria-label="The Timeline"]')?.click();   // a phone keeps it in the drawer
+      if (!visible(nav)) document.querySelector('[aria-label="Your work"]')?.click();   // a phone keeps it in the drawer
       const again = document.querySelector(`[data-tq-nav="${key}"]`);
       again?.click();
       return !!again;

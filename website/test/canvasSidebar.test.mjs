@@ -6,21 +6,24 @@ import assert from "node:assert/strict";
 const src = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 
 // The canvas redesign's sidebar (docs/superpowers/specs/2026-09-29-assistant-canvas-redesign-design.md):
-// buttons on top, then a full-width Work | Timeline selector with the filter as an icon beside it, then the counts line.
+// buttons on top, then the filter taking the whole row (the Work | Timeline selector it sat beside is gone, the owner
+// 2026-10-15: "replace it with the filter being a little larger"), then the counts line.
 test("the sidebar's buttons are New, Reports, Connections, Hub, Settings, in that order", async () => {
   const { SIDE_NAV } = await import("../src/sideNav.js");
   assert.deepEqual(SIDE_NAV.map((n) => n.key), ["new", "reports", "connections", "hub", "settings"]);
   for (const n of SIDE_NAV) assert.ok(n.label && n.hint, n.key);
 });
 
-test("the stack sits above the selector, which is full width, and the filter is an icon with a tooltip", () => {
+test("the stack sits above the filter, which takes the whole row and says what it filters to", () => {
   const feed = src("FeedView.jsx");
-  const nav = feed.indexOf("data-tq-sidenav"), views = feed.indexOf('aria-label="Feed views"'), sync = feed.indexOf("Sync now");
-  assert.ok(nav > 0 && nav < views && views < sync, "buttons, then the selector, then the counts line");
-  assert.match(feed.slice(views, views + 400), /flex: 1/, "the selector takes the row");
-  const filter = src("FeedView.jsx").slice(feed.indexOf("function FilterButton"), feed.indexOf("function FilterButton") + 2500);
-  assert.match(filter, /<IconButton/);
-  assert.match(filter, /<Tooltip title=\{/);
+  assert.doesNotMatch(feed, /aria-label="Feed views"/, "no Work | Timeline switch");
+  const nav = feed.indexOf("data-tq-sidenav"), filterAt = feed.indexOf("<FilterButton "), sync = feed.indexOf("Sync now");
+  assert.ok(nav > 0 && nav < filterAt && filterAt < sync, "buttons, then the filter, then the counts line");
+  const filter = feed.slice(feed.indexOf("function FilterButton"), feed.indexOf("function FilterButton") + 2500);
+  assert.match(filter, /const label = filterLabel\(cat, pick\)/);
+  assert.match(filter, /flex: 1, minWidth: 0, height: 30/, "the filter takes the row");
+  assert.match(filter, /\{label\}<\/Box>/, "its label is on its face, not in a tooltip");
+  assert.doesNotMatch(filter, /<IconButton/);
 });
 
 test("a section heading walks that section; its chevron alone opens a capped band", () => {

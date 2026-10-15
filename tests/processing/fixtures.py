@@ -100,3 +100,17 @@ def processing_picture() -> ProcessingPicture:
         waiting_message=waiting_message, waiting_session=waiting_session,
         duplicate_task=duplicate_task, duplicate_comment=duplicate_comment,
         replay_raw=replay_raw, replay_lines=('fixture worker started', 'waiting for synthetic approval'))
+
+
+def inventory(store, *, channel=None, source=None, days=None, fixed_now=None, live_state=None) -> dict:
+    """Every canonical item, compacted - what the paged All route served before the Timeline went (2026-10-15),
+    without its paging. Tests that need an item's id and open target to ask for its detail read it here."""
+    from taskuary import processing_all
+    if days is None:
+        try: days = int(store.get_setting('feed_days') or 14) if hasattr(store, 'get_setting') else 14
+        except (TypeError, ValueError): days = 14
+    query = processing_all.normalize_query(channel, source, days)
+    snapshot = store.processing_inventory_snapshot(fixed_now=fixed_now or datetime.now().isoformat(), live_state=live_state,
+                                                   display_only=True, history_days=query['days'])
+    items, coverage, counts = processing_all.compact_inventory(snapshot, query, degraded_ok=True)
+    return {'items': items, 'coverage': coverage, 'counts': counts}

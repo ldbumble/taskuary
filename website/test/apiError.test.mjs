@@ -1,15 +1,15 @@
 // The seam, which is where this broke: processingAll's predicates were tested on hand-built error
 // objects, api.js's normalizer was never tested at all, and nothing ran the two together. In the
 // app the normalizer runs FIRST on every rejection, so a structured refusal reached the deciding
-// code as a JSON string that matched no code - the legacy-Timeline fallback, the snapshot reload
-// and the Assistant's two pile retries all went unreachable, and a routine "membership is being
+// code as a JSON string that matched no code - the Assistant's two pile retries went
+// unreachable, and a routine "membership is being
 // reconciled" surfaced as axios's "Request failed with status code 409" in a red banner.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { detailText, keepDetail } from "../src/apiError.js";
-import { isCoveragePending, isSnapshotExpired, processingErrorCode, processingErrorMessage } from "../src/processingAll.js";
+import { isCoveragePending, processingErrorCode, processingErrorMessage } from "../src/processingAll.js";
 
 // what axios hands a catch block after the interceptor has run, for a real 409 from the inventory
 const refused = (code, message, extra = {}) => keepDetail({
@@ -22,14 +22,12 @@ test("a refusal still names itself after normalizing, so its recovery can run", 
   assert.equal(processingErrorCode(pending), "processing_coverage_pending");
   assert.equal(isCoveragePending(pending), true);
   assert.equal(processingErrorMessage(pending, "Failed to load the feed"), "All items are not ready yet");
-  const expired = refused("processing_snapshot_expired", "This page snapshot expired; refresh All");
-  assert.equal(isSnapshotExpired(expired), true);
   const moved = refused("processing_target_moved", "That item moved under you");
   assert.equal(processingErrorCode(moved), "processing_target_moved");
   assert.equal(moved.detail.message, "That item moved under you");   // the banner's words are the server's
 });
 
-test("the Timeline's own catches read the structure, not the flattened copy", () => {
+test("the rail's own catches read the structure, not the flattened copy", () => {
   const src = readFileSync(fileURLToPath(new URL("../src/FeedView.jsx", import.meta.url)), "utf8");
   assert.doesNotMatch(src, /response\?\.data\?\.detail\?\.code/);
   assert.doesNotMatch(src, /response\.data\.detail\.message/);

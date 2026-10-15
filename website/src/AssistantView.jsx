@@ -1851,8 +1851,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     setAiEl(null);
   };
   const toggleSpeak = () => { const v = !speakOnState; setSpeak(v); try { localStorage.setItem("taskuary_speak", v ? "1" : "0"); } catch { /* private mode */ } if (!v) window.speechSynthesis?.cancel(); };
-  // a card's "open on the Timeline": the row opens on the stage, over the chat, right here - the rail
-  // reads the hash and pins the row (FeedView); its close comes back to the conversation
+  // a card's link to its message: it opens on the stage, over the chat, right here - the rail reads the
+  // hash and pins it (FeedView.openHash); its close comes back to the conversation
   const timeline = (mid) => { window.location.hash = `msg=${mid}`; };
   // The walk, taken to a chat you already have connected (WhatsApp, Telegram). This is not a way to
   // CONNECT one - a chat with no Assistant card offers nothing here (the owner, 2026-09-07: "point is
@@ -2090,7 +2090,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
-        <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
+        <Tooltip title="Your work"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
         {/* no AI to name before the first run picked one - it said "Claude Code · coder" over the question asking which (2026-10-15) */}
         {!firstRun && <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}

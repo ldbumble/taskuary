@@ -65,10 +65,8 @@ def test_without_permission_it_still_refuses():
     assert e.value.status == 409
 
 
-def test_the_page_route_asks_to_degrade_and_the_pile_does_on_its_last_try():
+def test_the_pile_degrades_on_its_last_try():
     import inspect
-    page = inspect.getsource(processing_all.AllInventory.page)
-    assert 'compact_inventory(snapshot, query, degraded_ok=True)' in page
     from taskuary import processing_unread
     build = inspect.getsource(processing_unread.build)
     assert 'degraded_ok=attempt == 2' in build, 'one retry for a race, then take what there is'

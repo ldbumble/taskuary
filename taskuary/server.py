@@ -610,19 +610,6 @@ async def _all_error(_request, error: processing_all.AllError):
     # every route that reads the inventory can meet this; one answer, the same JSON the explicit catches give
     return JSONResponse({'detail': error.detail}, status_code=error.status)
 
-@app.get('/api/processing/all')
-def processing_all_page(limit: int = 100, cursor: str = None, channel: str = None, source: str = None):
-    try:
-        days = int(store.get_setting('feed_days') or 14)
-    except (TypeError, ValueError):
-        days = 14
-    try:
-        return processing_all.inventory.page(store, limit=limit, cursor=cursor, channel=channel,
-                                             source=source, days=days, live_state=_processing_live())
-    except processing_all.AllError as exc:
-        raise HTTPException(exc.status, exc.detail) from exc
-
-
 @app.get('/api/processing/items/{item_id}/detail')
 def processing_item_detail(item_id: str, kind: str = None, id: int = None, view_revision: str = None):
     try:
@@ -3980,13 +3967,12 @@ def calendar_today():
     except Exception as e: return {'date': None, 'now': None, 'events': [], 'tz': None, 'errors': [str(e)[:200]]}
 
 def prep_key(start, subject) -> str:
-    """What ties a prep row to the invite it is about. The front end builds the same string from
-    the event it is drawing (FeedView.evKey), so the two must not drift - hence one function and
-    one comment saying so."""
+    """What ties a prep row to the invite it is about: the prep message's conversation id. (The Timeline drew a prep
+    under its meeting by building the same string; it went with the Timeline, 2026-10-15.)"""
     return f"calendar:{start or ''}:{(subject or 'the meeting').strip()[:120]}"
 
 class MeetingPrepBody(BaseModel):
-    """The event as the Timeline panel already has it, plus what the owner wants done about it."""
+    """The event as the page already has it, plus what the owner wants done about it."""
     subject: str | None = None; start: str | None = None; end: str | None = None
     where: str | None = None; organizer: str | None = None; who: list[str] = []
     about: str | None = None; link: str | None = None; status: str | None = None
@@ -3998,7 +3984,7 @@ class MeetingPrepBody(BaseModel):
 
 @app.post('/api/calendar/prep')
 def calendar_prep(body: MeetingPrepBody):
-    """"Get me ready for this one": the meeting on the Timeline, handed to an agent with your
+    """"Get me ready for this one": the meeting, handed to an agent with your
     own prompt. The invite (when, where, who, what it says) becomes the task's context and your
     prompt is the ask, so the session opens already knowing which meeting it is about.
 

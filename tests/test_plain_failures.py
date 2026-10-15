@@ -85,7 +85,7 @@ class NumberSettingTests(unittest.TestCase):
             c = TestClient(server.app)
             for bad in ('-5', 'often', 'nan', 'inf'):
                 r = c.patch('/api/settings', json={'name': 'feed_days', 'value': bad})
-                self.assertEqual(r.status_code, 422, bad); self.assertIn('Timeline lookback', r.json()['detail'])
+                self.assertEqual(r.status_code, 422, bad); self.assertIn('Work rail lookback', r.json()['detail'])
             self.assertEqual(s.get_settings()['feed_days'], '14')
             for good in ('21', '0', ''):
                 self.assertEqual(c.patch('/api/settings', json={'name': 'feed_days', 'value': good}).status_code, 200, good)

@@ -525,10 +525,10 @@
     },
     "feed_days": {
       "group": "Display",
-      "label": "Timeline lookback (days)",
+      "label": "Work rail lookback (days)",
       "type": "number",
-      "desc": "How many days the Timeline shows. Display only — nothing is deleted.",
-      "help": "Purely the Timeline's window. Older messages stay in the database, in task histories, and in search."
+      "desc": "How many days back the Work rail reads. Display only — nothing is deleted.",
+      "help": "Purely the rail's window. Older messages stay in the database, in task histories, and in search."
     }
   }
 }

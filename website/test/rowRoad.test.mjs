@@ -91,27 +91,4 @@ test("both verdicts carry a word and a hint", () => {
   assert.equal(VERDICTS.find((v) => v.key === "ignored").label, "ignored");
   assert.equal(VERDICTS.find((v) => v.key === "error").label, "triage failed");
 });
-
-// the tag reads the verdict FIRST: an ignored row has no road, but an errored follow-up on a task
-// does, and the road would win if the order were the other way round
-test("the row's tag asks for the verdict before the road", () => {
-  const view = readFileSync(new URL("../src/FeedView.jsx", import.meta.url), "utf8");
-  const tag = view.slice(view.indexOf("export const tagMeta"), view.indexOf("const RoadTag"));
-  assert.ok(tag.indexOf("VERDICTS.find") < tag.indexOf("ROADS.find"),
-    "the verdict is read before the road, or a failed follow-up wears its thread's word");
-});
-
-// ONE WORD PER ROW, on both transports. The state mark was gated on `!r.Lane`, which is a transport
-// detail rather than a question about words: /api/processing/all sets Lane on every row, so the mark
-// never drew there even on a row the tag had no word for, while /api/feed (the "canonical grouping
-// is still finishing" fallback, and any install whose processing reads are not active) sends none,
-// so the mark drew BESIDE the word the row already had (the owner, 2026-09-15: "one word everywhere").
-test("the state mark fills the gap, and never sits beside a word", () => {
-  const view = readFileSync(new URL("../src/FeedView.jsx", import.meta.url), "utf8");
-  assert.ok(view.includes("{!generic && !rowWord && !tagMeta(r) && <StateMark row={r} state={st} />}"),
-    "the mark asks whether a word was produced, not which endpoint served the row");
-  assert.ok(!/!generic && !r\.Lane && <StateMark/.test(view), "the transport-detail gate is gone");
-  // ...and the lane word is computed once, so the tag and the gate cannot disagree about it
-  assert.ok(view.includes('const rowWord = view === "unread" ? (r.Lane || rowLane(r)) : null;'));
-  assert.ok(view.indexOf("const rowWord =") < view.indexOf("{rowWord ? <LaneTag"));
-});
+

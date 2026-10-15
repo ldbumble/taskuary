@@ -1,29 +1,7 @@
-import { channelsForCategory } from "./feedFilters.js";
-
-export const PROCESSING_ALL_SCHEMA = "taskuary.processing.all.v1";
 export const PROCESSING_ALL_MAX_PAGE = 500;
 
 const object = (value) => value && typeof value === "object" && !Array.isArray(value);
 const text = (value) => value == null ? "" : String(value);
-
-export function processingAllParams({ category = "", pick = "", discovered = [], limit = 100, cursor = null } = {}) {
-  if (!Number.isInteger(limit) || limit < 1 || limit > PROCESSING_ALL_MAX_PAGE) {
-    throw new TypeError("limit must be an integer between 1 and 500");
-  }
-  const params = { limit };
-  if (pick.startsWith("src:")) {
-    const [, channel, ...source] = pick.split(":");
-    params.channel = channel;
-    params.source = source.join(":");
-  } else if (pick.startsWith("channel:")) {
-    params.channel = pick.slice(8);
-  } else {
-    const channels = channelsForCategory(category, discovered);
-    if (channels) params.channel = channels.join(",");
-  }
-  if (cursor) params.cursor = cursor;
-  return params;
-}
 
 export const processingTransportLimit = (wanted) => Math.min(PROCESSING_ALL_MAX_PAGE, Math.max(1, Math.trunc(wanted)));
 
@@ -43,24 +21,6 @@ export function processingErrorMessage(error, fallback) {
 }
 
 export const isCoveragePending = (error) => processingErrorCode(error) === "processing_coverage_pending";
-export const isSnapshotExpired = (error) => processingErrorCode(error) === "processing_snapshot_expired";
-
-// A page whose membership census had not settled used to be a 409 with no rows, so All fell back to
-// the legacy /api/feed every time. It now arrives WITH a manifest of what it could not group, and
-// the two questions that manifest answers are different:
-//   incomplete - entities exist that could not become items at all, so rows really are missing and
-//                only the legacy transport can show them. Rare, and the reason the fallback stays.
-//   settling   - the grouping is behind or conflicted but nothing is missing: read the page, say so
-//                quietly, and do NOT swap transports underneath the owner.
-export const degradedOf = (data) => (data?.coverage?.degraded) || null;
-export const isIncomplete = (data) => (degradedOf(data)?.missing || 0) > 0;
-export const settlingNotice = (data) => {
-  const d = degradedOf(data);
-  if (!d || (d.missing || 0) > 0) return "";
-  return d.reason === "conflicted"
-    ? "Grouping hit a conflict — items may be split until it is resolved."
-    : "Grouping is catching up — a few items may be split for a moment.";
-};
 
 function targetOf(item) {
   const target = item?.open_target;
@@ -71,46 +31,8 @@ function targetOf(item) {
   return { kind: target.kind, id: target.id };
 }
 
-export function compactProcessingRow(item) {
-  if (!object(item) || typeof item.item_id !== "string" || !item.item_id) {
-    throw new TypeError("canonical All item_id must be a non-empty string");
-  }
-  if (!Array.isArray(item.member_ids) || item.member_ids.some((id) => typeof id !== "string")) {
-    throw new TypeError("canonical All member_ids must be strings");
-  }
-  const target = targetOf(item);
-  const counts = object(item.counts) ? { ...item.counts } : {};
-  const row = object(item.row) ? { ...item.row } : {};
-  const status = typeof item.status === "string" ? item.status : "";
-  return {
-    ...row,
-    ProcessingItemId: item.item_id,
-    ProcessingMemberIds: [...item.member_ids],
-    ContextRevision: text(item.context_revision),
-    ViewRevision: text(item.view_revision),
-    ActivityBasis: text(item.activity_basis),
-    OpenTarget: target,
-    ProcessingCounts: counts,
-    SentAt: row.SentAt || item.activity_at || "",
-    Subject: row.Subject || item.title || "",
-    FromName: row.FromName || item.actor || "",
-    Preview: row.Preview || item.preview || "",
-    Channel: row.Channel || item.channel || "",
-    SourceName: row.SourceName || item.source || "",
-    Category: row.Category || item.category || "",
-    MsgStatus: row.MsgStatus || status,
-    Attachments: row.Attachments ?? counts.attachments ?? 0,
-    MessageId: row.MessageId ?? (target.kind === "message" ? target.id : null),
-    TaskId: row.TaskId ?? (target.kind === "task" ? target.id : null),
-    TaskStatus: row.TaskStatus ?? (target.kind === "task" ? status : null),
-    ReviewId: row.ReviewId ?? (target.kind === "review" ? target.id : null),
-    IdeaId: row.IdeaId ?? (target.kind === "idea" ? target.id : null),
-  };
-}
-
-// Unread already arrives as the canonical pile. FeedView needs a small row envelope only for
-// its date/count header and for exact-message deep links when "Task" mode is selected; fetching
-// the entire canonical All inventory again duplicated the most expensive read on page load.
+// Work arrives as the canonical pile. FeedView needs a small row envelope only for its count
+// header and for exact-message deep links when "Task" mode is selected.
 export function unreadProcessingRows(pile) {
   if (!object(pile) || pile.canonical !== true || !Array.isArray(pile.items)) return null;
   return pile.items.flatMap((item) => {
@@ -152,52 +74,6 @@ export function unreadProcessingRows(pile) {
       Unread: item.unread ? 1 : 0,
     }];
   });
-}
-
-function validatePage(payload) {
-  if (!object(payload) || payload.schema_version !== PROCESSING_ALL_SCHEMA) {
-    throw new TypeError("unsupported canonical All response");
-  }
-  if (typeof payload.snapshot_revision !== "string" || !payload.snapshot_revision) {
-    throw new TypeError("canonical All response has no snapshot_revision");
-  }
-  if (!Array.isArray(payload.items)) throw new TypeError("canonical All items must be an array");
-  if (payload.next_cursor != null && typeof payload.next_cursor !== "string") {
-    throw new TypeError("canonical All next_cursor must be null or a string");
-  }
-  const rows = payload.items.map((item) => ({ ...compactProcessingRow(item), AllSnapshotRevision: payload.snapshot_revision }));
-  if (!rows.length && payload.next_cursor) throw new TypeError("canonical All empty page cannot have a continuation");
-  const ids = rows.map((row) => row.ProcessingItemId);
-  if (new Set(ids).size !== ids.length) throw new TypeError("canonical All page contains duplicate item_id values");
-  return {
-    snapshotRevision: payload.snapshot_revision,
-    nextCursor: payload.next_cursor || null,
-    counts: object(payload.counts) ? { ...payload.counts } : {},
-    coverage: object(payload.coverage) ? structuredClone(payload.coverage) : {},
-    rows,
-  };
-}
-
-export function firstProcessingPage(payload) {
-  return validatePage(payload);
-}
-
-export function appendProcessingPage(current, payload) {
-  const page = validatePage(payload);
-  if (!object(current) || current.snapshotRevision !== page.snapshotRevision) {
-    throw new TypeError("canonical All page snapshot changed");
-  }
-  const seen = new Set((current.rows || []).map((row) => row.ProcessingItemId));
-  if (page.rows.some((row) => seen.has(row.ProcessingItemId))) {
-    throw new TypeError("canonical All pages contain a duplicate item_id");
-  }
-  return {
-    snapshotRevision: current.snapshotRevision,
-    nextCursor: page.nextCursor,
-    counts: page.counts,
-    coverage: page.coverage,
-    rows: [...current.rows, ...page.rows],
-  };
 }
 
 export const processingRowId = (row) => row?.ProcessingItemId || (row?.MessageId != null ? `legacy-message:${row.MessageId}` : "");
@@ -253,7 +129,6 @@ export function fullProcessingRow(compact, payload) {
     OpenTarget: target,
     ProcessingCounts: { ...(compact.ProcessingCounts || {}) },
     AllSnapshotRevision: compact.AllSnapshotRevision || "",
-    AllLoadGeneration: compact.AllLoadGeneration ?? null,
     SentAt: full.SentAt || fallback.SentAt || "",
     Subject: full.Subject || payload.detail?.title || fallback.Subject || "",
     FromName: full.FromName || fallback.FromName || "",

@@ -1073,8 +1073,8 @@
       "type": "vertex_ai",
       "title": "Google Vertex AI",
       "group": "AI — agents & models",
-      "planned": true,
-      "desc": "Gemini and partner models through GCP",
+      "planned": false,
+      "desc": "Gemini and partner models through Google Cloud's Agent Platform - project + API key",
       "match": [
         "google vertex ai",
         "google",

@@ -40,7 +40,7 @@ OPENAI_COMPATIBLE = {
     'perplexity': ('https://api.perplexity.ai', 'sonar'),
 }
 # `chatgpt` is the owner's ChatGPT plan through Sign in with ChatGPT (chatgptauth.py): no key, a signed-in account
-AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta', 'chatgpt') + tuple(OPENAI_COMPATIBLE)
+AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'vertex_ai', 'openrouter', 'ollama', 'meta', 'chatgpt') + tuple(OPENAI_COMPATIBLE)
 
 # What a vision model will look at. "See below." is half the mail this app reads, and below was
 # a screenshot - a text-only funnel filed the sentence and threw the actual ask away.
@@ -610,6 +610,15 @@ def make_llm(t, cfg: dict, key: str):
         base = (cfg.get('base_url') or default_base).rstrip('/')
         urls = [f'{base}/chat/completions']
         headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or default_model
+    elif t == 'vertex_ai':
+        # Google's Agent Platform (Vertex AI): the same chat completions, under a project and a location. Its API key rides
+        # x-goog-api-key - Bearer there wants an OAuth token - and its models are named by publisher (google/, meta/ ...)
+        if not cfg.get('project'): raise RuntimeError('vertex_ai needs its Google Cloud project id')
+        loc = (cfg.get('location') or 'global').strip()
+        host = 'aiplatform.googleapis.com' if loc == 'global' else f'{loc}-aiplatform.googleapis.com'
+        urls = [f"https://{host}/v1/projects/{cfg['project'].strip()}/locations/{loc}/endpoints/openapi/chat/completions"]
+        model = (cfg.get('model') or 'gemini-2.5-flash').strip()
+        headers, model = {'x-goog-api-key': key}, model if '/' in model else f'google/{model}'
     elif t == 'azure_openai':
         ep = (cfg.get('endpoint') or '').rstrip('/')
         if not (ep and cfg.get('deployment')): raise RuntimeError('azure_openai needs endpoint + deployment')

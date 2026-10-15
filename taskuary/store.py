@@ -1076,7 +1076,7 @@ class SQLiteStore:
                          ('cohere', 'Cohere'),
                          ('deepseek', 'DeepSeek'),
                          ('perplexity', 'Perplexity'),
-                         ('azure_openai', 'Azure OpenAI'), ('openrouter', 'OpenRouter'),
+                         ('azure_openai', 'Azure OpenAI'), ('vertex_ai', 'Google Vertex AI'), ('openrouter', 'OpenRouter'),
                          ('ollama', 'Local models (Ollama)'), ('meta', 'Meta Model API (Muse Spark)'),
                          ('chatgpt', 'ChatGPT (your plan)'),
                          # answers typed questions and emits no text at all, so it is a card you can

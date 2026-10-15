@@ -516,8 +516,9 @@ def health_ideas(store, now: datetime = None) -> list:
     # advisor to tell us").
     try:
         waiting = len(store.pending_triage(limit=50))
+        from . import llm
         brain = str(store.get_setting('triage_ai') or '').strip()
-        if waiting and not brain and not any(x['active'] and x['has_secret'] for x in appfacts.connections(store) if x['type'] in ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta')):
+        if waiting and not brain and not any(x['active'] and x['has_secret'] for x in appfacts.connections(store) if x['type'] in llm.AI_TYPES):
             out.append({'key': 'health:brain', 'kind': 'health', 'sig': 'no-brain',
                         'text': f'{waiting} messages wait for triage and no brain is set to read them.',
                         'action': {'type': 'health', 'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents',

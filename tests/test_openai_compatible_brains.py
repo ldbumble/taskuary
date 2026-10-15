@@ -46,3 +46,34 @@ class TableIsTheIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class VertexTests(unittest.TestCase):
+    """Google's Agent Platform (Vertex AI) speaks chat completions too, but under a PROJECT and a location, and an API key
+    rides `x-goog-api-key` - a bearer header there wants an OAuth token, not a key."""
+
+    def ask(self, cfg):
+        seen = {}
+        def post(url, headers=None, json=None, timeout=None):
+            seen.update(url=url, headers=headers, model=json.get('model'))
+            r = mock.Mock(); r.status_code = 200; r.json.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+            return r
+        with mock.patch('taskuary.llm.requests.post', side_effect=post): self.assertEqual(make_llm('vertex_ai', cfg, 'AQ.key')('s', 'u'), 'ok')
+        return seen
+
+    def test_it_is_a_brain_everywhere(self): self.assertIn('vertex_ai', AI_TYPES)
+
+    def test_the_project_names_the_url_and_the_key_rides_googles_header(self):
+        seen = self.ask({'project': 'acme-ai'})
+        self.assertEqual(seen['url'], 'https://aiplatform.googleapis.com/v1/projects/acme-ai/locations/global/endpoints/openapi/chat/completions')
+        self.assertEqual(seen['headers'], {'x-goog-api-key': 'AQ.key'})
+        self.assertEqual(seen['model'], 'google/gemini-2.5-flash')
+
+    def test_a_region_has_its_own_host_and_a_bare_model_is_googles(self):
+        seen = self.ask({'project': 'acme-ai', 'location': 'us-central1', 'model': 'gemini-2.5-pro'})
+        self.assertTrue(seen['url'].startswith('https://us-central1-aiplatform.googleapis.com/v1/projects/acme-ai/locations/us-central1/'))
+        self.assertEqual(seen['model'], 'google/gemini-2.5-pro')
+        self.assertEqual(self.ask({'project': 'p', 'model': 'meta/llama-4-maverick'})['model'], 'meta/llama-4-maverick')
+
+    def test_no_project_says_what_is_missing(self):
+        with self.assertRaisesRegex(RuntimeError, 'project'): make_llm('vertex_ai', {}, 'k')

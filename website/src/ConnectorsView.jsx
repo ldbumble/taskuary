@@ -473,6 +473,12 @@ const META = {
     howto: ["Create a key at aistudio.google.com → Get API key. Free tier, no card.",
       "Paste it under Credentials. Leave model blank for gemini-2.0-flash, or name a newer one from ai.google.dev/models.",
       "Test runs a real round trip."] },
+  vertex_ai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
+    fields: [["project", "project"], ["location (default global)", "location"], ["model (default gemini-2.5-flash)", "model"]], secretLabel: "API key",
+    desc: "Gemini and partner models through Google Cloud's Agent Platform (Vertex AI) - project + API key.",
+    howto: ["Google Cloud console → Agent Platform (Vertex AI) → API keys: create a key. The project id is in the console's project picker.",
+      "Enter the project id; leave location blank for global, or name a region (us-central1). Model blank = gemini-2.5-flash; a partner model is named with its publisher (meta/llama-4-maverick).",
+      "Paste the key under Credentials. Test runs a real round trip."] },
   deepseek: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default deepseek-chat)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Open reasoning models at roughly a tenth of the usual price — the cheapest capable triage brain here.",
@@ -1656,7 +1662,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → Triage & agents",
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }) },
-      ...channelCards(["anthropic", "openai", "chatgpt", "azure_openai", "openrouter", "meta", "ollama", "typesafe",
+      ...channelCards(["anthropic", "openai", "chatgpt", "azure_openai", "vertex_ai", "openrouter", "meta", "ollama", "typesafe",
         // the nine that speak the OpenAI surface (llm.OPENAI_COMPATIBLE). Four of them -
         // groq, cerebras, gemini, mistral - need no payment method at all.
         "groq", "cerebras", "gemini", "deepseek", "mistral", "together", "xai", "cohere", "perplexity"]),

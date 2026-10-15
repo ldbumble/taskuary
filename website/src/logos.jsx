@@ -449,6 +449,7 @@ LOGOS.gemini_image = (p) => (
     <path fill="#4285F4" d="M12 4.2c.5 3.4 1.9 5.6 4.9 6.4v2.8c-3 .8-4.4 3-4.9 6.4-.5-3.4-1.9-5.6-4.9-6.4v-2.8c3-.8 4.4-3 4.9-6.4z" />
   </S>
 );
+LOGOS.vertex_ai = LOGOS.gemini_image;          // Gemini is what Vertex serves first, so it wears the Gemini mark
 LOGOS.stability_image = (p) => <T p={p} bg="#8b5cf6" text="S" />;
 LOGOS.replicate_image = (p) => (
   <S {...p}>

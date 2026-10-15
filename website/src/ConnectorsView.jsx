@@ -31,6 +31,7 @@ import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
+import { AI_SHELF } from "./aiShelf.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -1680,10 +1681,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → Triage & agents",
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }) },
-      ...channelCards(["anthropic", "openai", "chatgpt", "azure_openai", "vertex_ai", "openrouter", "meta", "ollama", "typesafe",
-        // the nine that speak the OpenAI surface (llm.OPENAI_COMPATIBLE). Four of them -
-        // groq, cerebras, gemini, mistral - need no payment method at all.
-        "groq", "cerebras", "gemini", "deepseek", "mistral", "together", "xai", "cohere", "perplexity"]),
+      ...channelCards(AI_SHELF),
       ...catalogCards("AI — agents & models"),
     ]},
     // speech to text: voice notes on the chat channels arrive as text, and the prompt boxes get a mic

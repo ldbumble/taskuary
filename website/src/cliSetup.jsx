@@ -25,12 +25,12 @@ export const useCliSetup = () => {
   useEffect(() => () => { alive.current = false; }, []);
 
   const openSetup = useCallback(async (cli) => {
-    const name = typeof cli === "string" ? cli : cli?.setup || "";
+    const name = typeof cli === "string" ? cli : cli?.setup || "", login = !!cli?.login;    // login: its sign-in alone (clisetup.LOGIN)
     if (!name) { setNote({ bad: true, text: "Taskuary does not know how to set that one up" }); return null; }
     const put = (fn, v) => { if (alive.current) fn(v); };
     put(setOpening, name); put(setNote, null);
     try {
-      const { data } = await api.post("/api/cli/setup", { name });
+      const { data } = await api.post("/api/cli/setup", { name, login });
       put(setPane, { sid: data.sid, taskId: data.taskId, name });
       // a second press reattaches: say so, or the owner waits for a pane that is already theirs
       put(setNote, { text: data.existing ? "that set-up is already open — it is the pane below"
@@ -62,7 +62,8 @@ export const SetupButton = ({ cli, opening, onOpen, sx = {} }) => {
 // two knobs that restyle the pane itself are deliberately faint. Explaining them anywhere else is
 // explaining them to somebody who is not looking at them. (It was orphaned for three weeks when
 // the Terminal tab that used to carry it was removed.)
-export const CliPane = ({ pane, height = "46vh" }) => (pane?.sid ? (<>
-  <SessionPane sid={pane.sid} height={height} />
-  <ThemeHint cli={pane.name} />
+// `hint` off where the pane is one sign-in and the knobs are not what anybody came for (the first run)
+export const CliPane = ({ pane, height = "46vh", hint = true, onExit }) => (pane?.sid ? (<>
+  <SessionPane sid={pane.sid} height={height} onExit={onExit} />
+  {hint && <ThemeHint cli={pane.name} />}
 </>) : null);

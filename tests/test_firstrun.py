@@ -36,7 +36,7 @@ class ChooseAiTests(unittest.TestCase):
         with detect(), mock.patch.object(agents, 'run_cli', side_effect=RuntimeError('not logged in')):
             out = firstrun.choose_cli(self.s, self.cfg, 'codex')
         self.assertEqual((out['ok'], out['fix']), (False, 'signin'))
-        self.assertIn('needs you to sign in once', out['why']); self.assertIn('click the card again', out['why'])
+        self.assertIn('needs you to sign in once', out['why']); self.assertIn('Press Sign in below', out['why'])
         self.assertEqual(self.s.get_setting('triage_ai') or '', '', 'a brain that does not answer is never made the brain')
 
     def test_a_failed_pick_is_still_said_after_a_reload_and_cleared_when_it_works(self):
@@ -190,6 +190,23 @@ class StateTests(unittest.TestCase):
         self.assertTrue(out['ok']); self.assertIn('step', out); arrived.assert_called_once()
         from taskuary import guard
         self.assertTrue(any('first-run' in pat for _, pat, _ in guard.DENIED))
+
+class SignInTests(unittest.TestCase):
+    """The sign-in opened the CLI plain, so Codex led with its own "Update available" menu and the sign-in was somewhere after it
+    (the owner, 2026-10-15). Where the CLI has a login command, Sign in runs that and nothing else."""
+    def argv(self, name, login):
+        from taskuary import clisetup, cliinstall
+        with mock.patch.object(cliinstall, 'find', return_value=f'/bin/{name}'), mock.patch.object(cliinstall, 'working', return_value=(f'/bin/{name}', '')):
+            return clisetup.command(name, login)
+
+    def test_sign_in_runs_the_login_command(self):
+        self.assertEqual(self.argv('codex', True), ['/bin/codex', 'login'])
+        self.assertEqual(self.argv('claude', True), ['/bin/claude', 'auth', 'login'])
+
+    def test_a_cli_with_no_login_command_and_the_plain_set_up_open_it_plain(self):
+        self.assertEqual(self.argv('gemini', True), ['/bin/gemini'])
+        self.assertEqual(self.argv('codex', False), ['/bin/codex'])
+
 
 
 if __name__ == '__main__':

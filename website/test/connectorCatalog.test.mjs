@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
 import { CATALOGUE, PLANNED_CONNECTORS, plannedFor } from "../src/connectorCatalog.js";
+import { AI_SHELF } from "../src/aiShelf.js";
 
 const CATEGORIES = [
   "AI — agents & models", "AI — voice", "Email", "Messaging", "Developer",
@@ -28,7 +29,7 @@ test("the requested Grok API connector is BUILT, not merely planned", () => {
   assert.equal(plannedFor("AI — agents & models").find((c) => c.type === "xai"), undefined);
   const view = read("ConnectorsView.jsx");
   assert.match(view, /^ {2}xai: \{ group: "AI — agents & models"/m);
-  assert.match(view, /"xai"/);
+  assert.ok(AI_SHELF.includes("xai"));
 });
 
 test("Everything else is a useful catalog rather than an empty bucket", () => {

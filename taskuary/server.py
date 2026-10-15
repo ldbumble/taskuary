@@ -5977,7 +5977,7 @@ def cli_install_state():
     from . import cliinstall
     return cliinstall.state()
 
-class CliSetupBody(BaseModel): name: str
+class CliSetupBody(BaseModel): name: str; login: bool = False
 
 @app.post('/api/cli/setup')
 def cli_setup(body: CliSetupBody):
@@ -5990,7 +5990,7 @@ def cli_setup(body: CliSetupBody):
     from . import clis, clisetup
     name = str(body.name or '')
     label = next((k['label'] for k in clis.KNOWN if k['name'] == name), '')
-    try: return clisetup.start(store, name, ACTOR, label=label)
+    try: return clisetup.start(store, name, ACTOR, label=label, login=body.login)
     # ...and every other way a PANE can fail to open is an answer too, not a crash: no pywinpty on
     # this Windows, a shim the ConPTY cannot spawn, a folder that is gone. The owner pressed Test,
     # watched it pass, pressed Set it up and got a bare 500 (2026-09-22). What stopped it is the

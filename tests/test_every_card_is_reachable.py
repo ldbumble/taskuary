@@ -86,6 +86,12 @@ class EveryCardCanBeTested(unittest.TestCase):
         self.assertEqual(missing, [], f'no Test branch in channels.test_connector: {missing}')
 
 
+def ai_shelf() -> set:
+    """The AI shelf's types: one list in aiShelf.js since Setup and Connections both read it (2026-10-15)."""
+    src = (ROOT / 'website' / 'src' / 'aiShelf.js').read_text(encoding='utf-8')
+    return set(re.findall(r'"([a-z0-9_]+)"', src[src.index('AI_SHELF = ['):src.index('];')]))
+
+
 class EveryCardIsOnThePage(unittest.TestCase):
     """A connector nobody can open is a connector nobody has.
 
@@ -111,6 +117,7 @@ class EveryCardIsOnThePage(unittest.TestCase):
         listed = set(re.findall(r'specialCards\("([a-z0-9_]+)"', groups))
         for call in re.findall(r'(?:channelCards|dataCards|plannedCards)\(\[(.*?)\]\)', groups, re.S):
             listed |= set(re.findall(r'"([a-z0-9_]+)"', call))
+        if 'channelCards(AI_SHELF)' in groups: listed |= ai_shelf()
         catalogue = json.loads((ROOT / 'taskuary' / 'connectorcatalog.json').read_text(encoding='utf-8'))
         working = {r['type'] for r in catalogue['cards'] if not r['planned']}
         missing = sorted(t for t in {c['Type'] for c in MemoryStore().list_connectors()} & working
@@ -123,6 +130,7 @@ class EveryCardIsOnThePage(unittest.TestCase):
         listed = set()
         for call in re.findall(r'(?:channelCards|dataCards)\(\[(.*?)\]\)', src, re.S):
             listed |= set(re.findall(r'"([a-z0-9_]+)"', call))
+        if 'channelCards(AI_SHELF)' in src: listed |= ai_shelf()
         missing = sorted(listed - described)
         self.assertEqual(missing, [], f'listed in a group but not described: {missing}')
 

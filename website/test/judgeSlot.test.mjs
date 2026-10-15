@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { AI_SHELF } from "../src/aiShelf.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -29,10 +30,8 @@ test("there is a card to paste the key on, and it says what it is for", () => {
   // names the AI cards explicitly, so a card left out of both lists is a key with nowhere to go.
   const view = read("ConnectorsView.jsx");
   assert.match(view, /^ {2}typesafe: \{ group: "AI — agents & models"/m);
-  // the list spans lines now that nine OpenAI-compatible providers joined it, so match it
-  // whole rather than end-to-end on one line
-  const named = view.slice(view.indexOf('channelCards(["anthropic"'), view.indexOf('catalogCards("AI'));
-  assert.match(named, /"typesafe"/);
+  // the shelf's list is aiShelf.js, the one Setup reads too
+  assert.match(view, /channelCards\(AI_SHELF\)/); assert.ok(AI_SHELF.includes("typesafe"));
   assert.match(view, /Where runs go/);          // where it is picked, said on the card itself
 });
 

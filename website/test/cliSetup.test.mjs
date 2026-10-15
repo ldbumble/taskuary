@@ -21,7 +21,7 @@ test("the title says what will happen, and names the CLI", () => {
 
 test("the hook posts the recipe and renders the session it gets back", () => {
   const src = read("cliSetup.jsx");
-  assert.match(src, /api\.post\("\/api\/cli\/setup", \{ name \}\)/);
+  assert.match(src, /api\.post\("\/api\/cli\/setup", \{ name, login \}\)/);
   assert.match(src, /SessionPane/);
   // the pane is a task on the Board: a second press must reattach, never open a second one
   assert.match(src, /existing/);

@@ -85,7 +85,7 @@ def state(store) -> dict:
     name = PLAIN[cli][0] if cli in PLAIN else raw
     fix = _fix(store) if step == 'ai' else None
     ask = "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
-    nxt = {'ai': f"{fix['why']} Or pick another AI below." if fix else ask,
+    nxt = {'ai': fix['why'] if fix else ask,
            'email': f"{name or 'Your AI'} is ready. What email do you have? Click it below - Microsoft 365 is one sign-in.",
            'reading': (f"Sorting {sorting} email{'s' if sorting != 1 else ''} now. Any other connection you'd like to set up while it reads?"
                        if sorting else "Reading your mail now. Any other connection you'd like to set up while it reads?"),
@@ -131,8 +131,9 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     except Exception as e:
         logger.info(f'first run: {name} did not answer - {e}')
         return failed({'ok': False, 'fix': 'signin' if k.get('setup') else '',
-                'why': f"{label} is installed but didn't answer - it most likely needs you to sign in once."
-                       + (' Press Set it up below, sign in where it asks, then click the card again.' if k.get('setup') else ''),
+                'why': f"{label} is installed but needs you to sign in once."
+                       + (" Press Sign in below - Taskuary checks it by itself when you're done." if k.get('setup') else
+                          ' Sign in to it on this computer, then click its card again.'),
                 'detail': str(e)[:200]})
     worker = next((o['value'] for o in agents.cli_agent_options(store) if o['cli'] == name), '') or key
     _everywhere(store, f'cli:{worker}', cli=key)                       # the owner's own click: theirs, not an auto-pick

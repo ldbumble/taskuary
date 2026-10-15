@@ -47,7 +47,15 @@ open_task = aisetup.open_task         # ...and so is reusing the task a dead pan
 SETUP = frozenset({'claude', 'codex', 'gemini', 'qwen', 'opencode', 'kimi', 'copilot', 'cursor', 'muse', 'devin'})
 
 
+# ...except the sign-in itself, where the CLI has a command for exactly that: plain Codex led with its own "Update available"
+# menu and the sign-in came somewhere after it (the owner, 2026-10-15). Gemini has none, so it opens plain.
+LOGIN = {'codex': ['login'], 'claude': ['auth', 'login']}
+
+
 def tag(name: str) -> str: return f'cli:{name}'
+
+
+def command(name: str, login: bool = False) -> list: return argv(name) + (LOGIN.get(name, []) if login else [])
 
 
 def argv(name: str) -> list:
@@ -76,13 +84,13 @@ def live_for(store, name: str):
     return None
 
 
-def start(store, name: str, actor: str = 'owner', label: str = '') -> dict:
+def start(store, name: str, actor: str = 'owner', label: str = '', login: bool = False) -> dict:
     """Open the CLI on a setup task and get out of the way. It asks for what it needs; the owner
     answers it in the pane, where they can see what they are typing and to whom."""
     from . import terminal as term
     live = live_for(store, name)
     if live: return {**live, 'existing': True}
-    cmd, what = argv(name), label or name             # resolve first: no task to close if there is no CLI
+    cmd, what = command(name, login), label or name             # resolve first: no task to close if there is no CLI
     tid = open_task(store, tag(name), f'Set up {what}') or store.create_task(
         {'Title': f'Set up {what}', 'Kind': KIND, 'Status': 'in_progress', 'Tags': tag(name),
          'Summary': f'{what} runs its own setup in a live session here - settings, then the sign-in.'}, actor)

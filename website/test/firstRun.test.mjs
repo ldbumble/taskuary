@@ -64,7 +64,7 @@ test("the cards wear their logos: each CLI its maker's, Gemini its own", () => {
 test("a failed pick keeps its Sign in and the line saying so, and Gmail links to its App Password page", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
   assert.match(fr, /fix\?\.fix === "signin" && fix\.setup/, "the fix is the server's, so a reload keeps it");
-  assert.match(fr, /<SetupButton cli=/);
+  assert.match(fr, /Sign in to \$\{fix\.title\}/);
   assert.match(cv, /href="https:\/\/myaccount\.google\.com\/apppasswords"/);
   assert.doesNotMatch(cv.match(/const SIMPLE_HINT = [\s\S]*?\n\};/)[0], /Credentials|imap->smtp/);
 });
